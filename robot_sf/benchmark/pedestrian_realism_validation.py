@@ -8,7 +8,7 @@ force-model or parameter PR can show its realism delta. It is deliberately
 distinct from the issue #3971 ``pedestrian_flow_validation`` harness, which only
 runs *synthetic* no-robot fixtures and never compares against real tracks.
 
-The three metric families requested by #4975:
+The three core metric families requested by #4975:
 
 1. **Trajectory RMSE** against matched real tracks (``trajectory_rmse``). A
    simulated track and a matched real track are resampled onto a common time grid
@@ -32,6 +32,10 @@ Claim boundary: this harness computes metric values and emits a scorecard. It
 does not establish a calibrated realism threshold, a benchmark ranking, or a
 paper-facing claim. When the real reference is absent, the scorecard is labeled
 ``not_available`` per the repository fail-closed contract.
+
+The optional speed- and proxemic-distribution diagnostics are descriptive
+empirical distances over the same crowd arrays. They are diagnostic-only and do
+not change the core metric status or claim boundary.
 """
 
 from __future__ import annotations
@@ -79,12 +83,14 @@ __all__ = [
     "lane_formation_comparison",
     "lane_formation_score_curve",
     "match_tracks",
+    "proxemic_distribution_distance",
     "render_scorecard_markdown",
     "resample_track",
     "run_realism_validation",
     "run_realism_validation_from_staged_dataset",
     "run_realism_validation_from_track_set",
     "speed_density_points",
+    "speed_distribution_distance",
     "trajectory_rmse",
     "write_realism_scorecard",
 ]
@@ -303,8 +309,9 @@ class RealismCrowdInputs:
 
     Bundles the ``(T, K, 2)`` position/velocity arrays the fundamental-diagram
     and lane-formation comparisons need, so the orchestrator signature stays
-    small. Either both simulation arrays or both real arrays may be ``None``; the
-    corresponding distribution metric then degrades to ``empty`` (fail-closed).
+    small. The optional speed- and proxemic-distribution diagnostics consume the
+    same arrays. Either both simulation arrays or both real arrays may be ``None``;
+    the corresponding distribution metrics then remain absent (fail-closed).
 
     Attributes:
         sim_positions: Simulation positions shaped ``(T, K, 2)`` or ``None``.
@@ -772,11 +779,317 @@ def lane_formation_comparison(
 
 
 # --------------------------------------------------------------------------- #
+# 4. Speed-distribution distance (diagnostic-only)
+# --------------------------------------------------------------------------- #
+
+SPEED_DISTRIBUTION_UNITS = "m/s"
+SPEED_DISTRIBUTION_CLAIM_BOUNDARY = (
+    "diagnostic-only empirical 1-Wasserstein distance between simulation and "
+    "reference speed distributions; no calibrated threshold, ranking, or "
+    "paper-facing claim"
+)
+
+
+def speed_distribution_distance(
+    sim_velocities: np.ndarray,
+    real_velocities: np.ndarray,
+) -> dict[str, Any]:
+    """Compute the empirical 1-Wasserstein distance between speed distributions.
+
+    Speed samples are finite Euclidean norms from ``(T, K, 2)`` velocity
+    arrays.  Non-finite observations are excluded and counted.
+
+    Returns:
+        A JSON-safe mapping with ``status``, ``distance`` (when ok), per-arm
+        sample counts and statistics, ``units``, ``evidence_status``, and a
+        controlled ``empty_reason`` when unavailable.
+    """
+
+    sim_samples = _extract_speed_samples(sim_velocities)
+    real_samples = _extract_speed_samples(real_velocities)
+    excluded = _count_nonfinite_speed_observations(
+        sim_velocities
+    ) + _count_nonfinite_speed_observations(real_velocities)
+    if sim_samples.size == 0 or real_samples.size == 0:
+        empty_reason = (
+            "no finite speed samples in simulation arm"
+            if sim_samples.size == 0
+            else "no finite speed samples in real arm"
+        )
+        if sim_samples.size == 0 and real_samples.size == 0:
+            empty_reason = "no finite speed samples in either arm"
+        return {
+            "metric_id": "speed_distribution_distance",
+            "status": STATUS_EMPTY,
+            "distance": None,
+            "sim_sample_count": int(sim_samples.size),
+            "real_sample_count": int(real_samples.size),
+            "sim": _distribution_arm_stats(sim_samples),
+            "real": _distribution_arm_stats(real_samples),
+            "units": SPEED_DISTRIBUTION_UNITS,
+            "evidence_status": EVIDENCE_STATUS_DIAGNOSTIC_ONLY,
+            "claim_boundary": SPEED_DISTRIBUTION_CLAIM_BOUNDARY,
+            "empty_reason": empty_reason,
+            "excluded_nonfinite_count": excluded,
+        }
+    distance = _empirical_wasserstein_1d(sim_samples, real_samples)
+    return {
+        "metric_id": "speed_distribution_distance",
+        "status": STATUS_OK,
+        "distance": distance,
+        "sim_sample_count": int(sim_samples.size),
+        "real_sample_count": int(real_samples.size),
+        "sim": _distribution_arm_stats(sim_samples),
+        "real": _distribution_arm_stats(real_samples),
+        "units": SPEED_DISTRIBUTION_UNITS,
+        "evidence_status": EVIDENCE_STATUS_DIAGNOSTIC_ONLY,
+        "claim_boundary": SPEED_DISTRIBUTION_CLAIM_BOUNDARY,
+        "empty_reason": None,
+        "excluded_nonfinite_count": excluded,
+    }
+
+
+def _extract_speed_samples(velocities: np.ndarray) -> np.ndarray:
+    """Extract finite Euclidean speed norms from a ``(T, K, 2)`` velocity array.
+
+    Returns:
+        A 1-D array of finite speed samples (may be empty).
+    """
+
+    vel = np.asarray(velocities, dtype=float)
+    if vel.ndim != 3 or vel.shape[2] != 2:
+        raise ValueError("velocities must have shape (T, K, 2)")
+    speed = np.linalg.norm(vel, axis=2).reshape(-1)
+    return speed[np.isfinite(speed)]
+
+
+# --------------------------------------------------------------------------- #
+# 5. Proxemic-distribution distance (diagnostic-only)
+# --------------------------------------------------------------------------- #
+
+PROXEMIC_DISTRIBUTION_UNITS = "m"
+PROXEMIC_DISTRIBUTION_CLAIM_BOUNDARY = (
+    "diagnostic-only empirical 1-Wasserstein distance between simulation and "
+    "reference within-frame proxemic (pedestrian-pair) distributions; no "
+    "calibrated threshold, ranking, or paper-facing claim"
+)
+
+
+def proxemic_distribution_distance(
+    sim_positions: np.ndarray,
+    real_positions: np.ndarray,
+) -> dict[str, Any]:
+    """Compute the empirical 1-Wasserstein distance between proxemic distributions.
+
+    Proxemic samples are each unordered distinct pedestrian pair once per
+    frame, excluding the diagonal but preserving coincident distinct
+    pedestrians.  Non-finite observations are excluded and counted.
+
+    Returns:
+        A JSON-safe mapping with ``status``, ``distance`` (when ok), per-arm
+        sample counts and statistics, ``units``, ``evidence_status``, and a
+        controlled ``empty_reason`` when unavailable.
+    """
+
+    sim_samples = _extract_proxemic_samples(sim_positions)
+    real_samples = _extract_proxemic_samples(real_positions)
+    excluded_sim = _count_nonfinite_position_observations(sim_positions)
+    excluded_real = _count_nonfinite_position_observations(real_positions)
+    excluded = excluded_sim + excluded_real
+    if sim_samples.size == 0 or real_samples.size == 0:
+        empty_reasons: list[str] = []
+        if sim_samples.size == 0:
+            empty_reasons.append(_proxemic_empty_reason(sim_positions, "simulation"))
+        if real_samples.size == 0:
+            empty_reasons.append(_proxemic_empty_reason(real_positions, "real"))
+        empty_reason = "; ".join(empty_reasons)
+        return {
+            "metric_id": "proxemic_distribution_distance",
+            "status": STATUS_EMPTY,
+            "distance": None,
+            "sim_sample_count": int(sim_samples.size),
+            "real_sample_count": int(real_samples.size),
+            "sim": _distribution_arm_stats(sim_samples),
+            "real": _distribution_arm_stats(real_samples),
+            "units": PROXEMIC_DISTRIBUTION_UNITS,
+            "evidence_status": EVIDENCE_STATUS_DIAGNOSTIC_ONLY,
+            "claim_boundary": PROXEMIC_DISTRIBUTION_CLAIM_BOUNDARY,
+            "empty_reason": empty_reason,
+            "excluded_nonfinite_count": excluded,
+        }
+    distance = _empirical_wasserstein_1d(sim_samples, real_samples)
+    return {
+        "metric_id": "proxemic_distribution_distance",
+        "status": STATUS_OK,
+        "distance": distance,
+        "sim_sample_count": int(sim_samples.size),
+        "real_sample_count": int(real_samples.size),
+        "sim": _distribution_arm_stats(sim_samples),
+        "real": _distribution_arm_stats(real_samples),
+        "units": PROXEMIC_DISTRIBUTION_UNITS,
+        "evidence_status": EVIDENCE_STATUS_DIAGNOSTIC_ONLY,
+        "claim_boundary": PROXEMIC_DISTRIBUTION_CLAIM_BOUNDARY,
+        "empty_reason": None,
+        "excluded_nonfinite_count": excluded,
+    }
+
+
+def _extract_proxemic_samples(positions: np.ndarray) -> np.ndarray:
+    """Extract unordered distinct-pair distances from a ``(T, K, 2)`` position array.
+
+    For each frame, the Euclidean distance between every unordered distinct
+    pair of pedestrians is recorded once.  Frames with fewer than two
+    observed (finite) pedestrians are skipped.  The diagonal is excluded but
+    coincident distinct pedestrians (distance zero) are preserved.
+
+    Returns:
+        A 1-D array of pairwise distances (may be empty).
+    """
+
+    pos = np.asarray(positions, dtype=float)
+    if pos.ndim != 3 or pos.shape[2] != 2:
+        raise ValueError("positions must have shape (T, K, 2)")
+    if pos.shape[0] == 0 or pos.shape[1] < 2:
+        return np.empty(0, dtype=float)
+    all_distances: list[np.ndarray] = []
+    for t in range(pos.shape[0]):
+        frame = pos[t]
+        observed = np.all(np.isfinite(frame), axis=1)
+        obs_indices = np.nonzero(observed)[0]
+        if obs_indices.size < 2:
+            continue
+        obs_positions = frame[obs_indices]
+        diff = obs_positions[:, None, :] - obs_positions[None, :, :]
+        dist = np.sqrt(np.sum(diff * diff, axis=2))
+        # Extract upper triangle (excluding diagonal) for unordered pairs.
+        tri_indices = np.triu_indices(obs_positions.shape[0], k=1)
+        all_distances.append(dist[tri_indices])
+    if not all_distances:
+        return np.empty(0, dtype=float)
+    return np.concatenate(all_distances)
+
+
+def _count_nonfinite_speed_observations(velocities: np.ndarray) -> int:
+    """Count non-finite vector observations in a ``(T, K, 2)`` array.
+
+    Returns:
+        Number of pedestrian-frame velocity vectors with at least one non-finite
+        component.
+    """
+
+    vel = np.asarray(velocities, dtype=float)
+    if vel.ndim != 3 or vel.shape[2] != 2:
+        raise ValueError("velocities must have shape (T, K, 2)")
+    return int(np.count_nonzero(~np.all(np.isfinite(vel), axis=2)))
+
+
+def _count_nonfinite_position_observations(positions: np.ndarray) -> int:
+    """Count non-finite pedestrian-frame observations in a ``(T, K, 2)`` array.
+
+    Returns:
+        Number of pedestrian-frame position vectors with at least one non-finite
+        component.
+    """
+
+    pos = np.asarray(positions, dtype=float)
+    if pos.ndim != 3 or pos.shape[2] != 2:
+        raise ValueError("positions must have shape (T, K, 2)")
+    return int(np.count_nonzero(~np.all(np.isfinite(pos), axis=2)))
+
+
+def _proxemic_empty_reason(positions: np.ndarray, arm_name: str) -> str:
+    """Explain whether an arm lacks finite pair opportunities or finite samples.
+
+    Returns:
+        A controlled empty-result reason for the named arm.
+    """
+
+    pos = np.asarray(positions, dtype=float)
+    has_pair = any(np.count_nonzero(np.all(np.isfinite(frame), axis=1)) >= 2 for frame in pos)
+    if not has_pair:
+        return f"fewer than two finite pedestrians in every frame of {arm_name} arm"
+    return f"no finite proxemic samples in {arm_name} arm"
+
+
+# --------------------------------------------------------------------------- #
+# Common distribution helpers
+# --------------------------------------------------------------------------- #
+
+
+def _empirical_wasserstein_1d(a: np.ndarray, b: np.ndarray) -> float:
+    """Unweighted empirical 1-Wasserstein distance over finite 1-D samples.
+
+    Both arms are filtered to finite samples and deterministically sorted. The empirical
+    quantile functions
+    are integrated over the union of their step boundaries, which handles
+    unequal sample counts without histogram bins. This is a descriptive
+    distribution distance, not a pass/fail threshold.
+
+    Raises:
+        ValueError: If either arm has no finite sample.
+
+    Returns:
+        The scalar Wasserstein-1 distance in the units of the input samples.
+    """
+
+    flat_a = np.asarray(a, dtype=float).ravel()
+    flat_b = np.asarray(b, dtype=float).ravel()
+    sa = np.sort(flat_a[np.isfinite(flat_a)])
+    sb = np.sort(flat_b[np.isfinite(flat_b)])
+    if sa.size == 0 or sb.size == 0:
+        raise ValueError("both arms must contain at least one finite sample")
+    index_a = 0
+    index_b = 0
+    position = 0.0
+    distance = 0.0
+    while position < 1.0:
+        next_a = (index_a + 1) / sa.size
+        next_b = (index_b + 1) / sb.size
+        next_position = min(next_a, next_b)
+        distance += (next_position - position) * abs(sa[index_a] - sb[index_b])
+        position = next_position
+        if index_a + 1 < sa.size and next_a <= position:
+            index_a += 1
+        if index_b + 1 < sb.size and next_b <= position:
+            index_b += 1
+    return float(distance)
+
+
+def _distribution_arm_stats(samples: np.ndarray) -> dict[str, Any]:
+    """Return summary statistics for a 1-D sample arm.
+
+    Returns:
+        A mapping with ``mean``, ``std``, ``quantile_010``, ``quantile_050``,
+        ``quantile_090``, and ``count``.  Values are ``None`` when the arm is
+        empty.
+    """
+
+    if samples.size == 0:
+        return {
+            "mean": None,
+            "std": None,
+            "quantile_010": None,
+            "quantile_050": None,
+            "quantile_090": None,
+            "count": 0,
+        }
+    flat = np.asarray(samples, dtype=float).ravel()
+    return {
+        "mean": float(np.mean(flat)),
+        "std": float(np.std(flat)),
+        "quantile_010": float(np.quantile(flat, 0.10)),
+        "quantile_050": float(np.quantile(flat, 0.50)),
+        "quantile_090": float(np.quantile(flat, 0.90)),
+        "count": int(flat.size),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Orchestrator + scorecard
 # --------------------------------------------------------------------------- #
 
 
-def build_dataset_scorecard(
+def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are contract inputs
     *,
     dataset_id: str,
     config: RealismMetricConfig,
@@ -786,6 +1099,8 @@ def build_dataset_scorecard(
     reference_source: str,
     notes: Sequence[str] | None = None,
     reconstruction: dict[str, Any] | None = None,
+    speed_distribution: dict[str, Any] | None = None,
+    proxemic_distribution: dict[str, Any] | None = None,
 ) -> RealismScorecard:
     """Aggregate per-metric results into a per-dataset scorecard.
 
@@ -798,6 +1113,8 @@ def build_dataset_scorecard(
         reference_source: Provenance note for the real reference data.
         notes: Caveat notes.
         reconstruction: Content-light reconstruction readiness summary.
+        speed_distribution: Speed-distribution distance mapping (or ``None``).
+        proxemic_distribution: Proxemic-distribution distance mapping (or ``None``).
 
     Returns:
         A :class:`RealismScorecard` with aggregated statistics.
@@ -841,6 +1158,13 @@ def build_dataset_scorecard(
         or _empty_metric("fundamental_diagram_comparison"),
         "lane_formation_comparison": lane_formation or _empty_metric("lane_formation_comparison"),
     }
+    # Add distribution diagnostics only when both simulation and real arms
+    # were supplied. Preserve an explicit ``empty`` result and its reason rather
+    # than silently dropping an unavailable diagnostic.
+    if speed_distribution is not None:
+        metrics["speed_distribution_distance"] = speed_distribution
+    if proxemic_distribution is not None:
+        metrics["proxemic_distribution_distance"] = proxemic_distribution
     return RealismScorecard(
         dataset_id=dataset_id,
         status=status,
@@ -864,7 +1188,7 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
     movement_axis: int = 0,
     lateral_axis: int = 1,
 ) -> RealismScorecard:
-    """Run all three realism metric families and build a per-dataset scorecard.
+    """Run the realism metrics and build a per-dataset scorecard.
 
     This is the pure-metric orchestrator. It takes already-collected simulation
     and real arrays/track pairs and computes the three #4975 metrics. The
@@ -873,9 +1197,9 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
     :mod:`robot_sf.data.external.eth_ucy_trajectories`).
 
     Pass the simulation and real crowd arrays together via ``crowds`` (a
-    :class:`RealismCrowdInputs`); ``None`` arrays on either side make the
-    corresponding distribution metric degrade to ``empty`` (fail-closed), so a
-    partial run still produces a labeled scorecard. A missing real reference is
+    :class:`RealismCrowdInputs`). If arrays on either side are ``None``, the
+    orchestrator omits the corresponding distribution metrics (fail-closed), and
+    a partial run still produces a labeled scorecard. A missing real reference is
     never reported as a passing realism result.
 
     The optional ``reconstruction`` mapping is serialized as a content-light readiness
@@ -891,6 +1215,8 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
 
     fundamental: dict[str, Any] | None = None
     lane: dict[str, Any] | None = None
+    speed_dist: dict[str, Any] | None = None
+    proxemic_dist: dict[str, Any] | None = None
     if crowds is not None and _crowds_complete(crowds):
         sim_points = speed_density_points(
             crowds.sim_positions, crowds.sim_velocities, neighbor_radius_m=cfg.neighbor_radius_m
@@ -908,6 +1234,8 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
             movement_axis=movement_axis,
             lateral_axis=lateral_axis,
         )
+        speed_dist = speed_distribution_distance(crowds.sim_velocities, crowds.real_velocities)
+        proxemic_dist = proxemic_distribution_distance(crowds.sim_positions, crowds.real_positions)
 
     return build_dataset_scorecard(
         dataset_id=dataset_id,
@@ -918,6 +1246,8 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
         reference_source=reference_source,
         notes=notes,
         reconstruction=reconstruction,
+        speed_distribution=speed_dist,
+        proxemic_distribution=proxemic_dist,
     )
 
 
@@ -1611,6 +1941,29 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
         f"- mean score delta: {lane.get('mean_score_delta', 0.0):.4f}",
         "",
     ]
+    for metric_id, title in (
+        ("speed_distribution_distance", "Speed-Distribution Distance"),
+        ("proxemic_distribution_distance", "Proxemic-Distribution Distance"),
+    ):
+        diagnostic = sc["metrics"].get(metric_id)
+        if diagnostic is None:
+            continue
+        distance = diagnostic.get("distance")
+        distance_text = "unavailable" if distance is None else f"{distance:.4f}"
+        lines += [
+            f"## {title}",
+            "",
+            f"- status: `{diagnostic.get('status', 'empty')}`",
+            f"- distance: {distance_text} {diagnostic.get('units', '')}".rstrip(),
+            f"- sim/real samples: {diagnostic.get('sim_sample_count', 0)} / "
+            f"{diagnostic.get('real_sample_count', 0)}",
+            f"- excluded non-finite observations: {diagnostic.get('excluded_nonfinite_count', 0)}",
+            f"- claim boundary: {diagnostic.get('claim_boundary', 'diagnostic-only')}",
+            "",
+        ]
+        empty_reason = diagnostic.get("empty_reason")
+        if empty_reason:
+            lines.insert(len(lines) - 1, f"- empty reason: {empty_reason}")
     if sc["notes"]:
         lines += ["## Notes", ""]
         lines += [f"- {note}" for note in sc["notes"]]

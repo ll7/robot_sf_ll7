@@ -145,6 +145,83 @@ For planner additions or modifications, review:
 If a planner is added but never executed in the local benchmark stack, treat the change as
 incomplete.
 
+## Native Execution Criterion For The #5579 Canary
+
+Reviewers keep re-deriving an unsatisfiable probe on MPC canary work: treating
+`planner_kinematics.execution_mode == "native"` as if it were the #5579
+"native execution" requirement. It is not, and the conflation has already cost
+multiple full quarantine / repair-exhaustion cycles (PR #6716 on 2026-08-07 and
+2026-08-08). This section records the ruling so the same probe stops being
+re-derived. Ruling of record: issue #6828 (Option A, 2026-08-08); frozen
+criterion it interprets: issue #5579.
+
+Two distinct concepts are being conflated. Keep them separate:
+
+- **`execution_mode` is a command-space concept.** It is a
+  `planner_kinematics` registry field that records *which command space the
+  planner emits into*: native robot commands (`native`) versus
+  adapter-projected commands (`adapter`) versus a mix (`mixed`). It is declared
+  per algorithm in the registry (`_KINEMATICS_PROFILE_BY_CANONICAL` in
+  `robot_sf/benchmark/algorithm_metadata.py`). It does **not** record whether a
+  solver ran.
+- **Solver-execution is a runtime concept.** It records *whether the MPC
+  solver actually ran and produced the commands*. This is what the #5579
+  canary "native execution" clause guards.
+
+The canonical `prediction_mpc` planner is registry-declared adapter-only:
+`supports_native_commands: False`, `default_execution_mode: "adapter"`
+(`robot_sf/benchmark/algorithm_metadata.py`, the `prediction_mpc` entry of
+`_KINEMATICS_PROFILE_BY_CANONICAL`). A gate bound to
+`execution_mode == "native"` is therefore **unsatisfiable by construction** for
+this planner. Demanding it on a PR is probing a defect that does not exist.
+
+### Ruling (Option A, issue #6828)
+
+For a registry-declared adapter-only algorithm, the #5579 "native execution"
+requirement is satisfied by a fail-closed `canary.solver_execution` contract,
+**not** by `planner_kinematics.execution_mode == "native"`. The fail-closed
+contract is what proves the solver actually ran. Concretely, the contract
+comprises:
+
+- the solver token ran and produced commands (a non-degenerate solver update),
+- the declared adapter execution shape (`SOLVER_EXECUTION_IDENTITY_FIELDS`),
+- a registry cross-check that the declared adapter matches the runtime planner
+  registry,
+- the six fail-closed flags
+  (`SOLVER_EXECUTION_REQUIRED_FLAGS`: `require_valid_provenance`,
+  `require_finite_commands`, `require_solver_update`, `require_control_update`,
+  `forbid_solver_failure`, `forbid_fallback`).
+
+These are defined in `robot_sf/benchmark/mpc_tuning_sensitivity.py` and
+exercised by `scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py`.
+
+### Boundary Preserved (Do Not Weaken)
+
+This ruling changes only how "native execution" is satisfied for adapter-only
+algorithms. It does **not** relax the underlying requirement:
+
+- For planners the registry declares `supports_native_commands: True`, the
+  native command path is still required. Option A does not excuse a
+  native-capable planner from its native path.
+- Fallback or degraded execution **never** satisfies this criterion in either
+  case (native-command or adapter-only). A run that fell back, skipped the
+  solver, or executed in a degraded mode is a failure of the criterion, not a
+  pass.
+
+### Reviewer Probe Guidance
+
+When reviewing MPC canary work under #5579, do not raise
+`execution_mode == "native"` as a blocker for a registry-declared adapter-only
+algorithm such as `prediction_mpc` or `learned_prediction_mpc`. The
+benchmark-facing questions are instead: did the fail-closed
+`canary.solver_execution` contract run green (solver token ran, declared
+adapter shape matched the registry, all six fail-closed flags held), and was
+no fallback/degraded execution counted as success? If yes, the "native
+execution" clause is satisfied for an adapter-only algorithm. If a review still
+reads the frozen #5579 body text alone, use that coordinator-side issue-body
+amendment, this section, and issue #6828 together as the durable reading of the
+adapter-only interpretation.
+
 ## Proof Requirements By Change Type
 
 - new planner or planner integration:

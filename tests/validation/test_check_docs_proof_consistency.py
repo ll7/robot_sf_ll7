@@ -1177,6 +1177,56 @@ def test_new_dirty_evidence_entry_fails_even_with_legacy_entries(tmp_path: Path)
     )
 
 
+def test_issue_6820_new_non_legacy_dirty_evidence_still_rejected_alongside_legacy_entries(
+    tmp_path: Path,
+) -> None:
+    """A new non-legacy evidence entry must still be rejected when legacy entries exist.
+
+    Regression for issue #6820: 7 pre-existing catalog anchors were reclassified
+    with ``legacy_dirty_evidence: true`` to unblock the lightweight proof path.
+    That escape hatch must not weaken the checker: a newly added evidence entry
+    that references ignored ``output/`` artifacts or an absolute local path, but
+    is *not* marked ``legacy_dirty_evidence``, must still produce diagnostics even
+    when other legacy-dirty entries are present in the same catalog.
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+
+    legacy = repo_root / "docs/context/evidence/legacy_report.json"
+    legacy.write_text('{"source": "output/local/report.json"}\n', encoding="utf-8")
+
+    new_dirty_output = repo_root / "docs/context/evidence/new_dirty_output.json"
+    new_dirty_output.write_text('{"artifact": "output/run_123/result.json"}\n', encoding="utf-8")
+    new_dirty_abs = repo_root / "docs/context/evidence/new_dirty_abs.json"
+    new_dirty_abs.write_text('{"path": "/home/user/scratch/result.json"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- path: docs/context/evidence/legacy_report.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n"
+        "  legacy_dirty_evidence: true\n"
+        "- path: docs/context/evidence/new_dirty_output.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n"
+        "- path: docs/context/evidence/new_dirty_abs.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    messages = [d.message for d in diagnostics]
+    assert any("ignored output/ artifacts" in m for m in messages), diagnostics
+    assert any("absolute local filesystem paths" in m for m in messages), diagnostics
+
+
 def test_context_catalog_skips_binary_evidence_scan(tmp_path: Path) -> None:
     """Binary evidence entries should not crash text-only provenance checks."""
     repo_root = tmp_path

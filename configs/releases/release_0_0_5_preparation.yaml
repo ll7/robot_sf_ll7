@@ -1,0 +1,7 @@
+# This marker permits the explicitly prepared next citation target to live on
+# an untagged tree while maintainer approval is still pending. It is not
+# publication authorization and does not permit creating a tag or release.
+schema_version: release_preparation.v1
+release_tag: "0.0.5"
+status: awaiting_maintainer_approval
+publication_authorized: false

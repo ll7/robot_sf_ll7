@@ -30,6 +30,8 @@
  * <http://gamma.cs.unc.edu/RVO2/>
  */
 
+/* Robot SF local modification: collaboration-coefficient behavior. */
+
 #include "Agent.h"
 
 #include "KdTree.h"

@@ -89,7 +89,10 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
 
     assert 'dist_mode="${PYTEST_XDIST_DIST:-load}"' in script_text
     assert "Invalid PYTEST_XDIST_DIST value" in script_text
-    assert 'cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")' in script_text
+    assert "cmd=(uv run pytest)" in script_text
+    assert 'if [[ "$pytest_execution_mode" == "xdist" ]]; then' in script_text
+    assert 'cmd+=(-n "$worker_spec" --dist "$dist_mode")' in script_text
+    assert 'if [[ "$worker_spec" == "1" ]]; then' in script_text
     assert "PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup" in script_text
     assert "--lane core|optional|all" in script_text
     assert "ROBOT_SF_TEST_LANE=core|optional|all" in script_text
@@ -268,6 +271,7 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
         "Invalid PYTEST_XDIST_DIST value 'invalid-mode' "
         "(expected load|worksteal|loadscope|loadfile|loadgroup)."
     ) in result.stderr
+    assert "Resolved pytest workers" not in result.stderr
     assert "Resolved pytest-xdist workers" not in result.stderr
     assert "resolve_pytest_workers.py" not in result.stderr
 
@@ -296,8 +300,8 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
             [
                 "#!/usr/bin/env bash",
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
-                '  printf "1\\n"',
-                "  exit 0",
+                '  echo "worker resolver must not rewrite explicit serial mode" >&2',
+                "  exit 98",
                 "fi",
                 'printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
             ]
@@ -374,6 +378,10 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
 
     assert result.returncode == 0, result.stderr
     pytest_args = captured_args.read_text(encoding="utf-8")
+    padded_pytest_args = f" {pytest_args} "
+    assert " -n " not in padded_pytest_args
+    assert " --dist " not in padded_pytest_args
+    assert "in-process serial (pytest-xdist disabled)" in result.stderr
     assert "tests/test_new_top_level.py" in pytest_args
     assert "tests/test_optional_top_level.py" not in pytest_args
     assert "tests/ped_npc" in pytest_args
@@ -393,7 +401,7 @@ def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     tmp_path: Path,
 ) -> None:
-    """Serial fallback must not inherit parallel flags or hide serial failures (issue #5633)."""
+    """Coverage-finalization fallback must be true no-xdist and fail closed (#6526)."""
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -438,6 +446,7 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
                 "  count=$((count + 1))",
                 '  printf "%s\\n" "$count" > "$UV_COUNT_FILE"',
                 '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
+                '  echo "sqlite3.OperationalError: unable to open database file" >&2',
                 '  echo "Segmentation fault (core dumped)" >&2',
                 "  exit 1",
                 "fi",
@@ -474,8 +483,12 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
     calls = captured_args.read_text(encoding="utf-8").splitlines()
     assert len(calls) == 2
     assert "-n 2" in calls[0]
-    assert "-n 1" in calls[1]
+    assert "--dist load" in calls[0]
+    padded_serial_call = f" {calls[1]} "
+    assert " -n " not in padded_serial_call
+    assert " --dist " not in padded_serial_call
     assert "-n 2" not in calls[1]
+    assert "pytest-xdist disabled" in result.stderr
     assert "parallel diagnostic observed" in result.stderr
     assert "serial diagnostic observed" in result.stderr
 
@@ -1606,6 +1619,121 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     assert "pulls/6529" in call_lines[1]
     assert "issues/6529/comments" in call_lines[2]
     assert all("gh pr" not in call for call in call_lines)
+
+
+def test_gh_comment_issue_uses_rest_api(tmp_path: Path) -> None:
+    """Issue comment publication must use REST validation and issue comments, not ``gh issue comment``.
+
+    Mirrors ``test_gh_comment_pr_uses_rest_api`` so the issue path is provably
+    quota-independent: under a mocked environment where GraphQL is exhausted but
+    REST remains available, it invokes only ``gh api`` REST calls (no
+    ``gh issue comment``, no GraphQL) to validate the target and publish.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        "printf '%s\\n' '{\"id\": 1, \"number\": 6843}'\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST issue comment body\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "6843",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    # REST validation lookup (GET repos/<owner>/<repo>/issues/<number>) precedes the POST.
+    assert call_lines[0].startswith("api repos/ll7/robot_sf_ll7/issues/6843")
+    assert "--method POST" not in call_lines[0]
+    # Publication uses the REST issue-comments endpoint with the body file.
+    assert "api --method POST repos/ll7/robot_sf_ll7/issues/6843/comments" in call_lines[1]
+    assert "-F body=@" in call_lines[1]
+    # The issue path must never fall back to ``gh issue comment`` (which routes
+    # through GraphQL under quota exhaustion) nor issue any GraphQL call.
+    assert all("issue comment" not in call for call in call_lines)
+    assert all("graphql" not in call.lower() for call in call_lines)
+
+
+def test_gh_comment_issue_fail_closed_on_missing(tmp_path: Path) -> None:
+    """Issue path must exit nonzero and skip the POST when the target is missing/unknown.
+
+    When the REST issue lookup reports a missing or unknown target, the script
+    fails closed (nonzero exit) and never publishes a comment, so a degraded
+    GraphQL lookup cannot masquerade as a successful publication.
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        # A publication POST must never be reached when validation fails; if it
+        # somehow is, surface a distinct non-matching exit so the assertion fails.
+        'case "$*" in\n'
+        '  *"--method POST"*) echo "POST reached despite failed validation" >&2; exit 5 ;;\n'
+        '  *) echo "HTTP 404: Not Found" >&2; exit 1 ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("must not be posted\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "issue",
+            "9999999",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "could not be resolved through the REST API" in result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    # Only the REST validation lookup is recorded; no POST and no ``gh issue comment``.
+    assert any(call.startswith("api repos/ll7/robot_sf_ll7/issues/9999999") for call in call_lines)
+    assert not any("--method POST" in call for call in call_lines)
+    assert not any("issue comment" in call for call in call_lines)
 
 
 # Help-behaviour contract tests.

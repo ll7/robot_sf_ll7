@@ -172,6 +172,95 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     claim.assert_called_once_with([2667, 2668], remote="origin")
 
 
+def test_snapshot_issues_fail_closed_for_closed_issue_state() -> None:
+    """Explicit issue snapshots must not classify closed issues as claimable."""
+    issue_payload = {
+        "number": 2680,
+        "title": "closed but otherwise claimable issue",
+        "body": "closed issue body",
+        "state": " closed ",
+        "url": "https://github.test/issues/2680",
+        "labels": [{"name": "workflow"}],
+        "assignees": [],
+    }
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps(issue_payload),
+            stderr="",
+        )
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = _claim_status(2680)
+            payload = snapshot_issues(
+                [2680], repo="ll7/robot_sf_ll7", body_limit=150, remote="origin"
+            )
+
+    row = payload["issues"][0]
+    assert row["state"] == "CLOSED"
+    assert row["classification"] == "closed"
+    assert row["reason"] == "issue state is CLOSED; skip autonomous claim"
+
+
+def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() -> None:
+    """Claimable list rows must fail closed when gh returns non-open or missing states."""
+    issue_list = [
+        {
+            "number": 2681,
+            "title": "closed claimable-looking issue",
+            "state": "CLOSED",
+            "url": "https://github.test/issues/2681",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2682,
+            "title": "missing state claimable-looking issue",
+            "url": "https://github.test/issues/2682",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2683,
+            "title": "malformed state claimable-looking issue",
+            "state": None,
+            "url": "https://github.test/issues/2683",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2684,
+            "title": "open issue remains claimable",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2684",
+            "labels": [],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2681: _claim_status(2681),
+                2682: _claim_status(2682),
+                2683: _claim_status(2683),
+                2684: _claim_status(2684),
+            }
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=4,
+            )
+
+    classifications = [issue["classification"] for issue in payload["issues"]]
+    assert classifications == ["closed", "state_unknown", "state_unknown", "claimable"]
+    assert [issue["state"] for issue in payload["issues"]] == ["CLOSED", "", "", "OPEN"]
+    assert payload["issues"][0]["reason"] == "issue state is CLOSED; skip autonomous claim"
+    assert payload["issues"][1]["reason"] == "issue state missing or unknown; skip autonomous claim"
+    assert payload["issues"][2]["reason"] == "issue state missing or unknown; skip autonomous claim"
+
+
 def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:
     """Claimable snapshots should not shell out once per listed issue."""
     issue_list = [

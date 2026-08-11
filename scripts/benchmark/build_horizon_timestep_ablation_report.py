@@ -13,7 +13,7 @@ Usage::
         --output-dir docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
 """
 
-# evidence-writer-exempt: Existing writers unchanged; separate migration preserves output contracts.
+# evidence-writer-exempt: insertion-order JSON contract - json.dump without sort_keys preserves the committed field order that shared write_json (sort_keys=True) would reorder.
 from __future__ import annotations
 
 import argparse

@@ -137,6 +137,9 @@ knowledge, not every transient iteration detail.
 * Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 
+* Issue #6155 release environment packet:
+  [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)
+
 * Issue #3385 camera-ready decomposition closure audit:
 
   [issue_3385_closure_audit_2026_07_04.md](issue_3385_closure_audit_2026_07_04.md)

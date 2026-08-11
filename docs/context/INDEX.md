@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
+[issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
+
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
 gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:

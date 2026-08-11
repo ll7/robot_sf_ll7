@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/preflight_packet.json",
+  "artifact_sha256": "cf9755009636ca411248c83b648092bec7c623cd6dfb7c4cece1b586bbd25a0d",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

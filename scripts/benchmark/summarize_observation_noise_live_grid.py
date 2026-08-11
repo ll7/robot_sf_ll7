@@ -6,6 +6,7 @@ replays. It does not treat fallback, degraded, unavailable, trace-derived-only,
 or malformed summaries as successful evidence.
 """
 
+# evidence-writer-exempt: insertion-order JSON contract - json.dumps without sort_keys preserves the committed field order that shared write_json (sort_keys=True) would reorder.
 from __future__ import annotations
 
 import argparse

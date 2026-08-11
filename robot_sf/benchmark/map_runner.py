@@ -266,6 +266,7 @@ from robot_sf.planner.protocol import (
     DIAGNOSTICS_UNAVAILABLE_KEY,
     DIAGNOSTICS_UNAVAILABLE_REASON_KEY,
     PLANNER_TYPE_KEY,
+    BaselineStepToLocalAdapter,
     normalize_planner_diagnostics,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter  # noqa: F401 - registry re-export.
@@ -493,13 +494,16 @@ _load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
 _load_latency_stress_profile = _load_latency_profile
 
 
-class _ExternalMPCAdapter:
+class _ExternalMPCAdapter(BaselineStepToLocalAdapter):
     """Bridge an external MPC wrapper into the map-runner adapter contract.
 
     The external wrapper is expected to expose ``step(obs) -> dict`` while the
     benchmark runner expects ``plan(obs) -> (linear, angular)``. The adapter also
     normalizes the upstream observation into the structured Robot SF payload used
-    by the other external planner bridges.
+    by the other external planner bridges. The canonical baseline adapter owns
+    the lifecycle and ``step()``/``plan()`` construction; the two injected
+    callbacks retain the external-MPC observation and heading-aware projection
+    semantics at this benchmark boundary.
     """
 
     def __init__(
@@ -510,42 +514,44 @@ class _ExternalMPCAdapter:
         robot_kinematics: str | None,
         planner_name: str,
     ) -> None:
-        """Store the wrapped external MPC planner and its adapter configuration."""
-        self._planner = planner
+        """Construct the canonical adapter with external-MPC boundary callbacks."""
         self._algo_config = algo_config
         self._robot_kinematics = robot_kinematics
         self._planner_name = planner_name
+        self._current_observation: dict[str, Any] | None = None
+        super().__init__(
+            planner,
+            planner_type=planner_name,
+            step_executor=self._step_external_mpc,
+            action_projector=self._project_external_mpc_action,
+        )
 
-    def reset(self, *, seed: int | None = None) -> None:
-        """Reset the wrapped planner if it exposes the standard hook."""
-        if hasattr(self._planner, "reset"):
-            if seed is None:
-                self._planner.reset()
-            else:
-                try:
-                    self._planner.reset(seed=seed)
-                except TypeError:
-                    self._planner.reset()
-
-    def close(self) -> None:
-        """Release wrapped planner resources if available."""
-        if hasattr(self._planner, "close"):
-            self._planner.close()
-
-    def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
-        """Produce a map-runner command from an external MPC planner step.
+    def _step_external_mpc(self, planner: Any, obs: dict[str, Any]) -> Any:
+        """Forward the canonical observation through the external-MPC format.
 
         Returns:
-            tuple[float, float]: Projected ``(linear, angular)`` command.
+            The external planner's action mapping.
         """
-        action = self._planner.step(_obs_to_external_mpc_format(obs))
+        self._current_observation = obs
+        return planner.step(_obs_to_external_mpc_format(obs))
+
+    def _project_external_mpc_action(
+        self,
+        action: Any,
+        planner_type: str,
+    ) -> tuple[float, float]:
+        """Preserve the external-MPC heading-aware action projection.
+
+        Returns:
+            The projected ``(linear, angular)`` command.
+        """
+        if self._current_observation is None:
+            raise RuntimeError("external-MPC action projection context is not initialized")
         if not isinstance(action, dict):
-            raise TypeError(
-                f"{self._planner_name} returned unsupported action payload: {type(action)}"
-            )
+            raise TypeError(f"{planner_type} returned unsupported action payload: {type(action)}")
         linear, angular, _conversion_mode = _ppo_action_to_unicycle(
             action,
-            obs,
+            self._current_observation,
             self._algo_config,
             robot_kinematics=self._robot_kinematics,
             project_command=False,

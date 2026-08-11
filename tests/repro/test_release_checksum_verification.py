@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tarfile
 from io import BytesIO
 from pathlib import Path
@@ -624,6 +625,153 @@ class TestVerificationScript:
         }
 
         assert expected_source_paths <= entry_paths
+        source_path = (
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        )
+        historical_source = subprocess.run(
+            [
+                "git",
+                "cat-file",
+                "blob",
+                f"{manifest['frozen_manifest_origin_main_commit']}:{source_path}",
+            ],
+            capture_output=True,
+            check=True,
+            cwd=ROOT,
+        ).stdout
+        historical_sha256 = hashlib.sha256(historical_source).hexdigest()
+        for entry in manifest["entries"]:
+            if entry["path"] == source_path:
+                entry["sha256"] = historical_sha256
+                break
+        verification_manifest_path = tmp_path / "release_0_0_5_frozen_manifest.yaml"
+        verification_manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+        report = verify_release(
+            manifest_path=verification_manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=ROOT,
+        )
+        assert report["overall_verdict"] == "pass"
+        frozen_source = next(
+            result
+            for result in report["verdicts"]["repository_entries"]
+            if result.get("path") == source_path
+        )
+        assert frozen_source["match"] is True
+        assert frozen_source["source_commit"] == manifest["frozen_manifest_origin_main_commit"]
+        assert frozen_source["current_sha256"] == frozen_source["actual_sha256"]
+        assert frozen_source["frozen_sha256"] == frozen_source["expected_sha256"]
+        assert frozen_source["frozen_sha256"] != frozen_source["actual_sha256"]
+
+    def test_unavailable_frozen_source_commit_fails_closed(self, tmp_path: Path) -> None:
+        """A manifest pinning an unavailable frozen commit must fail closed."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": "0" * 40,
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/evidence.txt",
+                    "sha256": evidence_digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert any("unavailable in the repository" in error for error in report["errors"])
+
+    def test_malformed_frozen_source_commit_fails_closed(self, tmp_path: Path) -> None:
+        """A manifest with a malformed frozen commit pin must fail closed."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": "not-a-valid-sha",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/evidence.txt",
+                    "sha256": evidence_digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert any("must be a 40-character Git SHA" in error for error in report["errors"])
+
+    def test_frozen_source_fallback_does_not_rescue_unmatched_digest(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A frozen commit must not rescue a digest that matches neither source."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        canonical_manifest_path = (
+            ROOT / "configs" / "releases" / "release_0_0_5_checksum_manifest.yaml"
+        )
+        frozen_commit = _read_yaml(canonical_manifest_path)["frozen_manifest_origin_main_commit"]
+        source_path = (
+            "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+        )
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "frozen_manifest_origin_main_commit": frozen_commit,
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": source_path, "sha256": "0" * 64}],
+                },
+            },
+            "entries": [{"path": source_path, "sha256": "0" * 64}],
+        }
+        manifest_path = tmp_path / "configs" / "releases" / "manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
         report = verify_release(
             manifest_path=manifest_path,
             bundle_path=None,
@@ -631,7 +779,11 @@ class TestVerificationScript:
             download=False,
             repo_root=ROOT,
         )
-        assert report["overall_verdict"] == "pass"
+
+        assert report["overall_verdict"] == "fail"
+        assert any(
+            "Repository entry checksum verification failed" in error for error in report["errors"]
+        )
 
     def test_release_0_0_5_preserves_frozen_candidate_contract(self) -> None:
         """The release cards must preserve the frozen membership and claim boundaries."""

@@ -5,7 +5,8 @@ show_help() {
   cat <<'EOF'
 Usage: scripts/dev/run_tests_parallel.sh [wrapper-options] [pytest-args...]
 
-Runs pytest in parallel (`-n auto`) with fail-fast defaults for local triage.
+Runs pytest with fail-fast defaults for local triage. Worker counts above one
+use pytest-xdist; `PYTEST_NUM_WORKERS=1` runs pytest in-process without xdist.
 
 Wrapper options:
   --fast-fail      Stop on first failure (`-x`) [default]
@@ -204,16 +205,32 @@ if [[ -n "$worker_override" ]]; then
   requested_args=(--requested "$worker_override")
 fi
 
-worker_spec="$(
-  uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
-    --show-reason 2> >(cat >&2)
-)"
+if [[ "$worker_override" == "1" ]]; then
+  # ``resolve_pytest_workers.py`` applies platform concurrency floors (for
+  # example, two workers on macOS). An explicit one is a different semantic
+  # request: true in-process execution, so it must bypass every xdist floor.
+  worker_spec="1"
+  echo "explicit override via PYTEST_NUM_WORKERS=1 (true no-xdist)" >&2
+else
+  worker_spec="$(
+    uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
+      --show-reason 2> >(cat >&2)
+  )"
+fi
 if [[ -z "$worker_spec" ]]; then
   echo "Failed to resolve pytest worker count." >&2
   exit 2
 fi
 
-echo "Resolved pytest-xdist workers: $worker_spec" >&2
+pytest_execution_mode="xdist"
+if [[ "$worker_spec" == "1" ]]; then
+  pytest_execution_mode="no-xdist"
+  echo "Resolved pytest workers: $worker_spec" >&2
+  echo "Resolved pytest execution mode: in-process serial (pytest-xdist disabled)." >&2
+else
+  echo "Resolved pytest-xdist workers: $worker_spec" >&2
+  echo "Resolved pytest execution mode: pytest-xdist (dist=$dist_mode)." >&2
+fi
 
 # Fallback for issue #5633: when parallel pytest workers crash on a
 # native-extension/segfault combination (not an ordinary assertion failure),
@@ -246,7 +263,10 @@ if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
   trap cleanup_pytest_temproot EXIT
 fi
 
-cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
+cmd=(uv run pytest)
+if [[ "$pytest_execution_mode" == "xdist" ]]; then
+  cmd+=(-n "$worker_spec" --dist "$dist_mode")
+fi
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint
 # subset per shard so the suite parallelizes across runners. Main CI may opt in
@@ -313,6 +333,9 @@ if [[ "$sharding_active" != "1" && "${CI:-}" == "true" ]]; then
   coverage_enabled=1
 fi
 if [[ "$coverage_enabled" == "1" ]]; then
+  if [[ -n "${COVERAGE_FILE:-}" ]]; then
+    mkdir -p "$(dirname "$COVERAGE_FILE")"
+  fi
   if [[ "$sharding_active" == "1" ]]; then
     if [[ -z "${COVERAGE_FILE:-}" ]]; then
       echo "Sharded coverage requires a unique COVERAGE_FILE per shard." >&2
@@ -467,17 +490,18 @@ if [[ "$pytest_exit" -ne 0 ]]; then
   uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
     --log-file "$pytest_log" \
     --requested-workers "$worker_spec" \
-    --dist-mode "$dist_mode" >&2 || true
+    --dist-mode "$dist_mode" \
+    --execution-mode "$pytest_execution_mode" >&2 || true
   # Opt-in serial fallback: rerun with a single worker to separate an
   # environment crash from real failures. Disabled by default so the gate
   # stays fail-closed (an env crash is not success and not silently skipped).
-  if [[ "$serial_fallback" == "1" ]]; then
-    printf '\n[pr_ready_check] PR_READY_SERIAL_FALLBACK=1: rerunning serially to separate env crash from real failures.\n' >&2
+  if [[ "$serial_fallback" == "1" && "$pytest_execution_mode" == "xdist" ]]; then
+    printf '\n[pr_ready_check] PR_READY_SERIAL_FALLBACK=1: rerunning in-process with pytest-xdist disabled to separate env crash from real failures.\n' >&2
     serial_log="$(mktemp "${TMPDIR:-/tmp}/pytest_serial.XXXXXX.log")"
     # ``cmd`` starts with ``uv run pytest -n <workers> --dist <mode>``. Keep
-    # the wrapper-added pytest options, but do not copy the original worker
-    # flags after ``-n 1``; pytest would otherwise use the later worker value.
-    serial_cmd=(uv run pytest -n 1 --dist "$dist_mode")
+    # the wrapper-added pytest options, but omit the xdist worker/scheduler
+    # flags entirely so the fallback runs in pytest's controller process.
+    serial_cmd=(uv run pytest)
     if [[ ${#cmd[@]} -gt 7 ]]; then
       serial_cmd+=("${cmd[@]:7}")
     fi
@@ -490,6 +514,7 @@ if [[ "$pytest_exit" -ne 0 ]]; then
       --log-file "$serial_log" \
       --requested-workers 1 \
       --dist-mode "$dist_mode" \
+      --execution-mode no-xdist \
       --serialized-ok "$([[ "$serial_exit" -eq 0 ]] && echo true || echo false)" >&2 || true
     rm -f "$serial_log"
   fi

@@ -15,7 +15,9 @@ Usage:
 Notes:
   - If --body-file is omitted, comment body is read from stdin.
   - Prefer heredoc stdin for multiline comments to avoid literal "\n" escapes.
-  - PR comments use the REST issues-comments endpoint; no GraphQL PR comment lookup is required.
+  - Both PR and issue comments use the REST issue-comments endpoint
+    (POST repos/<owner>/<repo>/issues/<number>/comments) with REST target
+    validation, so publication is independent of GraphQL comment quotas.
 EOF
 }
 
@@ -149,9 +151,18 @@ if [ "$target_type" = "pr" ]; then
   gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
     -F "body=@$body_file"
 else
-  repo_flag=()
+  api_repo="{owner}/{repo}"
   if [ -n "$repo_arg" ]; then
-    repo_flag=(--repo "$repo_arg")
+    api_repo="$repo_arg"
   fi
-  gh issue comment "$target_id" "${repo_flag[@]}" --body-file "$body_file"
+  # Mirror the PR path: validate the target through REST before publication,
+  # then post through the REST issue-comments endpoint. This keeps the issue
+  # path independent of the GraphQL-backed ``gh issue comment`` command, which
+  # fails under exhausted GraphQL comment quota even when REST is available.
+  if ! gh api "repos/$api_repo/issues/$target_id" --silent; then
+    echo "Error: Issue '$target_id' could not be resolved through the REST API." >&2
+    exit 1
+  fi
+  gh api --method POST "repos/$api_repo/issues/$target_id/comments" \
+    -F "body=@$body_file"
 fi

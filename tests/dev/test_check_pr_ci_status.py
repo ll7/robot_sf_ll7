@@ -1261,6 +1261,61 @@ def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(
     assert "diagnostic: check_run_stale_job_success" in _format_human(data)
 
 
+def test_fetch_ci_status_marks_completed_job_with_stale_check_run_as_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale pending check-run over a completed-success job stays fail-closed and explicit."""
+    payload = {
+        "number": 6884,
+        "title": "stale check-run",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "friction",
+        "headRefOid": "abc123",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "2026-08-11T14:23:36Z",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {"status": "completed", "conclusion": "success"}
+            if path == "actions/runs/123"
+            else {
+                "status": "completed",
+                "conclusion": "success",
+                "steps": [
+                    {"name": "Unit tests", "status": "completed", "conclusion": "success"},
+                    {"name": "Complete job", "status": "completed", "conclusion": "success"},
+                ],
+            }
+            if path == "actions/jobs/456"
+            else None
+        ),
+    )
+
+    data = _fetch_ci_status("6884")
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["pending_reason"] == "status_propagation_lag"
+    assert data["checks"]["diagnostic"] == "check_run_stale_job_success"
+    assert data["checks"]["status_propagation_lag"][0]["job_status"] == "completed"
+    assert "fail-closed: true" in _format_human(data)
+
+
 def test_main_keeps_status_propagation_lag_fail_closed(
     capsys: pytest.CaptureFixture,
     monkeypatch: pytest.MonkeyPatch,

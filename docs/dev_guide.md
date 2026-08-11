@@ -573,7 +573,8 @@ Use `--max-wall-seconds` to give long-running monitors a clean local stop path b
 pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
 remote GitHub checks were cancelled or failed.
 If the parent workflow is already `completed/success` and every recorded job step ends with a
-successful `Complete job` step while GitHub still reports the job as `in_progress`, the JSON payload
+successful `Complete job` step while GitHub still reports a pending check/job lifecycle (either a
+job that remains `in_progress` or a stale check-run over a `completed/success` job), the JSON payload
 marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` and includes the
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition

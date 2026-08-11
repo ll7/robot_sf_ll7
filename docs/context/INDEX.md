@@ -16,6 +16,11 @@ execution:
 Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
 [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
 
+Issue #6875 camera-ready campaign producer for the diagnostic-only
+`report_crosswalk.v1` sidecar, with exact source-artifact/episode provenance,
+fail-closed serialized execution-monitor handling, and final-summary propagation:
+[issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md).
+
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
 gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:
@@ -255,7 +260,8 @@ or the normal diff wrapper.
 
 | Area | Current entry points | Use for |
 |---|---|---|
-| Agent workflow | [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md), [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md), [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md), [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md), [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md), [Agent Workflow Lessons memory](../../memory/workflows/2026-05-31_agent_workflow_lessons.md) | Issue-to-PR loops, research-result mode, queue exhaustion, batching, issue splitting, state-label routing, live-state checks, delegated-worker proof boundaries, skill consolidation candidates, and GitHub workflow policy. |
+| Diagnosis and execution report crosswalk | [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md) | Versioned episode/campaign reporting crosswalk for deterministic failure diagnosis and execution-deviation monitoring, including denominators, provenance, fallback/degraded states, and diagnostic-only claim boundaries. |
+| Agent workflow | [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md), [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md), [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md), [issue_audit_contract.md](issue_audit_contract.md), [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md), [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md), [Agent Workflow Lessons memory](../../memory/workflows/2026-05-31_agent_workflow_lessons.md) | Issue-to-PR loops, research-result mode, queue exhaustion, batching, issue splitting, state-label routing, live-state checks, deterministic versus interactive issue-audit authority, one-at-a-time decision envelopes, delegated-worker proof boundaries, skill consolidation candidates, and GitHub workflow policy. |
 | PR workflow contracts | [issue_3472_pr_body_contracts.md](issue_3472_pr_body_contracts.md), [../code_review.md](../code_review.md) | Live PR body, follow-up disposition, and domain-aware approval CI guard for reviewability and evidence-validity-sensitive PRs. |
 | Context architecture | This file, [../ai/context_packing.md](../ai/context_packing.md), [../ai/retrieval_deferral.md](../ai/retrieval_deferral.md), [issue_728_coding_agents_compatibility.md](issue_728_coding_agents_compatibility.md) | Context-pack decisions, optional external tools, Markdown-first retrieval, and cross-agent compatibility. |
 | Research-engine guide | [../researchers_guide.md](../researchers_guide.md), [research_month_one_synthesis_2026-06.md](research_month_one_synthesis_2026-06.md) | How to define a research question, choose an evidence tier, author a campaign manifest, run validation, interpret evidence grades, and the epic #3057 month-one landed-vs-pending synthesis. Synthesis/docs only — no new benchmark claim. |

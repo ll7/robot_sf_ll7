@@ -720,7 +720,7 @@ def test_ci_step_timer_signal_contract_survives_runner_ignored_sigint() -> None:
 def test_ci_step_timer_python_fallback_reaps_backend_after_readiness_interrupts_wait(
     tmp_path: Path,
 ) -> None:
-    """Retry Bash wait when the readiness trap races with immediate backend exit."""
+    """Retry backend reap long enough when readiness USR1 keeps interrupting Bash wait."""
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "ci_step_timer.sh"
     bash_path = shutil.which("bash")
     sleep_path = shutil.which("sleep")
@@ -732,8 +732,13 @@ def test_ci_step_timer_python_fallback_reaps_backend_after_readiness_interrupts_
     python_shim.unlink()
     python_shim.write_text(
         f"""#!{bash_path}
-"$CI_TIMER_SLEEP_PATH" 0.05
-kill -USR1 "$PPID"
+target_pid="$PPID"
+i=0
+while [[ "$i" -lt 160 ]]; do
+  kill -USR1 "$target_pid" 2>/dev/null || exit 0
+  "$CI_TIMER_SLEEP_PATH" 0.005
+  i=$((i + 1))
+done
 exit 0
 """,
         encoding="utf-8",

@@ -1,0 +1,58 @@
+issue_decision_envelope:
+  schema: issue_decision_envelope.v1
+  plan_schema: issue_audit_plan.v1
+  plan_digest: sha256
+  repo: string
+  status: ready | needs_clarification | blocked_incomplete_inventory
+  queue:
+    position: integer
+    total: integer
+    remaining_after: integer
+    ordering: issue_number_ascending
+  issue:
+    number: integer
+    display: string
+    title: string
+    url: string
+    state: string
+    labels:
+    - string
+    classification: string
+  decision:
+    required: true
+    question: string
+    question_source: string
+    blocking_evidence: string
+    source_excerpt: string
+    evidence_sources:
+    - source_id: string
+      kind: body | comment | label
+      url: string
+      author: string
+      created_at: string
+      excerpt: string
+    documented_options:
+    - token: string
+      label: string
+      source_id: string
+      source:
+        kind: body | comment | label
+        url: string
+        author: string
+        created_at: string
+        excerpt: string
+    safe_mutations_applied: []
+  answer_contract:
+    format: "#<issue-number>: <option-token>"
+    allowed_tokens:
+    - string
+    exact_match_required: true
+  verification:
+    refresh_issue_before_apply: true
+    compare_state_and_labels: true
+    rerun_shared_classifier: true
+    project5_writes: false
+  forbidden_inferences:
+  - string
+  inventory_errors:
+  - string

@@ -211,7 +211,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.1"
+required-version = "==0.16.2"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -682,7 +682,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "scalene>=2.3.0",
-    "ruff==0.16.1",
+    "ruff==0.16.2",
     "pre-commit>=4.6.1",
     "setuptools>=83.0.0",
     "pylint>=4.0.6",

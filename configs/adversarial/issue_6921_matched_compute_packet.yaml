@@ -96,17 +96,15 @@ budget:
     All-arms episode total is 90 * 2 = 180.
 seeds:
   frozen_scenario_seeds:
-    - 1101
-    - 2202
-    - 3303
+    - 123
   search_seed: 42
   residual_adversary_seed: 42
   description: >
-    Frozen seed set for reproducibility.  Scenario seeds control pedestrian
-    initialisation; search and adversary seeds control the deterministic
-    grid-search enumeration and residual policy state.  Both arms'
-    residual_search.seed and residual_adversary.seed are set to 42, matching
-    these packet-level seed values.
+    The frozen scenario seed is 123, matching the checked-in scenario template;
+    search and adversary seeds control the deterministic grid-search
+    enumeration and residual policy state.  Both arms' residual_search.seed
+    and residual_adversary.seed are set to 42, matching these packet-level
+    seed values.
 bounds_identity:
   residual_bounds:
     max_residual_accel_mps2: 1.5

@@ -522,11 +522,12 @@ def test_scenario_template_seed_is_frozen(packet: dict) -> None:
 
 
 def test_frozen_scenario_seeds(packet: dict) -> None:
-    """Scenario seeds must be frozen and non-empty."""
+    """Scenario seeds must be frozen and match the checked-in template seed."""
     seeds = packet["seeds"]["frozen_scenario_seeds"]
     assert isinstance(seeds, list)
     assert len(seeds) >= 1
     assert all(isinstance(s, int) for s in seeds)
+    assert seeds == [packet["scenario"]["template_seed"]]
 
 
 def test_search_seed_is_frozen(packet: dict) -> None:

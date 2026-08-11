@@ -18,7 +18,8 @@ guard.
 
 It AST-scans ``logger.<method>(...)`` calls and rejects any whose message template
 is a string constant that carries a printf-style placeholder (``%s``/``%d``/``%.2f``
-...) **and** passes positional arguments **and** has no brace field. Stdlib
+...) **and** passes positional arguments. This also catches mixed templates and
+escaped literal braces, which otherwise still discard the printf arguments. Stdlib
 ``logging`` modules are not affected because they never bind a loguru logger.
 
 Usage
@@ -206,8 +207,6 @@ class _ViolationVisitor(ast.NodeVisitor):
         if not (isinstance(message_arg, ast.Constant) and isinstance(message_arg.value, str)):
             return
         template = message_arg.value
-        if "{" in template:
-            return
         if not PRINTF_PLACEHOLDER_RE.search(template):
             return
         # ``log`` carries (level, message, *args); every other method uses

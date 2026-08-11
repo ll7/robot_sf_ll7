@@ -425,11 +425,11 @@ def test_circuit_breaker_warning_interpolates_signature_and_counters(tmp_path: P
     asserts the emitted loguru record contains the interpolated values, not the
     literal ``%s``/``%d`` placeholders.
     """
-    captured: list[str] = []
+    captured: list[dict] = []
 
     def capture_message(message) -> None:
         """Capture warning records emitted by the serial batch runner."""
-        captured.append(message.record["message"])
+        captured.append(message.record)
 
     def failing_worker(job) -> None:
         """Fail with an identical signature so the circuit breaker trips."""
@@ -453,9 +453,12 @@ def test_circuit_breaker_warning_interpolates_signature_and_counters(tmp_path: P
 
     # The breaker must actually trip on the second identical failure.
     assert abort_meta is not None
-    breaker_messages = [msg for msg in captured if "Circuit breaker tripped" in msg]
-    assert breaker_messages, "no circuit-breaker warning record was captured"
-    message = breaker_messages[0]
+    breaker_records = [
+        record for record in captured if "Circuit breaker tripped" in record["message"]
+    ]
+    assert breaker_records, "no circuit-breaker warning record was captured"
+    breaker_record = breaker_records[0]
+    message = breaker_record["message"]
 
     # Regression core: the failure signature and counters must be interpolated,
     # not emitted as the literal printf placeholders (issue #6837).
@@ -464,3 +467,4 @@ def test_circuit_breaker_warning_interpolates_signature_and_counters(tmp_path: P
     assert "Aborting arm after 2/2 jobs" in message, message
     assert "%s" not in message, message
     assert "%d" not in message, message
+    assert breaker_record["exception"] is None

@@ -2443,10 +2443,10 @@ def _run_batch_sequential(  # noqa: C901, D417
                         episodes_completed_before_onset=wrote,
                         total_jobs=total,
                     )
-                    # Surface the active exception's traceback via opt(exception=True);
-                    # the counters/signature below were previously discarded by the
-                    # printf-% template (issue #6837).
-                    logger.opt(exception=True).warning(
+                    # The active exception was already recorded by logger.exception above;
+                    # keep this summary warning to one record so it does not duplicate the
+                    # full traceback (issue #6837).
+                    logger.warning(
                         "Circuit breaker tripped: {} consecutive identical failures "
                         "({}). Aborting arm after {}/{} jobs. Projected episodes saved: {}.",
                         cb_tracker["consecutive"],

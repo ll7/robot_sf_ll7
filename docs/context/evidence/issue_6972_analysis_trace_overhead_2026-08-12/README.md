@@ -25,9 +25,11 @@ Run the same six-sample measurement at any candidate commit:
 
 ```bash
 LOGURU_LEVEL=ERROR uv run python scripts/benchmark/measure_analysis_trace_overhead_issue_6972.py \
-  --samples 6 --warmups 1 --output /tmp/issue-6972-receipt.json
+  --samples 6 --warmups 1 --batches 2 --output /tmp/issue-6972-receipt.json
 ```
 
-The script records exact samples, deterministic compressed sizes, paired
-outcome/metric digests, control-sequence digests, and provenance checks. The
-comparison receipt is [analysis_trace_overhead_receipt.json](analysis_trace_overhead_receipt.json).
+The current script records repeated paired batches and returns
+`target_met: null` when same-commit batch medians are unstable. The historical
+comparison receipt below predates that repeated-batch contract and remains a
+diagnostic v1 receipt:
+[analysis_trace_overhead_receipt.json](analysis_trace_overhead_receipt.json).

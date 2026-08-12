@@ -1,0 +1,21 @@
+# Shared base for the issue-4017 constrained-RL / unconstrained PPO CPU smoke pair.
+# Launch a variant file, not this base; policy and safety identities stay explicit below.
+algorithm: ppo
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 256
+seed: 4017
+num_envs: 1
+device: cpu
+policy: MultiInputPolicy
+env_overrides:
+  observation_mode: default_gym
+env_factory_kwargs:
+  reward_name: route_completion_v2
+ppo_hyperparams:
+  learning_rate: 0.0001
+  n_steps: 64
+  batch_size: 64
+  n_epochs: 2
+  gamma: 0.99
+tracking:
+  enabled: false

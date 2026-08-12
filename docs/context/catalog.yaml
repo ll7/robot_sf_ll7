@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-11
+updated_at: 2026-08-12
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,54 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6934_brne_action_scaling_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6934_brne_action_scaling_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6938_brne_progress_mechanism_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6938_brne_progress_mechanism_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6615_orca_adapter_validation_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6615_orca_adapter_validation_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/issue_6464_brne_corridor_diagnostic.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6934_brne_action_scaling.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6938_brne_progress_mechanism.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6615_orca_adapter_validation.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_6875_report_crosswalk_producer.md
   status: current
   freshness: maintained

@@ -1,0 +1,9 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "77330613a9a29a7438a1d764297996ca38156cfe",
+  "variants": {
+    "issue_4014_ppo_smoke_matched.yaml": "fad248acf08c64050224fef5a4d0a5de3a7810f14798a6eedd6e2c440c02eba9",
+    "issue_4014_ppo_mamba_smoke.yaml": "759d9c2125e61635bf847c1f9ccbf8ee1f4b9950b042a94d2b3f20484509e4a4",
+    "issue_4014_ppo_mamba_smoke_matched.yaml": "2ceac8dad630836e95abcb2c7f8b6d1ceb41c8586cb3721428330da46b74c9f3"
+  }
+}

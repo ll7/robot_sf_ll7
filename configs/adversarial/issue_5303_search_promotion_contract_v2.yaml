@@ -24,7 +24,7 @@ issue: 5303
 parent_issue: 5303
 step: "2b"
 task_id: issue-5303-step-2b-powered-search-promotion-preregistration
-frozen_on: "2026-08-11"
+frozen_on: "2026-08-12"
 # Exact green origin/main commit on which every pre-existing input hash was reproduced
 # (all 20 GitHub check runs completed success/skipped-by-design; blocker #6858 closed,
 # runtime-materialization prerequisite #6475 terminally reconciled to merged PR #6586).
@@ -140,7 +140,10 @@ input_provenance:
       sha256: f64fe6617dfd41c4b99248bf25b69347021369acde1aa81ab23b3a029134b581
     - id: algorithm_metadata
       path: robot_sf/benchmark/algorithm_metadata.py
-      sha256: 7490d04812dbf4a7e7405cfa2f4ae78c7a7f984fdcb4aa4cd6caab47c1b41190
+      # Refreshed after the additive, outcome-free BRNE diagnostic registry metadata
+      # change in issue #6464; no target, split, budget, estimator, gate, or decision
+      # field changed.
+      sha256: 3ea3c8b38101ca1b218a01e906114fd51364ae98a4c9ea0f8ea6aa0ec374bd5c
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

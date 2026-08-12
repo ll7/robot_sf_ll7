@@ -126,6 +126,7 @@ from robot_sf.benchmark.map_runner_observations import (
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
+from robot_sf.benchmark.map_runner_policies import brne as _brne_builder
 from robot_sf.benchmark.map_runner_policies import diffusion_policy as _diffusion_policy_builder
 from robot_sf.benchmark.map_runner_policies import distributional_rl as _distributional_rl_builder
 from robot_sf.benchmark.map_runner_policies import gap_reference as _gap_reference_builder
@@ -1043,6 +1044,7 @@ def _ppo_action_to_unicycle(
 # existing if/elif chain.
 _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
+    **dict.fromkeys(_brne_builder.BRNE_KEYS, _brne_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
         _adapter_policy_builders.build_risk_surface_dwa,

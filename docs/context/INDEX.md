@@ -137,6 +137,37 @@ campaign evidence remains blocked on a SLURM-capable worker):
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
 
+Issue #6464 BRNE corridor diagnostic: exact native preflight on three frozen
+seeds, non-degenerate execution and goal-reaching counts, fail-closed fallback
+handling, and the bounded `0/3` goal-reaching finding that requires a
+hypothesis-driven follow-up before any benchmark or ranking proposal:
+[issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
+[evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
+
+Issue #6934 BRNE action-weight scaling: upstream source and ROS-controller
+inspection proved that mean-normalized weights require a sample mean at the
+Robot SF adapter boundary; the bounded fix passed the exact three-seed corridor
+diagnostic but did not change the `0/3` goal-reaching boundary:
+[issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md),
+[evidence/issue_6934_brne_action_scaling_summary.json](evidence/issue_6934_brne_action_scaling_summary.json).
+The residual progress mechanism is tracked separately in
+[#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
+
+Issue #6938 BRNE progress mechanism: exact native traces separate pre-clamp and
+selected actions, show no clipping or gross heading/frame mismatch in the frozen
+slice, and reproduce a common post-initial-step low-speed command with positive
+phase progress but `0/3` goal-reaching:
+[issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
+[evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
+The bounded command-generation follow-up is [#6944](https://github.com/ll7/robot_sf_ll7/issues/6944).
+
+Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
+`orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The
+result measures projection divergence only; it is not benchmark evidence and does not retire the
+ORCA dissertation hedge:
+[issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
+[evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

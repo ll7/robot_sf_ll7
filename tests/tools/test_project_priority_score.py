@@ -14,11 +14,14 @@ from scripts.tools.project_priority_score import (
     EFFORT_FIELD,
     PRIORITY_SCORE_FIELD,
     REQUIRED_NUMBER_FIELDS,
+    GhProjectClient,
+    MissingProjectScopeError,
     ScoreInputs,
     SyncOptions,
     build_previews,
     compute_priority_score,
     field_keys,
+    main,
     normalize_inputs,
     sync_scores,
     write_summary,
@@ -489,8 +492,6 @@ def test_gh_project_client_surfaces_actionable_auth_error(monkeypatch: pytest.Mo
     recover instead of surfacing an opaque subprocess error.
     """
 
-    from scripts.tools.project_priority_score import GhProjectClient
-
     def _raise(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         """Raise an authentication failure from the gh CLI fallback."""
         raise subprocess.CalledProcessError(
@@ -505,6 +506,83 @@ def test_gh_project_client_surfaces_actionable_auth_error(monkeypatch: pytest.Mo
 
     with pytest.raises(RuntimeError, match="prefer the GitHub MCP/app tools"):
         client.item_list(owner="ll7", project_number=5, limit=1)
+
+
+def test_gh_project_client_classifies_missing_read_project_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing read:project is distinct from an arbitrary gh authentication failure."""
+
+    def _raise(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            1,
+            ["gh", "project", "field-list"],
+            output="",
+            stderr="error: your authentication token is missing required scopes [read:project]",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _raise)
+
+    with pytest.raises(MissingProjectScopeError) as exc_info:
+        GhProjectClient().field_list(owner="ll7", project_number=5)
+
+    assert exc_info.value.required_scopes == ("read:project",)
+    assert exc_info.value.command[:3] == ("gh", "project", "field-list")
+
+
+def test_main_only_empty_missing_scope_is_non_fatal_json_without_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The autopilot auto-fill path reports a blocker and leaves score writes untouched."""
+
+    def _raise(*args: object, **kwargs: object) -> list[dict]:
+        raise MissingProjectScopeError(
+            command=("gh", "project", "field-list", "5"),
+            details="error: your authentication token is missing required scopes [read:project]",
+            required_scopes=("read:project",),
+        )
+
+    updates: list[float] = []
+    monkeypatch.setattr(GhProjectClient, "field_list", _raise)
+    monkeypatch.setattr(
+        GhProjectClient,
+        "update_number_field",
+        lambda self, **kwargs: updates.append(float(kwargs["number"])),
+    )
+
+    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "blocked"
+    assert payload["reason"] == "missing_project_scope"
+    assert payload["required_scopes"] == ["read:project"]
+    assert payload["fallback"] == "live-label ordering"
+    assert payload["non_fatal"] is True
+    assert payload["writes_performed"] is False
+    assert payload["items"] == []
+    assert updates == []
+
+
+def test_main_non_empty_scope_failure_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the auto-fill mode converts a missing Project scope into a success status."""
+
+    monkeypatch.setattr(
+        GhProjectClient,
+        "field_list",
+        lambda self, **kwargs: (_ for _ in ()).throw(
+            MissingProjectScopeError(
+                command=("gh", "project", "field-list", "5"),
+                details="missing required scopes [read:project]",
+                required_scopes=("read:project",),
+            )
+        ),
+    )
+
+    with pytest.raises(MissingProjectScopeError):
+        main(["sync"])
 
 
 def test_gh_project_client_retries_user_owned_project_commands_with_at_me(

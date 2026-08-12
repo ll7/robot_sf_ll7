@@ -1,0 +1,168 @@
+schema_version: matched_compute_packet.v1
+issue: 6921
+parent_issue: 4360
+status: diagnostic_only_packet
+claim_boundary: >
+  Diagnostic-only comparison packet for reactive residual-search versus
+  open-loop Social Force comparator.  No benchmark, metric, planner-ranking,
+  safety, or paper-facing claim.  No campaign execution, SLURM submission,
+  or benchmark result.  Frozen seeds, budget, and bounds; domain-approval
+  gate required before any future campaign execution.
+packet:
+  name: matched_budget_reactive_vs_open_loop
+  purpose: >
+    Versioned, machine-checkable comparison packet defining the nominal Social
+    Force / open-loop candidate evaluation arm and the reactive residual-search
+    arm under an identical compute budget, seed set, and scenario family.
+arms:
+  open_loop:
+    label: social_force_open_loop
+    description: >
+      Nominal Social Force baseline with open-loop candidate evaluation.
+      Candidate residual proposals are evaluated once through the bounded
+      controller without iterative feedback from the applied residual state.
+    comparator: social_force
+    residual_search:
+      algorithm_name: finite_grid_search_v1
+      objective_proxy: maximize_residual_magnitude
+      grid_points_per_dim: 3
+      max_candidates: 9
+      seed: 42
+    residual_adversary:
+      is_active: true
+      macro_action_dt_s: 0.5
+      max_residual_accel_mps2: 1.5
+      max_jerk_mps3: 7.5
+      max_speed_delta_mps: 0.5
+      max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+      max_route_deviation_m: 1.5
+      min_separation_m: 0.6
+      target_ped_idx: [0]  # deliberate single-target matched-cost choice; see note
+      obstacle_projection_margin_m: 0.1
+      seed: 42
+  reactive:
+    label: residual_search_reactive
+    description: >
+      Reactive residual-search arm.  Candidate proposals are evaluated through
+      the full bounded controller with iterative jerk rate-limiting, geometry
+      projection, and separation enforcement carried across macro-action steps.
+    residual_search:
+      algorithm_name: finite_grid_search_v1
+      objective_proxy: maximize_residual_magnitude
+      grid_points_per_dim: 3
+      max_candidates: 9
+      seed: 42
+    residual_adversary:
+      is_active: true
+      macro_action_dt_s: 0.5
+      max_residual_accel_mps2: 1.5
+      max_jerk_mps3: 7.5
+      max_speed_delta_mps: 0.5
+      max_heading_change_per_macro_rad: 0.7853981633974483  # pi/4
+      max_route_deviation_m: 1.5
+      min_separation_m: 0.6
+      target_ped_idx: [0]  # deliberate single-target matched-cost choice; see note
+      obstacle_projection_margin_m: 0.1
+      seed: 42
+scenario:
+  template: configs/scenarios/templates/crossing_ttc.yaml
+  template_id: crossing_ttc_template
+  template_seed: 123
+  search_space: configs/adversarial/crossing_ttc_space.yaml
+  description: >
+    Frozen crossing/TTC scenario family defined by the checked-in template
+    (crossing_ttc_template, seed 123) and search space from issue #6911 /
+    #4360.  The template produces a single scenario identity; the search
+    space defines the adversary's parameterisation bounds.  No generated
+    manifest is claimed.
+simulation:
+  dt_s: 0.1
+  physics_steps_per_macro_action: 5
+  total_sim_steps: 50
+  description: >
+    Fixed timestep and episode length.  0.1 s physics step, 5 steps per
+    0.5 s macro-action, 50 total steps (5.0 s episode).
+budget:
+  macro_actions_per_episode: 10
+  candidates_per_macro_action_per_arm: 9
+  candidates_per_arm_per_episode: 90
+  total_candidates_all_arms_per_episode: 180
+  description: >
+    Matched compute budget derived from simulation geometry: 50 total sim
+    steps divided by 5 physics steps per macro-action gives 10 macro-actions
+    per episode.  Each arm evaluates 9 candidate residual proposals per
+    macro-action boundary (grid_points_per_dim ** 2 = 3 ** 2 for the 2-D
+    residual action space).  Per-arm episode total is 10 * 9 = 90.
+    All-arms episode total is 90 * 2 = 180.
+seeds:
+  frozen_scenario_seeds:
+    - 123
+  search_seed: 42
+  residual_adversary_seed: 42
+  description: >
+    The frozen scenario seed is 123, matching the checked-in scenario template;
+    search and adversary seeds control the deterministic grid-search
+    enumeration and residual policy state.  Both arms' residual_search.seed
+    and residual_adversary.seed are set to 42, matching these packet-level
+    seed values.
+bounds_identity:
+  residual_bounds:
+    max_residual_accel_mps2: 1.5
+    max_jerk_mps3: 7.5
+    max_speed_delta_mps: 0.5
+    max_heading_change_per_macro_rad: 0.7853981633974483
+    max_route_deviation_m: 1.5
+    min_separation_m: 0.6
+  objective_proxy: maximize_residual_magnitude
+  description: >
+    Hard residual bounds are identical across both arms.  The objective proxy
+    is the same diagnostic magnitude proxy.  Bounds and objective are frozen
+    and must not be relaxed without a new packet version.
+target_ped_idx_note: >
+  Both arms set target_ped_idx to [0] (single-target matched-cost choice).
+  This deliberately differs from the upstream issue_4360_residual_adversary
+  example which uses -1 (all-target).  The single-target setting ensures
+  both arms perturb exactly one pedestrian, making the comparison cost
+  matched per targeted agent.
+provenance:
+  parent_issue: 4360
+  scenario_template: configs/scenarios/templates/crossing_ttc.yaml
+  residual_search_config: configs/adversarial/issue_6911_residual_search.yaml
+  residual_adversary_config: configs/adversarial/issue_4360_residual_adversary.yaml
+  search_space: configs/adversarial/crossing_ttc_space.yaml
+  dispatchable_inventory: configs/adversarial/issue_4360_dispatchable_repro_seeds.yaml
+  description: >
+    This packet reuses the scenario template (crossing_ttc_template, seed 123),
+    the residual-search config (issue #6911), the residual-adversary config
+    (issue #4360), and the search space without introducing new runtime modules
+    or optimizer integrations.
+explicit_exclusions:
+  benchmark_execution: forbidden_until_domain_approval
+  slurm_campaign: forbidden_until_domain_approval
+  paper_facing_claims: forbidden
+  metric_or_ranking_claims: forbidden
+  new_optimizer: not_added
+  new_planner_integration: not_added
+  new_slurm_execution: not_added
+  fallback_degraded_evidence: not_treated_as_success
+  cmaes_mcts_ppo: deferred
+  stress_case_metrics: deferred
+  description: >
+    All exclusions are hard-frozen.  Benchmark execution, SLURM campaigns,
+    paper-facing claims, and metric/ranking claims require explicit
+    domain-approval gate before any future slice may proceed.  Fallback or
+    degraded execution is never treated as success evidence.
+gate:
+  domain_approval_required: true
+  description: >
+    Any future campaign execution, benchmark run, or stronger claim from
+    this packet requires maintainer domain-aware approval.  The packet is
+    frozen as a diagnostic-only specification; no execution path is enabled
+    by this config alone.
+output_artifacts:
+  output_dir: output/adversarial/issue_6921_matched_compute_packet
+  description: >
+    Local output directory for any future diagnostic runs.  Artifacts under
+    output/ are disposable local cache unless promoted by a later PR.
+validation_command: >
+  uv run pytest tests/adversarial/test_matched_compute_packet.py -v

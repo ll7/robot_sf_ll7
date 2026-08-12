@@ -47,7 +47,7 @@ def main() -> None:
         shaped_return += shaped_reward
 
         logger.info(
-            "Step %02d: clearance_penalty=%.3f shaped_reward=%.3f",
+            "Step {:02d}: clearance_penalty={:.3f} shaped_reward={:.3f}",
             step_idx,
             clearance_penalty,
             shaped_reward,
@@ -59,7 +59,7 @@ def main() -> None:
             obs, _info = env.reset(seed=step_idx + 200)
 
     env.close()
-    logger.info("Finished. Cumulative shaped reward: %.3f", shaped_return)
+    logger.info("Finished. Cumulative shaped reward: {:.3f}", shaped_return)
 
 
 if __name__ == "__main__":

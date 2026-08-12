@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.adversarial_package_b_gap_packet import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_gap_packet import (
     DEFAULT_MANIFEST,
     build_package_b_gap_packet,
 )

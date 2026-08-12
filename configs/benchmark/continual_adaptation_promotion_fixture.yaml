@@ -1,0 +1,106 @@
+# Continual-adaptation promotion fixture -- Issue #6657
+#
+# Campaign integration protocol fixture demonstrating a syntactically promotion-ready
+# continual-adaptation manifest. The evidence_bundle names the validator-derived identifier
+# (distinct from baseline), and all nominal/shift/forgetting result references carry
+# a uri plus a supported SHA-256 checksum.
+#
+# Validated by:
+#   uv run python -c "from robot_sf.research.continual_adaptation_protocol import load_continual_adaptation_run, check_continual_adaptation_run; r = check_continual_adaptation_run(load_continual_adaptation_run('configs/benchmark/continual_adaptation_promotion_fixture.yaml')); assert r.protocol_status == 'valid', r.to_dict(); print(r.to_dict())"
+#
+# This fixture is metadata-only: it does not launch training, alter a checkpoint,
+# mutate the safety wrapper, run an evaluation, or promote a policy. It is not
+# benchmark or paper evidence.
+
+schema_version: continual_adaptation_run.v1
+run_id: continual_adaptation_campaign_issue_6657
+issue: 6657
+
+claim_boundary: >-
+  Campaign integration fixture for continual-adaptation nominal/shift/forgetting
+  evidence wiring. Metadata-only; no training, checkpoint write, safety-wrapper
+  mutation, evaluation execution, or policy promotion. Not benchmark or paper evidence.
+
+baseline_policy:
+  identifier: ppo_ammv_baseline_v3
+  checksum:
+    algorithm: sha256
+    digest: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+safety_wrapper:
+  identifier: robot_sf.gym_env.safety_vel_controller
+  checksum:
+    algorithm: sha256
+    digest: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+  mutation_permitted: false
+
+adaptation:
+  allowed_parameters:
+    - policy_net.head.
+    - value_net.head.
+  experience_budget:
+    bounded: true
+    steps: 200000
+    units: gradient_steps
+
+scenarios:
+  adaptation:
+    - friction_low_train_a
+    - friction_low_train_b
+  evaluation:
+    - friction_low_eval_holdout_a
+    - friction_low_eval_holdout_b
+
+shifts:
+  - id: friction_low
+    kind: friction
+    description: >-
+      Lowered floor friction coefficient relative to the baseline calibration surface.
+    parameters:
+      friction_coefficient: 0.4
+
+thresholds:
+  nominal:
+    metric: success_rate_delta
+    bound: -0.02
+    direction: at_most
+  shift:
+    metric: success_rate_delta
+    bound: 0.05
+    direction: at_least
+  forgetting:
+    metric: success_rate_delta
+    bound: -0.02
+    direction: at_most
+
+promotion_decision:
+  decision: promote
+  rationale: >-
+    Protocol-contract fixture only: exact nominal/shift/forgetting artifact references
+    and the deterministic evidence bundle exercise the existing promotion gate. This is
+    not an empirical promotion decision; no training, evaluation, checkpoint or policy
+    promotion, benchmark ranking, or paper evidence occurred.
+
+results:
+  nominal_result:
+    uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/nominal_result.json
+    checksum:
+      algorithm: sha256
+      digest: be75bf0d30953b10c537204940bd53e33f20fe9b8ba93772f653d639a18acdc4
+  shift_result:
+    uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json
+    checksum:
+      algorithm: sha256
+      digest: c55efe5f7b8157f2bd3447d9592338211e47b145ec6ebfc638c3633442f48fea
+  forgetting_result:
+    uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/forgetting_result.json
+    checksum:
+      algorithm: sha256
+      digest: e86afc9d700b96aa9cd487eeedf942b8c586cdfe3ab0a215823ec2c4896c28de
+  evidence_bundle:
+    identifier: continual_adaptation_evidence_6657_v1
+    uri: docs/context/evidence/issue_6657_continual_adaptation_campaign/evidence_bundle.yaml
+    checksum:
+      algorithm: sha256
+      digest: 45210b4679d0352f99093a1b86b591a7b39b18ca2a4f54ad2cfcf92f659411bb
+    policy_identifier: "ppo_ammv_baseline_v3#continual-adaptation@sha256:7e1d8e6036fa246c"

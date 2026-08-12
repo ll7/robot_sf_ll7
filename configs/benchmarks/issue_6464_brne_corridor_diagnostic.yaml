@@ -1,0 +1,29 @@
+# Issue #6464: approved corridor-only native diagnostic preflight.
+schema_version: brne-corridor-diagnostic.v1
+issue: 6464
+claim_boundary: >-
+  Smoke/diagnostic evidence for native BRNE execution, budget observability,
+  goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking,
+  safety, realism, matched-compute, or paper claim.
+scenario_matrix: configs/scenarios/issue_6464_brne_corridor_diagnostic.yaml
+scenario_ids:
+  - classic_head_on_corridor_low
+seeds: [111, 112, 113]
+horizon: 500
+dt: 0.1
+corridor:
+  y_min: 2.5
+  y_max: 37.5
+  robot_radius_m: 1.0
+  min_displacement_m: 0.5
+  max_zero_motion_fraction: 0.95
+planners:
+  - key: brne
+    algo: brne
+    config_path: configs/baselines/issue_6464_brne_corridor_diagnostic.yaml
+  - key: orca
+    algo: orca
+    config_path: configs/baselines/issue_6464_orca_corridor_diagnostic.yaml
+  - key: social_force
+    algo: social_force
+    config_path: configs/baselines/issue_6464_social_force_corridor_diagnostic.yaml

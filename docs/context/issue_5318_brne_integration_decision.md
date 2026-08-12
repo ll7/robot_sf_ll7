@@ -16,6 +16,12 @@ corridor-class scenarios only; BRNE does not handle arbitrary static geometry.
 This is **not** a blanket go and **not** a benchmark-arm approval. BRNE is
 testing-only and exploratory until the validation path below is complete.
 
+Issue #6464 completed the approved native corridor diagnostic. BRNE executed
+without fallback and produced non-degenerate motion on all three frozen seeds,
+but reached the goal on `0/3` episodes. The result keeps this decision at the
+exploration tier: it is a useful hypothesis signal, not a benchmark-arm or
+planner-ranking approval.
+
 ## Admissible Scenario Class
 
 **Corridor-class scenarios only**: single-passage maps where corridor bounds
@@ -99,6 +105,11 @@ A benchmark-arm proposal is permitted only after:
 3. A maintainer explicitly approves the benchmark arm (separate issue, not this
    decision).
 
+The #6464 preflight satisfies the execution and non-degenerate portions of this
+check, but its `0/3` goal-reaching result means the condition is not met. A
+hypothesis-driven follow-up is required before widening the scenario class or
+proposing a benchmark arm.
+
 ## Claim Boundary
 
 This decision authorizes an **exploration-tier integration**: a BRNE planner
@@ -111,6 +122,8 @@ planner readiness roster.
 
 - `docs/context/issue_5311_brne_source_smoke.md` — source-side smoke evidence
   (PR #5313, merged).
+- `docs/context/issue_6464_brne_corridor_diagnostic.md` — native corridor
+  diagnostic result and follow-up boundary.
 - `docs/benchmark_experimental_planners.md` — planner readiness roster.
 - `docs/context/issue_4870_sicnav_smoke.md` — closest analog (MPC comparator).
 - `docs/context/issue_4871_crowdnav_pred_attng_smoke.md` — learned-baseline

@@ -1,7 +1,25 @@
 # Context Retrieval Index
 
+Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
+`issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
+successor to the historical three-seed diagnostic, freezing six search seeds per method,
+64 candidates per seed per method (384 per method, 768 total with complete
+intention-to-search accounting), the merged PR #6586 runtime-effective candidate space,
+exact cluster-level inference over C(12,6)=924 arm-label assignments, the unweakened
+positive gate, the `issue_5303_search_promotion_result.v2` terminal result schema
+(downstream activation only on `promote` plus at least five admitted candidates plus
+verified hashes), and the deterministic 768-identity check-only manifest. It does not
+authorize the #6145 campaign and rejects the historical v1 contract for promotion-capable
+execution:
+[README.md](evidence/issue_5303_search_promotion_powered_preregistration/README.md).
+
 Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
 [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
+
+Issue #6875 camera-ready campaign producer for the diagnostic-only
+`report_crosswalk.v1` sidecar, with exact source-artifact/episode provenance,
+fail-closed serialized execution-monitor handling, and final-summary propagation:
+[issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md).
 
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
@@ -118,6 +136,13 @@ campaign evidence remains blocked on a SLURM-capable worker):
 
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
+
+Issue #6464 BRNE corridor diagnostic: exact native preflight on three frozen
+seeds, non-degenerate execution and goal-reaching counts, fail-closed fallback
+handling, and the bounded `0/3` goal-reaching finding that requires a
+hypothesis-driven follow-up before any benchmark or ranking proposal:
+[issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
+[evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
 
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
@@ -242,6 +267,7 @@ or the normal diff wrapper.
 
 | Area | Current entry points | Use for |
 |---|---|---|
+| Diagnosis and execution report crosswalk | [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md) | Versioned episode/campaign reporting crosswalk for deterministic failure diagnosis and execution-deviation monitoring, including denominators, provenance, fallback/degraded states, and diagnostic-only claim boundaries. |
 | Agent workflow | [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md), [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md), [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md), [issue_audit_contract.md](issue_audit_contract.md), [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md), [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md), [Agent Workflow Lessons memory](../../memory/workflows/2026-05-31_agent_workflow_lessons.md) | Issue-to-PR loops, research-result mode, queue exhaustion, batching, issue splitting, state-label routing, live-state checks, deterministic versus interactive issue-audit authority, one-at-a-time decision envelopes, delegated-worker proof boundaries, skill consolidation candidates, and GitHub workflow policy. |
 | PR workflow contracts | [issue_3472_pr_body_contracts.md](issue_3472_pr_body_contracts.md), [../code_review.md](../code_review.md) | Live PR body, follow-up disposition, and domain-aware approval CI guard for reviewability and evidence-validity-sensitive PRs. |
 | Context architecture | This file, [../ai/context_packing.md](../ai/context_packing.md), [../ai/retrieval_deferral.md](../ai/retrieval_deferral.md), [issue_728_coding_agents_compatibility.md](issue_728_coding_agents_compatibility.md) | Context-pack decisions, optional external tools, Markdown-first retrieval, and cross-agent compatibility. |

@@ -1,6 +1,7 @@
 # Multi-AMV Benchmark First Slice
 
-Issue: [#1092](https://github.com/ll7/robot_sf_ll7/issues/1092)
+Issues: [#1092](https://github.com/ll7/robot_sf_ll7/issues/1092),
+[approved tracer bullet #6473](https://github.com/ll7/robot_sf_ll7/issues/6473)
 
 The first multi-AMV benchmark slice is intentionally minimal. It proves that a scenario can declare
 more than one robot, run through the existing `MultiRobotEnv` path with a simple supported goal
@@ -33,6 +34,20 @@ The tracked smoke scenario is
 * `deadlock_detected` when the entire fleet stays below the deadlock speed threshold for the
   configured window
 
+The approved #6473 tracer bullet additionally uses
+`robot_sf.benchmark.multi_amv.inter_robot_pair_metrics` to preserve each unordered pair's
+identity (`i < j`), collision-event count, near-miss-event count, and minimum distance. The
+schema-compatible `metrics.inter_robot_collision_diagnostics` object records the geometric
+overlap-transition semantics, distance thresholds, and an `episode_summary` containing:
+
+* `per_pair_events`
+* `eligible_episodes` (at least two robots and at least one completed simulation step)
+* `episodes_with_collision_events`
+* `collision_event_fraction` with a safe `0.0` zero-denominator result
+
+These fields are diagnostic-only and are not planner-ranking, coordination-efficiency,
+pedestrian-disruption, social-validity, or benchmark-promotion evidence.
+
 These metrics are pairwise over robot positions only. They do not replace the existing
 single-robot benchmark metrics. The explicit smoke command can emit them under the canonical
 episode metrics root as `metrics.inter_robot`, while broad `robot_sf_bench run` multi-AMV matrix
@@ -47,8 +62,10 @@ rtk uv run python scripts/validation/run_multi_amv_smoke.py \
   --horizon 40
 ```
 
-The smoke uses a simple goal controller for every robot. It is meant to validate scenario parsing,
-`MultiRobotEnv` execution, and metric emission, not to demonstrate fleet-optimal coordination.
+The smoke uses a simple goal controller for every robot and an explicit seed of `0`; environment
+construction and reset receive the same seed and LiDAR noise is disabled for reproducibility. It is
+meant to validate scenario parsing, `MultiRobotEnv` execution, and metric emission, not to
+demonstrate fleet-optimal coordination.
 
 To emit benchmark-style artifacts for #1128, add the canonical output paths:
 
@@ -63,7 +80,21 @@ rtk uv run python scripts/validation/run_multi_amv_smoke.py \
 ```
 
 `episodes.jsonl` is schema-validated, the aggregate JSON flattens `metrics.inter_robot` into
-reportable metric keys, and the Markdown report summarizes the same inter-robot metric block.
+reportable metric keys, and the Markdown report summarizes the inter-robot metrics plus the
+diagnostic collision-event denominator/fraction. For a bounded headless check:
+
+```bash
+DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy \
+uv run python scripts/validation/run_multi_amv_smoke.py \
+  --scenario configs/scenarios/single/multi_amv_minimal_smoke.yaml \
+  --out /tmp/multi_amv_smoke.json \
+  --episodes-out /tmp/multi_amv_smoke.jsonl \
+  --horizon 4
+```
+
+Running that command twice with the same checkout and seed should produce identical metric and
+diagnostic fields. The resulting values remain smoke/diagnostic observations from one scenario and
+one smoke controller, not benchmark evidence.
 
 ## Limits
 

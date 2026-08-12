@@ -3,7 +3,7 @@ repos:
     # Ruff version. Keep in sync with `ruff` in pyproject.toml `[tool.ruff]`
     # required-version and the dev dependency pin; a mismatch fails the hook with
     # "Required version does not match the running version".
-    rev: v0.16.1
+    rev: v0.16.2
     hooks:
       # Run the linter.
       - id: ruff
@@ -64,6 +64,17 @@ repos:
         # Run a full scan when either source or the guard/baseline changes. Passing only
         # staged filenames would let baseline-only edits bypass repository-wide validation.
         files: ^(robot_sf/.*\.py|hooks/no_fstring_logger(?:_allowlist\.txt|\.py))$
+        pass_filenames: false
+      - id: no-printf-logger
+        name: No printf-% logger.*() calls (loguru brace-style guard)
+        entry: uv run python hooks/no_printf_logger.py
+        language: system
+        # ruff G002 cannot see loguru; this hook flags logger.<method>("%s", arg)
+        # calls that silently discard their positional arguments (issue #6837).
+        # Stdlib logging modules are unaffected because they never bind a loguru
+        # logger. Run a full scan across robot_sf/, scripts/, examples/ so a
+        # source-only edit cannot bypass repository-wide validation.
+        files: ^(robot_sf/.*\.py|scripts/.*\.py|examples/.*\.py|hooks/no_printf_logger\.py)$
         pass_filenames: false
       - id: ty-advisory-typecheck
         name: Ty Advisory Type Check

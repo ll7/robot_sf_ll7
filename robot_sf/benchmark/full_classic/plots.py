@@ -47,7 +47,7 @@ def _safe_fig_close(fig):  # pragma: no cover - trivial
         # Log at debug for visibility without changing behavior
         try:
             logger = importlib.import_module("loguru").logger
-            logger.debug("_safe_fig_close failed: %s", exc)
+            logger.debug("_safe_fig_close failed: {}", exc)  # noqa: PLE1205 - loguru brace style
         except ImportError:
             # If logger import fails we still want to silently ignore close failures
             pass
@@ -86,7 +86,7 @@ def _write_fallback_text_plot(path: Path, title: str, lines: list[str]):
         ) as exc:  # pragma: no cover - defensive
             try:
                 logger = importlib.import_module("loguru").logger
-                logger.debug("_write_fallback_text_plot close failed: %s", exc)
+                logger.debug("_write_fallback_text_plot close failed: {}", exc)  # noqa: PLE1205 - loguru brace style
             except ImportError:
                 pass
     return True

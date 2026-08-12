@@ -126,8 +126,8 @@ REPOS: tuple[RepoSpec, ...] = (
         license_compatibility_decision=(
             "GPL-3.0 is copyleft and therefore NOT compatible with vendoring BRNE source into "
             "this non-GPL repository. Staging is local-only for research/reference/contract "
-            "mapping. No robot_sf_ll7 code imports the staged tree at runtime; the smoke loads "
-            "it from the local clone explicitly, not from an installed/vendored copy."
+            "mapping. The bounded map-runner diagnostic loads the pure-numpy/numba core from "
+            "the local clone explicitly, never from an installed or vendored copy."
         ),
         redistribution_decision=(
             "no vendoring and no public redistribution of BRNE source in this repo; GPL-3.0 "
@@ -136,18 +136,20 @@ REPOS: tuple[RepoSpec, ...] = (
             "ships BRNE source would require the consuming work to be GPL-3.0."
         ),
         intended_use=(
-            "Reference checkout for the BRNE source-side smoke + contract mapping (issue #5311). "
+            "Reference checkout for the BRNE source-side smoke + bounded corridor diagnostic "
+            "contract mapping (issues #5311 and #6464). "
             "Only the pure-numpy/numba core algorithm (brne_nav/brne_py/brne_py/brne.py) is "
             "exercised; the ROS2 navigation node (brne_nav.py), the torch path, the C++ brnelib, "
-            "and the SocNavBench benchmark study are out of scope for the smoke. No robot_sf "
-            "planner registration and no benchmark roster eligibility — this is a go/no-go "
-            "control-budget assessment only."
+            "and the SocNavBench benchmark study are out of scope. Robot SF registration is "
+            "experimental and restricted to the approved corridor-only native diagnostic; no "
+            "benchmark roster or paper eligibility follows from this staging."
         ),
         validation_command=(
             "uv run pytest tests/baselines/test_brne_source_smoke.py "
-            "-k brne_skip_without_external_repo -q"
+            "-q && uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py "
+            "--preflight-only"
         ),
-        related_issues=(5311,),
+        related_issues=(5311, 6464),
     ),
 )
 

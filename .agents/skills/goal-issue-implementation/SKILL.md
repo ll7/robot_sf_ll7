@@ -483,11 +483,14 @@ Route remaining issues by their blocker:
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
    - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
-11. Open the PR and release the transient claim with:
+11. Open the PR and keep the transient claim while the PR is open. Release it only after terminal
+    delivery, with an explicit reason:
     ```bash
-    uv run python scripts/dev/issue_claim.py release <issue-number>
+    uv run python scripts/dev/issue_claim.py release <issue-number> --reason merged
+    # or --reason closed / --reason abandoned
     ```
-    Ensure the PR visibly covers the issue before releasing the claim.
+    Ensure the PR visibly covers the issue before eventual release. An open covering PR must retain
+    the claim; an abandoned run must record the handoff before using `--reason abandoned`.
 12. Tear down the worktree:
     - Follow `AGENTS.md` "Worktree Teardown And Preservation" to clean up the linked worktree and prune references.
     - Move to the next queue item.

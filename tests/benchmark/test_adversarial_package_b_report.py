@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_report import validate_package_b_report
+from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
 from scripts.tools.validate_adversarial_package_b_report import main
 
 if TYPE_CHECKING:

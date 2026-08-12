@@ -132,7 +132,7 @@ def main(steps: int = 1000, seed: int | None = SET_SEED) -> None:
 
         if done or truncated:
             logger.info(
-                "Episode ended at step %d (done=%s, truncated=%s, meta=%s)",
+                "Episode ended at step {} (done={}, truncated={}, meta={})",
                 step_idx,
                 done,
                 truncated,

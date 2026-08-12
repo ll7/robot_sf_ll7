@@ -23,6 +23,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import subprocess
 import sys
 import threading
 import time
@@ -46,6 +47,8 @@ _LOGGER = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BRNE_IMPORT_LOCK = threading.RLock()
 _BRNE_MODULE_NAME = "brne_upstream_planner"
+BRNE_PINNED_SHA = "633a5cdcb39ab27f18b596cb8cb1968644f82391"
+BRNE_CORE_REL = "brne_nav/brne_py/brne_py/brne.py"
 
 # Upstream defaults (matching brne_nav/brne_py/brne_py/brne_nav.py).
 _DEFAULT_NUM_SAMPLES = 196
@@ -96,13 +99,7 @@ def _load_brne_module(stage_path: Path) -> ModuleType:
     Returns:
         The imported upstream BRNE core module.
     """
-    core_rel = "brne_nav/brne_py/brne_py/brne.py"
-    core_file = stage_path / core_rel
-    if not core_file.is_file():
-        raise FileNotFoundError(
-            f"BRNE core algorithm not found at staged path: {core_file}. "
-            "Run `uv run python scripts/tools/manage_external_repos.py stage brne`."
-        )
+    core_file = _validate_stage_provenance(stage_path)
     with _BRNE_IMPORT_LOCK:
         existing = sys.modules.get(_BRNE_MODULE_NAME)
         if existing is not None:
@@ -114,6 +111,57 @@ def _load_brne_module(stage_path: Path) -> ModuleType:
         sys.modules[_BRNE_MODULE_NAME] = module
         spec.loader.exec_module(module)  # type: ignore[union-attr]
         return module
+
+
+def _validate_stage_provenance(stage_path: Path) -> Path:
+    """Validate the staged clone and return its pinned BRNE core path.
+
+    The external source is local-only, so the loader must verify both the git
+    commit and the checked-out core file before importing it. A matching
+    ``HEAD`` with a locally modified core is not an acceptable provenance
+    boundary for diagnostic evidence.
+
+    Raises:
+        FileNotFoundError: If the staged clone or core file is unavailable.
+        RuntimeError: If the clone is not the pinned, clean source checkout.
+
+    Returns:
+        Path: The validated upstream BRNE core module.
+    """
+    core_file = stage_path / BRNE_CORE_REL
+    if not core_file.is_file():
+        raise FileNotFoundError(
+            f"BRNE core algorithm not found at staged path: {core_file}. "
+            "Run `uv run python scripts/tools/manage_external_repos.py stage brne`."
+        )
+    if not (stage_path / ".git").exists():
+        raise RuntimeError(f"BRNE staged path is not a git clone: {stage_path}")
+
+    def _git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(stage_path), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    commit_result = _git("rev-parse", "--verify", "HEAD^{commit}")
+    staged_commit = commit_result.stdout.strip() if commit_result.returncode == 0 else ""
+    if staged_commit != BRNE_PINNED_SHA:
+        raise RuntimeError(
+            "BRNE staged source commit mismatch: "
+            f"expected {BRNE_PINNED_SHA}, got {staged_commit or 'unavailable'}"
+        )
+    tracked_result = _git("ls-tree", "-r", "--name-only", "HEAD", "--", BRNE_CORE_REL)
+    if tracked_result.returncode != 0 or tracked_result.stdout.strip() != BRNE_CORE_REL:
+        raise RuntimeError(f"BRNE pinned commit does not track {BRNE_CORE_REL}")
+    for diff_args in (
+        ("diff", "--quiet", "--", BRNE_CORE_REL),
+        ("diff", "--cached", "--quiet", "--", BRNE_CORE_REL),
+    ):
+        if _git(*diff_args).returncode != 0:
+            raise RuntimeError(f"BRNE staged core is locally modified: {core_file}")
+    return core_file
 
 
 class BRNEPlanner:
@@ -553,8 +601,26 @@ class BRNEPlanner:
 
         config_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
         stage = self._resolve_stage_path()
-        core_rel = "brne_nav/brne_py/brne_py/brne.py"
-        status = "ok" if (stage / core_rel).is_file() else "missing_dependency"
+        source_commit: str | None = None
+        source_integrity = "missing"
+        try:
+            _validate_stage_provenance(stage)
+        except FileNotFoundError:
+            status = "missing_dependency"
+        except RuntimeError:
+            status = "invalid_provenance"
+            source_integrity = "invalid"
+            commit_result = subprocess.run(
+                ["git", "-C", str(stage), "rev-parse", "--verify", "HEAD^{commit}"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            source_commit = commit_result.stdout.strip() or None
+        else:
+            status = "ok"
+            source_commit = BRNE_PINNED_SHA
+            source_integrity = "clean_pinned_worktree"
         runtime_status = (
             "failed" if self._failure_count > 0 else "ok" if self._step_count > 0 else "not_started"
         )
@@ -564,6 +630,9 @@ class BRNEPlanner:
             "config_hash": config_hash,
             "seed": self._seed,
             "status": status,
+            "source_commit": source_commit,
+            "source_integrity": source_integrity,
+            "source_pin": BRNE_PINNED_SHA,
             "effective_num_samples": self._last_effective_num_samples,
             "runtime_status": runtime_status,
             "step_count": self._step_count,

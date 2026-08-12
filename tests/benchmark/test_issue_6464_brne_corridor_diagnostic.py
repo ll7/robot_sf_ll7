@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
@@ -149,12 +150,23 @@ def test_brne_requires_native_dependency_status() -> None:
             "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
         },
         "planner_metadata": {"status": "ok"},
+        "planner_kinematics": {
+            "execution_mode": "adapter",
+            "adapter_active": True,
+            "adapter_name": "BRNEPlanner",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "planner_command_space": "unicycle_vw",
+        },
         "planner_runtime": {
             "planner_metadata": {
                 "status": "ok",
                 "runtime_status": "ok",
                 "failure_count": 0,
-                "effective_num_samples": 42,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 49,
                 "step_count": 1,
             }
         },
@@ -166,6 +178,28 @@ def test_brne_requires_native_dependency_status() -> None:
     )
     assert native["native"] is True
     assert native["status"] == "available_native"
+
+    wrong_sample_count = classify_record(
+        _record(
+            metadata={
+                **native_metadata,
+                "planner_runtime": {
+                    "planner_metadata": {
+                        "status": "ok",
+                        "runtime_status": "ok",
+                        "failure_count": 0,
+                        "source_commit": BRNE_PINNED_SHA,
+                        "source_pin": BRNE_PINNED_SHA,
+                        "source_integrity": "clean_pinned_worktree",
+                        "effective_num_samples": 42,
+                    }
+                },
+            }
+        ),
+        config,
+        planner_key="brne",
+    )
+    assert wrong_sample_count["status"] == "unavailable"
 
 
 def test_brne_runtime_failure_is_unavailable_even_with_motion() -> None:
@@ -179,6 +213,14 @@ def test_brne_runtime_failure_is_unavailable_even_with_motion() -> None:
                     "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
                 },
                 "planner_metadata": {"status": "ok"},
+                "planner_kinematics": {
+                    "execution_mode": "adapter",
+                    "adapter_active": True,
+                    "adapter_name": "BRNEPlanner",
+                    "supports_native_commands": True,
+                    "supports_adapter_commands": True,
+                    "planner_command_space": "unicycle_vw",
+                },
                 "planner_runtime": {
                     "planner_metadata": {
                         "status": "ok",

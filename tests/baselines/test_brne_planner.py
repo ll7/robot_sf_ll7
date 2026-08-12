@@ -148,6 +148,9 @@ def test_brne_metadata_when_staged_repo_present() -> None:
     meta = planner.get_metadata()
     assert meta["algorithm"] == "brne"
     assert meta["status"] == "ok"
+    assert meta["source_commit"] == brne_module.BRNE_PINNED_SHA
+    assert meta["source_pin"] == brne_module.BRNE_PINNED_SHA
+    assert meta["source_integrity"] == "clean_pinned_worktree"
 
 
 # --- Step fails closed when dependency missing ---
@@ -455,10 +458,32 @@ def test_brne_module_loader_rejects_missing_import_spec(
     core.mkdir(parents=True)
     (core / "brne.py").write_text("# fixture\n", encoding="utf-8")
     monkeypatch.delitem(brne_module.sys.modules, brne_module._BRNE_MODULE_NAME, raising=False)
+    monkeypatch.setattr(
+        brne_module, "_validate_stage_provenance", lambda path: path / brne_module.BRNE_CORE_REL
+    )
     monkeypatch.setattr(brne_module.importlib.util, "spec_from_file_location", lambda *_args: None)
 
     with pytest.raises(ImportError, match="Could not build import spec"):
         brne_module._load_brne_module(tmp_path)
+
+
+def test_brne_stage_provenance_rejects_wrong_commit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A staged core at another git commit is unavailable to the diagnostic."""
+    core = tmp_path / brne_module.BRNE_CORE_REL
+    core.parent.mkdir(parents=True)
+    core.write_text("# fixture\n", encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+
+    def _git(*_args: object, **_kwargs: object) -> object:
+        return brne_module.subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout="deadbeef\n", stderr=""
+        )
+
+    monkeypatch.setattr(brne_module.subprocess, "run", _git)
+    with pytest.raises(RuntimeError, match="commit mismatch"):
+        brne_module._validate_stage_provenance(tmp_path)
 
 
 def test_brne_pose_falls_back_to_goal_or_zero_heading() -> None:

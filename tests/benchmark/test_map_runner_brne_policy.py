@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.map_runner_policies import brne as brne_policy
 
 
@@ -30,6 +31,9 @@ class _FakeBRNEPlanner:
             "status": "ok",
             "runtime_status": "not_started",
             "effective_num_samples": None,
+            "source_commit": BRNE_PINNED_SHA,
+            "source_pin": BRNE_PINNED_SHA,
+            "source_integrity": "clean_pinned_worktree",
         }
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -112,7 +116,13 @@ def test_brne_policy_fails_closed_when_stage_is_unavailable(
 
     class _MissingPlanner(_FakeBRNEPlanner):
         def get_metadata(self) -> dict[str, Any]:
-            return {"algorithm": "brne", "status": "missing_dependency"}
+            return {
+                "algorithm": "brne",
+                "status": "missing_dependency",
+                "source_commit": None,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "missing",
+            }
 
     monkeypatch.setattr(brne_policy, "BRNEPlanner", _MissingPlanner)
     with pytest.raises(RuntimeError, match="staged core is unavailable"):

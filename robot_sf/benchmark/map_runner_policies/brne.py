@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.baselines.brne import BRNEPlanner, build_brne_config
+from robot_sf.baselines.brne import BRNE_PINNED_SHA, BRNEPlanner, build_brne_config
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from robot_sf.benchmark.map_runner_policy_common import build_adapter_policy
 
@@ -73,12 +73,18 @@ def build(
 
     planner = BRNEPlanner(build_brne_config(algo_config), seed=None)
     planner_metadata = planner.get_metadata()
-    if planner_metadata.get("status") != "ok":
+    if (
+        planner_metadata.get("status") != "ok"
+        or planner_metadata.get("source_commit") != BRNE_PINNED_SHA
+        or planner_metadata.get("source_pin") != BRNE_PINNED_SHA
+        or planner_metadata.get("source_integrity") != "clean_pinned_worktree"
+    ):
         reason = planner_metadata.get("status", "missing_dependency")
         planner.close()
         raise RuntimeError(
             "BRNE staged core is unavailable for the native diagnostic preflight "
-            f"({reason}). Stage the pinned local-only repository first."
+            f"({reason}; source provenance is not the pinned clean checkout). "
+            "Stage the pinned local-only repository first."
         )
 
     adapter = _MapRunnerBRNEAdapter(planner)
@@ -98,6 +104,7 @@ def build(
         "upstream_reference": {
             "repo_url": "https://github.com/MurpheyLab/brne",
             "commit": "633a5cd",
+            "pinned_sha": BRNE_PINNED_SHA,
             "staged_path": planner.config.stage_path,
             "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
         },

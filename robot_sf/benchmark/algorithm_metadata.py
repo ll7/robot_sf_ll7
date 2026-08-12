@@ -660,7 +660,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "brne": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": True,
-        "supports_adapter_commands": False,
+        "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "BRNEPlanner",
         "upstream_command_space": "unicycle_vw",

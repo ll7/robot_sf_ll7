@@ -29,6 +29,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -222,8 +223,8 @@ def _validate_planner_entry(  # noqa: C901
     return {"key": key, "algo": algo, "config_path": str(config_path)}, planner_config
 
 
-def _validate_planners(config: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
-    """Validate planner configs and return entries plus the BRNE pedestrian cap."""
+def _validate_planners(config: dict[str, Any]) -> tuple[list[dict[str, Any]], int, int]:
+    """Validate planner configs and return entries plus frozen BRNE limits."""
     raw_planners = config.get("planners")
     if not isinstance(raw_planners, list):
         raise ValueError("planners must be a list")
@@ -246,7 +247,13 @@ def _validate_planners(config: dict[str, Any]) -> tuple[list[dict[str, Any]], in
         raise ValueError("BRNE maximum_agents must be a positive integer") from exc
     if maximum_agents < 1:
         raise ValueError("BRNE maximum_agents must be a positive integer")
-    return planners, maximum_agents - 1
+    try:
+        expected_effective_num_samples = int(brne_config["num_samples"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("BRNE num_samples must be a positive integer") from exc
+    if expected_effective_num_samples < 1:
+        raise ValueError("BRNE num_samples must be a positive integer")
+    return planners, maximum_agents - 1, expected_effective_num_samples
 
 
 def validate_campaign_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -258,7 +265,7 @@ def validate_campaign_config(config: dict[str, Any]) -> dict[str, Any]:
     seeds = _validate_campaign_header(config)
     horizon, dt = _validate_campaign_horizon(config)
     corridor = _validate_corridor(config)
-    planners, max_pedestrians = _validate_planners(config)
+    planners, max_pedestrians, expected_effective_num_samples = _validate_planners(config)
 
     scenario_matrix = _resolve_repo_path(config.get("scenario_matrix"), field="scenario_matrix")
     if not scenario_matrix.is_file():
@@ -276,6 +283,7 @@ def validate_campaign_config(config: dict[str, Any]) -> dict[str, Any]:
             "corridor": corridor,
             "planners": planners,
             "max_pedestrians": max_pedestrians,
+            "expected_effective_num_samples": expected_effective_num_samples,
         }
     )
     return normalized
@@ -345,6 +353,17 @@ def _trace_summary(
     return positions, max_pedestrians
 
 
+def _runtime_source_fields(runtime_planner_meta: Any) -> tuple[Any, Any, Any]:
+    """Extract source-integrity fields from runtime planner metadata."""
+    if not isinstance(runtime_planner_meta, dict):
+        return None, None, None
+    return (
+        runtime_planner_meta.get("source_commit"),
+        runtime_planner_meta.get("source_pin"),
+        runtime_planner_meta.get("source_integrity"),
+    )
+
+
 def classify_record(
     record: dict[str, Any], config: dict[str, Any], *, planner_key: str
 ) -> dict[str, Any]:
@@ -359,6 +378,7 @@ def classify_record(
         else "unknown"
     )
     diagnostic_meta = metadata.get("brne_diagnostic")
+    planner_kinematics = metadata.get("planner_kinematics")
     planner_runtime = metadata.get("planner_runtime")
     runtime_planner_meta = (
         planner_runtime.get("planner_metadata") if isinstance(planner_runtime, dict) else None
@@ -372,6 +392,9 @@ def classify_record(
         str(runtime_planner_meta.get("status", "unknown")).strip().lower()
         if isinstance(runtime_planner_meta, dict)
         else "not_applicable"
+    )
+    runtime_source_commit, runtime_source_pin, runtime_source_integrity = _runtime_source_fields(
+        runtime_planner_meta
     )
     try:
         runtime_failure_count = (
@@ -407,9 +430,21 @@ def classify_record(
         runtime_status == "ok"
         and runtime_dependency_status == "ok"
         and runtime_failure_count == 0
+        and runtime_source_commit == BRNE_PINNED_SHA
+        and runtime_source_pin == BRNE_PINNED_SHA
+        and runtime_source_integrity == "clean_pinned_worktree"
         and isinstance(effective_num_samples, int)
         and not isinstance(effective_num_samples, bool)
-        and effective_num_samples > 0
+        and effective_num_samples == int(config["expected_effective_num_samples"])
+    )
+    canonical_metadata_valid = planner_key != "brne" or (
+        isinstance(planner_kinematics, dict)
+        and planner_kinematics.get("execution_mode") == "adapter"
+        and planner_kinematics.get("adapter_active") is True
+        and planner_kinematics.get("adapter_name") == "BRNEPlanner"
+        and planner_kinematics.get("supports_native_commands") is True
+        and planner_kinematics.get("supports_adapter_commands") is True
+        and planner_kinematics.get("planner_command_space") == "unicycle_vw"
     )
     positions, max_pedestrians = _trace_summary(record)
     corridor = config["corridor"]
@@ -425,7 +460,10 @@ def classify_record(
         )
         lower = float(corridor["y_min"])
         upper = float(corridor["y_max"])
-        violation_count = sum(y < lower or y > upper for _, y in positions)
+        radius = float(corridor["robot_radius_m"])
+        center_lower = lower + radius
+        center_upper = upper - radius
+        violation_count = sum(y < center_lower or y > center_upper for _, y in positions)
 
     metrics = record.get("metrics")
     metrics = metrics if isinstance(metrics, dict) else {}
@@ -441,6 +479,7 @@ def classify_record(
         and not runtime_invalid
         and diagnostic_metadata_valid
         and runtime_provenance_valid
+        and canonical_metadata_valid
     )
     native = (
         planner_key == "brne"
@@ -448,6 +487,7 @@ def classify_record(
         and planner_status == "ok"
         and diagnostic_metadata_valid
         and runtime_provenance_valid
+        and canonical_metadata_valid
     )
     crowd_within_budget = max_pedestrians is not None and max_pedestrians <= int(
         config["max_pedestrians"]
@@ -486,6 +526,9 @@ def classify_record(
         "planner_dependency_status": planner_status,
         "planner_runtime_status": runtime_status,
         "planner_runtime_dependency_status": runtime_dependency_status,
+        "planner_runtime_source_commit": runtime_source_commit,
+        "planner_runtime_source_pin": runtime_source_pin,
+        "planner_runtime_source_integrity": runtime_source_integrity,
         "planner_runtime_failure_count": runtime_failure_count,
         "effective_num_samples": effective_num_samples,
         "goal_reached": goal_reached,
@@ -500,6 +543,7 @@ def classify_record(
         "diagnostic_metadata_present": isinstance(diagnostic_meta, dict),
         "diagnostic_metadata_valid": diagnostic_metadata_valid,
         "runtime_provenance_valid": runtime_provenance_valid,
+        "canonical_metadata_valid": canonical_metadata_valid,
         "native_core_via_adapter": native,
         "claim_boundary": config["claim_boundary"],
     }

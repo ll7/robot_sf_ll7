@@ -179,9 +179,26 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
     not flake on slow CI. The full neighbor-count sweep (including the borderline
     8-agent case) is measured by scripts/tools/probe_brne_source_harness.py and
     recorded in the contract-mapping note, not asserted here.
+
+    **Measurement protocol.** To avoid intermittent flake from Numba parallel-thread
+    scheduling, CPU-affinity changes, or host-load contention (issue #6924):
+
+    - Pin Numba's runtime thread pool to a single thread after the
+      ``upstream_brne`` fixture has loaded the module.  This eliminates the
+      non-deterministic parallel-thread scheduling noise while still exercising
+      the real compiled solver path.
+    - Warm up the JIT across *multiple* solves so Numba compilation and thread-pool
+      initialisation are fully amortised.
+    - Collect a robust statistic (median + max) over several timed solves so that
+      one-off OS scheduling delays do not dominate the verdict.
+    - Classify a genuinely noisy host as *unsupported-environment* (``skip``) only
+      after checking the median against the 100 ms budget.  Environment noise
+      never silently turns a consistently over-budget median into a pass.
     """
+    import statistics
     import time
 
+    import numba
     import numpy as np
 
     brne = upstream_brne
@@ -207,16 +224,75 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
         xtraj[(i + 1) * num_samples : (i + 2) * num_samples] = xp * 0.1 + xmean
         ytraj[(i + 1) * num_samples : (i + 2) * num_samples] = yp * 0.1 + ymean
 
-    # Warm up JIT compilation outside the timed region.
-    brne.brne_nav(
-        xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
+    # Configure the already-imported Numba runtime rather than relying on env
+    # variables, which Numba reads before this module-scoped fixture is used.
+    previous_numba_threads = numba.get_num_threads()
+    numba.set_num_threads(1)
+    timed_runs = 5
+    solve_times_ms: list[float] = []
+    try:
+        # Warm up JIT compilation across several solves so the thread pool and all
+        # Numba specialisations are fully settled before measurement.
+        for _ in range(3):
+            warmup_weights = brne.brne_nav(
+                xtraj,
+                ytraj,
+                num_agents,
+                plan_steps,
+                num_samples,
+                4.0,
+                1.0,
+                80.0,
+                0.1,
+                -0.65,
+                0.65,
+            )
+            assert warmup_weights is not None, (
+                "brne_nav returned the corridor out-of-bounds sentinel during warmup"
+            )
+
+        # Collect a robust timing statistic over multiple timed solves.
+        for _ in range(timed_runs):
+            t0 = time.perf_counter()
+            w = brne.brne_nav(
+                xtraj,
+                ytraj,
+                num_agents,
+                plan_steps,
+                num_samples,
+                4.0,
+                1.0,
+                80.0,
+                0.1,
+                -0.65,
+                0.65,
+            )
+            solve_times_ms.append((time.perf_counter() - t0) * 1000.0)
+            assert w is not None, (
+                "brne_nav returned the corridor out-of-bounds sentinel unexpectedly"
+            )
+    finally:
+        numba.set_num_threads(previous_numba_threads)
+
+    median_ms = statistics.median(solve_times_ms)
+    worst_ms = max(solve_times_ms)
+
+    # -- Budget guard: a consistently over-budget median is a real failure even
+    # when the host also shows a noisy individual sample.
+    assert median_ms < 100.0, (
+        f"4-agent BRNE solve median {median_ms:.1f} ms (expected < 100 ms). "
+        f"Per-run times: {[f'{t:.1f}' for t in solve_times_ms]} ms."
     )
-    t0 = time.perf_counter()
-    w = brne.brne_nav(
-        xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
-    )
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
-    assert w is not None
-    # 4-agent steady solve at num_samples=49 is far under the 100 ms budget; use a
-    # generous 2x headroom over the observed ~3-5 ms to avoid CI flakiness.
-    assert elapsed_ms < 100.0, f"4-agent BRNE solve took {elapsed_ms:.1f} ms (expected < 100 ms)"
+
+    # -- Environment-noise classification (issue #6924).  If the median remains
+    # within budget but one solve is unusually slow, skip explicitly rather than
+    # report a clean pass from a host whose timing is not reproducible.
+    if worst_ms > 50.0:
+        pytest.skip(
+            f"Host environment too noisy for control-budget measurement: "
+            f"worst single solve {worst_ms:.1f} ms (median {median_ms:.1f} ms); "
+            f"median remains below the 100 ms budget."
+        )
+
+    assert w.shape == (num_agents, num_samples)
+    assert np.all(np.isfinite(w[0])), "robot weights contain non-finite values"

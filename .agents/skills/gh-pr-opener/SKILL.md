@@ -72,9 +72,12 @@ Remote-state check (issue #6916):
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
    intentional handoff with incomplete validation, unresolved scope, or another clearly documented
    reason that should block review.
-    For an existing PR, update its body with
-    `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`;
-    do not use `gh pr edit --body-file` while it queries retired Projects Classic fields.
+    For an existing PR, reconcile its final title and body with
+    `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --reconcile --title "<final title>" --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`;
+    this is an explicit no-op when both fields already match. Keep the existing
+    body-only mode for compatibility, but use reconciliation for any final-state
+    handoff. Do not use `gh pr edit --body-file` while it queries retired Projects
+    Classic fields.
 
     For label operations on issues or PRs, use
     `uv run python scripts/dev/gh_pr_label_rest.py add <number> --label <name> --repo ll7/robot_sf_ll7`
@@ -93,6 +96,14 @@ Remote-state check (issue #6916):
   - downstream propagation decisions for evidence-producing changes,
   - follow-up issues, if any.
 - Do not commit large temporary artifacts from `output/`; use manifests or external artifact pointers.
+
+## Final-State Metadata
+
+After any revision or fix push, rebuild the PR title/body from the final diff, validation, claims,
+and follow-ups before handoff. Always reconcile the body; change the title only when the final scope,
+intent, type, or issue linkage changed. The REST helper is idempotent and patches title and body
+together when either differs. Review evidence must then carry the exact `pr-metadata: reconciled @
+<digest>` trailer. A stale or missing digest is a handoff blocker, not a reason to invent a summary.
 
 ## Anti-Loop / Race Rules
 

@@ -117,6 +117,7 @@ uv run python -m pytest tests/benchmark/test_forecast_heavy_model_adapter.py -q
 
 ## Related
 
-- Issue #2844 (lightweight learned baseline), Issue #2915 (deterministic baseline ladder), Issue
-  Issue #3065 (real-traj ingestion + staging contract), and Issues #1490 / #2843 (coupling / gating
-  constraints to respect).
+- Issue #2844 (lightweight learned baseline).
+- Issue #2915 (deterministic baseline ladder).
+- Issue #3065 (real-traj ingestion + staging contract).
+- Issues #1490 / #2843 (coupling / gating constraints to respect).

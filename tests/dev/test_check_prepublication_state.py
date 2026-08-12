@@ -6,6 +6,8 @@ import json
 import subprocess
 from typing import Any
 
+import pytest
+
 from scripts.dev import check_prepublication_state as gate
 
 
@@ -112,6 +114,89 @@ def test_local_head_movement_requires_refresh() -> None:
     assert result["reason"] == "local_head_changed"
 
 
+def test_dirty_worktree_blocks_even_when_shas_are_unchanged() -> None:
+    """A dirty worktree cannot support a trustworthy publication decision."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(tree_state="dirty"))
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "dirty_worktree"
+
+
+def test_unknown_current_issue_state_blocks() -> None:
+    """An unexpected live issue state must fail closed."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(issue_state="LOCKED"))
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "issue_state_unknown"
+
+
+def test_unknown_baseline_issue_state_blocks() -> None:
+    """An unexpected baseline issue state must not permit publication."""
+    result = gate.evaluate_state(_snapshot(issue_state="LOCKED"), _snapshot())
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "baseline_issue_state_unknown"
+
+
+def test_snapshot_paths_disambiguate_sanitization_collisions() -> None:
+    """Branches that sanitize to one filename receive distinct snapshot paths."""
+    first = gate._default_snapshot_path("feature/fresh-state")
+    second = gate._default_snapshot_path("feature-fresh-state")
+
+    assert first != second
+    assert first == gate._default_snapshot_path("feature/fresh-state")
+
+
+def test_run_converts_timeout_to_gate_error(monkeypatch) -> None:
+    """A stalled external command becomes a bounded fail-closed error."""
+
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(gate.subprocess, "run", fake_run)
+
+    with pytest.raises(gate.GateError, match="timed out after 3s"):
+        gate._run(["git", "fetch"], timeout=3)
+
+
+def test_fetch_refs_uses_exact_remote_refs(monkeypatch) -> None:
+    """Ref refresh must not rely on broad branch-pattern matching."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        if command[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                "branch-a\trefs/heads/feature/fresh-state\n",
+                "",
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "base-a")
+
+    assert gate._fetch_refs(remote="origin", base_ref="main", branch="feature/fresh-state") == (
+        "base-a",
+        "branch-a",
+    )
+    assert [
+        "git",
+        "fetch",
+        "--no-tags",
+        "origin",
+        "refs/heads/main:refs/remotes/origin/main",
+    ] in commands
+    assert [
+        "git",
+        "ls-remote",
+        "--heads",
+        "origin",
+        "refs/heads/feature/fresh-state",
+    ] in commands
+
+
 def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
     """Live collection extracts an explicit closing reference from merged PR data."""
     commands: list[list[str]] = []
@@ -122,15 +207,25 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
             return {"state": "OPEN", "updatedAt": "2026-08-12T10:00:00Z", "closedAt": None}
         return [
             {
-                "number": 7001,
-                "title": "fix: close the issue",
-                "body": "Closes #6916",
+                "number": 7000,
+                "title": "fix unrelated issue",
+                "body": "Closes otherorg/otherrepo#6916",
                 "mergedAt": "2026-08-12T10:02:00Z",
                 "mergeCommit": {"oid": "merge-a"},
                 "headRefName": "fix/6916",
                 "headRefOid": "head-fix",
                 "baseRefName": "main",
-            }
+            },
+            {
+                "number": 7001,
+                "title": "fix: close the issue",
+                "body": "Closes https://github.com/ll7/robot_sf_ll7/issues/6916",
+                "mergedAt": "2026-08-12T10:03:00Z",
+                "mergeCommit": {"oid": "merge-b"},
+                "headRefName": "fix/6916-target",
+                "headRefOid": "head-fix-target",
+                "baseRefName": "main",
+            },
         ]
 
     monkeypatch.setattr(gate, "_json_command", fake_json)
@@ -148,10 +243,10 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
         {
             "number": 7001,
             "title": "fix: close the issue",
-            "merged_at": "2026-08-12T10:02:00Z",
-            "merge_commit": {"oid": "merge-a"},
-            "head_ref": "fix/6916",
-            "head_sha": "head-fix",
+            "merged_at": "2026-08-12T10:03:00Z",
+            "merge_commit": {"oid": "merge-b"},
+            "head_ref": "fix/6916-target",
+            "head_sha": "head-fix-target",
             "base_ref": "main",
         }
     ]
@@ -180,7 +275,19 @@ def test_non_fast_forward_integration_fails_closed_without_reset(monkeypatch) ->
 
     assert result["ok"] is False
     assert result["reason"] == "integration_conflict"
-    assert "reset" not in " ".join(" ".join(command) for command in commands)
+    assert result["merge_aborted"] is True
+    assert ["git", "merge", "--abort"] in commands
+    assert all(command[:2] not in (["git", "reset"], ["git", "clean"]) for command in commands)
+    assert not any(
+        command[:2] == ["git", "branch"]
+        and any(argument in {"-d", "-D", "--delete"} for argument in command[2:])
+        for command in commands
+    )
+    assert not any(
+        command[:2] == ["git", "push"]
+        and ("--delete" in command or any(argument.startswith(":") for argument in command[2:]))
+        for command in commands
+    )
 
 
 def test_parser_exposes_capture_check_and_sync() -> None:
@@ -206,3 +313,67 @@ def test_check_cli_writes_ready_decision(tmp_path, monkeypatch, capsys) -> None:
     assert json.loads(decision_path.read_text(encoding="utf-8"))["reason"] == (
         "remote_state_unchanged"
     )
+
+
+def test_check_cli_writes_superseded_decision_for_closed_issue(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """The check command persists supersession when the issue closes remotely."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: _snapshot(issue_state="CLOSED"))
+
+    assert gate.main(["check", "--snapshot-path", str(snapshot_path)]) == 3
+
+    output = json.loads(capsys.readouterr().out)
+    decision_path = tmp_path / "state.decision.json"
+    persisted = json.loads(decision_path.read_text(encoding="utf-8"))
+    assert output["decision"] == "superseded"
+    assert persisted["reason"] == "issue_closed"
+
+
+def test_sync_failure_nests_integration_result(tmp_path, monkeypatch, capsys) -> None:
+    """Integration failures retain the original drift reason and schema shape."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: _snapshot(base_sha="base-b"))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {
+            "ok": False,
+            "reason": "integration_conflict",
+            "detail": "CONFLICT (content)",
+            "merged": [],
+            "merge_aborted": True,
+        },
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    persisted = json.loads((tmp_path / "state.decision.json").read_text(encoding="utf-8"))
+    assert output["reason"] == "base_changed"
+    assert output["integration"]["reason"] == "integration_conflict"
+    assert "ok" not in output
+    assert persisted == output
+
+
+def test_sync_success_marks_post_integration_self_comparison(tmp_path, monkeypatch, capsys) -> None:
+    """A refreshed post-integration decision identifies its self-comparison basis."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    states = iter([_snapshot(base_sha="base-b"), _snapshot(base_sha="base-b")])
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {"ok": True, "merged": ["refs/remotes/origin/main"]},
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    assert output["reason"] == "remote_state_integrated"
+    assert output["comparison"] == "self_snapshot_after_integration"

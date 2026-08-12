@@ -11,6 +11,7 @@ merges; it never resets or deletes a worktree.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -28,20 +29,32 @@ EXIT_CODES = {
 }
 _CLOSING_REFERENCE_RE = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+"
-    r"(?:(?:https?://github\.com/[\w.-]+/[\w.-]+/issues/)|"
-    r"(?:[\w.-]+/[\w.-]+)?#)?(?P<number>\d+)\b",
+    r"(?:(?:https?://github\.com/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)|"
+    r"(?:(?P<repo>[\w.-]+/[\w.-]+)?#))?(?P<number>\d+)\b",
     re.IGNORECASE,
 )
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+DEFAULT_TIMEOUT_SECONDS = 120
 
 
 class GateError(RuntimeError):
     """Raised when the gate cannot establish a trustworthy remote state."""
 
 
-def _run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _run(
+    command: list[str], *, check: bool = True, timeout: float = DEFAULT_TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str]:
     """Run a command without invoking a shell."""
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GateError(f"{' '.join(command)}: timed out after {timeout}s") from exc
     if check and result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "command failed"
         raise GateError(f"{' '.join(command)}: {detail}")
@@ -105,9 +118,19 @@ def _normalized_state(value: Any) -> str:
 
 def _fetch_refs(*, remote: str, base_ref: str, branch: str) -> tuple[str, str | None]:
     """Refresh the base ref and read the remote publication branch tip."""
-    _run(["git", "fetch", "--no-tags", remote, base_ref])
+    _run(
+        [
+            "git",
+            "fetch",
+            "--no-tags",
+            remote,
+            f"refs/heads/{base_ref}:refs/remotes/{remote}/{base_ref}",
+        ]
+    )
     base_sha = _git_output("rev-parse", f"refs/remotes/{remote}/{base_ref}")
-    branch_result = _run(["git", "ls-remote", "--heads", remote, branch], check=False)
+    branch_result = _run(
+        ["git", "ls-remote", "--heads", remote, f"refs/heads/{branch}"], check=False
+    )
     if branch_result.returncode != 0:
         detail = branch_result.stderr.strip() or branch_result.stdout.strip() or "command failed"
         raise GateError(f"git ls-remote --heads {remote} {branch}: {detail}")
@@ -127,7 +150,7 @@ def _fetch_remote_branch(*, remote: str, branch: str) -> None:
             "fetch",
             "--no-tags",
             remote,
-            f"{branch}:refs/remotes/{remote}/{branch}",
+            f"refs/heads/{branch}:refs/remotes/{remote}/{branch}",
         ]
     )
 
@@ -159,9 +182,12 @@ def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
         if not isinstance(pull_request, dict):
             continue
         searchable = "\n".join(str(pull_request.get(field) or "") for field in ("title", "body"))
-        closes = {
-            int(match.group("number")) for match in _CLOSING_REFERENCE_RE.finditer(searchable)
-        }
+        closes = set()
+        for match in _CLOSING_REFERENCE_RE.finditer(searchable):
+            qualifier = match.group("url_repo") or match.group("repo")
+            if qualifier and qualifier.casefold() != repo.casefold():
+                continue
+            closes.add(int(match.group("number")))
         if issue not in closes:
             continue
         matches.append(
@@ -360,7 +386,8 @@ def _decision(
 def _default_snapshot_path(branch: str) -> Path:
     """Return the ignored local path used for a branch's publication snapshot."""
     safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", branch).strip("-") or "detached-head"
-    return Path("output/validation/prepublication") / f"{safe}.json"
+    digest = hashlib.sha256(branch.encode("utf-8")).hexdigest()[:8]
+    return Path("output/validation/prepublication") / f"{safe}-{digest}.json"
 
 
 def _decision_path(snapshot_path: Path, explicit: str | None) -> Path:
@@ -415,12 +442,14 @@ def _integrate_targets(*, remote: str, branch: str, targets: list[str]) -> dict[
         result = _run(["git", "merge", "--no-edit", target], check=False)
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "merge failed"
+            abort = _run(["git", "merge", "--abort"], check=False)
             return {
                 "ok": False,
                 "reason": "integration_conflict",
                 "target": target,
                 "detail": detail,
                 "merged": merged,
+                "merge_aborted": abort.returncode == 0,
             }
         merged.append(target)
     return {"ok": True, "merged": merged}
@@ -526,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
             targets=targets,
         )
         if not integration.get("ok"):
-            decision.update(integration)
+            decision["integration"] = integration
             decision["decision_path"] = str(decision_path)
             _write_json(decision_path, decision)
             print(json.dumps(decision, indent=2, sort_keys=True))
@@ -544,6 +573,7 @@ def main(argv: list[str] | None = None) -> int:
         refreshed_decision.update(
             {
                 "reason": "remote_state_integrated",
+                "comparison": "self_snapshot_after_integration",
                 "integrated": integration.get("merged", []),
                 "snapshot_path": str(snapshot_path),
                 "decision_path": str(decision_path),

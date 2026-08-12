@@ -65,6 +65,7 @@ from robot_sf.benchmark.analysis_trace import (
     normalize_telemetry_profile,
     telemetry_from_scenario,
     trace_artifact_sha256,
+    trace_coverage,
 )
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
     _CIRCUIT_BREAKER_MSG_PREFIX_LEN,
@@ -2340,6 +2341,14 @@ def run_episode(  # noqa: PLR0913
         record["algorithm_metadata"]["analysis_trace"] = trace
         record["algorithm_metadata"]["telemetry"] = telemetry_profile.to_mapping()
         record.setdefault("provenance", {})["artifact_sha256"] = trace_artifact_sha256(trace)
+        coverage = trace_coverage(record)
+        record["algorithm_metadata"]["analysis_trace_coverage"] = coverage
+        if coverage.get("status") != "complete":
+            record["algorithm_metadata"]["analysis_trace_unavailable"] = {
+                "status": "unavailable",
+                "reason": "analysis_trace_fields_incomplete",
+                "reasons": coverage.get("reasons", []),
+            }
 
     steps_taken = max(0, len(robot_pos_traj) - 1)
 

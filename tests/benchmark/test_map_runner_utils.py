@@ -144,6 +144,7 @@ def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> N
     assert _reset_robot_heading(fallback, {"robot_heading": [0.5]}) == pytest.approx(0.5)
     assert _initial_robot_velocity(SimpleNamespace(robot_velocity_xy="invalid")) is None
     assert _initial_ped_velocities(SimpleNamespace(ped_vel=None), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids="ab"), 2) is None
     assert _finite_positive_float(0.4) == pytest.approx(0.4)
     assert _finite_positive_float(0.0) is None
     assert _finite_positive_float("invalid") is None
@@ -5842,21 +5843,20 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         "benchmark_profile": "experimental",
         "workers": 1,
         "resume": False,
-        "record_simulation_step_trace": True,
     }
     run_map_batch(out_path=off_path, **common)
     run_map_batch(
         out_path=on_path,
         telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+        record_simulation_step_trace=True,
         **common,
     )
     off = json.loads(off_path.read_text(encoding="utf-8").splitlines()[0])
     on = json.loads(on_path.read_text(encoding="utf-8").splitlines()[0])
     assert off["outcome"] == on["outcome"]
-    assert (
-        off["algorithm_metadata"]["simulation_step_trace"]
-        == on["algorithm_metadata"]["simulation_step_trace"]
-    )
+    assert off["metrics"] == on["metrics"]
+    assert "simulation_step_trace" not in off["algorithm_metadata"]
+    assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
 
 

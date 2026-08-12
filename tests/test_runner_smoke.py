@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark import runner as runner_mod
+from robot_sf.benchmark.analysis_trace import trace_coverage
 from robot_sf.benchmark.runner import run_batch, run_episode, validate_and_write
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
@@ -138,6 +139,10 @@ def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) 
     assert trace["steps"][0]["time_s"] == 0.0
     assert record["algorithm_metadata"]["telemetry"]["analysis_trace"] == "all"
     assert record["provenance"]["artifact_sha256"] == trace["artifact_sha256"]
+    coverage = trace_coverage(record)
+    assert coverage["status"] == "unavailable"
+    assert "stable_actor_ids" in coverage["reasons"] or "controls" in coverage["reasons"]
+    assert record["algorithm_metadata"]["analysis_trace_unavailable"]["status"] == "unavailable"
 
 
 def test_runner_goal_alias_executes_like_simple_policy(tmp_path: Path):

@@ -91,7 +91,9 @@ INVALID_STATUS_VALUES = frozenset(
         "degraded",
         "unavailable",
         "not_available",
+        "not-available",
         "partial-failure",
+        "partial_failure",
         "unknown",
         "malformed",
     }
@@ -192,6 +194,23 @@ def _decode_algorithm_metadata(value: Any) -> Mapping[str, Any] | None:
     return decoded if isinstance(decoded, Mapping) else None
 
 
+def _nested_optional_status_ineligibility_reason(metadata: Mapping[str, Any]) -> str | None:
+    """Validate optional nested availability, readiness, and preflight statuses."""
+    if "availability_status" in metadata:
+        availability_status = _normalise_status(metadata["availability_status"])
+        if availability_status != "available":
+            return f"algorithm_metadata.availability_status={availability_status!r}"
+    if "readiness_status" in metadata:
+        readiness_status = _normalise_status(metadata["readiness_status"])
+        if readiness_status not in ELIGIBLE_EXECUTION_MODES:
+            return f"algorithm_metadata.readiness_status={readiness_status!r}"
+    for key in ("readiness_status", "preflight_status"):
+        value = _normalise_status(metadata.get(key))
+        if value in INVALID_STATUS_VALUES:
+            return f"algorithm_metadata.{key}={value!r}"
+    return None
+
+
 def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     """Return an ineligibility reason for nested algorithm metadata, if any."""
     if not isinstance(metadata, Mapping):
@@ -205,21 +224,15 @@ def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     execution_mode = _normalise_status(kinematics.get("execution_mode"))
     if execution_mode not in ELIGIBLE_EXECUTION_MODES:
         return f"algorithm_metadata.planner_kinematics.execution_mode={execution_mode!r}"
-    availability_status = _normalise_status(metadata.get("availability_status"))
-    if availability_status and availability_status != "available":
-        return f"algorithm_metadata.availability_status={availability_status!r}"
-    readiness_status = _normalise_status(metadata.get("readiness_status"))
-    if readiness_status and readiness_status not in ELIGIBLE_EXECUTION_MODES:
-        return f"algorithm_metadata.readiness_status={readiness_status!r}"
-    for key in ("readiness_status", "preflight_status"):
-        value = _normalise_status(metadata.get(key))
-        if value in INVALID_STATUS_VALUES:
-            return f"algorithm_metadata.{key}={value!r}"
-    return None
+    return _nested_optional_status_ineligibility_reason(metadata)
 
 
 def _flat_metadata_ineligibility_reason(
-    row: Mapping[str, Any], *, require_status: bool
+    row: Mapping[str, Any],
+    *,
+    require_status: bool,
+    require_mode: bool = True,
+    allow_blank: bool = False,
 ) -> str | None:
     """Validate flattened metadata used by aggregate CSV compatibility inputs."""
     status_present, status_raw = _first_present(
@@ -235,23 +248,27 @@ def _flat_metadata_ineligibility_reason(
         row, ("algorithm_metadata_readiness_status", "readiness_status")
     )
 
-    if require_status and (not status_present or not _normalise_status(status_raw)):
+    status = _normalise_status(status_raw)
+    if require_status and (not status_present or not status):
         return "algorithm_metadata.status is missing or blank"
-    if status_present and _normalise_status(status_raw) != "ok":
-        return f"algorithm_metadata.status={_normalise_status(status_raw)!r}"
-    if not mode_present or not _normalise_status(mode_raw):
+    if status_present and status and status != "ok":
+        return f"algorithm_metadata.status={status!r}"
+    mode = _normalise_status(mode_raw)
+    if require_mode and (not mode_present or not mode):
         return "algorithm_metadata.planner_kinematics.execution_mode is missing or blank"
-    if _normalise_status(mode_raw) not in ELIGIBLE_EXECUTION_MODES:
-        return (
-            f"algorithm_metadata.planner_kinematics.execution_mode={_normalise_status(mode_raw)!r}"
-        )
+    if mode_present and not mode and not allow_blank:
+        return "algorithm_metadata.planner_kinematics.execution_mode is blank"
+    if mode_present and mode and mode not in ELIGIBLE_EXECUTION_MODES:
+        return f"algorithm_metadata.planner_kinematics.execution_mode={mode!r}"
     if availability_present:
         availability = _normalise_status(availability_raw)
-        if not availability or availability != "available":
+        if (not availability and not allow_blank) or (availability and availability != "available"):
             return f"algorithm_metadata.availability_status={availability!r}"
     if readiness_present:
         readiness = _normalise_status(readiness_raw)
-        if not readiness or readiness not in ELIGIBLE_EXECUTION_MODES:
+        if (not readiness and not allow_blank) or (
+            readiness and readiness not in ELIGIBLE_EXECUTION_MODES
+        ):
             return f"algorithm_metadata.readiness_status={readiness!r}"
     return None
 
@@ -324,6 +341,11 @@ def _ineligible_execution_reason(row: Mapping[str, Any]) -> str | None:
             if metadata is None:
                 return "algorithm_metadata is malformed"
             reason = _metadata_ineligibility_reason(metadata)
+            if reason is not None:
+                return reason
+            reason = _flat_metadata_ineligibility_reason(
+                row, require_status=False, require_mode=False, allow_blank=True
+            )
             if reason is not None:
                 return reason
             return _flat_metadata_consistency_reason(row, metadata)

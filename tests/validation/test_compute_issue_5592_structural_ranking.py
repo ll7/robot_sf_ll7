@@ -418,6 +418,66 @@ def test_rejects_nested_invalid_execution_metadata() -> None:
         metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
 
+@pytest.mark.parametrize("field", ["availability_status", "readiness_status"])
+def test_rejects_blank_nested_optional_execution_metadata(field: str) -> None:
+    """Present-but-blank nested status fields must fail closed."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["algorithm_metadata"] = {
+        "status": "ok",
+        "availability_status": "available",
+        "readiness_status": "native",
+        "planner_kinematics": {"execution_mode": "native"},
+    }
+    rows[0]["algorithm_metadata"][field] = ""
+
+    with pytest.raises(metric.RankingMetricError, match=field):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+@pytest.mark.parametrize("field", ["availability_status", "readiness_status"])
+def test_allows_blank_flat_metadata_alongside_nested_metadata(field: str) -> None:
+    """Empty duplicate CSV columns do not override canonical nested metadata."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["algorithm_metadata"] = {
+        "status": "ok",
+        "availability_status": "available",
+        "readiness_status": "native",
+        "planner_kinematics": {"execution_mode": "native"},
+    }
+    rows[0][field] = ""
+
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+def test_rejects_nonblank_invalid_flat_metadata_alongside_nested_metadata() -> None:
+    """A nonblank invalid flattened field cannot hide behind nested metadata."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["algorithm_metadata"] = {
+        "status": "ok",
+        "planner_kinematics": {"execution_mode": "native"},
+    }
+    rows[0]["availability_status"] = "fallback"
+
+    with pytest.raises(metric.RankingMetricError, match="availability_status"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+@pytest.mark.parametrize("status", ["not-available", "partial_failure"])
+def test_rejects_noncanonical_failure_status_aliases(status: str) -> None:
+    """Failure-status spelling variants must not enter a valid metadata row."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["status"] = status
+
+    with pytest.raises(metric.RankingMetricError, match=status):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
 @pytest.mark.parametrize("execution_mode", ["", "unknown", "fallback"])
 def test_rejects_missing_or_ineligible_flat_execution_metadata(execution_mode: str) -> None:
     """Flat campaign metadata must explicitly identify eligible execution."""

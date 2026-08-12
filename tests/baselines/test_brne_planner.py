@@ -185,6 +185,9 @@ def test_brne_solve_fails_closed_on_nonfinite_weights(monkeypatch: pytest.Monkey
     planner._jit_warmup_done = True
 
     assert planner.step(_make_observation(num_agents=1)) == {"v": 0.0, "omega": 0.0}
+    metadata = planner.get_metadata()
+    assert metadata["runtime_status"] == "failed"
+    assert metadata["failure_reasons"] == ["nonfinite_weights"]
 
 
 def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,6 +213,31 @@ def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch
 
     action = planner.step(_make_observation(num_agents=1))
     assert action == pytest.approx({"v": 0.7, "omega": 0.25})
+
+
+def test_brne_declared_heading_takes_precedence_over_velocity() -> None:
+    """Stationary or stale-velocity observations retain their declared heading."""
+    pose = BRNEPlanner._infer_robot_pose(
+        np.array([0.0, 0.0]),
+        np.array([1.0, 0.0]),
+        np.array([4.0, 0.0]),
+        r_heading=math.pi / 2.0,
+    )
+    assert pose[2] == pytest.approx(math.pi / 2.0)
+
+
+def test_brne_normalizes_samples_first_control_ensemble() -> None:
+    """Legacy samples-first control arrays are normalized before trajectory use."""
+    samples_first = np.arange(3 * 4 * 2, dtype=float).reshape(3, 4, 2)
+    normalized = BRNEPlanner._normalize_control_ensemble(samples_first, plan_steps=4)
+    assert normalized.shape == (4, 3, 2)
+    np.testing.assert_array_equal(normalized[0], samples_first[:, 0, :])
+
+
+def test_brne_rejects_malformed_control_ensemble() -> None:
+    """Malformed or ambiguous control tensors fail closed at the adapter boundary."""
+    with pytest.raises(ValueError, match="invalid_control_ensemble_shape"):
+        BRNEPlanner._normalize_control_ensemble(np.zeros((4, 3)), plan_steps=4)
 
 
 # --- Integration: real upstream solve ---

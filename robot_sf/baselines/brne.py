@@ -9,7 +9,8 @@ Bounded integration scope (issue #5318):
 
 - Corridor-class scenarios only (``corridor_y_min/max`` bounds).
 - Native unicycle ``(v, omega)`` output — no projection required.
-- Fail-closed budget enforcement: zero motion on budget overrun.
+- Fail-closed budget enforcement: zero motion on budget overrun, with
+  runtime failure provenance so diagnostic rows are excluded.
 - GPL-3.0 upstream: local-only staging, never vendored.
 
 Upstream: ``MurpheyLab/brne`` @ ``633a5cd`` (IJRR 2024, GPL-3.0).
@@ -131,7 +132,13 @@ class BRNEPlanner:
         self._brne: ModuleType | None = None
         self._lmat: np.ndarray | None = None
         self._jit_warmup_done = False
+        self._upstream_rng_seeded = False
         self._last_effective_num_samples: int | None = None
+        self._step_count = 0
+        self._failure_count = 0
+        self._failure_reasons: list[str] = []
+        self._last_failure_reason: str | None = None
+        self._last_step_status = "not_started"
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -162,10 +169,14 @@ class BRNEPlanner:
         Returns:
             The cached BRNE core module.
         """
-        if self._brne is not None:
-            return self._brne
-        stage = self._resolve_stage_path()
-        self._brne = _load_brne_module(stage)
+        if self._brne is None:
+            stage = self._resolve_stage_path()
+            self._brne = _load_brne_module(stage)
+        if not self._upstream_rng_seeded and self._seed is not None:
+            upstream_rng = getattr(self._brne, "rng", None)
+            if upstream_rng is not None:
+                self._brne.rng = np.random.default_rng(self._seed)
+            self._upstream_rng_seeded = True
         return self._brne
 
     def _ensure_cov(self, brne: ModuleType) -> np.ndarray:
@@ -190,13 +201,45 @@ class BRNEPlanner:
             self._seed = seed
         self._lmat = None
         self._jit_warmup_done = False
+        self._upstream_rng_seeded = False
         self._last_effective_num_samples = None
+        self._reset_runtime_diagnostics()
 
     def configure(self, config: dict[str, Any] | BRNEPlannerConfig) -> None:
         """Update the BRNE wrapper configuration."""
         self.config = self._parse_config(config)
         self._lmat = None
+        self._upstream_rng_seeded = False
         self._last_effective_num_samples = None
+        self._reset_runtime_diagnostics()
+
+    def _reset_runtime_diagnostics(self) -> None:
+        """Clear per-episode runtime diagnostics."""
+        self._step_count = 0
+        self._failure_count = 0
+        self._failure_reasons = []
+        self._last_failure_reason = None
+        self._last_step_status = "not_started"
+
+    def _record_failure(self, reason: str) -> None:
+        """Record a fail-closed step without hiding it behind zero motion."""
+        normalized_reason = str(reason).strip() or "unknown_failure"
+        self._step_count += 1
+        self._failure_count += 1
+        self._last_failure_reason = normalized_reason
+        self._last_step_status = "failed"
+        if normalized_reason not in self._failure_reasons:
+            self._failure_reasons.append(normalized_reason)
+
+    def _record_success(self) -> None:
+        """Record one finite control step."""
+        self._step_count += 1
+        self._last_step_status = "ok"
+
+    def _zero_action(self, reason: str) -> dict[str, float]:
+        """Return the bounded stop action and retain its failure reason."""
+        self._record_failure(reason)
+        return {"v": 0.0, "omega": 0.0}
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         """Compute a BRNE action for the current observation.
@@ -210,8 +253,10 @@ class BRNEPlanner:
         try:
             return self._solve(obs)
         except FileNotFoundError:
+            self._record_failure("missing_dependency")
             raise
         except Exception as exc:  # broad catch: solver fallback boundary
+            self._record_failure("solver_exception")
             if self.config.fallback_on_error:
                 _LOGGER.warning("BRNE solve failed, returning zero motion: %s", exc)
                 return {"v": 0.0, "omega": 0.0}
@@ -232,7 +277,14 @@ class BRNEPlanner:
         r_pos = np.asarray(robot["position"], dtype=np.float64)
         r_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=np.float64)
         r_goal = np.asarray(robot.get("goal", [r_pos[0] + 1.0, r_pos[1]]), dtype=np.float64)
-        robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal)
+        heading_value = robot.get("heading")
+        try:
+            robot_heading = float(heading_value) if heading_value is not None else None
+        except (TypeError, ValueError):
+            robot_heading = None
+        if robot_heading is not None and not np.isfinite(robot_heading):
+            robot_heading = None
+        robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal, r_heading=robot_heading)
         selected = self._select_agents(obs.agents, r_pos)
         num_peds = len(selected)
         num_agents = num_peds + 1
@@ -283,7 +335,7 @@ class BRNEPlanner:
             _LOGGER.debug(
                 "BRNE returned out-of-bounds or non-finite weights; returning zero motion"
             )
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("nonfinite_weights")
 
         if elapsed_s > cfg.step_budget_s:
             _LOGGER.debug(
@@ -291,12 +343,12 @@ class BRNEPlanner:
                 elapsed_s * 1000.0,
                 cfg.step_budget_s * 1000.0,
             )
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("step_budget_exceeded")
 
         robot_weights = weights[0]
         if ulist.ndim != 3 or robot_weights.ndim != 1:
             _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("invalid_control_ensemble_shape")
         if ulist.shape[1] == robot_weights.size:
             cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
         elif ulist.shape[0] == robot_weights.size:
@@ -307,12 +359,13 @@ class BRNEPlanner:
             _LOGGER.debug(
                 "BRNE weights and control ensemble shapes disagree; returning zero motion"
             )
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("sample_weight_shape_mismatch")
         if not np.all(np.isfinite(cmd)):
             _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("nonfinite_control_command")
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
         self._clamp_action(action)
+        self._record_success()
         return action
 
     def _brne_solve(
@@ -349,19 +402,56 @@ class BRNEPlanner:
         r_pos: np.ndarray,
         r_vel: np.ndarray,
         r_goal: np.ndarray,
+        *,
+        r_heading: float | None = None,
     ) -> np.ndarray:
-        """Return the robot ``[x, y, theta]`` pose, taking heading from velocity or goal bearing.
+        """Return the robot ``[x, y, theta]`` pose.
+
+        A declared observation heading takes precedence. Velocity/goal bearing
+        remains a compatibility fallback for callers using the older baseline
+        mapping that did not carry heading explicitly.
 
         Returns:
             The ``[x, y, theta]`` robot pose.
         """
-        if np.linalg.norm(r_vel) > 1e-6:
+        if r_heading is not None and np.isfinite(r_heading):
+            theta = float(r_heading)
+        elif np.linalg.norm(r_vel) > 1e-6:
             theta = float(np.arctan2(r_vel[1], r_vel[0]))
         elif np.linalg.norm(r_goal - r_pos) > 1e-6:
             theta = float(np.arctan2(r_goal[1] - r_pos[1], r_goal[0] - r_pos[0]))
         else:
             theta = 0.0
         return np.array([r_pos[0], r_pos[1], theta])
+
+    @staticmethod
+    def _normalize_control_ensemble(ulist: Any, *, plan_steps: int) -> np.ndarray:
+        """Normalize upstream control ensembles to ``(plan_steps, samples, 2)``.
+
+        The pinned upstream helper returns plan-step-first arrays, while older
+        isolated adapters used samples-first arrays. Accept both only when the
+        plan-step axis is explicit and reject all malformed layouts.
+
+        Returns:
+            np.ndarray: Plan-step-first finite control ensemble.
+
+        Raises:
+            ValueError: If the ensemble shape or values are invalid.
+        """
+        array = np.asarray(ulist, dtype=float)
+        if array.ndim != 3 or array.shape[2] != 2:
+            raise ValueError("invalid_control_ensemble_shape")
+        if array.shape[0] == plan_steps:
+            normalized = array
+        elif array.shape[1] == plan_steps:
+            normalized = np.transpose(array, (1, 0, 2))
+        else:
+            raise ValueError("invalid_control_ensemble_plan_axis")
+        if normalized.shape[0] != plan_steps or normalized.shape[1] < 1:
+            raise ValueError("invalid_control_ensemble_sample_axis")
+        if not np.all(np.isfinite(normalized)):
+            raise ValueError("nonfinite_control_ensemble")
+        return normalized
 
     def _select_agents(
         self,
@@ -410,7 +500,10 @@ class BRNEPlanner:
             else 0.0
         )
         nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
-        ulist = brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples)
+        ulist = self._normalize_control_ensemble(
+            brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples),
+            plan_steps=plan_steps,
+        )
         effective_num_samples = int(ulist.shape[1])
         traj = brne.traj_sim_essemble(
             np.tile(robot_pose, reps=(effective_num_samples, 1)).T,
@@ -451,6 +544,7 @@ class BRNEPlanner:
         """Release BRNE wrapper resources."""
         self._brne = None
         self._lmat = None
+        self._upstream_rng_seeded = False
         self._last_effective_num_samples = None
 
     def get_metadata(self) -> dict[str, Any]:
@@ -461,12 +555,22 @@ class BRNEPlanner:
         stage = self._resolve_stage_path()
         core_rel = "brne_nav/brne_py/brne_py/brne.py"
         status = "ok" if (stage / core_rel).is_file() else "missing_dependency"
+        runtime_status = (
+            "failed" if self._failure_count > 0 else "ok" if self._step_count > 0 else "not_started"
+        )
         return {
             "algorithm": "brne",
             "config": cfg,
             "config_hash": config_hash,
+            "seed": self._seed,
             "status": status,
             "effective_num_samples": self._last_effective_num_samples,
+            "runtime_status": runtime_status,
+            "step_count": self._step_count,
+            "failure_count": self._failure_count,
+            "failure_reasons": list(self._failure_reasons),
+            "last_failure_reason": self._last_failure_reason,
+            "last_step_status": self._last_step_status,
             "sample_count_note": (
                 "The pinned upstream grid helper may return fewer samples than the requested "
                 "num_samples; all trajectory and weight tensors use that effective count."

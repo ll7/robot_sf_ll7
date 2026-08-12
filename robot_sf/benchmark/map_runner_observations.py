@@ -211,10 +211,13 @@ def obs_to_brne_format(obs: dict[str, Any]) -> dict[str, Any]:
     """Convert a map-runner observation into the BRNE baseline contract.
 
     BRNE consumes the canonical ``dt``/``robot``/``agents`` payload used by the
-    baseline registry. Map observations expose heading and speed separately, so
-    this bridge reconstructs a world-frame velocity when an explicit velocity
-    vector is unavailable. Static obstacles are preserved for provenance even
-    though the bounded upstream BRNE core only uses corridor bounds.
+    baseline registry. The SocNav observation contract stores pedestrian
+    velocities in the robot ego frame, so this bridge rotates them back into
+    world coordinates before passing them to BRNE's world-frame predictor. Map
+    observations expose heading and speed separately, so the bridge also
+    reconstructs a world-frame robot velocity when an explicit vector is
+    unavailable. Static obstacles are preserved for provenance even though the
+    bounded upstream BRNE core only uses corridor bounds.
 
     Returns:
         Mapping compatible with :class:`robot_sf.baselines.brne.BRNEPlanner`.
@@ -237,6 +240,23 @@ def obs_to_brne_format(obs: dict[str, Any]) -> dict[str, Any]:
     if velocity.size < 2 or not np.all(np.isfinite(velocity[:2])):
         velocity = np.zeros(2, dtype=float)
     robot["velocity"] = [float(velocity[0]), float(velocity[1])]
+
+    heading = float(robot.get("heading", 0.0))
+    cos_h = np.cos(heading)
+    sin_h = np.sin(heading)
+    for agent in payload["agents"]:
+        ego_velocity = np.asarray(agent.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)
+        if ego_velocity.size < 2 or not np.all(np.isfinite(ego_velocity[:2])):
+            world_velocity = np.zeros(2, dtype=float)
+        else:
+            world_velocity = np.array(
+                [
+                    cos_h * ego_velocity[0] - sin_h * ego_velocity[1],
+                    sin_h * ego_velocity[0] + cos_h * ego_velocity[1],
+                ],
+                dtype=float,
+            )
+        agent["velocity"] = [float(world_velocity[0]), float(world_velocity[1])]
 
     obstacles = normalized.get("obstacles")
     payload["obstacles"] = obstacles if isinstance(obstacles, list) else []

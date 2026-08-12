@@ -36,6 +36,35 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml"
 EXPECTED_PLANNERS = ("brne", "orca", "social_force")
 EXPECTED_SCENARIO = "classic_head_on_corridor_low"
+EXPECTED_SEEDS = (111, 112, 113)
+EXPECTED_HORIZON = 500
+EXPECTED_DT = 0.1
+EXPECTED_SCENARIO_MATRIX = (
+    REPO_ROOT / "configs/scenarios/issue_6464_brne_corridor_diagnostic.yaml"
+).resolve()
+EXPECTED_PLANNER_CONFIGS = {
+    "brne": (REPO_ROOT / "configs/baselines/issue_6464_brne_corridor_diagnostic.yaml").resolve(),
+    "orca": (REPO_ROOT / "configs/baselines/issue_6464_orca_corridor_diagnostic.yaml").resolve(),
+    "social_force": (
+        REPO_ROOT / "configs/baselines/issue_6464_social_force_corridor_diagnostic.yaml"
+    ).resolve(),
+}
+EXPECTED_PLANNER_FIELDS = {
+    "brne": {
+        "num_samples": 49,
+        "plan_steps": 25,
+        "dt": 0.1,
+        "maximum_agents": 8,
+        "corridor_y_min": 2.5,
+        "corridor_y_max": 37.5,
+        "step_budget_s": 0.1,
+        "fallback_on_error": False,
+        "allow_testing_algorithms": True,
+        "include_in_paper": False,
+    },
+    "orca": {"allow_fallback": False},
+    "social_force": {"action_space": "unicycle", "allow_fallback": False},
+}
 ZERO_MOTION_EPSILON_M = 1.0e-6
 
 
@@ -95,6 +124,8 @@ def _validate_campaign_header(config: dict[str, Any]) -> list[int]:
     seeds = [int(seed) for seed in raw_seeds]
     if len(set(seeds)) != len(seeds) or any(seed < 0 for seed in seeds):
         raise ValueError("seeds must be distinct non-negative integers")
+    if tuple(seeds) != EXPECTED_SEEDS:
+        raise ValueError(f"issue #6464 diagnostic seeds are frozen to {list(EXPECTED_SEEDS)}")
     return seeds
 
 
@@ -104,6 +135,10 @@ def _validate_campaign_horizon(config: dict[str, Any]) -> tuple[int, float]:
     dt = _finite_float(config.get("dt"), field="dt")
     if horizon <= 0 or dt <= 0.0:
         raise ValueError("horizon and dt must be positive")
+    if horizon != EXPECTED_HORIZON or not math.isclose(
+        dt, EXPECTED_DT, rel_tol=0.0, abs_tol=1.0e-12
+    ):
+        raise ValueError("issue #6464 diagnostic horizon and dt are frozen to 500 and 0.1")
     return horizon, dt
 
 
@@ -125,6 +160,24 @@ def _validate_corridor(config: dict[str, Any]) -> dict[str, float]:
         raise ValueError("corridor bounds and thresholds are inconsistent")
     if not 0.0 <= max_zero_fraction <= 1.0:
         raise ValueError("corridor.max_zero_motion_fraction must be in [0, 1]")
+    expected_corridor = {
+        "y_min": 2.5,
+        "y_max": 37.5,
+        "robot_radius_m": 1.0,
+        "min_displacement_m": 0.5,
+        "max_zero_motion_fraction": 0.95,
+    }
+    if any(
+        not math.isclose(value, expected_corridor[field], rel_tol=0.0, abs_tol=1.0e-12)
+        for field, value in {
+            "y_min": y_min,
+            "y_max": y_max,
+            "robot_radius_m": radius,
+            "min_displacement_m": min_displacement,
+            "max_zero_motion_fraction": max_zero_fraction,
+        }.items()
+    ):
+        raise ValueError("issue #6464 diagnostic corridor thresholds are frozen")
     return {
         "y_min": y_min,
         "y_max": y_max,
@@ -134,7 +187,9 @@ def _validate_corridor(config: dict[str, Any]) -> dict[str, float]:
     }
 
 
-def _validate_planner_entry(raw_planner: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+def _validate_planner_entry(  # noqa: C901
+    raw_planner: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Validate one planner entry and load its config."""
     if not isinstance(raw_planner, dict):
         raise ValueError("each planner entry must be a mapping")
@@ -145,7 +200,18 @@ def _validate_planner_entry(raw_planner: Any) -> tuple[dict[str, Any], dict[str,
     config_path = _resolve_repo_path(raw_planner.get("config_path"), field=f"{key}.config_path")
     if not config_path.is_file():
         raise FileNotFoundError(f"missing planner config: {config_path}")
+    if config_path != EXPECTED_PLANNER_CONFIGS[key]:
+        raise ValueError(f"{key} must use its frozen issue #6464 planner config")
     planner_config = _load_mapping(config_path)
+    for field, expected in EXPECTED_PLANNER_FIELDS[key].items():
+        observed = planner_config.get(field)
+        matches = (
+            math.isclose(float(observed), float(expected), rel_tol=0.0, abs_tol=1.0e-12)
+            if isinstance(expected, float)
+            else observed == expected
+        )
+        if not matches:
+            raise ValueError(f"{key}.{field} does not match the frozen issue #6464 value")
     if key == "brne":
         if bool(planner_config.get("fallback_on_error", False)):
             raise ValueError("BRNE fallback_on_error must be false")
@@ -197,6 +263,8 @@ def validate_campaign_config(config: dict[str, Any]) -> dict[str, Any]:
     scenario_matrix = _resolve_repo_path(config.get("scenario_matrix"), field="scenario_matrix")
     if not scenario_matrix.is_file():
         raise FileNotFoundError(f"missing scenario matrix: {scenario_matrix}")
+    if scenario_matrix != EXPECTED_SCENARIO_MATRIX:
+        raise ValueError("issue #6464 diagnostic must use its frozen scenario matrix")
 
     normalized = dict(config)
     normalized.update(
@@ -234,6 +302,17 @@ def select_scenarios(config: dict[str, Any]) -> list[dict[str, Any]]:
             raise ValueError(
                 f"scenario seeds {scenario_seeds} do not match the frozen seeds {config['seeds']}"
             )
+        scenario_horizon = scenario.get("run_horizon")
+        if scenario_horizon is not None and int(scenario_horizon) != int(config["horizon"]):
+            raise ValueError("scenario horizon does not match the frozen diagnostic horizon")
+        scenario_dt = scenario.get("run_dt")
+        if scenario_dt is not None and not math.isclose(
+            _finite_float(scenario_dt, field="scenario.run_dt"),
+            float(config["dt"]),
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        ):
+            raise ValueError("scenario timestep does not match the frozen diagnostic timestep")
         if any(key in scenario for key in ("single_pedestrians", "map_semantics")):
             raise ValueError("unsupported static/marker geometry in BRNE corridor diagnostic")
     return selected
@@ -280,6 +359,33 @@ def classify_record(
         else "unknown"
     )
     diagnostic_meta = metadata.get("brne_diagnostic")
+    planner_runtime = metadata.get("planner_runtime")
+    runtime_planner_meta = (
+        planner_runtime.get("planner_metadata") if isinstance(planner_runtime, dict) else None
+    )
+    runtime_status = (
+        str(runtime_planner_meta.get("runtime_status", "unknown")).strip().lower()
+        if isinstance(runtime_planner_meta, dict)
+        else "not_applicable"
+    )
+    runtime_dependency_status = (
+        str(runtime_planner_meta.get("status", "unknown")).strip().lower()
+        if isinstance(runtime_planner_meta, dict)
+        else "not_applicable"
+    )
+    try:
+        runtime_failure_count = (
+            int(runtime_planner_meta.get("failure_count", 0))
+            if isinstance(runtime_planner_meta, dict)
+            else 0
+        )
+    except (TypeError, ValueError):
+        runtime_failure_count = -1
+    effective_num_samples = (
+        runtime_planner_meta.get("effective_num_samples")
+        if isinstance(runtime_planner_meta, dict)
+        else None
+    )
     record_status = str(record.get("status", "")).strip().lower()
     record_failed = record_status in {"failed", "error"}
     fallback = bool(
@@ -287,6 +393,23 @@ def classify_record(
         or metadata.get("fallback_triggered")
         or status in {"fallback", "degraded", "unknown"}
         or planner_status in {"fallback", "degraded"}
+    )
+    runtime_invalid = planner_key == "brne" and (
+        runtime_status != "ok" or runtime_failure_count != 0
+    )
+    diagnostic_metadata_valid = planner_key != "brne" or (
+        isinstance(diagnostic_meta, dict)
+        and diagnostic_meta.get("status") == "native_core_via_adapter"
+        and diagnostic_meta.get("execution_semantics")
+        == "native_upstream_core_through_robot_sf_adapter"
+    )
+    runtime_provenance_valid = planner_key != "brne" or (
+        runtime_status == "ok"
+        and runtime_dependency_status == "ok"
+        and runtime_failure_count == 0
+        and isinstance(effective_num_samples, int)
+        and not isinstance(effective_num_samples, bool)
+        and effective_num_samples > 0
     )
     positions, max_pedestrians = _trace_summary(record)
     corridor = config["corridor"]
@@ -311,8 +434,21 @@ def classify_record(
         goal_reached = float(success_value) > 0.0
     except (TypeError, ValueError):
         goal_reached = False
-    execution_ok = status == "ok" and not record_failed and not fallback
-    native = planner_key == "brne" and execution_ok and planner_status == "ok"
+    execution_ok = (
+        status == "ok"
+        and not record_failed
+        and not fallback
+        and not runtime_invalid
+        and diagnostic_metadata_valid
+        and runtime_provenance_valid
+    )
+    native = (
+        planner_key == "brne"
+        and execution_ok
+        and planner_status == "ok"
+        and diagnostic_metadata_valid
+        and runtime_provenance_valid
+    )
     crowd_within_budget = max_pedestrians is not None and max_pedestrians <= int(
         config["max_pedestrians"]
     )
@@ -348,6 +484,10 @@ def classify_record(
         "record_status": record_status,
         "planner_status": status,
         "planner_dependency_status": planner_status,
+        "planner_runtime_status": runtime_status,
+        "planner_runtime_dependency_status": runtime_dependency_status,
+        "planner_runtime_failure_count": runtime_failure_count,
+        "effective_num_samples": effective_num_samples,
         "goal_reached": goal_reached,
         "trace_status": trace_status,
         "max_pedestrians": max_pedestrians,
@@ -358,6 +498,9 @@ def classify_record(
         "corridor_violation_count": violation_count,
         "corridor_valid": corridor_valid,
         "diagnostic_metadata_present": isinstance(diagnostic_meta, dict),
+        "diagnostic_metadata_valid": diagnostic_metadata_valid,
+        "runtime_provenance_valid": runtime_provenance_valid,
+        "native_core_via_adapter": native,
         "claim_boundary": config["claim_boundary"],
     }
 
@@ -375,27 +518,60 @@ def summarize_records(
     expected = {
         (scenario_id, seed) for scenario_id in config["scenario_ids"] for seed in config["seeds"]
     }
-    observed = {(row["scenario_id"], int(row["seed"])) for row in classified}
-    arm_status = "unavailable" if error or not classified else "available"
-    if arm_status == "available" and len(classified) < len(expected):
-        arm_status = "partial"
+    observed_sequence: list[tuple[str, int]] = []
+    invalid_pair_rows = 0
+    for row in classified:
+        scenario_id = row.get("scenario_id")
+        try:
+            seed = int(row.get("seed"))
+        except (TypeError, ValueError):
+            invalid_pair_rows += 1
+            continue
+        if not isinstance(scenario_id, str) or not scenario_id.strip():
+            invalid_pair_rows += 1
+            continue
+        observed_sequence.append((scenario_id, seed))
+    observed = set(observed_sequence)
+    duplicate_pairs = sorted(pair for pair in observed if observed_sequence.count(pair) > 1)
+    unexpected_pairs = sorted(observed - expected)
+    missing_pairs = sorted(expected - observed)
+    pair_coverage_exact = (
+        not invalid_pair_rows
+        and not duplicate_pairs
+        and not unexpected_pairs
+        and not missing_pairs
+        and len(observed_sequence) == len(expected)
+    )
+    arm_status = "unavailable" if error or not classified else "partial"
+    if arm_status == "partial" and pair_coverage_exact:
+        arm_status = "available"
+    eligible_statuses = {"available_native", "available_comparator"}
     return {
         "planner": planner_key,
         "status": arm_status,
         "error": error,
         "expected_rows": len(expected),
         "observed_rows": len(classified),
-        "missing_pairs": [list(pair) for pair in sorted(expected - observed)],
+        "unique_observed_rows": len(observed),
+        "pair_coverage_exact": pair_coverage_exact,
+        "missing_pairs": [list(pair) for pair in missing_pairs],
+        "duplicate_pairs": [list(pair) for pair in duplicate_pairs],
+        "unexpected_pairs": [list(pair) for pair in unexpected_pairs],
+        "invalid_pair_rows": invalid_pair_rows,
         "native_rows": sum(bool(row["native"]) for row in classified),
         "execution_ok_rows": sum(bool(row["execution_ok"]) for row in classified),
         "unavailable_rows": sum(row["status"] == "unavailable" for row in classified),
-        "goal_reached_rows": sum(bool(row["goal_reached"]) for row in classified),
+        "goal_reached_rows": sum(
+            bool(row["goal_reached"]) and row["status"] in eligible_statuses for row in classified
+        ),
+        "goal_reached_unavailable_rows": sum(
+            bool(row["goal_reached"]) and row["status"] not in eligible_statuses
+            for row in classified
+        ),
         "nondegenerate_rows": sum(bool(row["nondegenerate"]) for row in classified),
         "corridor_violation_rows": sum(not row["corridor_valid"] for row in classified),
         "crowd_over_budget_rows": sum(not row["crowd_within_budget"] for row in classified),
-        "diagnostic_eligible_rows": sum(
-            row["status"] in {"available_native", "available_comparator"} for row in classified
-        ),
+        "diagnostic_eligible_rows": sum(row["status"] in eligible_statuses for row in classified),
         "execution_summary": execution_summary,
         "rows": classified,
     }
@@ -430,18 +606,20 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         f"- Scenario/seed cells: `{report['expected_pairs']}`",
         "- Evidence tier: smoke/diagnostic only",
         "- Fallback/degraded rows: unavailable and excluded",
+        "- Goal-reaching counts: eligible rows only; unavailable rows are reported separately",
         "",
         "This report does not rank planners and is not benchmark, safety, realism, matched-compute, or paper evidence.",
         "",
         "## Arm accounting",
         "",
-        "| planner | status | observed | native | eligible | goal reached | non-degenerate | corridor violations |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| planner | status | observed | exact pairs | native | eligible | goal reached | non-degenerate | corridor violations |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for arm in report["arms"]:
         lines.append(
             f"| {arm['planner']} | {arm['status']} | {arm['observed_rows']} | "
-            f"{arm['native_rows']} | {arm['diagnostic_eligible_rows']} | "
+            f"{'yes' if arm['pair_coverage_exact'] else 'no'} | {arm['native_rows']} | "
+            f"{arm['diagnostic_eligible_rows']} | "
             f"{arm['goal_reached_rows']} | {arm['nondegenerate_rows']} | "
             f"{arm['corridor_violation_rows']} |"
         )
@@ -507,6 +685,7 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
     expected_pairs = len(config["scenario_ids"]) * len(config["seeds"])
     complete = all(
         arm["status"] == "available"
+        and arm["pair_coverage_exact"]
         and arm["observed_rows"] == expected_pairs
         and arm["unavailable_rows"] == 0
         for arm in arms
@@ -518,7 +697,7 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
         "config": config,
         "expected_pairs": expected_pairs,
         "paired_coverage_exact": all(
-            not arm["missing_pairs"] and arm["observed_rows"] == expected_pairs for arm in arms
+            arm["pair_coverage_exact"] and arm["observed_rows"] == expected_pairs for arm in arms
         ),
         "arms": arms,
         "claim_boundary": config["claim_boundary"],

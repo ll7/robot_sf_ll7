@@ -85,7 +85,8 @@ def build(
     meta: dict[str, Any] = {
         "algorithm": algo_key,
         "brne_diagnostic": {
-            "status": "native_only",
+            "status": "native_core_via_adapter",
+            "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
             "evidence_tier": "smoke_diagnostic",
             "claim_boundary": (
                 "corridor-only native execution and non-degenerate behavior; "

@@ -12,6 +12,7 @@ from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
     classify_record,
+    summarize_records,
     validate_campaign_config,
 )
 
@@ -97,7 +98,7 @@ def test_obs_to_brne_format_reconstructs_world_velocity() -> None:
 
     assert converted["dt"] == pytest.approx(0.1)
     assert converted["robot"]["velocity"] == pytest.approx([0.0, 2.0])
-    assert converted["agents"][0]["velocity"] == [0.0, -1.0]
+    assert converted["agents"][0]["velocity"] == pytest.approx([1.0, 0.0])
     assert converted["obstacles"] == [{"kind": "corridor_boundary"}]
 
 
@@ -138,17 +139,93 @@ def test_brne_requires_native_dependency_status() -> None:
     """BRNE rows without a successful staged-core status are unavailable."""
     config = _config()
     missing = classify_record(_record(), config, planner_key="brne")
-    assert missing["execution_ok"] is True
+    assert missing["execution_ok"] is False
     assert missing["native"] is False
     assert missing["status"] == "unavailable"
 
+    native_metadata = {
+        "brne_diagnostic": {
+            "status": "native_core_via_adapter",
+            "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
+        },
+        "planner_metadata": {"status": "ok"},
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "effective_num_samples": 42,
+                "step_count": 1,
+            }
+        },
+    }
     native = classify_record(
-        _record(metadata={"planner_metadata": {"status": "ok"}}),
+        _record(metadata=native_metadata),
         config,
         planner_key="brne",
     )
     assert native["native"] is True
     assert native["status"] == "available_native"
+
+
+def test_brne_runtime_failure_is_unavailable_even_with_motion() -> None:
+    """Fail-closed zero-motion/runtime failures cannot become native evidence."""
+    config = _config()
+    failed = classify_record(
+        _record(
+            metadata={
+                "brne_diagnostic": {
+                    "status": "native_core_via_adapter",
+                    "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
+                },
+                "planner_metadata": {"status": "ok"},
+                "planner_runtime": {
+                    "planner_metadata": {
+                        "status": "ok",
+                        "runtime_status": "failed",
+                        "failure_count": 1,
+                        "effective_num_samples": 42,
+                    }
+                },
+            }
+        ),
+        config,
+        planner_key="brne",
+    )
+    assert failed["execution_ok"] is False
+    assert failed["status"] == "unavailable"
+
+
+def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:
+    """Coverage and outcomes must use exact pairs and eligible rows only."""
+    config = _config()
+    first = _record()
+    first["seed"] = 111
+    unavailable_goal = _record(metadata={"fallback_triggered": True})
+    unavailable_goal["seed"] = 112
+    duplicate = _record()
+    duplicate["seed"] = 111
+
+    summary = summarize_records(
+        planner_key="social_force",
+        records=[first, unavailable_goal, duplicate],
+        config=config,
+    )
+
+    assert summary["pair_coverage_exact"] is False
+    assert summary["duplicate_pairs"] == [["classic_head_on_corridor_low", 111]]
+    assert summary["missing_pairs"] == [["classic_head_on_corridor_low", 113]]
+    assert summary["goal_reached_rows"] == 2
+    assert summary["goal_reached_unavailable_rows"] == 1
+
+
+def test_campaign_rejects_mutated_frozen_inputs() -> None:
+    """The diagnostic cannot silently change its predeclared horizon or seed set."""
+    payload = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    payload["seeds"] = [111, 112, 114]
+    with pytest.raises(ValueError, match="seeds are frozen"):
+        validate_campaign_config(payload)
 
 
 def test_fallback_and_over_cap_rows_are_unavailable() -> None:

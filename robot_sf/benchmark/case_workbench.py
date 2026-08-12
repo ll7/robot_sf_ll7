@@ -104,7 +104,7 @@ def analyze_cases(
                 command=f"analyze-cases --result-store {input_path}",
                 overwrite=True,
             )
-        except (ImportError, ModuleNotFoundError) as exc:
+        except ImportError as exc:
             # The proposal still remains useful in a lean environment; the
             # package states that the normalized store could not be materialized.
             (output_path / "campaign-result-store.v2.unavailable").write_text(
@@ -125,7 +125,7 @@ def analyze_cases(
                 command=f"analyze-cases --result-store {input_path}",
                 overwrite=True,
             )
-        except (ImportError, ModuleNotFoundError) as exc:
+        except ImportError as exc:
             (output_path / "campaign-result-store.v2.unavailable").write_text(
                 f"campaign-result-store.v2 unavailable: {exc}\n", encoding="utf-8"
             )

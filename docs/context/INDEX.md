@@ -38,8 +38,13 @@ fail-closed serialized execution-monitor handling, and final-summary propagation
 
 Issue #6970 paired-effect retained-row contract: versioned #4598 outcome fields,
 config/preflight provenance, fail-closed producer validation, and a config-exposure audit for the
-#13775 non-identifiability boundary; no campaign or result claim:
+Issue #13775 non-identifiability boundary; no campaign or result claim:
 [issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md).
+
+Issue #6971 safety-wrapper paired-campaign preregistration: freezes the 48-scenario,
+three-planner, S20 paired design, exact #6970 retained fields, interval-based analysis and
+cost reserve; proposal only, with no campaign submission or result claim:
+[issue_6971_safety_wrapper_paired_preregistration.md](issue_6971_safety_wrapper_paired_preregistration.md).
 
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
@@ -50,6 +55,22 @@ Issue #6103 / Issue #3275 same-planner held-out contract: six frozen eligible
 fit anchors, cross-family same-planner evaluation, exact per-arm outcome
 admission, and the pending human-review boundary:
 [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md).
+
+Issue #6105 step-3 #3275 same-planner held-out decision (inconclusive): the
+frozen decision is inconclusive. No code in this repository emits
+`adversarial_independent_outcomes.v2` rows from native `social_force` execution
+(the step-3 runner only consumes such a packet), and the campaign's immutable
+allowed paths permit no committed execution orchestrator, so native outcomes
+were not produced and the frozen fail-closed rule yields inconclusive. This is
+independently guaranteed by the frozen predeclared underpowering (k=12 per arm,
+Fisher-exact boundary minimum detectable yield difference ~0.417 above the 0.20
+minimally important effect), so the design can never reach continue or stop on
+this budget. The packet records full candidate-to-manifest lineage for all 24
+selected candidates, the verified frozen-input hashes, the live decision
+predicates, and the authoritative runner decision-function output; it is
+diagnostic only and not benchmark, calibrated-failure-probability,
+cross-planner, or paper evidence:
+[evidence/issue_3275_same_planner_held_out/step3_decision_packet.json](evidence/issue_3275_same_planner_held_out/step3_decision_packet.json).
 
 
 Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:

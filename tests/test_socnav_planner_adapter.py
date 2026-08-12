@@ -299,6 +299,145 @@ def test_orca_adapter(monkeypatch):
     assert v >= 0.0
 
 
+def test_orca_velocity_projection_aligned_straight_motion():
+    """World velocity aligned with robot heading should project to straight motion."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(max_linear_speed=2.0, max_angular_speed=0.75, angular_gain=1.0)
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([1.2, 0.0], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    assert v == pytest.approx(1.2)
+    assert w == pytest.approx(0.0)
+
+
+def test_orca_velocity_projection_reorients_when_target_is_behind_robot():
+    """Behind-robot velocity should stop forward motion and clamp angular command."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=2.0,
+            max_angular_speed=0.5,
+            angular_gain=1.0,
+            orca_heading_slowdown=1.0,
+        )
+    )
+    obs = _make_obs(goal=(-5.0, 0.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([-1.0, 0.0], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    assert v == pytest.approx(0.0)
+    assert w == pytest.approx(adapter.config.max_angular_speed)
+
+
+def test_orca_velocity_projection_pi_over_two_heading_slowdown_boundary():
+    """At pi/2 heading error, full slowdown should zero linear motion."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=2.0,
+            max_angular_speed=0.75,
+            angular_gain=1.0,
+            orca_heading_slowdown=1.0,
+        )
+    )
+    obs = _make_obs(goal=(0.0, 5.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([0.0, 1.0], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    assert v == pytest.approx(0.0)
+    assert w == pytest.approx(adapter.config.max_angular_speed)
+
+
+def test_orca_velocity_projection_clamps_to_configured_max_speed():
+    """Projected linear command should not exceed configured max speed."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(max_linear_speed=0.7, max_angular_speed=0.75, angular_gain=1.0)
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([2.5, 0.0], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    assert v == pytest.approx(adapter.config.max_linear_speed)
+    assert w == pytest.approx(0.0)
+
+
+def test_orca_velocity_projection_zero_velocity_stops():
+    """Zero world velocity should produce a full stop command."""
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(max_linear_speed=2.0))
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([0.0, 0.0], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    assert v == pytest.approx(0.0)
+    assert w == pytest.approx(0.0)
+
+
+def test_orca_velocity_projection_records_optional_adapter_trace():
+    """Enabled adapter trace should expose planned/executed projection diagnostics."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(
+            max_linear_speed=1.0,
+            max_angular_speed=0.75,
+            angular_gain=1.0,
+            orca_adapter_trace_enabled=True,
+        )
+    )
+    obs = _make_obs(goal=(5.0, 5.0), heading=0.0)
+
+    v, w = adapter._velocity_world_to_command(
+        velocity_world=np.array([0.6, 0.6], dtype=float),
+        robot_pos=np.array([0.0, 0.0], dtype=float),
+        robot_heading=0.0,
+        observation=obs,
+    )
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["planner_type"] == "ORCAPlannerAdapter"
+    assert diagnostics["adapter_trace_schema_version"] == "orca_adapter_trace.v1"
+    trace_records = diagnostics["adapter_trace"]
+    assert len(trace_records) == 1
+
+    record = trace_records[0]
+    assert record["schema_version"] == "orca_adapter_trace.v1"
+    assert record["planned_velocity_world_mps"] == pytest.approx([0.6, 0.6])
+    assert record["planned_speed_mps"] == pytest.approx(float(np.sqrt(0.72)))
+    assert record["executed_command_vw"] == pytest.approx([v, w])
+    assert record["executed_speed_mps"] == pytest.approx(v)
+    assert record["angle_error_rad"] == pytest.approx(np.pi / 4)
+    assert record["speed_delta_mps"] == pytest.approx(0.0)
+
+    summary = diagnostics["adapter_trace_summary"]
+    assert summary["schema_version"] == "orca_adapter_trace.v1"
+    assert summary["sample_count"] == 1
+    assert summary["angle_error_rad_mean"] == pytest.approx(np.pi / 4)
+    assert summary["speed_delta_mps_mean"] == pytest.approx(0.0)
+
+
 def test_orca_slowdown_with_head_on_pedestrian(monkeypatch):
     """ORCA-like heuristic reduces speed for a head-on pedestrian."""
     adapter = _orca_fallback_adapter(monkeypatch)

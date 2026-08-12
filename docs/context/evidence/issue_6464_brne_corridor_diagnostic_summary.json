@@ -4,10 +4,8 @@
   "status": "diagnostic_complete",
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Native upstream BRNE core through the Robot SF adapter, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
-  "base_commit": "af394c62bc349d1edcaa069bbf266b2296512d34",
-  "source_worktree_dirty_at_capture": true,
-  "evidence_admission": "historical_diagnostic_handoff_only",
-  "exact_head_reproducible": false,
+  "base_commit": "cb5ee5700ebe262733dd29e8e97c74deaff03cc7",
+  "source_worktree_dirty_at_capture": false,
   "scenario": {
     "name": "classic_head_on_corridor_low",
     "seeds": [111, 112, 113],
@@ -18,6 +16,7 @@
   "upstream": {
     "repo": "https://github.com/MurpheyLab/brne",
     "commit": "633a5cd",
+    "pinned_sha": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
     "license": "GPL-3.0",
     "redistribution": "local_only",
     "requested_samples": 49,
@@ -32,7 +31,20 @@
   "reproducibility": {
     "planner_rng": "upstream BRNE default_rng rebound from the declared episode seed at reset",
     "exact_pair_coverage": true,
-    "runtime_failure_rows_excluded": true
+    "runtime_failure_rows_excluded": true,
+    "completed_run_environment": {
+      "NUMBA_NUM_THREADS": "1",
+      "reason": "single-thread isolation for the native BRNE timing path"
+    },
+    "default_thread_repeat": {
+      "status": "diagnostic_incomplete",
+      "reason": "seed-112 hit the known load-sensitive BRNE step-budget failure",
+      "related_resolution": {
+        "issue": 6924,
+        "pull_request": 6931,
+        "status": "merged"
+      }
+    }
   },
   "arms": {
     "brne": {
@@ -68,13 +80,13 @@
     }
   },
   "artifact": {
-    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_20260812T022300Z",
-    "report_json_sha256": "a9679f3aa636381d79269e6adfe1817f3c8db3d6982debe0473162ba47da9306",
+    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_followup_20260812T031500Z",
+    "report_json_sha256": "b76c1fc9ab08e1272b67fe78c85d341f56e56b62a31b3299c75c293f00a6e62f",
     "report_markdown_sha256": "b30a2b7ba441f4b86c558b837c8198cf8bb57f7e0bf2e811938cf36b6d8125e0",
-    "raw_artifacts": "ignored_worktree_local",
-    "current_head_reproduction_required": true
+    "raw_artifacts": "ignored_worktree_local"
   },
   "follow_up_issue": 6923,
+  "contract_follow_up_issue": 6932,
   "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching in #6923 before any broader or ranking campaign.",
   "follow_up_6923": {
     "status": "diagnostic_incomplete",

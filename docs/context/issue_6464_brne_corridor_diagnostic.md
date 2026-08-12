@@ -159,3 +159,17 @@ Markdown SHA-256 is
 `f312c0d4b1147a900446619ee81618edfe47146d4d84743e907493c8b6532a13`.
 Raw episode files remain ignored and worktree-local; the tracked summary is a
 compact handoff, not a raw episode archive.
+
+## Action-weight contract follow-up (#6934)
+
+Issue [#6934](https://github.com/ll7/robot_sf_ll7/issues/6934) verified the pinned upstream
+BRNE action contract and repaired the adapter's sample aggregation. The upstream weight rows are
+mean-normalized, and both the pinned Python and C++ nodes compute a weighted mean over controls;
+the former adapter sum therefore scaled commands by the effective sample count before the
+unchanged safety clamp. The repair and its exact three-seed diagnostic result are recorded in
+[`issue_6934_brne_action_weight_contract.md`](issue_6934_brne_action_weight_contract.md).
+
+The intervention remains diagnostic-only: it removed the prior collision/saturation pattern in
+the frozen slice but produced `0/3` goal-reaching with timeout/deadlock diagnostics, so no planner
+ranking, benchmark, safety, realism, or paper conclusion follows. Any further progress/control
+hypothesis needs a separately bounded issue and the same claim boundary.

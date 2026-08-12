@@ -144,6 +144,11 @@ hypothesis-driven follow-up before any benchmark or ranking proposal:
 [issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
 [evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
 
+Issue #6934 BRNE action-weight contract: pinned-source proof that the adapter must use a
+mean-normalized weighted mean over the effective sample axis, with a hand-checkable fixture,
+fail-closed malformed-weight tests, and the bounded three-seed intervention result:
+[issue_6934_brne_action_weight_contract.md](issue_6934_brne_action_weight_contract.md).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

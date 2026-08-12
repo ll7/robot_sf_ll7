@@ -85,7 +85,7 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "control_ensemble_shape": [25, 42, 2],
             "weight_shape": [8, 42],
             "aggregation_mode": "plan_step_first",
-            "aggregation_formula": "sum_plan_step_first_over_samples",
+            "aggregation_formula": "weighted_mean_plan_step_first_over_samples",
         },
         "runtime": {
             "status": "ok",

@@ -196,8 +196,10 @@ def test_brne_solve_fails_closed_on_nonfinite_weights(monkeypatch: pytest.Monkey
     assert metadata["failure_reasons"] == ["nonfinite_weights"]
 
 
-def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Normalized sample weights preserve, rather than divide, control magnitude."""
+def test_brne_solve_uses_upstream_normalized_weighted_mean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mean-normalized upstream weights produce a weighted mean, not a sample sum."""
     planner = BRNEPlanner({})
     monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
     monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
@@ -207,18 +209,76 @@ def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch
         lambda *_args: (
             np.zeros((1, 1)),
             np.zeros((1, 1)),
-            np.array([[[0.4, 0.1]], [[0.8, 0.3]]]),
+            np.array(
+                [
+                    [[0.4, 0.1], [0.8, 0.3]],
+                    [[0.2, -0.1], [0.6, 0.1]],
+                ]
+            ),
         ),
     )
     monkeypatch.setattr(
         planner,
         "_brne_solve",
-        lambda *_args: np.array([[0.25, 0.75]]),
+        lambda *_args: np.array([[0.5, 1.5]]),
     )
     planner._jit_warmup_done = True
 
     action = planner.step(_make_observation(num_agents=1))
     assert action == pytest.approx({"v": 0.7, "omega": 0.25})
+
+
+def test_brne_weighted_mean_fixture_matches_pinned_upstream_contract() -> None:
+    """A hand-checkable plan-step/sample fixture uses the upstream weighted mean."""
+    controls = np.array(
+        [
+            [[0.2, -0.2], [0.4, 0.0], [0.6, 0.2]],
+            [[0.3, -0.1], [0.5, 0.1], [0.7, 0.3]],
+        ]
+    )
+    weights = np.array([0.5, 1.0, 1.5])
+
+    command, mode = BRNEPlanner._aggregate_control_ensemble(controls, weights)
+
+    assert mode == "plan_step_first"
+    np.testing.assert_allclose(command[0], [7.0 / 15.0, 1.0 / 15.0])
+
+
+def test_brne_weighted_mean_rejects_unnormalized_weights() -> None:
+    """The adapter must not silently reinterpret weights with a different scale."""
+    controls = np.ones((1, 2, 2))
+
+    with pytest.raises(ValueError, match="unnormalized_sample_weights"):
+        BRNEPlanner._aggregate_control_ensemble(controls, np.array([0.5, 0.5]))
+
+
+def test_brne_solve_fails_closed_on_invalid_sample_weights(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Negative or otherwise invalid mixture weights must stop the adapter."""
+    planner = BRNEPlanner({})
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((1, 1)),
+            np.zeros((1, 1)),
+            np.ones((1, 2, 2)),
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_brne_solve",
+        lambda *_args: np.array([[-0.5, 2.5]]),
+    )
+    planner._jit_warmup_done = True
+
+    assert planner.step(_make_observation(num_agents=1)) == {"v": 0.0, "omega": 0.0}
+    metadata = planner.get_metadata()
+    assert metadata["runtime_status"] == "failed"
+    assert metadata["failure_reasons"] == ["invalid_sample_weights"]
 
 
 def test_brne_declared_heading_takes_precedence_over_velocity() -> None:
@@ -603,7 +663,7 @@ def test_brne_rejects_ambiguous_or_nonfinite_control_ensembles(
         (np.zeros((2, 1)), np.ones((1, 2)), "invalid_control_ensemble_shape"),
         (np.zeros((2, 2, 2)), np.ones((1, 2, 1)), "invalid_control_ensemble_shape"),
         (np.zeros((2, 2, 2)), np.ones((1, 3)), "sample_weight_shape_mismatch"),
-        (np.full((2, 2, 2), np.nan), np.ones((1, 2)), "nonfinite_control_command"),
+        (np.full((2, 2, 2), np.nan), np.ones((1, 2)), "nonfinite_control_ensemble"),
     ],
 )
 def test_brne_solver_records_control_shape_and_finiteness_failures(
@@ -633,7 +693,7 @@ def test_brne_solver_records_control_shape_and_finiteness_failures(
 
     observation = _make_observation()
     observation["robot"]["heading"] = (
-        "invalid" if reason != "nonfinite_control_command" else math.nan
+        "invalid" if reason != "nonfinite_control_ensemble" else math.nan
     )
 
     action = planner.step(observation)

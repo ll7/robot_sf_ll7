@@ -407,9 +407,9 @@ class BRNEPlanner:
                     "weight_shape": list(weights_shape) if weights_shape is not None else None,
                     "aggregation_mode": aggregation_mode,
                     "aggregation_formula": (
-                        "sum_plan_step_first_over_samples"
+                        "weighted_mean_plan_step_first_over_samples"
                         if aggregation_mode == "plan_step_first"
-                        else "sum_samples_first_over_samples"
+                        else "weighted_mean_samples_first_over_samples"
                         if aggregation_mode == "samples_first"
                         else "not_applied"
                     ),
@@ -453,7 +453,7 @@ class BRNEPlanner:
                 return {"v": 0.0, "omega": 0.0}
             raise RuntimeError(f"BRNE solve failed: {exc}") from exc
 
-    def _solve(self, obs: Observation) -> dict[str, float]:  # noqa: C901
+    def _solve(self, obs: Observation) -> dict[str, float]:
         """Run the BRNE solver for one observation.
 
         Returns:
@@ -497,7 +497,7 @@ class BRNEPlanner:
             plan_steps,
             dt,
         )
-        effective_num_samples = int(ulist.shape[1])
+        effective_num_samples = int(ulist.shape[1]) if ulist.ndim >= 2 else 0
         self._last_effective_num_samples = effective_num_samples
 
         def finish(
@@ -578,42 +578,25 @@ class BRNEPlanner:
                 weights_shape=tuple(int(value) for value in weights.shape),
             )
 
-        robot_weights = weights[0]
-        if ulist.ndim != 3 or robot_weights.ndim != 1:
-            _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
+        if weights.ndim != 2 or weights.shape[0] < 1:
+            _LOGGER.debug("BRNE returned an invalid weight shape; returning zero motion")
             return finish(
                 {"v": 0.0, "omega": 0.0},
                 failure_reason="invalid_control_ensemble_shape",
                 elapsed_s=elapsed_s,
                 weights_shape=tuple(int(value) for value in weights.shape),
             )
-        aggregation_mode: str
-        if ulist.shape[1] == robot_weights.size:
-            cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
-            aggregation_mode = "plan_step_first"
-        elif ulist.shape[0] == robot_weights.size:
-            # Preserve compatibility with isolated adapters that expose samples first;
-            # the pinned upstream helper uses the plan-step-first layout above.
-            cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
-            aggregation_mode = "samples_first"
-        else:
-            _LOGGER.debug(
-                "BRNE weights and control ensemble shapes disagree; returning zero motion"
-            )
+        robot_weights = weights[0]
+        try:
+            cmd, aggregation_mode = self._aggregate_control_ensemble(ulist, robot_weights)
+        except ValueError as exc:
+            failure_reason = str(exc)
+            _LOGGER.debug("BRNE control aggregation rejected its inputs: %s", failure_reason)
             return finish(
                 {"v": 0.0, "omega": 0.0},
-                failure_reason="sample_weight_shape_mismatch",
+                failure_reason=failure_reason,
                 elapsed_s=elapsed_s,
                 weights_shape=tuple(int(value) for value in weights.shape),
-            )
-        if not np.all(np.isfinite(cmd)):
-            _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
-            return finish(
-                {"v": 0.0, "omega": 0.0},
-                failure_reason="nonfinite_control_command",
-                elapsed_s=elapsed_s,
-                weights_shape=tuple(int(value) for value in weights.shape),
-                aggregation_mode=aggregation_mode,
             )
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
         self._clamp_action(action)
@@ -708,6 +691,53 @@ class BRNEPlanner:
         if not np.all(np.isfinite(normalized)):
             raise ValueError("nonfinite_control_ensemble")
         return normalized
+
+    @staticmethod
+    def _aggregate_control_ensemble(ulist: Any, robot_weights: Any) -> tuple[np.ndarray, str]:
+        """Apply the pinned upstream BRNE weighted-mean command contract.
+
+        The pinned upstream node normalizes each weight row to unit mean and
+        computes ``mean(control * weights, axis=samples)``. A sum would scale
+        the native ``(v, omega)`` command by the effective sample count. The
+        plan-step-first layout is canonical; the samples-first branch remains
+        available for isolated legacy fixtures.
+
+        Returns:
+            A plan-step-first command array and the layout used for aggregation.
+
+        Raises:
+            ValueError: If the ensemble or weights are malformed, non-finite,
+                invalid as a nonnegative mixture, or shape-incompatible.
+        """
+        controls = np.asarray(ulist, dtype=float)
+        weights = np.asarray(robot_weights, dtype=float)
+        if controls.ndim != 3 or controls.shape[2] != 2:
+            raise ValueError("invalid_control_ensemble_shape")
+        if weights.ndim != 1 or weights.size < 1:
+            raise ValueError("invalid_sample_weight_shape")
+        if not np.all(np.isfinite(controls)):
+            raise ValueError("nonfinite_control_ensemble")
+        if not np.all(np.isfinite(weights)) or np.any(weights < 0.0):
+            raise ValueError("invalid_sample_weights")
+        weight_mean = float(np.mean(weights))
+        if not np.any(weights > 0.0) or not np.isfinite(weight_mean):
+            raise ValueError("invalid_sample_weights")
+        if not np.isclose(weight_mean, 1.0, rtol=1.0e-5, atol=1.0e-8):
+            raise ValueError("unnormalized_sample_weights")
+
+        if controls.shape[1] == weights.size:
+            plan_step_first = controls
+            aggregation_mode = "plan_step_first"
+        elif controls.shape[0] == weights.size:
+            plan_step_first = np.transpose(controls, (1, 0, 2))
+            aggregation_mode = "samples_first"
+        else:
+            raise ValueError("sample_weight_shape_mismatch")
+
+        command = np.mean(plan_step_first * weights[np.newaxis, :, np.newaxis], axis=1)
+        if not np.all(np.isfinite(command)):
+            raise ValueError("nonfinite_control_command")
+        return command, aggregation_mode
 
     def _select_agents(
         self,

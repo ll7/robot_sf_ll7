@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/mapping_ledger.json",
+  "artifact_sha256": "fbf21fa8027d998488f055257e1d35d81c74a6732649a1f47571530f08f0a2bd",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

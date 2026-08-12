@@ -5778,9 +5778,10 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     class _DummyEnv:
         """Deterministic environment with one terminal step."""
 
-        def __init__(self, map_def: MapDefinition) -> None:
+        def __init__(self, map_def: MapDefinition, action_log: list[list[float]]) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
+            self.action_log = action_log
 
         def reset(self, seed: int | None = None):
             """Return the same observation for both profile variants."""
@@ -5808,7 +5809,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
 
         def step(self, action):
             """Terminate with a deterministic successful outcome."""
-            _ = action
+            self.action_log.append(np.asarray(action, dtype=float).tolist())
             obs, _ = self.reset()
             return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
 
@@ -5838,9 +5839,19 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         "robot_sf.benchmark.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
+    action_sequences = [[], []]
+    env_call_index = {"value": 0}
+
+    def _make_env(config, seed, debug):
+        """Return one environment per profile and retain its applied actions."""
+        _ = config, seed, debug
+        index = env_call_index["value"]
+        env_call_index["value"] += 1
+        return _DummyEnv(_minimal_map_def(), action_sequences[index])
+
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.make_robot_env",
-        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+        _make_env,
     )
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
@@ -5881,6 +5892,10 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     assert "simulation_step_trace" not in off["algorithm_metadata"]
     assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
+    # Compare the actual commands passed to env.step, not only the terminal
+    # result. This catches profile-induced control changes.
+    assert action_sequences[0] == action_sequences[1]
+    assert action_sequences[0]
 
 
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:

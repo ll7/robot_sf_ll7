@@ -1,0 +1,296 @@
+# Issue #6971 preregistration: metric-capable paired safety-wrapper campaign.
+#
+# This is a frozen design and analysis contract. It does not run episodes, submit compute, or
+# establish a safety gain. A future maintainer go/no-go must be recorded before this packet is
+# used by a campaign launcher. Fallback/degraded execution is never success evidence.
+schema_version: issue_6971_safety_wrapper_paired_preregistration.v1
+issue: 6971
+parent_issues: [3501, 4598, 4830, 6970]
+status: preregistration
+evidence_tier: proposal
+benchmark_evidence: false
+paper_facing: false
+
+claim_boundary: >
+  Preregistration only. This packet does not run episodes or submit compute and is not benchmark
+  evidence or a paper-facing safety result. It fixes the estimand, retained fields, analysis,
+  and cost boundary for a future diagnostic campaign; any measured effect remains scoped to the
+  declared planner/scenario/seed suite.
+
+execution_boundary:
+  campaign_execution_in_this_pr: false
+  compute_submit_authorized: false
+  slurm_submission_in_this_pr: false
+  gpu_submission_in_this_pr: false
+  paper_or_dissertation_claim_in_this_pr: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+domain_approval:
+  required: true
+  status: pending
+  required_decisions:
+    - Confirm the fixed scenario suite and S20 seed schedule remain the intended diagnostic scope.
+    - Confirm native planner and model provenance readiness before any campaign submission.
+    - Confirm the #4826 per-arm subprocess isolation gate is available on the execution host.
+    - Confirm the reserved wall-clock, worker-hour, and storage budget is acceptable.
+    - Confirm that the resulting report stays diagnostic and does not promote a universal or transfer claim.
+
+source_contracts:
+  campaign_config: configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml
+  design_config: configs/research/safety_wrapper_ablation_v1.yaml
+  metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  seed_sets: configs/benchmarks/seed_sets_v1.yaml
+  runtime_validator: robot_sf/benchmark/safety_wrapper_runtime.py
+  report_builder: robot_sf/benchmark/safety_wrapper_factorial_report.py
+  timing_reference: docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json
+
+source_sha256:
+  campaign_config: 1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6
+  design_config: 635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3
+  metric_contract: 851c5642f530f9c0260a177629d70a343336bdf260da50bbb02113e53d3b7390
+  scenario_matrix: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  seed_sets: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  runtime_validator: a8941e1344c7d566636d0a9938275dafc55659635bd62b18e5f00d0d05f3b155
+  report_builder: fa3944013d268b9f3b007729f85a8aa25826b64768e65781606cba28211bce25
+  timing_reference: 2211bf0c13815bf6af34afa2798b50da8559153be76d7b84650f8c970c2539b6
+
+design:
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_selection: all_resolved_scenarios_no_filter
+  scenario_count: 48
+  planner_keys: [orca, social_force, prediction_planner]
+  planner_roster:
+    - key: orca
+      algorithm: orca
+      source_arm_keys: [orca__wrapper_off, orca__wrapper_on]
+      role: core baseline planner
+    - key: social_force
+      algorithm: social_force
+      source_arm_keys: [social_force__wrapper_off, social_force__wrapper_on]
+      role: core force-model baseline planner
+    - key: prediction_planner
+      algorithm: prediction_planner
+      source_arm_keys: [prediction_planner__wrapper_off, prediction_planner__wrapper_on]
+      role: experimental model-based planner
+  seed_schedule:
+    name: paper_eval_s20
+    source: configs/benchmarks/seed_sets_v1.yaml::paper_eval_s20
+    values: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130]
+    count: 20
+  pairing_key: [planner, scenario_id, seed]
+  planned_episode_count: 5760
+  wrapper_arms:
+    - key: wrapper_off
+      enabled: false
+      baseline: true
+      contrast_role: baseline
+    - key: wrapper_on
+      enabled: true
+      baseline: false
+      contrast_role: fixed predeclared safety wrapper
+
+fixed_runner:
+  kinematics: [differential_drive]
+  horizon_steps: 100
+  dt_seconds: 0.1
+  workers: 2
+  arm_isolation: subprocess
+  resume: true
+  record_forces: true
+  videos: false
+
+retained_field_manifest:
+  contract_path: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+  fields:
+    - name: exact_collision_probability
+      path: metric_values.exact_collision_probability
+    - name: near_miss_probability
+      path: metric_values.near_miss_probability
+    - name: min_predicted_separation_m
+      path: metric_values.min_predicted_separation_m
+    - name: completion_probability
+      path: metric_values.completion_probability
+    - name: progress_at_timeout
+      path: metric_values.progress_at_timeout
+    - name: false_positive_stop_rate
+      path: metric_values.false_positive_stop_rate
+    - name: stop_yield_latency_s
+      path: metric_values.stop_yield_latency_s
+    - name: wrapper_intervention_rate
+      path: metric_values.wrapper_intervention_rate
+
+estimand:
+  primary_metric: exact_collision_probability
+  unit: probability [0, 1]
+  contrast: wrapper_on_minus_wrapper_off
+  pairing_key: [planner, scenario_id, seed]
+  definition: >
+    For each planner, the mean within-pair difference in episode-level exact-collision probability
+    between wrapper_on and wrapper_off over the fixed 48-scenario by 20-seed suite. The same
+    scenario and seed define the pair; planner-specific contrasts are retained separately.
+  safety_gain_definition: >
+    A negative wrapper_on-minus-wrapper_off contrast on exact_collision_probability, with its
+    predeclared confidence interval and practical-effect rule satisfied, is evidence of a
+    diagnostic safety improvement for that planner and fixed suite only.
+  non_claims:
+    - No universal claim across planners, environments, or scenario populations.
+    - No transfer claim to unseen maps, policies, hardware, or deployment conditions.
+    - No safety certification, paper claim, or dissertation claim from this preregistration or a single run.
+
+secondary_outcomes:
+  - metric: near_miss_probability
+    role: secondary
+    definition: Report the paired wrapper-on-minus-wrapper-off near-miss probability contrast.
+  - metric: min_predicted_separation_m
+    role: secondary
+    definition: Report the paired difference in the retained minimum predicted separation in meters.
+  - metric: completion_probability
+    role: secondary
+    definition: Report the paired wrapper-on-minus-wrapper-off completion probability contrast.
+  - metric: false_positive_stop_rate
+    role: secondary
+    definition: Report the paired false-positive stop-rate contrast; do not substitute a proxy.
+  - metric: stop_yield_latency_s
+    role: secondary
+    definition: Report the paired difference in retained stop/yield recovery latency in seconds.
+  - metric: wrapper_intervention_rate
+    role: secondary
+    definition: Report wrapper intervention rate as a diagnostic mechanism outcome, not as safety gain.
+
+task_performance_cost:
+  metric: progress_at_timeout
+  definition: >
+    Report the paired wrapper-on-minus-wrapper-off change in timeout progress and interpret it as
+    task-performance cost when wrapper_on reduces progress.
+  maximum_acceptable_mean_delta: -0.05
+
+inference_contract:
+  resampling_unit:
+    method: seed-block bootstrap within each planner over fixed scenario rows
+    rationale: >
+      Resampling whole seed blocks preserves the paired scenario structure while exposing the
+      finite-seed uncertainty; the fixed suite is not treated as a universal sampled population.
+    bootstrap_confidence: 0.95
+    resampling_order: seed blocks containing all declared scenarios and both wrapper arms
+  inference_population:
+    type: fixed_suite
+    rationale: >
+      The estimand is the declared 48-scenario suite crossed with the declared S20 seed schedule,
+      not an estimate of an unspecified deployment or scenario population.
+  estimand:
+    type: paired_delta
+    description: Per-planner wrapper_on-minus-wrapper_off mean difference on the primary metric.
+  decision_rule:
+    rule: >
+      Promote only when the bootstrap interval is compatible with a negative safety contrast and
+      the absolute effect reaches the practical threshold; use interval width for precision and no p-value threshold.
+    threshold: >
+      Primary safety gain requires a 95% interval upper bound below 0 and point estimate at or below -0.05;
+      otherwise classify no-gain or inconclusive under the packet criteria.
+  primary_metrics:
+    metrics: [exact_collision_probability]
+    ordered_by_importance: true
+  multiplicity_handling:
+    strategy: separate planner-specific primary contrasts with no pooled universal claim
+    rationale: >
+      The three planner contrasts answer distinct conditional questions; secondary outcomes are
+      reported descriptively and do not replace the primary outcome.
+    adjustment_method: none_single_contrast
+
+power_precision:
+  smallest_practically_meaningful_absolute_delta: 0.05
+  target_ci_half_width: 0.03
+  target_ci_width: 0.06
+  interval_width_not_significance_threshold: true
+  seed_budget: 20 paired seeds (S20), with no post-hoc extension
+  rationale: >
+    S20 is the fixed precision target selected after the S3 design anchor. The target is an
+    interval-width goal, not a promise of significance; if the observed interval is wider, the
+    corresponding planner result remains inconclusive and is not extended post hoc.
+
+analysis_plan:
+  paired_estimator: >
+    For each planner and pairing key, compute wrapper_on minus wrapper_off for each retained metric,
+    then average the paired differences over the fixed scenario-seed cells.
+  aggregation: >
+    Keep planner-specific estimates and report the fixed-suite aggregate only with its complete
+    pairing manifest; never pool planners to manufacture a universal estimate.
+  bootstrap_samples: 1000
+  bootstrap_confidence: 0.95
+  bootstrap_seed: 123
+  ties_and_degenerate_episodes: >
+    Retain exact zero paired differences as data. If all paired differences are identical or a
+    planner has no valid complete pairs, report the degenerate/incomplete status and do not infer gain.
+  missingness_policy: >
+    Missing, non-finite, or contract-invalid retained fields fail closed; do not drop a wrapper arm,
+    substitute a legacy alias, or replace a missing pair after inspecting outcomes.
+  stop_rule: >
+    Do not stop early for a favorable result and do not substitute a metric, planner, seed, or
+    scenario after seeing outcomes; no post-hoc substitution is allowed. The preregistered S20
+    schedule is run or the result is incomplete.
+
+promotion_criteria:
+  measured_safety_gain: >
+    For a named planner only, exact_collision_probability has a negative point estimate at or below
+    -0.05 and a 95% bootstrap interval entirely below zero, with complete retained pairs and no
+    fallback/degraded execution. Report all secondary outcomes and progress cost alongside it.
+  no_gain: >
+    For a named planner, classify no gain when the primary point estimate is not at or below -0.05
+    or the interval includes zero while the declared precision target is met; report the signed effect.
+  inconclusive: >
+    Classify inconclusive when retained fields are incomplete, valid pairs are missing, the interval
+    is wider than 0.06, execution is fallback/degraded, or the interval/point estimate cannot support
+    either the measured-gain or no-gain rule.
+  reporting_commitment: >
+    Report every planner, every declared primary and secondary outcome, the task-performance cost,
+    interval width, exclusions, and any gate failure; never report only a favorable planner.
+
+cost_estimate:
+  planned_episodes: 5760
+  episodes_per_planner: 1920
+  reference_source: docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json
+  reference_episodes_per_second:
+    orca: 0.9360
+    social_force: 1.3297
+    prediction_planner: 0.1431
+  projected_seconds_per_planner:
+    orca: 2051.2821
+    social_force: 1443.9347
+    prediction_planner: 13417.1908
+  projected_sequential_seconds: 16912.4075
+  projected_sequential_wall_hours: 4.6979
+  ideal_parallel_wall_hours: 3.7270
+  headroom_fraction: 0.25
+  fixed_setup_overhead_hours: 0.5
+  required_wall_hours: 5.1587
+  reserved_wall_clock_hours: 6.0
+  concurrent_worker_slots: 2
+  reserved_worker_hours: 12.0
+  storage:
+    assumed_raw_episode_kib: 64
+    report_log_headroom_mib: 128
+    modeled_mib: 488.0
+    reserved_storage_gib: 1.0
+  caveat: >
+    The timing reference is a historical all-planners campaign summary, not safety-wrapper paired
+    evidence. It supplies a transparent planning rate only; wrapper overhead, queue time, model
+    loading, and storage variance require headroom and must be measured during a future canary.
+
+validation:
+  commands:
+    - uv run python scripts/validation/check_issue_6971_safety_wrapper_preregistration.py --json
+    - uv run python scripts/validation/check_preregistration_inference_contract.py --json configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml
+    - uv run pytest -q tests/validation/test_issue_6971_safety_wrapper_preregistration.py
+  no_campaign_command_in_this_packet: true
+
+readiness_decision:
+  status: blocked_pending_maintainer_go_no_go
+  campaign_execution_allowed: false
+  compute_submit_authorized: false
+  future_run_requires:
+    - Maintainer approval of this packet and a separate bounded go/no-go record.
+    - Native planner/model readiness and exact provenance checks for every declared arm.
+    - "#4826 per-arm subprocess isolation and a successful canary before any full run."
+    - Fail-closed retained-row and paired-report validation with no fallback/degraded success.

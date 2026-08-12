@@ -74,6 +74,13 @@ REAL_REEXPORT_CONFIG_EVIDENCE_SCHEMA = "issue_6411_config_evidence.v1"
 ISSUE_6412_PACKAGE_SHA256SUMS_SHA256 = (
     "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 )
+# The approved package deliberately leaves ``package_complete.json`` outside
+# its historical checksum ledger.  Keep its reviewed digest here so callers
+# using the approved package identity still bind that exception to the exact
+# immutable metadata record.
+ISSUE_6412_PACKAGE_COMPLETE_SHA256 = (
+    "1457877aca9e6ff892e4d82030d26a63f5fa9413b8eab57a5cc653328db0045b"
+)
 # The approved #6412 package predates the #6814 re-export overlay and uses the
 # resolver's original mapping schema.  The overlay's synthetic fixtures use
 # the namespaced #6412 schema.  Both are accepted only after the immutable
@@ -2437,6 +2444,7 @@ def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
     *,
     expected_identity: object,
     expected_package_sha256: str,
+    expected_package_complete_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Verify the complete #6412 compact package before external retrieval."""
 
@@ -2460,6 +2468,16 @@ def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
         raise RealReexportBindingError("issue #6412 SHA256SUMS is unavailable")
     actual_sums_sha = _sha256_file(sums_path)
     _require_digest(actual_sums_sha, expected_package_sha256, "issue #6412 SHA256SUMS")
+    if expected_package_complete_sha256 is None and (
+        expected_package_sha256 == ISSUE_6412_PACKAGE_SHA256SUMS_SHA256
+    ):
+        expected_package_complete_sha256 = ISSUE_6412_PACKAGE_COMPLETE_SHA256
+    if expected_package_complete_sha256 is not None:
+        _require_digest(
+            _sha256_file(package_root / "package_complete.json"),
+            expected_package_complete_sha256,
+            "issue #6412 package_complete",
+        )
     declared_sums_sha = complete.get("sha256sums_sha256")
     if declared_sums_sha != expected_package_sha256:
         raise RealReexportBindingError("issue #6412 package_complete SHA256SUMS identity mismatch")
@@ -2489,6 +2507,22 @@ def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
         missing = sorted(required_package_paths - listed_paths)
         raise RealReexportBindingError(
             f"issue #6412 SHA256SUMS omits required package artifacts: {missing}"
+        )
+    actual_paths = {
+        path.relative_to(package_root).as_posix()
+        for path in package_root.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    allowed_paths = listed_paths | {"package_complete.json"}
+    unexpected_paths = sorted(actual_paths - allowed_paths)
+    missing_paths = sorted(listed_paths - actual_paths)
+    if unexpected_paths:
+        raise RealReexportBindingError(
+            f"issue #6412 package contains unlisted artifacts: {unexpected_paths}"
+        )
+    if missing_paths:
+        raise RealReexportBindingError(
+            f"issue #6412 SHA256SUMS lists missing artifacts: {missing_paths}"
         )
 
     manifest = _issue_6814_read_package_json(package_root, "package_manifest.json")
@@ -2763,6 +2797,7 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
     external_arm_root: Path,
     expected_identity: object,
     expected_package_sha256: str = ISSUE_6412_PACKAGE_SHA256SUMS_SHA256,
+    expected_package_complete_sha256: str | None = None,
 ) -> VerifiedRealReexportRowSource:
     """Verify the complete #6412 lineage before exposing one row's fields."""
 
@@ -2770,6 +2805,7 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
         package_root,
         expected_identity=expected_identity,
         expected_package_sha256=expected_package_sha256,
+        expected_package_complete_sha256=expected_package_complete_sha256,
     )
     source_provenance = package["source_provenance"]
     pointer = package["source_pointer_arm"]
@@ -2917,8 +2953,13 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
         if provenance_commit != ISSUE_6814_EXECUTION_COMMIT:
             raise RealReexportBindingError("issue #6814 result provenance commit mismatch")
         jsonl_line = result_provenance_row.get("jsonl_line")
-        if jsonl_line is not None and jsonl_line != row_index:
-            raise RealReexportBindingError("issue #6814 result provenance row index mismatch")
+        if jsonl_line is not None:
+            # The approved #6412 sidecars use zero-based JSONL line numbers,
+            # while the immutable mapping receipt uses one-based row indexes.
+            # Accept that exact historical representation only after the
+            # selected episode/config identity has already matched above.
+            if jsonl_line not in {row_index, row_index - 1}:
+                raise RealReexportBindingError("issue #6814 result provenance row index mismatch")
         artifact_sha = result_provenance_row.get("trace_artifact_sha256")
         if artifact_sha is not None and artifact_sha != pointer["episodes_sha256"]:
             raise RealReexportBindingError("issue #6814 result provenance artifact hash mismatch")
@@ -2997,6 +3038,7 @@ __all__ = [
     "REAL_REEXPORT_EXCEPTION_SEEDS",
     "REAL_REEXPORT_REQUEST_TUPLES",
     "ISSUE_6412_PACKAGE_SHA256SUMS_SHA256",
+    "ISSUE_6412_PACKAGE_COMPLETE_SHA256",
     "ISSUE_6814_EXECUTION_COMMIT",
     "CampaignExpectation",
     "FrozenTraceReexportContract",

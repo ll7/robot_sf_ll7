@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/sketches/interactive_dossier.md",
+  "artifact_sha256": "f8c4b65645f84e582fb3624fb3185ef56102113d4b9ca009c794482d9abdfc09",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -272,6 +272,10 @@ def test_brne_step_returns_valid_unicycle_action(staged_brne_available: bool) ->
     assert math.isfinite(action["omega"])
     assert 0.0 <= action["v"] <= planner.config.v_max
     assert abs(action["omega"]) <= planner.config.omega_max + 1e-9
+    mechanism_trace = planner.get_metadata()["mechanism_trace"]
+    assert mechanism_trace["schema_version"] == "brne-mechanism-trace.v1"
+    assert mechanism_trace["status"] == "available"
+    assert len(mechanism_trace["steps"]) == 1
 
 
 def test_brne_step_with_no_agents(staged_brne_available: bool) -> None:

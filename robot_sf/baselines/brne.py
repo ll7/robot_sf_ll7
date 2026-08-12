@@ -187,6 +187,8 @@ class BRNEPlanner:
         self._failure_reasons: list[str] = []
         self._last_failure_reason: str | None = None
         self._last_step_status = "not_started"
+        self._mechanism_trace_steps: list[dict[str, Any]] = []
+        self._previous_action: dict[str, float] | None = None
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -268,6 +270,8 @@ class BRNEPlanner:
         self._failure_reasons = []
         self._last_failure_reason = None
         self._last_step_status = "not_started"
+        self._mechanism_trace_steps = []
+        self._previous_action = None
 
     def _record_failure(self, reason: str) -> None:
         """Record a fail-closed step without hiding it behind zero motion."""
@@ -288,6 +292,145 @@ class BRNEPlanner:
         """Return the bounded stop action and retain its failure reason."""
         self._record_failure(reason)
         return {"v": 0.0, "omega": 0.0}
+
+    @staticmethod
+    def _wrap_angle(angle: float) -> float:
+        """Wrap an angle to the principal ``[-pi, pi)`` interval.
+
+        Returns:
+            float: The wrapped angle in radians.
+        """
+        return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+    def _record_mechanism_step(  # noqa: PLR0913
+        self,
+        *,
+        robot_position: np.ndarray,
+        robot_velocity: np.ndarray,
+        declared_heading: float | None,
+        goal_position: np.ndarray,
+        selected_agents: list[tuple[float, int]],
+        agents: list[dict[str, Any]],
+        action: dict[str, float],
+        runtime_status: str,
+        failure_reason: str | None,
+        elapsed_s: float | None,
+        ulist_shape: tuple[int, ...],
+        weights_shape: tuple[int, ...] | None,
+        aggregation_mode: str,
+        effective_num_samples: int,
+    ) -> None:
+        """Record compact BRNE mechanism telemetry for one planner observation.
+
+        The trace is deliberately adapter-facing and bounded: it records pose,
+        goal/frame geometry, the selected command, ensemble shapes, and runtime
+        status without retaining raw trajectories, weights, or sampled control
+        tensors. The environment trace remains the source of truth for applied
+        motion and terminal outcome.
+        """
+        position = np.asarray(robot_position, dtype=float)
+        velocity = np.asarray(robot_velocity, dtype=float)
+        goal = np.asarray(goal_position, dtype=float)
+        goal_delta = goal - position
+        goal_distance = float(np.linalg.norm(goal_delta))
+        goal_bearing = (
+            float(np.arctan2(goal_delta[1], goal_delta[0])) if goal_distance > 1.0e-9 else None
+        )
+        velocity_norm = float(np.linalg.norm(velocity))
+        velocity_heading = (
+            float(np.arctan2(velocity[1], velocity[0])) if velocity_norm > 1.0e-9 else None
+        )
+        heading_reference = declared_heading
+        if heading_reference is None:
+            heading_reference = velocity_heading
+        angular_difference = (
+            self._wrap_angle(goal_bearing - heading_reference)
+            if goal_bearing is not None and heading_reference is not None
+            else None
+        )
+        previous_action = self._previous_action
+        action_delta = (
+            {
+                "v": float(action["v"] - previous_action["v"]),
+                "omega": float(action["omega"] - previous_action["omega"]),
+                "changed": bool(
+                    not np.isclose(action["v"], previous_action["v"])
+                    or not np.isclose(action["omega"], previous_action["omega"])
+                ),
+            }
+            if previous_action is not None
+            else None
+        )
+        selected_pedestrians = []
+        for distance, agent_idx in selected_agents:
+            agent = agents[agent_idx]
+            agent_position = np.asarray(agent.get("position", [np.nan, np.nan]), dtype=float)
+            agent_velocity = np.asarray(agent.get("velocity", [np.nan, np.nan]), dtype=float)
+            selected_pedestrians.append(
+                {
+                    "agent_index": int(agent_idx),
+                    "distance_m": float(distance),
+                    "position_world_m": [float(agent_position[0]), float(agent_position[1])],
+                    "velocity_world_m_s": [float(agent_velocity[0]), float(agent_velocity[1])],
+                }
+            )
+        self._mechanism_trace_steps.append(
+            {
+                "step": int(self._step_count - 1),
+                "observation": {
+                    "robot_position_world_m": [float(position[0]), float(position[1])],
+                    "robot_velocity_world_m_s": [float(velocity[0]), float(velocity[1])],
+                    "declared_heading_rad": declared_heading,
+                    "velocity_derived_heading_rad": velocity_heading,
+                    "goal_position_world_m": [float(goal[0]), float(goal[1])],
+                    "goal_bearing_rad": goal_bearing,
+                    "heading_goal_angular_difference_rad": angular_difference,
+                    "heading_reference": (
+                        "declared_heading"
+                        if declared_heading is not None
+                        else "velocity_derived_heading"
+                        if velocity_heading is not None
+                        else "unavailable"
+                    ),
+                },
+                "selected_pedestrians": selected_pedestrians,
+                "adapter_input_frame": "world",
+                "selected_action": {
+                    "v_m_s": float(action["v"]),
+                    "omega_rad_s": float(action["omega"]),
+                },
+                "action_delta": action_delta,
+                "ensemble": {
+                    "requested_num_samples": int(self.config.num_samples),
+                    "effective_num_samples": int(effective_num_samples),
+                    "control_ensemble_shape": list(ulist_shape),
+                    "weight_shape": list(weights_shape) if weights_shape is not None else None,
+                    "aggregation_mode": aggregation_mode,
+                    "aggregation_formula": (
+                        "sum_plan_step_first_over_samples"
+                        if aggregation_mode == "plan_step_first"
+                        else "sum_samples_first_over_samples"
+                        if aggregation_mode == "samples_first"
+                        else "not_applied"
+                    ),
+                },
+                "runtime": {
+                    "status": runtime_status,
+                    "failure_reason": failure_reason,
+                    "failure_count": int(self._failure_count),
+                    "failure_reasons": list(self._failure_reasons),
+                    "elapsed_s": float(elapsed_s) if elapsed_s is not None else None,
+                    "budget_s": float(self.config.step_budget_s),
+                    "budget_exceeded": bool(
+                        elapsed_s is not None and elapsed_s > self.config.step_budget_s
+                    ),
+                },
+            }
+        )
+        self._previous_action = {
+            "v": float(action["v"]),
+            "omega": float(action["omega"]),
+        }
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         """Compute a BRNE action for the current observation.
@@ -310,7 +453,7 @@ class BRNEPlanner:
                 return {"v": 0.0, "omega": 0.0}
             raise RuntimeError(f"BRNE solve failed: {exc}") from exc
 
-    def _solve(self, obs: Observation) -> dict[str, float]:
+    def _solve(self, obs: Observation) -> dict[str, float]:  # noqa: C901
         """Run the BRNE solver for one observation.
 
         Returns:
@@ -357,6 +500,43 @@ class BRNEPlanner:
         effective_num_samples = int(ulist.shape[1])
         self._last_effective_num_samples = effective_num_samples
 
+        def finish(
+            action: dict[str, float],
+            *,
+            failure_reason: str | None = None,
+            elapsed_s: float | None = None,
+            weights_shape: tuple[int, ...] | None = None,
+            aggregation_mode: str = "not_applied",
+        ) -> dict[str, float]:
+            """Record runtime state and compact telemetry before returning an action.
+
+            Returns:
+                dict[str, float]: The action passed to the environment.
+            """
+            if failure_reason is None:
+                self._record_success()
+                runtime_status = "ok"
+            else:
+                self._record_failure(failure_reason)
+                runtime_status = "failed"
+            self._record_mechanism_step(
+                robot_position=r_pos,
+                robot_velocity=r_vel,
+                declared_heading=robot_heading,
+                goal_position=r_goal,
+                selected_agents=selected,
+                agents=obs.agents,
+                action=action,
+                runtime_status=runtime_status,
+                failure_reason=failure_reason,
+                elapsed_s=elapsed_s,
+                ulist_shape=tuple(int(value) for value in ulist.shape),
+                weights_shape=weights_shape,
+                aggregation_mode=aggregation_mode,
+                effective_num_samples=effective_num_samples,
+            )
+            return action
+
         if not self._jit_warmup_done:
             self._brne_solve(
                 brne,
@@ -383,7 +563,7 @@ class BRNEPlanner:
             _LOGGER.debug(
                 "BRNE returned out-of-bounds or non-finite weights; returning zero motion"
             )
-            return self._zero_action("nonfinite_weights")
+            return finish({"v": 0.0, "omega": 0.0}, failure_reason="nonfinite_weights")
 
         if elapsed_s > cfg.step_budget_s:
             _LOGGER.debug(
@@ -391,30 +571,58 @@ class BRNEPlanner:
                 elapsed_s * 1000.0,
                 cfg.step_budget_s * 1000.0,
             )
-            return self._zero_action("step_budget_exceeded")
+            return finish(
+                {"v": 0.0, "omega": 0.0},
+                failure_reason="step_budget_exceeded",
+                elapsed_s=elapsed_s,
+                weights_shape=tuple(int(value) for value in weights.shape),
+            )
 
         robot_weights = weights[0]
         if ulist.ndim != 3 or robot_weights.ndim != 1:
             _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
-            return self._zero_action("invalid_control_ensemble_shape")
+            return finish(
+                {"v": 0.0, "omega": 0.0},
+                failure_reason="invalid_control_ensemble_shape",
+                elapsed_s=elapsed_s,
+                weights_shape=tuple(int(value) for value in weights.shape),
+            )
+        aggregation_mode: str
         if ulist.shape[1] == robot_weights.size:
             cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
+            aggregation_mode = "plan_step_first"
         elif ulist.shape[0] == robot_weights.size:
             # Preserve compatibility with isolated adapters that expose samples first;
             # the pinned upstream helper uses the plan-step-first layout above.
             cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+            aggregation_mode = "samples_first"
         else:
             _LOGGER.debug(
                 "BRNE weights and control ensemble shapes disagree; returning zero motion"
             )
-            return self._zero_action("sample_weight_shape_mismatch")
+            return finish(
+                {"v": 0.0, "omega": 0.0},
+                failure_reason="sample_weight_shape_mismatch",
+                elapsed_s=elapsed_s,
+                weights_shape=tuple(int(value) for value in weights.shape),
+            )
         if not np.all(np.isfinite(cmd)):
             _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
-            return self._zero_action("nonfinite_control_command")
+            return finish(
+                {"v": 0.0, "omega": 0.0},
+                failure_reason="nonfinite_control_command",
+                elapsed_s=elapsed_s,
+                weights_shape=tuple(int(value) for value in weights.shape),
+                aggregation_mode=aggregation_mode,
+            )
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
         self._clamp_action(action)
-        self._record_success()
-        return action
+        return finish(
+            action,
+            elapsed_s=elapsed_s,
+            weights_shape=tuple(int(value) for value in weights.shape),
+            aggregation_mode=aggregation_mode,
+        )
 
     def _brne_solve(
         self,
@@ -640,6 +848,15 @@ class BRNEPlanner:
             "failure_reasons": list(self._failure_reasons),
             "last_failure_reason": self._last_failure_reason,
             "last_step_status": self._last_step_status,
+            "mechanism_trace": {
+                "schema_version": "brne-mechanism-trace.v1",
+                "status": "available" if self._mechanism_trace_steps else "unavailable",
+                "claim_boundary": (
+                    "Adapter-facing native BRNE telemetry for mechanism diagnosis only; "
+                    "not benchmark, safety, realism, or paper evidence."
+                ),
+                "steps": list(self._mechanism_trace_steps),
+            },
             "sample_count_note": (
                 "The pinned upstream grid helper may return fewer samples than the requested "
                 "num_samples; all trajectory and weight tensors use that effective count."

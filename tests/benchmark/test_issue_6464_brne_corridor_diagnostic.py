@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
+    _mechanism_table_row,
+    _write_report,
     classify_record,
     summarize_records,
     validate_campaign_config,
@@ -55,6 +58,55 @@ def _record(
             "simulation_step_trace": {"steps": steps},
             **(metadata or {}),
         },
+    }
+
+
+def _native_mechanism_trace() -> dict[str, Any]:
+    """Return valid compact BRNE telemetry steps for classifier fixtures."""
+    first_step = {
+        "step": 0,
+        "observation": {
+            "robot_position_world_m": [0.0, 4.0],
+            "robot_velocity_world_m_s": [0.0, 0.0],
+            "declared_heading_rad": 0.0,
+            "velocity_derived_heading_rad": None,
+            "goal_position_world_m": [0.0, 8.0],
+            "goal_bearing_rad": 1.5707963267948966,
+            "heading_goal_angular_difference_rad": 1.5707963267948966,
+            "heading_reference": "declared_heading",
+        },
+        "selected_pedestrians": [],
+        "adapter_input_frame": "world",
+        "selected_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
+        "action_delta": None,
+        "ensemble": {
+            "requested_num_samples": 49,
+            "effective_num_samples": 42,
+            "control_ensemble_shape": [25, 42, 2],
+            "weight_shape": [8, 42],
+            "aggregation_mode": "plan_step_first",
+            "aggregation_formula": "sum_plan_step_first_over_samples",
+        },
+        "runtime": {
+            "status": "ok",
+            "failure_reason": None,
+            "failure_count": 0,
+            "failure_reasons": [],
+            "elapsed_s": 0.01,
+            "budget_s": 0.1,
+            "budget_exceeded": False,
+        },
+    }
+    second_step = deepcopy(first_step)
+    second_step["step"] = 1
+    second_step["observation"]["robot_position_world_m"] = [0.0, 5.0]
+    third_step = deepcopy(first_step)
+    third_step["step"] = 2
+    third_step["observation"]["robot_position_world_m"] = [0.0, 6.0]
+    return {
+        "schema_version": "brne-mechanism-trace.v1",
+        "status": "available",
+        "steps": [first_step, second_step, third_step],
     }
 
 
@@ -169,16 +221,31 @@ def test_brne_requires_native_dependency_status() -> None:
                 "source_integrity": "clean_pinned_worktree",
                 "effective_num_samples": 42,
                 "step_count": 1,
+                "mechanism_trace": _native_mechanism_trace(),
             }
         },
     }
     native = classify_record(
-        _record(metadata=native_metadata),
+        _record(
+            metadata=native_metadata,
+            positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]],
+        ),
         config,
         planner_key="brne",
     )
     assert native["native"] is True
     assert native["status"] == "available_native"
+    mechanism_row = _mechanism_table_row(
+        _record(
+            metadata=native_metadata,
+            positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]],
+        ),
+        native,
+        planner_key="brne",
+    )
+    assert mechanism_row["trace_status"] == "available"
+    assert mechanism_row["goal"]["signed_progress_by_phase"]
+    assert mechanism_row["aggregation"]["modes"] == ["plan_step_first"]
 
     wrong_sample_count = classify_record(
         _record(
@@ -237,6 +304,99 @@ def test_brne_runtime_failure_is_unavailable_even_with_motion() -> None:
     )
     assert failed["execution_ok"] is False
     assert failed["status"] == "unavailable"
+
+
+def test_mechanism_trace_must_be_complete_for_native_rows() -> None:
+    """Malformed compact telemetry cannot be promoted to native evidence."""
+    config = _config()
+    native_metadata = {
+        "brne_diagnostic": {
+            "status": "native_core_via_adapter",
+            "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
+        },
+        "planner_metadata": {"status": "ok"},
+        "planner_kinematics": {
+            "execution_mode": "adapter",
+            "adapter_active": True,
+            "adapter_name": "BRNEPlanner",
+            "supports_native_commands": True,
+            "supports_adapter_commands": True,
+            "planner_command_space": "unicycle_vw",
+        },
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": _native_mechanism_trace(),
+            }
+        },
+    }
+    native_metadata["planner_runtime"]["planner_metadata"]["mechanism_trace"]["steps"][0][
+        "runtime"
+    ]["status"] = "malformed"
+    classified = classify_record(
+        _record(
+            metadata=native_metadata,
+            positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]],
+        ),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert classified["mechanism_trace_status"].startswith("malformed:")
+    assert classified["status"] == "unavailable"
+
+
+def test_report_writer_marks_missing_mechanism_cells_explicitly(tmp_path: Path) -> None:
+    """The report must not render unavailable mechanism values as literal nulls."""
+    report = {
+        "status": "diagnostic_incomplete",
+        "config": {
+            "scenario_matrix": "configs/scenarios/example.yaml",
+            "claim_boundary": "diagnostic only",
+        },
+        "expected_pairs": 1,
+        "arms": [
+            {
+                "planner": "orca",
+                "status": "available",
+                "observed_rows": 1,
+                "pair_coverage_exact": True,
+                "native_rows": 0,
+                "diagnostic_eligible_rows": 1,
+                "goal_reached_rows": 1,
+                "nondegenerate_rows": 1,
+                "corridor_violation_rows": 0,
+            }
+        ],
+        "mechanism_table": [
+            {
+                "planner": "orca",
+                "seed": 111,
+                "status": "available_comparator",
+                "runtime": {"status": "not_applicable", "failure_count": 0},
+                "goal": {
+                    "initial_distance_m": None,
+                    "final_distance_m": None,
+                    "signed_progress_by_phase": None,
+                },
+                "motion": {"displacement_m": 1.0},
+                "interaction_zone": {"exposure_share": 0.0},
+                "clearance": {"min_clearance_m": 1.0},
+                "events": {"collision_step": None, "goal_step": None},
+            }
+        ],
+    }
+    _, markdown_path = _write_report(report, tmp_path)
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "goal start -> end (m)" in markdown
+    assert "not available" in markdown
+    assert "| None |" not in markdown
 
 
 def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:

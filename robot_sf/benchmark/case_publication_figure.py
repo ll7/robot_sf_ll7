@@ -21,12 +21,13 @@ import numpy as np
 from robot_sf.common.optional_import import try_import
 
 
-def render_publication_figure(
+def render_publication_figure(  # noqa: C901, PLR0915
     package: str | Path,
     *,
     case_id: str | None = None,
     output: str | Path,
     output_format: str = "pdf",
+    _allow_unverified_preview: bool = False,
 ) -> dict[str, Any]:
     """Render a deterministic reduced figure and sidecar metadata."""
 
@@ -36,6 +37,9 @@ def render_publication_figure(
     import matplotlib.pyplot as plt
 
     package_path = Path(package)
+    if not _allow_unverified_preview:
+        _verify_package_integrity(package_path)
+        _verify_publication_gate(package_path)
     proposal = json.loads((package_path / "proposal.json").read_text(encoding="utf-8"))
     all_cases = [case for case in proposal.get("portfolio", []) if isinstance(case, dict)]
     cases = all_cases
@@ -54,7 +58,7 @@ def render_publication_figure(
                 cases = [selected]
     if not cases:
         raise ValueError(f"no proposed case found in package: {case_id or '<any>'}")
-    selected = cases[:2]
+    selected = _select_publication_cases(cases)
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig = plt.figure(figsize=(7.0, 6.2), constrained_layout=False)
@@ -108,15 +112,49 @@ def render_publication_figure(
         )
     fig.savefig(output_path, format=output_format, metadata=metadata)
     plt.close(fig)
+    manifest = (
+        _read_json_mapping(package_path / "manifest.json") if not _allow_unverified_preview else {}
+    )
+    proposal_sha = manifest.get("proposal_sha256") or _sha256_file(package_path / "proposal.json")
+    config_sha = (
+        (manifest.get("config") or {}).get("sha256")
+        if isinstance(manifest.get("config"), dict)
+        else None
+    ) or _optional_sha256_file(package_path / "config.yaml")
+    store_path = package_path / "campaign-result-store.v2"
+    store_sha = (
+        (manifest.get("source") or {}).get("sha256")
+        if isinstance(manifest.get("source"), dict)
+        else None
+    ) or (_sha256_directory(store_path) if store_path.is_dir() else None)
+    overlay_status = "proposed"
+    overlay_path = package_path / "admission_overlay.json"
+    if overlay_path.is_file():
+        try:
+            overlay_status = str(_read_json_mapping(overlay_path).get("status") or "proposed")
+        except ValueError:
+            overlay_status = "unavailable"
     sidecar = output_path.with_suffix(output_path.suffix + ".json")
     payload = {
         "schema_version": "case-publication-figure.v1",
         "case_ids": [case.get("case_id") for case in selected],
-        "release_cell_counts": "see campaign-result-store.v2/cells.parquet",
-        "evidence_grain": "exact recorded trace; diagnostic preview only; proposal not author-admitted",
+        "release_cell_counts": _release_cell_counts(package_path, selected),
+        "evidence_grain": (
+            "exact recorded trace; author-admitted package"
+            if overlay_status.lower() == "admitted" and not _allow_unverified_preview
+            else "exact recorded trace; diagnostic preview only; proposal not author-admitted"
+        ),
         "shared_prefix": False,
         "claim_boundary": "Observed result only; competing explanations remain open; no causal pivot.",
         "source_hashes": [case.get("provenance", {}).get("artifact_sha256") for case in selected],
+        "package_sha256": (
+            _sha256_file(package_path / "SHA256SUMS")
+            if (package_path / "SHA256SUMS").is_file()
+            else None
+        ),
+        "proposal_sha256": proposal_sha,
+        "config_sha256": config_sha,
+        "store_sha256": store_sha,
         "map_hashes": [trace.get("map_digest") if trace else None for trace in traces],
         "observed_result": "Recorded world trajectories and applied controls for the selected cases.",
         "competing_explanation": "Seed, start-state, and other unrecorded factors remain possible explanations.",
@@ -153,6 +191,171 @@ def render_publication_figure(
     }
     sidecar.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return payload
+
+
+def _read_json_mapping(path: Path) -> dict[str, Any]:
+    """Read a required JSON object at an artifact boundary."""
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"package provenance file is unreadable: {path}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"package provenance file must contain an object: {path}")
+    return value
+
+
+def _verify_package_integrity(package: Path) -> None:
+    """Fail closed when a package manifest/checksum set does not verify."""
+
+    manifest_path = package / "manifest.json"
+    checksums_path = package / "SHA256SUMS"
+    if not manifest_path.is_file() or not checksums_path.is_file():
+        raise ValueError("case-workbench package is missing manifest.json or SHA256SUMS")
+    _read_json_mapping(manifest_path)
+    expected_files: set[str] = set()
+    for line in checksums_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            expected, relative = line.split("  ", 1)
+        except ValueError as exc:
+            raise ValueError("case-workbench package checksum receipt is malformed") from exc
+        if len(expected) != 64 or any(char not in "0123456789abcdef" for char in expected):
+            raise ValueError(f"invalid package checksum entry: {relative}")
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise ValueError(f"invalid package checksum path: {relative}")
+        target = package / relative_path
+        if not target.is_file() or _sha256_file(target) != expected:
+            raise ValueError(f"package checksum mismatch: {relative}")
+        expected_files.add(relative)
+    actual_files = {
+        str(path.relative_to(package))
+        for path in package.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    if actual_files != expected_files:
+        missing = sorted(actual_files - expected_files)
+        extra = sorted(expected_files - actual_files)
+        raise ValueError(f"package checksum inventory mismatch: missing={missing}, extra={extra}")
+
+
+def _verify_publication_gate(package: Path) -> None:
+    """Require source restoration and author admission before publication output."""
+
+    manifest = _read_json_mapping(package / "manifest.json")
+    gate = manifest.get("source_integrity_gate")
+    if not isinstance(gate, dict) or gate.get("status") != "passed":
+        raise ValueError("publication rendering is blocked by the source-integrity gate")
+    overlay = _read_json_mapping(package / "admission_overlay.json")
+    if str(overlay.get("status") or "").lower() != "admitted":
+        raise ValueError("publication rendering requires an admitted author overlay")
+
+
+def _select_publication_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Choose one case or one complete declared pair, never an arbitrary portfolio slice."""
+
+    if len(cases) == 1:
+        return cases
+    if len(cases) == 2:
+        ids = {str(case.get("case_id")) for case in cases}
+        if all(
+            isinstance(case.get("comparison_pair_ids"), list)
+            and ids.issubset({str(value) for value in case["comparison_pair_ids"]})
+            for case in cases
+        ):
+            return sorted(cases, key=lambda item: str(item.get("case_id")))
+        raise ValueError("publication composition requires an explicit compatible case pair")
+    for case in cases:
+        pair_ids = case.get("comparison_pair_ids")
+        if not isinstance(pair_ids, list) or len(pair_ids) != 2:
+            continue
+        ids = {str(value) for value in pair_ids}
+        pair = [candidate for candidate in cases if str(candidate.get("case_id")) in ids]
+        if len(pair) == 2:
+            return sorted(pair, key=lambda item: str(item.get("case_id")))
+    raise ValueError("publication composition requires an explicit compatible case pair")
+
+
+def _release_cell_counts(package: Path, cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Copy selected cell outcome context into the sidecar when the store exposes it."""
+
+    store = package / "campaign-result-store.v2" / "cells.parquet"
+    if not store.is_file() or not cases:
+        return {"status": "unavailable", "reason": "cell_table_missing"}
+    try:
+        pyarrow = try_import("pyarrow.parquet")
+        if pyarrow is None:
+            return {"status": "unavailable", "reason": "pyarrow_missing"}
+        rows = pyarrow.read_table(store).to_pylist()
+    except (OSError, ValueError, AttributeError):
+        return {"status": "unavailable", "reason": "cell_table_unreadable"}
+    selected_keys = {(str(case.get("planner")), str(case.get("scenario_id"))) for case in cases}
+    matching = [
+        {
+            "planner": row.get("planner"),
+            "scenario_id": row.get("scenario_id"),
+            "config_hash": row.get("config_hash"),
+            "scenario_digest": row.get("scenario_digest"),
+            "map_digest": row.get("map_digest"),
+            "outcome_counts": _decode_json(row.get("outcome_counts_json")),
+            "entropy": row.get("entropy"),
+            "seed_count": row.get("seed_count"),
+            "uncertainty": _decode_json(row.get("uncertainty_json")),
+            "boundary_context": _decode_json(row.get("boundary_context_json")),
+        }
+        for row in rows
+        if (str(row.get("planner")), str(row.get("scenario_id"))) in selected_keys
+    ]
+    return (
+        {"status": "available", "cells": matching}
+        if matching
+        else {
+            "status": "unavailable",
+            "reason": "selected_cell_not_found",
+        }
+    )
+
+
+def _decode_json(value: Any) -> Any:
+    """Decode a JSON column for sidecar serialization."""
+
+    if value is None:
+        return None
+    try:
+        return json.loads(str(value))
+    except (TypeError, json.JSONDecodeError):
+        return value
+
+
+def _sha256_file(path: Path) -> str:
+    """Hash one package file."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _optional_sha256_file(path: Path) -> str | None:
+    """Hash an optional package file without turning absence into an exception."""
+
+    return _sha256_file(path) if path.is_file() else None
+
+
+def _sha256_directory(path: Path) -> str | None:
+    """Hash a package directory by sorted relative names and bytes."""
+
+    if not path.is_dir():
+        return None
+    digest = hashlib.sha256()
+    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(str(child.relative_to(path)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(child.read_bytes())
+    return digest.hexdigest()
 
 
 def _draw_world(
@@ -352,7 +555,10 @@ def _position_point(position: Any) -> list[tuple[float, float]]:
 
     if not isinstance(position, list) or len(position) < 2:
         return []
-    return [(float(position[0]), float(position[1]))]
+    if not all(isinstance(value, (int, float)) for value in position[:2]):
+        return []
+    point = (float(position[0]), float(position[1]))
+    return [point] if all(np.isfinite(value) for value in point) else []
 
 
 def _critical_step(trace: dict[str, Any]) -> dict[str, Any] | None:
@@ -477,7 +683,12 @@ def _clearance_series(trace: dict[str, Any]) -> list[float]:
         rp = robot.get("position")
         if not isinstance(rp, list) or len(rp) < 2:
             continue
-        rr = float(robot.get("radius_m") or 0.0)
+        rr = _finite_positive(robot.get("radius_m"))
+        if rr is None or not all(
+            isinstance(value, (int, float)) and np.isfinite(float(value)) for value in rp[:2]
+        ):
+            values.append(float("nan"))
+            continue
         distances = []
         for actor in (
             step.get("pedestrians", []) if isinstance(step.get("pedestrians"), list) else []
@@ -487,6 +698,11 @@ def _clearance_series(trace: dict[str, Any]) -> list[float]:
             ap = actor["position"]
             if len(ap) < 2:
                 continue
+            actor_radius = _finite_positive(actor.get("radius_m"))
+            if actor_radius is None or not all(
+                isinstance(value, (int, float)) and np.isfinite(float(value)) for value in ap[:2]
+            ):
+                continue
             distances.append(
                 float(
                     np.linalg.norm(
@@ -494,10 +710,19 @@ def _clearance_series(trace: dict[str, Any]) -> list[float]:
                     )
                 )
                 - rr
-                - float(actor.get("radius_m") or 0.0)
+                - actor_radius
             )
         values.append(min(distances) if distances else float("nan"))
     return values
+
+
+def _finite_positive(value: Any) -> float | None:
+    """Return a finite positive geometry value, or typed unavailable."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    numeric = float(value)
+    return numeric if np.isfinite(numeric) and numeric > 0.0 else None
 
 
 def _speed_series(trace: dict[str, Any]) -> list[float]:

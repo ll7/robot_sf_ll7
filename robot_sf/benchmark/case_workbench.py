@@ -40,6 +40,7 @@ from robot_sf.common.optional_import import try_import
 SCHEMA_VERSION = "case-workbench.v1"
 METRIC_PROFILE_VERSION = "case-workbench-metrics.v1"
 ADMISSION_SCHEMA_VERSION = "case-admission-overlay.v1"
+SOURCE_GATE_SCHEMA_VERSION = "case-source-integrity-gate.v1"
 INELIGIBLE_STATUSES = {
     "fallback",
     "degraded",
@@ -57,7 +58,7 @@ INELIGIBLE_STATUSES = {
 }
 
 
-def load_workbench_config(path: str | Path) -> dict[str, Any]:
+def load_workbench_config(path: str | Path) -> dict[str, Any]:  # noqa: C901, PLR0912
     """Load and validate the compact workbench configuration."""
 
     payload = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
@@ -66,6 +67,109 @@ def load_workbench_config(path: str | Path) -> dict[str, Any]:
     portfolio = payload.get("portfolio")
     if not isinstance(portfolio, dict) or not isinstance(portfolio.get("roles"), list):
         raise ValueError("portfolio.roles must be a list")
+    if portfolio.get("require_trace_coverage", "complete") != "complete":
+        raise ValueError("portfolio.require_trace_coverage must be 'complete'")
+    if portfolio.get("allow_shared_prefix_false") is not True:
+        raise ValueError("portfolio.allow_shared_prefix_false must be true for v1")
+    interestingness = payload.get("interestingness", {})
+    if interestingness and not isinstance(interestingness, dict):
+        raise ValueError("interestingness must be a mapping")
+    weights = interestingness.get("weights", {}) if isinstance(interestingness, dict) else {}
+    if weights and not isinstance(weights, dict):
+        raise ValueError("interestingness.weights must be a mapping")
+    for name, value in weights.items():
+        if not _finite_number(value):
+            raise ValueError(f"interestingness.weights.{name} must be finite")
+    comparison = payload.get("comparison", {})
+    if comparison and not isinstance(comparison, dict):
+        raise ValueError("comparison must be a mapping")
+    for name in ("require_matching_initial_state", "require_matching_config_digest"):
+        if name in comparison and not isinstance(comparison[name], bool):
+            raise ValueError(f"comparison.{name} must be boolean")
+        if comparison.get(name) is not True:
+            raise ValueError(f"comparison.{name} must be true for v1")
+    if comparison.get("shared_prefix", False) is not False:
+        raise ValueError("comparison.shared_prefix must be false for case-workbench.v1")
+    publication = payload.get("publication", {})
+    if publication and not isinstance(publication, dict):
+        raise ValueError("publication must be a mapping")
+    for name in ("include_difference_curve", "include_normalized_duration"):
+        if publication.get(name, False) is not False:
+            raise ValueError(f"publication.{name} is forbidden in case-workbench.v1")
+    return payload
+
+
+def _load_source_gate_receipt(source: Path, receipt_path: str | Path | None) -> dict[str, Any]:
+    """Resolve the exact-source gate without promoting a guessed package."""
+
+    expected_source_sha = _sha256_file(source) if source.is_file() else _sha256_directory(source)
+    blocked = {
+        "schema_version": SOURCE_GATE_SCHEMA_VERSION,
+        "status": "blocked_pending_exact_source_restore",
+        "reason": "source_gate_receipt_missing",
+        "source_sha256": expected_source_sha,
+        "robot_sf_issues": [
+            "https://github.com/ll7/robot_sf_ll7/issues/6792",
+            "https://github.com/ll7/robot_sf_ll7/issues/6814",
+        ],
+        "dissertation_issue": "https://github.com/ll7/diss/issues/698",
+    }
+    if receipt_path is None:
+        return blocked
+    path = Path(receipt_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {**blocked, "reason": "source_gate_receipt_unreadable", "receipt_path": str(path)}
+    if not isinstance(payload, Mapping):
+        return {**blocked, "reason": "source_gate_receipt_invalid", "receipt_path": str(path)}
+    if payload.get("schema_version") != SOURCE_GATE_SCHEMA_VERSION:
+        return {
+            **blocked,
+            "reason": "source_gate_schema_mismatch",
+            "receipt_path": str(path),
+            "receipt_sha256": _sha256_file(path),
+        }
+    status = str(payload.get("status") or "").lower()
+    supplied_sha = str(payload.get("source_sha256") or payload.get("digest") or "")
+    if status != "passed":
+        return {
+            **blocked,
+            "reason": f"source_gate_status:{status or 'missing'}",
+            "receipt_path": str(path),
+            "receipt_sha256": _sha256_file(path),
+        }
+    if not re.fullmatch(r"[0-9a-f]{64}", supplied_sha) or supplied_sha != expected_source_sha:
+        return {
+            **blocked,
+            "reason": "source_gate_digest_mismatch",
+            "receipt_path": str(path),
+            "receipt_sha256": _sha256_file(path),
+            "supplied_source_sha256": supplied_sha or None,
+        }
+    return {
+        "schema_version": SOURCE_GATE_SCHEMA_VERSION,
+        "status": "passed",
+        "source_sha256": expected_source_sha,
+        "receipt_path": str(path),
+        "receipt_sha256": _sha256_file(path),
+        "robot_sf_issues": [
+            "https://github.com/ll7/robot_sf_ll7/issues/6792",
+            "https://github.com/ll7/robot_sf_ll7/issues/6814",
+        ],
+        "dissertation_issue": "https://github.com/ll7/diss/issues/698",
+    }
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    """Read one JSON object at a package mutation boundary."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"JSON package input is unreadable: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"JSON package input must be an object: {path}")
     return payload
 
 
@@ -75,6 +179,7 @@ def analyze_cases(
     result_store: str | Path,
     output: str | Path,
     check_determinism: bool = False,
+    source_gate_receipt: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic proposal/admission package from a result store."""
 
@@ -82,6 +187,7 @@ def analyze_cases(
     input_path = Path(result_store)
     output_path = Path(output)
     records = _load_records(input_path)
+    source_gate = _load_source_gate_receipt(input_path, source_gate_receipt)
     interestingness_weights = config.get("interestingness", {}).get("weights", {})
     candidates = [
         _candidate(record, interestingness_weights=interestingness_weights) for record in records
@@ -111,6 +217,12 @@ def analyze_cases(
                 f"campaign-result-store.v2 unavailable: {exc}\n",
                 encoding="utf-8",
             )
+    elif (input_path / "episodes.parquet").is_file():
+        # A v2 directory is already the canonical normalized store.  Copy it
+        # byte-for-byte so the package remains bound to the verified source
+        # manifest/checksum set instead of silently re-exporting a sidecar
+        # JSONL with different provenance.
+        shutil.copytree(input_path, output_path / "campaign-result-store.v2")
     elif (input_path / "episodes.jsonl").is_file() or (input_path / "records.jsonl").is_file():
         source_jsonl = next(
             candidate
@@ -150,9 +262,12 @@ def analyze_cases(
     _write_case_files(output_path, proposal)
     _write_viewer_blueprint(output_path, proposal)
     _write_audit_dossier(output_path, proposal)
-    _write_publication_preview(output_path, proposal)
+    (output_path / "source_integrity_gate.json").write_text(
+        json.dumps(source_gate, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    _write_publication_preview(output_path, proposal, source_gate=source_gate)
     (output_path / "review_memo.md").write_text(_review_memo(proposal), encoding="utf-8")
-    manifest = _manifest(output_path, proposal, input_path, config_path)
+    manifest = _manifest(output_path, proposal, input_path, config_path, source_gate=source_gate)
     (output_path / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -160,7 +275,7 @@ def analyze_cases(
     return proposal
 
 
-def apply_admission_overlay(  # noqa: C901
+def apply_admission_overlay(  # noqa: C901, PLR0912, PLR0915
     proposal: Mapping[str, Any], overlay: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Apply a digest-bound author overlay while retaining machine recommendations."""
@@ -193,6 +308,15 @@ def apply_admission_overlay(  # noqa: C901
     decision_ids = [str(item.get("case_id") or "") for item in normalized_decisions]
     if len(decision_ids) != len(set(decision_ids)):
         raise ValueError("admission overlay contains duplicate case decisions")
+    if overlay_status == "admitted":
+        proposed_ids = set(by_id)
+        if set(decision_ids) != proposed_ids:
+            missing = sorted(proposed_ids - set(decision_ids))
+            extra = sorted(set(decision_ids) - proposed_ids)
+            raise ValueError(
+                "an admitted overlay must decide every proposed case "
+                f"(missing={missing}, unknown={extra})"
+            )
     for decision in normalized_decisions:
         case_id = str(decision.get("case_id") or "")
         action = str(decision.get("decision") or "").lower()
@@ -244,6 +368,51 @@ def apply_admission_overlay(  # noqa: C901
         "overlay_sha256": _sha256_json(overlay),
         "decisions": admission_records,
     }
+    return result
+
+
+def admit_package(package: str | Path, overlay_path: str | Path) -> dict[str, Any]:
+    """Apply an author overlay and refresh the package's digest receipts."""
+
+    package_path = Path(package)
+    proposal_path = package_path / "proposal.json"
+    manifest_path = package_path / "manifest.json"
+    if not proposal_path.is_file() or not manifest_path.is_file():
+        raise ValueError("case-workbench package is missing proposal.json or manifest.json")
+    from robot_sf.benchmark.case_publication_figure import _verify_package_integrity
+
+    _verify_package_integrity(package_path)
+    proposal = _read_json_object(proposal_path)
+    overlay = _read_json_object(Path(overlay_path))
+    manifest = _read_json_object(manifest_path)
+    gate = manifest.get("source_integrity_gate")
+    if not isinstance(gate, Mapping) or gate.get("status") != "passed":
+        raise ValueError("author admission is blocked by the source-integrity gate")
+    result = apply_admission_overlay(proposal, overlay)
+    if str(overlay.get("status") or "").lower() == "admitted" and not overlay.get("decisions"):
+        raise ValueError("an admitted package requires at least one author decision")
+    proposal_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (package_path / "admission_overlay.json").write_text(
+        json.dumps(overlay, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    publication = package_path / "publication"
+    for stale in (publication / "figure.preview.pdf", publication / "figure.preview.pdf.json"):
+        if stale.is_file():
+            stale.unlink()
+    _write_audit_dossier(package_path, result)
+    manifest["proposal_sha256"] = _sha256_json(result)
+    manifest["evidence_status"] = (
+        "admitted" if str(overlay.get("status") or "").lower() == "admitted" else "reviewed"
+    )
+    manifest["files"] = sorted(
+        str(path.relative_to(package_path))
+        for path in package_path.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (package_path / "SHA256SUMS").write_text(_checksums(package_path), encoding="utf-8")
     return result
 
 
@@ -344,7 +513,9 @@ def _validate_episode_ids(rows: list[dict[str, Any]], source: Path) -> None:
         seen.add(episode_id)
 
 
-def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:  # noqa: C901
+def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
+    store: Path, episodes_path: Path
+) -> list[dict[str, Any]]:
     """Rehydrate v2 episode, step, actor, event, and feature tables."""
 
     episode_rows = _read_parquet_rows(episodes_path)
@@ -361,10 +532,32 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
     feature_rows = (
         _read_parquet_rows(store / "features.parquet") if "features" not in missing_tables else []
     )
+    cell_rows = _read_parquet_rows(store / "cells.parquet") if "cells" not in missing_tables else []
+    comparison_rows = (
+        _read_parquet_rows(store / "comparisons.parquet")
+        if "comparisons" not in missing_tables
+        else []
+    )
+    integrity_errors.extend(
+        _v2_row_count_errors(
+            store,
+            {
+                "episodes": len(episode_rows),
+                "steps": len(step_rows),
+                "actors": len(actor_rows),
+                "events": len(event_rows),
+                "features": len(feature_rows),
+                "cells": len(cell_rows),
+                "comparisons": len(comparison_rows),
+            },
+        )
+    )
     by_episode_steps: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_episode_actors: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     by_episode_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_episode_features: dict[str, dict[str, float]] = defaultdict(dict)
+    by_cell: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    by_episode_comparisons: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in step_rows:
         by_episode_steps[str(row.get("episode_id"))].append(row)
     for row in actor_rows:
@@ -377,6 +570,33 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             by_episode_features[str(row.get("episode_id"))][str(row.get("feature_name"))] = float(
                 value
             )
+    for row in cell_rows:
+        key = (
+            str(row.get("planner") or ""),
+            str(row.get("scenario_id") or ""),
+            str(row.get("config_hash") or ""),
+            str(row.get("scenario_digest") or ""),
+            str(row.get("map_digest") or ""),
+        )
+        by_cell[key] = {
+            "cell_id": row.get("cell_id"),
+            "outcome_counts": _decode_json(row.get("outcome_counts_json")),
+            "entropy": row.get("entropy"),
+            "seed_count": row.get("seed_count"),
+            "uncertainty": _decode_json(row.get("uncertainty_json")),
+            "boundary_context": _decode_json(row.get("boundary_context_json")),
+            "representative_episode_id": row.get("representative_episode_id"),
+            "representative_status": row.get("representative_status"),
+            "boundary_status": row.get("boundary_status"),
+            "outlier_status": row.get("outlier_status"),
+        }
+    for row in comparison_rows:
+        left_id = str(row.get("left_episode_id") or "")
+        right_id = str(row.get("right_episode_id") or "")
+        if left_id:
+            by_episode_comparisons[left_id].append(dict(row))
+        if right_id:
+            by_episode_comparisons[right_id].append(dict(row))
     result: list[dict[str, Any]] = []
     for row in episode_rows:
         episode_id = str(row.get("episode_id") or "")
@@ -429,7 +649,11 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
         artifact_sha = row.get("artifact_sha256")
         if artifact_sha and provenance.get("artifact_sha256") in (None, ""):
             provenance["artifact_sha256"] = artifact_sha
-        first_step_row = by_episode_steps.get(episode_id, [None])[0]
+        sorted_step_rows = sorted(
+            by_episode_steps.get(episode_id, []),
+            key=lambda item: int(item.get("step") or 0),
+        )
+        first_step_row = sorted_step_rows[0] if sorted_step_rows else None
         units = (
             _decode_json(first_step_row.get("units_json"))
             if isinstance(first_step_row, dict)
@@ -449,6 +673,7 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             "horizon": provenance.get("horizon"),
             "actor_geometry": provenance.get("actor_geometry"),
             "actor_id_source": provenance.get("actor_id_source"),
+            "artifact_sha256": artifact_sha,
             "coordinate_frame": (
                 first_step_row.get("coordinate_frame") if isinstance(first_step_row, dict) else None
             ),
@@ -456,6 +681,12 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             "steps": trace_steps,
             "events": by_episode_events.get(episode_id, []),
         }
+        stored_trace = _decode_json(row.get("analysis_trace_json"))
+        if isinstance(stored_trace, Mapping):
+            # The exact source envelope is the replay authority.  The flattened
+            # tables remain queryable projections, but must not be reserialized
+            # into a different artifact identity during v2 adaptation.
+            analysis_trace = json.loads(canonical_json(stored_trace))
         reconstructed = {
             "episode_id": episode_id,
             "scenario_id": row.get("scenario_id"),
@@ -469,6 +700,16 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             "git_hash": provenance.get("git_hash"),
             "metrics": by_episode_features.get(episode_id, {}),
             "algorithm_metadata": {"analysis_trace": analysis_trace},
+            "cell_context": by_cell.get(
+                (
+                    str(row.get("planner") or ""),
+                    str(row.get("scenario_id") or ""),
+                    str(row.get("config_hash") or provenance.get("config_hash") or ""),
+                    str(row.get("scenario_digest") or provenance.get("scenario_digest") or ""),
+                    str(row.get("map_digest") or provenance.get("map_digest") or ""),
+                )
+            ),
+            "comparison_receipts": by_episode_comparisons.get(episode_id, []),
         }
         computed_coverage = trace_coverage(reconstructed)
         if integrity_errors or missing_tables or stored_coverage.get("status") != "complete":
@@ -512,6 +753,8 @@ def _v2_integrity_errors(store: Path) -> list[str]:  # noqa: C901, PLR0912
             manifest_errors.append(f"manifest_table_file_invalid:{table_name}")
         elif not (store / expected_file).is_file():
             manifest_errors.append(f"manifest_table_missing:{table_name}")
+        elif not isinstance(table.get("rows"), int) or table.get("rows") < 0:
+            manifest_errors.append(f"manifest_table_rows_invalid:{table_name}")
 
     checksum_path = store / "SHA256SUMS"
     if not checksum_path.is_file():
@@ -530,6 +773,12 @@ def _v2_integrity_errors(store: Path) -> list[str]:  # noqa: C901, PLR0912
         except ValueError:
             errors.append("checksum_receipt_malformed")
             continue
+        if not re.fullmatch(r"[0-9a-f]{64}", expected) or Path(relative).is_absolute():
+            errors.append(f"checksum_entry_invalid:{relative}")
+            continue
+        if ".." in Path(relative).parts:
+            errors.append(f"checksum_entry_invalid:{relative}")
+            continue
         seen_files.add(relative)
         path = store / relative
         if not path.is_file():
@@ -540,6 +789,27 @@ def _v2_integrity_errors(store: Path) -> list[str]:  # noqa: C901, PLR0912
     expected_files = {f"{name}.parquet" for name in expected_tables} | {"manifest.json"}
     for relative in sorted(expected_files - seen_files):
         errors.append(f"checksum_entry_missing:{relative}")
+    for relative in sorted(seen_files - expected_files):
+        errors.append(f"checksum_entry_unexpected:{relative}")
+    return errors
+
+
+def _v2_row_count_errors(store: Path, actual_counts: Mapping[str, int]) -> list[str]:
+    """Compare manifest row counts with the tables actually read."""
+
+    try:
+        manifest = json.loads((store / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ["manifest_unreadable"]
+    tables = manifest.get("tables") if isinstance(manifest, Mapping) else None
+    if not isinstance(tables, Mapping):
+        return ["manifest_table_contract_invalid"]
+    errors: list[str] = []
+    for name, actual in actual_counts.items():
+        table = tables.get(name)
+        expected = table.get("rows") if isinstance(table, Mapping) else None
+        if isinstance(expected, int) and expected != actual:
+            errors.append(f"manifest_row_count_mismatch:{name}")
     return errors
 
 
@@ -609,7 +879,7 @@ def _row_from_v2_store(row: Mapping[str, Any], store: Path) -> dict[str, Any]:
     }
 
 
-def _candidate(  # noqa: C901, PLR0912
+def _candidate(  # noqa: C901, PLR0912, PLR0915
     record: Mapping[str, Any],
     *,
     interestingness_weights: Mapping[str, Any] | None = None,
@@ -635,6 +905,17 @@ def _candidate(  # noqa: C901, PLR0912
                 blockers.append(f"execution_metadata:{key}={nested}")
         if metadata.get("evidence_eligible") is False:
             blockers.append("execution_metadata:evidence_eligible=false")
+        foresight = metadata.get("foresight_prediction")
+        if isinstance(foresight, Mapping) and foresight.get("evidence_eligible") is False:
+            blockers.append("execution_metadata:foresight.evidence_eligible=false")
+        if isinstance(foresight, Mapping) and str(foresight.get("status") or "").lower() in {
+            "fallback",
+            "degraded",
+            "unavailable",
+        }:
+            blockers.append(
+                f"execution_metadata:foresight.status={str(foresight.get('status')).lower()}"
+            )
         if isinstance(metadata.get("algorithm_metadata"), Mapping):
             nested_metadata = metadata["algorithm_metadata"]
             if nested_metadata.get("evidence_eligible") is False:
@@ -648,19 +929,28 @@ def _candidate(  # noqa: C901, PLR0912
     if isinstance(supplied_coverage, Mapping) and supplied_coverage.get("status") == "complete":
         if computed_coverage.get("status") != "complete":
             blockers.append("trace_coverage:stored_complete_receipt_conflict")
+    elif isinstance(supplied_coverage, Mapping) and supplied_coverage.get("status") != "complete":
+        # A normalized v2 store carries a coverage receipt for the source
+        # tables.  Do not let a complete embedded trace overrule an
+        # unavailable receipt caused by missing or tampered projections.
+        supplied_reason = str(supplied_coverage.get("reason") or "analysis_trace_fields_incomplete")
+        blockers.append(f"trace_coverage:{supplied_reason}")
     if coverage.get("status") != "complete":
         blockers.append(f"trace_coverage:{coverage.get('reason') or 'incomplete'}")
     trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
     artifact_sha = provenance.get("artifact_sha256")
-    if not isinstance(artifact_sha, str) or not artifact_sha:
+    if not isinstance(artifact_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha):
         blockers.append("provenance:artifact_sha256_missing")
     if isinstance(trace, Mapping):
         embedded_sha = trace.get("artifact_sha256")
-        if isinstance(embedded_sha, str):
-            if artifact_sha != embedded_sha:
-                blockers.append("provenance:artifact_sha256_mismatch")
-            if embedded_sha != trace_artifact_sha256(trace):
-                blockers.append("provenance:artifact_sha256_invalid")
+        if not isinstance(embedded_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", embedded_sha):
+            blockers.append("provenance:artifact_sha256_invalid")
+        elif artifact_sha != embedded_sha:
+            blockers.append("provenance:artifact_sha256_mismatch")
+        elif embedded_sha != trace_artifact_sha256(trace):
+            blockers.append("provenance:artifact_sha256_invalid")
+    else:
+        blockers.append("provenance:analysis_trace_missing")
     episode_id = str(record.get("episode_id") or "").strip()
     scenario_id = str(record.get("scenario_id") or record.get("scenario") or "").strip()
     planner = str(record.get("algo") or record.get("planner") or "").strip()
@@ -707,6 +997,8 @@ def _episode_metrics(record: Mapping[str, Any]) -> dict[str, float | None]:
         ),
         "progress": value("progress", "route_progress", "distance_travelled"),
         "control_effort": value("control_effort", "action_effort"),
+        "applied_linear_control_effort": value("applied_linear_control_effort"),
+        "applied_turn_control_effort": value("applied_turn_control_effort"),
         "event_time": value("event_time", "first_collision_time"),
         "ttc_min": value("ttc_min"),
         "cpa_min": value("cpa_min"),
@@ -1159,7 +1451,7 @@ def _write_viewer_blueprint(output: Path, proposal: Mapping[str, Any]) -> None:
             {
                 "id": "clearance",
                 "kind": "time_series",
-                "field": "surface_clearance",
+                "field": "min_pedestrian_clearance_m",
                 "units": "m",
                 "synchronized": True,
             },
@@ -1192,7 +1484,12 @@ def _write_audit_dossier(output: Path, proposal: Mapping[str, Any]) -> None:
 
     dossier = {
         "schema_version": "case-workbench-audit-dossier.v1",
-        "evidence_status": "proposed_not_admitted",
+        "evidence_status": (
+            "admitted"
+            if isinstance(proposal.get("author_admission"), Mapping)
+            and str(proposal["author_admission"].get("status") or "").lower() == "admitted"
+            else "proposed_not_admitted"
+        ),
         "claim_boundary": proposal.get("claim_boundary"),
         "portfolio": proposal.get("portfolio", []),
         "excluded": proposal.get("excluded", []),
@@ -1241,11 +1538,30 @@ def _write_audit_dossier(output: Path, proposal: Mapping[str, Any]) -> None:
     (output / "audit_dossier.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _write_publication_preview(output: Path, proposal: Mapping[str, Any]) -> None:
-    """Render a reduced preview when plotting dependencies are available."""
+def _write_publication_preview(
+    output: Path, proposal: Mapping[str, Any], *, source_gate: Mapping[str, Any]
+) -> None:
+    """Render a reduced diagnostic preview only after the source gate passes."""
 
     publication = output / "publication"
     publication.mkdir(exist_ok=True)
+    if source_gate.get("status") != "passed":
+        (publication / "UNAVAILABLE.json").write_text(
+            json.dumps(
+                {
+                    "status": "unavailable",
+                    "reason": str(
+                        source_gate.get("reason") or "blocked_pending_exact_source_restore"
+                    ),
+                    "source_integrity_gate": dict(source_gate),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return
     if not proposal.get("portfolio"):
         (publication / "UNAVAILABLE.json").write_text(
             json.dumps({"status": "unavailable", "reason": "no_proposed_cases"}, indent=2) + "\n",
@@ -1272,8 +1588,9 @@ def _write_publication_preview(output: Path, proposal: Mapping[str, Any]) -> Non
             output,
             output=publication / "figure.preview.pdf",
             output_format="pdf",
+            _allow_unverified_preview=True,
         )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         (publication / "UNAVAILABLE.json").write_text(
             json.dumps(
                 {
@@ -1313,7 +1630,12 @@ def _review_memo(proposal: Mapping[str, Any]) -> str:
 
 
 def _manifest(
-    output: Path, proposal: Mapping[str, Any], source: Path, config: str | Path
+    output: Path,
+    proposal: Mapping[str, Any],
+    source: Path,
+    config: str | Path,
+    *,
+    source_gate: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Build package provenance manifest."""
 
@@ -1329,14 +1651,7 @@ def _manifest(
         },
         "config": {"path": str(config), "sha256": _sha256_file(Path(config))},
         "evidence_status": "proposed_not_admitted",
-        "source_integrity_gate": {
-            "status": "blocked_pending_exact_source_restore",
-            "robot_sf_issues": [
-                "https://github.com/ll7/robot_sf_ll7/issues/6792",
-                "https://github.com/ll7/robot_sf_ll7/issues/6814",
-            ],
-            "dissertation_issue": "https://github.com/ll7/diss/issues/698",
-        },
+        "source_integrity_gate": dict(source_gate),
         "claim_boundary": "No causal divergence point; no planner ranking; source integrity remains separate.",
         "files": sorted(
             str(path.relative_to(output))
@@ -1432,6 +1747,8 @@ def _sha256_directory(path: Path) -> str:
 __all__ = [
     "ADMISSION_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "SOURCE_GATE_SCHEMA_VERSION",
+    "admit_package",
     "analyze_cases",
     "apply_admission_overlay",
     "load_workbench_config",

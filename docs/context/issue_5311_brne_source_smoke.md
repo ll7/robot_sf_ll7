@@ -51,6 +51,13 @@ Artifacts (git-ignored, regenerated each run):
 Focused test (skips cleanly without the staged clone, so CI does not regress):
 `tests/baselines/test_brne_source_smoke.py`.
 
+The focused control-budget assertion is wall-clock based when run in isolation.
+When the test is collected by pytest-xdist, it uses process CPU time for the
+steady-state compute guard so scheduler contention from unrelated repository
+workers cannot masquerade as BRNE compute cost. The source harness command
+above remains the canonical wall-clock measurement path; this test distinction
+is tracked by friction follow-up #6924.
+
 ## Per-step runtime vs neighbor count (the control-budget question)
 
 Driven through the **real** upstream `brne.brne_nav(...)` against synthetic

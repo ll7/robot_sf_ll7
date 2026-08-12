@@ -13,6 +13,7 @@ source is vendored (GPL-3.0, local-only reference).
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -212,12 +213,24 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
     brne.brne_nav(
         xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
     )
-    t0 = time.perf_counter()
+    wall_t0 = time.perf_counter()
+    cpu_t0 = time.process_time()
     w = brne.brne_nav(
         xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
     )
-    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    elapsed_wall_ms = (time.perf_counter() - wall_t0) * 1000.0
+    elapsed_cpu_ms = (time.process_time() - cpu_t0) * 1000.0
     assert w is not None
-    # 4-agent steady solve at num_samples=49 is far under the 100 ms budget; use a
-    # generous 2x headroom over the observed ~3-5 ms to avoid CI flakiness.
-    assert elapsed_ms < 100.0, f"4-agent BRNE solve took {elapsed_ms:.1f} ms (expected < 100 ms)"
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        # xdist workers can be descheduled for hundreds of milliseconds while other
+        # repository tests compile native extensions. Process CPU time preserves the
+        # source-core compute guard without counting that scheduler contention.
+        assert elapsed_cpu_ms < 100.0, (
+            f"4-agent BRNE solve consumed {elapsed_cpu_ms:.1f} ms CPU (expected < 100 ms)"
+        )
+    else:
+        # The isolated smoke keeps the wall-clock guard used by the real-time control
+        # contract. The canonical source harness records the same wall-clock metric.
+        assert elapsed_wall_ms < 100.0, (
+            f"4-agent BRNE solve took {elapsed_wall_ms:.1f} ms (expected < 100 ms)"
+        )

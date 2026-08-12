@@ -804,7 +804,7 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
             execution_error = str(exc)
             try:
                 records = _read_jsonl(episodes_path) if episodes_path.is_file() else []
-            except Exception as read_exc:  # noqa: BLE001 - preserve failed-arm reporting.
+            except (OSError, ValueError) as read_exc:
                 execution_error = f"{execution_error}; episode read failed: {read_exc}"
                 records = []
         arm = summarize_records(

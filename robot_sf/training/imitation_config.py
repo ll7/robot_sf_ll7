@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from robot_sf.common import ensure_seed_tuple
 from robot_sf.telemetry.progress import PipelineStepDefinition
+from robot_sf.training.progress_weighted_bc import ProgressWeightedObjectiveConfig
 
 if TYPE_CHECKING:
     from robot_sf.training.multi_map_protocol import DomainRandomization, MultiMapTrainTestProtocol
@@ -441,6 +442,7 @@ class BCPretrainingConfig:
     env_overrides: dict[str, object] = field(default_factory=dict)
     env_factory_kwargs: dict[str, object] = field(default_factory=dict)
     device: str = "auto"
+    progress_weighted_objective: ProgressWeightedObjectiveConfig | None = None
 
     @classmethod
     def from_raw(  # noqa: PLR0913
@@ -459,6 +461,9 @@ class BCPretrainingConfig:
         env_overrides: dict[str, object] | None = None,
         env_factory_kwargs: dict[str, object] | None = None,
         device: str | None = "auto",
+        progress_weighted_objective: (
+            ProgressWeightedObjectiveConfig | Mapping[str, object] | None
+        ) = None,
     ) -> BCPretrainingConfig:
         """Create a config while coercing seeds to a canonical tuple.
 
@@ -480,6 +485,13 @@ class BCPretrainingConfig:
             env_overrides=dict(env_overrides or {}),
             env_factory_kwargs=dict(env_factory_kwargs or {}),
             device=str(device or "auto").strip() or "auto",
+            progress_weighted_objective=(
+                progress_weighted_objective
+                if isinstance(progress_weighted_objective, ProgressWeightedObjectiveConfig)
+                else ProgressWeightedObjectiveConfig.from_mapping(progress_weighted_objective)
+                if progress_weighted_objective
+                else None
+            ),
         )
 
 

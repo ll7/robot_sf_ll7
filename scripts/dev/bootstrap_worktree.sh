@@ -10,6 +10,10 @@
 # This makes the bootstrap fail closed with an actionable message rather than
 # silently succeeding and leaving the caller without a working .venv.
 #
+# The generated activation script also carries `UV_NO_SYNC=1`. This preserves the
+# dependency selection made by bootstrap when the documented `uv run` workflow is
+# used after activation; bootstrap explicitly unsets that guard for its own sync.
+#
 # Usage:
 #   scripts/dev/bootstrap_worktree.sh [--extra NAME] [--no-symlink-machine] [WORKTREE_DIR]
 #
@@ -43,6 +47,12 @@ named extras instead of `--all-extras`.
 The explicit `uv venv .venv` step is required: `uv sync --all-extras` alone may
 silently reuse the main checkout's .venv without creating one in the worktree,
 leaving .venv/bin/activate missing (issue #5091).
+
+After a successful sync, bootstrap adds `export UV_NO_SYNC=1` to
+`.venv/bin/activate`. Source that file before running `uv run` so a later command
+does not silently prune the selected extras. To intentionally resync this local
+environment, use `env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync
+--all-extras` or rerun this bootstrap script.
 
 Options:
   --extra NAME          Include an optional dependency extra (repeatable), such as training.
@@ -142,9 +152,10 @@ fi
 # `uv sync --all-extras` alone may silently reuse the main checkout's .venv
 # (detectable because it prints no "Creating virtual environment" line and runs
 # in ~1ms). Creating .venv explicitly first guarantees packages land here.
+local_venv="$repo_root/.venv"
 if [[ ! -d "$repo_root/.venv" ]]; then
     echo "bootstrap_worktree: creating local .venv ..."
-    uv venv .venv
+    env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$local_venv" uv venv .venv
 fi
 
 if [[ ${#sync_extras[@]} -eq 0 ]]; then
@@ -157,7 +168,7 @@ else
 fi
 
 echo "bootstrap_worktree: syncing dependencies (uv sync ${sync_args[*]}) ..."
-uv sync "${sync_args[@]}"
+env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$local_venv" uv sync "${sync_args[@]}"
 
 # Fail closed: verify the environment is actually usable.
 if [[ ! -x "$repo_root/.venv/bin/python" ]]; then
@@ -166,8 +177,8 @@ bootstrap_worktree: ERROR — .venv/bin/python not found after uv sync --all-ext
 
 Suggested recovery:
   rm -rf .venv
-  uv venv .venv
-  uv sync --all-extras
+  env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv venv .venv
+  env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
   source .venv/bin/activate
 
 If uv is not on PATH, ensure the main checkout's .venv/bin is in PATH or
@@ -176,5 +187,26 @@ EOF
     exit 1
 fi
 
+activate_path="$local_venv/bin/activate"
+activate_marker="# robot_sf bootstrap: preserve selected extras for uv run"
+if [[ ! -f "$activate_path" ]]; then
+    cat >&2 <<'EOF'
+bootstrap_worktree: ERROR — .venv/bin/activate not found after uv sync.
+
+The local virtual environment is incomplete. Remove .venv and rerun
+scripts/dev/bootstrap_worktree.sh so uv creates the activation script.
+EOF
+    exit 1
+fi
+
+# Keep repeated bootstrap runs idempotent while making the documented activation
+# path safe from a later plain `uv run` resync.
+if ! grep -Fqx "$activate_marker" "$activate_path"; then
+    {
+        printf '\n%s\n' "$activate_marker"
+        printf '%s\n' 'export UV_NO_SYNC=1'
+    } >> "$activate_path"
+fi
+
 echo "bootstrap_worktree: .venv/bin/python is ready."
-echo "bootstrap_worktree: run 'source .venv/bin/activate' to activate."
+echo "bootstrap_worktree: run 'source .venv/bin/activate' to activate (UV_NO_SYNC=1)."

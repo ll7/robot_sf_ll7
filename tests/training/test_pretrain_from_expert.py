@@ -267,7 +267,26 @@ def test_trajectory_loader_requires_digest_before_np_load(
 
     monkeypatch.setattr(np, "load", fail_if_loaded)
     with pytest.raises(ProgressWeightedBcError, match="digest is required"):
-        _load_trajectory_dataset(dataset_path, trusted_root=tmp_path)
+        _load_trajectory_dataset(
+            dataset_path,
+            trusted_root=tmp_path,
+            require_expected_dataset_digest=True,
+        )
+
+
+def test_standard_trajectory_loader_preserves_no_digest_compatibility(tmp_path: Path) -> None:
+    """Ordinary BC datasets remain loadable without the new Arm-B digest contract."""
+    dataset_path = tmp_path / "trajectory.npz"
+    positions = np.zeros((1, 2, 2), dtype=np.float32)
+    actions = np.zeros((1, 1, 1), dtype=np.float32)
+    observations = np.zeros((1, 2, 1), dtype=np.float32)
+    np.savez(dataset_path, positions=positions, actions=actions, observations=observations)
+
+    dataset = _load_trajectory_dataset(dataset_path, trusted_root=tmp_path)
+
+    np.testing.assert_array_equal(dataset["positions"], positions)
+    np.testing.assert_array_equal(dataset["actions"], actions)
+    np.testing.assert_array_equal(dataset["observations"], observations)
 
 
 def test_progress_objective_seed_must_match_primary_run_seed() -> None:

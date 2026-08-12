@@ -220,7 +220,7 @@
       "has_as_count": 2,
       "pragma_no_cover_count": 0,
       "blessed": true,
-      "note": "Blessed broad catch. Add a justification note in scripts/dev/generate_optional_import_snapshot.py when blessing.",
+      "note": "Blessed optional analytics boundary: the typed Parquet dependency error is reported as an explicit package gap alongside ImportError.",
       "samples": [
         "robot_sf/benchmark/case_workbench.py:300",
         "robot_sf/benchmark/case_workbench.py:327"

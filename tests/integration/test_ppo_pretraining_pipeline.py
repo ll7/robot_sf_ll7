@@ -141,6 +141,29 @@ def test_default_bc_pretraining_config_loads_auto_device():
     assert bc_config.device == "auto"
 
 
+def test_issue_6951_configs_parse_named_objective() -> None:
+    """Matched #6951 configs expose metadata and prevent silent arm/seed drift."""
+    from scripts.training.pretrain_from_expert import load_bc_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    arm_a = load_bc_config(
+        repo_root / "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml"
+    )
+    arm_b = load_bc_config(
+        repo_root / "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml"
+    )
+
+    assert arm_a.progress_weighted_objective is not None
+    assert arm_a.progress_weighted_objective.arm == "A"
+    assert arm_a.progress_weighted_objective.weight_min == 1.0
+    assert arm_a.random_seeds == (111, 112, 113)
+    assert arm_b.progress_weighted_objective is not None
+    assert arm_b.progress_weighted_objective.arm == "B"
+    assert arm_b.progress_weighted_objective.objective_name == (
+        "progress_weighted_expert_action_nll"
+    )
+
+
 def test_load_bc_config_accepts_cpu_device_override(tmp_path):
     """BC YAML should be able to force a CPU-only pre-training run."""
     from scripts.training.pretrain_from_expert import load_bc_config

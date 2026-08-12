@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from gymnasium.spaces import Space
     from imitation.data.types import Trajectory as ImitationTrajectory
 
+    from robot_sf.training.progress_weighted_bc import ProgressWeightedObjectiveConfig
+
 
 @dataclass(slots=True)
 class _FallbackTrajectory:
@@ -102,11 +104,31 @@ def _require_imitation_bc():
     return bc
 
 
-def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
-    """Load NPZ trajectory dataset."""
+def _load_trajectory_dataset(
+    dataset_path: Path,
+    *,
+    trusted_root: Path,
+    expected_dataset_digest: str | None = None,
+    require_dataset_digest: bool = True,
+) -> dict[str, Any]:
+    """Load an NPZ trajectory dataset after trusted-path and digest validation.
+
+    The default remains strict for provenance-sensitive callers. Legacy standard
+    BC and the uniform Arm-A control may explicitly opt into observed-digest
+    compatibility until a configured digest is available; Arm B must keep the
+    strict default so route-progress data is never admitted unpinned.
+    """
     if not dataset_path.is_file():
         raise FileNotFoundError(f"Dataset not found or not a file: {dataset_path}")
 
+    from robot_sf.training.progress_weighted_bc import validate_trajectory_npz_integrity
+
+    validate_trajectory_npz_integrity(
+        dataset_path,
+        trusted_root=trusted_root,
+        expected_dataset_digest=expected_dataset_digest,
+        require_expected_digest=require_dataset_digest,
+    )
     with np.load(str(dataset_path), allow_pickle=True) as data:
         metadata_raw = data.get("metadata")
         metadata = {}
@@ -255,6 +277,77 @@ def _create_bc_trainer(
     return trainer, policy_model
 
 
+def _parse_progress_weighted_objective(
+    raw_dict: Any | None,
+) -> ProgressWeightedObjectiveConfig | None:
+    """Parse a progress_weighted_objective dict into a ProgressWeightedObjectiveConfig.
+
+    Returns the config object if the dict is non-empty and valid, or None if
+    no objective override is specified.  Raises ProgressWeightedBcError for
+    malformed configurations.
+    """
+    if not raw_dict:
+        return None
+
+    from robot_sf.training.progress_weighted_bc import ProgressWeightedObjectiveConfig
+
+    if isinstance(raw_dict, ProgressWeightedObjectiveConfig):
+        return raw_dict
+    return ProgressWeightedObjectiveConfig.from_mapping(raw_dict)
+
+
+def _validate_progress_objective_seed(
+    objective_config: ProgressWeightedObjectiveConfig,
+    random_seeds: tuple[int, ...],
+) -> int:
+    """Require the objective seed to match the primary pre-training run seed."""
+    from robot_sf.training.progress_weighted_bc import ProgressWeightedBcError
+
+    if not random_seeds:
+        raise ProgressWeightedBcError(
+            "progress-weighted objective requires a primary pre-training random seed"
+        )
+    primary_seed = int(random_seeds[0])
+    if objective_config.random_seed != primary_seed:
+        raise ProgressWeightedBcError(
+            "progress-weighted objective random_seed must match the primary pre-training "
+            f"random seed: objective={objective_config.random_seed}, primary={primary_seed}"
+        )
+    return objective_config.random_seed
+
+
+def _load_route_length_and_compute_weights(
+    dataset_path: Path,
+    objective_config: ProgressWeightedObjectiveConfig,
+    *,
+    trusted_root: Path,
+) -> list[np.ndarray]:
+    """Load remaining-route-length from the dataset NPZ and compute per-step weights.
+
+    Returns a list of 1-D weight arrays, one per episode.
+    """
+    from robot_sf.training.progress_weighted_bc import (
+        ProgressWeightedBcError,
+        compute_progress_weights,
+        load_remaining_route_length_from_npz,
+    )
+
+    result = load_remaining_route_length_from_npz(
+        dataset_path,
+        array_key=objective_config.remaining_route_length_key,
+        trusted_root=trusted_root,
+        expected_dataset_digest=objective_config.dataset_digest,
+    )
+    configured_digest = objective_config.dataset_digest
+    actual_digest = str(result["dataset_digest"])
+    if configured_digest and configured_digest.lower() != actual_digest.lower():
+        raise ProgressWeightedBcError(
+            "remaining-route-length dataset digest does not match the configured digest: "
+            f"configured={configured_digest}, actual={actual_digest}"
+        )
+    return compute_progress_weights(result["remaining_route_length"], objective_config)
+
+
 def run_bc_pretraining(
     config: BCPretrainingConfig,
     *,
@@ -267,7 +360,30 @@ def run_bc_pretraining(
     # Load dataset
     dataset_path = common.get_trajectory_dataset_path(config.dataset_id)
     logger.info("Loading dataset from {}", dataset_path)
-    dataset = _load_trajectory_dataset(dataset_path)
+    objective_config = _parse_progress_weighted_objective(config.progress_weighted_objective)
+    objective_seed = (
+        _validate_progress_objective_seed(objective_config, config.random_seeds)
+        if objective_config is not None
+        else None
+    )
+    trajectory_root = common.get_trajectory_dataset_dir()
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=trajectory_root,
+        expected_dataset_digest=(objective_config.dataset_digest if objective_config else None),
+        require_dataset_digest=objective_config is not None and objective_config.arm == "B",
+    )
+    objective_manifest: dict[str, object] | None = None
+    objective_weights: list[np.ndarray] | None = None
+    if objective_config is not None and objective_config.arm == "B":
+        # Validate and materialize the explicit route-progress contract before
+        # constructing an environment or policy, so malformed provenance fails
+        # closed without leaving runtime resources open.
+        objective_weights = _load_route_length_and_compute_weights(
+            dataset_path,
+            objective_config,
+            trusted_root=trajectory_root,
+        )
 
     # Create environment for BC using the same observation contract as collection.
     env = make_training_contract_env(
@@ -287,11 +403,80 @@ def run_bc_pretraining(
     # Prepare training
     if not dry_run:
         trajectories = _convert_to_transitions(dataset, raw_observation_space)
-        trainer, policy_model = _create_bc_trainer(env, trajectories, config)
 
-        # Train
-        logger.info("Training BC for {} epochs", config.bc_epochs)
-        trainer.train(n_epochs=config.bc_epochs)
+        if objective_config is not None:
+            from robot_sf.training.progress_weighted_bc import (
+                ProgressWeightedBCTrainer,
+                compute_progress_weights,
+                serialize_objective_config,
+            )
+
+            if objective_config.arm == "B":
+                # Arm B requires the explicit aligned route-length provenance field.
+                if objective_weights is None:
+                    raise RuntimeError("Arm B route-progress weights were not prevalidated")
+                weights = objective_weights
+            else:
+                # Arm A follows the same weighted trainer/loss path with uniform
+                # weights and does not require route-progress data.
+                weights = compute_progress_weights(
+                    None,
+                    objective_config,
+                    action_step_counts=[len(trajectory.acts) for trajectory in trajectories],
+                )
+
+            # Build the policy model
+            policy_model = PPO(
+                "MlpPolicy",
+                env,
+                learning_rate=config.learning_rate,
+                device=config.device,
+                verbose=1,
+            )
+
+            trainer = ProgressWeightedBCTrainer(
+                observation_space=env.observation_space,
+                action_space=env.action_space,
+                demonstrations=trajectories,
+                policy=policy_model.policy,
+                config=objective_config,
+                weights=weights,
+                batch_size=config.batch_size,
+                rng=np.random.default_rng(objective_seed),
+                device=config.device,
+                learning_rate=config.learning_rate,
+            )
+            logger.info(
+                "Training weighted BC (Arm {}) for {} epochs",
+                objective_config.arm,
+                config.bc_epochs,
+            )
+            trainer.train(n_epochs=config.bc_epochs)
+
+            objective_manifest = serialize_objective_config(objective_config, npz_path=dataset_path)
+        else:
+            # No objective override: standard BC (fail-closed if weights were
+            # silently expected)
+            policy_model = PPO(
+                "MlpPolicy",
+                env,
+                learning_rate=config.learning_rate,
+                device=config.device,
+                verbose=1,
+            )
+            bc = _require_imitation_bc()
+            trainer = bc.BC(
+                observation_space=env.observation_space,
+                action_space=env.action_space,
+                demonstrations=trajectories,
+                policy=policy_model.policy,
+                batch_size=config.batch_size,
+                rng=np.random.default_rng(int(config.random_seeds[0])),
+                device=config.device,
+            )
+            logger.info("Training standard BC for {} epochs", config.bc_epochs)
+            trainer.train(n_epochs=config.bc_epochs)
+            objective_manifest = None
 
         # Save policy
         policy_path = common.get_expert_policy_dir() / f"{config.policy_output_id}.zip"
@@ -307,17 +492,44 @@ def run_bc_pretraining(
 
     logger.success("BC pre-training complete, policy saved to {}", policy_path)
 
+    if dry_run and objective_config is not None:
+        from robot_sf.training.progress_weighted_bc import serialize_objective_config
+
+        objective_manifest = serialize_objective_config(objective_config, npz_path=dataset_path)
+
+    # Build manifest notes with objective metadata
+    notes = [f"BC pre-training from dataset {config.dataset_id}"]
+    if objective_config is not None:
+        notes.append(f"objective: {objective_config.objective_name} (arm {objective_config.arm})")
+        notes.append(
+            f"progress_lambda: {objective_config.progress_lambda}, "
+            f"normalization_scale: {objective_config.progress_normalization_scale}, "
+            f"weight_bounds: [{objective_config.weight_min}, {objective_config.weight_max}]"
+        )
+        if objective_manifest:
+            import json as _json
+
+            notes.append(f"objective_manifest: {_json.dumps(objective_manifest, sort_keys=True)}")
+
     # Write training run manifest
     training_artifact = common.TrainingRunArtifact(
         run_id=config.run_id,
         run_type=common.TrainingRunType.BEHAVIOURAL_CLONING,
         input_artefacts=(config.dataset_id,),
         seeds=config.random_seeds,
-        metrics={},  # BC metrics would be added here in production
-        episode_log_path=Path(""),  # BC doesn't produce episode logs
-        wall_clock_hours=0.0,  # Would track actual time in production
+        metrics={},
+        episode_log_path=Path(""),
+        wall_clock_hours=0.0,
         status=common.TrainingRunStatus.COMPLETED,
-        notes=[f"BC pre-training from dataset {config.dataset_id}"],
+        notes=notes,
+        metadata=(
+            {
+                "objective": objective_manifest,
+                "random_seeds": list(config.random_seeds),
+            }
+            if objective_manifest is not None
+            else {}
+        ),
     )
 
     manifest_path = write_training_run_manifest(training_artifact)
@@ -364,6 +576,7 @@ def load_bc_config(config_path: Path) -> BCPretrainingConfig:
         env_overrides=dict(raw.get("env_overrides") or {}),
         env_factory_kwargs=dict(raw.get("env_factory_kwargs") or {}),
         device=raw.get("device", "auto"),
+        progress_weighted_objective=dict(raw.get("progress_weighted_objective") or {}) or None,
     )
 
 

@@ -37,7 +37,7 @@
   },
   "tests": {
     "command": "NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py tests/baselines/test_brne_planner.py",
-    "result": "47 passed"
+    "result": "48 passed"
   },
   "diagnostic": {
     "config": "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",

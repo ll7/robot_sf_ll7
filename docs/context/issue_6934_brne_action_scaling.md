@@ -34,7 +34,7 @@ NUMBA_NUM_THREADS=1 uv run pytest -q \
   tests/baselines/test_brne_source_smoke.py tests/baselines/test_brne_planner.py
 ```
 
-Result: **47 passed**.
+Result: **48 passed**.
 
 The frozen corridor diagnostic was rerun with the exact three seeds, single
 Numba threading, and fallback disabled:

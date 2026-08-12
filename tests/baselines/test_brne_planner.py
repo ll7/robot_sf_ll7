@@ -245,6 +245,27 @@ def test_brne_solve_uses_plan_step_first_mean_normalized_weighted_mean(
     assert mechanism_step["ensemble"]["weight_shape"] == [1, 3]
     assert mechanism_step["ensemble"]["aggregation_mode"] == "plan_step_first"
     assert mechanism_step["ensemble"]["aggregation_formula"] == "mean_plan_step_first_over_samples"
+    candidate_distribution = mechanism_step["ensemble"]["candidate_distribution"]
+    assert candidate_distribution["status"] == "available"
+    assert candidate_distribution["sample_count"] == 3
+    assert candidate_distribution["plan_step_count"] == 2
+    assert candidate_distribution["first"]["weighted_mean"] == pytest.approx(
+        {"v_m_s": expected_first_step_command[0], "omega_rad_s": expected_first_step_command[1]}
+    )
+    assert candidate_distribution["first_to_second"]["weighted_mean_delta_v_m_s"] == pytest.approx(
+        -0.3166666667
+    )
+    assert mechanism_step["pre_clamp_action"] == pytest.approx(
+        {"v_m_s": expected_first_step_command[0], "omega_rad_s": expected_first_step_command[1]}
+    )
+    assert mechanism_step["selected_action"] == pytest.approx(
+        {"v_m_s": expected_first_step_command[0], "omega_rad_s": expected_first_step_command[1]}
+    )
+    assert mechanism_step["action_clipping"] == {
+        "v_clipped": False,
+        "omega_clipped": False,
+        "any_clipped": False,
+    }
 
 
 def test_brne_solve_uses_samples_first_mean_normalized_weighted_mean(
@@ -292,6 +313,36 @@ def test_brne_solve_uses_samples_first_mean_normalized_weighted_mean(
     assert mechanism_step["ensemble"]["weight_shape"] == [1, 3]
     assert mechanism_step["ensemble"]["aggregation_mode"] == "samples_first"
     assert mechanism_step["ensemble"]["aggregation_formula"] == "mean_samples_first_over_samples"
+
+
+def test_brne_mechanism_trace_separates_pre_clamp_and_selected_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Safety clipping is observable without confusing it with the weighted command."""
+    planner = BRNEPlanner({"v_max": 0.5, "omega_max": 0.1})
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((1, 1)),
+            np.zeros((1, 1)),
+            np.array([[[1.0, -2.0]]]),
+        ),
+    )
+    monkeypatch.setattr(planner, "_brne_solve", lambda *_args: np.array([[1.0]]))
+    planner._jit_warmup_done = True
+
+    assert planner.step(_make_observation(num_agents=1)) == {"v": 0.5, "omega": -0.1}
+    step = planner.get_metadata()["mechanism_trace"]["steps"][0]
+    assert step["pre_clamp_action"] == {"v_m_s": 1.0, "omega_rad_s": -2.0}
+    assert step["selected_action"] == {"v_m_s": 0.5, "omega_rad_s": -0.1}
+    assert step["action_clipping"] == {
+        "v_clipped": True,
+        "omega_clipped": True,
+        "any_clipped": True,
+    }
 
 
 def test_brne_declared_heading_takes_precedence_over_velocity() -> None:

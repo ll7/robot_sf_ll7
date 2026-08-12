@@ -41,22 +41,19 @@ import numpy as np
 
 from robot_sf.evidence.writers import write_json, write_sha256sums, write_text
 from robot_sf.research.emergent_phenomena import (
+    ARCH_DENSITY_RATIO_CLEAR,
+    LANE_SEGREGATION_CLEAR,
+    LANE_SEGREGATION_WEAK,
+    OSCILLATION_FLIPS_CLEAR,
     EmergentPhenomenaReport,
     ScenarioResult,
+    derive_phenomenon_verdict,
     run_emergent_phenomena_demo,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_5149_emergent_phenomena_2026-07")
 ISSUE_REF = "robot_sf_ll7#5149"
-
-# How long to label a phenomenon as "clearly present" vs "weak/partial" vs
-# "absent". These thresholds are documented in the README and are intentionally
-# conservative so the demonstration does not overclaim.
-LANE_SEGREGATION_CLEAR = 0.5
-LANE_SEGREGATION_WEAK = 0.15
-OSCILLATION_FLIPS_CLEAR = 2
-ARCH_DENSITY_RATIO_CLEAR = 2.0
 
 
 def _git_commit() -> str:
@@ -69,22 +66,6 @@ def _git_commit() -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
-
-
-def _lane_verdict(value: float) -> str:
-    if value >= LANE_SEGREGATION_CLEAR:
-        return "clearly_present"
-    if value >= LANE_SEGREGATION_WEAK:
-        return "weak_partial"
-    return "absent_or_negligible"
-
-
-def _oscillation_verdict(flips: float) -> str:
-    return "clearly_present" if flips >= OSCILLATION_FLIPS_CLEAR else "absent_or_negligible"
-
-
-def _arch_verdict(ratio: float) -> str:
-    return "clearly_present" if ratio >= ARCH_DENSITY_RATIO_CLEAR else "absent_or_negligible"
 
 
 def _scenario_plot(result: ScenarioResult, out_path: Path) -> None:
@@ -120,7 +101,7 @@ def _scenario_plot(result: ScenarioResult, out_path: Path) -> None:
 def _result_to_record(result: ScenarioResult) -> dict[str, Any]:
     """Serialize one scenario result into a JSON-friendly record."""
     ops = {k: float(v) for k, v in result.order_parameters.items()}
-    verdict = _derive_verdict(result.scenario.name, ops)
+    verdict = derive_phenomenon_verdict(result.scenario.name, ops)
     return {
         "scenario": result.scenario.name,
         "calibration": result.calibration.name,
@@ -136,17 +117,6 @@ def _result_to_record(result: ScenarioResult) -> dict[str, Any]:
         "order_parameters": ops,
         "phenomenon_verdict": verdict,
     }
-
-
-def _derive_verdict(scenario: str, ops: dict[str, float]) -> str:
-    """Map the order parameters to a coarse phenomenon-present label."""
-    if scenario == "bidirectional_corridor":
-        return _lane_verdict(ops.get("lane_segregation_index", 0.0))
-    if scenario == "narrow_doorway":
-        return _oscillation_verdict(ops.get("oscillation_flips", 0.0))
-    if scenario == "high_density_exit":
-        return _arch_verdict(ops.get("exit_density_ratio", 0.0))
-    return "unknown"
 
 
 def _write_readme(

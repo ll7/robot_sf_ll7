@@ -12,6 +12,12 @@ interactive issue/PR/project work moves toward GitHub MCP / app tools.
 The helper reads issue-backed project items via `gh project item-list`, applies
 defaults and clamping for missing or invalid inputs, and writes the derived
 numeric score back to a `Priority Score` project field.
+
+The autopilot's ``sync --only-empty`` mode fails closed and returns a
+machine-readable blocked status when the GitHub token lacks ``read:project``.
+Callers can continue with live-label queue ordering and recover score sync by
+refreshing the token's Project scope. Other sync modes preserve their existing
+exception behavior.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -58,6 +65,32 @@ REQUIRED_NUMBER_FIELDS: tuple[str, ...] = (
     "Unlock Factor",
     PRIORITY_SCORE_FIELD,
 )
+MISSING_PROJECT_SCOPE_RE = re.compile(
+    r"missing required scopes?\s*\[(?P<scopes>[^\]]*\bread:project\b[^\]]*)\]",
+    re.IGNORECASE,
+)
+
+
+class MissingProjectScopeError(RuntimeError):
+    """Raised when GitHub rejects a Project command for missing ``read:project``."""
+
+    def __init__(
+        self,
+        *,
+        command: Sequence[str],
+        details: str,
+        required_scopes: Sequence[str],
+    ) -> None:
+        """Store the failed command, CLI details, and required scope names."""
+        self.command = tuple(command)
+        self.details = details
+        self.required_scopes = tuple(required_scopes)
+        super().__init__(
+            "GitHub Project access requires scope(s) "
+            + ", ".join(self.required_scopes)
+            + ". Refresh the token before retrying Project #5 priority sync."
+            + f"\n{details}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +253,18 @@ class GhProjectClient:
             stderr = exc.stderr.strip()
             stdout = exc.stdout.strip()
             details = stderr or stdout or "no stderr/stdout captured"
+            scope_match = MISSING_PROJECT_SCOPE_RE.search(details)
+            if scope_match:
+                required_scopes = tuple(
+                    scope.strip()
+                    for scope in scope_match.group("scopes").split(",")
+                    if scope.strip()
+                )
+                raise MissingProjectScopeError(
+                    command=("gh", *args),
+                    details=details,
+                    required_scopes=required_scopes,
+                ) from exc
             raise RuntimeError(
                 "gh command failed: "
                 + " ".join(["gh", *args])
@@ -663,10 +708,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Only assess issues whose Priority Score is currently empty; never re-score or "
             "overwrite an existing priority. Used by the autopilot auto-fill loop to stay cheap "
-            "and avoid churning human-set priorities."
+            "and avoid churning human-set priorities. Missing read:project access returns a "
+            "non-fatal blocked result so live-label ordering can continue."
         ),
     )
     return parser
+
+
+def _blocked_project_scope_payload(
+    *, owner: str, project_number: int, error: MissingProjectScopeError
+) -> dict[str, Any]:
+    """Build the stable non-fatal payload for the autopilot's blocked auto-fill path."""
+    return {
+        "status": "blocked",
+        "reason": "missing_project_scope",
+        "owner": owner,
+        "project_number": project_number,
+        "required_scopes": list(error.required_scopes),
+        "items": [],
+        "non_fatal": True,
+        "writes_performed": False,
+        "fallback": "live-label ordering",
+        "message": (
+            "Project #5 priority auto-fill was skipped because the GitHub token lacks "
+            + ", ".join(error.required_scopes)
+            + ". Continue with live-label ordering; refresh the token scope before retrying."
+        ),
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -676,21 +744,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command != "sync":
         raise ValueError(f"unsupported command: {args.command}")
 
-    previews = sync_scores(
-        GhProjectClient(),
-        SyncOptions(
-            owner=args.owner,
-            project_number=args.project_number,
-            ensure_fields=args.ensure_fields,
-            limit=args.limit,
-            alpha=args.alpha,
-            round_digits=args.round_digits,
-            issue_number=args.issue_number,
-            dry_run=args.dry_run,
-            skip_statuses=set(args.skip_status),
-            only_empty=args.only_empty,
-        ),
-    )
+    try:
+        previews = sync_scores(
+            GhProjectClient(),
+            SyncOptions(
+                owner=args.owner,
+                project_number=args.project_number,
+                ensure_fields=args.ensure_fields,
+                limit=args.limit,
+                alpha=args.alpha,
+                round_digits=args.round_digits,
+                issue_number=args.issue_number,
+                dry_run=args.dry_run,
+                skip_statuses=set(args.skip_status),
+                only_empty=args.only_empty,
+            ),
+        )
+    except MissingProjectScopeError as exc:
+        if not args.only_empty:
+            raise
+        print(
+            json.dumps(
+                _blocked_project_scope_payload(
+                    owner=args.owner,
+                    project_number=args.project_number,
+                    error=exc,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     if args.summary_file is not None:
         write_summary(args.summary_file, previews)

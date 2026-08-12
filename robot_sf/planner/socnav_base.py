@@ -57,6 +57,9 @@ class SocNavPlannerConfig:
     orca_obstacle_max_points: int = 80
     orca_obstacle_radius_scale: float = 1.0
     orca_heading_slowdown: float = 0.2
+    # Optional diagnostic-only capture of the holonomic-to-unicycle ORCA adapter.
+    # Keep disabled by default so normal benchmark episodes do not retain per-step traces.
+    orca_adapter_trace_enabled: bool = False
     orca_symmetry_bias: float = 0.22
     orca_head_on_bias: float = 0.32
     orca_stall_speed_threshold: float = 0.12

@@ -73,3 +73,7 @@ alignment and action-scale diagnosis, not planner ranking, safety, realism,
 matched-compute, objective, or paper claims. The remaining `0/3` goal-reaching
 result requires the separately scoped [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938)
 progress/mechanism experiment before any broader BRNE campaign.
+
+The exact trace-level result from [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938)
+is recorded in [`issue_6938_brne_progress_mechanism.md`](issue_6938_brne_progress_mechanism.md)
+and [`evidence/issue_6938_brne_progress_mechanism_summary.json`](evidence/issue_6938_brne_progress_mechanism_summary.json).

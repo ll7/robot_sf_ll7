@@ -447,7 +447,7 @@ Benchmark algorithm key:
 Core integration points:
 
 - Planner adapter: `robot_sf/planner/socnav.py` (`PredictionPlannerAdapter`)
-- Benchmark config loader: `robot_sf/benchmark/predictive_planner_config.py`
+- Benchmark config loader: `robot_sf/benchmark/predictive/predictive_planner_config.py`
 - Episode runner: `robot_sf/benchmark/map_runner.py`
 
 Runtime flow in benchmark episodes:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import torch
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
@@ -12,8 +13,9 @@ from robot_sf.benchmark.algorithm_readiness import (
     get_algorithm_readiness,
     require_algorithm_allowed,
 )
-from robot_sf.benchmark.predictive_planner_config import (
+from robot_sf.benchmark.predictive.predictive_planner_config import (
     build_predictive_planner_algo_config,
+    infer_predictive_checkpoint_feature_schema_name,
     load_predictive_planner_algo_config,
 )
 from robot_sf.planner.obstacle_features import (
@@ -87,6 +89,74 @@ def test_prediction_planner_camera_ready_config_matches_registry_contract() -> N
     )
     model_ids = {entry["model_id"] for entry in registry.get("models", [])}
     assert config["predictive_model_id"] in model_ids
+
+
+def test_load_predictive_planner_algo_config_rejects_non_mapping(tmp_path: Path) -> None:
+    """Custom predictive planner configs must retain the mapping contract."""
+    config_path = tmp_path / "invalid_predictive_config.yaml"
+    config_path.write_text("- not-a-mapping\n", encoding="utf-8")
+
+    with pytest.raises(TypeError, match="must be a mapping"):
+        load_predictive_planner_algo_config(config_path)
+
+
+def test_infer_predictive_checkpoint_feature_schema_handles_unusable_payloads(
+    tmp_path: Path,
+) -> None:
+    """Checkpoint schema inference should fail closed and support the legacy config field."""
+    missing = tmp_path / "missing.pt"
+    assert not missing.exists()
+    from_missing = build_predictive_planner_algo_config(
+        checkpoint_path=missing,
+        device=None,
+    )
+    assert from_missing["predictive_feature_schema_name"] == "predictive_legacy_v1"
+    assert from_missing["predictive_device"] == "cpu"
+
+    empty = tmp_path / "empty.pt"
+    empty.touch()
+    from_empty = build_predictive_planner_algo_config(checkpoint_path=empty)
+    assert from_empty["predictive_feature_schema_name"] == "predictive_legacy_v1"
+
+    non_mapping = tmp_path / "non_mapping.pt"
+    torch.save(["not-a-mapping"], non_mapping)
+    assert infer_predictive_checkpoint_feature_schema_name(non_mapping) is None
+
+    fallback = tmp_path / "fallback.pt"
+    torch.save(
+        {
+            "feature_schema": {"name": ""},
+            "config": {"feature_schema_name": "  predictive_custom_v2  "},
+        },
+        fallback,
+    )
+    assert infer_predictive_checkpoint_feature_schema_name(fallback) == "predictive_custom_v2"
+
+    no_schema = tmp_path / "no_schema.pt"
+    torch.save({"feature_schema": "not-a-mapping", "config": {}}, no_schema)
+    assert infer_predictive_checkpoint_feature_schema_name(no_schema) is None
+
+
+def test_build_predictive_planner_algo_config_preserves_custom_schema_and_applies_overrides(
+    tmp_path: Path,
+) -> None:
+    """Config-path, no-device, and explicit override inputs should compose predictably."""
+    config_path = tmp_path / "custom_predictive_config.yaml"
+    config_path.write_text(
+        "predictive_model_id: custom_model\npredictive_feature_schema_name: config_schema\n",
+        encoding="utf-8",
+    )
+
+    config = build_predictive_planner_algo_config(
+        config_path=config_path,
+        device=None,
+        overrides={"predictive_device": "cuda", "custom_marker": "covered"},
+    )
+
+    assert config["predictive_model_id"] == "custom_model"
+    assert config["predictive_feature_schema_name"] == "config_schema"
+    assert config["predictive_device"] == "cuda"
+    assert config["custom_marker"] == "covered"
 
 
 def test_prediction_planner_metadata_overrides_expose_search_and_uncertainty_modes() -> None:

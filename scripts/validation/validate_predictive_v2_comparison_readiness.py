@@ -2,7 +2,7 @@
 """CLI for the predictive planner v2 same-seed comparison readiness preflight (#1490).
 
 This is a thin wrapper around
-``robot_sf.benchmark.predictive_v2_comparison_readiness``. It is read-only and
+``robot_sf.benchmark.predictive.predictive_v2_comparison_readiness``. It is read-only and
 coordination-only: it never trains, evaluates, submits Slurm, or tunes planners.
 
 Exit codes:
@@ -21,7 +21,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.predictive_v2_comparison_readiness import (
+from robot_sf.benchmark.predictive.predictive_v2_comparison_readiness import (
     DEFAULT_CONTRACT_PATH,
     PredictiveV2ComparisonReadinessError,
     validate_predictive_v2_comparison_readiness,

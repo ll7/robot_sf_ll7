@@ -27,7 +27,7 @@ EXPECTED_ASSERT_COUNTS = {
     "robot_sf/benchmark/manifest_lineage_graph.py": 0,
     "robot_sf/benchmark/map_runner_native_command.py": 0,
     "robot_sf/benchmark/metrics.py": 0,
-    "robot_sf/benchmark/predictive_checkpoint_schema_audit.py": 0,
+    "robot_sf/benchmark/predictive/predictive_checkpoint_schema_audit.py": 0,
     "robot_sf/benchmark/runner.py": 0,
     "robot_sf/benchmark/schemas/episode_schema.py": 0,
     "robot_sf/benchmark/schemas/forecast_batch_schema.py": 0,

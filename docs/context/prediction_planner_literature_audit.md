@@ -46,7 +46,7 @@ Use these files as the primary evidence base for any future discussion:
 - benchmark contract:
   - `robot_sf/benchmark/algorithm_readiness.py`
   - `robot_sf/benchmark/algorithm_metadata.py`
-  - `robot_sf/benchmark/predictive_planner_config.py`
+  - `robot_sf/benchmark/predictive/predictive_planner_config.py`
   - `configs/algos/prediction_planner_camera_ready.yaml`
   - `model/registry.yaml`
 - benchmark-facing interpretation:

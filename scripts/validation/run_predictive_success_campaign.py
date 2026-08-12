@@ -15,7 +15,9 @@ import numpy as np
 import yaml
 
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
+from robot_sf.benchmark.predictive.predictive_planner_config import (
+    build_predictive_planner_algo_config,
+)
 from scripts.validation.predictive_eval_common import load_seed_manifest, make_subset_scenarios
 
 _CONTRACT_VERSION = "benchmark-reset-v2"

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import yaml
 
 from robot_sf.benchmark.analysis_trace import (
     build_analysis_trace,
@@ -18,12 +17,19 @@ from robot_sf.benchmark.analysis_trace import (
     trace_artifact_sha256,
     trace_coverage,
 )
-from robot_sf.benchmark.case_publication_figure import render_publication_figure
+from robot_sf.benchmark.case_publication_figure import (
+    _read_json_mapping,
+    _select_publication_cases,
+    _verify_package_integrity,
+    render_publication_figure,
+)
 from robot_sf.benchmark.case_workbench import (
     _candidate,
+    _load_source_gate_receipt,
     admit_package,
     analyze_cases,
     apply_admission_overlay,
+    load_workbench_config,
 )
 from robot_sf.benchmark.parquet_export import (
     derive_episode_metrics,
@@ -532,6 +538,120 @@ def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path) -
     assert sidecar["proposal_sha256"]
     assert sidecar["config_sha256"]
     assert sidecar["store_sha256"]
+
+
+def test_source_gate_receipt_failure_modes_fail_closed(tmp_path: Path) -> None:
+    """Malformed, pending, and digest-mismatched source receipts stay blocked."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    cases = [
+        ("unreadable", "{", "source_gate_receipt_unreadable"),
+        ("invalid", "[]", "source_gate_receipt_invalid"),
+        (
+            "schema",
+            json.dumps({"schema_version": "wrong", "status": "passed"}),
+            "source_gate_schema_mismatch",
+        ),
+        (
+            "pending",
+            json.dumps(
+                {
+                    "schema_version": "case-source-integrity-gate.v1",
+                    "status": "pending",
+                    "source_sha256": digest,
+                }
+            ),
+            "source_gate_status:pending",
+        ),
+        (
+            "digest",
+            json.dumps(
+                {
+                    "schema_version": "case-source-integrity-gate.v1",
+                    "status": "passed",
+                    "source_sha256": "0" * 64,
+                }
+            ),
+            "source_gate_digest_mismatch",
+        ),
+    ]
+    for name, content, reason in cases:
+        receipt = tmp_path / f"receipt-{name}.json"
+        receipt.write_text(content, encoding="utf-8")
+        result = _load_source_gate_receipt(source, receipt)
+        assert result["status"] == "blocked_pending_exact_source_restore"
+        assert result["reason"] == reason
+
+
+def test_load_workbench_config_rejects_unsafe_contract_shapes(tmp_path: Path) -> None:
+    """Every v1 contract relaxation remains an explicit configuration error."""
+
+    base = yaml.safe_load(Path("configs/analysis/case_workbench.v1.yaml").read_text())
+    invalid_payloads = []
+
+    payload = copy.deepcopy(base)
+    payload["schema_version"] = "case-workbench.v0"
+    invalid_payloads.append((payload, "configuration must declare"))
+    payload = copy.deepcopy(base)
+    payload["portfolio"].pop("roles")
+    invalid_payloads.append((payload, "portfolio.roles must be a list"))
+    payload = copy.deepcopy(base)
+    payload["portfolio"]["require_trace_coverage"] = "partial"
+    invalid_payloads.append((payload, "portfolio.require_trace_coverage"))
+    payload = copy.deepcopy(base)
+    payload["portfolio"]["allow_shared_prefix_false"] = False
+    invalid_payloads.append((payload, "portfolio.allow_shared_prefix_false"))
+    payload = copy.deepcopy(base)
+    payload["interestingness"] = "free-form"
+    invalid_payloads.append((payload, "interestingness must be a mapping"))
+    payload = copy.deepcopy(base)
+    payload["interestingness"]["weights"] = "free-form"
+    invalid_payloads.append((payload, "interestingness.weights must be a mapping"))
+    payload = copy.deepcopy(base)
+    payload["interestingness"]["weights"]["surface_clearance_min"] = math.nan
+    invalid_payloads.append((payload, "interestingness.weights.surface_clearance_min"))
+    payload = copy.deepcopy(base)
+    payload["comparison"] = "free-form"
+    invalid_payloads.append((payload, "comparison must be a mapping"))
+    payload = copy.deepcopy(base)
+    payload["comparison"]["require_matching_initial_state"] = "yes"
+    invalid_payloads.append((payload, "comparison.require_matching_initial_state must be boolean"))
+    payload = copy.deepcopy(base)
+    payload["comparison"].pop("require_matching_config_digest")
+    invalid_payloads.append((payload, "comparison.require_matching_config_digest must be true"))
+    payload = copy.deepcopy(base)
+    payload["comparison"]["shared_prefix"] = True
+    invalid_payloads.append((payload, "comparison.shared_prefix"))
+    payload = copy.deepcopy(base)
+    payload["publication"] = "free-form"
+    invalid_payloads.append((payload, "publication must be a mapping"))
+    payload = copy.deepcopy(base)
+    payload["publication"]["include_difference_curve"] = True
+    invalid_payloads.append((payload, "publication.include_difference_curve"))
+
+    for index, (payload, message) in enumerate(invalid_payloads):
+        path = tmp_path / f"invalid-{index}.yaml"
+        path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+        with pytest.raises(ValueError, match=message):
+            load_workbench_config(path)
+
+
+def test_publication_helpers_fail_closed_before_rendering(tmp_path: Path) -> None:
+    """Publication helpers reject unreadable provenance, missing receipts, and loose pairs."""
+
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError, match="unreadable"):
+        _read_json_mapping(malformed)
+    malformed.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="must contain an object"):
+        _read_json_mapping(malformed)
+    with pytest.raises(ValueError, match="missing manifest"):
+        _verify_package_integrity(tmp_path)
+    with pytest.raises(ValueError, match="explicit compatible case pair"):
+        _select_publication_cases([{"case_id": "left"}, {"case_id": "right"}])
 
 
 def test_candidate_rejects_tampered_trace_and_nested_fallback() -> None:

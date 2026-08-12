@@ -62,9 +62,11 @@ from robot_sf.benchmark.map_runner_batch_plan import (
 )
 from robot_sf.benchmark.map_runner_episode import (
     _CollisionEventContext,
+    _finite_positive_float,
     _initial_ped_velocities,
     _initial_pedestrian_actor_ids,
     _initial_robot_velocity,
+    _reset_robot_heading,
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
@@ -135,6 +137,16 @@ def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> N
         actor_ids=actor_ids,
     )
     assert [frame["actor_id"] for frame in frames] == actor_ids
+    direct = SimpleNamespace(robot_velocity_xy=(0.6, -0.2), robot_theta=1.25)
+    np.testing.assert_allclose(_initial_robot_velocity(direct), np.array([0.6, -0.2]))
+    assert _reset_robot_heading(direct, {}) == pytest.approx(1.25)
+    fallback = SimpleNamespace(robot_theta="invalid", ped_vel=None)
+    assert _reset_robot_heading(fallback, {"robot_heading": [0.5]}) == pytest.approx(0.5)
+    assert _initial_robot_velocity(SimpleNamespace(robot_velocity_xy="invalid")) is None
+    assert _initial_ped_velocities(SimpleNamespace(ped_vel=None), 2) is None
+    assert _finite_positive_float(0.4) == pytest.approx(0.4)
+    assert _finite_positive_float(0.0) is None
+    assert _finite_positive_float("invalid") is None
 
 
 def test_command_action_payload_preserves_structured_holonomic_trace_fields() -> None:

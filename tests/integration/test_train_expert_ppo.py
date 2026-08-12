@@ -2876,3 +2876,111 @@ def test_issue_4014_ppo_smoke_variants_keep_distinct_overrides() -> None:
     assert matched_mapping["tracking"]["tensorboard"] is False
     assert "tracking" not in mamba_mapping
     assert mamba_matched_mapping["tracking"]["tensorboard"] is False
+
+
+# Issue #4018: the issue_4018 density-curriculum / fixed-density smoke pair was
+# migrated to inherit shared settings from a single base config. The constants
+# below pin that contract and the frozen pre-change resolved-config baseline.
+_ISSUE_4018_FAMILY_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_4018_BASE_NAME = "issue_4018_smoke_base.yaml"
+_ISSUE_4018_BASELINE_PATH = Path("tests/integration/_baseline_issue_4018_smoke_resolved.json")
+_ISSUE_4018_VARIANTS = [
+    "issue_4018_density_curriculum_smoke.yaml",
+    "issue_4018_fixed_density_smoke.yaml",
+]
+
+
+def _issue_4018_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    assert _ISSUE_4018_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_4018_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_4018_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_4018_VARIANTS)
+def test_issue_4018_density_smoke_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated variant must resolve byte-identically to the frozen pre-change mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant.
+    """
+    path = (_ISSUE_4018_FAMILY_DIR / variant).resolve()
+    baseline = _issue_4018_baseline()
+
+    actual_fingerprint = _issue_4018_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+
+
+def test_issue_4018_density_smoke_base_inherits_and_no_launch_identity() -> None:
+    """Every variant inherits its shared base and the base stays lean."""
+    for variant in _ISSUE_4018_VARIANTS:
+        variant_path = (_ISSUE_4018_FAMILY_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == _ISSUE_4018_BASE_NAME
+
+        base_path = (_ISSUE_4018_FAMILY_DIR / _ISSUE_4018_BASE_NAME).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        # A base must not self-inherit and carries no launch identity.
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+
+
+@pytest.mark.parametrize("variant", _ISSUE_4018_VARIANTS)
+def test_issue_4018_density_smoke_loads_through_loader(variant: str) -> None:
+    """Each migrated variant loads through load_expert_training_config successfully."""
+    path = (_ISSUE_4018_FAMILY_DIR / variant).resolve()
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.total_timesteps == 96
+    assert config.seeds == (4018,)
+    assert config.evaluation.step_schedule
+
+
+def test_issue_4018_density_smoke_variants_keep_distinct_overrides() -> None:
+    """The density-curriculum and fixed-density variants retain distinct density settings."""
+    density = load_expert_training_config(
+        (_ISSUE_4018_FAMILY_DIR / "issue_4018_density_curriculum_smoke.yaml").resolve()
+    )
+    fixed = load_expert_training_config(
+        (_ISSUE_4018_FAMILY_DIR / "issue_4018_fixed_density_smoke.yaml").resolve()
+    )
+    density_mapping = _load_expert_training_config_mapping(
+        (_ISSUE_4018_FAMILY_DIR / "issue_4018_density_curriculum_smoke.yaml").resolve()
+    )
+    fixed_mapping = _load_expert_training_config_mapping(
+        (_ISSUE_4018_FAMILY_DIR / "issue_4018_fixed_density_smoke.yaml").resolve()
+    )
+
+    assert density.policy_id == "issue_4018_density_curriculum_smoke"
+    assert fixed.policy_id == "issue_4018_fixed_density_smoke"
+    assert density.policy_id != fixed.policy_id
+
+    # Density curriculum is enabled in one, disabled in the other.
+    assert density_mapping["density_curriculum"]["enabled"] is True
+    assert fixed_mapping["density_curriculum"]["enabled"] is False
+
+    # The density curriculum variant has stages; the fixed-density variant does not.
+    assert "stages" in density_mapping["density_curriculum"]
+    assert "stages" not in fixed_mapping["density_curriculum"]
+
+    # Tracking tags are distinct per variant.
+    assert density_mapping["tracking"]["wandb"]["tags"] == [
+        "issue-4018",
+        "density-curriculum-smoke",
+    ]
+    assert fixed_mapping["tracking"]["wandb"]["tags"] == [
+        "issue-4018",
+        "fixed-density-smoke",
+    ]

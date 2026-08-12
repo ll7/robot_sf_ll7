@@ -187,6 +187,13 @@ ORCA dissertation hedge:
 [issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
 [evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
 
+Issue #6942 ORCA adapter-hedge preregistration: a blocked, proposal-only six-scenario/S30 paired
+protocol that freezes the native rvo2 world-velocity counterfactual, existing
+`orca_adapter_trace.v1` fields, materiality estimands, missingness, provenance, approval, and
+stop rules without authorizing campaign execution:
+[issue_6942_orca_adapter_hedge_preregistration.md](issue_6942_orca_adapter_hedge_preregistration.md),
+[configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml](../../configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

@@ -7,12 +7,14 @@ real-world, or safety evidence.
 
 ## Result
 
-The median trace-on overhead fell from 92.2350% at baseline commit
-`36cc9fca4c8f0b2325feffafc529c76b91c3e978` to 6.8860% at optimized commit
-`b2cfce837e2362497d9798a65ff64439aefbfefe`, below the 10% local target. The
-trace-on median wall time fell from 24.859 ms to 13.911 ms. Paired outcomes and
-metrics remained equal, and the control-sequence, commit-provenance, and
-artifact-digest checks passed in both arms.
+The median trace-on overhead fell from 88.4145% at baseline commit
+`36cc9fca4c8f0b2325feffafc529c76b91c3e978` to 5.8905% at optimized commit
+`2fe5b888b90f1ff16030c6d7860d6175c7ac0bbd`, below the 10% local target. The
+trace-on median wall time fell from 23.864 ms to 13.596 ms. The trace-only
+compressed payload was 1,070 bytes at baseline and 1,068 bytes after the
+optimization; full episode-record gzip sizes are reported separately in the
+receipt. Paired outcomes and metrics remained equal, and the control-sequence,
+commit-provenance, and artifact-digest checks passed in both arms.
 
 These values are local wall-clock diagnostics on one machine and one fixture,
 not a claim about all scenarios or hardware.

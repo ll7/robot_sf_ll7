@@ -98,6 +98,8 @@ report_contract:
     Paired diagnostic campaign, not safety certification. Any wrapper-on/off delta is diagnostic
     until durable, paired-seed evidence over the full scenario distribution is collected.
 
+retained_metric_contract: paired_effect_metric_contract_v1.yaml
+
 # Six factorial arms: 3 planners x {wrapper_off, wrapper_on}. Each planner's off/on pair is
 # identical except for the safety_wrapper block, so the factorial contrast is clean.
 #

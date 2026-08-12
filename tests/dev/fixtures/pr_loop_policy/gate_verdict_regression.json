@@ -72,6 +72,7 @@
       "draft": false,
       "head_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
       "labels": ["merge-ready"],
+      "metadata_digest": "f5031fa772f0f0988f369fe93fe57d0c736c571400c3a5eb6d26b2e85f7a08f8",
       "checks": {
         "overall": "success",
         "total": 19,
@@ -90,6 +91,9 @@
           }
         ]
       },
+      "metadata_verdicts": [
+        "pr-metadata: reconciled @ f5031fa772f0f0988f369fe93fe57d0c736c571400c3a5eb6d26b2e85f7a08f8"
+      ],
       "expected_state": "ready_to_merge"
     }
   ]

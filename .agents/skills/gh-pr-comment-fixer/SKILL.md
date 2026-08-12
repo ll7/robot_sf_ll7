@@ -43,10 +43,13 @@ asks to fix known review comments.
 4. Apply minimal edits grouped by concern.
 5. Run appropriate validation (prefer targeted first; full suite only when needed by risk).
 6. Commit and push.
-7. Re-query unresolved review threads after the push before resolving anything. Bots may add fresh
+7. Rebuild the final PR title/body from the post-fix diff and validation, then run the REST
+   reconciliation helper with the final title and body. A no-op is valid; any metadata change
+   invalidates prior final-state review evidence and requires a fresh exact-head review trailer.
+8. Re-query unresolved review threads after the push and metadata reconciliation before resolving anything. Bots may add fresh
    findings once a draft PR becomes ready or after the first fix commit.
-8. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
-9. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
+9. Resolve only addressed threads using the `resolveReviewThread` mutation via `gh api graphql`.
+10. Re-check thread state; report any unresolved items with blocker reason (permissions, rate limits, or
    external dependency).
 
 ## Anti-Loop / Retry

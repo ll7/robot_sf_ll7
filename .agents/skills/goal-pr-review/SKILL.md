@@ -154,6 +154,7 @@ deterministically:
 | `failed_ci` | `inspect_failed_ci` | `fixing` if the failure is a fixable regression on a writable branch, else `blocked_external` |
 | `missing_artifacts` | `verify_artifacts` | `under_review` |
 | `stale_worktree` | `refresh_snapshot` | `under_review` (re-snapshot the advanced head before deciding) |
+| `pending_pr_metadata` | `reconcile_pr_metadata` | `under_review` until the final title/body digest is reconciled and re-reviewed |
 | `ready_to_merge` | `mark_ready_candidate` | `merge_ready` only after the full proof bar in `## Proof and Validation` closes; otherwise `under_review` |
 | `no_action` | `no_action` | keep the current state (`awaiting_reviewer`, `blocked_external`, `deferred_scope`, or `closed_out`) |
 
@@ -192,7 +193,7 @@ uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --j
 ```
 
 The policy classifies each PR into `pending_ci`, `failed_ci`, `missing_artifacts`,
-`stale_worktree`, `ready_to_merge`, or `no_action` and recommends one bounded action
+`stale_worktree`, `pending_pr_metadata`, `ready_to_merge`, or `no_action` and recommends one bounded action
 under the loop budget. Use the policy decision to avoid ad-hoc state inspection.
 
 For PR babysitting or handoff, prefer the conservative one-shot babysitter snapshot:
@@ -205,15 +206,21 @@ Use it when the next question is whether to wait, diagnose failed CI, process re
 because the PR closed or went stale, or perform a final merge-readiness review. The babysitter
 helper is route evidence only and does not perform GitHub-visible writes.
 
-4. Fix actionable items on writable branches; commit and push.
-5. Validate per required tier.
-6. Re-query unresolved review threads after push and verification before resolving anything, especially
+4. Fix actionable items on writable branches; commit and push. After every fix or revision push,
+   rebuild the final title/body from the resulting diff, claims, validation, and follow-ups and run
+   `scripts/dev/gh_pr_body_rest.py --reconcile`. Treat an unchanged result as a valid no-op; a
+   changed title is justified only when scope, intent, type, or issue linkage changed.
+5. Validate per required tier, including the PR title/body contract after reconciliation.
+6. Re-query unresolved review threads after push, metadata reconciliation, and verification before resolving anything, especially
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
-8. After the full proof bar closes, post an exact-head review-evidence comment by submitting a GitHub
-   COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA,
-   validation, findings disposition, and any single-account waiver; then update `merge-ready`. The
+8. After the full proof bar closes, reconcile the final title/body one more time and compute its
+   exact metadata digest. Then post an exact-head review-evidence comment by submitting a GitHub
+   COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA, the
+   validation, findings disposition, any single-account waiver, and
+   `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
+   `merge-ready`. The
    review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
    does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the
    comment or record the gate-refresh blocker.

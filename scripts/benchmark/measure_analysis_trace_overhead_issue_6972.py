@@ -186,7 +186,7 @@ def _run_batch(
 
     records: dict[str, list[dict[str, Any]]] = {"analysis_trace_off": [], "analysis_trace_on": []}
     timings: dict[str, list[dict[str, Any]]] = {"analysis_trace_off": [], "analysis_trace_on": []}
-    for trace_enabled in (False, True):
+    for trace_enabled in arm_order:
         for _ in range(warmups):
             _run_episode(trace_enabled=trace_enabled)
     for sample_index in range(samples):

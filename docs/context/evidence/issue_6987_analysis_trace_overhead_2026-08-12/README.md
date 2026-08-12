@@ -35,8 +35,9 @@ The receipts identify Issue #6987 as the measurement follow-up and Issue #6972 a
 The harness preserves paired outcomes and metrics, requested/applied control-sequence digests,
 trace Git commit hashes, trace artifact/provenance digest matches, deterministic compressed-size
 summaries, and compact raw timing samples. A target decision is admissible only when the integrity
-checks pass, repeated same-commit batch medians stay within the declared 25% relative-fraction
-spread tolerance, and every repeated batch is within the 10% target. A stable batch above 10%
+checks pass, repeated same-commit batch medians stay within the declared 25 percentage-point
+absolute overhead-fraction spread tolerance, and every repeated batch is within the 10% target.
+A stable batch above 10%
 therefore yields `target_met: false`; otherwise the receipt reports an inconclusive decision.
 
 ## Reproduction

@@ -78,8 +78,8 @@ def test_measurement_alternates_batches_and_allows_stable_target(
         True,
         False,
         True,
-        False,
         True,
+        False,
         True,
         False,
         True,
@@ -127,3 +127,28 @@ def test_measurement_does_not_hide_a_failed_batch_behind_the_aggregate(
     assert receipt["derived"]["target_decision"] == "not_met"
     assert receipt["issue"] == 6987
     assert receipt["source_issue"] == 6972
+
+
+def test_measurement_blocks_target_decision_on_integrity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Divergent paired outcomes remain inconclusive despite stable timing."""
+
+    monkeypatch.setattr(measurement, "_git_hash", lambda: GIT_HASH)
+
+    def fake_run_episode(*, trace_enabled: bool) -> dict[str, Any]:
+        record = _record(trace_enabled=trace_enabled)
+        if trace_enabled:
+            record["outcome"] = {"timeout_event": False}
+        return record
+
+    monkeypatch.setattr(measurement, "_run_episode", fake_run_episode)
+    ticks = iter(tick for _ in range(4) for tick in (0.0, 1.0))
+    monkeypatch.setattr(measurement, "time", SimpleNamespace(perf_counter=lambda: next(ticks)))
+
+    receipt = measurement.measure(samples=1, warmups=0, batches=2)
+
+    assert receipt["checks"]["paired_outcomes_and_metrics_equal"] is False
+    assert receipt["derived"]["batch_target_met"] is True
+    assert receipt["derived"]["target_met"] is None
+    assert receipt["derived"]["target_decision"] == "inconclusive"

@@ -1,7 +1,7 @@
 """Fail-closed validator for the ``collision_causal_report.v1`` contract.
 
 This module owns the cross-field semantic rules that the JSON schema in
-``schemas/collision_causal_report.v1.json`` cannot express. The report is a
+``../schemas/collision_causal_report.v1.json`` cannot express. The report is a
 *model-scoped* reconstruction of a single collision: it separates observed
 facts, the proximate mechanism, and the intervention-supported causal
 contribution, and it never assigns legal or moral fault
@@ -59,7 +59,7 @@ except ImportError as exc:  # pragma: no cover - dependency is declared in pypro
 
 COLLISION_CAUSAL_REPORT_SCHEMA_VERSION = "collision_causal_report.v1"
 COLLISION_CAUSAL_REPORT_SCHEMA_FILE = (
-    Path(__file__).with_name("schemas") / "collision_causal_report.v1.json"
+    Path(__file__).resolve().parents[1] / "schemas" / "collision_causal_report.v1.json"
 )
 
 #: The four systems-theoretic (STPA) unsafe-control-action forms plus fail-closed values.

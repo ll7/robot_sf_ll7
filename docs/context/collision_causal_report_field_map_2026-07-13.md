@@ -7,7 +7,7 @@ collisions can be causally attributed.
 **Design source:**
 [`docs/context/collision_causality_online_risk_scenario_discovery_2026-07-12.md`](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
 section 3.
-**Owner module:** `robot_sf/benchmark/collision_causal_report.py` +
+**Owner module:** `robot_sf/benchmark/collision/collision_causal_report.py` +
 `robot_sf/benchmark/schemas/collision_causal_report.v1.json`.
 
 Plain-language summary: this contract is a *reviewable incident report* for one simulated
@@ -55,7 +55,7 @@ fields unavailable rather than inferred.* `Availability` describes what the repo
 | `feasible_command` | none (actuation model) | **unavailable** | Kinematic-feasibility projection not exported. |
 | `applied_command` | `mechanism_trace.v1.selected_command` | planner-scoped | Proxy for applied command. |
 | `actor_states` | `critical_intervals.py` trace arrays (robot/ped positions, velocities) | available | |
-| `geometry` | `robot_sf/benchmark/collision_definition_inventory.py` (clearance regime, radii) | available | |
+| `geometry` | `robot_sf/benchmark/collision/collision_definition_inventory.py` (clearance regime, radii) | available | |
 
 ### 2.3 Report-level fields
 

@@ -1,10 +1,10 @@
-"""Tests for robot_sf.benchmark.collision_cause_attribution — validation scoring."""
+"""Tests for robot_sf.benchmark.collision.collision_cause_attribution — validation scoring."""
 
 from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.collision_cause_attribution import (
+from robot_sf.benchmark.collision.collision_cause_attribution import (
     AMBIGUITY_AMBIGUOUS,
     AMBIGUITY_NEGATIVE_CONTROL,
     AMBIGUITY_UNAMBIGUOUS,

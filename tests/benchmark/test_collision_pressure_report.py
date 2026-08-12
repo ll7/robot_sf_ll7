@@ -10,7 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
-from robot_sf.benchmark.collision_pressure_report import (
+from robot_sf.benchmark.collision.collision_pressure_report import (
     CollisionPressureReportError,
     build_collision_pressure_report,
     main,

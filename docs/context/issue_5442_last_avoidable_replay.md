@@ -108,7 +108,7 @@ and the join described below embeds the replay result into that contract.
 
 ## Join into `collision_causal_report.v1` (remaining item delivered)
 
-`robot_sf/benchmark/collision_causal_report.py` exposes
+`robot_sf/benchmark/collision/collision_causal_report.py` exposes
 `collide_causal_report_from_last_avoidable`, which wraps a `last_avoidable_replay.v1`
 result into the additive `collision_causal_report.v1` contract **without re-running**
 the engine. The fail-closed failure semantics survive the join:

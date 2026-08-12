@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.benchmark import last_avoidable_fixtures as fx
-from robot_sf.benchmark.collision_causal_report import (
+from robot_sf.benchmark.collision.collision_causal_report import (
     CausalJoinMetadata,
     CollisionCausalReportError,
     collide_causal_report_from_last_avoidable,

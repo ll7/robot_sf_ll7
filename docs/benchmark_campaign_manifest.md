@@ -244,3 +244,69 @@ cross-arm comparisons must be protected against the under-tuning objection.
 
 This is auditability metadata, not benchmark evidence by itself: it records tuning effort so the
 asymmetry is reviewable; it does not change any measured outcome.
+
+## Prospective tuning-run ledger
+
+Future campaign launches also emit a machine-readable `reports/tuning_ledger.json`. Its individual
+records use the versioned schema
+[`robot_sf/benchmark/schemas/tuning_run_record.v1.json`](../robot_sf/benchmark/schemas/tuning_run_record.v1.json)
+and the ledger envelope uses
+[`robot_sf/benchmark/schemas/tuning_ledger.v1.json`](../robot_sf/benchmark/schemas/tuning_ledger.v1.json).
+Records are grouped into three explicit run classes:
+
+- `debug`: launch metadata only; never contributes to tuning totals.
+- `tuning`: contributes only counters that the record actually captured, such as attempted
+  configurations, simulator episodes/calls, and wall-clock seconds.
+- `evidence`: immutable evaluation metadata; never contributes to tuning totals.
+
+Omitted counters, including `person_hours`, are serialized as `null`, not zero. Git commits are
+provenance only and are never interpreted as tuning trials. The generated ledger records the run
+id, planner, source commit, campaign config hash, objective, development split or scenario ids,
+evaluation-set disjointness, stopping rule, and capture provenance. A partial aggregate remains
+unknown when any contributing tuning record omitted that counter.
+
+The campaign config block is deliberately small. The following examples show the three run
+classes; only a strict publication/release comparative profile requires the complete fields.
+
+Debug/smoke launch:
+
+```yaml
+tuning_run_provenance:
+  run_class: debug
+```
+
+Prospective tuning launch:
+
+```yaml
+tuning_run_provenance:
+  run_class: tuning
+  run_id: planner-a-tuning-2026-08-12
+  objective: minimize validation collision rate
+  development_split: development-v1
+  eval_set_disjoint: true
+  stopping_rule: stop after the registered trial budget
+  compute_resource: local-cpu
+```
+
+Fixed evaluation campaign:
+
+```yaml
+tuning_run_provenance:
+  run_class: evidence
+  run_id: comparative-evidence-2026-08-12
+  objective: compare the registered planner arms
+  development_scenario_ids: [development-v1]
+  eval_set_disjoint: true
+  stopping_rule: fixed preregistered matrix
+```
+
+Omitting `tuning_run_provenance` is equivalent to the first example and emits minimal debug
+records automatically.
+
+For a strict profile, set `tuning_effort_enforcement: error`, declare each enabled arm's existing
+`tuning` block, and provide a non-debug run block with a stable `run_id`, objective, development
+split/scenarios, disjointness flag, and stopping rule. The strict gate is intentionally not applied
+to exploratory, smoke, or developer/debug configurations. The prospective ledger is additive:
+the frozen retrospective registry
+[`configs/benchmarks/tuning_effort_history_v1.yaml`](../configs/benchmarks/tuning_effort_history_v1.yaml)
+and historical manifests are not rewritten or reinterpreted.

@@ -215,6 +215,35 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert "${{ github.run_attempt }}" in duration_save["with"]["key"]
 
 
+def test_determinism_gate_reuses_the_model_preflight_cache() -> None:
+    """The full determinism gate must not redownload models in a parallel job."""
+
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    determinism_gate = workflow["jobs"]["determinism-gate"]
+    assert determinism_gate["needs"] == "exact-repeat-model-preflight"
+    assert (
+        determinism_gate["env"]["PPO_ALGO_CONFIG"]
+        == "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
+    )
+    key_step = next(
+        step
+        for step in determinism_gate["steps"]
+        if step.get("name") == "Derive model-cache key from registry-pinned digests"
+    )
+    assert key_step["id"] == "model-cache-key"
+    assert "required_model_ids_for_config" in key_step["run"]
+    restore_step = next(
+        step
+        for step in determinism_gate["steps"]
+        if step.get("name") == "Restore exact-repeat model cache"
+    )
+    assert restore_step["uses"].startswith("actions/cache/restore@")
+    assert restore_step["with"] == {
+        "path": "output/model_cache",
+        "key": "model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}",
+    }
+
+
 def test_pytest_coverage_is_explicit_opt_in() -> None:
     """Default pytest runs should stay fast while the wrapper preserves coverage opt-in."""
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))

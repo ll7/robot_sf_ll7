@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, CampaignConfig
 from robot_sf.benchmark.camera_ready._util import (
+    _config_hash_payload,
     _hash_payload,
-    _jsonable_repo_relative,
     _kinematics_matrix_or_default,
     _latency_stress_metadata,
     _repo_relative,
@@ -76,7 +75,7 @@ def _build_matrix_summary_rows(
         Deterministically ordered matrix rows for CSV/JSON artifacts.
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
-    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    config_hash = _config_hash(_config_hash_payload(cfg))
     noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     repeats = len(resolved_seeds)
     horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"

@@ -1545,6 +1545,12 @@ def execute_campaign(
     targets, scenario_defs, planner_defs, repeats_per_target, expected_manifest_hash = (
         _validate_resolved_bundle(resolved_bundle)
     )
+    # Validate every manifest reference before staging model assets. A malformed
+    # bundle must report its structural error even when an unrelated model asset
+    # is unavailable; otherwise preflight masks the fail-closed contract and
+    # makes deterministic validation depend on external release availability.
+    for target in targets:
+        _resolve_target_definitions(target, scenario_defs, planner_defs)
     run_episode, enforce_model_preflight = _setup_campaign_runner(
         run_episode, targets, planner_defs
     )

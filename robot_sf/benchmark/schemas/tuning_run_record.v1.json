@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/specs/tuning-run-record.v1.json",
+  "title": "Robot SF prospective tuning run record",
+  "description": "Machine-verifiable provenance for debug, tuning, and evidence launches.",
+  "type": "object",
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "run_class": { "const": "debug" },
+        "counts_toward_tuning": { "const": false }
+      }
+    },
+    {
+      "properties": {
+        "run_class": { "const": "tuning" },
+        "counts_toward_tuning": { "const": true }
+      }
+    },
+    {
+      "properties": {
+        "run_class": { "const": "evidence" },
+        "counts_toward_tuning": { "const": false }
+      }
+    }
+  ],
+  "required": [
+    "schema_version",
+    "run_id",
+    "run_class",
+    "counts_toward_tuning"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "tuning-run-record.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run_class": {
+      "enum": ["debug", "tuning", "evidence"]
+    },
+    "planner_id": {
+      "type": ["string", "null"]
+    },
+    "source_commit": {
+      "type": ["string", "null"]
+    },
+    "config_hash": {
+      "type": ["string", "null"]
+    },
+    "parameters_changed": {
+      "type": ["array", "null"],
+      "items": {"type": "string"}
+    },
+    "objective": {
+      "type": ["string", "null"]
+    },
+    "development_scenario_ids": {
+      "type": ["array", "null"],
+      "items": {"type": "string"}
+    },
+    "development_split": {
+      "type": ["string", "null"]
+    },
+    "eval_set_disjoint": {
+      "type": ["boolean", "null"]
+    },
+    "attempted_configurations": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "simulator_episodes": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "simulator_calls": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "wall_clock_seconds": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "compute_resource": {
+      "type": ["string", "null"]
+    },
+    "stopping_rule": {
+      "type": ["string", "null"]
+    },
+    "parent_run_id": {
+      "type": ["string", "null"]
+    },
+    "person_hours": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "campaign_id": {
+      "type": ["string", "null"]
+    },
+    "recorded_at_utc": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "counts_toward_tuning": {
+      "type": "boolean"
+    },
+    "provenance": {
+      "type": "object"
+    }
+  }
+}

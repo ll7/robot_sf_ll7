@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/specs/tuning-ledger.v1.json",
+  "title": "Robot SF prospective tuning ledger",
+  "description": "Deterministic envelope for versioned prospective tuning-run records.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_schema_version",
+    "ledger_sha256",
+    "records",
+    "summary",
+    "by_planner",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "tuning-ledger.v1"
+    },
+    "record_schema_version": {
+      "const": "tuning-run-record.v1"
+    },
+    "ledger_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "debug"
+                  },
+                  "counts_toward_tuning": {
+                    "const": false
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "tuning"
+                  },
+                  "counts_toward_tuning": {
+                    "const": true
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "evidence"
+                  },
+                  "counts_toward_tuning": {
+                    "const": false
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "required": [
+          "schema_version",
+          "run_id",
+          "run_class",
+          "counts_toward_tuning"
+        ],
+        "properties": {
+          "schema_version": {
+            "const": "tuning-run-record.v1"
+          },
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run_class": {
+            "enum": ["debug", "tuning", "evidence"]
+          },
+          "counts_toward_tuning": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/aggregate"
+    },
+    "by_planner": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/aggregate"
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debug_counts_toward_tuning",
+        "tuning_counts_toward_tuning",
+        "evidence_counts_toward_tuning",
+        "unknown_counter_value",
+        "person_hours_required",
+        "commit_counts_as_trial"
+      ],
+      "properties": {
+        "debug_counts_toward_tuning": {
+          "const": false
+        },
+        "tuning_counts_toward_tuning": {
+          "const": true
+        },
+        "evidence_counts_toward_tuning": {
+          "const": false
+        },
+        "unknown_counter_value": {
+          "type": "null"
+        },
+        "person_hours_required": {
+          "const": false
+        },
+        "commit_counts_as_trial": {
+          "const": false
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "campaign_id": {
+          "type": ["string", "null"]
+        },
+        "source_commit": {
+          "type": ["string", "null"]
+        },
+        "config_hash": {
+          "type": ["string", "null"]
+        },
+        "recorded_at_utc": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "strict_validation": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_count",
+        "tuning_record_count",
+        "debug_record_count",
+        "evidence_record_count",
+        "counts_toward_tuning"
+      ],
+      "properties": {
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tuning_record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "debug_record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "counts_toward_tuning": {
+          "type": "boolean"
+        },
+        "attempted_configurations": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "simulator_episodes": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "simulator_calls": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "wall_clock_seconds": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "person_hours": {
+          "type": ["number", "null"],
+          "minimum": 0
+        },
+        "unknown_attempted_configurations_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_simulator_episodes_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_simulator_calls_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_wall_clock_seconds_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_person_hours_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

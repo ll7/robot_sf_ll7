@@ -1586,6 +1586,7 @@ class _CampaignPreflightPaths:
     amv_coverage_md_path: Path
     comparability_json_path: Path | None
     comparability_md_path: Path | None
+    tuning_ledger_path: Path
     manifest_payload: dict[str, Any]
     amv_summary: dict[str, Any]
     campaign_started_at_utc: str
@@ -1687,6 +1688,7 @@ def _unpack_campaign_preflight(prepared: dict[str, Any]) -> _CampaignPreflightPa
         comparability_md_path=(
             Path(path) if (path := prepared.get("comparability_md_path")) else None
         ),
+        tuning_ledger_path=Path(prepared["tuning_ledger_path"]),
         manifest_payload=dict(prepared["manifest_payload"]),
         amv_summary=dict(prepared["amv_summary"]),
         campaign_started_at_utc=str(prepared["created_at_utc"]),
@@ -2720,6 +2722,7 @@ def _build_run_meta_preflight_artifacts(
     return {
         "validate_config": _repo_relative(paths.validate_config_path),
         "preview_scenarios": _repo_relative(paths.preview_scenarios_path),
+        "tuning_ledger": _repo_relative(paths.tuning_ledger_path),
         "amv_coverage_json": _repo_relative(paths.amv_coverage_json_path),
         "amv_coverage_md": _repo_relative(paths.amv_coverage_md_path),
         "comparability_json": (

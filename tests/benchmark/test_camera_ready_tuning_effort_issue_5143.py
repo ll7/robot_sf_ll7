@@ -29,6 +29,7 @@ from robot_sf.benchmark.camera_ready._preflight import (
     prepare_campaign_preflight,
 )
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+from robot_sf.benchmark.tuning_run_provenance import TuningRunSpec
 
 
 def _parse_tuning(raw: object) -> TuningSpec | None:
@@ -309,7 +310,7 @@ def test_validate_campaign_config_error_gate_rejects_non_declared_tuning(source:
 
 
 def test_validate_campaign_config_error_gate_passes_when_all_enabled_arms_declared() -> None:
-    """When every enabled arm declares tuning, the error gate passes; disabled arms are exempt."""
+    """Strict campaigns also declare the prospective run provenance block."""
     cfg = CampaignConfig(
         name="gate",
         scenario_matrix_path=Path("does-not-matter.yaml"),
@@ -328,6 +329,14 @@ def test_validate_campaign_config_error_gate_passes_when_all_enabled_arms_declar
         seed_policy=SeedPolicy(),
         scenario_candidates=ScenarioCandidateSelection(),
         tuning_effort_enforcement="error",
+        tuning_run_provenance=TuningRunSpec(
+            run_class="evidence",
+            run_id="evidence-1",
+            objective="compare planners",
+            development_split="development-v1",
+            eval_set_disjoint=True,
+            stopping_rule="fixed campaign matrix",
+        ),
     )
     # A disabled arm is exempt; should not raise.
     _validate_campaign_config(cfg)
@@ -349,6 +358,14 @@ def test_validate_campaign_config_error_gate_ignores_disabled_arms() -> None:
         seed_policy=SeedPolicy(),
         scenario_candidates=ScenarioCandidateSelection(),
         tuning_effort_enforcement="error",
+        tuning_run_provenance=TuningRunSpec(
+            run_class="evidence",
+            run_id="evidence-1",
+            objective="compare planners",
+            development_split="development-v1",
+            eval_set_disjoint=True,
+            stopping_rule="fixed campaign matrix",
+        ),
     )
     _validate_campaign_config(cfg)
 

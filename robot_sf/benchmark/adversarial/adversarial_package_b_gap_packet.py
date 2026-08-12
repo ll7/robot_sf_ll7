@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.adversarial_package_b_preflight import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
     PackageBPreflightResult,
     preflight_package_b_manifest,
 )

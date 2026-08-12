@@ -1,0 +1,3 @@
+# Social-force comparator settings for issue #6464.
+action_space: unicycle
+allow_fallback: false

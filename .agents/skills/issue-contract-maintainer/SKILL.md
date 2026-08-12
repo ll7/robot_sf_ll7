@@ -11,6 +11,7 @@ requires_benchmark_artifacts: false
 delegates_to:
 - gh-issue-clarifier
 - gh-issue-template-auditor
+- issue-audit-autonomous
 - issue-audit
 - issue-splitter
 output_schema: skill_run_summary.v1
@@ -23,11 +24,17 @@ aliases:
 
 ## When to use
 
-Use this skill when an issue needs contract maintenance before implementation: template compliance, ambiguity clarification, or applying a user decision.
+Use this skill when an issue needs contract maintenance before implementation:
+template compliance, deterministic state/label cleanup, ambiguity clarification,
+or applying a user decision. Read
+docs/context/issue_audit_contract.md before choosing an audit route.
 
 ## Modes
 
 - `audit-template-compliance`: compare issue bodies with `.github/ISSUE_TEMPLATE/` and repair clear gaps without changing intent.
+- `audit-deterministic-cleanup`: route the complete open-issue inventory and evidence-supported
+  label/state repairs to `issue-audit-autonomous`. This mode never asks a question, changes
+  Project #5, changes priority, creates a follow-up issue, or guesses a policy answer.
 - `clarify-ambiguity`: identify problem, scope, solution, or validation ambiguity and post concise options with pros/cons.
 - `apply-user-decision`: update issue text, labels, and Project #5 state after the user resolves a readiness question.
   For research backlog revision, keep interesting-but-not-next paths open at lower priority by
@@ -46,18 +53,27 @@ flag malformed YAML or invalid values instead of inventing replacements.
 
 ## Workflow
 
-1. Read the issue, labels, linked PRs, recent comments, and Project #5 fields.
+1. Read the issue, labels, linked PRs, recent comments, and Project #5 fields only for the selected
+   mode. Deterministic cleanup uses the shared core inventory; Project #5 ordering is owned by
+   `gh-issue-sequencer`.
 2. Choose exactly one mode for the pass and state it before editing.
 3. Preserve `docs/context/issue_713_batch_first_issue_workflow.md` batching discipline.
 4. Use `gh` REST operations for ordinary issue edits; reserve GraphQL for Project #5 fields.
-5. If the fix is not obvious, add or preserve `decision-required`, write the smallest decision prompt, and stop.
-6. For `split-parent-to-child`, require a duplicate child check first and update the parent with
+5. For `audit-deterministic-cleanup`, delegate the read/plan/apply/readback loop to
+   `issue-audit-autonomous`; do not reproduce its classifier in this orchestrator.
+6. For ambiguity or an exact user answer, delegate to `issue-audit`; it may ask at most one focused
+   question per turn and must read back the issue after applying the answer.
+7. If the fix is not obvious, add or preserve `decision-required`, write the smallest decision prompt,
+   and stop in the interactive route.
+8. For `split-parent-to-child`, require a duplicate child check first and update the parent with
    `Next Implementable Child` only after a child issue exists and the relationship is clear.
 
 ## Guardrails
 
 - Do not expand the issue beyond the original intent.
 - Do not implement the issue from this skill; hand ready work to `gh-issue-autopilot`.
+- Do not let the autonomous cleanup route ask questions or write Project #5; hand its pending
+  decision queue to `issue-audit`.
 - Do not close useful optional research paths merely to reduce queue size; lower priority, split, or
   synthesize them unless they are duplicate, invalid, or fully superseded.
 - Do not split a parent into more than one child in a single pass unless the maintainer explicitly
@@ -68,7 +84,7 @@ flag malformed YAML or invalid values instead of inventing replacements.
 ## Output
 
 ```yaml
-mode: audit-template-compliance | clarify-ambiguity | apply-user-decision | split-parent-to-child
+mode: audit-template-compliance | audit-deterministic-cleanup | clarify-ambiguity | apply-user-decision | split-parent-to-child
 issue: "#..."
 edits_made:
   - "..."
@@ -76,5 +92,7 @@ project_updates:
   - "..."
 blockers:
   - "..."
-next_skill: gh-issue-autopilot | gh-issue-sequencer | issue-splitter | none
+pending_decisions:
+  - "issue_audit_plan.v1 queue path or none"
+next_skill: issue-audit-autonomous | issue-audit | gh-issue-autopilot | gh-issue-sequencer | issue-splitter | none
 ```

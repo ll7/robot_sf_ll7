@@ -44,6 +44,9 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_table_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import _sanitize_name, _scenario_with_kinematics
+from robot_sf.benchmark.camera_ready._crosswalk_producer import (
+    write_crosswalk_sidecar,
+)
 from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
@@ -524,6 +527,7 @@ def _execute_campaign_planner_batch(
             record_forces=cfg.record_forces,
             record_planner_decision_trace=cfg.record_planner_decision_trace,
             record_simulation_step_trace=cfg.record_simulation_step_trace,
+            telemetry=cfg.telemetry,
             snqi_weights=context.snqi_weights,
             snqi_baseline=context.snqi_baseline,
             algo=planner.algo,
@@ -612,14 +616,16 @@ def _prepare_campaign_planner_variant_run(
             planner.benchmark_profile,
             effective_workers,
         )
-    scoped_scenarios = [
-        _scenario_with_kinematics(
-            sc,
+    scoped_scenarios = []
+    for scenario in context.scenarios:
+        scoped = _scenario_with_kinematics(
+            scenario,
             kinematics=kinematics,
             holonomic_command_mode=cfg.holonomic_command_mode,
         )
-        for sc in context.scenarios
-    ]
+        if cfg.telemetry is not None:
+            scoped["telemetry"] = dict(cfg.telemetry)
+        scoped_scenarios.append(scoped)
     return _CampaignPlannerVariantRun(
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,
@@ -3439,6 +3445,17 @@ def _finalize_campaign_outputs(  # noqa: PLR0913
         kinematics_matrix,
         invoked_command,
     )
+
+    crosswalk_sidecar_path = write_crosswalk_sidecar(
+        paths.reports_dir,
+        campaign_id=paths.campaign_id,
+        run_entries=run_entries,
+        repo_root=get_repository_root(),
+    )
+    if "artifacts" in campaign_summary:
+        campaign_summary["artifacts"]["report_crosswalk_json"] = _repo_relative(
+            crosswalk_sidecar_path
+        )
 
     return _export_and_write_final_artifacts(
         cfg,

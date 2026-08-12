@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/campaign-result-store.v2.json",
+  "title": "RobotSF campaign result store v2",
+  "type": "object",
+  "required": ["schema_version", "tables", "unavailable_policy"],
+  "properties": {
+    "schema_version": {"const": "campaign-result-store.v2"},
+    "study_id": {"type": "string"},
+    "command": {"type": "string"},
+    "tables": {
+      "type": "object",
+      "required": ["episodes", "steps", "actors", "events", "features", "cells", "comparisons"],
+      "additionalProperties": false,
+      "properties": {
+        "episodes": {"$ref": "#/$defs/table"},
+        "steps": {"$ref": "#/$defs/table"},
+        "actors": {"$ref": "#/$defs/table"},
+        "events": {"$ref": "#/$defs/table"},
+        "features": {"$ref": "#/$defs/table"},
+        "cells": {"$ref": "#/$defs/table"},
+        "comparisons": {"$ref": "#/$defs/table"}
+      }
+    },
+    "source_files": {"type": "array"},
+    "unavailable_policy": {"const": "missing historical fields are typed unavailable; never inferred"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "table": {
+      "type": "object",
+      "required": ["file", "rows"],
+      "properties": {
+        "file": {"type": "string", "pattern": "^[a-z]+\\.parquet$"},
+        "rows": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}

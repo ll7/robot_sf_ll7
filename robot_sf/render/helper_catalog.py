@@ -139,7 +139,7 @@ def derive_recording_tags(source: str | Path) -> tuple[str, str, str]:
     algorithm = parts[2] if len(parts) > 2 else "unknown"
 
     logger.debug(
-        "Derived recording tags suite=%s scenario=%s algorithm=%s from stem=%s",
+        "Derived recording tags suite={} scenario={} algorithm={} from stem={}",
         suite,
         scenario,
         algorithm,
@@ -162,5 +162,5 @@ def deterministic_seed_from_name(name: str | Path) -> int:
     normalized = str(name)
     digest = sha1(normalized.encode("utf-8")).hexdigest()
     seed = int(digest[:8], 16) & 0x7FFFFFFF
-    logger.debug("Generated deterministic seed=%s from name=%s", seed, normalized)
+    logger.debug("Generated deterministic seed={} from name={}", seed, normalized)
     return seed

@@ -95,7 +95,7 @@ def generate_frames(  # noqa: PLR0912
         ) as exc:  # pragma: no cover - fallback path
             try:
                 logger = importlib.import_module("loguru").logger
-                logger.debug("convert_map failed for %s: %s", episode.map_path, exc)
+                logger.debug("convert_map failed for {}: {}", episode.map_path, exc)  # noqa: PLE1205 - loguru brace style
             except ImportError:
                 pass
             map_def = None
@@ -153,7 +153,7 @@ def generate_frames(  # noqa: PLR0912
             ) as exc:  # pragma: no cover - defensive
                 try:
                     logger = importlib.import_module("loguru").logger
-                    logger.debug("generate_frames render capture failed: %s", exc)
+                    logger.debug("generate_frames render capture failed: {}", exc)  # noqa: PLE1205 - loguru brace style
                 except ImportError:
                     pass
                 frame = np.zeros((360, 640, 3), dtype=np.uint8)

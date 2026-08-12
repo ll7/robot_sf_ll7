@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.adversarial_package_b_confirmation import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_confirmation import (
     build_package_b_confirmation_sidecar,
     validate_package_b_confirmation,
 )
-from robot_sf.benchmark.adversarial_package_b_preflight import preflight_package_b_manifest
-from robot_sf.benchmark.adversarial_package_b_report import validate_package_b_report
+from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
+    preflight_package_b_manifest,
+)
+from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
 from scripts.tools.compare_adversarial_samplers import (
     build_comparison_payload,
     load_package_b_manifest,

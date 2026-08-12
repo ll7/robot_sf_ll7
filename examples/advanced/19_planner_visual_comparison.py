@@ -108,7 +108,7 @@ def load_comparison_map() -> MapDefinition:
 
     if (map_def.width, map_def.height) != EXPECTED_SIZE:
         logger.warning(
-            "Loaded map size %s differs from expected %s",
+            "Loaded map size {} differs from expected {}",
             (map_def.width, map_def.height),
             EXPECTED_SIZE,
         )
@@ -116,7 +116,7 @@ def load_comparison_map() -> MapDefinition:
     bboxes = _obstacle_bboxes(map_def)
     if sorted(bboxes) != sorted(EXPECTED_OBS_BBOX):
         logger.warning(
-            "Loaded obstacle bounds %s differ from expected %s",
+            "Loaded obstacle bounds {} differ from expected {}",
             bboxes,
             EXPECTED_OBS_BBOX,
         )

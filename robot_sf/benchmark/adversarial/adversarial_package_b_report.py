@@ -14,7 +14,7 @@ from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-from robot_sf.benchmark.adversarial_package_b_preflight import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
     EXPECTED_BUDGETS,
     EXPECTED_OBJECTIVE,
     EXPECTED_REPORTING_FIELDS,

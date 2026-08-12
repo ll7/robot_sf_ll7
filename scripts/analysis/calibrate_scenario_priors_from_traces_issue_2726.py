@@ -23,6 +23,8 @@ from typing import Any
 import numpy as np
 import yaml
 
+from robot_sf.evidence.writers import write_json, write_text
+
 # parent 1 is scripts/analysis, parent 2 is scripts, parent 3 is the repo root.
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -558,12 +560,11 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     yaml_path = args.output_dir / "scenario_prior_cards_issue_2726.yaml"
-    with open(yaml_path, "w", encoding="utf-8") as fh:
-        yaml.safe_dump(registry, fh, default_flow_style=False, sort_keys=False)
+    yaml_payload = yaml.safe_dump(registry, default_flow_style=False, sort_keys=False)
+    write_text(yaml_path, "# AI-GENERATED NEEDS-REVIEW\n" + yaml_payload)
 
     md_path = args.output_dir / "report.md"
-    with open(md_path, "w", encoding="utf-8") as fh:
-        fh.write(md_report)
+    write_text(md_path, md_report, issue_ref="robot_sf#2726")
 
     json_path = args.output_dir / "report.json"
     report_json_data = {
@@ -604,8 +605,7 @@ def main(argv: list[str] | None = None) -> int:
             for cid, traces in clusters.items()
         },
     }
-    with open(json_path, "w", encoding="utf-8") as fh:
-        json.dump(report_json_data, fh, indent=2, sort_keys=True)
+    write_json(json_path, report_json_data)
 
     # Write README.md in output dir
     readme_path = args.output_dir / "README.md"
@@ -637,8 +637,7 @@ uv run python scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.
     --output-dir docs/context/evidence/issue_2726_scenario_prior_trace_clusters
 ```
 """
-    with open(readme_path, "w", encoding="utf-8") as fh:
-        fh.write(readme_content)
+    write_text(readme_path, readme_content, issue_ref="robot_sf#2726")
 
     print(f"Report and YAML cards successfully written to: {args.output_dir}")
     return 0

@@ -45,6 +45,10 @@ NOTES = {
         "Blessed broad catch: guarded plotting / native-lib load may raise "
         "RuntimeError. Do not collapse to ImportError."
     ),
+    "ImportError+ParquetDependencyError": (
+        "Blessed optional analytics boundary: the typed Parquet dependency error is "
+        "reported as an explicit package gap alongside ImportError."
+    ),
     "ImportError+OSError": (
         "Blessed broad catch: native-lib / filesystem load may raise OSError. "
         "campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it "

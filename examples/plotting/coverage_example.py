@@ -84,7 +84,7 @@ def _load_or_create_coverage(path: Path) -> dict[str, Any]:
             return json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             logger.warning(
-                "Invalid coverage JSON at %s (%s). Falling back to sample payload.",
+                "Invalid coverage JSON at {} ({}). Falling back to sample payload.",
                 path,
                 exc,
             )
@@ -94,9 +94,9 @@ def _load_or_create_coverage(path: Path) -> dict[str, Any]:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(sample, indent=2) + "\n", encoding="utf-8")
-        logger.debug("Wrote sample coverage dataset to %s", path)
+        logger.debug("Wrote sample coverage dataset to {}", path)
     except OSError as exc:
-        logger.debug("Unable to persist sample coverage dataset: %s", exc)
+        logger.debug("Unable to persist sample coverage dataset: {}", exc)
     return sample
 
 

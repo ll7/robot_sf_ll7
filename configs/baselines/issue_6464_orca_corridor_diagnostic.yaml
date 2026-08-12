@@ -1,0 +1,2 @@
+# Native-only ORCA comparator settings for issue #6464.
+allow_fallback: false

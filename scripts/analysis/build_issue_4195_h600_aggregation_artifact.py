@@ -17,6 +17,7 @@ from statistics import mean
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.evidence.writers import write_json, write_sha256sums, write_text
 
 SCHEMA_VERSION = "issue_4195_h600_aggregation.v1"
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_3810_h600_interpretation_2026-07")
@@ -117,6 +118,15 @@ def _scrub_public_paths(value: Any) -> Any:
     if isinstance(value, float) and not math.isfinite(value):
         return None
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
+def _write_json_payload(path: Path, payload: dict[str, Any]) -> None:
+    """Write JSON while preserving the file's custom Path/non-finite normalization."""
+
+    normalized = json.loads(json.dumps(payload, default=_json_default))
+    if not isinstance(normalized, dict):
+        raise TypeError(f"{path} payload must normalize to a JSON object")
+    write_json(path, normalized)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -945,7 +955,7 @@ def _write_metric_markdown(path: Path, rows: list[dict[str, Any]]) -> None:
             cell_values.append(_markdown_escape(value))
         lines.append("| " + " | ".join(cell_values) + " |")
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4195")
 
 
 def _write_comparability_markdown(path: Path, report: dict[str, Any]) -> None:
@@ -969,7 +979,7 @@ def _write_comparability_markdown(path: Path, report: dict[str, Any]) -> None:
             "{comparability_mapping_hash_match} | {status} |".format(**row)
         )
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4195")
 
 
 def _write_snqi_markdown(path: Path, report: dict[str, Any]) -> None:
@@ -993,7 +1003,7 @@ def _write_snqi_markdown(path: Path, report: dict[str, Any]) -> None:
             "{h500_to_h600_recalibrated_stability} | {decision_reversal_status} |".format(**row)
         )
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4195")
 
 
 def _write_horizon_markdown(path: Path, report: dict[str, Any]) -> None:
@@ -1016,7 +1026,7 @@ def _write_horizon_markdown(path: Path, report: dict[str, Any]) -> None:
             "{stability} |".format(**row)
         )
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4195")
 
 
 def _write_exposure_markdown(path: Path, report: dict[str, Any]) -> None:
@@ -1053,7 +1063,7 @@ def _write_exposure_markdown(path: Path, report: dict[str, Any]) -> None:
             )
         )
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#4195")
 
 
 def _write_readme(
@@ -1109,18 +1119,13 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs {
 - Comfort rows: {len(comfort_rows)}.
 - {comfort_note}
 """
-    path.write_text(text, encoding="utf-8")
+    write_text(path, text, issue_ref="robot_sf#4195")
 
 
 def _write_sha256sums(output_dir: Path) -> None:
     """Write SHA256SUMS for generated files, excluding SHA256SUMS itself."""
 
-    lines = []
-    for path in sorted(output_dir.iterdir()):
-        if path.name == "SHA256SUMS" or not path.is_file():
-            continue
-        lines.append(f"{sha256_file(path)}  {_public_path(path)}")
-    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_sha256sums(output_dir)
 
 
 def _read_existing_metric_rows(path: Path) -> list[dict[str, Any]]:
@@ -1164,29 +1169,17 @@ def extend_existing_artifact(
         / "interaction_exposure_diagnostics.json",
         "interaction_exposure_diagnostics.md": output_dir / "interaction_exposure_diagnostics.md",
     }
-    outputs["snqi_recalibration_bundle.json"].write_text(
-        json.dumps(snqi_recalibration, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["snqi_recalibration_bundle.json"], snqi_recalibration)
     _write_snqi_markdown(outputs["snqi_recalibration_report.md"], snqi_recalibration)
-    outputs["horizon_sensitivity_report.json"].write_text(
-        json.dumps(horizon_sensitivity, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["horizon_sensitivity_report.json"], horizon_sensitivity)
     _write_horizon_markdown(outputs["horizon_sensitivity_report.md"], horizon_sensitivity)
-    outputs["interaction_exposure_diagnostics.json"].write_text(
-        json.dumps(exposure_diagnostics, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["interaction_exposure_diagnostics.json"], exposure_diagnostics)
     _write_exposure_markdown(outputs["interaction_exposure_diagnostics.md"], exposure_diagnostics)
     manifest["h500_s20_reports"] = h500_s20_reports
     manifest["generated_outputs"] = sorted(
         set(manifest.get("generated_outputs") or []) | set(outputs)
     )
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(manifest_path, manifest)
     _write_readme(
         output_dir / "README.md",
         rows=rows,
@@ -1269,25 +1262,13 @@ def build_artifact(
     }
     _write_csv(outputs["planner_metric_summary.csv"], all_rows)
     _write_metric_markdown(outputs["planner_metric_summary.md"], all_rows)
-    outputs["comparability_check.json"].write_text(
-        json.dumps(comparability, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["comparability_check.json"], comparability)
     _write_comparability_markdown(outputs["comparability_check.md"], comparability)
-    outputs["snqi_recalibration_bundle.json"].write_text(
-        json.dumps(snqi_recalibration, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["snqi_recalibration_bundle.json"], snqi_recalibration)
     _write_snqi_markdown(outputs["snqi_recalibration_report.md"], snqi_recalibration)
-    outputs["horizon_sensitivity_report.json"].write_text(
-        json.dumps(horizon_sensitivity, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["horizon_sensitivity_report.json"], horizon_sensitivity)
     _write_horizon_markdown(outputs["horizon_sensitivity_report.md"], horizon_sensitivity)
-    outputs["interaction_exposure_diagnostics.json"].write_text(
-        json.dumps(exposure_diagnostics, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["interaction_exposure_diagnostics.json"], exposure_diagnostics)
     _write_exposure_markdown(outputs["interaction_exposure_diagnostics.md"], exposure_diagnostics)
     manifest = {
         "schema_version": f"{SCHEMA_VERSION}.source_manifest",
@@ -1296,10 +1277,7 @@ def build_artifact(
         "h500_s20_reports": h500_s20_reports,
         "generated_outputs": sorted(outputs),
     }
-    outputs["source_manifest.json"].write_text(
-        json.dumps(manifest, indent=2, sort_keys=True, default=_json_default) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_payload(outputs["source_manifest.json"], manifest)
     _write_readme(
         outputs["README.md"],
         rows=all_rows,

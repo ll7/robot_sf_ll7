@@ -23,6 +23,7 @@ pedestrian-filled environments.
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
 | Use benchmarks with evidence discipline | [`docs/research-guide.md`](docs/research-guide.md) |
+| Discover and explain interesting benchmark cases | [`docs/case_workbench.md`](docs/case_workbench.md) |
 | Find architecture, contribution, and CI docs | [`docs/developer-guide.md`](docs/developer-guide.md) |
 | Browse all docs by audience | [`docs/README.md`](docs/README.md) |
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |

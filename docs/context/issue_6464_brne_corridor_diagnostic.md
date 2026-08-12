@@ -102,3 +102,70 @@ any broader campaign. Candidate checks are goal/heading frame alignment,
 progress-versus-interaction weighting, and whether the pinned upstream action
 aggregation is appropriate for this control loop. The follow-up preserves the
 same native-core-via-adapter, corridor-only, fail-closed boundary.
+
+## Issue #6923 trace follow-up (2026-08-12)
+
+Status: **diagnostic-only retention; no adapter revision, negative-result closure,
+ranking, or paper claim**.
+
+The exact current-head run was executed from implementation head
+`ed9bd4dcc01d3af8d498cbba74f4bc5f62bea227` with the frozen config, seeds,
+fallback policy, and pinned upstream source:
+
+```bash
+NUMBA_NUM_THREADS=4 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 \
+uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
+  --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml \
+  --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0625Z
+```
+
+The run returned `diagnostic_complete`: all three arms have exact `3/3`
+scenario/seed coverage and `3/3` trace tables. BRNE is `3/3` native,
+execution-admissible, non-degenerate, and pinned to effective sample count
+`42`, but reaches the goal in `0/3` rows and collides in all three. ORCA
+reaches `3/3`; Social Force reaches `2/3`. These are paired diagnostic
+comparators, not a planner ranking. The direct configured corridor band from
+the merged #6932/#6933 contract is used; all arms have zero corridor
+violations.
+
+The trace extractor now preserves the initial and changing route waypoints,
+declared heading, velocity-derived heading, world-frame pedestrian positions
+and velocities, goal-bearing error, selected commands and command deltas,
+route-switch markers, phase progress, exposure, clearance, termination,
+collision/goal steps, runtime failures, effective samples, source provenance,
+and the BRNE `weighted_first_command` / `plan_step_first` aggregation layout.
+Progress is reset at a waypoint switch so the distance to one waypoint is not
+silently compared with the next waypoint's distance.
+
+Observed BRNE signals from the durable trace tables:
+
+- Seed 111: 142 steps, collision at step 141, maximum absolute heading-goal
+  error `2.419 rad`, first opposing-heading row 87, and zero nonzero angular
+  commands in the remaining `55` rows; linear command stayed at `2.0 m/s`.
+- Seed 112: 173 steps, collision at step 172, maximum absolute heading-goal
+  error `2.608 rad`, first opposing-heading row 131, and zero nonzero angular
+  commands in the remaining `42` rows; linear command stayed at `2.0 m/s`.
+- Seed 113: 184 steps, collision at step 183, maximum absolute heading-goal
+  error `2.853 rad`, first opposing-heading row 131, and `4/53` nonzero
+  angular commands after that threshold; linear command stayed at `2.0 m/s`.
+
+The maximum absolute difference between declared and velocity-derived heading
+was `0.0413`, `0.0370`, and `0.0369 rad` for seeds 111–113. This provides no
+trace evidence of a heading/velocity-frame mismatch in the recorded state.
+Seeds 112 and 113 had zero interaction-zone exposure but still collided, so
+pedestrian interaction is not a necessary explanation. The sparse angular
+correction after opposing-heading rows is a supported diagnostic signal, not a
+proven upstream cause. The trace confirms the aggregation layout but does not
+expose per-ensemble-member headings or weights; the internal aggregation
+hypothesis therefore remains unresolved and does not justify an adapter change.
+
+The clean run required `NUMBA_NUM_THREADS=4` in this environment because
+default-thread attempts exposed load-sensitive BRNE step-budget failures. The
+thread setting is recorded as an execution caveat, not a scientific result;
+runtime determinism needs a separate bounded follow-up. Raw JSONL and trace
+tables remain ignored, worktree-local artifacts. The durable machine-readable
+handoff is
+`docs/context/evidence/issue_6923_brne_trace_diagnostic_summary.json`, with
+report and trace-table hashes plus the exact provenance boundary.
+
+The next proof is already tracked in [#6934](https://github.com/ll7/robot_sf_ll7/issues/6934): isolate the upstream weight/action-unit contract and raw-command clipping with a hand-checkable ensemble fixture. The load-sensitive timing caveat is related to the completed support issue [#6924](https://github.com/ll7/robot_sf_ll7/issues/6924); it remains an execution caveat for this diagnostic and is not promoted to a scientific result.

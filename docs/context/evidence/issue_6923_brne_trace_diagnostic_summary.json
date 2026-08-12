@@ -1,0 +1,152 @@
+{
+  "schema_version": "issue-6923-brne-trace-diagnostic-summary.v1",
+  "issue": 6923,
+  "parent_issue": 6464,
+  "status": "diagnostic_complete",
+  "decision": "diagnostic_only_retention",
+  "evidence_tier": "smoke_diagnostic",
+  "claim_boundary": "Trace-backed diagnosis of the bounded native BRNE corridor run only; no benchmark ranking, safety, realism, matched-compute, planner-benefit, or paper claim.",
+  "execution_head": "ed9bd4dcc01d3af8d498cbba74f4bc5f62bea227",
+  "source_worktree_dirty_at_capture": false,
+  "scenario": {
+    "name": "classic_head_on_corridor_low",
+    "seeds": [111, 112, 113],
+    "horizon_steps": 500,
+    "timestep_s": 0.1,
+    "geometry": "constant_width_corridor_only",
+    "corridor_band": "direct_configured_y_band"
+  },
+  "command": "NUMBA_NUM_THREADS=4 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0625Z",
+  "environment": {
+    "NUMBA_NUM_THREADS": "4",
+    "loguru_level": "WARNING",
+    "TF_CPP_MIN_LOG_LEVEL": "2",
+    "thread_setting_reason": "Default-thread attempts were load-sensitive at the 100 ms BRNE budget; the setting isolates this diagnostic execution path and is not a scientific claim."
+  },
+  "upstream": {
+    "repo": "https://github.com/MurpheyLab/brne",
+    "commit": "633a5cd",
+    "pinned_sha": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "source_integrity": "clean_pinned_worktree",
+    "license": "GPL-3.0",
+    "redistribution": "local_only",
+    "requested_samples": 49,
+    "effective_samples": 42,
+    "fallback_enabled": false
+  },
+  "arms": {
+    "brne": {
+      "exact_runs": "3/3",
+      "native_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "0/3",
+      "collisions": "3/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "trace_tables": "3/3"
+    },
+    "orca_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "3/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "trace_tables": "3/3"
+    },
+    "social_force_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "2/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "trace_tables": "3/3"
+    }
+  },
+  "trace_schema": {
+    "table": "brne-trace-table.v1",
+    "simulation_envelope": "simulation-step-trace.v1",
+    "route_switch_progress_reset": true,
+    "required_frames": [
+      "declared_robot_heading",
+      "velocity_derived_heading",
+      "world_frame_pedestrians",
+      "current_goal_waypoint"
+    ],
+    "brne_aggregation_layout": "weighted_first_command / plan_step_first"
+  },
+  "brne_mechanism_observations": [
+    {
+      "seed": 111,
+      "steps": 142,
+      "termination": "collision",
+      "collision_step": 141,
+      "max_abs_heading_goal_error_rad": 2.419441250910392,
+      "first_opposing_heading_step": 87,
+      "opposing_heading_steps": 55,
+      "nonzero_angular_commands_after_first_opposing": "0/55",
+      "linear_command_values_m_s": [2.0],
+      "max_declared_vs_velocity_heading_delta_rad": 0.04131561963936603,
+      "interaction_exposure_steps": 10,
+      "min_pedestrian_clearance_m": 0.25108076481980823,
+      "signed_progress_m": 7.3583544474216716
+    },
+    {
+      "seed": 112,
+      "steps": 173,
+      "termination": "collision",
+      "collision_step": 172,
+      "max_abs_heading_goal_error_rad": 2.6084953466773624,
+      "first_opposing_heading_step": 131,
+      "opposing_heading_steps": 42,
+      "nonzero_angular_commands_after_first_opposing": "0/42",
+      "linear_command_values_m_s": [2.0],
+      "max_declared_vs_velocity_heading_delta_rad": 0.03697652465449719,
+      "interaction_exposure_steps": 0,
+      "min_pedestrian_clearance_m": 2.5800768188018024,
+      "signed_progress_m": 17.001040885328095
+    },
+    {
+      "seed": 113,
+      "steps": 184,
+      "termination": "collision",
+      "collision_step": 183,
+      "max_abs_heading_goal_error_rad": 2.8534093050583595,
+      "first_opposing_heading_step": 131,
+      "opposing_heading_steps": 53,
+      "nonzero_angular_commands_after_first_opposing": "4/53",
+      "linear_command_values_m_s": [2.0],
+      "max_declared_vs_velocity_heading_delta_rad": 0.03688728190159152,
+      "interaction_exposure_steps": 0,
+      "min_pedestrian_clearance_m": 1.4651953713316987,
+      "signed_progress_m": 12.584057078569797
+    }
+  ],
+  "competing_explanations": {
+    "runtime_or_provenance_failure": "rejected_by_trace: all BRNE rows have runtime_status=ok, failure_count=0, effective_num_samples=42, pinned source, and clean source integrity",
+    "heading_velocity_frame_mismatch": "not_observed: maximum declared-versus-velocity-derived heading differences are below 0.042 rad across the three BRNE rows",
+    "pedestrian_interaction_is_necessary": "rejected_by_trace: seeds 112 and 113 have zero interaction-zone exposure but still collide",
+    "sparse_angular_correction_after_heading_divergence": "supported_as_a_diagnostic_signal: opposing-heading rows begin at 87, 131, and 131, with 0/55, 0/42, and 4/53 nonzero angular commands afterward while linear command remains 2.0 m/s",
+    "internal_ensemble_weighting_is_the_root_cause": "unresolved: the run proves weighted_first_command/plan_step_first metadata but does not expose per-member headings or weights"
+  },
+  "artifacts": {
+    "local_report_dir": "output/benchmarks/issue_6923_brne_trace_20260812T0625Z",
+    "report_json_sha256": "37237bcd523c61bd2b21c0bceb13d59da623c41db01838b25510408525dd50ac",
+    "report_markdown_sha256": "35021e6ddb0545c21e1e91dfe02c75520199c387ec76c4464c7ee5f2468c6191",
+    "trace_tables_sha256": {
+      "brne": "51319bf96a41af1d17dc52778b97b131a8a8e6cc3704cf3ff374020c620ad426",
+      "orca": "9d50be795f72992174d6a13febc4b88a07dba815472bb810eefe9fa5741e1118",
+      "social_force": "069b2828574b4dec0c28fd5d91f81cd3510bf3e04ee597caae4f0eb0675c4a94"
+    },
+    "raw_artifacts": "ignored_worktree_local"
+  },
+  "next_smallest_proof": "Issue #6934: compare per-ensemble-member BRNE headings, weights, raw commands, and clipping around the first interaction/heading-divergence transition, while recording the effective thread setting and timing outcome; do not change the adapter or widen the campaign before that evidence.",
+  "follow_up_issue": 6934,
+  "related_runtime_issue": 6924,
+  "follow_up_friction": "Track the load-sensitive BRNE step-budget behavior as technical debt with an explicit reproducible runtime lane."
+}

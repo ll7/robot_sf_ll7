@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/case-workbench.v1.json",
+  "title": "RobotSF case workbench configuration",
+  "type": "object",
+  "required": ["schema_version", "portfolio", "comparison", "admission"],
+  "properties": {
+    "schema_version": {"const": "case-workbench.v1"},
+    "portfolio": {"type": "object", "required": ["roles", "max_cases"]},
+    "comparison": {"type": "object"},
+    "admission": {"type": "object"},
+    "publication": {"type": "object"}
+  },
+  "additionalProperties": true
+}

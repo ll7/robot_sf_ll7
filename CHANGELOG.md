@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **PR #6941 case workbench hardening.** Analysis traces now carry explicit reset-state,
+  event, control, timing, and provenance coverage; campaign-result-store.v2 round-trips
+  verify required tables and checksums; comparisons fail closed on incompatible starts;
+  package viewer inputs include the complete summary contract; and diagnostic publication
+  previews no longer masquerade as admitted figures. The analysis profile remains opt-in.
 * **Issue #6960 per-phenomenon replay videos for the issue #5149 emergence campaign.** Added
   `scripts/validation/render_issue_5149_emergent_phenomena_videos.py`, which renders one animated
   replay GIF per phenomenon x speed calibration (lane formation in the bidirectional corridor;

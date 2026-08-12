@@ -9,9 +9,9 @@ adapter from the A/B trace pipeline. For other trace exports, first provide
 validated trace-bundle directories; the viewer never weakens the adapter's
 campaign checks.
 
-Surface-clearance tracks subtract the repository's default robot and pedestrian
-radii because the bundle schema does not carry runtime radii. Treat them as
-diagnostic unless those defaults are known to match the source run.
+Surface-clearance tracks use the robot and actor radii recorded in the package.
+Legacy bundles without runtime radii expose surface clearance as unavailable;
+the viewer does not silently substitute a repository-wide geometry default.
 
 Examples:
 
@@ -29,19 +29,21 @@ project dependency change.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import re
 import sys
 import tempfile
 import threading
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Iterator, Sequence
 
 # Running a script by path normally puts scripts/tools, rather than the checkout
 # root, first on sys.path. Pin imports to this worktree so linked worktrees never
@@ -59,11 +61,7 @@ os.environ.setdefault(
 )
 
 from robot_sf.benchmark import trace_scene_figure as trace_scene  # noqa: E402
-from robot_sf.benchmark.collision_definition_inventory import (  # noqa: E402
-    DEFAULT_PED_RADIUS,
-)
 from robot_sf.benchmark.constants import NEAR_MISS_DIST  # noqa: E402
-from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS  # noqa: E402
 
 APPLICATION_ID = "robot_sf_edge_case_trace_viewer"
 VALIDATED_RERUN_SDK_VERSION = "0.34.1"
@@ -78,8 +76,6 @@ COLOR_MAP = (70, 70, 70)
 COLOR_CONTEXT = (165, 165, 165)
 COLOR_EVENT = (30, 30, 30)
 COLOR_THRESHOLD = (100, 100, 100)
-
-RADIUS_SUM_M = DEFAULT_ROBOT_RADIUS + DEFAULT_PED_RADIUS
 
 
 class TraceViewerError(RuntimeError):
@@ -120,10 +116,26 @@ class EpisodeCase:
     @property
     def surface_clearance_m(self) -> tuple[float, ...]:
         """Return radius-aware pedestrian surface clearance for each step."""
-        return tuple(
-            float(center_distance) - RADIUS_SUM_M
-            for center_distance in self.scene_trace.min_robot_ped_distance_m
-        )
+        values: list[float] = []
+        for frame, center_distance in zip(
+            self.frames, self.scene_trace.min_robot_ped_distance_m, strict=True
+        ):
+            if not math.isfinite(float(center_distance)):
+                values.append(float("nan"))
+                continue
+            robot = frame.get("robot") if isinstance(frame.get("robot"), dict) else {}
+            robot_radius = _finite_radius(robot.get("radius_m"))
+            actor_radii = [
+                _finite_radius(actor.get("radius_m"))
+                for actor in frame.get("pedestrians", [])
+                if isinstance(actor, dict)
+            ]
+            actor_radius = next((radius for radius in actor_radii if radius is not None), None)
+            if robot_radius is None or actor_radius is None:
+                values.append(float("nan"))
+            else:
+                values.append(float(center_distance) - robot_radius - actor_radius)
+        return tuple(values)
 
     @property
     def outcome(self) -> str:
@@ -252,7 +264,7 @@ def _headline(case_label: str, hinge_trace: Any) -> str:
         )
     ).replace("_", " ")
     step_count = len(hinge_trace.time_s)
-    surface_clearance = float(closest["distance_m"]) - RADIUS_SUM_M
+    surface_clearance = _closest_surface_clearance(hinge_trace, closest)
     return (
         f"Episode {case_label} ended in {outcome} after {step_count} steps; "
         f"its minimum pedestrian surface clearance was {surface_clearance:.2f} m "
@@ -348,6 +360,309 @@ def prepared_episode_dirs(
         yield adapted_dirs
 
 
+@contextmanager
+def prepared_package_dirs(
+    package: Path,
+    *,
+    case_id: str | None,
+) -> Iterator[list[Path]]:
+    """Adapt a case-workbench package into the existing viewer bundle contract."""
+
+    _verify_case_workbench_package(package)
+    proposal_path = package / "proposal.json"
+    if not proposal_path.is_file():
+        raise TraceViewerError(f"case-workbench package has no proposal.json: {package}")
+    proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+    all_cases = [case for case in proposal.get("portfolio", []) if isinstance(case, dict)]
+    cases = all_cases
+    if case_id:
+        selected = next(
+            (case for case in all_cases if str(case.get("case_id")) == str(case_id)), None
+        )
+        if selected is None:
+            cases = []
+        else:
+            pair_ids = selected.get("comparison_pair_ids")
+            if isinstance(pair_ids, list) and pair_ids:
+                pair_id_set = {str(value) for value in pair_ids}
+                cases = [case for case in all_cases if str(case.get("case_id")) in pair_id_set]
+            else:
+                cases = [selected]
+    if not cases:
+        raise TraceViewerError(f"case-workbench package has no case {case_id or '<any>'}")
+    with tempfile.TemporaryDirectory(prefix="robot_sf_trace_viewer_package_") as temp_dir:
+        root = Path(temp_dir)
+        dirs: list[Path] = []
+        for label, case in zip(("A", "B"), cases[:2], strict=False):
+            trace = case.get("trace")
+            if not isinstance(trace, dict) or not isinstance(trace.get("steps"), list):
+                raise TraceViewerError(f"case {case.get('case_id')} has no analysis trace")
+            bundle = root / f"episode_{label}"
+            bundle.mkdir(parents=True, exist_ok=True)
+            frames = [frame for frame in trace["steps"] if isinstance(frame, dict)]
+            derived_rows = _package_derived_rows(frames)
+            finite_distances = [
+                (float(row["min_robot_ped_distance_m"]), int(row["step"]))
+                for row in derived_rows
+                if isinstance(row.get("min_robot_ped_distance_m"), (int, float))
+                and math.isfinite(float(row["min_robot_ped_distance_m"]))
+            ]
+            if not finite_distances:
+                raise TraceViewerError(
+                    f"case {case.get('case_id')} has no finite robot/pedestrian distance"
+                )
+            minimum_distance, minimum_step = min(finite_distances)
+            termination_reason = str(
+                trace.get("termination_reason") or case.get("outcome", {}).get("label", "unknown")
+            )
+            metadata = {
+                "schema_version": "case-workbench-viewer-input.v1",
+                "scenario_id": case.get("scenario_id") or trace.get("scenario_id"),
+                "seed": case.get("seed"),
+                "planner": case.get("planner") or trace.get("planner"),
+                "git_commit": trace.get("git_hash"),
+                "planner_commit": trace.get("planner_commit"),
+                "config_hash": trace.get("config_hash"),
+                "scenario_digest": trace.get("scenario_digest"),
+                "map_file": trace.get("map_file"),
+                "map_digest": trace.get("map_digest"),
+                "episode_status": case.get("outcome", {}).get("label", "unknown"),
+                "summary": {
+                    "scenario_id": case.get("scenario_id"),
+                    "episode_status": case.get("outcome", {}).get("label", "unknown"),
+                    "global_min_robot_ped_distance_m": minimum_distance,
+                    "global_min_distance_step": minimum_step,
+                    "step_count": len(derived_rows),
+                    "termination_reason": termination_reason,
+                },
+                "coordinate_frame": trace.get("coordinate_frame", "world"),
+                "shared_prefix": False,
+            }
+            trace_series = {
+                "schema_version": "case-workbench-viewer-input.v1",
+                "metadata": metadata,
+                "frames": frames,
+                "derived_rows": derived_rows,
+                "review_marker": "AI-GENERATED",
+            }
+            (bundle / "trace_series.json").write_text(
+                json.dumps(trace_series, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            metadata_json = dict(metadata)
+            metadata_json["review_marker"] = "AI-GENERATED"
+            (bundle / "metadata.json").write_text(
+                json.dumps(metadata_json, indent=2, sort_keys=True), encoding="utf-8"
+            )
+            dirs.append(bundle)
+        yield dirs
+
+
+def _verify_case_workbench_package(package: Path) -> None:
+    """Verify the package checksum receipt before loading viewer inputs."""
+
+    manifest = package / "manifest.json"
+    checksums = package / "SHA256SUMS"
+    if not manifest.is_file() or not checksums.is_file():
+        raise TraceViewerError("case-workbench package is missing manifest.json or SHA256SUMS")
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TraceViewerError("case-workbench package manifest is unreadable") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != "case-workbench-package.v1"
+    ):
+        raise TraceViewerError("case-workbench package manifest schema is invalid")
+    expected_files: set[str] = set()
+    for line in checksums.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            expected, relative = line.split("  ", 1)
+        except ValueError as exc:
+            raise TraceViewerError("case-workbench package checksums are malformed") from exc
+        path = Path(relative)
+        if not re.fullmatch(r"[0-9a-f]{64}", expected) or path.is_absolute() or ".." in path.parts:
+            raise TraceViewerError(f"case-workbench package checksum entry is invalid: {relative}")
+        target = package / path
+        if not target.is_file() or _sha256_file(target) != expected:
+            raise TraceViewerError(f"case-workbench package checksum mismatch: {relative}")
+        expected_files.add(relative)
+    actual_files = {
+        str(path.relative_to(package))
+        for path in package.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    if actual_files != expected_files:
+        raise TraceViewerError("case-workbench package checksum inventory is incomplete")
+
+
+def _load_package_blueprint(package: Path) -> dict[str, Any]:
+    """Load the verified synchronized-view blueprint emitted by the workbench."""
+
+    path = package / "viewer_blueprint.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise TraceViewerError("case-workbench viewer blueprint is unreadable") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != "case-workbench-viewer-blueprint.v1"
+    ):
+        raise TraceViewerError("case-workbench viewer blueprint schema is invalid")
+    views = payload.get("views")
+    if not isinstance(views, list) or not all(isinstance(view, Mapping) for view in views):
+        raise TraceViewerError("case-workbench viewer blueprint views are invalid")
+    return payload
+
+
+def _package_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive only the legacy viewer columns from package trace fields."""
+
+    rows: list[dict[str, Any]] = []
+    for frame in frames:
+        robot = frame.get("robot") if isinstance(frame.get("robot"), dict) else {}
+        robot_pos = (
+            robot.get("position") if isinstance(robot.get("position"), list) else [None, None]
+        )
+        distances: list[tuple[float, str]] = []
+        for index, actor in enumerate(
+            frame.get("pedestrians", []) if isinstance(frame.get("pedestrians"), list) else []
+        ):
+            if not isinstance(actor, dict):
+                continue
+            actor.setdefault("id", actor.get("actor_id", index))
+            pos = actor.get("position") if isinstance(actor.get("position"), list) else []
+            if (
+                len(pos) < 2
+                or len(robot_pos) < 2
+                or not all(isinstance(v, (int, float)) for v in [*pos[:2], *robot_pos[:2]])
+            ):
+                continue
+            distance = math.hypot(
+                float(pos[0]) - float(robot_pos[0]), float(pos[1]) - float(robot_pos[1])
+            )
+            distances.append((distance, str(actor.get("actor_id") or actor.get("id") or index)))
+        nearest = min(distances, default=(None, None))
+        velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
+        controls = frame.get("controls") if isinstance(frame.get("controls"), dict) else {}
+        applied = controls.get("applied") if isinstance(controls.get("applied"), dict) else {}
+        requested = controls.get("requested") if isinstance(controls.get("requested"), dict) else {}
+        selected_action = {
+            "linear_velocity": (
+                float(applied["linear_m_s"])
+                if _finite_number(applied.get("linear_m_s"))
+                else float("nan")
+            ),
+            "angular_velocity": (
+                float(applied["turn_rate_rad_s"])
+                if _finite_number(applied.get("turn_rate_rad_s"))
+                else float("nan")
+            ),
+        }
+        rows.append(
+            {
+                "step": frame.get("step"),
+                "time_s": frame.get("time_s"),
+                "robot_x_m": robot_pos[0] if len(robot_pos) > 0 else None,
+                "robot_y_m": robot_pos[1] if len(robot_pos) > 1 else None,
+                "robot_heading_rad": robot.get("heading"),
+                "executed_speed_m_s": math.hypot(float(velocity[0]), float(velocity[1]))
+                if len(velocity) >= 2 and all(isinstance(v, (int, float)) for v in velocity[:2])
+                else None,
+                "min_robot_ped_distance_m": nearest[0],
+                "nearest_pedestrian_id": nearest[1],
+                "pedestrian_count": len(frame.get("pedestrians", []))
+                if isinstance(frame.get("pedestrians"), list)
+                else 0,
+                "applied_linear_speed_m_s": applied.get("linear_m_s"),
+                "applied_turn_rate_rad_s": applied.get("turn_rate_rad_s"),
+                "requested_linear_speed_m_s": requested.get("linear_m_s"),
+                "requested_turn_rate_rad_s": requested.get("turn_rate_rad_s"),
+                "surface_clearance_m": _frame_surface_clearance(frame),
+            }
+        )
+        planner = frame.get("planner") if isinstance(frame.get("planner"), dict) else {}
+        planner["selected_action"] = selected_action
+        frame["planner"] = planner
+    return rows
+
+
+def _finite_radius(value: Any) -> float | None:
+    """Return a positive finite actor radius when the package recorded one."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    value = float(value)
+    return value if math.isfinite(value) and value > 0.0 else None
+
+
+def _finite_number(value: Any) -> bool:
+    """Return whether a value is a finite non-boolean number."""
+
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _frame_surface_clearance(frame: Mapping[str, Any]) -> float | None:
+    """Compute one frame's surface clearance from its recorded actor geometry."""
+
+    robot = frame.get("robot") if isinstance(frame.get("robot"), Mapping) else {}
+    position = robot.get("position") if isinstance(robot.get("position"), list) else []
+    robot_radius = _finite_radius(robot.get("radius_m"))
+    if len(position) < 2 or robot_radius is None:
+        return None
+    values: list[float] = []
+    for actor in frame.get("pedestrians", []) if isinstance(frame.get("pedestrians"), list) else []:
+        if not isinstance(actor, Mapping):
+            continue
+        actor_position = actor.get("position")
+        actor_radius = _finite_radius(actor.get("radius_m"))
+        if not isinstance(actor_position, list) or len(actor_position) < 2 or actor_radius is None:
+            continue
+        if not all(
+            isinstance(value, (int, float)) for value in [*position[:2], *actor_position[:2]]
+        ):
+            continue
+        values.append(
+            math.hypot(
+                float(position[0]) - float(actor_position[0]),
+                float(position[1]) - float(actor_position[1]),
+            )
+            - robot_radius
+            - actor_radius
+        )
+    return min(values) if values else None
+
+
+def _closest_surface_clearance(hinge_trace: Any, closest: Mapping[str, Any]) -> float:
+    """Return the radius-aware clearance at the closest center-distance sample."""
+
+    frames = hinge_trace.payload.get("frames") if isinstance(hinge_trace.payload, Mapping) else []
+    if isinstance(frames, list):
+        target_time = closest.get("time_s")
+        if isinstance(target_time, (int, float)) and math.isfinite(float(target_time)):
+            ordered = [
+                frame
+                for frame in frames
+                if isinstance(frame, Mapping) and isinstance(frame.get("time_s"), (int, float))
+            ]
+            if ordered:
+                frame = min(ordered, key=lambda item: abs(float(item["time_s"]) - target_time))
+                value = _frame_surface_clearance(frame)
+                if value is not None:
+                    return value
+        index_value = closest.get("step")
+        if isinstance(index_value, int) and 0 <= index_value < len(frames):
+            value = _frame_surface_clearance(frames[index_value])
+            if value is not None:
+                return value
+    return float("nan")
+
+
 def select_focal_pedestrians(cases: Sequence[EpisodeCase]) -> FocalSelection:
     """Lock one focal pedestrian per episode; share the ID when possible."""
     if len(cases) == 1:
@@ -413,11 +728,10 @@ def pair_contrast_headline(
         events[0],
         events[1],
     )
-    clearance = contrast["min_clearance_focal_m"]
     near_misses = contrast["near_miss_steps"]
     steps = contrast["steps_to_termination"]
-    surface_a = float(clearance["episode_a"]) - RADIUS_SUM_M
-    surface_b = float(clearance["episode_b"]) - RADIUS_SUM_M
+    surface_a = _closest_surface_clearance(cases[0].hinge_trace, focal_closest[0])
+    surface_b = _closest_surface_clearance(cases[1].hinge_trace, focal_closest[1])
     return (
         f"Contrast: A ended in {cases[0].outcome} after {steps['episode_a']} steps "
         f"while B ended in {cases[1].outcome} after {steps['episode_b']} steps; "
@@ -460,13 +774,15 @@ def _provenance_text(case: EpisodeCase) -> str:
 
 
 def _pair_provenance_text(cases: Sequence[EpisodeCase]) -> str | None:
-    """Describe whether a two-episode view shares commit and scenario context."""
+    """Describe whether a two-episode view shares its recorded context."""
     if len(cases) != 2:
         return None
     first = cases[0].scene_trace.metadata
     second = cases[1].scene_trace.metadata
     commit_a, commit_b = first.get("git_commit"), second.get("git_commit")
     scenario_a, scenario_b = first.get("scenario_id"), second.get("scenario_id")
+    config_a, config_b = first.get("config_hash"), second.get("config_hash")
+    map_a, map_b = first.get("map_digest"), second.get("map_digest")
     shared_context = (
         commit_a is not None
         and commit_a == commit_b
@@ -477,8 +793,9 @@ def _pair_provenance_text(cases: Sequence[EpisodeCase]) -> str | None:
         return (
             f"A/B provenance: shared commit {commit_a}, shared scenario {scenario_a}; "
             f"planner A={first.get('planner', 'missing')}, "
-            f"planner B={second.get('planner', 'missing')}. "
-            "Configuration hashes are unavailable in this bundle schema."
+            f"planner B={second.get('planner', 'missing')}; "
+            f"config hashes A/B={config_a or 'missing'}/{config_b or 'missing'}, "
+            f"map digests A/B={map_a or 'missing'}/{map_b or 'missing'}."
         )
     return (
         "A/B provenance caveat: "
@@ -488,11 +805,40 @@ def _pair_provenance_text(cases: Sequence[EpisodeCase]) -> str | None:
     )
 
 
-def _map_obstacle_strips(case: EpisodeCase) -> list[list[tuple[float, float]]]:
+def _map_obstacle_strips(case: EpisodeCase) -> list[list[tuple[float, float]]]:  # noqa: C901
     """Resolve and close map obstacle polygons through the scene renderer."""
     scenario_id = _scenario_id(case)
+    metadata = case.scene_trace.metadata
+    map_file = metadata.get("map_file")
+    map_digest = metadata.get("map_digest")
+    if map_file or map_digest:
+        if not isinstance(map_file, str) or not isinstance(map_digest, str):
+            raise TraceViewerError(
+                f"{case.bundle_dir}: map provenance is incomplete; geometry unavailable"
+            )
+        map_path = Path(map_file)
+        candidates = [map_path]
+        if not map_path.is_absolute():
+            candidates.extend(
+                [case.bundle_dir / map_path, REPO_ROOT / map_path, Path.cwd() / map_path]
+            )
+        resolved = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if resolved is None:
+            raise TraceViewerError(f"{case.bundle_dir}: recorded map file is unavailable")
+        try:
+            if _sha256_file(resolved) != map_digest:
+                raise TraceViewerError(f"{case.bundle_dir}: recorded map digest does not match")
+            svg_map = _svg_map_module()
+            map_definition = svg_map.SvgMapConverter(str(resolved)).map_definition
+        except (OSError, ValueError, AttributeError) as exc:
+            raise TraceViewerError(
+                f"{case.bundle_dir}: recorded map geometry is unavailable"
+            ) from exc
+    else:
+        map_definition = None
     try:
-        map_definition = trace_scene._load_map_definition(scenario_id)
+        if map_definition is None:
+            map_definition = trace_scene._load_map_definition(scenario_id)
     except (OSError, ValueError) as exc:
         raise TraceViewerError(
             f"cannot load static map obstacles for scenario '{scenario_id}': {exc}"
@@ -507,6 +853,31 @@ def _map_obstacle_strips(case: EpisodeCase) -> list[list[tuple[float, float]]]:
     if not strips:
         raise TraceViewerError(f"scenario '{scenario_id}' has no map obstacles to log")
     return strips
+
+
+def _svg_map_module() -> Any:
+    """Load the map parser lazily for digest-bound package geometry."""
+
+    module = getattr(trace_scene, "try_import", None)
+    if callable(module):
+        svg_map = module("robot_sf.nav.svg_map_parser")
+    else:
+        from robot_sf.nav import svg_map_parser as svg_map
+    if svg_map is None:
+        raise TraceViewerError("SVG map parser is unavailable")
+    return svg_map
+
+
+def _sha256_file(path: Path) -> str:
+    """Hash one map/package file."""
+
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _trajectory_strips(
@@ -586,6 +957,8 @@ def _log_series_styles(audit: RecordingAudit, rr: Any, case: EpisodeCase) -> Non
     """Give A/B scalar tracks the same color identity as their scene."""
     styles = (
         ("min_pedestrian_clearance_m", f"{case.label} clearance", case.color, 2.0),
+        ("applied_linear_speed_m_s", f"{case.label} applied speed", case.color, 2.0),
+        ("applied_turn_rate_rad_s", f"{case.label} applied turn rate", case.color, 2.0),
         ("speed_command_m_s", f"{case.label} speed command", case.color, 2.0),
         ("omega_command_rad_s", f"{case.label} omega command", case.color, 2.0),
         (
@@ -695,7 +1068,15 @@ def _log_frame(
         rr.Scalars(float(case.hinge_trace.cmd_v[index])),
     )
     audit.log(
+        f"{case.root}/metrics/applied_linear_speed_m_s",
+        rr.Scalars(float(case.hinge_trace.cmd_v[index])),
+    )
+    audit.log(
         f"{case.root}/metrics/omega_command_rad_s",
+        rr.Scalars(float(case.hinge_trace.cmd_omega[index])),
+    )
+    audit.log(
+        f"{case.root}/metrics/applied_turn_rate_rad_s",
         rr.Scalars(float(case.hinge_trace.cmd_omega[index])),
     )
     audit.log(
@@ -725,8 +1106,12 @@ def _log_frame(
         )
 
 
-def build_blueprint(rrb: Any, cases: Sequence[EpisodeCase]) -> Any:
-    """Build a side-by-side scene over three shared metric tracks."""
+def build_blueprint(
+    rrb: Any,
+    cases: Sequence[EpisodeCase],
+    blueprint: Mapping[str, Any] | None = None,
+) -> Any:
+    """Build a side-by-side scene from the package blueprint contract."""
     spatial_views = [
         rrb.Spatial2DView(
             origin=f"/{case.root}/scene",
@@ -743,26 +1128,51 @@ def build_blueprint(rrb: Any, cases: Sequence[EpisodeCase]) -> Any:
     def metric_contents(metric_name: str) -> list[str]:
         return [f"/{case.root}/metrics/{metric_name}" for case in cases]
 
+    def view_config(view_id: str, default_field: str, default_name: str) -> tuple[str, str]:
+        """Resolve one stable view field/name from a package blueprint."""
+
+        if isinstance(blueprint, Mapping):
+            views = blueprint.get("views")
+            if isinstance(views, list):
+                for view in views:
+                    if isinstance(view, Mapping) and view.get("id") == view_id:
+                        field = view.get("field")
+                        name = view.get("name")
+                        return (
+                            str(field) if isinstance(field, str) and field else default_field,
+                            str(name) if isinstance(name, str) and name else default_name,
+                        )
+        return default_field, default_name
+
+    clearance_field, clearance_name = view_config(
+        "clearance", "min_pedestrian_clearance_m", "Minimum pedestrian surface clearance (m)"
+    )
+    speed_field, speed_name = view_config(
+        "speed", "applied_linear_speed_m_s", "Applied linear speed (m/s)"
+    )
+    turn_field, turn_name = view_config(
+        "turn_rate", "applied_turn_rate_rad_s", "Applied turn rate (rad/s)"
+    )
     clearance_contents = [
-        *metric_contents("min_pedestrian_clearance_m"),
+        *metric_contents(clearance_field),
         *metric_contents("near_miss_threshold_m"),
     ]
     layout = rrb.Vertical(
         spatial_layout,
         rrb.TimeSeriesView(
             origin="/",
-            name="Minimum pedestrian surface clearance (m)",
+            name=clearance_name,
             contents=clearance_contents,
         ),
         rrb.TimeSeriesView(
             origin="/",
-            name="Commanded linear speed (m/s)",
-            contents=metric_contents("speed_command_m_s"),
+            name=speed_name,
+            contents=metric_contents(speed_field),
         ),
         rrb.TimeSeriesView(
             origin="/",
-            name="Commanded angular speed (rad/s)",
-            contents=metric_contents("omega_command_rad_s"),
+            name=turn_name,
+            contents=metric_contents(turn_field),
         ),
         row_shares=[4, 1, 1, 1],
     )
@@ -787,11 +1197,13 @@ def log_cases(
     rr: Any,
     rrb: Any,
     cases: Sequence[EpisodeCase],
+    *,
+    blueprint: Mapping[str, Any] | None = None,
 ) -> tuple[RecordingAudit, FocalSelection, str | None]:
     """Log all cases and return the exact emitted-entity audit."""
     focal = select_focal_pedestrians(cases)
     contrast = pair_contrast_headline(cases, focal)
-    _send_blueprint(recording, rr, build_blueprint(rrb, cases))
+    _send_blueprint(recording, rr, build_blueprint(rrb, cases, blueprint))
 
     audit = RecordingAudit(recording)
     for case in cases:
@@ -866,6 +1278,8 @@ def verify_recording_contract(  # noqa: C901 - explicit entity-by-entity proof c
             "metrics/min_pedestrian_clearance_m",
             "metrics/speed_command_m_s",
             "metrics/omega_command_rad_s",
+            "metrics/applied_linear_speed_m_s",
+            "metrics/applied_turn_rate_rad_s",
             "metrics/near_miss_threshold_m",
         ):
             _assert_time_range(audit, f"{case.root}/{suffix}", expected_range)
@@ -1013,6 +1427,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--package",
+        type=Path,
+        help="case-workbench package produced by robot_sf_bench analyze-cases",
+    )
+    parser.add_argument(
+        "--case-id",
+        default=None,
+        help="Optional case id to select from --package",
+    )
+    parser.add_argument(
         "--seed",
         action="append",
         default=[],
@@ -1032,16 +1456,28 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run the trace-viewer CLI."""
     args = _build_parser().parse_args(argv)
     try:
+        package_blueprint: dict[str, Any] | None = None
+        if args.package is not None:
+            if args.bundle_dirs or args.episodes_jsonl is not None or args.seed:
+                raise TraceViewerError(
+                    "--package is mutually exclusive with bundle and JSONL inputs"
+                )
+            bundle_context = prepared_package_dirs(args.package.resolve(), case_id=args.case_id)
+            package_blueprint = _load_package_blueprint(args.package.resolve())
+        else:
+            if args.case_id is not None:
+                raise TraceViewerError("--case-id requires --package")
+            bundle_context = prepared_episode_dirs(
+                bundle_dirs=args.bundle_dirs,
+                episodes_jsonl=args.episodes_jsonl,
+                seeds=args.seed,
+            )
         rr, rrb = _import_rerun()
-        with prepared_episode_dirs(
-            bundle_dirs=args.bundle_dirs,
-            episodes_jsonl=args.episodes_jsonl,
-            seeds=args.seed,
-        ) as bundle_dirs:
+        with bundle_context as bundle_dirs:
             cases = load_episode_bundles(bundle_dirs)
             recording = rr.RecordingStream(APPLICATION_ID)
             server_guard = _configure_recording_sink(
@@ -1051,7 +1487,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 spawn=args.spawn,
                 serve=args.serve,
             )
-            audit, focal, contrast = log_cases(recording, rr, rrb, cases)
+            audit, focal, contrast = log_cases(
+                recording, rr, rrb, cases, blueprint=package_blueprint
+            )
             if args.save is not None:
                 _finalize_saved_recording(recording)
             else:

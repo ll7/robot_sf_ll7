@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/campaign-result-store.v2.json",
+  "title": "RobotSF campaign result store v2",
+  "type": "object",
+  "required": ["schema_version", "tables", "unavailable_policy"],
+  "properties": {
+    "schema_version": {"const": "campaign-result-store.v2"},
+    "study_id": {"type": "string"},
+    "command": {"type": "string"},
+    "tables": {"type": "object", "minProperties": 7},
+    "source_files": {"type": "array"},
+    "unavailable_policy": {"const": "missing historical fields are typed unavailable; never inferred"}
+  },
+  "additionalProperties": true
+}

@@ -103,6 +103,43 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     assert reloaded["episode_id"] == record["episode_id"]
 
 
+def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) -> None:
+    """The opt-in non-map trace carries reset state, telemetry, and its artifact hash."""
+
+    scenario = {
+        "id": "smoke-telemetry",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    output = tmp_path / "telemetry.jsonl"
+    summary = run_batch(
+        [scenario],
+        out_path=output,
+        schema_path=SCHEMA_PATH,
+        base_seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        append=False,
+        workers=1,
+        resume=False,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+    )
+
+    assert summary["written"] == 1
+    record = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+    trace = record["algorithm_metadata"]["analysis_trace"]
+    assert trace["steps"][0]["time_s"] == 0.0
+    assert record["algorithm_metadata"]["telemetry"]["analysis_trace"] == "all"
+    assert record["provenance"]["artifact_sha256"] == trace["artifact_sha256"]
+
+
 def test_runner_goal_alias_executes_like_simple_policy(tmp_path: Path):
     """The ``goal`` alias resolves to the built-in simple goal-seeking policy.
 

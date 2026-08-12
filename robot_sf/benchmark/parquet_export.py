@@ -153,7 +153,7 @@ def export_campaign_result_store_v2(
     manifest_path = out_dir / "manifest.json"
     checksum_path = out_dir / "SHA256SUMS"
     _ensure_can_write([*table_paths.values(), manifest_path, checksum_path], overwrite)
-    records = _read_jsonl_files(paths)
+    records = _read_jsonl_files(paths, annotate_source_path=True)
     tables = _build_campaign_v2_rows(records, paths)
     out_dir.mkdir(parents=True, exist_ok=True)
     schemas = _campaign_v2_schemas(pa_mod)
@@ -1708,8 +1708,15 @@ def _resolve_total_runtime_sec(record: Mapping[str, Any]) -> float | None:
     return None
 
 
-def _read_jsonl_files(paths: Sequence[Path]) -> list[dict[str, Any]]:
-    """Read benchmark episode JSONL files, failing closed on malformed source data."""
+def _read_jsonl_files(
+    paths: Sequence[Path], *, annotate_source_path: bool = False
+) -> list[dict[str, Any]]:
+    """Read benchmark episode JSONL files, failing closed on malformed source data.
+
+    Source-path annotations are opt-in because the legacy Parquet export hashes the original
+    record surface; adding an internal bookkeeping field there would create unrelated golden
+    output drift.
+    """
     records: list[dict[str, Any]] = []
     for path in paths:
         if not path.is_file():
@@ -1732,7 +1739,8 @@ def _read_jsonl_files(paths: Sequence[Path]) -> list[dict[str, Any]]:
                     raise EpisodeRecordInputError(
                         f"{path}:{line_number} must contain a JSON object"
                     )
-                record["_source_path"] = str(path)
+                if annotate_source_path:
+                    record["_source_path"] = str(path)
                 records.append(record)
     return records
 

@@ -113,6 +113,12 @@ _GATE_A_EXCLUDED_ROW_CLASSES: tuple[str, ...] = (
     "blind_corner",
     "blind-corner",
 )
+_GATE_A_EXCLUDED_ROW_CLASS_ALIASES = frozenset(
+    {
+        *_GATE_A_EXCLUDED_ROW_CLASSES,
+        *(row_class.replace("_", "-") for row_class in _GATE_A_EXCLUDED_ROW_CLASSES),
+    }
+)
 
 # Frozen #6145 terminal result schema that Gate A activation checks.
 _PROMOTION_RESULT_SCHEMA_VERSION = "issue_5303_search_promotion_result.v2"
@@ -531,11 +537,12 @@ def _is_excluded_row_class(candidate_payload: dict[str, Any]) -> str | None:
                 classification = str(certificate.get("classification", "")).strip().lower()
                 if classification:
                     classes.add(classification)
+                    classes.add(classification.replace("-", "_"))
                 eligibility = str(certificate.get("benchmark_eligibility", "")).strip().lower()
                 if eligibility:
                     classes.add(eligibility)
     # Reject the frozen excluded classes and any non-eligible tier.
-    for excluded in _GATE_A_EXCLUDED_ROW_CLASSES:
+    for excluded in _GATE_A_EXCLUDED_ROW_CLASS_ALIASES:
         if excluded in classes:
             return excluded
     tier = _candidate_certification_tier(candidate_payload)
@@ -1350,7 +1357,7 @@ def _validate_gate_a_configs(configs: list[CertifiedConfig]) -> None:
                 f"Gate A rejects certification_tier {config.certification_tier!r} "
                 f"for config={config.config_id!r}"
             )
-        row_class = config.row_class.strip().lower()
+        row_class = config.row_class.strip().lower().replace("-", "_")
         if not row_class or row_class == "excluded" or row_class in _GATE_A_EXCLUDED_ROW_CLASSES:
             raise ValueError(
                 f"Gate A rejects row class {config.row_class!r} for config={config.config_id!r}"

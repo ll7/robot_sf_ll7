@@ -62,8 +62,9 @@ result.
     aliases for the version boundary.
   - `select_certified_configs(..., eligible_only=True)` rejects
     `stress_only`, `fallback`, `degraded`, `unavailable`, `duplicate`,
-    `pre_correction`, `blind_corner`/`blind-corner`, malformed, and
-    lineage-incomplete rows.
+    `pre_correction`/`pre-correction`, `knife_edge`/`knife-edge`,
+    `blind_corner`/`blind-corner`, `lineage_incomplete`/`lineage-incomplete`,
+    and malformed rows.
   - `build_gate_a_transfer_matrix` enforces the full contract itself:
     exactly one frozen 3-planner roster, exactly 5 distinct fresh seeds per
     candidate/planner, constraints-first outcomes as the authoritative
@@ -130,6 +131,8 @@ until Gate B passes.
   evaluation seeds distinct from the scenario seed, and attribution/review
   status on every row; absent values are not inferred from config or source
   paths.
+- Excluded row-class spellings are normalized across underscore and dash forms
+  at both selection and builder boundaries.
 
 ## Validation
 

@@ -532,7 +532,7 @@ def test_gate_a_select_rejects_stress_only(tmp_path):
 
 
 def test_gate_a_select_rejects_excluded_row_classes(tmp_path):
-    """Gate A must reject fallback/degraded/unavailable/duplicate/pre-correction rows."""
+    """Gate A rejects underscore and dash spellings of excluded row classes."""
 
     def _excluded_candidate(start_x, *, seed, objective, classification):
         payload = _certified_candidate(start_x, seed=seed, objective=objective)
@@ -550,6 +550,9 @@ def test_gate_a_select_rejects_excluded_row_classes(tmp_path):
             _excluded_candidate(0.3, seed=703, objective=30.0, classification="degraded"),
             _excluded_candidate(0.4, seed=704, objective=40.0, classification="duplicate"),
             _excluded_candidate(0.5, seed=705, objective=50.0, classification="pre_correction"),
+            _excluded_candidate(0.6, seed=706, objective=60.0, classification="pre-correction"),
+            _excluded_candidate(0.7, seed=707, objective=70.0, classification="knife-edge"),
+            _excluded_candidate(0.8, seed=708, objective=80.0, classification="lineage-incomplete"),
         ],
     )
     gate_a = select_certified_configs([m], target_planner=_TARGET_PLANNER, K=10, eligible_only=True)
@@ -707,6 +710,24 @@ def test_gate_a_rejects_stress_only_in_builder_even_if_selected(tmp_path):
     )
     evals = _gate_a_evals(configs)
     with pytest.raises(ValueError, match="stress_only"):
+        build_gate_a_transfer_matrix(configs, evals)
+
+
+def test_gate_a_builder_rejects_dash_row_class_even_if_manually_supplied(tmp_path):
+    """The builder normalizes excluded dash spellings independently of selection."""
+    m = _manifest(
+        tmp_path,
+        name="m.json",
+        candidates=[
+            _certified_candidate(0.1 + i * 0.01, seed=700 + i, objective=float(i)) for i in range(5)
+        ],
+    )
+    configs = _with_gate_a_provenance(
+        select_certified_configs([m], target_planner=_TARGET_PLANNER, K=5, eligible_only=True)
+    )
+    configs[0] = replace(configs[0], row_class="lineage-incomplete")
+    evals = _gate_a_evals(configs)
+    with pytest.raises(ValueError, match="row class"):
         build_gate_a_transfer_matrix(configs, evals)
 
 

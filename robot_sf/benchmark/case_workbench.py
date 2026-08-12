@@ -1186,6 +1186,16 @@ def _candidate(  # noqa: C901, PLR0912, PLR0915
         "row_status": row_status,
         "coverage": dict(coverage),
         "provenance": dict(provenance),
+        "cell_context": (
+            dict(record.get("cell_context"))
+            if isinstance(record.get("cell_context"), Mapping)
+            else None
+        ),
+        "comparison_receipts": (
+            list(record.get("comparison_receipts"))
+            if isinstance(record.get("comparison_receipts"), list)
+            else []
+        ),
         "outcome": {"success": success, "collision": collision, "label": _outcome_label(record)},
         "metrics": _episode_metrics(record),
         "eligible": not blockers,
@@ -1423,17 +1433,30 @@ def _relation_metric(candidate: Mapping[str, Any], *keys: str) -> bool:
 
     raw = candidate.get("raw")
     metrics = raw.get("metrics") if isinstance(raw, Mapping) else None
-    if not isinstance(metrics, Mapping):
-        metrics = {}
-    for key in keys:
-        value = metrics.get(key)
-        if isinstance(value, bool):
-            if value:
+    contexts = [metrics]
+    cell_context = candidate.get("cell_context")
+    if isinstance(cell_context, Mapping):
+        contexts.append(cell_context)
+    raw_cell_context = raw.get("cell_context") if isinstance(raw, Mapping) else None
+    if isinstance(raw_cell_context, Mapping):
+        contexts.append(raw_cell_context)
+    for context in contexts:
+        for key in keys:
+            value = context.get(key)
+            if isinstance(value, Mapping):
+                value = value.get("status") or value.get("value")
+            if isinstance(value, bool):
+                if value:
+                    return True
+            elif _finite_number(value) and float(value) > 0.0:
                 return True
-        elif _finite_number(value) and float(value) > 0.0:
-            return True
-        elif isinstance(value, str) and value in {"available", "observed", "medoid", "boundary"}:
-            return True
+            elif isinstance(value, str) and value in {
+                "available",
+                "observed",
+                "medoid",
+                "boundary",
+            }:
+                return True
     return False
 
 
@@ -1449,9 +1472,7 @@ def _comparison_pair(role: str, candidates: list[dict[str, Any]]) -> list[dict[s
         ranked = sorted(group, key=lambda item: (-_role_score(role, item), item["episode_id"]))
         for left_index, left in enumerate(ranked):
             for right in ranked[left_index + 1 :]:
-                if left[dimension] == right[dimension]:
-                    continue
-                if dimension == "seed" and (left["seed"] is None or right["seed"] is None):
+                if not _pair_matches_role(role, left, right, dimension):
                     continue
                 if not is_comparison_compatible(left.get("raw", {}), right.get("raw", {})):
                     continue
@@ -1463,6 +1484,22 @@ def _comparison_pair(role: str, candidates: list[dict[str, Any]]) -> list[dict[s
     if not pair_options:
         return None
     return sorted(pair_options, key=lambda item: (-item[0], item[1], item[2]))[0][3]
+
+
+def _pair_matches_role(
+    role: str, left: Mapping[str, Any], right: Mapping[str, Any], dimension: str
+) -> bool:
+    """Return whether a pair changes only the dimension named by its role."""
+
+    if left[dimension] == right[dimension]:
+        return False
+    if dimension == "seed" and (left["seed"] is None or right["seed"] is None):
+        return False
+    if role == "seed_sensitivity":
+        return left["planner"] == right["planner"]
+    if role == "planner_upset":
+        return left["seed"] == right["seed"]
+    return True
 
 
 def _truncate_portfolio_atomically(

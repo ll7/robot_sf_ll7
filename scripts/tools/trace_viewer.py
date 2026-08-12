@@ -532,6 +532,11 @@ def _package_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if not isinstance(actor, dict):
                 continue
             actor.setdefault("id", actor.get("actor_id", index))
+            # The legacy hinge loader expects numeric ``id`` values. Keep the
+            # canonical opaque actor_id for provenance, but expose a stable
+            # numeric display slot for that compatibility boundary.
+            if not isinstance(actor.get("id"), (int, float)) or isinstance(actor.get("id"), bool):
+                actor["id"] = index
             pos = actor.get("position") if isinstance(actor.get("position"), list) else []
             if (
                 len(pos) < 2

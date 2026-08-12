@@ -426,6 +426,8 @@ def _build_campaign_v2_rows(
         episode_features = _campaign_feature_rows(record, episode_id, trace_steps, coverage)
         features.extend(episode_features)
         trace_mapping = trace if isinstance(trace, Mapping) else {}
+        record_for_cell = dict(record)
+        record_for_cell["trace_coverage"] = coverage
         by_cell.setdefault(
             (
                 planner,
@@ -438,7 +440,7 @@ def _build_campaign_v2_rows(
                 str(trace_mapping.get("map_digest") or provenance.get("map_digest") or ""),
             ),
             [],
-        ).append(record)
+        ).append(record_for_cell)
 
     cells = _campaign_cell_rows(by_cell)
     comparisons = _campaign_comparison_rows(records)
@@ -485,13 +487,16 @@ def _campaign_step_rows(
     actor_rows: list[dict[str, Any]] = []
     actor_rows.append(_campaign_actor_row(episode_id, step, "robot", "robot", robot))
     pedestrians = step.get("pedestrians") if isinstance(step.get("pedestrians"), list) else []
-    for index, actor in enumerate(pedestrians):
+    for actor in pedestrians:
         if isinstance(actor, Mapping):
+            actor_id = actor.get("actor_id")
+            if not isinstance(actor_id, str) or not actor_id.strip():
+                actor_id = None
             actor_rows.append(
                 _campaign_actor_row(
                     episode_id,
                     step,
-                    str(actor.get("actor_id") or f"pedestrian-{index}"),
+                    actor_id,
                     "pedestrian",
                     actor,
                 )
@@ -500,7 +505,11 @@ def _campaign_step_rows(
 
 
 def _campaign_actor_row(
-    episode_id: str, step: Mapping[str, Any], actor_id: str, kind: str, actor: Mapping[str, Any]
+    episode_id: str,
+    step: Mapping[str, Any],
+    actor_id: str | None,
+    kind: str,
+    actor: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Build one actor row."""
 
@@ -1020,8 +1029,11 @@ def _campaign_cell_rows(
         map_digest,
     ), records in sorted(by_cell.items()):
         eligible_records = [record for record in records if _cell_record_eligible(record)]
+        # A cell with no provenance-eligible episodes is not an observed
+        # aggregate.  Omit it rather than emitting zero counts that could be
+        # mistaken for canonical uncertainty or boundary evidence.
         if not eligible_records:
-            eligible_records = []
+            continue
         counts: dict[str, int] = {}
         for record in eligible_records:
             outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
@@ -1128,8 +1140,8 @@ def _cell_record_eligible(record: Mapping[str, Any]) -> bool:
     integrity = record.get("integrity")
     if isinstance(integrity, Mapping) and integrity.get("contradictions"):
         return False
-    coverage = record.get("trace_coverage")
-    if isinstance(coverage, Mapping) and coverage.get("status") not in {None, "complete"}:
+    coverage = trace_coverage(record)
+    if coverage.get("status") != "complete":
         return False
     metadata = record.get("algorithm_metadata")
     trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None

@@ -117,9 +117,17 @@ def map_digest(scenario: dict[str, Any]) -> str | None:
     """Return the content digest of the scenario's referenced map when resolvable."""
 
     explicit = scenario.get("map_digest") or scenario.get("map_sha256")
-    if isinstance(explicit, str) and explicit:
-        return explicit
     raw_path = scenario.get("map_file") or scenario.get("map")
+    if isinstance(explicit, str) and explicit:
+        if not re.fullmatch(_SHA256_RE, explicit):
+            return None
+        # An explicit digest is only authoritative when there is no local map
+        # to verify.  When a path is available, reject a stale or forged digest
+        # instead of allowing the trace to be compared against another map.
+        if not isinstance(raw_path, str) or not raw_path:
+            return explicit
+    else:
+        explicit = None
     if not isinstance(raw_path, str) or not raw_path:
         return None
     path = Path(raw_path)
@@ -130,7 +138,10 @@ def map_digest(scenario: dict[str, Any]) -> str | None:
         if not candidate.is_file():
             continue
         try:
-            return hashlib.sha256(candidate.read_bytes()).hexdigest()
+            actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            if explicit is not None and actual != explicit:
+                return None
+            return actual
         except OSError:
             continue
     return None
@@ -222,6 +233,12 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
     resolved_initial_ids = (
         list(initial_pedestrian_ids) if initial_pedestrian_ids is not None else inferred_ids
     )
+    if resolved_initial_ids is not None and (
+        len(resolved_initial_ids) != len(initial_peds)
+        or len({str(value) for value in resolved_initial_ids}) != len(resolved_initial_ids)
+        or any(value is None or isinstance(value, bool) for value in resolved_initial_ids)
+    ):
+        resolved_initial_ids = None
     pedestrian_ids = list(
         resolved_initial_ids if resolved_initial_ids is not None else range(len(initial_peds))
     )
@@ -370,7 +387,7 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
             if initial_pedestrian_id_source is not None
             else (
                 "explicit"
-                if initial_pedestrian_ids is not None
+                if resolved_initial_ids is not None and initial_pedestrian_ids is not None
                 else ("simulator" if resolved_initial_ids is not None else "positional_index")
             )
         ),
@@ -491,9 +508,9 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         controls_payload = step.get("controls")
         if not isinstance(controls_payload, dict):
             controls = False
-        elif index > 0 and not _control_payload_has_value(controls_payload):
+        elif index > 0 and not _control_payload_complete(controls_payload):
             controls = False
-        elif _control_payload_has_value(controls_payload):
+        elif _control_payload_complete(controls_payload):
             control_observed = True
     controls = controls and control_observed
     actor_ids = actor_ids and trace.get("actor_id_source") in {
@@ -532,6 +549,11 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         and bool(re.fullmatch(r"[0-9a-f]{7,64}", str(trace.get(key)).lower()))
         for key in ("git_hash", "planner_commit")
     )
+    record_scenario = record.get("scenario_id")
+    record_planner = record.get("algo") or record.get("planner")
+    trace_identity = (
+        record_scenario is None or str(record_scenario) == str(trace.get("scenario_id"))
+    ) and (record_planner is None or str(record_planner) == str(trace.get("planner")))
     artifact_hash = (
         isinstance(trace.get("artifact_sha256"), str)
         and bool(re.fullmatch(_SHA256_RE, str(trace.get("artifact_sha256"))))
@@ -550,6 +572,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         and units
         and timing
         and provenance
+        and trace_identity
         and artifact_hash
     )
     reasons = []
@@ -564,6 +587,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         ("units", units),
         ("timing", timing),
         ("provenance", provenance),
+        ("trace_identity", trace_identity),
         ("artifact_hash", artifact_hash),
     ):
         if not valid:
@@ -584,6 +608,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         "coordinate_frame": coordinate_frame,
         "units": units,
         "provenance": provenance,
+        "trace_identity": trace_identity,
         "artifact_hash": artifact_hash,
         "map_digest": trace.get("map_digest") not in (None, ""),
     }
@@ -639,16 +664,16 @@ def _positive_int(value: Any) -> bool:
     return isinstance(value, (int, np.integer)) and not isinstance(value, bool) and int(value) > 0
 
 
-def _control_payload_has_value(payload: Mapping[str, Any]) -> bool:
-    """Return whether requested/applied controls contain a finite scalar."""
+def _control_payload_complete(payload: Mapping[str, Any]) -> bool:
+    """Return whether both requested and applied control dimensions are finite."""
 
     for section in ("requested", "applied"):
         values = payload.get(section)
-        if not isinstance(values, Mapping):
-            continue
-        if any(_finite_number(values.get(key)) for key in ("linear_m_s", "turn_rate_rad_s")):
-            return True
-    return False
+        if not isinstance(values, Mapping) or not all(
+            _finite_number(values.get(key)) for key in ("linear_m_s", "turn_rate_rad_s")
+        ):
+            return False
+    return True
 
 
 def _action_control_values(action: Any) -> tuple[float | None, float | None]:

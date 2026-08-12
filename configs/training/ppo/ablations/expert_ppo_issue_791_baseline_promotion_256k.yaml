@@ -8,11 +8,7 @@ evaluation:
   step_schedule:
     - every_steps: 32768
 tracking:
-  tensorboard: false
   wandb:
-    enabled: true
-    project: robot_sf
-    group: issue-791-baseline
     job_type: expert-ppo-256k-promotion
     tags:
       - issue-791

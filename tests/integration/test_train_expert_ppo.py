@@ -2607,6 +2607,16 @@ def test_issue_6484_baseline_promotion_base_inheritance_and_no_launch_identity()
         assert "policy_id" not in base_yaml
         assert "job_type" not in base_yaml.get("tracking", {}).get("wandb", {})
         assert "tags" not in base_yaml.get("tracking", {}).get("wandb", {})
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
 
 
 def test_issue_6484_baseline_promotion_variants_keep_distinct_overrides() -> None:

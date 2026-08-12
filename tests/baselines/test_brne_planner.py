@@ -245,6 +245,16 @@ def test_brne_solve_uses_plan_step_first_mean_normalized_weighted_mean(
     assert mechanism_step["ensemble"]["weight_shape"] == [1, 3]
     assert mechanism_step["ensemble"]["aggregation_mode"] == "plan_step_first"
     assert mechanism_step["ensemble"]["aggregation_formula"] == "mean_plan_step_first_over_samples"
+    candidate_distribution = mechanism_step["ensemble"]["candidate_distribution"]
+    assert candidate_distribution["status"] == "available"
+    assert candidate_distribution["sample_count"] == 3
+    assert candidate_distribution["plan_step_count"] == 2
+    assert candidate_distribution["first"]["weighted_mean"] == pytest.approx(
+        {"v_m_s": expected_first_step_command[0], "omega_rad_s": expected_first_step_command[1]}
+    )
+    assert candidate_distribution["first_to_second"]["weighted_mean_delta_v_m_s"] == pytest.approx(
+        -0.3166666667
+    )
     assert mechanism_step["pre_clamp_action"] == pytest.approx(
         {"v_m_s": expected_first_step_command[0], "omega_rad_s": expected_first_step_command[1]}
     )

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -107,6 +108,19 @@ def _jsonable_repo_relative(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_jsonable_repo_relative(item) for item in value]
     return value
+
+
+def _config_hash_payload(cfg: Any) -> dict[str, Any]:
+    """Return the JSON-ready configuration payload used for campaign hashes.
+
+    Returns:
+        Configuration mapping with the optional prospective provenance block removed when unset.
+    """
+    payload = asdict(cfg)
+    if getattr(cfg, "tuning_run_provenance", None) is None:
+        # Preserve hashes for legacy configs that predate the optional prospective block.
+        payload.pop("tuning_run_provenance", None)
+    return _jsonable_repo_relative(payload)
 
 
 def _sanitize_csv_cell(value: Any) -> Any:

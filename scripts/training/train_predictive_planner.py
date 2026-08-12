@@ -22,7 +22,9 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from robot_sf import common
 from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
+from robot_sf.benchmark.predictive.predictive_planner_config import (
+    build_predictive_planner_algo_config,
+)
 from robot_sf.models.registry import upsert_registry_entry
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,

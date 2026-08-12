@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-import robot_sf.benchmark.predictive_checkpoint_schema_audit as schema_audit
+import robot_sf.benchmark.predictive.predictive_checkpoint_schema_audit as schema_audit
 from robot_sf.benchmark.camera_ready._config_types import (
     CampaignConfig,
     PlannerSpec,
     SeedPolicy,
 )
-from robot_sf.benchmark.predictive_checkpoint_schema_audit import (
+from robot_sf.benchmark.predictive.predictive_checkpoint_schema_audit import (
     STATUS_COMPAT,
     STATUS_INCOMPAT,
     STATUS_NOT_PREDICTIVE,

@@ -5,6 +5,12 @@ trace builder digest on the opt-in path, with action-sequence regression proof
 and a pinned local before/after receipt (5.890% post-change overhead; diagnostic
 only): [issue_6972_analysis_trace_overhead_2026-08-12/README.md](evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md).
 
+Issue #6987 analysis-trace measurement-invariance follow-up: adds alternating
+same-commit paired batches and fail-closed target decisions. Two sequential runs
+were internally stable but disagreed: one measured 18.469% (`not_met`) and one
+8.327% (`met`); the profile remains opt-in and diagnostic only:
+[issue_6987_analysis_trace_overhead_2026-08-12/README.md](evidence/issue_6987_analysis_trace_overhead_2026-08-12/README.md).
+
 Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
 `issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
 successor to the historical three-seed diagnostic, freezing six search seeds per method,
@@ -38,8 +44,13 @@ fail-closed serialized execution-monitor handling, and final-summary propagation
 
 Issue #6970 paired-effect retained-row contract: versioned #4598 outcome fields,
 config/preflight provenance, fail-closed producer validation, and a config-exposure audit for the
-#13775 non-identifiability boundary; no campaign or result claim:
+Issue #13775 non-identifiability boundary; no campaign or result claim:
 [issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md).
+
+Issue #6971 safety-wrapper paired-campaign preregistration: freezes the 48-scenario,
+three-planner, S20 paired design, exact #6970 retained fields, interval-based analysis and
+cost reserve; proposal only, with no campaign submission or result claim:
+[issue_6971_safety_wrapper_paired_preregistration.md](issue_6971_safety_wrapper_paired_preregistration.md).
 
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient

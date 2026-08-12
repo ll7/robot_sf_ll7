@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -38,6 +37,7 @@ from robot_sf.benchmark.camera_ready._summaries import (
     _build_matrix_summary_rows,
 )
 from robot_sf.benchmark.camera_ready._util import (
+    _config_hash_payload,
     _hash_payload,
     _jsonable_repo_relative,
     _latency_stress_metadata,
@@ -58,6 +58,10 @@ from robot_sf.benchmark.observation_noise import (
     observation_noise_hash,
 )
 from robot_sf.benchmark.orca_preflight import check_orca_rvo2_preflight
+from robot_sf.benchmark.tuning_run_provenance import (
+    aggregate_tuning_records,
+    build_launch_records,
+)
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
 
@@ -238,6 +242,52 @@ def _tuning_effort_summary(planners: tuple[PlannerSpec, ...]) -> dict[str, Any]:
         "arms_missing_tuning": sorted(planner.key for planner in backfill_pending),
         "by_source": by_source,
     }
+
+
+def _build_tuning_provenance_ledger(
+    cfg: CampaignConfig,
+    *,
+    campaign_id: str,
+    created_at_utc: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Emit and aggregate one prospective launch record per enabled planner arm.
+
+    The generated ledger is a launch/ingestion receipt, not benchmark evidence.  A
+    missing machine counter remains ``null`` in the record and in the aggregate.
+
+    Returns:
+        JSON-compatible tuning ledger with records, policy, and capture metadata.
+    """
+    planner_parameters = {
+        planner.key: (planner.tuning.parameters_touched if planner.tuning is not None else None)
+        for planner in cfg.planners
+        if planner.enabled
+    }
+    git_meta = metadata.get("git_meta") if isinstance(metadata.get("git_meta"), dict) else {}
+    records = build_launch_records(
+        cfg.tuning_run_provenance,
+        campaign_id=campaign_id,
+        source_commit=(str(git_meta.get("commit")) if git_meta.get("commit") else None),
+        config_hash=metadata.get("config_hash"),
+        planner_parameters=planner_parameters,
+        recorded_at_utc=created_at_utc,
+        provenance={
+            "campaign_name": cfg.name,
+            "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
+        },
+        strict=cfg.tuning_effort_enforcement == "error",
+    )
+    ledger = aggregate_tuning_records(records)
+    ledger["capture"] = {
+        "mode": "camera_ready_preflight",
+        "campaign_id": campaign_id,
+        "source_commit": git_meta.get("commit"),
+        "config_hash": metadata.get("config_hash"),
+        "recorded_at_utc": created_at_utc,
+        "strict_validation": cfg.tuning_effort_enforcement == "error",
+    }
+    return ledger
 
 
 def _scenario_display_name(scenario: dict[str, Any]) -> str:
@@ -614,7 +664,7 @@ def _compute_campaign_metadata(
         schedule_path=cfg.scenario_horizons_path,
     )
     git_meta = _git_context()
-    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    config_hash = _config_hash(_config_hash_payload(cfg))
     noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
     return {
@@ -901,6 +951,16 @@ def _write_campaign_artifacts(  # noqa: PLR0913
         campaign_id=campaign_id,
         created_at_utc=created_at_utc,
     )
+    tuning_ledger = _build_tuning_provenance_ledger(
+        cfg,
+        campaign_id=campaign_id,
+        created_at_utc=created_at_utc,
+        metadata=metadata,
+    )
+    tuning_ledger_path = reports_dir / "tuning_ledger.json"
+    _write_json(tuning_ledger_path, tuning_ledger)
+    summary_artifacts["tuning_ledger"] = tuning_ledger
+    summary_artifacts["tuning_ledger_path"] = tuning_ledger_path
     return validate_config_path, preview_scenarios_path, checkpoint_report_path, summary_artifacts
 
 
@@ -953,6 +1013,7 @@ def _build_manifest_artifact_block(  # noqa: PLR0913
     amv_coverage_md_path: Path,
     comparability_json_path: Path | None,
     comparability_md_path: Path | None,
+    tuning_ledger_path: Path,
 ) -> dict[str, Any]:
     """Build the artifact-path block for the campaign manifest.
 
@@ -976,6 +1037,7 @@ def _build_manifest_artifact_block(  # noqa: PLR0913
         "snqi_diagnostics_json": None,
         "snqi_diagnostics_md": None,
         "snqi_sensitivity_csv": None,
+        "tuning_ledger": _repo_relative(tuning_ledger_path),
     }
 
 
@@ -1093,6 +1155,9 @@ def _build_manifest_contract_block(
 def _build_manifest_execution_block(
     cfg: CampaignConfig,
     planner_entries: list[dict[str, Any]],
+    *,
+    tuning_ledger: dict[str, Any],
+    tuning_ledger_path: Path,
 ) -> dict[str, Any]:
     """Build planner, tuning, and execution metadata for the campaign manifest.
 
@@ -1103,6 +1168,20 @@ def _build_manifest_execution_block(
         "planners": planner_entries,
         "tuning_effort_enforcement": cfg.tuning_effort_enforcement,
         "tuning_effort_summary": _tuning_effort_summary(cfg.planners),
+        "tuning_run_provenance": {
+            "run_class": (
+                cfg.tuning_run_provenance.run_class
+                if cfg.tuning_run_provenance is not None
+                else "debug"
+            ),
+            "ledger_schema_version": tuning_ledger["schema_version"],
+            "record_schema_version": tuning_ledger["record_schema_version"],
+            "ledger_sha256": tuning_ledger["ledger_sha256"],
+            "record_count": len(tuning_ledger["records"]),
+            "summary": tuning_ledger["summary"],
+            "ledger_path": _repo_relative(tuning_ledger_path),
+            "policy": tuning_ledger["policy"],
+        },
         "checkpoint_provenance_enforcement": cfg.checkpoint_provenance_enforcement,
         "kinematics_matrix": list(cfg.kinematics_matrix),
         "holonomic_command_mode": cfg.holonomic_command_mode,
@@ -1127,6 +1206,8 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
     comparability_mapping_path: Path | None,
     planner_entries: list[dict[str, Any]],
     artifact_block: dict[str, Any],
+    tuning_ledger: dict[str, Any],
+    tuning_ledger_path: Path,
 ) -> dict[str, Any]:
     """Build the complete JSON-serializable campaign manifest payload.
 
@@ -1150,7 +1231,12 @@ def _build_campaign_manifest_payload(  # noqa: PLR0913
             comparability_summary=comparability_summary,
             comparability_mapping_path=comparability_mapping_path,
         ),
-        **_build_manifest_execution_block(cfg, planner_entries),
+        **_build_manifest_execution_block(
+            cfg,
+            planner_entries,
+            tuning_ledger=tuning_ledger,
+            tuning_ledger_path=tuning_ledger_path,
+        ),
         "artifacts": artifact_block,
     }
 
@@ -1208,7 +1294,10 @@ def _finalize_campaign_preflight(  # noqa: PLR0913
             amv_coverage_md_path=summary_artifacts["amv_coverage_md_path"],
             comparability_json_path=summary_artifacts["comparability_json_path"],
             comparability_md_path=summary_artifacts["comparability_md_path"],
+            tuning_ledger_path=summary_artifacts["tuning_ledger_path"],
         ),
+        tuning_ledger=summary_artifacts["tuning_ledger"],
+        tuning_ledger_path=summary_artifacts["tuning_ledger_path"],
     )
     _verify_existing_resume_context(
         cfg,
@@ -1233,6 +1322,8 @@ def _finalize_campaign_preflight(  # noqa: PLR0913
         "amv_summary": summary_artifacts["amv_summary"],
         "comparability_json_path": summary_artifacts["comparability_json_path"],
         "comparability_md_path": summary_artifacts["comparability_md_path"],
+        "tuning_ledger_path": summary_artifacts["tuning_ledger_path"],
+        "tuning_ledger": summary_artifacts["tuning_ledger"],
         "manifest_payload": manifest_payload,
         "created_at_utc": created_at_utc,
         "scenarios": scenarios,

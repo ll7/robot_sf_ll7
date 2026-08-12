@@ -45,7 +45,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.predictive_checkpoint_schema_audit import (
+from robot_sf.benchmark.predictive.predictive_checkpoint_schema_audit import (
     audit_predictive_checkpoint_schema_from_config,
     emit_schema_filtered_config,
     format_schema_audit_table,

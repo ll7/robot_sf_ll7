@@ -1,0 +1,22 @@
+schema_version: ch7-evidence-package.v1
+issue: 6792
+claim_boundary: >-
+  Release-cell descriptive evidence only. Trace-level trajectory dossiers remain
+  typed unavailable until the exact source and compatibility gates are admitted.
+approved_source_sha256sums: 011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543
+release_archive_sha256: 3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7
+required_counts:
+  requested: 90
+  admitted: 88
+  excluded: 2
+trace_policy:
+  doorway_seed_pair: unavailable
+  seed_118_planner_pair: unavailable
+  shared_prefix: false
+  dtw: forbidden
+  counterfactual_branching: forbidden
+materialization_overlay:
+  planner_upset: unavailable
+  seed_sensitivity: unavailable
+  feasibility_criticism: available
+  cross_cell_inversion: available

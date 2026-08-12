@@ -146,6 +146,8 @@ knowledge, not every transient iteration detail.
   [issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md)
 * Issue #6615 ORCA adapter-validation harness and diagnostic projection trace:
   [issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md)
+* Issue #6942 ORCA adapter-hedge preregistration and approval boundary:
+  [issue_6942_orca_adapter_hedge_preregistration.md](issue_6942_orca_adapter_hedge_preregistration.md)
 
 * Issue #6155 release environment packet:
   [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)

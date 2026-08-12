@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6923_brne_trace_diagnostic_summary.json",
+  "artifact_sha256": "7bfeb4e1b5acd324304b858bff66361ca2bd1ccfb9f95328925394a71414422a",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

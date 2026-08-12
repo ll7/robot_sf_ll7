@@ -64,6 +64,7 @@ _DEFAULT_PED_SAMPLE_SCALE = 0.1
 _DEFAULT_CORRIDOR_Y_MIN = -0.65
 _DEFAULT_CORRIDOR_Y_MAX = 0.65
 _DEFAULT_STEP_BUDGET_S = 0.1
+_UPSTREAM_BRNE_ACTIVATION_RADIUS_M = 3.5
 
 
 @dataclass
@@ -189,6 +190,7 @@ class BRNEPlanner:
         self._last_step_status = "not_started"
         self._mechanism_trace_steps: list[dict[str, Any]] = []
         self._previous_action: dict[str, float] | None = None
+        self._last_nominal_command: dict[str, Any] | None = None
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -272,6 +274,7 @@ class BRNEPlanner:
         self._last_step_status = "not_started"
         self._mechanism_trace_steps = []
         self._previous_action = None
+        self._last_nominal_command = None
 
     def _record_failure(self, reason: str) -> None:
         """Record a fail-closed step without hiding it behind zero motion."""
@@ -397,6 +400,7 @@ class BRNEPlanner:
         declared_heading: float | None,
         goal_position: np.ndarray,
         selected_agents: list[tuple[float, int]],
+        pedestrian_selection: dict[str, Any],
         agents: list[dict[str, Any]],
         action: dict[str, float],
         runtime_status: str,
@@ -408,6 +412,7 @@ class BRNEPlanner:
         effective_num_samples: int,
         pre_clamp_action: dict[str, float] | None,
         candidate_distribution: dict[str, Any] | None,
+        nominal_command: dict[str, Any] | None,
     ) -> None:
         """Record compact BRNE mechanism telemetry for one planner observation.
 
@@ -509,6 +514,12 @@ class BRNEPlanner:
                     ),
                 },
                 "selected_pedestrians": selected_pedestrians,
+                "pedestrian_selection": dict(pedestrian_selection),
+                "nominal_command": (
+                    dict(nominal_command)
+                    if nominal_command is not None
+                    else {"status": "unavailable", "reason": "not_recorded"}
+                ),
                 "adapter_input_frame": "world",
                 "pre_clamp_action": pre_clamp_payload,
                 "selected_action": {
@@ -597,6 +608,11 @@ class BRNEPlanner:
             robot_heading = None
         robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal, r_heading=robot_heading)
         selected = self._select_agents(obs.agents, r_pos)
+        pedestrian_selection = self._summarize_pedestrian_selection(
+            obs.agents,
+            r_pos,
+            selected,
+        )
         num_peds = len(selected)
         num_agents = num_peds + 1
         num_samples = cfg.num_samples
@@ -647,6 +663,7 @@ class BRNEPlanner:
                 declared_heading=robot_heading,
                 goal_position=r_goal,
                 selected_agents=selected,
+                pedestrian_selection=pedestrian_selection,
                 agents=obs.agents,
                 action=action,
                 runtime_status=runtime_status,
@@ -658,6 +675,7 @@ class BRNEPlanner:
                 effective_num_samples=effective_num_samples,
                 pre_clamp_action=pre_clamp_action,
                 candidate_distribution=candidate_distribution,
+                nominal_command=self._last_nominal_command,
             )
             return action
 
@@ -862,6 +880,62 @@ class BRNEPlanner:
         agent_dists.sort(key=lambda x: x[0])
         return agent_dists[: max(0, cfg.maximum_agents - 1)]
 
+    @staticmethod
+    def _summarize_pedestrian_selection(
+        agents: list[dict[str, Any]],
+        r_pos: np.ndarray,
+        selected: list[tuple[float, int]],
+    ) -> dict[str, Any]:
+        """Record adapter selection counts against the pinned upstream gate.
+
+        The adapter intentionally keeps its current nearest-agent selection semantics. This
+        summary exposes how those semantics differ from the upstream controller's 3.5 m
+        activation threshold without applying that threshold to runtime behavior.
+
+        Returns:
+            Compact counts and provenance for the observed and selected pedestrians.
+        """
+        distances = [
+            float(np.linalg.norm(np.asarray(agent["position"], dtype=np.float64) - r_pos))
+            for agent in agents
+        ]
+        return {
+            "observed_count": len(agents),
+            "within_upstream_activation_radius_count": sum(
+                distance < _UPSTREAM_BRNE_ACTIVATION_RADIUS_M for distance in distances
+            ),
+            "passed_to_brne_count": len(selected),
+            "upstream_activation_radius_m": _UPSTREAM_BRNE_ACTIVATION_RADIUS_M,
+            "activation_gate_applied": False,
+            "selection_mode": "nearest_up_to_maximum_agents",
+        }
+
+    def _build_nominal_commands(
+        self,
+        r_pos: np.ndarray,
+        r_vel: np.ndarray,
+        r_goal: np.ndarray,
+        plan_steps: int,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Build the adapter's constant nominal command and its trace metadata.
+
+        Returns:
+            The plan-step-first nominal commands and a compact trace payload.
+        """
+        cfg = self.config
+        direction = r_goal - r_pos
+        speed = (
+            min(float(np.linalg.norm(r_vel)) or 0.4, cfg.v_max)
+            if np.linalg.norm(direction) > 1e-6
+            else 0.0
+        )
+        nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
+        return nominal_cmds, {
+            "v_m_s": float(speed),
+            "omega_rad_s": 0.0,
+            "construction_mode": "straight_constant",
+        }
+
     def _build_trajectories(  # noqa: PLR0913
         self,
         brne: ModuleType,
@@ -883,13 +957,13 @@ class BRNEPlanner:
             The stacked ``xtraj``/``ytraj`` arrays and the control ensemble ``ulist``.
         """
         cfg = self.config
-        direction = r_goal - r_pos
-        speed = (
-            min(float(np.linalg.norm(r_vel)) or 0.4, cfg.v_max)
-            if np.linalg.norm(direction) > 1e-6
-            else 0.0
+        nominal_cmds, nominal_command = self._build_nominal_commands(
+            r_pos,
+            r_vel,
+            r_goal,
+            plan_steps,
         )
-        nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
+        self._last_nominal_command = nominal_command
         ulist = self._normalize_control_ensemble(
             brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples),
             plan_steps=plan_steps,

@@ -1,0 +1,5 @@
+{
+  "schema_version": "case-source-integrity-registry.v1",
+  "purpose": "Trusted exact-source approvals for evidence promotion; empty until #6792/#6814 restoration is reviewed.",
+  "approved_sources": []
+}

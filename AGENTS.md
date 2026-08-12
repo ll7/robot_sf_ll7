@@ -99,8 +99,13 @@ common Git dir, symlink the main `local.machine.md` when present, then run
 `uv venv .venv && uv sync --all-extras`. The `uv venv .venv` step is required: `uv sync --all-extras`
 alone may silently detect and reuse the main checkout's `.venv` without creating one locally,
 leaving `.venv/bin/activate` missing. After sync, verify `.venv/bin/python` exists before
-continuing; if absent, the environment is not usable and the caller must fail closed. Then
-`source .venv/bin/activate` before Python tooling. For quick targeted validation, prefer
+continuing; if absent, the environment is not usable and the caller must fail closed. The
+bootstrap script pins sync to the local `.venv` and adds `UV_NO_SYNC=1` to its activation script,
+so `source .venv/bin/activate` before Python tooling. For a dependency-only check that separates
+missing optional packages from changed-code failures, run
+`python scripts/dev/check_worktree_optional_deps.py --profile all-extras`. Use a matching named
+profile such as `--profile training` when bootstrap was invoked with `--extra training`. For quick
+targeted validation, prefer
 `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized current-worktree
 `.venv` when available, otherwise reuses the main checkout `.venv`, while `PYTHONPATH` points at
 the active worktree. Use a full local `.venv` and final PR readiness for merge proof. Do not include

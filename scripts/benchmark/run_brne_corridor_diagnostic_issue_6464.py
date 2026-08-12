@@ -376,12 +376,66 @@ def _finite_optional(value: Any, *, field: str) -> float | None:
 
 def _finite_required(value: Any, *, field: str) -> float:
     """Validate a required finite scalar."""
-    if value is None:
+    if value is None or isinstance(value, bool):
         raise ValueError(f"{field} is required")
     parsed = float(value)
     if not math.isfinite(parsed):
         raise ValueError(f"{field} must be finite when present")
     return parsed
+
+
+def _validate_nominal_command(value: Any, *, step_index: int) -> None:
+    """Validate the adapter nominal command and its construction mode."""
+    if not isinstance(value, dict):
+        raise ValueError(f"step {step_index} is missing nominal command")
+    _finite_required(value.get("v_m_s"), field="nominal v")
+    _finite_required(value.get("omega_rad_s"), field="nominal omega")
+    mode = value.get("construction_mode")
+    if not isinstance(mode, str) or not mode.strip():
+        raise ValueError(f"step {step_index} has an invalid nominal command construction mode")
+
+
+def _validate_pedestrian_selection(value: Any, *, step_index: int, selected_count: int) -> None:
+    """Validate observed, activation-radius, and passed-agent counts."""
+    if not isinstance(value, dict):
+        raise ValueError(f"step {step_index} is missing pedestrian selection metadata")
+    counts: dict[str, int] = {}
+    for field in (
+        "observed_count",
+        "within_upstream_activation_radius_count",
+        "passed_to_brne_count",
+    ):
+        count = value.get(field)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ValueError(f"step {step_index} has an invalid pedestrian {field}")
+        counts[field] = count
+    if counts["within_upstream_activation_radius_count"] > counts["observed_count"]:
+        raise ValueError(f"step {step_index} has more activated than observed pedestrians")
+    if counts["passed_to_brne_count"] > counts["observed_count"]:
+        raise ValueError(f"step {step_index} passes more pedestrians than observed")
+    if counts["passed_to_brne_count"] != selected_count:
+        raise ValueError(f"step {step_index} has inconsistent passed pedestrian count")
+    radius = _finite_required(
+        value.get("upstream_activation_radius_m"),
+        field="upstream activation radius",
+    )
+    if radius < 0.0:
+        raise ValueError(f"step {step_index} has a negative upstream activation radius")
+    if not isinstance(value.get("activation_gate_applied"), bool):
+        raise ValueError(f"step {step_index} has an invalid activation gate flag")
+    mode = value.get("selection_mode")
+    if not isinstance(mode, str) or not mode.strip():
+        raise ValueError(f"step {step_index} has an invalid pedestrian selection mode")
+
+
+def _validate_applied_environment_action(value: Any, *, step_index: int) -> None:
+    """Validate the action payload that was passed to the environment step."""
+    if not isinstance(value, dict):
+        raise ValueError(f"step {step_index} is missing applied environment action")
+    linear = value.get("linear_velocity", value.get("v"))
+    angular = value.get("angular_velocity", value.get("omega"))
+    _finite_required(linear, field="applied environment linear action")
+    _finite_required(angular, field="applied environment angular action")
 
 
 def _validate_candidate_distribution(  # noqa: C901
@@ -473,6 +527,12 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
     if not isinstance(simulation_steps, list) or len(steps) != len(simulation_steps):
         return None, "step_count_mismatch"
     try:
+        for index, simulation_step in enumerate(simulation_steps):
+            planner = simulation_step.get("planner") if isinstance(simulation_step, dict) else None
+            _validate_applied_environment_action(
+                planner.get("applied_environment_action") if isinstance(planner, dict) else None,
+                step_index=index,
+            )
         for index, step in enumerate(steps):
             if not isinstance(step, dict) or int(step.get("step", -1)) != index:
                 raise ValueError(f"step {index} has an invalid index")
@@ -498,6 +558,12 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
                 _finite_pair(pedestrian.get("position_world_m"), field="pedestrian position")
                 _finite_pair(pedestrian.get("velocity_world_m_s"), field="pedestrian velocity")
                 _finite_optional(pedestrian.get("distance_m"), field="pedestrian distance")
+            _validate_nominal_command(step.get("nominal_command"), step_index=index)
+            _validate_pedestrian_selection(
+                step.get("pedestrian_selection"),
+                step_index=index,
+                selected_count=len(selected_pedestrians),
+            )
             selected_action = step.get("selected_action")
             if not isinstance(selected_action, dict):
                 raise ValueError(f"step {index} is missing selected action")
@@ -619,11 +685,18 @@ def _phase_progress(goal_distances: list[float]) -> list[dict[str, Any]] | None:
 
 
 def _simulation_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
-    """Summarize applied unicycle actions from the common simulation trace."""
+    """Summarize actions passed to ``env.step`` from the common simulation trace."""
     actions: list[dict[str, float]] = []
+    applied_count = 0
     for step in steps:
         planner = step.get("planner") if isinstance(step, dict) else None
-        payload = planner.get("selected_action") if isinstance(planner, dict) else None
+        payload = planner.get("applied_environment_action") if isinstance(planner, dict) else None
+        if isinstance(payload, dict):
+            applied_count += 1
+        elif isinstance(planner, dict):
+            # Preserve context-only summaries for historical comparator traces. Native BRNE
+            # rows are fail-closed above when the actual environment action is absent.
+            payload = planner.get("selected_action")
         if not isinstance(payload, dict):
             continue
         linear = payload.get("linear_velocity", payload.get("v"))
@@ -640,8 +713,23 @@ def _simulation_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
         or not math.isclose(previous["omega_rad_s"], current["omega_rad_s"])
         for previous, current in pairwise(actions)
     )
+    has_legacy_fallback = bool(actions) and applied_count != len(actions)
     return {
-        "source": "algorithm_metadata.simulation_step_trace.steps[].planner.selected_action",
+        "source": (
+            "algorithm_metadata.simulation_step_trace.steps[].planner.applied_environment_action"
+            if applied_count and not has_legacy_fallback
+            else "algorithm_metadata.simulation_step_trace.steps[].planner.selected_action"
+        ),
+        "command_space": (
+            "environment_step_action"
+            if applied_count and not has_legacy_fallback
+            else "planner_command"
+        ),
+        "semantics": (
+            "action payload passed to env.step after planner-command conversion"
+            if applied_count and not has_legacy_fallback
+            else "legacy planner selected-action payload; environment conversion not recorded"
+        ),
         "available": bool(actions),
         "first": actions[0] if actions else None,
         "last": actions[-1] if actions else None,
@@ -692,6 +780,34 @@ def _mechanism_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
         ),
         "action_change_count": changes,
         "clipped_steps": clipped_steps,
+    }
+
+
+def _selected_post_clamp_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize selected BRNE commands after the planner safety clamp."""
+    actions: list[dict[str, float]] = []
+    for step in steps:
+        payload = step.get("selected_action") if isinstance(step, dict) else None
+        if not isinstance(payload, dict):
+            continue
+        try:
+            linear_value = float(payload.get("v_m_s"))
+            angular_value = float(payload.get("omega_rad_s"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(linear_value) and math.isfinite(angular_value):
+            actions.append({"v_m_s": linear_value, "omega_rad_s": angular_value})
+    changes = sum(
+        not math.isclose(previous["v_m_s"], current["v_m_s"])
+        or not math.isclose(previous["omega_rad_s"], current["omega_rad_s"])
+        for previous, current in pairwise(actions)
+    )
+    return {
+        "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].selected_action",
+        "available": bool(actions),
+        "first": actions[0] if actions else None,
+        "last": actions[-1] if actions else None,
+        "action_change_count": changes,
     }
 
 
@@ -764,6 +880,63 @@ def _candidate_distribution_summary(ensemble_steps: list[dict[str, Any]]) -> dic
             "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[]"
             ".ensemble.candidate_distribution"
         ),
+    }
+
+
+def _nominal_command_summary(mechanism_steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize nominal adapter commands without retaining the full command sequence."""
+    commands = [step.get("nominal_command") for step in mechanism_steps]
+    commands = [
+        item for item in commands if isinstance(item, dict) and item.get("status") != "unavailable"
+    ]
+    if not commands:
+        return {
+            "available": False,
+            "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].nominal_command",
+        }
+    return {
+        "available": True,
+        "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].nominal_command",
+        "first": commands[0],
+        "last": commands[-1],
+        "construction_modes": sorted({str(item.get("construction_mode")) for item in commands}),
+        "v_range_m_s": [
+            min(float(item["v_m_s"]) for item in commands),
+            max(float(item["v_m_s"]) for item in commands),
+        ],
+        "omega_range_rad_s": [
+            min(float(item["omega_rad_s"]) for item in commands),
+            max(float(item["omega_rad_s"]) for item in commands),
+        ],
+    }
+
+
+def _pedestrian_selection_summary(mechanism_steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize per-step observed and passed pedestrian counts."""
+    selections = [step.get("pedestrian_selection") for step in mechanism_steps]
+    selections = [item for item in selections if isinstance(item, dict)]
+    if not selections:
+        return {
+            "available": False,
+            "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].pedestrian_selection",
+        }
+    return {
+        "available": True,
+        "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].pedestrian_selection",
+        "first": selections[0],
+        "last": selections[-1],
+        "observed_count_range": [
+            min(int(item["observed_count"]) for item in selections),
+            max(int(item["observed_count"]) for item in selections),
+        ],
+        "within_upstream_activation_radius_count_range": [
+            min(int(item["within_upstream_activation_radius_count"]) for item in selections),
+            max(int(item["within_upstream_activation_radius_count"]) for item in selections),
+        ],
+        "passed_to_brne_count_range": [
+            min(int(item["passed_to_brne_count"]) for item in selections),
+            max(int(item["passed_to_brne_count"]) for item in selections),
+        ],
     }
 
 
@@ -860,8 +1033,11 @@ def _mechanism_table_row(
     ensemble_steps = [step.get("ensemble", {}) for step in mechanism_steps]
     ensemble_steps = [item for item in ensemble_steps if isinstance(item, dict)]
     pre_clamp_action = _mechanism_action_summary(mechanism_steps)
+    selected_post_clamp_command = _selected_post_clamp_summary(mechanism_steps)
     selected_pedestrians = [step.get("selected_pedestrians", []) for step in mechanism_steps]
     selected_pedestrians = [item for item in selected_pedestrians if isinstance(item, list)]
+    nominal_command = _nominal_command_summary(mechanism_steps)
+    pedestrian_selection = _pedestrian_selection_summary(mechanism_steps)
     runtime_meta = metadata.get("planner_runtime")
     runtime_planner_meta = (
         runtime_meta.get("planner_metadata") if isinstance(runtime_meta, dict) else None
@@ -870,6 +1046,7 @@ def _mechanism_table_row(
     termination = record.get("outcome")
     termination = termination if isinstance(termination, dict) else {}
     row_status = classified.get("status", "unavailable")
+    applied_environment_command = _simulation_action_summary(simulation_steps)
     return {
         "schema_version": "brne-mechanism-table-row.v1",
         "planner": planner_key,
@@ -894,7 +1071,10 @@ def _mechanism_table_row(
             "unavailable_reason": None if observations else "goal_geometry_not_recorded",
         },
         "pre_clamp_action": pre_clamp_action,
-        "selected_action": _simulation_action_summary(simulation_steps),
+        "selected_action": applied_environment_command,
+        "selected_post_clamp_command": selected_post_clamp_command,
+        "applied_environment_command": applied_environment_command,
+        "nominal_command": nominal_command,
         "action_clipping": {
             "available": pre_clamp_action["available"],
             "clipped_steps": pre_clamp_action["clipped_steps"],
@@ -961,6 +1141,7 @@ def _mechanism_table_row(
             "simulation_last": simulation_steps[-1].get("pedestrians"),
             "max_observed_count": classified.get("max_pedestrians"),
         },
+        "pedestrian_selection": pedestrian_selection,
         "aggregation": {
             "requested_num_samples": sorted(
                 {item.get("requested_num_samples") for item in ensemble_steps}
@@ -1338,6 +1519,52 @@ def _markdown_candidate_transition(summary: Any) -> str:
         return "not available"
 
 
+def _markdown_nominal_command(summary: Any) -> str:
+    """Render the nominal adapter command and construction mode."""
+    if not isinstance(summary, dict) or summary.get("available") is not True:
+        return "not available"
+    first = summary.get("first")
+    last = summary.get("last")
+    modes = summary.get("construction_modes")
+    if not isinstance(first, dict) or not isinstance(last, dict) or not isinstance(modes, list):
+        return "not available"
+    try:
+        return (
+            f"{float(first['v_m_s']):.3f}/{float(first['omega_rad_s']):.3f}"
+            f" -> {float(last['v_m_s']):.3f}/{float(last['omega_rad_s']):.3f}; "
+            f"mode={','.join(str(mode) for mode in modes)}"
+        )
+    except (KeyError, TypeError, ValueError):
+        return "not available"
+
+
+def _markdown_pedestrian_selection(summary: Any) -> str:
+    """Render observed, activation-radius, and passed-agent counts."""
+    if not isinstance(summary, dict) or summary.get("available") is not True:
+        return "not available"
+    first = summary.get("first")
+    last = summary.get("last")
+    if not isinstance(first, dict) or not isinstance(last, dict):
+        return "not available"
+    try:
+        first_counts = (
+            int(first["observed_count"]),
+            int(first["within_upstream_activation_radius_count"]),
+            int(first["passed_to_brne_count"]),
+        )
+        last_counts = (
+            int(last["observed_count"]),
+            int(last["within_upstream_activation_radius_count"]),
+            int(last["passed_to_brne_count"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return "not available"
+    return (
+        f"{first_counts[0]}/{first_counts[1]}/{first_counts[2]}"
+        f" -> {last_counts[0]}/{last_counts[1]}/{last_counts[2]}"
+    )
+
+
 def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     """Write machine-readable and human-readable diagnostic reports."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1376,8 +1603,8 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
             "Rows retain diagnostic telemetry even when native eligibility is unavailable. "
             "`not available` is a fail-closed state, not a zero or a success.",
             "",
-            "| planner | seed | status | runtime | failures | pre-clamp action (v/omega) | selected action (v/omega) | candidate transition (v mean/weighted; weight mean) | heading/goal first (decl/vel/goal rad) | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | terminal | collision step | goal step |",
-            "| --- | ---: | --- | --- | ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: |",
+            "| planner | seed | status | runtime | failures | nominal command (v/omega/mode) | pedestrian selection (observed/within/passed) | pre-clamp action (v/omega) | selected post-clamp command (v/omega) | applied environment action (linear/angular) | candidate transition (v mean/weighted; weight mean) | heading/goal first (decl/vel/goal rad) | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | terminal | collision step | goal step |",
+            "| --- | ---: | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: |",
         ]
     )
     for row in report["mechanism_table"]:
@@ -1387,13 +1614,16 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         motion = row.get("motion", {})
         interaction = row.get("interaction_zone", {})
         clearance = row.get("clearance", {})
+        nominal_text = _markdown_nominal_command(row.get("nominal_command"))
+        pedestrian_selection_text = _markdown_pedestrian_selection(row.get("pedestrian_selection"))
         candidate_transition = _markdown_candidate_transition(
             row.get("aggregation", {}).get("candidate_distribution")
             if isinstance(row.get("aggregation"), dict)
             else None
         )
         pre_clamp_text = _markdown_action_summary(row.get("pre_clamp_action"), include_clipped=True)
-        selected_text = _markdown_action_summary(row.get("selected_action"))
+        selected_text = _markdown_action_summary(row.get("selected_post_clamp_command"))
+        applied_text = _markdown_action_summary(row.get("applied_environment_command"))
         heading_text = (
             f"{_markdown_cell(heading.get('declared_first_rad'))}/"
             f"{_markdown_cell(heading.get('velocity_derived_first_rad'))}/"
@@ -1417,8 +1647,9 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         lines.append(
             f"| {row.get('planner', 'unknown')} | {row.get('seed', 'unknown')} | "
             f"{row.get('status', 'unavailable')} | {runtime.get('status', 'not available')} | "
-            f"{runtime.get('failure_count', 'not available')} | {pre_clamp_text} | "
-            f"{selected_text} | {candidate_transition} | {heading_text} | {goal_text} | {phase_text} | "
+            f"{runtime.get('failure_count', 'not available')} | {nominal_text} | "
+            f"{pedestrian_selection_text} | {pre_clamp_text} | {selected_text} | {applied_text} | "
+            f"{candidate_transition} | {heading_text} | {goal_text} | {phase_text} | "
             f"{_markdown_cell(motion.get('displacement_m'))} | "
             f"{_markdown_cell(interaction.get('exposure_share'))} | "
             f"{_markdown_cell(clearance.get('min_clearance_m'))} | "

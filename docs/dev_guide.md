@@ -138,11 +138,23 @@ A cheap fresh-worktree check is:
 Use this order for a fresh worktree:
 
 ```bash
-MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-ln -s "$MAIN_REPO_ROOT/local.machine.md" .
-uv sync --all-extras
+scripts/dev/bootstrap_worktree.sh
 source .venv/bin/activate
+python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
+
+`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
+`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
+commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
+intentionally resync the local environment, unset the guard for that command:
+
+```bash
+env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
+```
+
+The optional-dependency preflight uses import-spec probes without importing project code. A
+`missing_optional` result is setup evidence and should not be confused with a changed-code
+collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
 
 Notes:
 
@@ -412,6 +424,21 @@ because:
 **When to revisit.** If the native merge queue becomes available and is enabled, the gate-side
 staleness check can be replaced by the queue's built-in re-validation, which is strictly stronger.
 The gate-side rule remains useful as a safety net for non-GitHub CI providers.
+
+### Pre-publication state refresh (issue #6916)
+
+The local readiness stamp proves a branch and HEAD were validated, but it cannot tell whether the
+claimed issue was closed by a concurrent PR or whether a remote branch tip changed while readiness
+was running. Use `scripts/dev/check_prepublication_state.py` around expensive publication work:
+
+1. `capture` the issue, base, remote branch, and local HEAD SHAs before readiness.
+2. Run `check` immediately before opening or updating the PR.
+3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
+   evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
+   rerun readiness and capture a new baseline.
+
+The gate records the exact before/after SHAs and any merged PR that explicitly closes the issue.
+Its integration path uses ordinary Git merges and never resets or deletes local worktrees.
 
 **Rollback path.** Remove step 6 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`

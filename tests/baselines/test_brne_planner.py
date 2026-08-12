@@ -268,6 +268,27 @@ def test_brne_solve_uses_plan_step_first_mean_normalized_weighted_mean(
     }
 
 
+def test_brne_selection_summary_exposes_upstream_activation_comparison() -> None:
+    """Selection telemetry records the upstream radius without changing adapter selection."""
+    summary = BRNEPlanner._summarize_pedestrian_selection(
+        [
+            {"position": [1.0, 0.0]},
+            {"position": [4.0, 0.0]},
+        ],
+        np.array([0.0, 0.0]),
+        [(1.0, 0)],
+    )
+
+    assert summary == {
+        "observed_count": 2,
+        "within_upstream_activation_radius_count": 1,
+        "passed_to_brne_count": 1,
+        "upstream_activation_radius_m": 3.5,
+        "activation_gate_applied": False,
+        "selection_mode": "nearest_up_to_maximum_agents",
+    }
+
+
 def test_brne_solve_uses_samples_first_mean_normalized_weighted_mean(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -400,6 +421,14 @@ def test_brne_step_returns_valid_unicycle_action(staged_brne_available: bool) ->
     assert mechanism_trace["schema_version"] == "brne-mechanism-trace.v1"
     assert mechanism_trace["status"] == "available"
     assert len(mechanism_trace["steps"]) == 1
+    step = mechanism_trace["steps"][0]
+    assert step["nominal_command"] == {
+        "v_m_s": pytest.approx(0.4),
+        "omega_rad_s": 0.0,
+        "construction_mode": "straight_constant",
+    }
+    assert step["pedestrian_selection"]["observed_count"] == 1
+    assert step["pedestrian_selection"]["passed_to_brne_count"] == 1
 
 
 def test_brne_step_with_no_agents(staged_brne_available: bool) -> None:
@@ -618,6 +647,11 @@ def test_brne_build_trajectories_uses_effective_control_sample_count() -> None:
     assert xtraj.shape == (2 * effective_samples, plan_steps)
     assert ytraj.shape == (2 * effective_samples, plan_steps)
     assert ulist.shape == (plan_steps, effective_samples, 2)
+    assert planner._last_nominal_command == {
+        "v_m_s": 0.4,
+        "omega_rad_s": 0.0,
+        "construction_mode": "straight_constant",
+    }
 
 
 def test_brne_metadata_marks_invalid_and_valid_source_provenance(

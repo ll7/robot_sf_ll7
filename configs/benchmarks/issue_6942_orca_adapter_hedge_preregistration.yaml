@@ -1,0 +1,304 @@
+# Issue #6942 ORCA adapter-hedge preregistration.
+#
+# This is a protocol packet only. It freezes a possible future comparison while
+# keeping execution blocked on domain-aware approval, native readiness, and a
+# separate evidence review.
+schema_version: robot_sf.issue_6942_orca_adapter_hedge_preregistration.v1
+issue: 6942
+predecessor_issue: 6615
+fallback_policy_issue: 691
+study_id: issue_6942_orca_adapter_hedge_validation_v1
+status: preregistration
+evidence_tier: proposal
+
+claim_boundary: >-
+  Preregistration and local contract evidence only. This packet does not run a
+  representative campaign, establish planner quality or native-ORCA equivalence,
+  change a dissertation or paper claim, or authorize a hedge update. Any future
+  result must remain diagnostic unless every native, pairing, provenance, and
+  approval gate below passes.
+
+execution_boundary:
+  representative_campaign_run_in_this_change: false
+  native_canary_run_in_this_change: false
+  compute_submit_authorized: false
+  paper_or_dissertation_claim_edits: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+domain_approval:
+  required: true
+  status: pending
+  decision_question: >-
+    Does the frozen representative paired design identify a material contribution
+    from the holonomic-to-unicycle projection without attributing projection effects
+    to ORCA planner behavior?
+  required_decisions:
+    - accept_or_reject_the_scenario_and_seed_population
+    - accept_or_reject_the_native_world_velocity_counterfactual
+    - accept_or_reject_the_primary_estimands_and_materiality_thresholds
+    - accept_or_reject_the_fallback_missingness_and_stop_rules
+    - accept_or_reject_the_claim_boundary_as_diagnostic_only
+
+baseline_protocol:
+  scenario_matrix: configs/scenarios/issue_6474_social_compliance_nominal.yaml
+  scenario_population: fixed_declared_suite
+  horizon_steps: 600
+  dt_seconds: 0.1
+  simulator_physics_steps_per_episode: 600
+  worker_count: 1
+  scenario_selection_rule: >-
+    Use the six medium-density classic interaction scenarios already frozen by
+    the #6474 matrix. Do not add, remove, replace, or reorder a scenario after
+    approval or after the first paired row is produced.
+  selected_scenarios:
+    - scenario_id: classic_head_on_corridor_medium
+      source_path: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+      scenario_family: head_on_corridor
+    - scenario_id: classic_doorway_medium
+      source_path: configs/scenarios/archetypes/classic_doorway.yaml
+      scenario_family: doorway
+    - scenario_id: classic_group_crossing_medium
+      source_path: configs/scenarios/archetypes/classic_group_crossing.yaml
+      scenario_family: group_crossing
+    - scenario_id: classic_merging_medium
+      source_path: configs/scenarios/archetypes/classic_merging.yaml
+      scenario_family: merging
+    - scenario_id: classic_overtaking_medium
+      source_path: configs/scenarios/archetypes/classic_overtaking.yaml
+      scenario_family: overtaking
+    - scenario_id: classic_station_platform_medium
+      source_path: configs/scenarios/archetypes/classic_station_platform.yaml
+      scenario_family: station_platform
+  scenario_count: 6
+  pairing:
+    same_scenario_seed_set_across_arms: true
+    same_initial_snapshot_across_arms: true
+    same_simulator_physics_steps_across_arms: true
+    scenario_order_frozen: true
+    no_seed_substitution: true
+
+seed_policy:
+  source_path: configs/benchmarks/seed_sets_v1.yaml
+  set_name: paper_eval_s30
+  seeds:
+    - 111
+    - 112
+    - 113
+    - 114
+    - 115
+    - 116
+    - 117
+    - 118
+    - 119
+    - 120
+    - 121
+    - 122
+    - 123
+    - 124
+    - 125
+    - 126
+    - 127
+    - 128
+    - 129
+    - 130
+    - 131
+    - 132
+    - 133
+    - 134
+    - 135
+    - 136
+    - 137
+    - 138
+    - 139
+    - 140
+  seed_count: 30
+  episode_cell_count: 180
+
+comparator_contract:
+  comparator_id: same_native_rvo2_velocity_with_or_without_projection
+  native_solver:
+    implementation: vendored_python_rvo2
+    upstream_repo: https://github.com/mit-acl/Python-RVO2
+    upstream_commit: 56b245132ea104ee8a621ddf65b8a3dd85028ed2
+    vendored_path: third_party/python-rvo2
+    required_execution_mode: native
+    fallback_allowed: false
+  arms:
+    - arm_id: native_world_velocity_counterfactual
+      role: holonomic_reference
+      command_space: world_velocity_xy
+      planner_anchor: robot_sf.planner.socnav_orca.ORCAPlannerAdapter.plan_velocity_world
+      execution_contract: >-
+        Record the native rvo2 world-velocity proposal at each paired snapshot
+        without applying the heading-safe velocity-to-unicycle projection. This
+        arm is a counterfactual action replay reference, not a claim that the
+        repository's robot executes holonomic commands.
+    - arm_id: adapter_projected_unicycle
+      role: executed_adapter_path
+      command_space: unicycle_vw
+      planner_anchor: robot_sf.planner.socnav_orca.ORCAPlannerAdapter.plan
+      projection_anchor: robot_sf.planner.socnav_orca.ORCAPlannerAdapter._velocity_world_to_command
+      trace_schema_version: orca_adapter_trace.v1
+      execution_contract: >-
+        Use the same native rvo2 world-velocity proposal and apply the existing
+        heading-safe projection before executing the differential-drive command.
+  same_native_velocity_proposals: true
+  planner_behavior_is_not_reestimated: true
+  projection_is_the_only_declared_arm_difference: true
+
+trace_contract:
+  schema_version: orca_adapter_trace.v1
+  trace_scope: every_valid_paired_planner_step
+  pairing_key:
+    - scenario_id
+    - seed
+    - episode_step
+  required_fields:
+    - schema_version
+    - step
+    - robot_heading_rad
+    - planned_velocity_world_mps
+    - planned_speed_mps
+    - executed_command_vw
+    - realized_velocity_world_mps
+    - executed_speed_mps
+    - angle_error_rad
+    - speed_delta_mps
+  nonfinite_policy: reject_the_row_and_record_not_available
+  missing_field_policy: reject_the_row_and_do_not_impute
+  trace_scope_note: >-
+    The #6615 trace is an instantaneous projection diagnostic. It does not
+    integrate angular velocity over a timestep and cannot by itself establish
+    closed-loop trajectory quality.
+
+estimand_contract:
+  primary_estimands:
+    - estimand_id: angle_error_rad
+      source_field: angle_error_rad
+      aggregation: episode_step_mean_and_p95_then_paired_scenario_seed_summary
+      materiality_threshold: 0.35
+      threshold_units: radians
+      direction: larger_means_more_projection_divergence
+    - estimand_id: forward_speed_loss_mps
+      source_field: speed_delta_mps
+      transformation: max_zero_minus_speed_delta_mps
+      aggregation: episode_step_mean_and_p95_then_paired_scenario_seed_summary
+      materiality_threshold: 0.10
+      threshold_units: meters_per_second
+      direction: larger_means_more_projection_loss
+  secondary_diagnostics:
+    - paired_success_delta_projected_minus_counterfactual
+    - paired_collision_delta_projected_minus_counterfactual
+    - paired_time_to_goal_delta_projected_minus_counterfactual
+  outcome_boundary: >-
+    Secondary episode outcomes describe the effect of the projection under the
+    frozen replay contract and remain diagnostic-only. They must not be written as ORCA planner-quality,
+    safety, ranking, or real-world claims.
+
+inference_contract:
+  resampling_unit:
+    method: paired scenario-seed block bootstrap within the fixed six-scenario suite
+    rationale: >-
+      Resample paired arm rows within the six declared scenarios so projection and
+      counterfactual values remain paired without implying a scenario superpopulation.
+    bootstrap_confidence: 0.95
+    resampling_order: scenario block then paired seed
+  inference_population:
+    type: fixed_suite
+    rationale: >-
+      The six declared medium-density scenarios are a fixed evaluation suite, not
+      a sample from an unobserved scenario superpopulation.
+  estimand:
+    type: paired_delta
+    description: >-
+      Compare projected-minus-counterfactual adapter effects within each paired
+      scenario-seed cell before the fixed-suite summary.
+  decision_rule:
+    rule: harmful-direction CI exceeds preregistered materiality threshold
+    threshold: >-
+      Require complete native paired provenance and a two-sided 95% paired interval
+      whose harmful-direction bound exceeds the relevant threshold; otherwise remain
+      inconclusive or diagnostic-only.
+  primary_metrics:
+    metrics:
+      - angle_error_rad
+      - forward_speed_loss_mps
+    ordered_by_importance: true
+  multiplicity_handling:
+    strategy: Holm-Bonferroni across the two preregistered primary estimands
+    rationale: >-
+      Two primary materiality decisions require family-wise error control before
+      any decision language.
+    adjustment_method: holm_bonferroni
+  inference_population_id: fixed_declared_suite
+  resampling_unit_id: paired_scenario_seed_block
+  bootstrap_samples: 2000
+  confidence_level: 0.95
+  bootstrap_seed: 123
+  primary_interval: percentile_bootstrap_ci
+  missingness: complete_case_only_no_imputation
+  multiplicity: >-
+    Report both primary estimands in preregistered order and apply Holm-Bonferroni
+    across the two primary materiality decisions before any decision language.
+  decision_rule_note: >-
+    A material adapter contribution requires complete native paired provenance and
+    a two-sided 95% paired interval whose harmful-direction bound exceeds the
+    corresponding preregistered threshold. Otherwise classify the result as
+    inconclusive or no material contribution on the fixed suite; never upgrade the
+    claim based on a partial, fallback, or degraded population.
+
+provenance_contract:
+  required_fields:
+    - source_commit
+    - preregistration_config_path
+    - preregistration_config_sha256
+    - scenario_matrix_path
+    - scenario_matrix_sha256
+    - seed_set_path
+    - seed_set_sha256
+    - upstream_rvo2_repo
+    - upstream_rvo2_commit
+    - runtime_dependency_versions
+    - exact_command
+    - execution_mode
+    - fallback_used
+  immutable_input_policy: >-
+    Capture hashes before the first row. A missing, changed, or unresolvable
+    input invalidates the campaign and cannot be repaired by substituting a local
+    worktree output or a different seed.
+  durable_artifact_policy: >-
+    Keep raw episode traces, videos, logs, and checkpoints outside Git in durable
+    artifact storage. Commit only compact manifests, summaries, hashes, and review
+    receipts after an independent evidence decision.
+
+preflight_contract:
+  native_dependency: rvo2
+  required_paths:
+    - configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml
+    - configs/scenarios/issue_6474_social_compliance_nominal.yaml
+    - configs/benchmarks/seed_sets_v1.yaml
+    - configs/algos/python_rvo2_orca_probe.yaml
+    - robot_sf/planner/socnav_orca.py
+    - scripts/benchmark/run_orca_adapter_validation_issue_6615.py
+  native_canary:
+    required_before_campaign: true
+    command_reference: >-
+      LOGURU_LEVEL=WARNING NUMBA_NUM_THREADS=1 uv run python
+      scripts/benchmark/run_orca_adapter_validation_issue_6615.py
+      --output-dir <ignored-worktree-diagnostic-output-dir>
+    interpretation: >-
+      The #6615 canary proves native trace-field availability only. It is not a
+      representative campaign row and cannot satisfy the campaign evidence gate.
+  representative_runner: separate_reviewed_implementation_required
+
+stop_rules:
+  - stop_if_domain_approval_is_pending_or_rejected
+  - stop_if_native_rvo2_is_unavailable
+  - stop_if_any_fallback_or_degraded_row_is_observed
+  - stop_if_scenario_seed_pairing_or_initial_snapshot_differs
+  - stop_if_trace_fields_are_missing_or_nonfinite
+  - stop_if_any_required_input_hash_changes_after_capture
+  - stop_if_complete_case_population_is_below_180_cells_per_arm
+  - stop_if_the_comparator_cannot_isolate_projection_from_planner_behavior
+  - stop_if_any_result_would_require_a_new_claim_boundary

@@ -1,13 +1,14 @@
 # Issue #6944 — BRNE Candidate Transition
 
-Status: **mechanism narrowed; diagnostic-only**.
+Status: **controller-parity mismatch observed; diagnostic-only**.
 
 Bayesian Recursive Nash Equilibrium (BRNE) emits a low-speed command after the
 first planner-observation transition in the frozen corridor diagnostic. This
-slice adds bounded candidate-control and weight summaries so the transition can
-be separated from the adapter's mean aggregation and safety clamp. It does not
-establish planner quality, ranking, safety, realism, matched-compute parity, or
-paper evidence.
+slice adds bounded candidate-control, weight, upstream-activation,
+nominal-command, and applied-environment-action summaries so the transition can
+be separated from candidate construction, pedestrian selection, mean
+aggregation, and the safety clamp. It does not establish planner quality,
+ranking, safety, realism, matched-compute parity, or paper evidence.
 
 ## Frozen diagnostic
 
@@ -18,8 +19,8 @@ paper evidence.
 - Upstream source: `MurpheyLab/brne` at
   `633a5cdcb39ab27f18b596cb8cb1968644f82391`, GPL-3.0, staged locally and not
   vendored or redistributed.
-- Integration base after refresh: `a31686e51f624638255d22968b89cda0257c2e4c`.
-- Implementation commit: `ad4653825b97b94acd760e5b9eb313b9f63c6d57`.
+- Integration base after refresh: `a25045b4ae02802c7ff58747924c898fbc841d0f`.
+- Implementation commit: `8f9438632e794f084db72bb016a14b539bbca648`.
 
 Reproduce with:
 
@@ -54,10 +55,28 @@ suppressed by weight normalization or aggregation. This is a falsifiable null
 result for the weighting/normalization explanation in this frozen slice, not a
 causal explanation of the upstream behavior.
 
+## Controller-parity fields
+
+The expanded trace now exposes the candidate-generation inputs and the command
+boundary for each native seed:
+
+| Seed | Nominal command | Observed / within `<3.5 m` / passed | Pre-clamp → selected | Applied environment action | Clipped |
+| ---: | --- | --- | --- | --- | ---: |
+| 111 | `0.40/0.00 → 0.04/0.00`, `straight_constant` | `2/0/2` | `0.40/0.00 → 0.04/0.00` | `0.40/0.00 → ~0.00/0.00` | 0 |
+| 112 | `0.40/0.00 → 0.04/0.00`, `straight_constant` | `2/0/2` | `0.40/0.00 → 0.04/0.00` | `0.40/0.00 → ~0.00/0.00` | 0 |
+| 113 | `0.40/0.00 → 0.04/0.00`, `straight_constant` | `2/0/2` | `0.40/0.00 → 0.04/0.00` | `0.40/0.00 → ~0.00/0.00` | 0 |
+
+This confirms a bounded upstream-controller-parity mismatch in the diagnostic:
+the adapter uses a constant straight nominal command and passes nearest agents
+without applying the upstream `<3.5 m` activation gate. The trace does not
+change either behavior, and it does not establish whether aligning either one
+would improve progress.
+
 All three rows retain positive signed goal-distance progress in early, middle,
-and late phases, but none reaches the goal. The remaining explanations are
-upstream candidate generation, planner state, or control-horizon behavior; no
-single intervention was run here.
+and late phases, but none reaches the goal. The remaining explanations include
+upstream candidate generation, planner state, and control-horizon behavior. No
+intervention was run here, and no separate implementation issue is created by
+this diagnostic slice.
 
 ## Decision and boundary
 
@@ -67,23 +86,24 @@ interpretation, or paper-facing surfaces. Raw episode JSONL and the staged GPL
 source remain ignored, worktree-local artifacts; the tracked summary is a
 compact provenance handoff rather than a raw episode archive.
 
-If further work is authorized, test one candidate-generation, planner-state, or
-control-horizon intervention at a time on the same frozen matrix. Otherwise the
-issue is resolved only to the weighting/normalization null result and remains
-unresolved as a full causal explanation.
+If further work is authorized, test one upstream-controller-parity,
+planner-state, or control-horizon intervention at a time on the same frozen
+matrix. The parity mismatch is now a confirmed diagnostic lead, not a validated
+fix or benchmark result.
 
 ## Validation
 
-- `uv run pytest -q tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py` — `57 passed`
+- `uv run pytest -q tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py` — `61 passed`
 - `NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py` — `6 passed`
+- `uv run pytest -q tests/benchmark/test_map_runner_utils.py -k run_map_episode_records_synthetic_actuation_metrics` — `1 passed`
 - focused Ruff check and `git diff --check` — passed
 
 ## Report integrity
 
 The exact local report directory is
-`output/benchmarks/issue_6944_candidate_trace_20260812T0755Z/`.
+`output/benchmarks/issue_6944_controller_parity_20260812T101747Z/`.
 
 - `diagnostic_report.json` SHA-256:
-  `722cb24f13135955e6e954c0cb1d1f84f6ab84a2c1e206d271d1b776eac417aa`
+  `4438f5df1e6d3fe8eeffa85fa433c24388b4f862accc4a8b77c5adec5e8f3e0a`
 - `diagnostic_report.md` SHA-256:
-  `412313a4be213b77144b299a07488ccc664288ec49ec7844f74f6b90d24dc80d`
+  `8abc23a4e0449168c481d10aae2501ebc586f9b8eba9b336cc21fad0349ffbb8`

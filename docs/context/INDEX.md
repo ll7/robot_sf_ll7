@@ -13,6 +13,16 @@ authorize the #6145 campaign and rejects the historical v1 contract for promotio
 execution:
 [README.md](evidence/issue_5303_search_promotion_powered_preregistration/README.md).
 
+Issue #6146 Gate A transfer-contract repair (capability-only): adds immutable
+candidate x evaluated-planner x fresh-seed rows, candidate-clustered uncertainty
+with explicit denominators, rejection of stress_only / fallback / degraded /
+unavailable / duplicate / pre_correction / malformed / lineage-incomplete rows,
+capability-only ranking without minimax/regret claims, and a side-effect-free
+`check_issue_6145_activation` helper. Gate B remains responsible for byte-level
+hash verification and full semantic promote; issue closure alone never activates
+downstream work:
+[issue_6146_gate_a_transfer_contract_repair.md](issue_6146_gate_a_transfer_contract_repair.md).
+
 Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
 [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
 
@@ -160,11 +170,13 @@ phase progress but `0/3` goal-reaching:
 [issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
 [evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
 
-Issue #6944 BRNE candidate transition: bounded native candidate/weight summaries
-show the candidate distribution itself shifts from `0.400` to `0.040` m/s
-while mean-normalized weights remain uniform; weighting/normalization is
-narrowed as a null explanation, but upstream candidate generation, planner
-state, and control-horizon causes remain unresolved and diagnostic-only:
+Issue #6944 BRNE candidate transition: bounded native candidate/weight and
+controller-parity summaries show the candidate distribution itself shifts from
+`0.400` to `0.040` m/s while mean-normalized weights remain uniform; the
+adapter also uses a straight-constant nominal command and passes `2/0/2`
+observed/within-upstream-radius/passed pedestrians. Weighting/normalization is
+narrowed as a null explanation, while the parity lead and remaining planner
+state/control-horizon causes remain diagnostic-only:
 [issue_6944_brne_candidate_transition.md](issue_6944_brne_candidate_transition.md),
 [evidence/issue_6944_brne_candidate_transition_summary.json](evidence/issue_6944_brne_candidate_transition_summary.json).
 
@@ -174,6 +186,13 @@ result measures projection divergence only; it is not benchmark evidence and doe
 ORCA dissertation hedge:
 [issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
 [evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
+
+Issue #6942 ORCA adapter-hedge preregistration: a blocked, proposal-only six-scenario/S30 paired
+protocol that freezes the native rvo2 world-velocity counterfactual, existing
+`orca_adapter_trace.v1` fields, materiality estimands, missingness, provenance, approval, and
+stop rules without authorizing campaign execution:
+[issue_6942_orca_adapter_hedge_preregistration.md](issue_6942_orca_adapter_hedge_preregistration.md),
+[configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml](../../configs/benchmarks/issue_6942_orca_adapter_hedge_preregistration.yaml).
 
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).

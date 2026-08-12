@@ -153,6 +153,14 @@ diagnostic but did not change the `0/3` goal-reaching boundary:
 The residual progress mechanism is tracked separately in
 [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
 
+Issue #6938 BRNE progress mechanism: exact native traces separate pre-clamp and
+selected actions, show no clipping or gross heading/frame mismatch in the frozen
+slice, and reproduce a common post-initial-step low-speed command with positive
+phase progress but `0/3` goal-reaching:
+[issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
+[evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
+The bounded command-generation follow-up is [#6944](https://github.com/ll7/robot_sf_ll7/issues/6944).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

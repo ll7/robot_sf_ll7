@@ -302,6 +302,93 @@ class BRNEPlanner:
         """
         return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
 
+    @staticmethod
+    def _summarize_control_candidates(
+        ulist: np.ndarray,
+        robot_weights: np.ndarray,
+        *,
+        aggregation_mode: str,
+    ) -> dict[str, Any]:
+        """Summarize candidate controls and weights without retaining raw tensors.
+
+        Returns:
+            A finite, bounded candidate/weight distribution summary.
+        """
+        candidates = np.asarray(ulist, dtype=float)
+        weights = np.asarray(robot_weights, dtype=float)
+        if aggregation_mode == "samples_first":
+            candidates = np.transpose(candidates, (1, 0, 2))
+        if (
+            aggregation_mode not in {"plan_step_first", "samples_first"}
+            or candidates.ndim != 3
+            or candidates.shape[2] != 2
+            or weights.ndim != 1
+            or candidates.shape[1] != weights.size
+            or not np.all(np.isfinite(candidates))
+            or not np.all(np.isfinite(weights))
+        ):
+            return {
+                "status": "unavailable",
+                "reason": "invalid_candidate_or_weight_tensor",
+            }
+
+        def stats(values: np.ndarray) -> dict[str, float]:
+            quantiles = np.quantile(values, [0.0, 0.25, 0.5, 0.75, 1.0])
+            return {
+                "min": float(quantiles[0]),
+                "q25": float(quantiles[1]),
+                "median": float(quantiles[2]),
+                "mean": float(np.mean(values)),
+                "q75": float(quantiles[3]),
+                "max": float(quantiles[4]),
+                "std": float(np.std(values)),
+            }
+
+        def step_summary(step_index: int) -> dict[str, Any]:
+            controls = candidates[step_index]
+            weighted_mean = np.mean(controls * weights[:, np.newaxis], axis=0)
+            return {
+                "candidate_controls": {
+                    "v_m_s": stats(controls[:, 0]),
+                    "omega_rad_s": stats(controls[:, 1]),
+                },
+                "weights": stats(weights),
+                "weighted_mean": {
+                    "v_m_s": float(weighted_mean[0]),
+                    "omega_rad_s": float(weighted_mean[1]),
+                },
+            }
+
+        first = step_summary(0)
+        second = step_summary(1) if candidates.shape[0] > 1 else None
+        first_to_second = None
+        if second is not None:
+            first_to_second = {
+                "candidate_mean_delta_v_m_s": float(
+                    second["candidate_controls"]["v_m_s"]["mean"]
+                    - first["candidate_controls"]["v_m_s"]["mean"]
+                ),
+                "weighted_mean_delta_v_m_s": float(
+                    second["weighted_mean"]["v_m_s"] - first["weighted_mean"]["v_m_s"]
+                ),
+                "candidate_mean_delta_omega_rad_s": float(
+                    second["candidate_controls"]["omega_rad_s"]["mean"]
+                    - first["candidate_controls"]["omega_rad_s"]["mean"]
+                ),
+                "weighted_mean_delta_omega_rad_s": float(
+                    second["weighted_mean"]["omega_rad_s"] - first["weighted_mean"]["omega_rad_s"]
+                ),
+            }
+        return {
+            "status": "available",
+            "schema_version": "brne-candidate-distribution.v1",
+            "sample_count": int(candidates.shape[1]),
+            "plan_step_count": int(candidates.shape[0]),
+            "first": first,
+            "second": second,
+            "first_to_second": first_to_second,
+        }
+
     def _record_mechanism_step(  # noqa: PLR0913
         self,
         *,
@@ -320,6 +407,7 @@ class BRNEPlanner:
         aggregation_mode: str,
         effective_num_samples: int,
         pre_clamp_action: dict[str, float] | None,
+        candidate_distribution: dict[str, Any] | None,
     ) -> None:
         """Record compact BRNE mechanism telemetry for one planner observation.
 
@@ -442,6 +530,9 @@ class BRNEPlanner:
                         if aggregation_mode == "samples_first"
                         else "not_applied"
                     ),
+                    "candidate_distribution": candidate_distribution
+                    if candidate_distribution is not None
+                    else {"status": "unavailable", "reason": "not_recorded"},
                 },
                 "runtime": {
                     "status": runtime_status,
@@ -537,6 +628,7 @@ class BRNEPlanner:
             weights_shape: tuple[int, ...] | None = None,
             aggregation_mode: str = "not_applied",
             pre_clamp_action: dict[str, float] | None = None,
+            candidate_distribution: dict[str, Any] | None = None,
         ) -> dict[str, float]:
             """Record runtime state and compact telemetry before returning an action.
 
@@ -565,6 +657,7 @@ class BRNEPlanner:
                 aggregation_mode=aggregation_mode,
                 effective_num_samples=effective_num_samples,
                 pre_clamp_action=pre_clamp_action,
+                candidate_distribution=candidate_distribution,
             )
             return action
 
@@ -649,6 +742,11 @@ class BRNEPlanner:
                 aggregation_mode=aggregation_mode,
             )
         pre_clamp_action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
+        candidate_distribution = self._summarize_control_candidates(
+            ulist,
+            robot_weights,
+            aggregation_mode=aggregation_mode,
+        )
         action = dict(pre_clamp_action)
         self._clamp_action(action)
         return finish(
@@ -657,6 +755,7 @@ class BRNEPlanner:
             weights_shape=tuple(int(value) for value in weights.shape),
             aggregation_mode=aggregation_mode,
             pre_clamp_action=pre_clamp_action,
+            candidate_distribution=candidate_distribution,
         )
 
     def _brne_solve(

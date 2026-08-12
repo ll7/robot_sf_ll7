@@ -159,7 +159,14 @@ slice, and reproduce a common post-initial-step low-speed command with positive
 phase progress but `0/3` goal-reaching:
 [issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
 [evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
-The bounded command-generation follow-up is [#6944](https://github.com/ll7/robot_sf_ll7/issues/6944).
+
+Issue #6944 BRNE candidate transition: bounded native candidate/weight summaries
+show the candidate distribution itself shifts from `0.400` to `0.040` m/s
+while mean-normalized weights remain uniform; weighting/normalization is
+narrowed as a null explanation, but upstream candidate generation, planner
+state, and control-horizon causes remain unresolved and diagnostic-only:
+[issue_6944_brne_candidate_transition.md](issue_6944_brne_candidate_transition.md),
+[evidence/issue_6944_brne_candidate_transition_summary.json](evidence/issue_6944_brne_candidate_transition_summary.json).
 
 Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
 `orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The

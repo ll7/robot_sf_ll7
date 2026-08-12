@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_batch import (
     ActorForecast,
     CoordinateFrame,
     ForecastBatch,

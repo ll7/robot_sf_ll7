@@ -28,7 +28,7 @@ The canonical schema lives at
 `robot_sf/benchmark/schemas/forecast_batch.schema.v1.json`. The
 `ForecastBatchSchema` structural validator is in
 `robot_sf/benchmark/schemas/forecast_batch_schema.py`; the domain dataclasses
-and stricter typed loader are in `robot_sf/benchmark/forecast_batch.py`. A CLI
+and stricter typed loader are in `robot_sf/benchmark/forecast/forecast_batch.py`. A CLI
 validator is available at `scripts/validation/validate_forecast_batch.py`.
 
 ## Minimal deterministic example

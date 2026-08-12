@@ -31,7 +31,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from robot_sf.benchmark.forecast_lane_inventory import main  # noqa: E402
+from robot_sf.benchmark.forecast.forecast_lane_inventory import main  # noqa: E402
 
 if __name__ == "__main__":
     sys.exit(main())

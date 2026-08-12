@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.forecast_heavy_model_adapter import (
+from robot_sf.benchmark.forecast.forecast_heavy_model_adapter import (
     FORECAST_HEAVY_MODEL_ADAPTER_VERSION,
     HeavyModelAdapterConfig,
     HeavyModelForecastAdapter,

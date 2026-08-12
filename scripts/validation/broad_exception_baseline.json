@@ -5,7 +5,7 @@
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
       "robot_sf/benchmark/candidate_trace_resolution.py": 1,
       "robot_sf/benchmark/doctor.py": 2,
-      "robot_sf/benchmark/forecast_lane_inventory.py": 1,
+      "robot_sf/benchmark/forecast/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
@@ -169,7 +169,7 @@
       "fingerprint": "b5dcc0004133d42e",
       "handler": "Exception",
       "lineno": 621,
-      "path": "robot_sf/benchmark/forecast_lane_inventory.py",
+      "path": "robot_sf/benchmark/forecast/forecast_lane_inventory.py",
       "source": "except Exception as exc:  # noqa: BLE001 - report any import failure as a blocker"
     },
     {

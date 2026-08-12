@@ -50,12 +50,12 @@ The inventory probes that the surfaces an offline experiment would touch import 
 key symbols. On the current checkout all *required* surfaces are present (the preflight passes its
 import verdict). They are:
 
-- `robot_sf/benchmark/forecast_metrics.py` — ADE/FDE/miss-rate scoring.
-- `robot_sf/benchmark/forecast_calibration_report.py` — calibration / reliability.
-- `robot_sf/benchmark/forecast_conformal_pilot.py` — distribution-free coverage.
-- `robot_sf/benchmark/forecast_dataset_recorder.py` — bounded durable dataset + manifest.
-- `robot_sf/benchmark/forecast_batch.py` — `ForecastBatch` / `ActorForecast` data contracts.
-- `robot_sf/benchmark/forecast_baseline_comparison.py` — baseline comparison ladder.
+- `robot_sf/benchmark/forecast/forecast_metrics.py` — ADE/FDE/miss-rate scoring.
+- `robot_sf/benchmark/forecast/forecast_calibration_report.py` — calibration / reliability.
+- `robot_sf/benchmark/forecast/forecast_conformal_pilot.py` — distribution-free coverage.
+- `robot_sf/benchmark/forecast/forecast_dataset_recorder.py` — bounded durable dataset + manifest.
+- `robot_sf/benchmark/forecast/forecast_batch.py` — `ForecastBatch` / `ActorForecast` data contracts.
+- `robot_sf/benchmark/forecast/forecast_baseline_comparison.py` — baseline comparison ladder.
 - `robot_sf/benchmark/pedestrian_forecast.py` — lightweight CV/graph comparator.
 
 ## Minimum viable offline experiment
@@ -75,7 +75,7 @@ Preflight status (2026-07-24 update):
 Local (closeable in-repo):
 
 1. `staged_holdout_dataset` — pending trace recording and a validated durable manifest.
-2. `heavy_model_adapter` — adapter at `robot_sf/benchmark/forecast_heavy_model_adapter.py`.
+2. `heavy_model_adapter` — adapter at `robot_sf/benchmark/forecast/forecast_heavy_model_adapter.py`.
 3. `cpu_runtime_budget` — config at `configs/forecast/heavy_model_cpu_budget.yaml`.
 
 External (standing decisions, out of this slice's scope):
@@ -117,5 +117,6 @@ uv run python -m pytest tests/benchmark/test_forecast_heavy_model_adapter.py -q
 
 ## Related
 
-- #2844 (lightweight learned baseline), #2915 (deterministic baseline ladder), #3065 (real-traj
-  ingestion + staging contract), #1490 / #2843 (coupling / gating constraints to respect).
+- Issue #2844 (lightweight learned baseline), Issue #2915 (deterministic baseline ladder), Issue
+  Issue #3065 (real-traj ingestion + staging contract), and Issues #1490 / #2843 (coupling / gating
+  constraints to respect).

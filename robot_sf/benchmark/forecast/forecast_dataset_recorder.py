@@ -17,7 +17,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExport,
     load_simulation_trace_export,
 )
-from robot_sf.benchmark.forecast_observation_adapters import (
+from robot_sf.benchmark.forecast.forecast_observation_adapters import (
     ForecastObservationAdapter,
     OracleFullStateForecastAdapter,
 )

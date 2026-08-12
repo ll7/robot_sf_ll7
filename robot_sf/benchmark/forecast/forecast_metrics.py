@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_batch import (
     FORECAST_BATCH_SCHEMA_VERSION,
     ActorForecast,
     ForecastBatch,

@@ -33,15 +33,15 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceFrame,
     SimulationTraceSource,
 )
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_batch import (
     ActorForecast,
     CoordinateFrame,
     ForecastBatch,
     ForecastBatchProvenance,
     validate_forecast_batch,
 )
-from robot_sf.benchmark.forecast_metrics import evaluate_forecast_batch
-from robot_sf.benchmark.forecast_observation_adapters import (
+from robot_sf.benchmark.forecast.forecast_metrics import evaluate_forecast_batch
+from robot_sf.benchmark.forecast.forecast_observation_adapters import (
     ForecastObservationAdapter,
     OracleFullStateForecastAdapter,
 )

@@ -572,6 +572,16 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
                     "link an open follow-up issue or add an explicit maintainer waiver."
                 ),
             )
+        if issue_state_errors:
+            return FollowupReport(
+                status="issue_state_error",
+                source=source,
+                deferred_work="",
+                linked_issues=linked_issues,
+                explicit_no_issue_reason="",
+                issue_state_errors=issue_state_errors,
+                message="Deferred work follow-up issue state could not be verified open.",
+            )
         return FollowupReport(
             status="ok",
             source=source,

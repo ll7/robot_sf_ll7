@@ -715,6 +715,25 @@ def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
     assert "#2966: state is CLOSED" in report.issue_state_errors[0]
 
 
+def test_analyze_body_rejects_closed_followup_issue_for_explicit_no_work(monkeypatch) -> None:
+    """Explicit no-work text must not bypass linked-issue state validation."""
+
+    def fake_fetch_issue(number: int, **kwargs):
+        return {"number": number, "status": "ok", "state": "CLOSED", "url": "https://example.com"}
+
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
+
+    report = analyze_body(
+        _body(deferred="No deferred work.", issues="#2966"),
+        source="fixture",
+        require_open_issues=True,
+    )
+
+    assert report.status == "issue_state_error"
+    assert report.linked_issues == ("#2966",)
+    assert "#2966: state is CLOSED" in report.issue_state_errors[0]
+
+
 def test_analyze_body_rejects_unverifiable_issue_when_rest_fails(monkeypatch) -> None:
     """Open-state verification reports a compact error when REST read fails."""
 

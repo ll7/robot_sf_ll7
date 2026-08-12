@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6951 progress-shaped behavioral-cloning objective.** Added a named,
+  config-first uniform control arm and a progress-weighted arm for expert-action
+  negative log-likelihood. Arm B consumes only explicitly aligned,
+  provenance-checked remaining-route-length data, records objective and dataset
+  digests in the training manifest, and validates the route-progress contract in
+  dry-run mode without launching training.
+
 * **Issue #6792 Chapter 7 release-cell evidence package.** Added the digest-verified
   `build_ch7_evidence_package.py` workflow, `ch7-evidence-package.v1` manifest, three design
   wireframes, a complete release-cell audit atlas, reduced publication atlas, deterministic

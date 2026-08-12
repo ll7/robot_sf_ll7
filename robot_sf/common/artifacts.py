@@ -107,6 +107,7 @@ class TrainingRunArtifact:
     evaluation_scenario_config: Path | None = None
     scenario_coverage: dict[str, int] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 def ensure_seed_tuple(seeds: tuple[int, ...] | list[int]) -> tuple[int, ...]:

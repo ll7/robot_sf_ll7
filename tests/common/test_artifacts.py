@@ -239,6 +239,7 @@ def test_training_run_artifact_defaults():
     assert art.evaluation_scenario_config is None
     assert art.scenario_coverage == {}
     assert art.notes == []
+    assert art.metadata == {}
 
 
 def test_training_run_artifact_with_optional():

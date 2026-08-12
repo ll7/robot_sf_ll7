@@ -51,6 +51,15 @@ EMPTY_OR_PLACEHOLDER = {
     "#<id>",
     "<id>",
 }
+EXPLICIT_NO_DEFERRED_WORK_RE = re.compile(
+    r"^(?:"
+    r"none|"
+    r"no\s+(?:deferred|follow[- ]?up)\s+work(?:\s+remains)?|"
+    r"nothing\s+(?:is\s+)?deferred|"
+    r"not\s+applicable|n/?a"
+    r")[.!]?$",
+    re.IGNORECASE,
+)
 DOMAIN_APPROVAL_NOT_REQUIRED = {
     "docs-only",
     "docs only",
@@ -234,6 +243,19 @@ def _read_changed_files(path: Path | None) -> tuple[str, ...]:
 def _is_empty_or_placeholder(text: str) -> bool:
     value = _clean_value(text).lower()
     return value in EMPTY_OR_PLACEHOLDER or value.startswith("#<")
+
+
+def _is_explicit_no_deferred_work(text: str) -> bool:
+    """Return whether the deferred-work field explicitly declares no work.
+
+    This is deliberately narrower than the follow-up issue disposition.  A
+    bare ``Issues opened for follow-up: none`` remains insufficient when the
+    deferred-work field names work, while punctuation and casing on the
+    deferred-work declaration itself must not turn ``none.`` into a missing
+    declaration.
+    """
+
+    return bool(EXPLICIT_NO_DEFERRED_WORK_RE.fullmatch(_clean_value(text)))
 
 
 def _is_option_placeholder(text: str) -> bool:
@@ -532,7 +554,7 @@ def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -
             issue_state_errors=(),
             message="No Follow-Up Issues section required (no residual scope declared).",
         )
-    if _is_empty_or_placeholder(deferred):
+    if _is_empty_or_placeholder(deferred) or _is_explicit_no_deferred_work(deferred):
         if (
             residual_closure
             and not linked_issues

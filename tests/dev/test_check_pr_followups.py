@@ -107,6 +107,48 @@ def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
 
 
 @pytest.mark.parametrize(
+    "deferred",
+    [
+        "none.",
+        "NONE",
+        "No deferred work.",
+        "Nothing is deferred!",
+        "N/A.",
+    ],
+)
+def test_analyze_body_accepts_explicit_no_deferred_work_forms(
+    deferred: str,
+) -> None:
+    """Issue #1159: an explicit no-work declaration is not a missing field."""
+    report = analyze_body(_body(deferred=deferred), source="fixture")
+
+    assert report.status == "ok"
+    assert report.deferred_work == ""
+    assert report.message == "No deferred work declared."
+
+
+@pytest.mark.parametrize(
+    ("pr_number", "deferred"),
+    [
+        (6705, "Deferred work: none."),
+        (6723, "Deferred work: no follow-up work remains."),
+    ],
+)
+def test_live_pr_body_regressions_reach_clean_followup_verdict(
+    pr_number: int,
+    deferred: str,
+) -> None:
+    """The two issue-1159-shaped bodies must not stall on punctuation/casing."""
+    del pr_number
+    report = analyze_body(
+        _body(deferred=deferred.removeprefix("Deferred work: ")),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+
+
+@pytest.mark.parametrize(
     "files",
     [
         ("robot_sf/benchmark/camera_ready/_summaries.py",),

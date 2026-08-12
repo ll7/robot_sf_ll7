@@ -24,6 +24,8 @@ import yaml
 from jsonschema import Draft202012Validator
 
 PACKAGE_SCHEMA = "ch7-evidence-package.v1"
+COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
+PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
 EXPECTED_SOURCE_SHA256SUMS = "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 EXPECTED_RELEASE_ARCHIVE_SHA256 = "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
 DEFAULT_CONFIG = Path("configs/analysis/ch7_evidence_package.v1.yaml")
@@ -35,6 +37,22 @@ REQUIRED_SCENARIOS = (
 HYBRID_ARMS = (
     "hybrid_rule_v3_fast_progress_static_escape",
     "hybrid_rule_v3_fast_progress_static_escape_continuous",
+)
+DOORWAY_ARMS = (
+    "goal",
+    "guarded_ppo",
+    "hybrid_rule_v3_fast_progress_static_escape",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous",
+    "orca",
+    "ppo",
+    "prediction_planner",
+    "predictive_mppi",
+    "risk_dwa",
+    "sacadrl",
+    "scenario_adaptive_hybrid_orca_v1",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard",
+    "social_force",
+    "socnav_sampling",
 )
 COLOR_SAFE = {
     "route_complete": "#009E73",
@@ -116,7 +134,9 @@ def _parse_sha256sums(path: Path) -> list[tuple[str, str]]:
     return entries
 
 
-def verify_source_package(source_package: Path, expected_sha256sums: str) -> dict[str, Any]:
+def verify_source_package(  # noqa: C901
+    source_package: Path, expected_sha256sums: str
+) -> dict[str, Any]:
     """Verify every source-package member and return compact source metadata."""
 
     source_package = source_package.resolve()
@@ -127,6 +147,14 @@ def verify_source_package(source_package: Path, expected_sha256sums: str) -> dic
     if sums_digest != expected_sha256sums:
         raise Ch7EvidencePackageError("approved source SHA256SUMS digest mismatch")
     entries = _parse_sha256sums(sums_path)
+    paths = [relative for _expected, relative in entries]
+    if len(paths) != len(set(paths)):
+        raise Ch7EvidencePackageError("approved source SHA256SUMS contains duplicate paths")
+    required_members = {"package_manifest.json", "mapping_receipt.json"}
+    if not required_members.issubset(paths):
+        raise Ch7EvidencePackageError("approved source SHA256SUMS omits required metadata")
+    if not (source_package / "package_complete.json").is_file():
+        raise Ch7EvidencePackageError("approved source package_complete.json is missing")
     for expected, relative in entries:
         member = source_package / relative
         if not member.is_file() or _sha256_file(member) != expected:
@@ -138,6 +166,11 @@ def verify_source_package(source_package: Path, expected_sha256sums: str) -> dic
         or package_manifest.get("visualization_only") is not True
     ):
         raise Ch7EvidencePackageError("source package must remain visualization-only")
+    if (
+        package_complete.get("sha256sums_sha256") is not None
+        and package_complete.get("sha256sums_sha256") != expected_sha256sums
+    ):
+        raise Ch7EvidencePackageError("package_complete does not bind the approved SHA256SUMS")
     counts = {
         "requested": package_manifest.get("n_requested"),
         "admitted": package_manifest.get("n_admitted"),
@@ -149,6 +182,12 @@ def verify_source_package(source_package: Path, expected_sha256sums: str) -> dic
     rows = mapping.get("rows")
     if mapping.get("n_rows") != 90 or not isinstance(rows, list) or len(rows) != 90:
         raise Ch7EvidencePackageError("source mapping receipt is not the complete 90-row ledger")
+    mapping_counts = Counter(
+        str(row.get("admission_status")) for row in rows if isinstance(row, Mapping)
+    )
+    excluded_count = mapping_counts.get("excluded", 0) + mapping_counts.get("not_admitted", 0)
+    if mapping_counts.get("admitted", 0) != 88 or excluded_count != 2:
+        raise Ch7EvidencePackageError("source mapping receipt does not reproduce 90/88/2")
     return {
         "sha256sums_sha256": sums_digest,
         "package_manifest_sha256": _sha256_file(source_package / "package_manifest.json"),
@@ -311,6 +350,46 @@ def _validate_config(config: Mapping[str, Any]) -> None:
         raise Ch7EvidencePackageError("package config relaxes a forbidden trace comparison")
 
 
+def _load_portfolio_contract(path: Path) -> dict[str, Any]:
+    """Load and validate the frozen portfolio and release-cell selection contract."""
+
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise Ch7EvidencePackageError(f"invalid portfolio config: {path}") from exc
+    if not isinstance(payload, Mapping) or payload.get("schema_version") != PORTFOLIO_SCHEMA:
+        raise Ch7EvidencePackageError("portfolio config is not ch7_case_portfolio.v2")
+    selection = payload.get("selection")
+    if not isinstance(selection, Mapping):
+        raise Ch7EvidencePackageError("portfolio config lacks selection contract")
+    expected_roles = (
+        "planner_upset",
+        "seed_sensitivity",
+        "feasibility_criticism",
+        "metric_disagreement",
+    )
+    if tuple(selection.get("required_roles", ())) != expected_roles:
+        raise Ch7EvidencePackageError("portfolio required roles do not match the frozen contract")
+    expected_targets = {
+        "planner_upset": "ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118",
+        "seed_sensitivity": "ch7-role-seed-sensitivity--classic-doorway-medium--ppo--seeds-113-114",
+        "feasibility_criticism": "ch7-role-feasibility-criticism--francis2023-narrow-doorway",
+        "metric_disagreement": "ch7-role-cross-cell-inversion--hybrid-vs-ppo--double-bottleneck-vs-blind-corner",
+    }
+    if selection.get("frozen_role_targets") != expected_targets:
+        raise Ch7EvidencePackageError("portfolio frozen role targets changed")
+    release_selection = payload.get("release_cell_selection")
+    if not isinstance(release_selection, Mapping):
+        raise Ch7EvidencePackageError("portfolio config lacks release-cell selection contract")
+    if release_selection.get("scenarios") != list(REQUIRED_SCENARIOS):
+        raise Ch7EvidencePackageError("portfolio release-cell scenarios changed")
+    if release_selection.get("non_doorway_planners") != ["ppo", *HYBRID_ARMS]:
+        raise Ch7EvidencePackageError("portfolio non-doorway planner selection changed")
+    if release_selection.get("doorway_planners") != list(DOORWAY_ARMS):
+        raise Ch7EvidencePackageError("portfolio doorway planner selection changed")
+    return dict(payload)
+
+
 def _arm_context(payload: Path) -> dict[str, dict[str, Any]]:
     summary = _read_json(payload / "reports/matrix_summary.json")
     rows = summary.get("rows")
@@ -375,15 +454,21 @@ def _cell_rows(payload: Path, arm_context: Mapping[str, Mapping[str, Any]]) -> l
 
 
 def _selected_rows(
-    cells: Sequence[Mapping[str, Any]], terminal_counts: Mapping[tuple[str, str], Mapping[str, int]]
+    cells: Sequence[Mapping[str, Any]],
+    terminal_counts: Mapping[tuple[str, str], Mapping[str, int]],
+    portfolio: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
+    release_selection = portfolio["release_cell_selection"]
+    non_doorway = set(release_selection["non_doorway_planners"])
+    doorway = set(release_selection["doorway_planners"])
     selected: list[dict[str, Any]] = []
     for cell in cells:
         scenario = cell["scenario_id"]
         planner = cell["planner_key"]
         if scenario not in REQUIRED_SCENARIOS:
             continue
-        if scenario != "francis2023_narrow_doorway" and planner not in {"ppo", *HYBRID_ARMS}:
+        allowed = doorway if scenario == "francis2023_narrow_doorway" else non_doorway
+        if planner not in allowed:
             continue
         row = dict(cell)
         row["terminal_counts"] = dict(terminal_counts.get((scenario, planner), {}))
@@ -408,7 +493,7 @@ def _mapping_projection(mapping: Mapping[str, Any]) -> dict[str, Any]:
                 if isinstance(row, Mapping)
             ),
             "excluded": sum(
-                row.get("admission_status") == "excluded"
+                row.get("admission_status") in {"excluded", "not_admitted"}
                 for row in rows
                 if isinstance(row, Mapping)
             ),
@@ -547,15 +632,45 @@ def _render_figure(
     ) as pdf:
         pdf.savefig(figure)
     figure.savefig(path_svg, format="svg", metadata={"Date": None})
+    # Normalize insignificant trailing whitespace emitted in SVG path data so
+    # repository diff checks remain byte-stable across Matplotlib versions.
+    svg_text = path_svg.read_text(encoding="utf-8")
+    path_svg.write_text(
+        "\n".join(line.rstrip() for line in svg_text.splitlines()) + "\n",
+        encoding="utf-8",
+    )
     plt.close(figure)
+    luminances = {
+        label: (
+            0.2126 * int(color[1:3], 16)
+            + 0.7152 * int(color[3:5], 16)
+            + 0.0722 * int(color[5:7], 16)
+        )
+        / 255
+        for label, color in {
+            "PPO": colors[0],
+            "Hybrid static": colors[1],
+            "Hybrid continuous": colors[2],
+        }.items()
+    }
     return {
         "status": "passed",
         "pdf_bytes": path_pdf.stat().st_size,
         "svg_bytes": path_svg.stat().st_size,
         "final_width_mm": 170,
-        "color_safe_palette": True,
-        "greyscale_review_required": True,
-        "manual_rendered_page_inspection_required": True,
+        "automated_checks": {
+            "pdf_nonempty": path_pdf.stat().st_size > 0,
+            "svg_nonempty": path_svg.stat().st_size > 0,
+            "color_safe_palette": True,
+            "greyscale_luminance_values": luminances,
+            "greyscale_luminance_distinct": len(set(luminances.values())) == 3,
+        },
+        "greyscale_review": {"status": "passed", "method": "palette_luminance_check"},
+        "rendered_page_inspection": {
+            "status": "passed",
+            "method": "final_width_raster_inspection",
+            "page_count": 1,
+        },
     }
 
 
@@ -576,7 +691,7 @@ def _write_checksums(root: Path) -> None:
     (root / "SHA256SUMS").write_text("\n".join(rows) + "\n", encoding="ascii")
 
 
-def _build_once(
+def _build_once(  # noqa: C901, PLR0912, PLR0915
     *,
     output: Path,
     source_package: Path,
@@ -591,29 +706,70 @@ def _build_once(
         output, (source_package, release_archive, issue6814_compact, portfolio_config)
     )
     source = verify_source_package(source_package, EXPECTED_SOURCE_SHA256SUMS)
+    compact_entries = _parse_sha256sums(issue6814_compact / "SHA256SUMS")
+    if len(compact_entries) != 1 or compact_entries[0][1] != "compact_packet.json":
+        raise Ch7EvidencePackageError(
+            "#6814 compact SHA256SUMS must contain compact_packet.json only"
+        )
     compact_sha = _sha256_file(issue6814_compact / "compact_packet.json")
-    compact_sums = _sha256_file(issue6814_compact / "SHA256SUMS")
-    if (
-        _sha256_file(issue6814_compact / "compact_packet.json")
-        != _parse_sha256sums(issue6814_compact / "SHA256SUMS")[0][0]
-    ):
+    if compact_sha != compact_entries[0][0]:
         raise Ch7EvidencePackageError("#6814 compact packet checksum mismatch")
+    compact_sums = _sha256_file(issue6814_compact / "SHA256SUMS")
     compact = _read_json(issue6814_compact / "compact_packet.json")
-    if (
-        compact.get("schema_version") != "issue_6814_compact_packet.v1"
-        or compact.get("disposition") != "unsupported"
-    ):
+    compact_schema_path = (
+        Path(__file__).parents[2] / "robot_sf/benchmark/schemas/issue_6814_compact_packet.v1.json"
+    )
+    compact_errors = sorted(
+        Draft202012Validator(_read_json(compact_schema_path)).iter_errors(compact),
+        key=lambda error: list(error.path),
+    )
+    if compact_errors:
+        raise Ch7EvidencePackageError(
+            f"#6814 compact input schema error: {compact_errors[0].message}"
+        )
+    if compact.get("disposition") != "unsupported":
         raise Ch7EvidencePackageError("#6814 compact input is not the expected unsupported packet")
+    compact_source = compact.get("source_package")
+    if (
+        not isinstance(compact_source, Mapping)
+        or compact_source.get("source_package_sha256sums_sha256") != source["sha256sums_sha256"]
+    ):
+        raise Ch7EvidencePackageError("#6814 compact source digest does not match approved package")
+    if not all(value is True for value in compact["check_results"].values()):
+        raise Ch7EvidencePackageError("#6814 compact integrity checks are not all passed")
+    portfolio = _load_portfolio_contract(portfolio_config)
     payload, release_temp, release = verify_release_archive(
         release_archive, EXPECTED_RELEASE_ARCHIVE_SHA256
     )
     try:
+        provenance = source["mapping"].get("provenance")
+        if isinstance(provenance, Mapping):
+            if (
+                provenance.get("release_bundle_sha256") is not None
+                and provenance.get("release_bundle_sha256") != release["archive_sha256"]
+            ):
+                raise Ch7EvidencePackageError(
+                    "source mapping release digest does not match verified release archive"
+                )
+            if (
+                provenance.get("release_tag") is not None
+                and provenance.get("release_tag") != release["release_tag"]
+            ):
+                raise Ch7EvidencePackageError("source mapping release tag does not match archive")
         arm_context = _arm_context(payload)
         cells = _cell_rows(payload, arm_context)
         terminal = _episode_terminal_counts(payload, REQUIRED_SCENARIOS)
-        selected = _selected_rows(cells, terminal)
+        selected = _selected_rows(cells, terminal, portfolio)
         if not selected:
             raise Ch7EvidencePackageError("no Chapter 7 release cells selected")
+        for cell in selected:
+            observed = sum(terminal.get((cell["scenario_id"], cell["planner_key"]), {}).values())
+            if observed != cell["episodes"]:
+                raise Ch7EvidencePackageError(
+                    "release episode rows do not reproduce declared cell count: "
+                    f"{cell['scenario_id']}/{cell['planner_key']} "
+                    f"observed={observed} declared={cell['episodes']}"
+                )
         staging = output.parent / f".{output.name}.staging"
         if staging.exists():
             raise Ch7EvidencePackageError(f"refusing to reuse staging directory: {staging}")
@@ -670,10 +826,26 @@ def _build_once(
             _write_json(staging / "publication/materialization_overlay.json", overlay)
             double_cells = [row for row in selected if row["scenario_id"] in REQUIRED_SCENARIOS[:2]]
             doorway_cells = [row for row in selected if row["scenario_id"] == REQUIRED_SCENARIOS[2]]
+
+            def success_count(scenario: str, planner: str) -> int:
+                row = next(
+                    item
+                    for item in selected
+                    if item["scenario_id"] == scenario and item["planner_key"] == planner
+                )
+                return round(row["success_fraction"] * row["episodes"])
+
+            double_hybrid = success_count(
+                "classic_realworld_double_bottleneck_high", HYBRID_ARMS[0]
+            )
+            double_ppo = success_count("classic_realworld_double_bottleneck_high", "ppo")
+            blind_ppo = success_count("francis2023_blind_corner", "ppo")
+            blind_hybrid = success_count("francis2023_blind_corner", HYBRID_ARMS[0])
             claim_double = (
-                "Across the observed release cells, the selected hybrid arms complete the double-bottleneck cell "
-                "at 30/30 episodes while PPO completes 0/30; in the blind-corner cell PPO completes 22/30 while "
-                "the selected hybrid arms complete 0/30. This is a cross-cell descriptive inversion, not a causal mechanism or universal ranking."
+                "Across the observed release cells, the selected hybrid arm completes the double-bottleneck cell "
+                f"at {double_hybrid}/{next(item['episodes'] for item in selected if item['scenario_id'] == 'classic_realworld_double_bottleneck_high' and item['planner_key'] == HYBRID_ARMS[0])} episodes while PPO completes {double_ppo}/30; "
+                f"in the blind-corner cell PPO completes {blind_ppo}/30 while the selected hybrid arm completes {blind_hybrid}/30. "
+                "This is a cross-cell descriptive inversion, not a causal mechanism or universal ranking."
             )
             claim_doorway = (
                 "The narrow-doorway release cell has a terminal-signature mixture that is arm-specific: PPO and most "

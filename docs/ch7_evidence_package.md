@@ -22,6 +22,12 @@ complete 90-requested/88-admitted/two-excluded mapping ledger, a 672-cell audit 
 Chapter 7 atlas, release-cell context keyed by arm/configuration identity, deterministic Matplotlib
 PDF/SVG output, sidecars, figure QA, and `SHA256SUMS`.
 
+Before reading release rows, the builder validates the complete `issue_6814_compact_packet.v1`
+schema, every compact checksum entry, the approved #6412 source digest, and the frozen portfolio
+selection contract. The source mapping and release archive must agree on release digest/tag, and
+selected release cells must reproduce their declared episode counts. A changed portfolio, forged
+compact packet, incomplete source ledger, or incomplete selected cell stops the build.
+
 The materialization overlay deliberately records `planner_upset` and `seed_sensitivity` as
 unavailable. The #6814 doorway and seed-118 trajectory dossiers remain unavailable because their
 starts/provenance are not compatible and `shared_prefix=false`; the package therefore emits viewer

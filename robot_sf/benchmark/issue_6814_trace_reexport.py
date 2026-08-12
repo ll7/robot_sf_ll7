@@ -1244,11 +1244,51 @@ def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
     packet_root = packet_root.resolve()
     manifest_path = packet_root / "packet_manifest.json"
     manifest = _read_json_object(manifest_path)
+    if manifest.get("schema_version") != PACKET_MANIFEST_SCHEMA or manifest.get("issue") != ISSUE:
+        raise Issue6814Error("packet manifest is not the approved issue #6814 schema")
+    source_package = manifest.get("source_package")
+    if not isinstance(source_package, Mapping):
+        raise Issue6814Error("packet manifest source package is unavailable")
+    if (
+        source_package.get("source_issue") != SOURCE_ISSUE
+        or source_package.get("source_package_sha256sums_sha256")
+        != ISSUE_6412_PACKAGE_SHA256SUMS_SHA256
+    ):
+        raise Issue6814SourceIntegrityError(
+            "packet source package is not the approved #6412 digest"
+        )
+    check_results = manifest.get("check_results")
+    if not isinstance(check_results, Mapping) or any(
+        check_results.get(name) is not True
+        for name in ("package_digest_ok", "row_contract_digest_ok", "artifact_integrity_ok")
+    ):
+        raise Issue6814UnsupportedError("packet integrity checks are not all passed")
+    indexed_sources = manifest.get("source_contracts")
+    indexed_pairs = manifest.get("pair_compatibility_receipts")
+    if not isinstance(indexed_sources, list) or len(indexed_sources) != len(
+        SELECTED_TRACE_IDENTITIES
+    ):
+        raise Issue6814Error("packet source-contract index is incomplete")
+    if not isinstance(indexed_pairs, list) or len(indexed_pairs) != 2:
+        raise Issue6814Error("packet pair-receipt index is incomplete")
     manifest_sha256 = sha256_file(manifest_path)
     source_contracts = []
-    for item in manifest.get("source_contracts", []):
+    for item in indexed_sources:
         if not isinstance(item, Mapping):
             raise Issue6814Error("packet source-contract index contains a non-object")
+        if not isinstance(item.get("path"), str) or not item["path"].startswith(
+            "source_contracts/"
+        ):
+            raise Issue6814Error("packet source-contract path is unsafe or unavailable")
+        if not isinstance(item.get("sha256"), str) or not _SHA256_RE.fullmatch(item["sha256"]):
+            raise Issue6814Error("packet source-contract digest is invalid")
+        source_path = packet_root / item["path"]
+        if source_path.resolve().parent != (packet_root / "source_contracts").resolve():
+            raise Issue6814Error("packet source-contract path escapes source_contracts")
+        if not source_path.is_file() or sha256_file(source_path) != item["sha256"]:
+            raise Issue6814SourceIntegrityError(
+                f"packet source-contract hash mismatch: {item['path']}"
+            )
         source_contracts.append(
             {
                 "path": item.get("path"),
@@ -1258,7 +1298,7 @@ def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
             }
         )
     pair_summaries = []
-    for item in manifest.get("pair_compatibility_receipts", []):
+    for item in indexed_pairs:
         if not isinstance(item, Mapping):
             raise Issue6814Error("packet pair-receipt index contains a non-object")
         path = item.get("path")
@@ -1267,11 +1307,16 @@ def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
         receipt_path = packet_root / path
         if receipt_path.resolve().parent != (packet_root / "pair_receipts").resolve():
             raise Issue6814Error("packet pair-receipt path escapes pair_receipts")
+        declared_sha256 = item.get("sha256")
+        if not isinstance(declared_sha256, str) or not _SHA256_RE.fullmatch(declared_sha256):
+            raise Issue6814Error("packet pair-receipt digest is invalid")
+        if not receipt_path.is_file() or sha256_file(receipt_path) != declared_sha256:
+            raise Issue6814SourceIntegrityError(f"packet pair-receipt hash mismatch: {path}")
         receipt = _read_json_object(receipt_path)
         pair_summaries.append(
             _compact_pair_receipt(
                 receipt=receipt,
-                receipt_sha256=str(item.get("sha256")),
+                receipt_sha256=declared_sha256,
                 retrieval_key=f"issue6814/full-packet/{manifest_sha256}/{path}",
             )
         )
@@ -1731,6 +1776,8 @@ def build_issue_6814_trace_packet(
         compact_output = compact_output.resolve()
         if compact_output.exists():
             raise Issue6814Error(f"refusing to overwrite existing compact output: {compact_output}")
+        if compact_output == external_output_root or external_output_root in compact_output.parents:
+            raise Issue6814Error("compact output must not be nested inside the full packet output")
     if external_output_root.exists():
         raise Issue6814Error(f"refusing to overwrite existing output: {external_output_root}")
     if set(arm_roots) != {identity.arm for identity in SELECTED_TRACE_IDENTITIES}:

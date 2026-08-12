@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wireframes, a complete release-cell audit atlas, reduced publication atlas, deterministic
   Matplotlib PDF/SVG preview, sidecars, figure QA, mapping ledger, and typed unavailable records
   for the unsupported #6814 trajectory dossiers. The package remains blocked pending domain
-  approval and does not include raw traces or the release archive.
+  approval and does not include raw traces or the release archive. The builder now validates the
+  complete #6814 compact schema/checksum ledger, the frozen portfolio selection, source-to-release
+  digest linkage, and selected-cell episode completeness before rendering.
 
 * **Issue #6814 compact provenance projection.** The strict trace-packet builder can now emit a
   frame-free, schema-validated `issue_6814_compact_packet.v1` projection with retrieval keys and

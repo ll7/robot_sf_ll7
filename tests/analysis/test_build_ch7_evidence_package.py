@@ -75,7 +75,7 @@ def _make_source(tmp_path: Path) -> tuple[Path, str]:
             "schema_version": "mapping.v1",
             "n_rows": 90,
             "rows": rows,
-            "provenance": {"release_bundle_sha256": "a" * 64},
+            "provenance": {},
         },
     )
     return root, _write_sums(root)
@@ -187,11 +187,60 @@ def _make_release(tmp_path: Path) -> tuple[Path, str]:
     return archive, _sha256(archive)
 
 
-def _make_compact(tmp_path: Path) -> Path:
+def _make_compact(tmp_path: Path, source_digest: str) -> Path:
     root = tmp_path / "compact"
     _write_json(
         root / "compact_packet.json",
-        {"schema_version": "issue_6814_compact_packet.v1", "disposition": "unsupported"},
+        {
+            "schema_version": "issue_6814_compact_packet.v1",
+            "issue": 6814,
+            "source_package": {
+                "source_issue": 6412,
+                "source_package_sha256sums_sha256": source_digest,
+            },
+            "full_packet": {
+                "manifest_retrieval_key": "issue6814/full/manifest",
+                "manifest_sha256": "a" * 64,
+            },
+            "disposition": "unsupported",
+            "check_results": {
+                "artifact_integrity_ok": True,
+                "deterministic_rebuild_ok": True,
+                "package_digest_ok": True,
+                "row_contract_digest_ok": True,
+            },
+            "source_contracts": [
+                {
+                    "path": f"source_contracts/source-{i}.json",
+                    "sha256": f"{i + 1:064x}",
+                    "status": "unsupported",
+                    "trace_identity": {},
+                }
+                for i in range(4)
+            ],
+            "pairs": [
+                {
+                    "pair_id": f"pair-{i}",
+                    "comparison_grammar": "matched_start",
+                    "comparison_grain": "matched_planner_pair",
+                    "full_receipt": {
+                        "retrieval_key": f"issue6814/full/pair-{i}",
+                        "sha256": f"{i + 11:064x}",
+                    },
+                    "pair_compatibility": {},
+                    "semantic_inputs": {},
+                    "process_validation": {},
+                    "renderer_admission": {},
+                }
+                for i in range(2)
+            ],
+            "evidence_boundary": {
+                "visualization_only": True,
+                "new_simulation_performed": False,
+                "episode_substitution_performed": False,
+                "tolerance_profile_modified": False,
+            },
+        },
     )
     _write_sums(root)
     return root
@@ -201,9 +250,44 @@ def _make_compact(tmp_path: Path) -> Path:
 def fixture_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     source, source_digest = _make_source(tmp_path)
     archive, archive_digest = _make_release(tmp_path)
-    compact = _make_compact(tmp_path)
+    compact = _make_compact(tmp_path, source_digest)
     portfolio = tmp_path / "portfolio.yaml"
-    portfolio.write_text("schema_version: ch7_case_portfolio.v2\n", encoding="utf-8")
+    portfolio.write_text(
+        """schema_version: ch7_case_portfolio.v2
+selection:
+  required_roles: [planner_upset, seed_sensitivity, feasibility_criticism, metric_disagreement]
+  frozen_role_targets:
+    planner_upset: ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118
+    seed_sensitivity: ch7-role-seed-sensitivity--classic-doorway-medium--ppo--seeds-113-114
+    feasibility_criticism: ch7-role-feasibility-criticism--francis2023-narrow-doorway
+    metric_disagreement: ch7-role-cross-cell-inversion--hybrid-vs-ppo--double-bottleneck-vs-blind-corner
+release_cell_selection:
+  scenarios:
+    - classic_realworld_double_bottleneck_high
+    - francis2023_blind_corner
+    - francis2023_narrow_doorway
+  non_doorway_planners:
+    - ppo
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+  doorway_planners:
+    - goal
+    - guarded_ppo
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - orca
+    - ppo
+    - prediction_planner
+    - predictive_mppi
+    - risk_dwa
+    - sacadrl
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - social_force
+    - socnav_sampling
+""",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(builder, "EXPECTED_SOURCE_SHA256SUMS", source_digest)
     monkeypatch.setattr(builder, "EXPECTED_RELEASE_ARCHIVE_SHA256", archive_digest)
     return {"source": source, "archive": archive, "compact": compact, "portfolio": portfolio}
@@ -285,3 +369,43 @@ def test_source_digest_mismatch_stops_before_package_creation(
             portfolio_config=fixture_inputs["portfolio"],
         )
     assert not (tmp_path / "package").exists()
+
+
+def test_compact_schema_and_checksum_path_are_fail_closed(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    compact = fixture_inputs["compact"]
+    payload_path = compact / "compact_packet.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload.pop("pairs")
+    _write_json(payload_path, payload)
+    _write_sums(compact)
+    with pytest.raises(builder.Ch7EvidencePackageError, match="compact input schema error"):
+        builder.build_ch7_evidence_package(
+            source_package=fixture_inputs["source"],
+            release_archive=fixture_inputs["archive"],
+            issue6814_compact=compact,
+            output=tmp_path / "package",
+            portfolio_config=fixture_inputs["portfolio"],
+        )
+
+
+def test_frozen_portfolio_mutation_is_rejected(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    portfolio = fixture_inputs["portfolio"]
+    portfolio.write_text(
+        portfolio.read_text(encoding="utf-8").replace(
+            "required_roles: [planner_upset, seed_sensitivity, feasibility_criticism, metric_disagreement]",
+            "required_roles: [seed_sensitivity]",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(builder.Ch7EvidencePackageError, match="required roles"):
+        builder.build_ch7_evidence_package(
+            source_package=fixture_inputs["source"],
+            release_archive=fixture_inputs["archive"],
+            issue6814_compact=fixture_inputs["compact"],
+            output=tmp_path / "package",
+            portfolio_config=portfolio,
+        )

@@ -24,7 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 PACKAGE_SCHEMA = "ch7-evidence-package.v1"
 COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
@@ -359,7 +359,14 @@ def verify_release_archive(
             "release_id": release_manifest.get("release_id"),
         }
         return payload, temporary, metadata
-    except Exception:
+    except (
+        Ch7EvidencePackageError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        tarfile.TarError,
+    ):
         temporary.cleanup()
         raise
 
@@ -1150,7 +1157,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
             Draft202012Validator(schema).validate(_read_json(staging / "manifest.json"))
             staging.rename(output)
             return _read_json(output / "manifest.json")
-        except Exception:
+        except (Ch7EvidencePackageError, OSError, TypeError, ValueError, ValidationError):
             shutil.rmtree(staging, ignore_errors=True)
             raise
     finally:

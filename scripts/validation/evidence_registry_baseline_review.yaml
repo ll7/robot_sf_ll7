@@ -19,8 +19,8 @@ latest_reviewed_date: 2026-08-12
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 421
-refreshed_baseline_files_with_findings: 93
+refreshed_baseline_total_findings: 419
+refreshed_baseline_files_with_findings: 91
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active

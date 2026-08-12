@@ -3,7 +3,8 @@
 
 Classifies PR state from compact snapshots and recommends one bounded action:
 stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
-refresh_snapshot, mark_ready_candidate, await_gate_verdict, or no_action.
+refresh_snapshot, mark_ready_candidate, await_gate_verdict, reconcile_pr_metadata,
+or no_action.
 
 Every PolicyDecision also emits a high-level ``flow_decision`` — one of exactly
 ``stop``, ``continue``, ``reroute``, or ``escalate`` — for machine consumption.
@@ -16,6 +17,8 @@ toward merge when every required check is green AND a current exact-head
 ``gate-verdict: accepted @ <head_sha>`` trailer exists. The dispatcher rejects
 (fail closed) any head missing such a trailer, classifying it as
 ``pending_gate_verdict`` instead of ``ready_to_merge``.
+After the gate verdict is current, a matching ``pr-metadata: reconciled @
+<digest>`` trailer is also required so final title/body state is reviewed.
 
 Accepts a compact PR queue snapshot JSON (as emitted by snapshot_pr_queue.py)
 or a single-PR mock, and emits JSON or concise text with the next action and
@@ -32,6 +35,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.pr_metadata import extract_metadata_digests
 from scripts.dev.route_efficiency_report import (
     EXPECTED_ARTIFACT_KEYS,
     has_validation_success,
@@ -52,6 +56,7 @@ VALID_ACTIONS = frozenset(
         "refresh_snapshot",
         "mark_ready_candidate",
         "await_gate_verdict",
+        "reconcile_pr_metadata",
         "no_action",
     }
 )
@@ -67,6 +72,7 @@ VALID_STATES = frozenset(
         "stale_worktree",
         "stale_merge_base",
         "pending_gate_verdict",
+        "pending_pr_metadata",
         "ready_to_merge",
         "no_action",
     }
@@ -279,6 +285,57 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     return any(_sha_matches_head(sha, head_sha) for sha in accepted)
 
 
+def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:
+    """Return synthesized metadata-trailer texts from explicit snapshot fields."""
+    texts: list[str] = []
+    explicit_list = pr.get("metadata_verdicts")
+    if isinstance(explicit_list, list):
+        for item in explicit_list:
+            if isinstance(item, str):
+                texts.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            digest = str(item.get("digest") or item.get("metadata_digest") or "")
+            verdict = str(item.get("verdict", "")).lower()
+            if digest and (verdict in {"accepted", "reconciled"} or item.get("accepted") is True):
+                texts.append(f"pr-metadata: reconciled @ {digest}")
+    explicit = pr.get("metadata_verdict")
+    if isinstance(explicit, str):
+        texts.append(explicit)
+    elif isinstance(explicit, dict):
+        digest = str(explicit.get("digest") or explicit.get("metadata_digest") or "")
+        verdict = str(explicit.get("verdict", "")).lower()
+        if digest and (verdict in {"accepted", "reconciled"} or explicit.get("accepted") is True):
+            texts.append(f"pr-metadata: reconciled @ {digest}")
+    return texts
+
+
+def _metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:
+    """Return candidate metadata trailers from trusted explicit/snapshot sources."""
+    return _explicit_metadata_verdict_texts(pr) + _snapshot_body_texts(pr)
+
+
+def _metadata_verdict_digests(pr: dict[str, Any]) -> set[str]:
+    """Return lowercased metadata digests from trusted trailer carriers."""
+    digests: set[str] = set()
+    for text in _metadata_verdict_texts(pr):
+        digests.update(extract_metadata_digests(text))
+    return digests
+
+
+def has_any_pr_metadata_verdict(pr: dict[str, Any]) -> bool:
+    """Return whether any trusted reconciled metadata trailer is present."""
+    return bool(_metadata_verdict_digests(pr))
+
+
+def has_current_pr_metadata_verdict(pr: dict[str, Any], digest: str) -> bool:
+    """Return whether a trusted trailer binds the exact current title/body digest."""
+    if not isinstance(pr, dict) or not isinstance(digest, str) or not digest:
+        return False
+    return digest.lower() in _metadata_verdict_digests(pr)
+
+
 def _label_names(pr: dict[str, Any]) -> list[str]:
     """Return compact label-name strings from a PR dict."""
     labels = pr.get("labels") or []
@@ -304,8 +361,9 @@ def _merge_ready_state(
     without an up-to-date base.
 
     Gate-verdict contract (issue #6019): reject any exact head unless a current
-    exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. Fail
-    closed when the trailer is missing or stale.
+    exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. The final
+    title/body pair must also have a current ``pr-metadata: reconciled @
+    <digest>`` trailer. Fail closed when either trailer is missing or stale.
     """
     if "merge-ready" not in label_names or overall != "success":
         return None
@@ -313,6 +371,9 @@ def _merge_ready_state(
         return "stale_merge_base"
     if not has_current_accepted_gate_verdict(pr, head_sha):
         return "pending_gate_verdict"
+    metadata_digest = str(pr.get("metadata_digest", "") or "")
+    if not has_current_pr_metadata_verdict(pr, metadata_digest):
+        return "pending_pr_metadata"
     return "ready_to_merge"
 
 
@@ -402,6 +463,7 @@ def _compute_flow_decision(
       - CHANGES_REQUESTED -> escalate (review blocker overrides other routing)
       - pending_ci -> continue
       - pending_gate_verdict -> continue (wait for current exact-head gate verdict)
+      - pending_pr_metadata -> continue (reconcile final title/body metadata)
       - ready_to_merge -> continue
       - failed_ci, failed_validation, missing_artifacts, stale_worktree -> reroute
       - no_action -> stop
@@ -411,7 +473,7 @@ def _compute_flow_decision(
     if review_state == "CHANGES_REQUESTED":
         return "escalate"
     match state:
-        case "pending_ci" | "pending_gate_verdict" | "ready_to_merge":
+        case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
             return "continue"
         case (
             "failed_ci"
@@ -529,6 +591,18 @@ def recommend_action(  # noqa: C901
                 reason=(
                     "CI green and merge-ready but no current exact-head "
                     "gate-verdict: accepted trailer; reject head"
+                ),
+                actions_remaining=remaining,
+            )
+        case "pending_pr_metadata":
+            return PolicyDecision(
+                pr=pr_number,
+                action="reconcile_pr_metadata",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "CI green, merge-ready, and current gate verdict exist but the final PR "
+                    "title/body lacks a matching trusted pr-metadata trailer"
                 ),
                 actions_remaining=remaining,
             )

@@ -107,6 +107,48 @@ def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
 
 
 @pytest.mark.parametrize(
+    "deferred",
+    [
+        "none.",
+        "NONE",
+        "No deferred work.",
+        "Nothing is deferred!",
+        "N/A.",
+    ],
+)
+def test_analyze_body_accepts_explicit_no_deferred_work_forms(
+    deferred: str,
+) -> None:
+    """Issue #1159: an explicit no-work declaration is not a missing field."""
+    report = analyze_body(_body(deferred=deferred), source="fixture")
+
+    assert report.status == "ok"
+    assert report.deferred_work == ""
+    assert report.message == "No deferred work declared."
+
+
+@pytest.mark.parametrize(
+    ("pr_number", "deferred"),
+    [
+        (6705, "Deferred work: none."),
+        (6723, "Deferred work: no follow-up work remains."),
+    ],
+)
+def test_live_pr_body_regressions_reach_clean_followup_verdict(
+    pr_number: int,
+    deferred: str,
+) -> None:
+    """The two issue-1159-shaped bodies must not stall on punctuation/casing."""
+    del pr_number
+    report = analyze_body(
+        _body(deferred=deferred.removeprefix("Deferred work: ")),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+
+
+@pytest.mark.parametrize(
     "files",
     [
         ("robot_sf/benchmark/camera_ready/_summaries.py",),
@@ -670,6 +712,25 @@ def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
     )
 
     assert report.status == "issue_state_error"
+    assert "#2966: state is CLOSED" in report.issue_state_errors[0]
+
+
+def test_analyze_body_rejects_closed_followup_issue_for_explicit_no_work(monkeypatch) -> None:
+    """Explicit no-work text must not bypass linked-issue state validation."""
+
+    def fake_fetch_issue(number: int, **kwargs):
+        return {"number": number, "status": "ok", "state": "CLOSED", "url": "https://example.com"}
+
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
+
+    report = analyze_body(
+        _body(deferred="No deferred work.", issues="#2966"),
+        source="fixture",
+        require_open_issues=True,
+    )
+
+    assert report.status == "issue_state_error"
+    assert report.linked_issues == ("#2966",)
     assert "#2966: state is CLOSED" in report.issue_state_errors[0]
 
 

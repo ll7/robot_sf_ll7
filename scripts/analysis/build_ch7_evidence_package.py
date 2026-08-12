@@ -6,6 +6,10 @@ admit a dissertation claim.  Cell-level release statistics can therefore be
 rendered while trace-level dossiers remain explicitly unavailable.
 """
 
+# evidence-writer-exempt: this builder emits an immutable, digest-pinned package whose JSON,
+# CSV, SVG, PDF, and SHA256SUMS bytes must remain exact; shared writers add review markers and
+# would change the approved package contract. Immutable outputs carry review sidecars instead.
+
 from __future__ import annotations
 
 import argparse

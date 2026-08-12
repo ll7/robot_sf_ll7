@@ -77,7 +77,7 @@ synthesis-grade evidence for issue #1489.
 - Template:
   `docs/context/evidence/predictive_same_seed_row_summary_template.yaml`
 - Python validator:
-  `robot_sf/benchmark/predictive_same_seed_row_summary.py`
+  `robot_sf/benchmark/predictive/predictive_same_seed_row_summary.py`
 - CLI:
   `scripts/validation/validate_predictive_same_seed_row_summary.py`
 

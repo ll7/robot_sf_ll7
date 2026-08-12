@@ -35,7 +35,7 @@ SHARED_PROTOCOL_PATHS: tuple[Path, ...] = (
     Path("configs/benchmarks/predictive_sweep_planner_grid_v1.yaml"),
     Path("scripts/validation/run_predictive_success_campaign.py"),
     Path("scripts/tools/campaign_result_store.py"),
-    Path("robot_sf/benchmark/predictive_planner_config.py"),
+    Path("robot_sf/benchmark/predictive/predictive_planner_config.py"),
     Path("configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"),
 )
 

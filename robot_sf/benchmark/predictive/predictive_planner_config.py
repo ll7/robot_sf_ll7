@@ -10,7 +10,7 @@ import yaml
 from robot_sf.planner.obstacle_features import PREDICTIVE_LEGACY_FEATURE_SCHEMA
 
 _DEFAULT_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent.parent
+    Path(__file__).resolve().parents[3]
     / "configs"
     / "algos"
     / "prediction_planner_camera_ready.yaml"

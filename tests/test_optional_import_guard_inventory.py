@@ -268,7 +268,7 @@ class TestOptionalImportGuardInventory:
         A first-party import of ``robot_sf.common.artifact_paths.get_repository_root``
         was previously wrapped in a broad ``except (ImportError, RuntimeError,
         OSError)`` guard inside
-        ``robot_sf/benchmark/predictive_checkpoint_schema_audit.py``. That guard
+        ``robot_sf/benchmark/predictive/predictive_checkpoint_schema_audit.py``. That guard
         could not actually fire: ``get_repository_root`` is a first-party, pure-path
         helper with no optional or native dependencies, and 20+ other modules import
         it unguarded. The broad catch was therefore unjustified and tripped this

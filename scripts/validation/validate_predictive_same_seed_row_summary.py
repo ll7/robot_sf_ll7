@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.predictive_same_seed_row_summary import (
+from robot_sf.benchmark.predictive.predictive_same_seed_row_summary import (
     PredictiveSameSeedRowSummaryValidationError,
     validate_predictive_same_seed_row_summary_file,
 )

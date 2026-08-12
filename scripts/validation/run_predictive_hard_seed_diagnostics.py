@@ -11,7 +11,9 @@ from pathlib import Path
 import numpy as np
 
 from robot_sf.benchmark.map_runner import _build_env_config, _build_policy
-from robot_sf.benchmark.predictive_planner_config import build_predictive_planner_algo_config
+from robot_sf.benchmark.predictive.predictive_planner_config import (
+    build_predictive_planner_algo_config,
+)
 from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from scripts.validation.predictive_eval_common import load_seed_manifest

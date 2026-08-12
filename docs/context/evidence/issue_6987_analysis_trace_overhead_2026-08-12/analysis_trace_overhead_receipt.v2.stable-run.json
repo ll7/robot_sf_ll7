@@ -1,0 +1,726 @@
+{
+  "arms": {
+    "analysis_trace_off": {
+      "control_sequence_digests": [],
+      "elapsed_sec_max": 0.02429403318092227,
+      "elapsed_sec_median": 0.013953605899587274,
+      "metric_digests": [
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+      ],
+      "outcome_digests": [
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+      ],
+      "record_compressed_bytes_median": 3576.0,
+      "samples": [
+        {
+          "batch": 0,
+          "elapsed_sec": 0.008223182056099176,
+          "record_compressed_bytes": 3576,
+          "sample": 0,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.01089064683765173,
+          "record_compressed_bytes": 3577,
+          "sample": 1,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.018831239081919193,
+          "record_compressed_bytes": 3576,
+          "sample": 2,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.015610481146723032,
+          "record_compressed_bytes": 3575,
+          "sample": 3,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.02429403318092227,
+          "record_compressed_bytes": 3580,
+          "sample": 4,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.007605414837598801,
+          "record_compressed_bytes": 3575,
+          "sample": 5,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.011642847210168839,
+          "record_compressed_bytes": 3577,
+          "sample": 0,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.018928860779851675,
+          "record_compressed_bytes": 3576,
+          "sample": 1,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.014419788960367441,
+          "record_compressed_bytes": 3576,
+          "sample": 2,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.020269278902560472,
+          "record_compressed_bytes": 3576,
+          "sample": 3,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.01193342637270689,
+          "record_compressed_bytes": 3577,
+          "sample": 4,
+          "trace_compressed_bytes": 0
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.013487422838807106,
+          "record_compressed_bytes": 3572,
+          "sample": 5,
+          "trace_compressed_bytes": 0
+        }
+      ],
+      "trace_artifact_matches_provenance": [],
+      "trace_compressed_bytes_median": 0.0,
+      "trace_enabled": false,
+      "trace_git_hashes": [],
+      "warmups": 2
+    },
+    "analysis_trace_on": {
+      "control_sequence_digests": [
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+        "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02"
+      ],
+      "elapsed_sec_max": 0.025244570802897215,
+      "elapsed_sec_median": 0.016530708642676473,
+      "metric_digests": [
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+      ],
+      "outcome_digests": [
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+        "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+      ],
+      "record_compressed_bytes_median": 4710.0,
+      "samples": [
+        {
+          "batch": 0,
+          "elapsed_sec": 0.011832001619040966,
+          "record_compressed_bytes": 4711,
+          "sample": 0,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.016249987296760082,
+          "record_compressed_bytes": 4713,
+          "sample": 1,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.025244570802897215,
+          "record_compressed_bytes": 4710,
+          "sample": 2,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.024511785712093115,
+          "record_compressed_bytes": 4713,
+          "sample": 3,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.014472384937107563,
+          "record_compressed_bytes": 4710,
+          "sample": 4,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 0,
+          "elapsed_sec": 0.01331302197650075,
+          "record_compressed_bytes": 4710,
+          "sample": 5,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.017688194755464792,
+          "record_compressed_bytes": 4708,
+          "sample": 0,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.013656795024871826,
+          "record_compressed_bytes": 4711,
+          "sample": 1,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.016811429988592863,
+          "record_compressed_bytes": 4710,
+          "sample": 2,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.017623047810047865,
+          "record_compressed_bytes": 4710,
+          "sample": 3,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.014445359818637371,
+          "record_compressed_bytes": 4710,
+          "sample": 4,
+          "trace_compressed_bytes": 1069
+        },
+        {
+          "batch": 1,
+          "elapsed_sec": 0.01814780430868268,
+          "record_compressed_bytes": 4710,
+          "sample": 5,
+          "trace_compressed_bytes": 1069
+        }
+      ],
+      "trace_artifact_matches_provenance": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "trace_compressed_bytes_median": 1069.0,
+      "trace_enabled": true,
+      "trace_git_hashes": [
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b",
+        "b2388de674eb078852e6713d40a6387e65b96c5b"
+      ],
+      "warmups": 2
+    }
+  },
+  "batches": [
+    {
+      "arm_order": [
+        "off",
+        "on"
+      ],
+      "arms": {
+        "analysis_trace_off": {
+          "control_sequence_digests": [],
+          "elapsed_sec_max": 0.02429403318092227,
+          "elapsed_sec_median": 0.01325056399218738,
+          "metric_digests": [
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+          ],
+          "outcome_digests": [
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+          ],
+          "record_compressed_bytes_median": 3576.0,
+          "samples": [
+            {
+              "batch": 0,
+              "elapsed_sec": 0.008223182056099176,
+              "record_compressed_bytes": 3576,
+              "sample": 0,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.01089064683765173,
+              "record_compressed_bytes": 3577,
+              "sample": 1,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.018831239081919193,
+              "record_compressed_bytes": 3576,
+              "sample": 2,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.015610481146723032,
+              "record_compressed_bytes": 3575,
+              "sample": 3,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.02429403318092227,
+              "record_compressed_bytes": 3580,
+              "sample": 4,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.007605414837598801,
+              "record_compressed_bytes": 3575,
+              "sample": 5,
+              "trace_compressed_bytes": 0
+            }
+          ],
+          "trace_artifact_matches_provenance": [],
+          "trace_compressed_bytes_median": 0.0,
+          "trace_enabled": false,
+          "trace_git_hashes": [],
+          "warmups": 1
+        },
+        "analysis_trace_on": {
+          "control_sequence_digests": [
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02"
+          ],
+          "elapsed_sec_max": 0.025244570802897215,
+          "elapsed_sec_median": 0.015361186116933823,
+          "metric_digests": [
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+          ],
+          "outcome_digests": [
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+          ],
+          "record_compressed_bytes_median": 4710.5,
+          "samples": [
+            {
+              "batch": 0,
+              "elapsed_sec": 0.011832001619040966,
+              "record_compressed_bytes": 4711,
+              "sample": 0,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.016249987296760082,
+              "record_compressed_bytes": 4713,
+              "sample": 1,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.025244570802897215,
+              "record_compressed_bytes": 4710,
+              "sample": 2,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.024511785712093115,
+              "record_compressed_bytes": 4713,
+              "sample": 3,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.014472384937107563,
+              "record_compressed_bytes": 4710,
+              "sample": 4,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 0,
+              "elapsed_sec": 0.01331302197650075,
+              "record_compressed_bytes": 4710,
+              "sample": 5,
+              "trace_compressed_bytes": 1069
+            }
+          ],
+          "trace_artifact_matches_provenance": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "trace_compressed_bytes_median": 1069.0,
+          "trace_enabled": true,
+          "trace_git_hashes": [
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b"
+          ],
+          "warmups": 1
+        }
+      },
+      "batch_index": 0,
+      "derived": {
+        "off_median_sec": 0.01325056399218738,
+        "on_median_sec": 0.015361186116933823,
+        "overhead_fraction": 0.1592854557731187,
+        "overhead_percent": 15.92854557731187,
+        "paired_runtime_delta_median_ms": 5.533473799005151,
+        "paired_runtime_delta_median_sec": 0.005533473799005151
+      }
+    },
+    {
+      "arm_order": [
+        "on",
+        "off"
+      ],
+      "arms": {
+        "analysis_trace_off": {
+          "control_sequence_digests": [],
+          "elapsed_sec_max": 0.020269278902560472,
+          "elapsed_sec_median": 0.013953605899587274,
+          "metric_digests": [
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+          ],
+          "outcome_digests": [
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+          ],
+          "record_compressed_bytes_median": 3576.0,
+          "samples": [
+            {
+              "batch": 1,
+              "elapsed_sec": 0.011642847210168839,
+              "record_compressed_bytes": 3577,
+              "sample": 0,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.018928860779851675,
+              "record_compressed_bytes": 3576,
+              "sample": 1,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.014419788960367441,
+              "record_compressed_bytes": 3576,
+              "sample": 2,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.020269278902560472,
+              "record_compressed_bytes": 3576,
+              "sample": 3,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.01193342637270689,
+              "record_compressed_bytes": 3577,
+              "sample": 4,
+              "trace_compressed_bytes": 0
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.013487422838807106,
+              "record_compressed_bytes": 3572,
+              "sample": 5,
+              "trace_compressed_bytes": 0
+            }
+          ],
+          "trace_artifact_matches_provenance": [],
+          "trace_compressed_bytes_median": 0.0,
+          "trace_enabled": false,
+          "trace_git_hashes": [],
+          "warmups": 1
+        },
+        "analysis_trace_on": {
+          "control_sequence_digests": [
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02",
+            "a6676754be49dc0b9959e92629557e8a7a91629ce0f7daf68185a3428aa80b02"
+          ],
+          "elapsed_sec_max": 0.01814780430868268,
+          "elapsed_sec_median": 0.017217238899320364,
+          "metric_digests": [
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+            "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe"
+          ],
+          "outcome_digests": [
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f",
+            "1e4958ade3998e828176baeaeee16f4446d3f84cd36292256eb1bb14b080f40f"
+          ],
+          "record_compressed_bytes_median": 4710.0,
+          "samples": [
+            {
+              "batch": 1,
+              "elapsed_sec": 0.017688194755464792,
+              "record_compressed_bytes": 4708,
+              "sample": 0,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.013656795024871826,
+              "record_compressed_bytes": 4711,
+              "sample": 1,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.016811429988592863,
+              "record_compressed_bytes": 4710,
+              "sample": 2,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.017623047810047865,
+              "record_compressed_bytes": 4710,
+              "sample": 3,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.014445359818637371,
+              "record_compressed_bytes": 4710,
+              "sample": 4,
+              "trace_compressed_bytes": 1069
+            },
+            {
+              "batch": 1,
+              "elapsed_sec": 0.01814780430868268,
+              "record_compressed_bytes": 4710,
+              "sample": 5,
+              "trace_compressed_bytes": 1069
+            }
+          ],
+          "trace_artifact_matches_provenance": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "trace_compressed_bytes_median": 1069.0,
+          "trace_enabled": true,
+          "trace_git_hashes": [
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b",
+            "b2388de674eb078852e6713d40a6387e65b96c5b"
+          ],
+          "warmups": 1
+        }
+      },
+      "batch_index": 1,
+      "derived": {
+        "off_median_sec": 0.013953605899587274,
+        "on_median_sec": 0.017217238899320364,
+        "overhead_fraction": 0.23389172829007765,
+        "overhead_percent": 23.389172829007766,
+        "paired_runtime_delta_median_ms": 2.4517872370779514,
+        "paired_runtime_delta_median_sec": 0.0024517872370779514
+      }
+    }
+  ],
+  "checks": {
+    "control_sequence_digest_stable": true,
+    "paired_outcomes_and_metrics_equal": true,
+    "repeated_batch_overheads_defined": true,
+    "same_commit_repeated_batch_stable": true,
+    "trace_artifact_matches_provenance": true,
+    "trace_git_hash_matches_commit": true
+  },
+  "claim_boundary": "Local synthetic-runner wall-clock and serialized-size diagnostic; not benchmark, paper-facing, real-world, or safety evidence.",
+  "derived": {
+    "batch_overhead_fractions": [
+      0.1592854557731187,
+      0.23389172829007765
+    ],
+    "batch_relative_spread_fraction": 0.07460627251695895,
+    "batch_target_met": false,
+    "median_overhead_fraction": 0.184690807640298,
+    "median_overhead_percent": 18.469080764029798,
+    "median_record_compressed_bytes_delta": 1134.0,
+    "median_runtime_delta_ms": 2.577102743089199,
+    "median_runtime_delta_seconds": 0.002577102743089199,
+    "median_trace_compressed_bytes": 1069.0,
+    "stability_passed": true,
+    "stability_status": "stable",
+    "target_decision": "not_met",
+    "target_met": false,
+    "target_percent": 10.0
+  },
+  "environment": {
+    "machine": "x86_64",
+    "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+    "python": "3.13.13"
+  },
+  "fixture": {
+    "dt": 0.1,
+    "horizon": 5,
+    "record_forces": false,
+    "scenario": {
+      "density": "low",
+      "flow": "uni",
+      "goal_topology": "point",
+      "groups": 0.0,
+      "id": "issue-6972-overhead",
+      "obstacle": "open",
+      "repeats": 1,
+      "robot_context": "embedded",
+      "speed_var": "low"
+    },
+    "seed": 123,
+    "telemetry_on": {
+      "analysis_trace": "all",
+      "planner_debug_trace": "none"
+    }
+  },
+  "issue": 6987,
+  "method": {
+    "arm_order": "alternating off/on, then on/off by batch",
+    "batch_count": 2,
+    "compression": "gzip.compress(mtime=0)",
+    "samples_per_arm_per_batch": 6,
+    "serialization": "analysis_trace.canonical_json",
+    "stability_tolerance_fraction": 0.25,
+    "target_rule": "target_met is null unless repeated batch medians are stable, every batch overhead is within 10%, and integrity checks pass; an aggregate median cannot hide a failed batch",
+    "timer": "time.perf_counter",
+    "upper_tail_summary": "maximum measured sample; not a statistical percentile",
+    "warmups_per_arm_per_batch": 1
+  },
+  "repository_commit": "b2388de674eb078852e6713d40a6387e65b96c5b",
+  "schema_version": "analysis_trace_overhead_measurement_receipt.v2",
+  "source_issue": 6972,
+  "status": "diagnostic_only"
+}

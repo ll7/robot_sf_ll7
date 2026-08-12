@@ -147,6 +147,10 @@ def measure(*, output: Path, samples: int = 5) -> dict[str, Any]:
         "source_commit": subprocess.run(
             ["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True
         ).stdout.strip(),
+        "measurement_command": (
+            "uv run python scripts/analysis/measure_issue_6972_trace_overhead.py "
+            "--output docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json"
+        ),
         "fixture": {
             "scenario": SCENARIO,
             "seed": 123,

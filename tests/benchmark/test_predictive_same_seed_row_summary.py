@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.predictive_same_seed_row_summary import (
+from robot_sf.benchmark.predictive.predictive_same_seed_row_summary import (
     load_predictive_same_seed_row_summary_input,
     validate_predictive_same_seed_row_summary_file,
     validate_predictive_same_seed_row_summary_rows,

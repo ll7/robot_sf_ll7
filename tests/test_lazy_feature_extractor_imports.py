@@ -12,7 +12,7 @@ import pytest
     "module_name",
     (
         "robot_sf.baselines.distributional_rl",
-        "robot_sf.benchmark.predictive_planner_config",
+        "robot_sf.benchmark.predictive.predictive_planner_config",
         "robot_sf.feature_extractor",
         "robot_sf.feature_extractors",
         "robot_sf.feature_extractors.attention_extractor",

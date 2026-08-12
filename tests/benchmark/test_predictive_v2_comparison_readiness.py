@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from robot_sf.benchmark.predictive_v2_comparison_readiness import (
+from robot_sf.benchmark.predictive.predictive_v2_comparison_readiness import (
     DEFAULT_CONTRACT_PATH,
     PredictiveV2ComparisonReadinessError,
     validate_predictive_v2_comparison_readiness,

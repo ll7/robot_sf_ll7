@@ -99,7 +99,7 @@ authorized executor.
 - Readiness surface: `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py`
   (`docs/context/issue_4142_dpcbf_dense_readiness.md`)
 - Packet: `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`
-- Runtime arm contract: `robot_sf/benchmark/cbf_safety_filter_runtime.py`
+- Runtime arm contract: `robot_sf/benchmark/safety/cbf_safety_filter_runtime.py`
 - Prior slices: DPCBF arm (PR #4168), passthrough gate hardening (PR #4231), readiness
   preflight (PR #4299)
 - Parent: issue #3948; first CBF slice PR #4139

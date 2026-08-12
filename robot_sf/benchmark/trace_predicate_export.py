@@ -1,7 +1,7 @@
 """Trace-level predicate export lane (issue #5593).
 
 In-sim trace-level safety-predicate producers already exist and are fixture-tested
-(``robot_sf/benchmark/safety_predicates.py``). What this module adds is a **dedicated
+(``robot_sf/benchmark/safety/safety_predicates.py``). What this module adds is a **dedicated
 export lane**: a versioned, queryable artifact that lets downstream consumers pull the
 full set of emitted predicate values per episode/scenario/planner without re-deriving
 them from raw per-step traces or writing a one-off analysis script each time.
@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
-from robot_sf.benchmark.safety_predicates import (
+from robot_sf.benchmark.safety.safety_predicates import (
     LATE_EVASIVE_PREDICATE_SCHEMA,
     OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
     OSCILLATORY_PREDICATE_SCHEMA,
@@ -51,7 +51,7 @@ TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION = "trace_predicate_coverage.v1"
 CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
 
 # Predicates motivated by the taxonomy and produced by the shipped producers in
-# robot_sf/benchmark/safety_predicates.py. ``record_key`` is the key under which the
+# robot_sf/benchmark/safety/safety_predicates.py. ``record_key`` is the key under which the
 # producer record appears in an episode's ``safety_predicates`` block.
 MOTIVATED_TRACE_PREDICATES: tuple[dict[str, str], ...] = (
     {

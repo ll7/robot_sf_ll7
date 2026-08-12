@@ -1,7 +1,7 @@
 """CLI: export trace-level safety predicates from a completed campaign.
 
 Reads one or more campaign ``episodes.jsonl`` bundles (each episode already carries a
-``safety_predicates`` block from robot_sf/benchmark/safety_predicates.py) and emits a
+``safety_predicates`` block from robot_sf/benchmark/safety/safety_predicates.py) and emits a
 versioned, queryable export (JSON-lines), a manifest of predicate presence/gaps, and a
 coverage report that enumerates exported-vs-motivated predicates for a release.
 

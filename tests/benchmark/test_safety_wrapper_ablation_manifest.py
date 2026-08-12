@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
     SAFETY_WRAPPER_ABLATION_SCHEMA,
     SAFETY_WRAPPER_CONFIG_FIELD,
     SAFETY_WRAPPER_MODE_DISABLED,
@@ -456,7 +456,7 @@ def test_check_factorial_ablation_rows_rejects_duplicate_or_unknown_arm() -> Non
 
 def test_load_safety_wrapper_ablation_rows_reads_jsonl_and_json_list(tmp_path: Path) -> None:
     """The public checker accepts benchmark-style JSONL and compact JSON fixtures."""
-    from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+    from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
         load_safety_wrapper_ablation_rows,
     )
 

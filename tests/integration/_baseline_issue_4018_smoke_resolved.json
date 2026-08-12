@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "878ed99bb077d0d5b05c337aa590a930d36ace26",
+  "variants": {
+    "issue_4018_density_curriculum_smoke.yaml": "88ba792a4ce1106ae50e9495099ad1c2d625c76d2cf635af996973beaa9b29db",
+    "issue_4018_fixed_density_smoke.yaml": "3f85110d8617d2cf5f3a77452327b5ad4975dbfc4edbcb3a22b1810f1991a1c6"
+  }
+}

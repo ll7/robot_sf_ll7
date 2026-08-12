@@ -18,12 +18,12 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from robot_sf.benchmark.collision_cause_analyser import (
+from robot_sf.benchmark.collision.collision_cause_analyser import (
     DetectedFault,
     analyse_suite,
     analyser_config,
 )
-from robot_sf.benchmark.collision_cause_attribution import (
+from robot_sf.benchmark.collision.collision_cause_attribution import (
     REPORT_STATUS_SCORED,
     VERDICT_PASS,
     build_validation_report,

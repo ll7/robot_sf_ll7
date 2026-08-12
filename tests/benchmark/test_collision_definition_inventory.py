@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.benchmark.collision_definition_inventory import (
+from robot_sf.benchmark.collision.collision_definition_inventory import (
     LABEL_CLEAR,
     LABEL_COLLISION,
     LABEL_NEAR_MISS,

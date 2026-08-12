@@ -33,6 +33,10 @@ def test_invalid_density_curriculum_config_fails_closed(tmp_path: Path) -> None:
     payload["density_curriculum"]["stages"][1]["density_m2"] = 0.01
     config_path = tmp_path / "bad_density_curriculum.yaml"
     config_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    base_config = CURRICULUM_CONFIG.parent / payload["base_config"]
+    (tmp_path / base_config.name).write_text(
+        base_config.read_text(encoding="utf-8"), encoding="utf-8"
+    )
 
     with pytest.raises(ValueError, match="non-decreasing"):
         load_expert_training_config(config_path)

@@ -64,6 +64,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json.review.json
   status: evidence
   freshness: evidence
@@ -72,6 +73,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6934_brne_action_scaling_summary.json.review.json
   status: evidence
   freshness: evidence
@@ -80,6 +82,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6938_brne_progress_mechanism_summary.json.review.json
   status: evidence
   freshness: evidence
@@ -88,6 +91,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+  legacy_dirty_evidence: true
 - path: docs/context/evidence/issue_6944_brne_candidate_transition_summary.json.review.json
   status: evidence
   freshness: evidence

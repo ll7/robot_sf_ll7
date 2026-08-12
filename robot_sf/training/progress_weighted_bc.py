@@ -943,13 +943,16 @@ def validate_trajectory_npz_integrity(
     *,
     trusted_root: Path,
     expected_dataset_digest: str | None = None,
+    require_expected_digest: bool = True,
 ) -> str:
-    """Validate an NPZ path and optional digest before any pickle-capable load.
+    """Validate an NPZ path and digest before any pickle-capable load.
 
     Trajectory NPZ files may contain object arrays for ragged episodes and
     provenance metadata, so callers must establish both the trusted artifact
-    boundary and, when configured, the expected bytes before calling
-    ``numpy.load(..., allow_pickle=True)``.
+    boundary and, for strict callers, the expected bytes before calling
+    ``numpy.load(..., allow_pickle=True)``. Compatibility callers may disable
+    the expected-digest requirement only after explicitly accepting the
+    observed file digest within the trusted root.
 
     Returns:
         The verified SHA-256 digest of ``npz_path``.
@@ -971,12 +974,15 @@ def validate_trajectory_npz_integrity(
             f"trajectory dataset path escapes the trusted trajectory artifact directory: {path}"
         ) from exc
 
-    if not expected_dataset_digest:
+    if not expected_dataset_digest and require_expected_digest:
         raise ProgressWeightedBcError(
             "configured trajectory dataset digest is required before NPZ load"
         )
 
     actual_digest = _sha256_file(resolved_path)
+    if not expected_dataset_digest:
+        return actual_digest
+
     expected = str(expected_dataset_digest)
     if len(expected) != 64 or any(char not in "0123456789abcdefABCDEF" for char in expected):
         raise ProgressWeightedBcError(

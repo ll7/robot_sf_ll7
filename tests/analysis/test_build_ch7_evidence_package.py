@@ -505,6 +505,29 @@ def test_unlisted_package_complete_requires_binding(
         builder.verify_source_package(source, fixture_inputs["source_digest"])
 
 
+def test_cli_converts_manifest_schema_error_to_typed_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def _raise_schema_error(**_: object) -> dict[str, object]:
+        raise builder.ValidationError("invalid generated manifest", instance={})
+
+    monkeypatch.setattr(builder, "build_ch7_evidence_package", _raise_schema_error)
+    status = builder.main(
+        [
+            "--source-package",
+            str(tmp_path / "source"),
+            "--release-archive",
+            str(tmp_path / "release.tar.gz"),
+            "--issue6814-compact",
+            str(tmp_path / "compact"),
+            "--output",
+            str(tmp_path / "package"),
+        ]
+    )
+    assert status == 2
+    assert "ch7 evidence package unavailable" in capsys.readouterr().out
+
+
 def test_unlisted_source_file_is_rejected(fixture_inputs: dict[str, Path], tmp_path: Path) -> None:
     (fixture_inputs["source"] / "unlisted-trace.jsonl").write_text("{}\n", encoding="utf-8")
     with pytest.raises(builder.Ch7EvidencePackageError, match="unlisted files"):

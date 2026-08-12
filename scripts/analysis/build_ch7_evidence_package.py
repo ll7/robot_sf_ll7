@@ -1243,7 +1243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_path=args.config,
             check_determinism=args.check_determinism,
         )
-    except (Ch7EvidencePackageError, OSError, tarfile.TarError) as exc:
+    except (Ch7EvidencePackageError, OSError, tarfile.TarError, ValidationError) as exc:
         print(f"ch7 evidence package unavailable: {exc}")
         return 2
     print(f"ch7 evidence package status: {manifest['status']}")

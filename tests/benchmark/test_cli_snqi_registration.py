@@ -22,6 +22,7 @@ EXPECTED_CORE_COMMANDS = [
     "validate-row-claims",
     "export-parquet",
     "analyze-cases",
+    "admit-cases",
     "seed-variance",
     "flakiness-audit",
     "extract-failures",

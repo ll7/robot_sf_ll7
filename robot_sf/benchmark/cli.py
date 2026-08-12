@@ -815,7 +815,7 @@ def _handle_analyze_cases(args) -> int:
             result_store=args.result_store,
             output=args.output,
             check_determinism=bool(args.check_determinism),
-            source_gate_receipt=args.source_gate_receipt,
+            source_gate_receipt=getattr(args, "source_gate_receipt", None),
         )
         logging.info(
             "Case workbench wrote %d proposed cases to %s",

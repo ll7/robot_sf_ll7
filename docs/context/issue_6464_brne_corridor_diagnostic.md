@@ -1,6 +1,6 @@
 # Issue #6464 — BRNE Corridor Diagnostic
 
-Status: **diagnostic complete; no planner-ranking or benchmark claim**.
+Status: **diagnostic complete under declared single-thread isolation; no planner-ranking or benchmark claim**.
 
 BRNE (Bayesian Recursive Nash Equilibrium) now has a fail-closed map-runner
 adapter for the approved corridor-only preflight. The bounded run below proves
@@ -18,14 +18,19 @@ matched-compute parity, planner superiority, or paper evidence.
 - BRNE source: `MurpheyLab/brne` at commit `633a5cd`, GPL-3.0, staged locally
   and not vendored or redistributed.
 - The upstream request is `49` samples; its pinned grid produces `42` actual
-  samples. The adapter records the effective count and handles the upstream
-  plan-step-first tensor layout.
+  samples, frozen as `expected_effective_num_samples: 42`. The adapter records
+  the effective count and handles the upstream plan-step-first tensor layout.
 - The upstream random generator is rebound from each declared episode seed at
   planner reset, so repeated runs use the same BRNE sampling stream.
 - Fallback is disabled. Fallback, degraded, unknown, failed, over-cap, or
   degenerate rows are unavailable rather than success evidence. Solver stop
   actions carry runtime failure provenance and are excluded even when the
   trace has non-zero displacement.
+- The completed rerun used `NUMBA_NUM_THREADS=1` to isolate the native BRNE
+  timing path. A default-thread repeat previously exposed the known
+  load-sensitive seed-112 budget failure and remains incomplete rather than
+  success evidence; the source-smoke guard itself was stabilized by merged PR
+  [#6931](https://github.com/ll7/robot_sf_ll7/pull/6931) for [#6924](https://github.com/ll7/robot_sf_ll7/issues/6924).
 
 ## Observed result
 
@@ -70,22 +75,23 @@ From the dedicated linked worktree, stage the external source and run:
 ```bash
 uv run python scripts/tools/manage_external_repos.py stage brne
 uv run pytest -q tests/baselines/test_brne_source_smoke.py tests/baselines/test_brne_planner.py
-uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
+NUMBA_NUM_THREADS=1 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
   --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml \
   --output-dir output/benchmarks/issue_6464_brne_diagnostic_<timestamp>
 ```
 
-The corrected local report was written to
-`output/benchmarks/issue_6464_brne_diagnostic_20260812T022300Z/` and has
-report JSON SHA-256
-`a9679f3aa636381d79269e6adfe1817f3c8db3d6982debe0473162ba47da9306`.
-The report's episode provenance records implementation commit
-`af394c62bc349d1edcaa069bbf266b2296512d34`.
+The clean follow-up report is
+`output/benchmarks/issue_6464_brne_diagnostic_followup_20260812T031500Z/`.
+Its report JSON SHA-256 is
+`b76c1fc9ab08e1272b67fe78c85d341f56e56b62a31b3299c75c293f00a6e62f` and its
+Markdown SHA-256 is
+`b30a2b7ba441f4b86c558b837c8198cf8bb57f7e0bf2e811938cf36b6d8125e0`.
+Every episode records implementation commit
+`cb5ee5700ebe262733dd29e8e97c74deaff03cc7`; the staged upstream source is
+validated at pinned commit
+`633a5cdcb39ab27f18b596cb8cb1968644f82391` with clean tracked source.
 Raw episode files and the staged GPL source remain ignored, worktree-local
-artifacts. Because this capture was made from a dirty historical worktree and
-the raw report is ignored, the tracked summary is a historical diagnostic
-handoff only, not exact-head or paper-facing evidence; reproduce from the
-current commit before making any stronger claim. The compact evidence handoff is tracked in
+artifacts. The compact evidence handoff is tracked in
 `docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json`.
 
 ## Next decision

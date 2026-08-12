@@ -104,11 +104,23 @@ def _require_imitation_bc():
     return bc
 
 
-def _load_trajectory_dataset(dataset_path: Path) -> dict[str, Any]:
+def _load_trajectory_dataset(
+    dataset_path: Path,
+    *,
+    trusted_root: Path,
+    expected_dataset_digest: str | None = None,
+) -> dict[str, Any]:
     """Load NPZ trajectory dataset."""
     if not dataset_path.is_file():
         raise FileNotFoundError(f"Dataset not found or not a file: {dataset_path}")
 
+    from robot_sf.training.progress_weighted_bc import validate_trajectory_npz_integrity
+
+    validate_trajectory_npz_integrity(
+        dataset_path,
+        trusted_root=trusted_root,
+        expected_dataset_digest=expected_dataset_digest,
+    )
     with np.load(str(dataset_path), allow_pickle=True) as data:
         metadata_raw = data.get("metadata")
         metadata = {}
@@ -299,6 +311,8 @@ def _validate_progress_objective_seed(
 def _load_route_length_and_compute_weights(
     dataset_path: Path,
     objective_config: ProgressWeightedObjectiveConfig,
+    *,
+    trusted_root: Path,
 ) -> list[np.ndarray]:
     """Load remaining-route-length from the dataset NPZ and compute per-step weights.
 
@@ -313,6 +327,8 @@ def _load_route_length_and_compute_weights(
     result = load_remaining_route_length_from_npz(
         dataset_path,
         array_key=objective_config.remaining_route_length_key,
+        trusted_root=trusted_root,
+        expected_dataset_digest=objective_config.dataset_digest or None,
     )
     configured_digest = objective_config.dataset_digest
     actual_digest = str(result["dataset_digest"])
@@ -336,12 +352,17 @@ def run_bc_pretraining(
     # Load dataset
     dataset_path = common.get_trajectory_dataset_path(config.dataset_id)
     logger.info("Loading dataset from {}", dataset_path)
-    dataset = _load_trajectory_dataset(dataset_path)
     objective_config = _parse_progress_weighted_objective(config.progress_weighted_objective)
     objective_seed = (
         _validate_progress_objective_seed(objective_config, config.random_seeds)
         if objective_config is not None
         else None
+    )
+    trajectory_root = common.get_trajectory_dataset_dir()
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=trajectory_root,
+        expected_dataset_digest=(objective_config.dataset_digest if objective_config else None),
     )
     objective_manifest: dict[str, object] | None = None
     objective_weights: list[np.ndarray] | None = None
@@ -349,7 +370,11 @@ def run_bc_pretraining(
         # Validate and materialize the explicit route-progress contract before
         # constructing an environment or policy, so malformed provenance fails
         # closed without leaving runtime resources open.
-        objective_weights = _load_route_length_and_compute_weights(dataset_path, objective_config)
+        objective_weights = _load_route_length_and_compute_weights(
+            dataset_path,
+            objective_config,
+            trusted_root=trajectory_root,
+        )
 
     # Create environment for BC using the same observation contract as collection.
     env = make_training_contract_env(

@@ -194,7 +194,7 @@ def test_load_trajectory_dataset_requires_regular_file(tmp_path: Path) -> None:
     dataset_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="not a file"):
-        _load_trajectory_dataset(dataset_dir)
+        _load_trajectory_dataset(dataset_dir, trusted_root=tmp_path)
 
 
 def test_progress_weighted_loader_rejects_dataset_digest_mismatch(tmp_path: Path) -> None:
@@ -221,7 +221,32 @@ def test_progress_weighted_loader_rejects_dataset_digest_mismatch(tmp_path: Path
     )
 
     with pytest.raises(ProgressWeightedBcError, match="dataset digest does not match"):
-        _load_route_length_and_compute_weights(dataset_path, config)
+        _load_route_length_and_compute_weights(dataset_path, config, trusted_root=tmp_path)
+
+
+def test_trajectory_loader_checks_digest_before_np_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A digest mismatch must stop the initial loader before pickle-capable np.load."""
+    dataset_path = tmp_path / "trajectory.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    def fail_if_loaded(*args: object, **kwargs: object) -> None:
+        raise AssertionError("numpy.load must not run before digest validation")
+
+    monkeypatch.setattr(np, "load", fail_if_loaded)
+    with pytest.raises(ProgressWeightedBcError, match="before NPZ load"):
+        _load_trajectory_dataset(
+            dataset_path,
+            trusted_root=tmp_path,
+            expected_dataset_digest="0" * 64,
+        )
 
 
 def test_progress_objective_seed_must_match_primary_run_seed() -> None:

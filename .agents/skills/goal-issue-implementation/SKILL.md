@@ -526,6 +526,13 @@ Use the minimum required tier for changed surfaces:
 Before PR creation, rerun freshness gate after latest `origin/main` sync.
 Do not use stale validation as proof.
 
+For issue-to-PR publication, also use `scripts/dev/check_prepublication_state.py`: capture the
+issue/base/remote-branch/local-HEAD baseline before expensive readiness, then run `check` immediately
+before opening the PR. Treat `superseded` and `blocked` as stops, and treat `refresh-required` as
+stale evidence; `sync --integrate` may merge changed remote refs only from a clean worktree. Record
+the decision and exact SHAs in the run ledger, then rerun readiness and capture a new baseline after
+any integration.
+
 ## Proof and Artifact Rules
 
 - Do not count benchmark fallback/degraded execution as success unless task scope explicitly says so.

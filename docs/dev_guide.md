@@ -413,6 +413,21 @@ because:
 staleness check can be replaced by the queue's built-in re-validation, which is strictly stronger.
 The gate-side rule remains useful as a safety net for non-GitHub CI providers.
 
+### Pre-publication state refresh (issue #6916)
+
+The local readiness stamp proves a branch and HEAD were validated, but it cannot tell whether the
+claimed issue was closed by a concurrent PR or whether a remote branch tip changed while readiness
+was running. Use `scripts/dev/check_prepublication_state.py` around expensive publication work:
+
+1. `capture` the issue, base, remote branch, and local HEAD SHAs before readiness.
+2. Run `check` immediately before opening or updating the PR.
+3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
+   evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
+   rerun readiness and capture a new baseline.
+
+The gate records the exact before/after SHAs and any merged PR that explicitly closes the issue.
+Its integration path uses ordinary Git merges and never resets or deletes local worktrees.
+
 **Rollback path.** Remove step 6 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.

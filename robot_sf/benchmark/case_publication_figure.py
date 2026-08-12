@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.analysis_trace import canonical_json
 from robot_sf.common.optional_import import try_import
 
 
@@ -205,6 +207,12 @@ def _read_json_mapping(path: Path) -> dict[str, Any]:
     return value
 
 
+def _sha256_json(value: Any) -> str:
+    """Hash canonical JSON for package-level semantic receipts."""
+
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
 def _verify_package_integrity(package: Path) -> None:
     """Fail closed when a package manifest/checksum set does not verify."""
 
@@ -245,16 +253,47 @@ def _verify_publication_gate(package: Path) -> None:
     """Require source restoration and author admission before publication output."""
 
     manifest = _read_json_mapping(package / "manifest.json")
+    proposal_path = package / "proposal.json"
+    proposal = _read_json_mapping(proposal_path)
+    proposal_digest = _sha256_json(proposal)
+    manifest_digest = manifest.get("proposal_sha256")
+    if manifest_digest != proposal_digest:
+        raise ValueError("publication proposal digest does not match manifest")
     gate = manifest.get("source_integrity_gate")
-    if not isinstance(gate, dict) or gate.get("status") != "passed":
+    from robot_sf.benchmark.case_workbench import _source_gate_is_trusted
+
+    source_manifest = manifest.get("source")
+    if (
+        not isinstance(gate, dict)
+        or not _source_gate_is_trusted(gate)
+        or not isinstance(source_manifest, dict)
+        or gate.get("source_sha256") != source_manifest.get("sha256")
+    ):
         raise ValueError("publication rendering is blocked by the source-integrity gate")
     overlay = _read_json_mapping(package / "admission_overlay.json")
     if str(overlay.get("status") or "").lower() != "admitted":
         raise ValueError("publication rendering requires an admitted author overlay")
+    machine_digest = manifest.get("machine_proposal_sha256")
+    admission = proposal.get("author_admission")
+    if not isinstance(machine_digest, str) or not isinstance(admission, dict):
+        raise ValueError("publication package is missing machine proposal admission binding")
+    if overlay.get("proposal_sha256") != machine_digest:
+        raise ValueError("admission overlay is not bound to the machine proposal")
+    if admission.get("machine_proposal_sha256") != machine_digest:
+        raise ValueError("admitted proposal is not bound to the machine proposal")
 
 
 def _select_publication_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Choose one case or one complete declared pair, never an arbitrary portfolio slice."""
+
+    def compatible_pair(case: Mapping[str, Any], pair_ids: set[str]) -> bool:
+        receipt = case.get("comparison_compatibility")
+        return (
+            isinstance(receipt, Mapping)
+            and receipt.get("status") == "compatible"
+            and {str(value) for value in receipt.get("pair_ids", [])} == pair_ids
+            and receipt.get("shared_prefix") is False
+        )
 
     if len(cases) == 1:
         return cases
@@ -263,6 +302,7 @@ def _select_publication_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any
         if all(
             isinstance(case.get("comparison_pair_ids"), list)
             and ids.issubset({str(value) for value in case["comparison_pair_ids"]})
+            and compatible_pair(case, ids)
             for case in cases
         ):
             return sorted(cases, key=lambda item: str(item.get("case_id")))
@@ -273,7 +313,7 @@ def _select_publication_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any
             continue
         ids = {str(value) for value in pair_ids}
         pair = [candidate for candidate in cases if str(candidate.get("case_id")) in ids]
-        if len(pair) == 2:
+        if len(pair) == 2 and all(compatible_pair(candidate, ids) for candidate in pair):
             return sorted(pair, key=lambda item: str(item.get("case_id")))
     raise ValueError("publication composition requires an explicit compatible case pair")
 
@@ -291,12 +331,23 @@ def _release_cell_counts(package: Path, cases: list[dict[str, Any]]) -> dict[str
         rows = pyarrow.read_table(store).to_pylist()
     except (OSError, ValueError, AttributeError):
         return {"status": "unavailable", "reason": "cell_table_unreadable"}
-    selected_keys = {(str(case.get("planner")), str(case.get("scenario_id"))) for case in cases}
+    selected_keys = {
+        (
+            str(case.get("planner")),
+            str(case.get("scenario_id")),
+            str(case.get("config_hash") or ""),
+            str(case.get("config_digest") or ""),
+            str(case.get("scenario_digest") or ""),
+            str(case.get("map_digest") or ""),
+        )
+        for case in cases
+    }
     matching = [
         {
             "planner": row.get("planner"),
             "scenario_id": row.get("scenario_id"),
             "config_hash": row.get("config_hash"),
+            "config_digest": row.get("config_digest"),
             "scenario_digest": row.get("scenario_digest"),
             "map_digest": row.get("map_digest"),
             "outcome_counts": _decode_json(row.get("outcome_counts_json")),
@@ -306,7 +357,15 @@ def _release_cell_counts(package: Path, cases: list[dict[str, Any]]) -> dict[str
             "boundary_context": _decode_json(row.get("boundary_context_json")),
         }
         for row in rows
-        if (str(row.get("planner")), str(row.get("scenario_id"))) in selected_keys
+        if (
+            str(row.get("planner")),
+            str(row.get("scenario_id")),
+            str(row.get("config_hash") or ""),
+            str(row.get("config_digest") or ""),
+            str(row.get("scenario_digest") or ""),
+            str(row.get("map_digest") or ""),
+        )
+        in selected_keys
     ]
     return (
         {"status": "available", "cells": matching}

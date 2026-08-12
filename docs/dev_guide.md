@@ -138,11 +138,23 @@ A cheap fresh-worktree check is:
 Use this order for a fresh worktree:
 
 ```bash
-MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-ln -s "$MAIN_REPO_ROOT/local.machine.md" .
-uv sync --all-extras
+scripts/dev/bootstrap_worktree.sh
 source .venv/bin/activate
+python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
+
+`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
+`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
+commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
+intentionally resync the local environment, unset the guard for that command:
+
+```bash
+env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
+```
+
+The optional-dependency preflight uses import-spec probes without importing project code. A
+`missing_optional` result is setup evidence and should not be confused with a changed-code
+collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
 
 Notes:
 

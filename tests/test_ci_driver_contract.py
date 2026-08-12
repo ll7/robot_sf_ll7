@@ -469,6 +469,86 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
+def test_ci_workflow_examples_smoke_has_bounded_checkout_retry_and_fail_closed_guard() -> None:
+    """Bounded checkout retry with explicit fail-closed guard (issue #6946).
+
+    When ``actions/checkout`` cannot verify GitHub's TLS certificate, the job
+    must retry a small bounded number of times without disabling TLS
+    verification. If every attempt fails, a dedicated guard step must fail the
+    job, report that no example tests ran, and provide a bounded rerun command.
+    This keeps checkout/infrastructure failure clearly separated from code-test
+    evidence.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    job = workflow["jobs"]["examples-smoke"]
+    steps = job["steps"]
+
+    attempt_1 = next(
+        (step for step in steps if step.get("id") == "checkout_attempt_1"),
+        None,
+    )
+    attempt_2 = next(
+        (step for step in steps if step.get("id") == "checkout_attempt_2"),
+        None,
+    )
+    attempt_3 = next(
+        (step for step in steps if step.get("id") == "checkout_attempt_3"),
+        None,
+    )
+    guard = next(
+        (step for step in steps if step.get("name") == "Fail-closed guard when checkout fails"),
+        None,
+    )
+
+    assert attempt_1 is not None, "checkout_attempt_1 step not found"
+    assert attempt_2 is not None, "checkout_attempt_2 step not found"
+    assert attempt_3 is not None, "checkout_attempt_3 step not found"
+    assert guard is not None, "fail-closed guard step not found"
+
+    pinned_checkout = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    for attempt in (attempt_1, attempt_2, attempt_3):
+        assert attempt["uses"] == pinned_checkout
+        assert attempt.get("continue-on-error") is True
+        # Preserve the existing checkout semantics: no extra options, and in
+        # particular no TLS-bypassing configuration, are injected.
+        assert "with" not in attempt
+
+    assert attempt_2["if"] == "steps.checkout_attempt_1.outcome == 'failure'"
+    assert attempt_3["if"] == (
+        "steps.checkout_attempt_1.outcome == 'failure' && "
+        "steps.checkout_attempt_2.outcome == 'failure'"
+    )
+
+    assert guard["if"] == (
+        "steps.checkout_attempt_1.outcome == 'failure' && "
+        "steps.checkout_attempt_2.outcome == 'failure' && "
+        "steps.checkout_attempt_3.outcome == 'failure'"
+    )
+
+    guard_run = guard.get("run", "")
+    assert "$GITHUB_STEP_SUMMARY" in guard_run
+    assert "No example smoke tests ran." in guard_run
+    assert "not bypassed" in guard_run
+    assert 'gh run rerun "$GITHUB_RUN_ID" --failed' in guard_run
+    assert "::error::" in guard_run
+    assert "exit 1" in guard_run
+
+    # Structural check: no insecure TLS bypass anywhere in the examples-smoke job.
+    job_text = yaml.dump(job)
+    tls_bypass_signals = [
+        "GIT_SSL_NO_VERIFY",
+        "sslVerify=false",
+        "NODE_TLS_REJECT_UNAUTHORIZED",
+        "GIT_HTTP_SSL_VERIFY",
+        "tls.skip_verify",
+        "insecure-skip-verify",
+    ]
+    for signal in tls_bypass_signals:
+        assert signal.lower() not in job_text.lower(), (
+            f"examples-smoke must not disable TLS verification: found {signal!r}"
+        )
+
+
 def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() -> None:
     """Keep notebook execution in a separately timed job required by aggregate CI."""
     workflow = yaml.safe_load(_workflow_text())

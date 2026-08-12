@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.runner import run_batch
+from robot_sf.evidence.writers import write_json, write_review_sidecar
 
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 SCENARIO: dict[str, object] = {
@@ -193,7 +194,8 @@ def measure(*, output: Path, samples: int = 5) -> dict[str, Any]:
         },
     }
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(output, receipt)
+    write_review_sidecar(output)
     return receipt
 
 

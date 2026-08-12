@@ -13,7 +13,9 @@ from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
+    _candidate_distribution_summary,
     _mechanism_table_row,
+    _validate_candidate_distribution,
     _write_report,
     classify_record,
     summarize_records,
@@ -63,10 +65,21 @@ def _record(
 
 def _candidate_distribution() -> dict[str, Any]:
     """Return bounded candidate/weight summaries for native trace fixtures."""
-    stats = {"min": 0.0, "q25": 0.0, "median": 0.0, "mean": 0.0, "q75": 0.0, "max": 0.0, "std": 0.0}
+    stats = {
+        "min": 0.0,
+        "q25": 0.0,
+        "median": 0.0,
+        "mean": 0.0,
+        "q75": 0.0,
+        "max": 0.0,
+        "std": 0.0,
+    }
     step = {
-        "candidate_controls": {"v_m_s": stats, "omega_rad_s": stats},
-        "weights": stats,
+        "candidate_controls": {
+            "v_m_s": stats.copy(),
+            "omega_rad_s": stats.copy(),
+        },
+        "weights": stats.copy(),
         "weighted_mean": {"v_m_s": 0.0, "omega_rad_s": 0.0},
     }
     return {
@@ -488,6 +501,33 @@ def test_native_mechanism_trace_requires_candidate_distribution() -> None:
     )
     assert classified["mechanism_trace_valid"] is False
     assert "candidate distribution" in classified["mechanism_trace_status"]
+
+
+def test_available_candidate_distribution_requires_complete_finite_fields() -> None:
+    """Available summaries must not pass validation with omitted telemetry."""
+    candidate = _candidate_distribution()
+    candidate["first"]["weights"].pop("mean")
+
+    with pytest.raises(ValueError, match="first.weights.mean"):
+        _validate_candidate_distribution(candidate, step_index=0)
+
+
+def test_candidate_summary_keeps_plan_step_and_observation_transitions_separate() -> None:
+    """The plan-step second summary must come from the first observation."""
+    first_distribution = _candidate_distribution()
+    second_distribution = deepcopy(_candidate_distribution())
+    first_distribution["second"]["weighted_mean"]["v_m_s"] = 1.0
+    second_distribution["second"]["weighted_mean"]["v_m_s"] = 2.0
+
+    summary = _candidate_distribution_summary(
+        [
+            {"candidate_distribution": first_distribution},
+            {"candidate_distribution": second_distribution},
+        ]
+    )
+
+    assert summary["second"]["weighted_mean"]["v_m_s"] == 1.0
+    assert summary["observation_step_transition"]["to"] == second_distribution["first"]
 
 
 def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:

@@ -374,6 +374,16 @@ def _finite_optional(value: Any, *, field: str) -> float | None:
     return parsed
 
 
+def _finite_required(value: Any, *, field: str) -> float:
+    """Validate a required finite scalar."""
+    if value is None:
+        raise ValueError(f"{field} is required")
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"{field} must be finite when present")
+    return parsed
+
+
 def _validate_candidate_distribution(  # noqa: C901
     value: Any, *, step_index: int
 ) -> None:
@@ -405,7 +415,7 @@ def _validate_candidate_distribution(  # noqa: C901
         if not isinstance(summary, dict):
             raise ValueError(f"step {step_index} has malformed {field} distribution")
         for statistic in ("min", "q25", "median", "mean", "q75", "max", "std"):
-            _finite_optional(summary.get(statistic), field=f"{field}.{statistic}")
+            _finite_required(summary.get(statistic), field=f"{field}.{statistic}")
 
     def validate_step_summary(summary: Any, *, field: str) -> None:
         if not isinstance(summary, dict):
@@ -419,8 +429,8 @@ def _validate_candidate_distribution(  # noqa: C901
         weighted_mean = summary.get("weighted_mean")
         if not isinstance(weighted_mean, dict):
             raise ValueError(f"step {step_index} is missing {field} weighted mean")
-        _finite_optional(weighted_mean.get("v_m_s"), field=f"{field}.weighted_mean.v_m_s")
-        _finite_optional(
+        _finite_required(weighted_mean.get("v_m_s"), field=f"{field}.weighted_mean.v_m_s")
+        _finite_required(
             weighted_mean.get("omega_rad_s"), field=f"{field}.weighted_mean.omega_rad_s"
         )
 
@@ -440,7 +450,7 @@ def _validate_candidate_distribution(  # noqa: C901
             "candidate_mean_delta_omega_rad_s",
             "weighted_mean_delta_omega_rad_s",
         ):
-            _finite_optional(first_to_second.get(field), field=f"first_to_second.{field}")
+            _finite_required(first_to_second.get(field), field=f"first_to_second.{field}")
 
 
 def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
@@ -743,11 +753,7 @@ def _candidate_distribution_summary(ensemble_steps: list[dict[str, Any]]) -> dic
         "sample_count": first_distribution.get("sample_count"),
         "plan_step_count": first_distribution.get("plan_step_count"),
         "first": first_distribution.get("first"),
-        "second": (
-            second_distribution.get("second")
-            if isinstance(second_distribution, dict)
-            else first_distribution.get("second")
-        ),
+        "second": first_distribution.get("second"),
         "first_to_second": (
             first_distribution.get("first_to_second")
             if isinstance(first_distribution, dict)

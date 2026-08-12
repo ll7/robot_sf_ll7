@@ -10,6 +10,8 @@ fail-closed preflight as ``gh-pr-merger``:
   - current ``merge-ready`` label,
   - a current exact-head ``gate-verdict: accepted @ <head_sha>`` trailer
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
+  - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
+    final PR title/body to the review evidence,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
@@ -18,9 +20,9 @@ fail-closed preflight as ``gh-pr-merger``:
     base SHA equals current ``main``; evaluated against ``main`` in ``--pr`` mode).
 
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
-queue merging strategy, base SHA, label set, gate-verdict status, staleness
-verdict, CI conclusion, reviewer-thread resolution, and requested-reviewer
-status so the merge decision is inspectable and reproducible.
+queue merging strategy, base SHA, label set, metadata digest and trailer
+statuses, staleness verdict, CI conclusion, reviewer-thread resolution, and
+requested-reviewer status so the merge decision is inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -64,9 +66,15 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _rollup_status,
 )
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
+    has_current_pr_metadata_verdict,
 )
-from scripts.dev.snapshot_pr_queue import _extract_gate_verdicts  # noqa: E402
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer  # noqa: E402
+from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+    _extract_gate_verdicts,
+    _extract_metadata_verdicts,
+)
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
 
@@ -116,6 +124,8 @@ class MergeGateAudit:
     draft: bool
     ci_overall: str
     gate_verdict_status: str
+    metadata_digest: str
+    metadata_verdict_status: str
     staleness_verdict: str
     thread_resolution: str
     reviewer_request_status: str
@@ -169,6 +179,15 @@ def _gate_verdict_status(pr: dict[str, Any], head_sha: str) -> str:
     return "accepted" if has_current_accepted_gate_verdict(pr, head_sha) else "missing"
 
 
+def _metadata_verdict_status(pr: dict[str, Any], digest: str) -> str:
+    """Classify the final title/body reconciliation trailer state."""
+    if not digest:
+        return "missing"
+    if has_current_pr_metadata_verdict(pr, digest):
+        return "accepted"
+    return "stale" if has_any_pr_metadata_verdict(pr) else "missing"
+
+
 def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | None) -> bool | None:
     """Use an explicit reviewer state or a validated snapshot value."""
     if reviewers_requested is not None:
@@ -177,13 +196,14 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
-def _fail_closed_reasons(
+def _fail_closed_reasons(  # noqa: PLR0913
     *,
     draft: bool,
     merge_ready: bool,
     ci_overall: str,
     staleness_verdict: str,
     gate_verdict_status: str,
+    metadata_verdict_status: str,
     thread_resolution: str,
     reviewer_request_status: str,
     merge_group_head_binding: str,
@@ -204,6 +224,12 @@ def _fail_closed_reasons(
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
         reasons.append("missing_exact_head_gate_verdict")
+    if metadata_verdict_status != "accepted":
+        reasons.append(
+            "stale_pr_metadata_verdict"
+            if metadata_verdict_status == "stale"
+            else "missing_pr_metadata_verdict"
+        )
     if merge_group_head_binding == "mismatch":
         reasons.append("merge_group_head_sha_mismatch")
     if thread_resolution != "resolved":
@@ -240,7 +266,8 @@ def evaluate_merge_gate(
         pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``, plus any
         gate-verdict carrier fields understood by
         ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
-        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts), and
+        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
+        ``metadata_digest`` and trusted ``metadata_verdicts``, and
         ``reviewers_requested`` when supplied by the live snapshot.
       main_sha: current ``main`` HEAD SHA. When both ``base_sha`` and
         ``main_sha`` are present and differ, the gate fails closed as stale. When
@@ -265,8 +292,8 @@ def evaluate_merge_gate(
 
     Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
     ``reasons``. The audit always records the evaluated head SHA, base SHA, label
-    set, gate-verdict status, staleness verdict, CI conclusion, and thread
-    resolution so the decision is inspectable.
+    set, gate-verdict and metadata-verdict statuses, staleness verdict, CI
+    conclusion, and thread resolution so the decision is inspectable.
     """
     head_sha = str(pr.get("head_sha", "") or "")
     labels = _label_names(pr)
@@ -283,6 +310,8 @@ def evaluate_merge_gate(
     reviewers_requested = _reviewers_requested_value(pr, reviewers_requested)
 
     gate_verdict_status = _gate_verdict_status(pr, head_sha)
+    metadata_digest_value = str(pr.get("metadata_digest", "") or "")
+    metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
 
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
     if merge_group_head_sha:
@@ -321,6 +350,7 @@ def evaluate_merge_gate(
             ci_overall=ci_overall,
             staleness_verdict=staleness_verdict,
             gate_verdict_status=gate_verdict_status,
+            metadata_verdict_status=metadata_verdict_status,
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
@@ -346,6 +376,8 @@ def evaluate_merge_gate(
         draft=draft,
         ci_overall=ci_overall or "unknown",
         gate_verdict_status=gate_verdict_status,
+        metadata_digest=metadata_digest_value,
+        metadata_verdict_status=metadata_verdict_status,
         staleness_verdict=staleness_verdict,
         thread_resolution=thread_resolution,
         reviewer_request_status=reviewer_request_status,
@@ -576,7 +608,7 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
             "--repo",
             repo,
             "--json",
-            "number,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
+            "number,title,body,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
         ]
     )
     if result.returncode != 0:
@@ -588,6 +620,15 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     draft_value = payload.get("isDraft")
     if type(draft_value) is not bool:
         return {}, "gh pr view isDraft field is missing or malformed"
+
+    title = payload.get("title")
+    body = payload.get("body")
+    if not isinstance(title, str):
+        return {}, "gh pr view title field is missing or malformed"
+    if body is None:
+        body = ""
+    if not isinstance(body, str):
+        return {}, "gh pr view body field is malformed"
 
     review_requests = payload.get("reviewRequests")
     if not isinstance(review_requests, list):
@@ -601,11 +642,13 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         "number": payload.get("number"),
         "draft": draft_value,
         "head_sha": str(payload.get("headRefOid") or ""),
+        "metadata_digest": metadata_digest(title, body),
         "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
+        "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
         # Each GitHub review request is an explicit request for review. Treat any
@@ -784,6 +827,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- draft: `{audit.draft}`",
         f"- merge-ready: `{audit.merge_ready}`",
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
+        f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
+        f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
@@ -794,8 +839,9 @@ def _format_summary(audit: MergeGateAudit) -> str:
     lines.append("")
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
-        "`gate-verdict: accepted` trailer + resolved threads + no outstanding reviewer "
-        "requests + `ALLGREEN` queue strategy; fail-closed on any missing dimension. "
+        "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
+        "trailer + resolved threads + no outstanding reviewer requests + "
+        "`ALLGREEN` queue strategy; fail-closed on any missing dimension. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
     )
@@ -922,10 +968,13 @@ def _self_test() -> int:
             "draft": draft,
             "base_sha": base_sha,
         }
+        digest = metadata_digest("merge queue gate self-test", "final body")
+        pr["metadata_digest"] = digest
         if ci_overall is not None:
             pr["checks"] = {"overall": ci_overall}
         if gate_verdict_sha:
             pr["gate_verdict"] = {"verdict": "accepted", "sha": gate_verdict_sha}
+            pr["metadata_verdicts"] = [metadata_trailer(digest)]
         return pr
 
     failures: list[str] = []
@@ -1106,6 +1155,10 @@ def _self_test() -> int:
             "draft": False,
             "checks": {"overall": "success"},
             "reviewers_requested": False,
+            "metadata_digest": metadata_digest("merge queue gate self-test", "final body"),
+            "metadata_verdicts": [
+                metadata_trailer(metadata_digest("merge queue gate self-test", "final body"))
+            ],
             "comment_snapshot": {
                 "latest": [
                     {

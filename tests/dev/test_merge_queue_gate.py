@@ -15,6 +15,7 @@ from scripts.dev.merge_queue_gate import (
     fetch_threads_resolved,
     main,
 )
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
 
@@ -33,16 +34,26 @@ def _raw_pr(
     """Build raw ``gh pr view`` data with an optional comment/review body."""
     payload: dict[str, object] = {
         "number": 42,
+        "title": "merge queue test PR",
+        "body": "final body",
         "isDraft": False,
         "headRefOid": FULL_SHA,
         "labels": [{"name": "merge-ready"}],
         "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
-        "comments": [],
+        "comments": [
+            {
+                "body": metadata_trailer(metadata_digest("merge queue test PR", "final body")),
+                "authorAssociation": "OWNER",
+            }
+        ],
         "reviews": [],
         "reviewRequests": [],
     }
     if body:
-        payload[carrier] = [{"body": body, "authorAssociation": author_association}]
+        payload[carrier] = [
+            *payload.get(carrier, []),
+            {"body": body, "authorAssociation": author_association},
+        ]
     return payload
 
 
@@ -478,6 +489,51 @@ def test_outstanding_requested_reviewer_fails_closed() -> None:
     assert audit.passed is False
     assert audit.reviewer_request_status == "requested"
     assert "outstanding_requested_reviewers" in audit.reasons
+
+
+def test_metadata_verdict_is_required_for_native_queue_admission() -> None:
+    """A current gate verdict alone cannot admit a changed final PR state."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "gate_verdicts": [gate_verdict],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.metadata_verdict_status == "missing"
+    assert "missing_pr_metadata_verdict" in audit.reasons
+
+
+def test_stale_metadata_verdict_is_distinguished_from_missing() -> None:
+    """A prior metadata digest is reported as stale rather than accepted."""
+    current_digest = metadata_digest("current title", "current body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "metadata_digest": current_digest,
+            "metadata_verdicts": [metadata_trailer(metadata_digest("old title", "old body"))],
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.metadata_digest == current_digest
+    assert audit.metadata_verdict_status == "stale"
+    assert "stale_pr_metadata_verdict" in audit.reasons
 
 
 def test_evaluate_merge_gate_fails_closed_when_runtime_dimensions_are_missing() -> None:

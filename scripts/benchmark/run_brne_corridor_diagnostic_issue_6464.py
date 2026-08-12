@@ -426,6 +426,24 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
             _finite_optional(selected_action.get("omega_rad_s"), field="selected omega")
             if selected_action.get("v_m_s") is None or selected_action.get("omega_rad_s") is None:
                 raise ValueError(f"step {index} has incomplete selected action")
+            pre_clamp_action = step.get("pre_clamp_action")
+            if pre_clamp_action is not None:
+                if not isinstance(pre_clamp_action, dict):
+                    raise ValueError(f"step {index} has malformed pre-clamp action")
+                _finite_optional(pre_clamp_action.get("v_m_s"), field="pre-clamp v")
+                _finite_optional(pre_clamp_action.get("omega_rad_s"), field="pre-clamp omega")
+                if (
+                    pre_clamp_action.get("v_m_s") is None
+                    or pre_clamp_action.get("omega_rad_s") is None
+                ):
+                    raise ValueError(f"step {index} has incomplete pre-clamp action")
+            action_clipping = step.get("action_clipping")
+            if action_clipping is not None:
+                if not isinstance(action_clipping, dict) or any(
+                    not isinstance(action_clipping.get(field), bool)
+                    for field in ("v_clipped", "omega_clipped", "any_clipped")
+                ):
+                    raise ValueError(f"step {index} has malformed action clipping")
             action_delta = step.get("action_delta")
             if action_delta is not None:
                 if not isinstance(action_delta, dict) or not isinstance(
@@ -454,6 +472,13 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
                 "samples_first",
             }:
                 raise ValueError(f"step {index} has unknown aggregation mode")
+            expected_formula = {
+                "not_applied": "not_applied",
+                "plan_step_first": "mean_plan_step_first_over_samples",
+                "samples_first": "mean_samples_first_over_samples",
+            }[ensemble["aggregation_mode"]]
+            if ensemble.get("aggregation_formula") != expected_formula:
+                raise ValueError(f"step {index} has an inconsistent aggregation formula")
             runtime_step = step.get("runtime")
             if not isinstance(runtime_step, dict):
                 raise ValueError(f"step {index} is missing runtime metadata")
@@ -470,6 +495,14 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
                 not isinstance(reason, str) for reason in runtime_step["failure_reasons"]
             ):
                 raise ValueError(f"step {index} has malformed runtime failure reasons")
+            if (
+                runtime_step.get("status") == "ok"
+                and ensemble.get("aggregation_mode") != "not_applied"
+            ):
+                if pre_clamp_action is None:
+                    raise ValueError(f"step {index} is missing pre-clamp action")
+                if action_clipping is None:
+                    raise ValueError(f"step {index} is missing action clipping metadata")
             _finite_optional(runtime_step.get("elapsed_s"), field="solver elapsed time")
             _finite_optional(runtime_step.get("budget_s"), field="solver budget")
     except (TypeError, ValueError) as exc:
@@ -530,6 +563,52 @@ def _simulation_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
         "first": actions[0] if actions else None,
         "last": actions[-1] if actions else None,
         "action_change_count": changes,
+    }
+
+
+def _mechanism_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize finite pre-clamp actions and observed safety clipping."""
+    actions: list[dict[str, float]] = []
+    clipped_steps = 0
+    for step in steps:
+        payload = step.get("pre_clamp_action") if isinstance(step, dict) else None
+        if not isinstance(payload, dict):
+            continue
+        try:
+            linear_value = float(payload.get("v_m_s"))
+            angular_value = float(payload.get("omega_rad_s"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(linear_value) and math.isfinite(angular_value):
+            actions.append({"v_m_s": linear_value, "omega_rad_s": angular_value})
+        clipping = step.get("action_clipping") if isinstance(step, dict) else None
+        if isinstance(clipping, dict) and clipping.get("any_clipped") is True:
+            clipped_steps += 1
+    changes = sum(
+        not math.isclose(previous["v_m_s"], current["v_m_s"])
+        or not math.isclose(previous["omega_rad_s"], current["omega_rad_s"])
+        for previous, current in pairwise(actions)
+    )
+    return {
+        "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].pre_clamp_action",
+        "available": bool(actions),
+        "first": actions[0] if actions else None,
+        "last": actions[-1] if actions else None,
+        "v_range_m_s": (
+            [min(action["v_m_s"] for action in actions), max(action["v_m_s"] for action in actions)]
+            if actions
+            else None
+        ),
+        "omega_range_rad_s": (
+            [
+                min(action["omega_rad_s"] for action in actions),
+                max(action["omega_rad_s"] for action in actions),
+            ]
+            if actions
+            else None
+        ),
+        "action_change_count": changes,
+        "clipped_steps": clipped_steps,
     }
 
 
@@ -625,6 +704,7 @@ def _mechanism_table_row(
     runtime_steps = [item for item in runtime_steps if isinstance(item, dict)]
     ensemble_steps = [step.get("ensemble", {}) for step in mechanism_steps]
     ensemble_steps = [item for item in ensemble_steps if isinstance(item, dict)]
+    pre_clamp_action = _mechanism_action_summary(mechanism_steps)
     selected_pedestrians = [step.get("selected_pedestrians", []) for step in mechanism_steps]
     selected_pedestrians = [item for item in selected_pedestrians if isinstance(item, list)]
     runtime_meta = metadata.get("planner_runtime")
@@ -658,7 +738,12 @@ def _mechanism_table_row(
             ),
             "unavailable_reason": None if observations else "goal_geometry_not_recorded",
         },
+        "pre_clamp_action": pre_clamp_action,
         "selected_action": _simulation_action_summary(simulation_steps),
+        "action_clipping": {
+            "available": pre_clamp_action["available"],
+            "clipped_steps": pre_clamp_action["clipped_steps"],
+        },
         "runtime": {
             "status": runtime_planner_meta.get("runtime_status", "not_applicable"),
             "failure_count": runtime_planner_meta.get("failure_count", 0),
@@ -1042,6 +1127,26 @@ def _markdown_cell(value: Any) -> str:
     return "not available" if value is None else str(value)
 
 
+def _markdown_action_summary(summary: Any, *, include_clipped: bool = False) -> str:
+    """Render a compact first-to-last action summary for the mechanism table."""
+    if not isinstance(summary, dict) or summary.get("available") is not True:
+        return "not available"
+    first = summary.get("first")
+    last = summary.get("last")
+    if not isinstance(first, dict) or not isinstance(last, dict):
+        return "not available"
+    try:
+        text = (
+            f"{float(first['v_m_s']):.3f}/{float(first['omega_rad_s']):.3f}"
+            f" -> {float(last['v_m_s']):.3f}/{float(last['omega_rad_s']):.3f}"
+        )
+    except (KeyError, TypeError, ValueError):
+        return "not available"
+    if include_clipped:
+        text += f"; clipped={summary.get('clipped_steps', 'not available')}"
+    return text
+
+
 def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     """Write machine-readable and human-readable diagnostic reports."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1080,16 +1185,24 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
             "Rows retain diagnostic telemetry even when native eligibility is unavailable. "
             "`not available` is a fail-closed state, not a zero or a success.",
             "",
-            "| planner | seed | status | runtime | failures | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | collision step | goal step |",
-            "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
+            "| planner | seed | status | runtime | failures | pre-clamp action (v/omega) | selected action (v/omega) | heading/goal first (decl/vel/goal rad) | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | terminal | collision step | goal step |",
+            "| --- | ---: | --- | --- | ---: | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: |",
         ]
     )
     for row in report["mechanism_table"]:
         goal = row.get("goal", {})
         runtime = row.get("runtime", {})
+        heading = row.get("heading", {})
         motion = row.get("motion", {})
         interaction = row.get("interaction_zone", {})
         clearance = row.get("clearance", {})
+        pre_clamp_text = _markdown_action_summary(row.get("pre_clamp_action"), include_clipped=True)
+        selected_text = _markdown_action_summary(row.get("selected_action"))
+        heading_text = (
+            f"{_markdown_cell(heading.get('declared_first_rad'))}/"
+            f"{_markdown_cell(heading.get('velocity_derived_first_rad'))}/"
+            f"{_markdown_cell(heading.get('goal_bearing_first_rad'))}"
+        )
         phase_progress = goal.get("signed_progress_by_phase")
         phase_text = (
             ", ".join(
@@ -1108,10 +1221,12 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         lines.append(
             f"| {row.get('planner', 'unknown')} | {row.get('seed', 'unknown')} | "
             f"{row.get('status', 'unavailable')} | {runtime.get('status', 'not available')} | "
-            f"{runtime.get('failure_count', 'not available')} | {goal_text} | {phase_text} | "
+            f"{runtime.get('failure_count', 'not available')} | {pre_clamp_text} | "
+            f"{selected_text} | {heading_text} | {goal_text} | {phase_text} | "
             f"{_markdown_cell(motion.get('displacement_m'))} | "
             f"{_markdown_cell(interaction.get('exposure_share'))} | "
             f"{_markdown_cell(clearance.get('min_clearance_m'))} | "
+            f"{_markdown_cell(row.get('events', {}).get('termination_reason'))} | "
             f"{_markdown_cell(row.get('events', {}).get('collision_step'))} | "
             f"{_markdown_cell(row.get('events', {}).get('goal_step'))} |"
         )

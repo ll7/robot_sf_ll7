@@ -319,6 +319,7 @@ class BRNEPlanner:
         weights_shape: tuple[int, ...] | None,
         aggregation_mode: str,
         effective_num_samples: int,
+        pre_clamp_action: dict[str, float] | None,
     ) -> None:
         """Record compact BRNE mechanism telemetry for one planner observation.
 
@@ -361,6 +362,32 @@ class BRNEPlanner:
             if previous_action is not None
             else None
         )
+        pre_clamp_payload = (
+            {
+                "v_m_s": float(pre_clamp_action["v"]),
+                "omega_rad_s": float(pre_clamp_action["omega"]),
+            }
+            if pre_clamp_action is not None
+            else None
+        )
+        action_clipping = (
+            {
+                "v_clipped": bool(
+                    not np.isclose(action["v"], pre_clamp_action["v"], rtol=0.0, atol=1.0e-12)
+                ),
+                "omega_clipped": bool(
+                    not np.isclose(
+                        action["omega"], pre_clamp_action["omega"], rtol=0.0, atol=1.0e-12
+                    )
+                ),
+            }
+            if pre_clamp_action is not None
+            else None
+        )
+        if action_clipping is not None:
+            action_clipping["any_clipped"] = bool(
+                action_clipping["v_clipped"] or action_clipping["omega_clipped"]
+            )
         selected_pedestrians = []
         for distance, agent_idx in selected_agents:
             agent = agents[agent_idx]
@@ -395,10 +422,12 @@ class BRNEPlanner:
                 },
                 "selected_pedestrians": selected_pedestrians,
                 "adapter_input_frame": "world",
+                "pre_clamp_action": pre_clamp_payload,
                 "selected_action": {
                     "v_m_s": float(action["v"]),
                     "omega_rad_s": float(action["omega"]),
                 },
+                "action_clipping": action_clipping,
                 "action_delta": action_delta,
                 "ensemble": {
                     "requested_num_samples": int(self.config.num_samples),
@@ -453,7 +482,7 @@ class BRNEPlanner:
                 return {"v": 0.0, "omega": 0.0}
             raise RuntimeError(f"BRNE solve failed: {exc}") from exc
 
-    def _solve(self, obs: Observation) -> dict[str, float]:  # noqa: C901
+    def _solve(self, obs: Observation) -> dict[str, float]:  # noqa: C901, PLR0915
         """Run the BRNE solver for one observation.
 
         Returns:
@@ -507,6 +536,7 @@ class BRNEPlanner:
             elapsed_s: float | None = None,
             weights_shape: tuple[int, ...] | None = None,
             aggregation_mode: str = "not_applied",
+            pre_clamp_action: dict[str, float] | None = None,
         ) -> dict[str, float]:
             """Record runtime state and compact telemetry before returning an action.
 
@@ -534,6 +564,7 @@ class BRNEPlanner:
                 weights_shape=weights_shape,
                 aggregation_mode=aggregation_mode,
                 effective_num_samples=effective_num_samples,
+                pre_clamp_action=pre_clamp_action,
             )
             return action
 
@@ -617,13 +648,15 @@ class BRNEPlanner:
                 weights_shape=tuple(int(value) for value in weights.shape),
                 aggregation_mode=aggregation_mode,
             )
-        action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
+        pre_clamp_action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
+        action = dict(pre_clamp_action)
         self._clamp_action(action)
         return finish(
             action,
             elapsed_s=elapsed_s,
             weights_shape=tuple(int(value) for value in weights.shape),
             aggregation_mode=aggregation_mode,
+            pre_clamp_action=pre_clamp_action,
         )
 
     def _brne_solve(

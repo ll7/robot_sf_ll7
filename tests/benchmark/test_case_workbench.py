@@ -186,6 +186,35 @@ def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_pat
     assert (output / "campaign-result-store.v2").is_dir()
 
 
+def test_case_workbench_keeps_proposal_when_v2_store_is_unavailable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A lean environment still receives a proposal with an explicit store gap."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+
+    def unavailable_store(*_args, **_kwargs):
+        raise ImportError("pyarrow is unavailable")
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.case_workbench.export_campaign_result_store_v2", unavailable_store
+    )
+    output = tmp_path / "package"
+    proposal = analyze_cases(
+        config_path="configs/analysis/case_workbench.v1.yaml",
+        result_store=source,
+        output=output,
+        check_determinism=True,
+    )
+
+    assert proposal["candidate_count"] == 1
+    unavailable = output / "campaign-result-store.v2.unavailable"
+    assert unavailable.read_text(encoding="utf-8") == (
+        "campaign-result-store.v2 unavailable: pyarrow is unavailable\n"
+    )
+
+
 def test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter(tmp_path: Path) -> None:
     """The normalized store keeps complete traces and typed v1 gaps."""
 

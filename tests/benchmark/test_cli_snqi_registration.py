@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from types import SimpleNamespace
+
+import pytest
 
 from robot_sf.benchmark import cli
 
@@ -114,3 +117,51 @@ def test_snqi_registration_preserves_defaults_and_dispatch_metadata() -> None:
     assert recompute.pareto_front_samples == 600
     assert recompute.decision_preflight is False
     assert recompute.decision_reversal_threshold == 0.0
+
+
+def test_case_workbench_cli_handler_and_telemetry_config(tmp_path, monkeypatch) -> None:
+    """The case command and telemetry config loader keep CLI failures explicit."""
+
+    direct = tmp_path / "telemetry-direct.yaml"
+    direct.write_text("analysis_trace: all\nplanner_debug_trace: none\n", encoding="utf-8")
+    wrapped = tmp_path / "telemetry-wrapped.yaml"
+    wrapped.write_text(
+        "telemetry:\n  analysis_trace: all\n  planner_debug_trace: none\n",
+        encoding="utf-8",
+    )
+    invalid = tmp_path / "telemetry-invalid.yaml"
+    invalid.write_text("- not-a-mapping\n", encoding="utf-8")
+
+    assert cli._load_telemetry_config(str(direct)) == {
+        "analysis_trace": "all",
+        "planner_debug_trace": "none",
+    }
+    assert cli._load_telemetry_config(str(wrapped)) == {
+        "analysis_trace": "all",
+        "planner_debug_trace": "none",
+    }
+    assert cli._load_telemetry_config(None) is None
+    with pytest.raises(ValueError, match="telemetry config must contain a YAML mapping"):
+        cli._load_telemetry_config(str(invalid))
+
+    calls = {}
+
+    def fake_analyze_cases(**kwargs):
+        calls.update(kwargs)
+        return {"portfolio": [{"case_id": "case-1"}]}
+
+    monkeypatch.setattr(cli, "analyze_cases", fake_analyze_cases)
+    args = SimpleNamespace(
+        config="config.yaml",
+        result_store="episodes.jsonl",
+        output=str(tmp_path / "package"),
+        check_determinism=True,
+    )
+    assert cli._handle_analyze_cases(args) == 0
+    assert calls["check_determinism"] is True
+
+    def failing_analyze_cases(**_kwargs):
+        raise ValueError("bad result store")
+
+    monkeypatch.setattr(cli, "analyze_cases", failing_analyze_cases)
+    assert cli._handle_analyze_cases(args) == 2

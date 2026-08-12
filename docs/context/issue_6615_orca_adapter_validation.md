@@ -41,10 +41,10 @@ The reproducible command is:
 ```bash
 LOGURU_LEVEL=WARNING NUMBA_NUM_THREADS=1 uv run python \
   scripts/benchmark/run_orca_adapter_validation_issue_6615.py \
-  --output-dir output/benchmarks/issue_6615_orca_adapter_validation_20260812T054900Z
+  --output-dir output/benchmarks/issue_6615_orca_adapter_validation_20260812T055400Z
 ```
 
-The committed source head was `b93d48b37377342582cb589c82af0ddf12bd0f1c`. The run was native
+The committed source head was `d3cc9367bac4eaea2b355b4ae1fd0a1918cc4c75`. The run was native
 (`rvo2` available), captured four records from four fixed synthetic cases, and reported:
 
 | quantity | mean | p50 | p95 |
@@ -54,8 +54,8 @@ The committed source head was `b93d48b37377342582cb589c82af0ddf12bd0f1c`. The ru
 
 The exact ignored-worktree report hashes are:
 
-- JSON: `4936b3d229700a84d09256edf452b26d554c5ab3bb3f64ba42b6e2551ceb9a36`
-- Markdown: `3376cb07ab15dc9c1c928926eceb4977b2bfc63468d6bb87ec9222545d18ae9e`
+- JSON: `74d848cc50559a7b06419577bdd00b92f1d7de7a1613e9fda4a2e45ed3abb087`
+- Markdown: `973cc7cee931b9d86bb3135a8f8a57458aca98904c3122c5ce303ff33854b76e`
 
 ## Claim boundary
 

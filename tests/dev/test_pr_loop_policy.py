@@ -19,10 +19,12 @@ from scripts.dev.pr_loop_policy import (
     evaluate_queue,
     format_text,
     has_current_accepted_gate_verdict,
+    has_current_pr_metadata_verdict,
     load_manifest_artifacts,
     main,
     recommend_action,
 )
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import _pr_payload_from_dict
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "pr_loop_policy"
@@ -57,6 +59,7 @@ def _pr(
         "draft": draft,
         "head_sha": head_sha,
         "labels": labels or [],
+        "metadata_digest": metadata_digest("test PR", ""),
         "checks": {
             "overall": overall,
             "total": 1,
@@ -98,6 +101,9 @@ def _apply_gate_verdict(result: dict[str, object], gate_verdict: object) -> None
         return
     if not sha:
         return
+    result["metadata_verdicts"] = [
+        metadata_trailer(str(result["metadata_digest"])),
+    ]
     trailer = f"gate-verdict: accepted @ {sha}"
     if carrier == "review":
         result["review_snapshot"] = {
@@ -403,6 +409,65 @@ def test_classify_green_merge_ready_with_current_verdict_accepted() -> None:
         gate_verdict=FULL_SHA,
     )
     assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_classify_green_merge_ready_without_current_metadata_verdict_reconciles() -> None:
+    """A current head verdict cannot bypass final title/body reconciliation."""
+    pr = _pr(
+        3016,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr.pop("metadata_verdicts")
+
+    assert classify_pr_state(pr) == "pending_pr_metadata"
+    decision = recommend_action("pending_pr_metadata", pr_number=3016, actions_remaining=3)
+    assert decision.action == "reconcile_pr_metadata"
+    assert decision.flow_decision == "continue"
+
+
+def test_classify_green_merge_ready_with_stale_metadata_digest_rejected() -> None:
+    """A trailer for a previous body must not satisfy the current digest."""
+    pr = _pr(
+        3017,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["metadata_digest"] = metadata_digest("changed final title", "")
+
+    assert has_current_pr_metadata_verdict(pr, str(pr["metadata_digest"])) is False
+    assert classify_pr_state(pr) == "pending_pr_metadata"
+
+
+def test_untrusted_metadata_trailer_cannot_admit_current_digest() -> None:
+    """Metadata evidence from an untrusted contributor remains fail-closed."""
+    digest = metadata_digest("test PR", "")
+    pr = _pr(
+        3018,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["metadata_verdicts"] = []
+    pr["comment_snapshot"] = {
+        "latest": [
+            {
+                "author_association": "OWNER",
+                "body_excerpt": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+            {
+                "author_association": "CONTRIBUTOR",
+                "body_excerpt": metadata_trailer(digest),
+            },
+        ]
+    }
+
+    assert classify_pr_state(pr) == "pending_pr_metadata"
 
 
 def test_classify_green_merge_ready_with_abbreviated_verdict_accepted() -> None:
@@ -1275,6 +1340,8 @@ def test_evaluate_queue_reviews_dict_approved_continue() -> None:
             "draft": False,
             "head_sha": FULL_SHA,
             "labels": ["merge-ready"],
+            "metadata_digest": metadata_digest("test PR", ""),
+            "metadata_verdicts": [metadata_trailer(metadata_digest("test PR", ""))],
             "reviews": {"APPROVED": 2},
             "checks": {"overall": "success"},
             "comment_snapshot": {
@@ -1394,7 +1461,10 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     """A long review comment with a trailer beyond 180 chars is parsed into gate_verdicts and evaluated as ready_to_merge."""
     sha = FULL_SHA
     long_prefix = "Detailed review feedback paragraph line. " * 6  # > 200 chars
-    long_review_body = f"{long_prefix}\n\ngate-verdict: accepted @ {sha}"
+    digest = metadata_digest("long body review PR", "")
+    long_review_body = (
+        f"{long_prefix}\n\ngate-verdict: accepted @ {sha}\n\n{metadata_trailer(digest)}"
+    )
 
     pr_raw = {
         "number": 6130,
@@ -1426,6 +1496,8 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
 
     # Verify trailer was extracted to gate_verdicts while body_excerpt was truncated
     assert pr_snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
+    assert pr_snapshot["metadata_digest"] == digest
+    assert pr_snapshot["metadata_verdicts"] == [metadata_trailer(digest)]
     excerpt = pr_snapshot["review_snapshot"]["latest"][0]["body_excerpt"]
     assert f"gate-verdict: accepted @ {sha}" not in excerpt
 

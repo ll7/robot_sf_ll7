@@ -20,6 +20,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_status,
 )
 from scripts.dev.pr_loop_policy import GATE_VERDICT_RE
+from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
@@ -224,6 +225,7 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     pr_dict = {
         "number": pull.get("number", number),
         "title": str(pull.get("title", "") or ""),
+        "body": str(pull.get("body", "") or ""),
         "state": str(pull.get("state", "") or ""),
         "isDraft": bool(pull.get("draft")),
         "labels": pull.get("labels", []) if isinstance(pull.get("labels"), list) else [],
@@ -563,6 +565,49 @@ def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(verdicts))
 
 
+def _extract_metadata_verdicts(pr: dict[str, Any]) -> list[str]:  # noqa: C901
+    """Extract trusted final title/body reconciliation trailers."""
+    verdicts: list[str] = []
+    existing_list = pr.get("metadata_verdicts")
+    if isinstance(existing_list, list):
+        for item in existing_list:
+            if isinstance(item, str):
+                verdicts.extend(
+                    metadata_trailer(digest) for digest in extract_metadata_digests(item)
+                )
+            elif isinstance(item, dict):
+                digest = str(item.get("digest") or item.get("metadata_digest") or "")
+                verdict = str(item.get("verdict", "")).lower()
+                if digest and (
+                    verdict in {"accepted", "reconciled"} or item.get("accepted") is True
+                ):
+                    verdicts.append(metadata_trailer(digest))
+    single = pr.get("metadata_verdict")
+    if isinstance(single, str):
+        verdicts.extend(metadata_trailer(digest) for digest in extract_metadata_digests(single))
+    elif isinstance(single, dict):
+        digest = str(single.get("digest") or single.get("metadata_digest") or "")
+        verdict = str(single.get("verdict", "")).lower()
+        if digest and (verdict in {"accepted", "reconciled"} or single.get("accepted") is True):
+            verdicts.append(metadata_trailer(digest))
+
+    for items in (pr.get("reviews"), pr.get("comments")):
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            association = str(entry.get("authorAssociation", "")).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if isinstance(body, str):
+                verdicts.extend(
+                    metadata_trailer(digest) for digest in extract_metadata_digests(body)
+                )
+    return list(dict.fromkeys(verdicts))
+
+
 def _pr_payload_from_dict(
     pr: dict[str, Any],
     *,
@@ -584,10 +629,14 @@ def _pr_payload_from_dict(
     )
     reviews = _reviews(pr)
     gate_verdicts = _extract_gate_verdicts(pr)
+    title = str(pr.get("title", "") or "")
+    body = str(pr.get("body", "") or "")
+    metadata_digest_value = metadata_digest(title, body)
+    metadata_verdicts = _extract_metadata_verdicts(pr)
     pr_payload = {
         "number": pr.get("number", default_number),
         "status": "ok",
-        "title": pr.get("title", ""),
+        "title": title,
         "state": pr.get("state", ""),
         "draft": is_draft,
         "url": pr.get("url", ""),
@@ -598,6 +647,8 @@ def _pr_payload_from_dict(
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        "metadata_digest": metadata_digest_value,
+        "metadata_verdicts": metadata_verdicts,
         "review_snapshot": _review_snapshot(pr),
         "comment_snapshot": _comment_snapshot(pr),
         "preflight": preflight,
@@ -640,7 +691,7 @@ def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str
             "--repo",
             repo,
             "--json",
-            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
     if result.returncode != 0:
@@ -672,7 +723,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "--limit",
             str(limit),
             "--json",
-            "number,title,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
 

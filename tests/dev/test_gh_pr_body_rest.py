@@ -7,7 +7,10 @@ import subprocess
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-from scripts.dev.gh_pr_body_rest import main, update_pr_body
+import pytest
+
+from scripts.dev.gh_pr_body_rest import main, reconcile_pr_metadata, update_pr_body
+from scripts.dev.pr_metadata import metadata_digest
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -108,3 +111,137 @@ def test_cli_prints_compact_success_json(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert rc == 0
     assert json.loads(captured.out)["url"] == "https://example/pr/5220"
+
+
+def test_reconcile_pr_metadata_patches_title_and_body_atomically(tmp_path: Path) -> None:
+    """A changed final state uses one PATCH carrying both metadata fields."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    desired_title = "fix: final title"
+    response = {
+        "title": desired_title,
+        "body": "final body",
+        "html_url": "https://example/pr/5220",
+    }
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_patch.return_value = _proc(stdout=json.dumps(response))
+        result = reconcile_pr_metadata(
+            5220,
+            desired_title,
+            body_file,
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert result == {
+        "status": "ok",
+        "number": 5220,
+        "repo": "ll7/robot_sf_ll7",
+        "url": "https://example/pr/5220",
+        "metadata_digest": metadata_digest(desired_title, "final body"),
+        "previous_metadata_digest": metadata_digest("old title", "old body"),
+        "changed_fields": ["title", "body"],
+        "changed": True,
+    }
+    mock_patch.assert_called_once_with(
+        "repos/ll7/robot_sf_ll7/pulls/5220",
+        {"title": desired_title, "body": "final body"},
+    )
+
+
+def test_reconcile_pr_metadata_is_an_explicit_noop_when_current_state_matches(
+    tmp_path: Path,
+) -> None:
+    """An already-current title/body must not create a remote mutation."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(
+            stdout=json.dumps(
+                {
+                    "title": "final title",
+                    "body": "final body",
+                    "html_url": "https://example/pr/5220",
+                }
+            )
+        )
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "unchanged"
+    assert result["changed"] is False
+    assert result["changed_fields"] == []
+    assert result["metadata_digest"] == metadata_digest("final title", "final body")
+    mock_patch.assert_not_called()
+
+
+def test_reconcile_pr_metadata_fails_closed_on_malformed_current_response(
+    tmp_path: Path,
+) -> None:
+    """A missing current title cannot be treated as a safe no-op or update."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"body": "body"}))
+        result = reconcile_pr_metadata(5220, "title", body_file)
+
+    assert result["status"] == "error"
+    assert "malformed title" in result["error"]
+    mock_patch.assert_not_called()
+
+
+def test_reconcile_pr_metadata_rejects_invalid_title_before_reading_remote(
+    tmp_path: Path,
+) -> None:
+    """Invalid title input must fail before any GET or PATCH request."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("body", encoding="utf-8")
+    with patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get:
+        result = reconcile_pr_metadata(5220, "bad\ntitle", body_file)
+
+    assert result["status"] == "error"
+    assert "single line" in result["error"]
+    mock_get.assert_not_called()
+
+
+def test_reconcile_cli_requires_title(capsys, tmp_path: Path) -> None:
+    """The atomic CLI mode must not silently fall back to body-only updates."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("body", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(["5220", "--reconcile", "--body-file", str(body_file)])
+
+    assert "--reconcile requires --title" in capsys.readouterr().err
+
+
+def test_reconcile_cli_treats_noop_as_success(tmp_path: Path, capsys) -> None:
+    """An idempotent reconciliation is successful at the shell boundary."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("body", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"title": "title", "body": "body"}))
+        rc = main(
+            [
+                "5220",
+                "--reconcile",
+                "--title",
+                "title",
+                "--body-file",
+                str(body_file),
+            ]
+        )
+
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "unchanged"
+    mock_patch.assert_not_called()

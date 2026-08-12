@@ -173,9 +173,9 @@ treating a loose keyword, a change in the same file, or historical failure outpu
 evidence.
 
 Two regression fixtures are required:
-- #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
+- Issue #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
   `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
-- #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: #5480 was dispatched after PR #5486
+- Issue #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: Issue #5480 was dispatched after PR #5486
   merged under #5482 (not #5480), so an issue-number-only merged-PR search missed it; the covering
   PR is found only by mapping the named failing test
   `test_run_batch_sequential_worker_failure_logs_warning` and its
@@ -587,7 +587,7 @@ Each child skill or worker may fail. Handle failures per scenario:
 
 - `gh-pr-opener` failure:
    - If the PR already exists for the branch, update the existing PR body with
-     `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
+     `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --reconcile --title "<final title>" --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
      instead of creating a duplicate. Do not use `gh pr edit --body-file` while its GraphQL query
      requests retired Projects Classic fields.
      For label operations, use

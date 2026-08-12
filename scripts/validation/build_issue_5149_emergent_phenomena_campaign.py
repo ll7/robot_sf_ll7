@@ -48,6 +48,7 @@ import pysocialforce as pysf
 from robot_sf.evidence.writers import (
     register_evidence,
     write_json,
+    write_review_sidecar,
     write_sha256sums,
     write_text,
 )
@@ -69,6 +70,10 @@ from robot_sf.research.emergent_phenomena_campaign import (
     result_to_run_record,
     run_multiseed_campaign,
 )
+
+# evidence-writer-exempt: runs.jsonl is an intentionally immutable JSONL artifact; the shared
+# write_json helper cannot preserve one sorted JSON document per line, so the artifact carries
+# its required marker through a generated review sidecar.
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08")
@@ -176,6 +181,9 @@ def _by_seed_plot(
 
 def _write_runs_jsonl(out_path: Path, records: list[dict[str, Any]]) -> None:
     """Write one sorted, deterministic JSON line per run record."""
+    # evidence-writer-exempt: JSONL is intentionally emitted one sorted record per line;
+    # the shared write_json helper writes a single JSON document, so the immutable JSONL
+    # artifact carries its required marker through the generated review sidecar below.
     ordered = sorted(records, key=lambda r: (r["scenario"], r["calibration"], r["seed"]))
     lines = [json.dumps(rec, sort_keys=True) for rec in ordered]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -439,6 +447,12 @@ def build_campaign_bundle(
     _write_readme(
         output_dir, aggregates, list(seeds), substrate_version, commit, generated_at, figure_names
     )
+
+    # Binary figures and the line-oriented run archive must preserve their exact bytes for
+    # SHA256SUMS and therefore carry the evidence marker in same-bundle review sidecars.
+    for figure_name in figure_names:
+        write_review_sidecar(output_dir / figure_name)
+    write_review_sidecar(output_dir / "runs.jsonl")
 
     # Integrity manifest last so it covers every other file in the bundle.
     write_sha256sums(output_dir)

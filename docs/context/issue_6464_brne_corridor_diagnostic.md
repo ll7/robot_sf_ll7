@@ -1,6 +1,6 @@
 # Issue #6464 — BRNE Corridor Diagnostic
 
-Status: **diagnostic complete; no planner-ranking or benchmark claim**.
+Status: **historical handoff superseded by an exact-head diagnostic-only reproduction; no planner-ranking or benchmark claim**.
 
 BRNE (Bayesian Recursive Nash Equilibrium) now has a fail-closed map-runner
 adapter for the approved corridor-only preflight. The bounded run below proves
@@ -27,7 +27,13 @@ matched-compute parity, planner superiority, or paper evidence.
   actions carry runtime failure provenance and are excluded even when the
   trace has non-zero displacement.
 
-## Observed result
+## Historical pre-#6923 handoff
+
+The original handoff below was captured before the exact-head follow-up. It is
+retained for provenance, but its eligible-row counts must not be treated as the
+current BRNE runtime result.
+
+## Historical observed result
 
 All three arms covered the exact three seed pairs. The comparator rows provide
 paired diagnostic coverage only; they are not a ranking or benchmark result.
@@ -96,3 +102,45 @@ any broader campaign. Candidate checks are goal/heading frame alignment,
 progress-versus-interaction weighting, and whether the pinned upstream action
 aggregation is appropriate for this control loop. The follow-up preserves the
 same native-core-via-adapter, corridor-only, fail-closed boundary.
+
+## Current exact-head #6923 reproduction
+
+The exact-head reproduction was run from commit
+`dce2c6b3011015f6a95bb367fb07cc0975d9a974` with the frozen command:
+
+```bash
+uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
+  --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml \
+  --output-dir output/benchmarks/issue_6923_brne_trace_diagnosis_<timestamp>
+```
+
+Pair coverage was exact for all three arms (`3/3` seeds each), with no
+fallback/degraded rows and the pinned BRNE source recorded as clean at
+`633a5cdcb39ab27f18b596cb8cb1968644f82391`. The BRNE mechanism trace was
+complete and schema-valid for all three rows; the rows were nevertheless
+ineligible because the native solver exceeded the configured `0.1 s` step
+budget on `500/500`, `499/500`, and `500/500` steps for seeds `111`, `112`, and
+`113`. Effective samples remained `42` from the requested `49`.
+
+| Arm | Exact pairs | Mechanism trace | Runtime-eligible | Eligible goal reached | Runtime failure | Main failure reason |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| BRNE | 3/3 | 3/3 | 0/3 | 0/3 | 3/3 | `step_budget_exceeded` |
+| ORCA comparator | 3/3 | common trace only | 2/3 | 2/2 | 0/3 | one corridor-invalid row |
+| Social-force comparator | 3/3 | common trace only | 2/3 | 1/2 | 0/3 | one collision and one corridor-invalid row |
+
+The compact mechanism table records finite declared heading, goal bearing,
+angular difference, world-frame adapter pedestrians, effective sample count,
+ensemble layout, per-step runtime status, signed goal-distance progress,
+interaction exposure, radius-aware clearance, and terminal events. The BRNE
+heading/goal fields do not show a gross frame mismatch in this slice, but that
+signal cannot establish an objective or aggregation mechanism while every row
+is runtime-invalid. Only one BRNE row exposed a successful plan-step-first
+aggregation step before the budget boundary dominated execution.
+
+Decision: **diagnostic-only retention; no bounded adapter revision and no
+broader campaign from this result**. A separately scoped follow-up may calibrate
+the runtime budget on the same frozen matrix, but this run does not support a
+planner, objective, safety, or paper claim. The durable machine-readable
+handoff is recorded in
+`docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json` under
+`follow_up_6923`.

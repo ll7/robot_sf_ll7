@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #5149 multi-seed emergent-phenomena campaign (measured face-validity).** Added
+  `robot_sf/research/emergent_phenomena_campaign.py` (multi-seed campaign runner, run-record
+  serialization, conservative aggregate statistics with weaker-verdict tie-breaking) and the
+  generation script `scripts/validation/build_issue_5149_emergent_phenomena_campaign.py`, which
+  archives per-seed run records (`runs.jsonl`), aggregate statistics (`summary.json`), a full
+  provenance manifest (`manifest.json`), trajectory and order-parameter-by-seed figures, and
+  `SHA256SUMS` under `docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/`.
+  The canonical verdict thresholds moved to `robot_sf/research/emergent_phenomena.py`
+  (`derive_phenomenon_verdict`), now shared behavior-identically with the pinned 2026-07
+  single-seed demo script. Claim boundary: measured face-validity (smoke-tier) evidence, not
+  benchmark-matrix or paper-grade validation (#4975).
+
 * **Issue #6814 fail-closed provenance re-export.** Added
   `apply_strict_metadata_projection`, the receipt-capable
   `build_simulation_trace_export*`/`write_simulation_trace_export` APIs,

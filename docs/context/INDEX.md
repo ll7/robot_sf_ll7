@@ -174,6 +174,9 @@ Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail
 Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
 
+Multi-seed measured emergent-phenomena campaign (10 seeds per scenario x calibration, per-seed run records, aggregate statistics, full provenance manifest) elevating the pinned single-seed exhibit to measured face-validity evidence:
+[README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
+
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
 

@@ -207,8 +207,10 @@ power_precision:
   seed_budget: 20 paired seeds (S20), with no post-hoc extension
   rationale: >
     S20 is the fixed precision target selected after the S3 design anchor. The target is an
-    interval-width goal, not a promise of significance; if the observed interval is wider, the
-    corresponding planner result remains inconclusive and is not extended post hoc.
+    interval-width goal, not a promise of significance or a guarantee from a pilot variance
+    estimate: this packet declares no pilot variance basis. The 0.06 width is evaluated after
+    collection; if the observed interval is wider, the corresponding planner result remains
+    inconclusive and the seed budget is not extended post hoc.
 
 analysis_plan:
   paired_estimator: >

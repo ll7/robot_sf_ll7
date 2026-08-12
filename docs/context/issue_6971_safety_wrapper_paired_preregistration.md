@@ -55,7 +55,8 @@ closed. The S20 schedule and metric roster cannot be changed after inspecting ou
 
 The practical primary threshold is an absolute difference of 0.05, while the precision target is a
 95 percent interval width of 0.06 (half-width 0.03). This is an interval-width target, not a
-significance promise. For a named planner, the packet classifies a measured safety gain only when
+significance promise or guarantee from a pilot variance estimate; the packet declares no pilot
+variance basis. The width is evaluated after collection, not guaranteed in advance. For a named planner, the packet classifies a measured safety gain only when
 the point estimate is at or below -0.05 and the interval is entirely below zero with complete
 native, non-degraded paired data. A result that does not meet the gain rule is reported as no gain
 when the precision target is met; incomplete data, wider intervals, or degraded execution are

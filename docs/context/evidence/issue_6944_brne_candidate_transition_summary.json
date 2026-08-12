@@ -6,6 +6,7 @@
   "claim_boundary": "Trace-level native BRNE candidate-transition mechanism only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
   "implementation": {
     "base_commit": "321081341811067c8f4c8a771f0d357f31918c31",
+    "integration_base_commit": "a31686e51f624638255d22968b89cda0257c2e4c",
     "implementation_commit": "ad4653825b97b94acd760e5b9eb313b9f63c6d57",
     "changed_files": [
       "robot_sf/baselines/brne.py",

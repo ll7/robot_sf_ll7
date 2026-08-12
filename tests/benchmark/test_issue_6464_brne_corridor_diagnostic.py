@@ -61,6 +61,30 @@ def _record(
     }
 
 
+def _candidate_distribution() -> dict[str, Any]:
+    """Return bounded candidate/weight summaries for native trace fixtures."""
+    stats = {"min": 0.0, "q25": 0.0, "median": 0.0, "mean": 0.0, "q75": 0.0, "max": 0.0, "std": 0.0}
+    step = {
+        "candidate_controls": {"v_m_s": stats, "omega_rad_s": stats},
+        "weights": stats,
+        "weighted_mean": {"v_m_s": 0.0, "omega_rad_s": 0.0},
+    }
+    return {
+        "status": "available",
+        "schema_version": "brne-candidate-distribution.v1",
+        "sample_count": 42,
+        "plan_step_count": 25,
+        "first": step,
+        "second": step,
+        "first_to_second": {
+            "candidate_mean_delta_v_m_s": 0.0,
+            "weighted_mean_delta_v_m_s": 0.0,
+            "candidate_mean_delta_omega_rad_s": 0.0,
+            "weighted_mean_delta_omega_rad_s": 0.0,
+        },
+    }
+
+
 def _native_mechanism_trace() -> dict[str, Any]:
     """Return valid compact BRNE telemetry steps for classifier fixtures."""
     first_step = {
@@ -92,6 +116,7 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "weight_shape": [8, 42],
             "aggregation_mode": "plan_step_first",
             "aggregation_formula": "mean_plan_step_first_over_samples",
+            "candidate_distribution": _candidate_distribution(),
         },
         "runtime": {
             "status": "ok",
@@ -252,6 +277,7 @@ def test_brne_requires_native_dependency_status() -> None:
     assert mechanism_row["trace_status"] == "available"
     assert mechanism_row["goal"]["signed_progress_by_phase"]
     assert mechanism_row["aggregation"]["modes"] == ["plan_step_first"]
+    assert mechanism_row["aggregation"]["candidate_distribution"]["status"] == "available"
     assert mechanism_row["pre_clamp_action"]["available"] is True
     assert mechanism_row["action_clipping"]["clipped_steps"] == 0
 
@@ -434,6 +460,34 @@ def test_native_mechanism_trace_requires_pre_clamp_action() -> None:
     )
     assert classified["mechanism_trace_valid"] is False
     assert "pre-clamp action" in classified["mechanism_trace_status"]
+
+
+def test_native_mechanism_trace_requires_candidate_distribution() -> None:
+    """Native mechanism rows must expose bounded candidate/weight summaries."""
+    config = _config()
+    trace = _native_mechanism_trace()
+    trace["steps"][0]["ensemble"].pop("candidate_distribution")
+    metadata = {
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": trace,
+            }
+        }
+    }
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "candidate distribution" in classified["mechanism_trace_status"]
 
 
 def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:

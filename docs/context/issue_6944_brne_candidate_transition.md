@@ -24,7 +24,10 @@ paper evidence.
 Reproduce with:
 
 ```bash
-NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 +uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py +  --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml +  --output-dir output/benchmarks/issue_6944_candidate_trace_<timestamp>
+NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 \
+  uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
+  --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml \
+  --output-dir output/benchmarks/issue_6944_candidate_trace_<timestamp>
 ```
 
 The run completed with exact `3/3` pair coverage, `3/3` native and eligible

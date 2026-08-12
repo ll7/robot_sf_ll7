@@ -6,6 +6,8 @@ from robot_sf.telemetry import DEFAULT_TELEMETRY_METRICS
 
 _TELEMETRY_PANE_LAYOUTS = {"vertical_split", "horizontal_split"}
 
+__all__ = ["TelemetryConfigMixin"]
+
 
 @dataclass(kw_only=True)
 class TelemetryConfigMixin:

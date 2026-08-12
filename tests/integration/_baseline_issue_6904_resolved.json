@@ -1,0 +1,30 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "issue": 6904,
+  "field_removed": "evaluation.frequency_episodes",
+  "source_revision": "2a6b9acade2e6778a6a1ffdd2347546d2893c541",
+  "pre_change_frequency_episodes": {
+    "configs/training/benchmark_orca_classic_cross_trap_subset.yaml": 1,
+    "configs/training/benchmark_orca_classic_crossing_subset.yaml": 1,
+    "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml": 10,
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml": 10
+  },
+  "variants": {
+    "configs/training/benchmark_orca_classic_cross_trap_subset.yaml": "742fdc26117809e8afde7bd3596a993c5759247aae1bd360761cf8abb73fdc44",
+    "configs/training/benchmark_orca_classic_crossing_subset.yaml": "15611060aab233f9d7b5bc65ab85524db8d090692e6e4e3da2801012369a2e19",
+    "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml": "cf71409ddc58a4a4931a0eb31059fd5591108b1199c1118fc4f63c57ddcf2de3",
+    "configs/training/ppo_imitation/expert_ppo.yaml": "5224547efdf1e40447fb8c0a5dcf0cfdf92987363799ec5793290c813a409e76",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid.yaml": "1c168a87a437860e2337491b5a2d6ae823c0fabe4202a33ab5ce0781bc3749ce",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive.yaml": "8911de22e62afa3a2a125899e8ca8ef8f44ce82ca04fd8f419d7e09a1dc07050",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse.yaml": "a3780ac3718e62ac6937bf6e43fb0ffa9b28696ee06f0729862bd1db69ef9264",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml": "ddf2776b4fb2bacc909c1f0e3c181f2f3269ca7d5526bc3f08a64412a18d16e7",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml": "06b434a573f1787303813e5e52cb08a771cb878e8ad132be7762993779749b57",
+    "configs/training/ppo_imitation/expert_ppo_issue_403_grid_radius_0_6.yaml": "8a2c92d85ef2558672a35d2c410c934e3c94551d8210d5720a5807bf4da1f6a7"
+  }
+}

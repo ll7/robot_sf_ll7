@@ -842,6 +842,8 @@ def test_write_evidence_bundle_blocked_is_diagnostic(tmp_path: Path) -> None:
     provenance_payload = json.loads(written["analysis_provenance.json"].read_text())
     assert provenance_payload["evidence_status"] == "diagnostic-only"
     assert provenance_payload["verdict"]["interpretation_promoted"] is False
+    assert provenance_payload["provenance"]["campaign_commit"] is None
+    assert provenance_payload["provenance"]["analysis_commit"] == "a" * 40
 
 
 def test_write_promoted_bundle_requires_input_checksums(tmp_path: Path) -> None:
@@ -1001,12 +1003,33 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 # --- CLI -------------------------------------------------------------------
 
 
-def test_cli_blocked_exits_nonzero(tmp_path: Path) -> None:
-    """Omitting the sweep summary fails closed with the blocked exit code."""
+def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify the blocked exit status and separate provenance.
+
+    The blocked bundle must keep ``campaign_commit`` null and record the
+    40-character ``analysis_commit`` independently, so an explicitly supplied
+    ``--campaign-commit`` is not persisted when ``--sweep-summary`` is omitted
+    and campaign provenance cannot be inferred from the analysis commit.
+    """
     cli = _load_cli()
-    exit_code = cli.main(["--output-dir", str(tmp_path / "bundle"), "--json"])
+    monkeypatch.setattr(cli, "current_git_sha", lambda: "b" * 40)
+    exit_code = cli.main(
+        [
+            "--output-dir",
+            str(tmp_path / "bundle"),
+            "--campaign-commit",
+            "a" * 40,
+            "--json",
+        ]
+    )
     assert exit_code == cli.EXIT_BLOCKED_PENDING_GATE2
     assert (tmp_path / "bundle" / "result.json").is_file()
+
+    provenance = json.loads((tmp_path / "bundle" / "analysis_provenance.json").read_text())[
+        "provenance"
+    ]
+    assert provenance["campaign_commit"] is None
+    assert provenance["analysis_commit"] == "b" * 40
 
 
 def test_cli_verdict_exits_zero(tmp_path: Path) -> None:

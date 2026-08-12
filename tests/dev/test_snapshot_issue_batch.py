@@ -36,21 +36,18 @@ def test_expand_issue_numbers_treats_two_values_as_range() -> None:
 def test_snapshot_issues_emits_compact_fields() -> None:
     """Snapshot output should include excerpts and claim state without raw bodies."""
     body = " ".join(["detail"] * 100)
-    issue_payload = {
+    rest_issue = {
         "number": 2665,
+        "status": "ok",
         "title": "workflow: compact issue snapshot",
         "body": body,
         "state": "OPEN",
         "url": "https://github.test/issues/2665",
-        "labels": [{"name": "workflow"}, {"name": "enhancement"}],
-        "assignees": [{"login": "alice"}],
+        "labels": ["enhancement", "workflow"],
+        "assignees": ["alice"],
     }
-    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
-        mock_gh.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(issue_payload),
-            stderr="",
-        )
+    with patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest:
+        mock_rest.fetch_issue.return_value = rest_issue
         with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
             claim.return_value = {
                 "ok": True,
@@ -76,8 +73,12 @@ def test_snapshot_issues_emits_compact_fields() -> None:
 
 def test_main_returns_error_when_any_issue_fails(capsys) -> None:  # type: ignore[no-untyped-def]
     """CLI should keep a JSON payload even when one issue cannot be fetched."""
-    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
-        mock_gh.return_value = MagicMock(returncode=1, stdout="", stderr="not found")
+    with patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest:
+        mock_rest.fetch_issue.return_value = {
+            "number": 1,
+            "status": "error",
+            "error": "issue 1 failed: not found",
+        }
         rc = main(["1", "--json"])
 
     assert rc == 1
@@ -87,21 +88,18 @@ def test_main_returns_error_when_any_issue_fails(capsys) -> None:  # type: ignor
 
 def test_snapshot_issues_can_write_context_capsules(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Optional capsules should seed workers without broad rediscovery."""
-    issue_payload = {
+    rest_issue = {
         "number": 2666,
+        "status": "ok",
         "title": "docs: claim boundary first",
         "body": "short body",
         "state": "OPEN",
         "url": "https://github.test/issues/2666",
-        "labels": [{"name": "docs"}],
+        "labels": ["docs"],
         "assignees": [],
     }
-    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
-        mock_gh.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(issue_payload),
-            stderr="",
-        )
+    with patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest:
+        mock_rest.fetch_issue.return_value = rest_issue
         with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
             claim.return_value = {
                 "ok": True,
@@ -170,6 +168,188 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     assert payload["issues"][1]["classification"] == "blocked_label"
     assert "reason" in payload["issues"][1]
     claim.assert_called_once_with([2667, 2668], remote="origin")
+
+
+def test_snapshot_issues_fail_closed_for_closed_issue_state() -> None:
+    """Explicit issue snapshots must not classify closed issues as claimable."""
+    rest_issue = {
+        "number": 2680,
+        "status": "ok",
+        "title": "closed but otherwise claimable issue",
+        "body": "closed issue body",
+        "state": " CLOSED ",
+        "url": "https://github.test/issues/2680",
+        "labels": ["workflow"],
+        "assignees": [],
+    }
+    with patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest:
+        mock_rest.fetch_issue.return_value = rest_issue
+        with patch("scripts.dev.snapshot_issue_batch.status_issue") as claim:
+            claim.return_value = _claim_status(2680)
+            payload = snapshot_issues(
+                [2680], repo="ll7/robot_sf_ll7", body_limit=150, remote="origin"
+            )
+
+    row = payload["issues"][0]
+    assert row["state"] == "CLOSED"
+    assert row["classification"] == "closed"
+    assert row["reason"] == "issue state is CLOSED; skip autonomous claim"
+
+
+def test_snapshot_issues_reads_rest_when_graphql_quota_exhausted() -> None:
+    """Explicit snapshots must succeed via REST when GraphQL quota is exhausted.
+
+    Regression for issue #6845: the explicit snapshot path used to call
+    ``gh issue view --json`` (GraphQL-backed), so every requested issue became
+    an error row when GraphQL quota was exhausted even though the REST API was
+    healthy. The path now routes through the REST-backed normalized reader
+    ``scripts.dev.gh_issue_rest.fetch_issue`` and returns the compact row.
+    """
+    rest_issue = {
+        "number": 6819,
+        "status": "ok",
+        "title": "workflow: explicit snapshot under quota exhaustion",
+        "body": "REST body remains readable when GraphQL quota is exhausted",
+        "state": "OPEN",
+        "url": "https://github.com/ll7/robot_sf_ll7/issues/6819",
+        "labels": ["enhancement", "workflow"],
+        "assignees": [],
+    }
+    with (
+        patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh,
+        patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest,
+        patch("scripts.dev.snapshot_issue_batch.status_issue") as claim,
+    ):
+        # Pin the GraphQL-backed helper to the observed quota-exhaustion error.
+        # If the explicit path ever regressed to `gh issue view --json`, _gh would
+        # fire and this error would surface as an error row instead of a snapshot.
+        mock_gh.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="GraphQL: API rate limit already exceeded",
+        )
+        mock_rest.fetch_issue.return_value = rest_issue
+        claim.return_value = {
+            "ok": True,
+            "claimed": False,
+            "claim_ref": "agent-claims/issue-6819",
+            "sha": None,
+        }
+        payload = snapshot_issues([6819], repo="ll7/robot_sf_ll7", body_limit=300, remote="origin")
+
+    issue = payload["issues"][0]
+    assert issue["status"] == "ok"
+    assert issue["number"] == 6819
+    assert issue["state"] == "OPEN"
+    assert issue["labels"] == ["enhancement", "workflow"]
+    assert issue["body_excerpt"] == rest_issue["body"]
+    assert issue["body_truncated"] is False
+    # Explicit reads must go through the REST reader, not the GraphQL CLI.
+    mock_rest.fetch_issue.assert_called_once_with(6819, repo="ll7/robot_sf_ll7")
+    mock_gh.assert_not_called()
+
+
+def test_snapshot_issues_fails_closed_on_malformed_rest_success_payload() -> None:
+    """A status=ok response must contain the complete normalized issue contract."""
+    rest_issue = {
+        "status": "ok",
+        "title": "malformed explicit response",
+        "body": "body",
+        "state": "OPEN",
+        "url": "https://github.test/issues/6819",
+        "labels": [],
+        "assignees": [],
+    }
+    with (
+        patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest,
+        patch("scripts.dev.snapshot_issue_batch.status_issue") as claim,
+    ):
+        mock_rest.fetch_issue.return_value = rest_issue
+        payload = snapshot_issues([6819], repo="ll7/robot_sf_ll7", body_limit=300, remote="origin")
+
+    row = payload["issues"][0]
+    assert row == {
+        "number": 6819,
+        "status": "error",
+        "error": "REST issue read returned malformed data: REST issue response has no positive integer number",
+    }
+    claim.assert_not_called()
+
+
+def test_snapshot_issues_fails_closed_when_rest_reader_raises_value_error() -> None:
+    """A normalization ValueError must become an error row rather than escape the CLI."""
+    with (
+        patch("scripts.dev.snapshot_issue_batch.gh_issue_rest") as mock_rest,
+        patch("scripts.dev.snapshot_issue_batch.status_issue") as claim,
+    ):
+        mock_rest.fetch_issue.side_effect = ValueError("invalid issue number")
+        payload = snapshot_issues([6819], repo="ll7/robot_sf_ll7", body_limit=300, remote="origin")
+
+    row = payload["issues"][0]
+    assert row["status"] == "error"
+    assert row["number"] == 6819
+    assert "invalid issue number" in row["error"]
+    claim.assert_not_called()
+
+
+def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() -> None:
+    """Claimable list rows must fail closed when gh returns non-open or missing states."""
+    issue_list = [
+        {
+            "number": 2681,
+            "title": "closed claimable-looking issue",
+            "state": "CLOSED",
+            "url": "https://github.test/issues/2681",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2682,
+            "title": "missing state claimable-looking issue",
+            "url": "https://github.test/issues/2682",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2683,
+            "title": "malformed state claimable-looking issue",
+            "state": None,
+            "url": "https://github.test/issues/2683",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2684,
+            "title": "open issue remains claimable",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2684",
+            "labels": [],
+            "assignees": [],
+        },
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2681: _claim_status(2681),
+                2682: _claim_status(2682),
+                2683: _claim_status(2683),
+                2684: _claim_status(2684),
+            }
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=4,
+            )
+
+    classifications = [issue["classification"] for issue in payload["issues"]]
+    assert classifications == ["closed", "state_unknown", "state_unknown", "claimable"]
+    assert [issue["state"] for issue in payload["issues"]] == ["CLOSED", "", "", "OPEN"]
+    assert payload["issues"][0]["reason"] == "issue state is CLOSED; skip autonomous claim"
+    assert payload["issues"][1]["reason"] == "issue state missing or unknown; skip autonomous claim"
+    assert payload["issues"][2]["reason"] == "issue state missing or unknown; skip autonomous claim"
 
 
 def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:

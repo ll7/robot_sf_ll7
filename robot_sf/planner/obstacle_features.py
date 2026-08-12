@@ -854,3 +854,30 @@ def validate_predictive_runtime_feature_schema(metadata: dict[str, object]) -> N
             "Predictive ego motion producer mismatch: "
             f"runtime expects {expected_producer!r}, got {actual_producer!r}"
         )
+
+
+__all__ = [
+    "PREDICTIVE_EGO_FEATURE_DIM",
+    "PREDICTIVE_EGO_FEATURE_SCHEMA",
+    "PREDICTIVE_EGO_MOTION_CHANNEL_SLOTS",
+    "PREDICTIVE_EGO_MOTION_PRODUCER_RUNTIME",
+    "PREDICTIVE_EGO_MOTION_PRODUCER_STANDALONE",
+    "PREDICTIVE_LEGACY_FEATURE_DIM",
+    "PREDICTIVE_LEGACY_FEATURE_SCHEMA",
+    "PREDICTIVE_OBSTACLE_FEATURE_DIM",
+    "PREDICTIVE_OBSTACLE_FEATURE_SCHEMA",
+    "PREDICTIVE_OBSTACLE_UNAVAILABLE_FEATURE_ROW",
+    "LocalObstacleFeature",
+    "LocalObstacleFeatureExtractor",
+    "ObstacleFeatureSchema",
+    "ObstacleFeatureSchemaError",
+    "append_obstacle_features",
+    "infer_predictive_feature_schema",
+    "normalize_obstacle_lines",
+    "obstacle_lines_from_map",
+    "obstacle_lines_from_observation",
+    "predictive_ego_motion_channel_producer_key",
+    "predictive_feature_schema_metadata",
+    "validate_predictive_feature_schema_metadata",
+    "validate_predictive_runtime_feature_schema",
+]

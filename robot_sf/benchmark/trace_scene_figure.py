@@ -943,17 +943,20 @@ def _move_text_in_display_space(text: Any, shift_x: float, shift_y: float) -> No
 
 
 _ZONE_LABEL_GID = "trace-scene-zone-label"
+_KEY_FRAME_LABEL_GID = "trace-scene-key-frame-label"
+_SCENE_TRAJECTORY_GID = "trace-scene-trajectory"
+_TIMELINE_GUIDE_GID = "trace-scene-time-guide"
 _LABEL_LINE_PADDING_PX = 1.0
 _LABEL_MARKER_PADDING_PX = 2.5
 
 
-def _segment_hits_bbox(
+def _segment_bbox_interval(
     p0: tuple[float, float],
     p1: tuple[float, float],
     bbox: Bbox,
     tolerance: float,
-) -> bool:
-    """Return True when the display-space segment p0->p1 enters *bbox* (padded).
+) -> tuple[float, float] | None:
+    """Return the parameter interval where display-space segment p0->p1 enters *bbox*.
 
     Liang-Barsky parametric clipping, mirroring the figure-QA overlap test so the
     placement pass avoids exactly what the linter would flag.
@@ -970,7 +973,7 @@ def _segment_hits_bbox(
     ):
         if abs(p) < 1e-12:
             if q < 0:
-                return False
+                return None
         else:
             t = q / p
             if p < 0:
@@ -978,8 +981,19 @@ def _segment_hits_bbox(
             else:
                 t_exit = min(t_exit, t)
             if t_enter > t_exit:
-                return False
-    return True
+                return None
+    return t_enter, t_exit
+
+
+def _segment_hits_bbox(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    bbox: Bbox,
+    tolerance: float,
+) -> bool:
+    """Return True when the display-space segment p0->p1 enters *bbox* (padded)."""
+
+    return _segment_bbox_interval(p0, p1, bbox, tolerance) is not None
 
 
 def _polyline_hits_bbox(points: np.ndarray, bbox: Bbox, tolerance: float) -> bool:
@@ -1050,6 +1064,11 @@ def _collect_line_obstacles(ax: Axes) -> list[np.ndarray]:
         if not child.get_visible():
             continue
         if isinstance(child, Line2D):
+            # Timeline guides are cut around reference-label bboxes after placement;
+            # treating them as fixed obstacles here can make a long label trade the
+            # guide for a hard collision with the underlying distance curve.
+            if child.get_gid() == _TIMELINE_GUIDE_GID:
+                continue
             for run in _finite_polyline_runs(child.get_xdata(), child.get_ydata()):
                 polylines.append(child.get_transform().transform(run))
         elif isinstance(child, Polygon) and not child.get_fill():
@@ -1237,6 +1256,8 @@ def _select_label_position(
     candidate_offsets: Sequence[tuple[float, float]],
     axes_bbox: Bbox,
     obstacles: _PlacementObstacles,
+    *,
+    allow_marker_overlap: bool = False,
 ) -> tuple[float, float, Bbox]:
     """Pick the best display-space shift for one label.
 
@@ -1265,6 +1286,18 @@ def _select_label_position(
             final_center = (bbox.x0 + bbox.width / 2, bbox.y0 + bbox.height / 2)
             leader_crossings = _leader_crosses_labels(
                 original_center, final_center, obstacles.placed_bboxes
+            )
+        if allow_marker_overlap:
+            # Time labels opt into marker-contact warnings, but ordinary data-line
+            # contact remains a hard QA defect.  Prefer that explicit warning over
+            # trading it for an untagged trajectory-line collision.
+            return (
+                label_collisions,
+                line_hits,
+                leader_crossings,
+                marker_hits,
+                text_overlap,
+                math.hypot(shift_x, shift_y),
             )
         return (
             label_collisions,
@@ -1386,6 +1419,7 @@ def _place_scene_annotations(ax: Axes) -> None:
             candidate_offsets,
             axes_bbox,
             obstacles,
+            allow_marker_overlap=text.get_gid() == "trace-scene-time-label",
         )
         if _scene_label_priority(text.get_text()) >= 2 and any(
             _bboxes_collide(final_bbox, placed) for placed in placed_bboxes
@@ -1400,6 +1434,108 @@ def _place_scene_annotations(ax: Axes) -> None:
         placed_bboxes.append(final_bbox)
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
             _add_label_leader(ax, original_center, final_bbox, leader_segments)
+
+
+def _clear_tagged_lines_behind_labels(  # noqa: C901 - bounded line-clipping branches
+    ax: Axes,
+    *,
+    line_gid: str,
+    text_gids: frozenset[str],
+) -> None:
+    """Split tagged lines around rendered label boxes to leave honest visual clearance."""
+
+    figure = ax.figure
+    figure.canvas.draw()
+    renderer = figure.canvas.get_renderer()
+    padding_px = _LABEL_LINE_PADDING_PX + 1.0
+    label_bboxes = [
+        text.get_window_extent(renderer).padded(padding_px)
+        for text in ax.texts
+        if text.get_visible() and text.get_gid() in text_gids
+    ]
+    if not label_bboxes:
+        return
+
+    for line in ax.lines:
+        if line.get_gid() != line_gid or not line.get_visible():
+            continue
+        replacement_x: list[float] = []
+        replacement_y: list[float] = []
+        changed = False
+        inverse_transform = line.get_transform().inverted().transform
+        for run in _finite_polyline_runs(line.get_xdata(), line.get_ydata()):
+            display_run = line.get_transform().transform(run)
+            for index in range(len(run) - 1):
+                p0 = (float(display_run[index, 0]), float(display_run[index, 1]))
+                p1 = (float(display_run[index + 1, 0]), float(display_run[index + 1, 1]))
+                intervals = [
+                    interval
+                    for bbox in label_bboxes
+                    if (interval := _segment_bbox_interval(p0, p1, bbox, 0.0)) is not None
+                ]
+                if not intervals:
+                    outside_intervals = [(0.0, 1.0)]
+                else:
+                    changed = True
+                    merged: list[tuple[float, float]] = []
+                    for lower, upper in sorted(intervals):
+                        if merged and lower <= merged[-1][1]:
+                            merged[-1] = (merged[-1][0], max(merged[-1][1], upper))
+                        else:
+                            merged.append((lower, upper))
+                    outside_intervals = []
+                    cursor = 0.0
+                    for lower, upper in merged:
+                        if lower > cursor:
+                            outside_intervals.append((cursor, lower))
+                        cursor = max(cursor, upper)
+                    if cursor < 1.0:
+                        outside_intervals.append((cursor, 1.0))
+
+                delta_x, delta_y = p1[0] - p0[0], p1[1] - p0[1]
+                for lower, upper in outside_intervals:
+                    display_piece = np.asarray(
+                        [
+                            (p0[0] + lower * delta_x, p0[1] + lower * delta_y),
+                            (p0[0] + upper * delta_x, p0[1] + upper * delta_y),
+                        ]
+                    )
+                    data_piece = inverse_transform(display_piece)
+                    replacement_x.extend(
+                        (float(data_piece[0, 0]), float(data_piece[1, 0]), math.nan)
+                    )
+                    replacement_y.extend(
+                        (float(data_piece[0, 1]), float(data_piece[1, 1]), math.nan)
+                    )
+        if changed:
+            line.set_data(replacement_x[:-1], replacement_y[:-1])
+
+
+def _clear_scene_trajectories_behind_annotations(ax: Axes) -> None:
+    """Leave small gaps in scene tracks only where the final annotation glyphs sit."""
+
+    _clear_tagged_lines_behind_labels(
+        ax,
+        line_gid=_SCENE_TRAJECTORY_GID,
+        text_gids=frozenset(
+            {
+                "trace-scene-time-label",
+                "trace-scene-pedestrian-label",
+                _KEY_FRAME_LABEL_GID,
+                _ZONE_LABEL_GID,
+            }
+        ),
+    )
+
+
+def _clear_timeline_guides_behind_reference_labels(ax: Axes) -> None:
+    """Cut small, visible gaps where timeline guides pass behind reference labels."""
+
+    _clear_tagged_lines_behind_labels(
+        ax,
+        line_gid=_TIMELINE_GUIDE_GID,
+        text_gids=frozenset({"trace-scene-reference-label"}),
+    )
 
 
 def _draw_robot_time_markers(
@@ -1637,7 +1773,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
     ax.scatter(
         [start_x], [start_y], s=28, color=GREEN, edgecolors="white", linewidths=0.5, zorder=9
     )
-    ax.annotate(
+    start_label = ax.annotate(
         "start",
         (start_x, start_y),
         xytext=(5, -10),
@@ -1645,6 +1781,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         fontsize=_fs(12),
         color=GREEN,
     )
+    start_label.set_gid(_KEY_FRAME_LABEL_GID)
 
     min_index = _global_min_index(episode)
     robot_x, robot_y = episode.robot_xy[min_index]
@@ -1670,7 +1807,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         )
         summary = _mapping(episode.metadata.get("summary"), "metadata.summary")
         distance = float(summary["global_min_robot_ped_distance_m"])
-        ax.annotate(
+        minimum_label = ax.annotate(
             f"d_min = {distance:.2f} m",
             ((robot_x + ped_x) / 2, (robot_y + ped_y) / 2),
             xytext=(0, 10),
@@ -1679,6 +1816,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
             color=RED,
             ha="center",
         )
+        minimum_label.set_gid(_KEY_FRAME_LABEL_GID)
 
     terminal_x, terminal_y = episode.robot_xy[-1]
     status = str(episode.metadata["episode_status"])
@@ -1708,7 +1846,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         terminal_label = str(summary["termination_reason"])
         terminal_color = RED
     terminal_offset = (8, 8) if status.lower() in _SUCCESS_STATUSES else (8, -10)
-    ax.annotate(
+    terminal_text = ax.annotate(
         terminal_label,
         (terminal_x, terminal_y),
         xytext=terminal_offset,
@@ -1717,6 +1855,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         color=terminal_color,
         va="bottom" if status.lower() in _SUCCESS_STATUSES else "top",
     )
+    terminal_text.set_gid(_KEY_FRAME_LABEL_GID)
 
 
 def _contiguous_segments(
@@ -1770,7 +1909,8 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
     robot_x = [point[0] for point in episode.robot_xy]
     robot_y = [point[1] for point in episode.robot_xy]
     for seg_x, seg_y in _contiguous_segments(robot_x, robot_y):
-        ax.plot(seg_x, seg_y, color=INK, linewidth=1.8, zorder=5)
+        robot_track = ax.plot(seg_x, seg_y, color=INK, linewidth=1.8, zorder=5)[0]
+        robot_track.set_gid(_SCENE_TRAJECTORY_GID)
     marker_points = [episode.robot_xy[index] for index in marker_indices]
     marker_label_specs = _draw_robot_time_markers(
         ax, episode, marker_indices, marker_interval_s, zone_label_centers
@@ -1785,14 +1925,15 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
         track_x = [sample[1] for sample in track]
         track_y = [sample[2] for sample in track]
         for seg_x, seg_y in _contiguous_segments(track_x, track_y):
-            ax.plot(
+            pedestrian_track = ax.plot(
                 seg_x,
                 seg_y,
                 color=style.color,
                 linewidth=style.linewidth,
                 alpha=style.alpha,
                 zorder=4,
-            )
+            )[0]
+            pedestrian_track.set_gid(_SCENE_TRAJECTORY_GID)
         if style.draw_markers:
             for marker_time in marker_times:
                 x, y = _position_at_time(track, marker_time)
@@ -1953,7 +2094,10 @@ def _draw_timeline(
     ax.set_ylabel(distance_label, color=INK, labelpad=7)
     ax.tick_params(axis="both", labelsize=_fs(11), width=0.6, pad=2)
     for marker_index in marker_indices:
-        ax.axvline(time[marker_index], color=GRAY, linestyle="--", linewidth=0.6, alpha=0.7)
+        gridline = ax.axvline(
+            time[marker_index], color=GRAY, linestyle="--", linewidth=0.6, alpha=0.7
+        )
+        gridline.set_gid(_TIMELINE_GUIDE_GID)
     # Start at t=0 (no negative-time margin) and put ticks at the same interval as the scene
     # panel's synchronized markers (0, interval, 2*interval, ...) so the two axes line up.
     ax.set_xlim(0.0, time[-1])
@@ -1972,7 +2116,8 @@ def _draw_timeline(
         ticks = ticks[::stride]
     ax.set_xticks(ticks)
     min_index = _global_min_index(episode)
-    ax.axvline(time[min_index], color=RED, linewidth=0.9, alpha=0.8)
+    minimum_guide = ax.axvline(time[min_index], color=RED, linewidth=0.9, alpha=0.8)
+    minimum_guide.set_gid(_TIMELINE_GUIDE_GID)
     ax.plot(
         time[min_index],
         episode.min_robot_ped_distance_m[min_index],
@@ -2047,6 +2192,10 @@ def _save_figure(
     save_options: dict[str, Any] = {"bbox_inches": "tight"} if tight else {}
     if out.suffix.lower() == ".png":
         save_options["dpi"] = dpi
+    elif out.suffix.lower() == ".pdf":
+        # Matplotlib otherwise embeds the wall-clock save time, making identical
+        # renders hash differently.  Omit volatile PDF timestamps at the source.
+        save_options["metadata"] = {"CreationDate": None, "ModDate": None}
     figure.savefig(out, **save_options)
     if close:
         plt.close(figure)
@@ -2140,6 +2289,10 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
             else:
                 figure.subplots_adjust(left=0.12, right=0.96, bottom=0.09, top=0.93)
             _place_scene_annotations(scene_ax)
+            _clear_scene_trajectories_behind_annotations(scene_ax)
+            if timeline_ax is not None:
+                _place_scene_annotations(timeline_ax)
+                _clear_timeline_guides_behind_reference_labels(timeline_ax)
             figure.set_layout_engine("none")
             if figure_width_in is not None:
                 _clamp_texts_to_canvas(figure)
@@ -2303,6 +2456,11 @@ def _render_comparison_figure(  # noqa: PLR0913 - internal split of render_compa
         figure.canvas.draw()
         for scene_ax in scene_axes:
             _place_scene_annotations(scene_ax)
+            _clear_scene_trajectories_behind_annotations(scene_ax)
+        for timeline_ax in timeline_axes:
+            if timeline_ax is not None:
+                _place_scene_annotations(timeline_ax)
+                _clear_timeline_guides_behind_reference_labels(timeline_ax)
         figure.set_layout_engine("none")
         if not tight:
             _clamp_texts_to_canvas(figure)

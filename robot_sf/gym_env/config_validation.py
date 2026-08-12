@@ -18,6 +18,14 @@ from robot_sf.sim.registry import list_backends
 
 _OPTIONAL_BACKENDS_WITH_LEGACY_FALLBACK = {"fast-pysf"}
 
+__all__ = [
+    "_check_backend_valid",
+    "_check_sensor_names_valid",
+    "_check_unknown_keys",
+    "get_resolved_config_dict",
+    "validate_config",
+]
+
 
 def _get_valid_field_names(config: BaseSimulationConfig) -> set[str]:
     """Extract valid field names from a dataclass config.

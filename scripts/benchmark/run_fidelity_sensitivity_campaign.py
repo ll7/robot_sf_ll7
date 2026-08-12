@@ -8,6 +8,7 @@ raw JSONL under ``output/`` plus a compact evidence bundle under
 ``docs/context/evidence``.
 """
 
+# evidence-writer-exempt: JSONL raw-rows contract (episode_rows.jsonl is per-row sort_keys JSON lines, not a single JSON document) plus a csv.DictWriter with explicit fieldnames; shared write_json/write_csv cannot preserve the exact bytes.
 from __future__ import annotations
 
 import argparse

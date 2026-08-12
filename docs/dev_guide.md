@@ -572,6 +572,13 @@ so the command works from a worktree that has not run `uv sync`. The `--help` ou
 Use `--max-wall-seconds` to give long-running monitors a clean local stop path before patching or
 pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
 remote GitHub checks were cancelled or failed.
+If the parent workflow is already `completed/success` and every recorded job step ends with a
+successful `Complete job` step while GitHub still reports a pending check/job lifecycle (either a
+job that remains `in_progress` or a stale check-run over a `completed/success` job), the JSON payload
+marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` and includes the
+parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
+code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
+from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
@@ -1553,7 +1560,16 @@ For the reproducible, commit-stamped aggregate of all quality signals (test resu
 
 ### Logging & Observability (Principle XII)
 
-The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. Acceptable `print()` exceptions: (1) short CLI entry scripts in `scripts/` or `examples/` where stdout is the UX, (2) early bootstrap failures before logging configuration, (3) tests explicitly asserting stdout content. Migration of stray prints to `from loguru import logger` with `logger.info|warning|error` is treated as maintenance (PATCH) unless it changes user‑visible contract output.
+The canonical logging facade is **Loguru**. Library code (anything under `robot_sf/` or wrappers over `fast-pysf`) must not use bare `print()` for informational or warning messages. The Ruff `T201` rule is enabled to enforce this; every surviving `print()` in `robot_sf/` is an intentional exception that must be **locally justified**.
+
+Acceptable `print()` exception categories (issue #6478, maintainer option B):
+1. **Human-facing CLI stdout** — CLI entry points where stdout is the UX (e.g. `robot_sf/benchmark/cli.py`, `robot_sf/examples_cli.py`, `robot_sf/benchmark/snqi/cli.py`). Suppressed via a `pyproject.toml` `[tool.ruff.lint.per-file-ignores]` entry.
+2. **Machine-readable stdout** — JSON/Markdown report emission meant to be piped or redirected (e.g. `forecast_lane_inventory.py`, `issue_5578_speed_tier_synthesis.py`). Suppressed per-file or with an inline `# noqa: T201 - CLI output`.
+3. **Subprocess JSON IPC** — a worker subprocess writing a JSON result to stdout for its parent process (e.g. `camera_ready/resource_lifecycle.py`). Inline `# noqa: T201 - subprocess JSON IPC to parent process`.
+4. **Loguru-unavailable fallback** — a fallback logger body that runs only when Loguru cannot be imported, where using Loguru would be circular (e.g. `episode_replay_figure.py::_LoggerFallback`). Inline `# noqa: T201 - loguru unavailable in fallback logger`.
+5. **Early bootstrap failures** before logging configuration, and **tests** explicitly asserting stdout content.
+
+Never reroute categories 1–3 to Loguru: that moves machine-readable or human-facing stdout off stdout and breaks piping, redirection, and subprocess consumers. Migration of any *stray* (un-justified) print to `from loguru import logger` with `logger.info|warning|error` is maintenance (PATCH) unless it changes user-visible contract output.
 
 Guidelines:
  - Prefer structured context (e.g., `logger.info("Reset complete seed={seed} scenario={sid}")`).

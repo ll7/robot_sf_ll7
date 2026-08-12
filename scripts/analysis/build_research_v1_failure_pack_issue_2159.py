@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 DEFAULT_GENERATED_AT = "2026-06-23T00:00:00+00:00"
 
 # Durable cases selected by issue #2269 case selection manifest.
@@ -404,7 +406,7 @@ def main(argv: list[str] | None = None) -> None:
     for case in CASE_INPUTS:
         report = build_case_report(case)
         report_path = output_dir / f"case_{case['case_id']}.md"
-        report_path.write_text(report, encoding="utf-8")
+        write_text(report_path, report, issue_ref="#2159")
 
     # Build and write manifest
     manifest = build_manifest(
@@ -415,10 +417,7 @@ def main(argv: list[str] | None = None) -> None:
         repo_root=repo_root,
     )
     manifest_path = output_dir / "failure_pack_manifest.json"
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(manifest_path, manifest)
 
     # Build and write README
     readme = build_readme(
@@ -427,7 +426,7 @@ def main(argv: list[str] | None = None) -> None:
         manifest=manifest,
     )
     readme_path = output_dir / "README.md"
-    readme_path.write_text(readme, encoding="utf-8")
+    write_text(readme_path, readme, issue_ref="#2159")
 
     # Write checksums
     checksums: list[str] = []
@@ -435,7 +434,10 @@ def main(argv: list[str] | None = None) -> None:
     for path in sorted(output_dir.rglob("*")):
         if path.is_file() and path != checksums_path:
             checksums.append(f"{sha256_file(path)}  {path.relative_to(output_dir)}")
-    checksums_path.write_text("\n".join(checksums) + "\n", encoding="utf-8")
+    write_text(
+        checksums_path,
+        "# AI-GENERATED NEEDS-REVIEW\n" + "\n".join(checksums) + "\n",
+    )
 
     case_names = ", ".join(c["case_id"] for c in CASE_INPUTS)
     sys.stderr.write(

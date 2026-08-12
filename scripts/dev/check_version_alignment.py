@@ -7,7 +7,8 @@ Three version axes historically drifted apart in this repository:
   resolve by these tags, so the tag line must never be renumbered),
 * the packaged version in ``pyproject.toml`` (now derived from the tag by
   hatch-vcs, no longer hardcoded),
-* ``CITATION.cff`` (now kept in lockstep with the latest full release tag).
+* ``CITATION.cff`` (kept in lockstep with the latest full release tag, except
+  for an explicit, non-authorizing release-preparation marker).
 
 This checker verifies that, when HEAD is on a version tag, the built/installed
 package version derives from that tag, and that ``CITATION.cff`` matches the
@@ -34,6 +35,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CITATION = REPO_ROOT / "CITATION.cff"
+DEFAULT_RELEASE_PREPARATION = REPO_ROOT / "configs/releases/release_0_0_5_preparation.yaml"
 
 # Release-line version tags only: plain X.Y.Z, vX.Y.Z, or rcX.Y.Z. This is
 # deliberately stricter than the hatch-vcs tag_regex so that unrelated tags
@@ -54,6 +56,11 @@ def numeric_version_from_tag(tag: str) -> str | None:
     """
     match = _VERSION_TAG_RE.match(tag.strip())
     return match.group("num") if match else None
+
+
+def exact_numeric_version(value: str) -> str | None:
+    """Return ``value`` only when it is an unprefixed exact ``X.Y.Z`` string."""
+    return value if numeric_version_from_tag(value) == value else None
 
 
 def is_release_candidate(tag: str) -> bool:
@@ -113,6 +120,7 @@ def evaluate(
     all_tags: list[str],
     package_version: str | None,
     citation_version: str,
+    release_preparation_version: str | None = None,
 ) -> list[str]:
     """Return a list of alignment problems (empty means aligned).
 
@@ -122,6 +130,8 @@ def evaluate(
         package_version: The built/installed package version, or ``None`` when
             the package is not installed.
         citation_version: The ``version:`` field from ``CITATION.cff``.
+        release_preparation_version: An explicitly marked, untagged release
+            target awaiting maintainer approval, or ``None``.
 
     Returns:
         Human-readable problem strings; an empty list means everything aligns.
@@ -152,10 +162,24 @@ def evaluate(
     else:
         latest_num = numeric_version_from_tag(latest)
         if base_version(citation_version) != latest_num:
-            problems.append(
-                f"CITATION.cff version {citation_version!r} does not match the "
-                f"latest full release tag {latest!r} ({latest_num})"
+            citation_num = exact_numeric_version(citation_version)
+            preparation_num = exact_numeric_version(release_preparation_version or "")
+            latest_key = tuple(int(part) for part in (latest_num or "0.0.0").split("."))
+            citation_key = (
+                tuple(int(part) for part in citation_num.split(".")) if citation_num else None
             )
+            staged_target = (
+                not head_version_tags
+                and citation_num is not None
+                and preparation_num == citation_num
+                and citation_key is not None
+                and citation_key > latest_key
+            )
+            if not staged_target:
+                problems.append(
+                    f"CITATION.cff version {citation_version!r} does not match the "
+                    f"latest full release tag {latest!r} ({latest_num})"
+                )
 
     return problems
 
@@ -234,6 +258,40 @@ def load_citation_version(path: Path) -> str:
     return str(version)
 
 
+def load_release_preparation_version(path: Path = DEFAULT_RELEASE_PREPARATION) -> str | None:
+    """Return the target version from an explicit non-authorizing prep marker.
+
+    The marker is intentionally narrow: it only permits an untagged future
+    citation version while its status says that maintainer approval is still
+    awaited and publication authorization is explicitly false. It never
+    authorizes a tag, GitHub Release, asset, Zenodo version, or DOI.
+
+    Returns:
+        The numeric target version, or ``None`` when no active marker exists.
+
+    Raises:
+        ValueError: If an active marker is malformed.
+    """
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path} is not valid YAML") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a YAML mapping")
+    if data.get("status") != "awaiting_maintainer_approval":
+        return None
+    if data.get("publication_authorized") is not False:
+        return None
+    release_tag = data.get("release_tag")
+    release_value = str(release_tag) if release_tag is not None else ""
+    release_version = exact_numeric_version(release_value)
+    if release_version is None:
+        raise ValueError(f"{path} requires a numeric release_tag")
+    return release_version
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the alignment check and report problems.
 
@@ -258,12 +316,27 @@ def main(argv: list[str] | None = None) -> int:
     all_tags = git_all_tags()
     package_version = installed_package_version()
     citation_version = load_citation_version(args.citation)
+    release_preparation_version = (
+        load_release_preparation_version()
+        if args.citation.resolve() == DEFAULT_CITATION.resolve()
+        else None
+    )
 
-    problems = evaluate(head_tags, all_tags, package_version, citation_version)
+    problems = evaluate(
+        head_tags,
+        all_tags,
+        package_version,
+        citation_version,
+        release_preparation_version,
+    )
 
     print(f"HEAD tags: {head_tags or '(none)'}")
     print(f"installed robot_sf version: {package_version or '(not installed)'}")
     print(f"CITATION.cff version: {citation_version}")
+    print(
+        "release preparation target: "
+        f"{release_preparation_version or '(none; strict tag alignment)'}"
+    )
     latest = latest_release_tag(all_tags)
     print(f"latest full release tag: {latest or '(none)'}")
 

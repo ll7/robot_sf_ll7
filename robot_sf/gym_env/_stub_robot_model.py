@@ -26,6 +26,8 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
+__all__ = ["StubRobotModel"]
+
 
 def _get_numpy():
     """Lazy-import numpy to avoid import cost for non-test usage.

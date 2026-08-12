@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import tarfile
 from typing import TYPE_CHECKING
 
+import pytest
 import yaml
 
 from scripts.tools import publish_model_registry_release
@@ -22,8 +24,31 @@ def _write(path: Path, payload: bytes | str) -> None:
         path.write_text(payload, encoding="utf-8")
 
 
-def _registry_text(model_path: Path) -> str:
+def _registry_text(model_path: Path, *, include_licensing: bool = True) -> str:
     """Return a small registry containing one W&B-backed model."""
+    license_path = model_path.parent / "LICENSE"
+    model_card_path = model_path.parent / "MODEL_CARD.md"
+    _write(license_path, "MIT License\nCopyright (c) fixture\n")
+    _write(model_card_path, "# Fixture model\n\nFor tests only.\n")
+    licensing = f"""
+    licensing:
+      license_spdx: MIT
+      copyright: Fixture copyright holder
+      redistribution_basis: Fixture permits redistribution
+      source_repository: https://example.invalid/fixture
+      source_revision: 0123456789abcdef0123456789abcdef01234567
+      source_archive_sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      weights_origin: trained-here
+      training_code_license: GPL-3.0-only
+      training_data:
+        provenance: synthetic fixture
+        license_spdx: CC0-1.0
+      license_file: {license_path}
+      model_card_file: {model_card_path}
+      included_notices: []
+"""
+    if not include_licensing:
+        licensing = ""
     return (
         f"""
 version: 1
@@ -38,6 +63,7 @@ models:
     wandb_entity: ll7
     wandb_project: robot_sf
     wandb_file: model.zip
+{licensing}
     tags:
       - demo
   - model_id: local_only_model
@@ -76,6 +102,9 @@ def test_publish_model_registry_release_stages_assets_and_manifest(
     asset_name = "demo_model-model.zip"
     assert (tmp_path / "staging" / asset_name).read_bytes() == b"checkpoint"
     assert (tmp_path / "staging" / "demo_model-metadata.json").exists()
+    legal_bundle = tmp_path / "staging" / "demo_model-legal.tar.gz"
+    with tarfile.open(legal_bundle, "r:gz") as archive:
+        assert set(archive.getnames()) == {"LICENSE", "MODEL_CARD.md", "PROVENANCE.json"}
     manifest = json.loads((tmp_path / "staging" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schema_version"] == "robot-sf-model-registry-release.v1"
     assert manifest["models"][0]["release_asset_url"].endswith(
@@ -85,6 +114,31 @@ def test_publish_model_registry_release_stages_assets_and_manifest(
         encoding="utf-8"
     )
     assert plan["upload_command"][0:3] == ["gh", "release", "upload"]
+
+
+def test_legal_bundle_is_byte_reproducible(tmp_path: Path, monkeypatch) -> None:
+    """Repeated staging of the same rights evidence must preserve its checksum."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    args = [
+        "--registry-path",
+        str(registry_path),
+        "--tag",
+        "artifact/models-test",
+        "--staging-dir",
+        str(tmp_path / "staging-one"),
+    ]
+    publish_model_registry_release.main(args)
+    first = (tmp_path / "staging-one" / "demo_model-legal.tar.gz").read_bytes()
+    args[-1] = str(tmp_path / "staging-two")
+    publish_model_registry_release.main(args)
+    second = (tmp_path / "staging-two" / "demo_model-legal.tar.gz").read_bytes()
+
+    assert first == second
 
 
 def test_publish_model_registry_release_updates_registry_output(
@@ -135,25 +189,45 @@ def test_publish_model_registry_release_reports_missing_local_without_download(
     _write(registry_path, _registry_text(tmp_path / "missing" / "model.zip"))
     monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
 
-    publish_model_registry_release.main(
-        [
-            "--registry-path",
-            str(registry_path),
-            "--tag",
-            "artifact/models-test",
-            "--staging-dir",
-            str(tmp_path / "staging"),
-        ]
-    )
-    plan = json.loads(capsys.readouterr().out)
+    with pytest.raises(ValueError, match="selected artifacts are unavailable"):
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+            ]
+        )
+    capsys.readouterr()
 
-    assert plan["published"] == []
-    assert plan["skipped"] == [
-        {
-            "model_id": "demo_model",
-            "reason": "missing local_path; rerun with --download-missing to hydrate from registry",
-        }
-    ]
+
+def test_publish_model_registry_release_blocks_existing_public_rows_without_legal_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Existing public rows must be remediated before any new release can be staged."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    data = yaml.safe_load(_registry_text(model_path))
+    data["models"][0]["github_release"] = {"asset_name": "old-model.zip"}
+    data["models"][0]["public_artifact_source"] = "github_release"
+    _write(registry_path, yaml.safe_dump(data, sort_keys=False))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="existing public rows"):
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+            ]
+        )
 
 
 def test_publish_model_registry_release_requires_upload_before_registry_update(
@@ -185,3 +259,31 @@ def test_publish_model_registry_release_requires_upload_before_registry_update(
         assert exc.code == 2
     else:
         raise AssertionError("--update-registry without upload did not fail closed")
+
+
+def test_publish_model_registry_release_blocks_missing_weight_rights(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A local checkpoint cannot be published without explicit rights evidence."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path, include_licensing=False))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    try:
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-test",
+                "--staging-dir",
+                str(tmp_path / "staging"),
+            ]
+        )
+    except ValueError as exc:
+        assert "licensing mapping is required" in str(exc)
+    else:
+        raise AssertionError("missing weight rights evidence was not rejected")

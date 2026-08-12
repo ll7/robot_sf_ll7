@@ -664,10 +664,15 @@ class TestNewOutputFiles:
         with (output_dir / "SHA256SUMS").open() as f:
             lines = f.readlines()
             assert len(lines) > 0
+            seen_checksum_entry = False
             for line in lines:
+                if not line.strip() or line.startswith("#"):
+                    continue
                 parts = line.strip().split("  ")
                 assert len(parts) == 2
                 assert len(parts[0]) == 64  # SHA256 hex length
+                seen_checksum_entry = True
+            assert seen_checksum_entry
 
     def test_label_coverage_md_created(self, tmp_path: Path) -> None:
         campaign = self._make_campaign(tmp_path)

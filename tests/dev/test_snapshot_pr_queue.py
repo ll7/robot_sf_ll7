@@ -781,3 +781,132 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
     assert len(excerpt) <= 180
     assert excerpt.endswith("...")
     assert f"gate-verdict: accepted @ {sha}" not in excerpt
+
+
+# Issue #6564: GraphQL quota exhaustion REST fallback tests (deterministic, no live GitHub).
+
+from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+    _is_graphql_quota_error,
+    _review_thread_snapshot,
+    fetch_pr,
+)
+
+QUOTA_STDERR = "GraphQL: API rate limit already exceeded."
+
+
+def _resp(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
+    return MagicMock(returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+def test_is_graphql_quota_error_detection() -> None:
+    assert _is_graphql_quota_error(QUOTA_STDERR)
+    assert _is_graphql_quota_error("server error: API rate limit exceeded")
+    assert not _is_graphql_quota_error("merge conflict")
+    assert not _is_graphql_quota_error("")
+
+
+def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
+    """A GraphQL quota failure switches to REST and marks the snapshot fail-closed."""
+    pull = {
+        "number": 42,
+        "title": "demo",
+        "state": "OPEN",
+        "draft": False,
+        "labels": [{"name": "merge-ready"}],
+        "html_url": "https://x/42",
+        "head": {"ref": "fix", "sha": "abc"},
+        "mergeable_state": "clean",
+    }
+    reviews = [{"state": "APPROVED", "author_association": "OWNER", "body": "lgtm"}]
+    comments = [{"author_association": "MEMBER", "body": "nudge"}]
+    check_runs = {
+        "check_runs": [
+            {"name": "ci", "status": "completed", "conclusion": "success", "details_url": "u"},
+        ]
+    }
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            _resp(returncode=1, stderr=QUOTA_STDERR),  # gh pr view -> quota
+            _resp(stdout=json.dumps(pull)),  # REST pulls/42
+            _resp(stdout=json.dumps(reviews)),  # REST pulls/42/reviews
+            _resp(stdout=json.dumps(comments)),  # REST issues/42/comments
+            _resp(stdout=json.dumps(check_runs)),  # REST commits/abc/check-runs
+        ],
+    ):
+        payload = fetch_pr(42, repo="ll7/robot_sf_ll7", expected_head_sha="abc")
+    assert payload["status"] == "ok"
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["review_threads"] == "unknown_graphql_quota"
+    assert payload["review_threads_admission"] == "fail_closed_unknown"
+    assert payload["head_sha"] == "abc"
+    assert payload["preflight"]["head_sha_matches_expected"] is True
+    assert payload["title"] == "demo"
+    assert "merge-ready" in payload["labels"]
+    assert payload["checks"]["overall"] == "success"
+
+
+def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
+    """The REST fallback binds checks to the REST head sha and reports a mismatch as stale."""
+    pull = {
+        "number": 7,
+        "title": "t",
+        "state": "OPEN",
+        "draft": False,
+        "labels": [],
+        "head": {"ref": "b", "sha": "resthead"},
+        "mergeable_state": "clean",
+    }
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            _resp(returncode=1, stderr=QUOTA_STDERR),
+            _resp(stdout=json.dumps(pull)),
+            _resp(stdout="[]"),  # reviews
+            _resp(stdout="[]"),  # comments
+            _resp(stdout=json.dumps({"check_runs": []})),  # check-runs at resthead
+        ],
+    ):
+        payload = fetch_pr(7, repo="ll7/robot_sf_ll7", expected_head_sha="differenthead")
+    assert payload["status"] == "ok"
+    assert payload["preflight"]["status"] == "stale"
+    assert "head_sha_mismatch" in payload["preflight"]["reasons"]
+    assert payload["preflight"]["head_sha_matches_expected"] is False
+
+
+def test_fetch_pr_non_quota_error_still_returns_generic_error() -> None:
+    """Non-quota gh failures are unchanged (no REST attempt)."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        return_value=_resp(returncode=1, stderr="could not find PR"),
+    ):
+        payload = fetch_pr(99, repo="ll7/robot_sf_ll7")
+    assert payload["status"] == "error"
+    assert "error_kind" not in payload
+    assert "could not find PR" in payload["error"]
+
+
+def test_review_thread_snapshot_reports_unknown_graphql_quota() -> None:
+    """Review threads are GraphQL-only; under quota they are unknown (fail-closed)."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+    ):
+        snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+    assert snap["status"] == "unknown_graphql_quota"
+    assert snap["unresolved"] is None
+    assert "merge-ready" in snap["guidance"]
+
+
+def test_fetch_pr_rest_rest_fallback_failure_is_labeled() -> None:
+    """If REST also fails under quota, the error is labeled graphql_quota_exhausted."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            _resp(returncode=1, stderr=QUOTA_STDERR),  # gh pr view -> quota
+            _resp(returncode=1, stderr="not found"),  # REST pulls -> fail
+        ],
+    ):
+        payload = fetch_pr(5, repo="ll7/robot_sf_ll7")
+    assert payload["status"] == "error"
+    assert payload["error_kind"] == "graphql_quota_exhausted"

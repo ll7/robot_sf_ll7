@@ -136,11 +136,11 @@ def _collect_episode_records(
         try:
             episodes = read_jsonl(str(episodes_file))
         except Exception as exc:  # pragma: no cover - defensive against IO errors
-            logger.warning("Failed to read episodes from %s: %s", result["algo"], exc)
+            logger.warning("Failed to read episodes from {}: {}", result["algo"], exc)
             continue
         records.extend(episodes)
         successful.append(result["algo"])
-        logger.info("Aggregated %d episodes from %s", len(episodes), result["algo"])
+        logger.info("Aggregated {} episodes from {}", len(episodes), result["algo"])
 
     return records, successful
 
@@ -174,7 +174,7 @@ def _compute_aggregates_payload(
         if "expected_algorithms" not in aggregate_kwargs:
             raise
         logger.debug(
-            "compute_aggregates_with_ci missing expected_algorithms support, falling back: %s",
+            "compute_aggregates_with_ci missing expected_algorithms support, falling back: {}",
             exc,
         )
         aggregate_kwargs.pop("expected_algorithms", None)
@@ -194,7 +194,7 @@ def _write_aggregates_file(output_root: str, aggregates: dict[str, Any]) -> Path
     aggregates_file = Path(output_root) / "aggregated_results.json"
     with open(aggregates_file, "w", encoding="utf-8") as f:
         json.dump(aggregates, f, indent=2)
-    logger.info("Aggregated results saved to %s", aggregates_file)
+    logger.info("Aggregated results saved to {}", aggregates_file)
     return aggregates_file
 
 
@@ -219,7 +219,7 @@ def aggregate_all_results(
             expected_algorithms=expected_algorithms,
         )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("Failed to aggregate results: %s", exc)
+        logger.error("Failed to aggregate results: {}", exc)
         return {"success": False, "error": str(exc)}
 
     meta = aggregates.get("_meta") if isinstance(aggregates, dict) else {}
@@ -227,7 +227,7 @@ def aggregate_all_results(
         missing = meta.get("missing_algorithms") or []
         if missing:
             logger.warning(
-                "Aggregation detected missing algorithms: %s",
+                "Aggregation detected missing algorithms: {}",
                 ", ".join(sorted(missing)),
             )
 

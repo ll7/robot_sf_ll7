@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.runner import run_batch
 
 if TYPE_CHECKING:
@@ -52,3 +53,29 @@ def test_algorithm_metadata_present(tmp_path: Path):
     planner_meta = algo_md.get("planner_kinematics")
     assert isinstance(planner_meta, dict)
     assert planner_meta.get("execution_mode") == "native"
+
+
+def test_prediction_mpc_registry_declared_adapter_only():
+    """Guard that prediction_mpc is registry-declared adapter-only by design.
+
+    Issue #6828 (Option A) established that the #5579 "native execution"
+    canary requirement for a registry-declared adapter-only algorithm is
+    satisfied by a fail-closed ``canary.solver_execution`` contract, NOT by
+    ``planner_kinematics.execution_mode == "native"``. ``execution_mode`` is a
+    command-space concept (native robot commands vs adapter-projected), not a
+    record of whether the MPC solver ran.
+
+    The canonical ``prediction_mpc`` planner is adapter-only by design: it
+    emits unicycle_vw commands through ``PredictionMPCPlannerAdapter`` and has
+    no native command path. A gate bound to ``execution_mode == "native"`` is
+    unsatisfiable by construction for this planner, so this test pins the
+    registry declaration so a future reader cannot mistake it for a staging
+    defect and re-raise it as a review blocker. See issue #6828 and the
+    "Native Execution Criterion For The #5579 Canary" section of
+    ``docs/code_review.md``.
+    """
+    enriched = enrich_algorithm_metadata(algo="prediction_mpc")
+    planner_kinematics = enriched["planner_kinematics"]
+    assert planner_kinematics["supports_native_commands"] is False
+    assert planner_kinematics["execution_mode"] == "adapter"
+    assert planner_kinematics["adapter_name"] == "PredictionMPCPlannerAdapter"

@@ -44,6 +44,9 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_table_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import _sanitize_name, _scenario_with_kinematics
+from robot_sf.benchmark.camera_ready._crosswalk_producer import (
+    write_crosswalk_sidecar,
+)
 from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
@@ -3439,6 +3442,17 @@ def _finalize_campaign_outputs(  # noqa: PLR0913
         kinematics_matrix,
         invoked_command,
     )
+
+    crosswalk_sidecar_path = write_crosswalk_sidecar(
+        paths.reports_dir,
+        campaign_id=paths.campaign_id,
+        run_entries=run_entries,
+        repo_root=get_repository_root(),
+    )
+    if "artifacts" in campaign_summary:
+        campaign_summary["artifacts"]["report_crosswalk_json"] = _repo_relative(
+            crosswalk_sidecar_path
+        )
 
     return _export_and_write_final_artifacts(
         cfg,

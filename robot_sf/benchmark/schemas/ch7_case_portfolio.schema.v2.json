@@ -1,0 +1,370 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7_case_portfolio.schema.v2.json",
+  "title": "Chapter 7 worked-example portfolio manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "selector_version",
+    "status",
+    "inputs",
+    "constraints",
+    "selection_pipeline",
+    "summary",
+    "pareto_analysis",
+    "exact_enumeration",
+    "selected",
+    "ledger",
+    "content_sha256"
+  ],
+  "properties": {
+    "schema_version": { "const": "ch7_case_portfolio.v2" },
+    "selector_version": { "type": "string" },
+    "status": { "enum": ["complete", "partial"] },
+    "claim_boundary": { "type": "string" },
+    "inputs": {
+      "type": "object",
+      "required": ["config_sha256", "source_inventory_count"],
+      "additionalProperties": true
+    },
+    "constraints": {
+      "type": "object",
+      "required": [
+        "required_roles",
+        "required_grains",
+        "required_conceptual_grains",
+        "required_topologies",
+        "required_failure_classes",
+        "required_process_classes",
+        "target_size",
+        "max_size",
+        "require_unique_primary_roles"
+      ],
+      "properties": {
+        "required_roles": { "type": "array", "items": { "type": "string" } },
+        "required_grains": { "type": "array", "items": { "type": "string" } },
+        "required_conceptual_grains": { "type": "array", "items": { "type": "string" } },
+        "required_topologies": { "type": "array", "items": { "type": "string" } },
+        "required_failure_classes": { "type": "array", "items": { "type": "string" } },
+        "required_process_classes": { "type": "array", "items": { "type": "string" } },
+        "target_size": { "type": "integer", "minimum": 1 },
+        "max_size": { "type": "integer", "minimum": 1 },
+        "require_unique_primary_roles": { "type": "boolean" },
+        "frozen_role_targets": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "selection_pipeline": {
+      "type": "array",
+      "items": { "type": "string" },
+      "contains": { "const": "fail_closed_eligibility" }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "n_inventory",
+        "n_eligible",
+        "n_pareto",
+        "n_selected",
+        "n_ledger",
+        "uncovered_roles",
+        "uncovered_grains",
+        "uncovered_conceptual_grains",
+        "uncovered_topologies",
+        "uncovered_failure_classes",
+        "uncovered_process_classes",
+        "unique_primary_roles_satisfied"
+      ],
+      "properties": {
+        "n_inventory": { "type": "integer", "minimum": 0 },
+        "n_source_inventory": { "type": "integer", "minimum": 0 },
+        "n_eligible": { "type": "integer", "minimum": 0 },
+        "n_pareto": { "type": "integer", "minimum": 0 },
+        "n_selected": { "type": "integer", "minimum": 0 },
+        "n_ledger": { "type": "integer", "minimum": 0 },
+        "uncovered_roles": { "type": "array", "items": { "type": "string" } },
+        "uncovered_grains": { "type": "array", "items": { "type": "string" } },
+        "uncovered_conceptual_grains": { "type": "array", "items": { "type": "string" } },
+        "uncovered_topologies": { "type": "array", "items": { "type": "string" } },
+        "uncovered_failure_classes": { "type": "array", "items": { "type": "string" } },
+        "uncovered_process_classes": { "type": "array", "items": { "type": "string" } },
+        "unique_primary_roles_satisfied": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "pareto_analysis": {
+      "type": "object",
+      "required": ["directions", "front", "dominated", "dimension_unavailable", "adapter", "adapter_semantics"],
+      "additionalProperties": true
+    },
+    "exact_enumeration": {
+      "type": "object",
+      "required": ["enumeration_count", "complete_constraints_satisfied", "constraint_classes"],
+      "additionalProperties": true
+    },
+    "selected": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/selectedCase" }
+    },
+    "ledger": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ledgerEntry" }
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "selectedCase": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "grain",
+        "conceptual_grain",
+        "conceptual_coverage",
+        "primary_role",
+        "allowed_claim",
+        "claim",
+        "event_anchor",
+        "presentation",
+        "coverage",
+        "eligibility",
+        "selection",
+        "selection_vector",
+        "dimensions",
+        "source",
+        "source_boundary"
+      ],
+      "properties": {
+        "case_id": { "type": "string", "minLength": 1 },
+        "grain": {
+          "enum": ["episode", "matched_planner_pair", "matched_seed_pair", "cell", "cross_cell"]
+        },
+        "conceptual_grain": { "enum": ["campaign", "cell", "matched_contrast", "trace"] },
+        "conceptual_coverage": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["campaign", "cell", "matched_contrast", "trace"] }
+        },
+        "primary_role": {
+          "enum": [
+            "prototype",
+            "criticism",
+            "boundary",
+            "planner_upset",
+            "seed_sensitivity",
+            "metric_disagreement",
+            "process_contrast",
+            "feasibility_criticism",
+            "negative_control",
+            "causal_abstention"
+          ]
+        },
+        "allowed_claim": { "type": "string", "minLength": 1 },
+        "claim": {
+          "type": "object",
+          "required": ["grade", "allowed", "forbidden"],
+          "properties": {
+            "grade": {
+              "enum": [
+                "descriptive",
+                "proximate_mechanism",
+                "model_relative_causal",
+                "abstention"
+              ]
+            },
+            "allowed": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "forbidden": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "additionalProperties": true
+        },
+        "event_anchor": {
+          "type": "object",
+          "required": ["type", "time_s", "source_field", "shared_between_cases"],
+          "properties": {
+            "type": {
+              "enum": ["collision", "min_clearance", "first_gate_breach", "stall_onset", "terminal"]
+            },
+            "time_s": {
+              "oneOf": [
+                { "type": "number" },
+                { "const": "unavailable" }
+              ]
+            },
+            "source_field": { "type": "string", "minLength": 1 },
+            "shared_between_cases": { "type": "boolean" },
+            "observed_at": { "type": "string" },
+            "shared_semantics": { "type": "object" }
+          },
+          "additionalProperties": true
+        },
+        "presentation": {
+          "type": "object",
+          "required": ["required_views", "shared_axis_contract", "semantic_keyframes"],
+          "properties": {
+            "required_views": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": ["world_xy", "route_sn", "time_space", "event_timeline", "cell_context"]
+              }
+            },
+            "conceptual_coverage": {
+              "type": "array",
+              "items": { "enum": ["campaign", "cell", "matched_contrast", "trace"] }
+            },
+            "shared_axis_contract": { "type": "string", "minLength": 1 },
+            "semantic_keyframes": { "type": "array" }
+          },
+          "additionalProperties": true
+        },
+        "coverage": {
+          "type": "object",
+          "required": ["topology", "mechanism", "failure_class", "process_class"],
+          "additionalProperties": true
+        },
+        "eligibility": { "$ref": "#/$defs/eligibility" },
+        "selection": {
+          "type": "object",
+          "required": [
+            "vector",
+            "pareto_status",
+            "coverage_tags",
+            "included_reason",
+            "excluded_reason",
+            "scientific_dimensions_applied",
+            "post_selection_dimensions"
+          ],
+          "properties": {
+            "vector": { "type": "object" },
+            "pareto_status": { "enum": ["nondominated", "dominated", "not_applicable"] },
+            "coverage_tags": { "type": "array", "items": { "type": "string" } },
+            "included_reason": { "type": "string" },
+            "excluded_reason": { "type": "string" },
+            "scientific_dimensions_applied": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "post_selection_dimensions": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        },
+        "selection_vector": {
+          "type": "object",
+          "required": ["scientific_pareto", "post_selection"],
+          "properties": {
+            "scientific_pareto": { "type": "object" },
+            "post_selection": { "type": "object" }
+          },
+          "additionalProperties": true
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "release_id",
+            "release_rows_sha256",
+            "trace_package_sha256",
+            "expected_release_rows_sha256",
+            "expected_trace_package_sha256",
+            "observed_release_rows_sha256",
+            "observed_trace_package_sha256",
+            "visualization_only_reexecution"
+          ],
+          "properties": {
+            "release_id": { "type": "string" },
+            "release_rows_sha256": { "type": "string" },
+            "trace_package_sha256": { "type": "string" },
+            "expected_release_rows_sha256": { "type": "string" },
+            "expected_trace_package_sha256": { "type": "string" },
+            "observed_release_rows_sha256": { "type": "string" },
+            "observed_trace_package_sha256": { "type": "string" },
+            "visualization_only_reexecution": { "type": "boolean" }
+          },
+          "additionalProperties": true
+        },
+        "source_boundary": { "type": "object" },
+        "dimensions": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "ledgerEntry": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "grain",
+        "conceptual_grain",
+        "primary_role",
+        "disposition",
+        "exclusion_reasons",
+        "eligibility",
+        "pareto_member",
+        "stable_tie_break"
+      ],
+      "properties": {
+        "case_id": { "type": "string", "minLength": 1 },
+        "grain": { "type": "string" },
+        "conceptual_grain": { "type": "string" },
+        "primary_role": { "type": "string" },
+        "disposition": { "enum": ["selected", "excluded"] },
+        "exclusion_reasons": { "type": "array", "items": { "type": "string" } },
+        "eligibility": { "$ref": "#/$defs/eligibility" },
+        "pareto_member": { "type": "boolean" },
+        "stable_tie_break": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "eligibility": {
+      "type": "object",
+      "required": [
+        "eligible",
+        "status",
+        "reasons",
+        "execution_mode",
+        "typed_outcome_semantics",
+        "initial_state_match",
+        "outcome_match",
+        "telemetry_grade",
+        "required_checks",
+        "checks",
+        "blockers"
+      ],
+      "properties": {
+        "eligible": { "type": "boolean" },
+        "status": { "enum": ["admitted", "excluded", "unavailable"] },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "execution_mode": { "type": "string" },
+        "typed_outcome_semantics": { "type": "boolean" },
+        "initial_state_match": {
+          "enum": ["pass", "fail", "unavailable"]
+        },
+        "outcome_match": {
+          "enum": ["pass", "fail", "unavailable"]
+        },
+        "telemetry_grade": {
+          "enum": ["geometry", "kinematics", "controller", "counterfactual"]
+        },
+        "required_checks": { "type": "array", "items": { "type": "string" } },
+        "checks": { "type": "object" },
+        "blockers": { "type": "array" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

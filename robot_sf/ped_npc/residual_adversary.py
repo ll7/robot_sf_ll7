@@ -11,8 +11,9 @@ law is preserved and only perturbed.
 Capability-only slice
 ---------------------
 This is a capability-only slice. It makes no benchmark, planner-ranking, safety, or
-paper-facing claim. It defines no new stress-case metric (issue item 4, which
-requires a maintainer Domain-Aware Approval, is deferred). It implements no
+paper-facing claim. It exposes only a diagnostic controller-behavior summary; this
+is not a new stress-case metric (issue item 4, which requires a maintainer
+Domain-Aware Approval, is deferred). It implements no
 Covariance Matrix Adaptation Evolution Strategy (CMA-ES), Monte Carlo Tree
 Search (MCTS), or Proximal Policy Optimization (PPO) adversary; those are later
 sequenced slices. The :class:`ResidualAdversaryPolicy` interface below is the seam
@@ -51,6 +52,9 @@ DEFAULT_MACRO_ACTION_DT_S = 0.5
 
 MIN_WALKABLE_MARGIN_M = 1e-3
 """Floor for the walkable-space projection margin so it is always strictly positive."""
+
+RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION = "residual_adversary_behavior.v1"
+"""Versioned schema identifier for the diagnostic controller summary."""
 
 
 class ResidualBoundConflictError(RuntimeError):
@@ -239,6 +243,49 @@ class ResidualAdversaryObservation:
     sim_time_s: float
     step_index: int
     macro_action_index: int
+
+
+@dataclass(frozen=True)
+class ResidualAdversaryBehaviorSummary:
+    """Immutable diagnostic accounting for one controller episode or run.
+
+    Norm statistics are computed over every emitted residual row at every processed
+    physics step, including zero rows for non-targeted pedestrians. The integral is
+    the sum of those norms multiplied by ``dt_s`` and therefore has units of m/s.
+    ``proposal_adjustment_fraction`` is the fraction of macro-action proposals whose
+    final applied residual differed from the proposal after the existing bound
+    pipeline. This summary does not alter episode metrics or benchmark schemas.
+    """
+
+    schema_version: str
+    status: str
+    steps: int
+    macro_actions: int
+    targeted_row_fraction: float
+    applied_residual_norm_mean: float
+    applied_residual_norm_max: float
+    applied_residual_norm_integral: float
+    nonzero_fraction: float
+    proposal_adjustment_fraction: float
+    finite: bool
+    bound_safe: bool
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable snapshot of the diagnostic summary."""
+        return {
+            "schema_version": self.schema_version,
+            "status": self.status,
+            "steps": self.steps,
+            "macro_actions": self.macro_actions,
+            "targeted_row_fraction": self.targeted_row_fraction,
+            "applied_residual_norm_mean": self.applied_residual_norm_mean,
+            "applied_residual_norm_max": self.applied_residual_norm_max,
+            "applied_residual_norm_integral": self.applied_residual_norm_integral,
+            "nonzero_fraction": self.nonzero_fraction,
+            "proposal_adjustment_fraction": self.proposal_adjustment_fraction,
+            "finite": self.finite,
+            "bound_safe": self.bound_safe,
+        }
 
 
 class ResidualAdversaryPolicy(Protocol):
@@ -1154,6 +1201,14 @@ class BoundedResidualAdversary:
     _macro_steps: int = field(init=False, default=1, repr=False)
     _target_mask: np.ndarray = field(init=False, repr=False)
     _target_indices: np.ndarray = field(init=False, repr=False)
+    _summary_norm_sum: float = field(init=False, default=0.0, repr=False)
+    _summary_norm_max: float = field(init=False, default=0.0, repr=False)
+    _summary_norm_sample_count: int = field(init=False, default=0, repr=False)
+    _summary_nonzero_sample_count: int = field(init=False, default=0, repr=False)
+    _summary_adjusted_proposal_count: int = field(init=False, default=0, repr=False)
+    _summary_finite: bool = field(init=False, default=True, repr=False)
+    _summary_bound_safe: bool = field(init=False, default=True, repr=False)
+    _summary_invalid: bool = field(init=False, default=False, repr=False)
 
     def __post_init__(self) -> None:
         """Validate sizing and initialize the held-residual and cadence state."""
@@ -1188,6 +1243,87 @@ class BoundedResidualAdversary:
     def last_residual(self) -> np.ndarray:
         """Return a copy of the residual applied on the most recent step."""
         return self._last_residual.copy()
+
+    @property
+    def behavior_summary(self) -> ResidualAdversaryBehaviorSummary:
+        """Return an immutable diagnostic summary of the applied residual behavior."""
+        sample_count = self._summary_norm_sample_count
+        targeted_row_fraction = (
+            float(np.count_nonzero(self._target_mask)) / self.num_peds if self.num_peds else 0.0
+        )
+        status = "invalid" if self._summary_invalid else "valid"
+        if not self.config.is_active:
+            status = "inactive"
+        return ResidualAdversaryBehaviorSummary(
+            schema_version=RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION,
+            status=status,
+            steps=self._step_index,
+            macro_actions=self._macro_action_index,
+            targeted_row_fraction=targeted_row_fraction,
+            applied_residual_norm_mean=(
+                self._summary_norm_sum / sample_count if sample_count else 0.0
+            ),
+            applied_residual_norm_max=self._summary_norm_max,
+            applied_residual_norm_integral=self._summary_norm_sum * self.dt_s,
+            nonzero_fraction=(
+                float(self._summary_nonzero_sample_count) / sample_count if sample_count else 0.0
+            ),
+            proposal_adjustment_fraction=(
+                float(self._summary_adjusted_proposal_count) / self._macro_action_index
+                if self._macro_action_index
+                else 0.0
+            ),
+            finite=self._summary_finite,
+            bound_safe=self._summary_bound_safe,
+        )
+
+    def _mark_summary_invalid(self, *, finite: bool = True) -> None:
+        """Record a failed step without weakening the fail-closed exception path."""
+        self._summary_invalid = True
+        self._summary_bound_safe = False
+        if not finite:
+            self._summary_finite = False
+
+    def _record_applied_residual(self, residual: np.ndarray) -> None:
+        """Accumulate finite output-row accounting for the diagnostic summary."""
+        residual_array = np.asarray(residual, dtype=float)
+        if not np.all(np.isfinite(residual_array)):
+            self._mark_summary_invalid(finite=False)
+            return
+        norms = np.linalg.norm(residual_array, axis=1)
+        if norms.size:
+            self._summary_norm_sum += float(np.sum(norms))
+            self._summary_norm_max = max(self._summary_norm_max, float(np.max(norms)))
+            self._summary_norm_sample_count += int(norms.size)
+            self._summary_nonzero_sample_count += int(np.count_nonzero(norms > EPSILON))
+        if np.any(norms > self.config.max_residual_accel_mps2 + EPSILON):
+            self._summary_bound_safe = False
+        if np.any(~self._target_mask & (norms > EPSILON)):
+            self._summary_bound_safe = False
+
+    def _record_proposal_adjustment(self, proposal: np.ndarray, applied: np.ndarray) -> None:
+        """Record whether a macro proposal changed in the bound pipeline."""
+        proposal_targeted = proposal * self._target_mask[:, None]
+        if np.any(np.linalg.norm(applied - proposal_targeted, axis=1) > EPSILON):
+            self._summary_adjusted_proposal_count += 1
+
+    def _record_proposal_adjustment_if_present(
+        self, proposal: np.ndarray | None, applied: np.ndarray
+    ) -> None:
+        """Record a proposal adjustment only on macro-action boundary steps."""
+        if proposal is not None:
+            self._record_proposal_adjustment(proposal, applied)
+
+    def _reset_behavior_summary(self) -> None:
+        """Clear accumulated diagnostic counters and validity flags."""
+        self._summary_norm_sum = 0.0
+        self._summary_norm_max = 0.0
+        self._summary_norm_sample_count = 0
+        self._summary_nonzero_sample_count = 0
+        self._summary_adjusted_proposal_count = 0
+        self._summary_finite = True
+        self._summary_bound_safe = True
+        self._summary_invalid = False
 
     def _apply_non_jerk_bounds(
         self,
@@ -1334,6 +1470,20 @@ class BoundedResidualAdversary:
         max_speeds: np.ndarray,
         robot_pose: RobotPose,
     ) -> np.ndarray:
+        """Return a bounded residual and classify any failed execution."""
+        try:
+            return self._step_residual(positions, velocities, max_speeds, robot_pose)
+        except (TypeError, ValueError, ResidualBoundConflictError) as exc:
+            self._mark_summary_invalid(finite="finite" not in str(exc))
+            raise
+
+    def _step_residual(
+        self,
+        positions: np.ndarray,
+        velocities: np.ndarray,
+        max_speeds: np.ndarray,
+        robot_pose: RobotPose,
+    ) -> np.ndarray:
         """Return the bounded ``(N, 2)`` residual acceleration to add to ped forces.
 
         On each macro-action boundary (``step_index % macro_steps == 0``) a fresh
@@ -1359,11 +1509,13 @@ class BoundedResidualAdversary:
         if not self.config.is_active:
             self._step_index += 1
             self._last_residual = np.zeros((self.num_peds, 2), dtype=float)
+            self._record_applied_residual(self._last_residual)
             return self._last_residual.copy()
 
         if self.num_peds == 0:
             self._step_index += 1
             self._last_residual = np.zeros((0, 2), dtype=float)
+            self._record_applied_residual(self._last_residual)
             return self._last_residual.copy()
 
         # An out-of-range target selection intentionally targets no one. Avoid
@@ -1374,11 +1526,13 @@ class BoundedResidualAdversary:
         if not np.any(self._target_mask):
             self._step_index += 1
             self._last_residual = np.zeros((self.num_peds, 2), dtype=float)
+            self._record_applied_residual(self._last_residual)
             return self._last_residual.copy()
 
         normalized_robot_pose = _normalize_robot_pose(robot_pose)
 
         sim_time_s = self._step_index * self.dt_s
+        proposal_for_adjustment: np.ndarray | None = None
         if self._step_index % self._macro_steps == 0:
             observation = ResidualAdversaryObservation(
                 positions=_readonly_array_snapshot(positions_array),
@@ -1400,6 +1554,7 @@ class BoundedResidualAdversary:
                 )
             self._held_proposal = proposal.copy()
             self._macro_action_index += 1
+            proposal_for_adjustment = proposal.copy()
 
         # Zero out non-targeted rows before bounding so only targets are perturbed.
         bounded = self._held_proposal * self._target_mask[:, None]
@@ -1421,6 +1576,8 @@ class BoundedResidualAdversary:
                 "jerk and non-jerk residual bounds are infeasible; residual not applied"
             )
         self._last_residual = bounded
+        self._record_applied_residual(bounded)
+        self._record_proposal_adjustment_if_present(proposal_for_adjustment, bounded)
         self._step_index += 1
         return bounded.copy()
 
@@ -1430,6 +1587,7 @@ class BoundedResidualAdversary:
         self._held_proposal = np.zeros((self.num_peds, 2), dtype=float)
         self._step_index = 0
         self._macro_action_index = 0
+        self._reset_behavior_summary()
 
 
 def build_default_residual_adversary(
@@ -1506,7 +1664,9 @@ def residual_displacement_from_accel(accel: np.ndarray, dt_s: float) -> np.ndarr
 __all__ = [
     "DEFAULT_MACRO_ACTION_DT_S",
     "EPSILON",
+    "RESIDUAL_ADVERSARY_BEHAVIOR_SCHEMA_VERSION",
     "BoundedResidualAdversary",
+    "ResidualAdversaryBehaviorSummary",
     "ResidualAdversaryConfig",
     "ResidualAdversaryObservation",
     "ResidualAdversaryPolicy",

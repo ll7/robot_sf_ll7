@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_confirmation import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_confirmation import (
     validate_package_b_confirmation,
 )
 

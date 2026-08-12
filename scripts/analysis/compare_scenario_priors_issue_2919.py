@@ -19,6 +19,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.research.scenario_prior_staging_contract import (
     CONTRACT_STATUS_READY,
     ScenarioPriorStagingContractError,
@@ -781,10 +782,7 @@ def write_summary(
             "summary_json": (output_dir / SUMMARY_NAME).relative_to(repo_root).as_posix(),
         },
     }
-    (output_dir / SUMMARY_NAME).write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / SUMMARY_NAME, payload)
     return payload
 
 
@@ -867,7 +865,7 @@ def write_markdown_report(
             "",
         ]
     )
-    (output_dir / REPORT_NAME).write_text("\n".join(lines), encoding="utf-8")
+    write_text(output_dir / REPORT_NAME, "\n".join(lines), issue_ref="robot_sf#2919")
 
 
 def run_comparison(

@@ -63,6 +63,61 @@ agent-assisted work, use [`AGENTS.md`](AGENTS.md).
 
 ---
 
+## Issue state labels and dispatch
+
+Issue `state:*` labels describe *what kind of state* an issue is in, not whether a worker can pick
+it up right now. When triaging supply — especially for compute-bound `resource:slurm` (SLURM is a
+cluster workload manager) issues — the question that matters is **dispatchability**: whether an
+issue is ready for a worker to start on.
+
+**`state:ready` is the sole positive dispatch signal.** An issue is dispatchable when it carries
+`state:ready` and no contradictory state label (for example, not also `state:running`,
+`state:blocked`, or `parked`). Two consequences that are easy to read backwards:
+
+- **Absence of `state:blocked` implies nothing.** An issue with no `state:*` label at all is *not*
+  workable — it is undispatchable and unlabeled, not a free issue. An empty state column reads as
+  "available" in every issue-list view, but it is not; route the issue through preparation rather
+  than picking it up.
+- A `resource:*` label by itself is never a dispatch signal. It only names the compute lane an
+  issue would need *once* dispatched.
+
+Worked examples (re-check the labels on GitHub before acting):
+
+| Labels on the issue | Dispatchable? |
+|---|---|
+| `state:ready` and no contradictory `state:*` label | Yes. As of writing, #6095 is the single open `resource:slurm` issue that satisfies this. |
+| `state:running` | No — already in progress (e.g. #6127). |
+| `state:blocked`, `parked`, or any single non-`ready` state label | No. |
+| no `state:*` label at all | No — undispatchable, not free work. |
+
+### The authoritative gate lives in the orchestrator repository
+
+The dispatch verdict that matters operationally is produced by the **preparation gate in the
+orchestrator repository** (`ll7_factory_v2_policy.py`, kept in that repository's `scripts/`
+directory), not by this repository. In simplified form, that gate returns `ready` only when
+`state:ready` is present *and* the issue's
+state is coherent, and returns `prepare` otherwise. `prepare` is the fall-through verdict for
+"missing `state:ready`" — **not** a statement that the issue is unblocked — so a `prepare` verdict
+and a `state:blocked` label agree with each other rather than contradicting.
+
+This repository intentionally **does not maintain** a live count of how many open `resource:*`
+issues have a label set that disagrees with the preparation-gate verdict. That count depends on the
+orchestrator's preparation store, which is not part of `robot_sf_ll7`; recomputing it here would
+diverge from the canonical gate. For the current count, read the gate verdict directly from the
+orchestrator.
+
+### Auditing dispatch state: exclude snapshot rows
+
+Any future audit that asks "what was the latest preparation verdict for this issue" must exclude
+`snapshot:` preparation rows. The preparation store re-upserts a row whose `preparation_id` matches
+`snapshot:%` on every sweep, so an `observed_at`-ordered "latest" lookup that does not exclude them
+reads the cycle's own intent back as if a worker had produced it. The correct predicate is
+`preparation_id NOT LIKE 'snapshot:%'` (the trap and the predicate are documented in the
+orchestrator's `ll7_factory_v2.py` script, under that repository's `scripts/` directory).
+Excluding snapshot rows is what keeps a gate-versus-label comparison honest.
+
+---
+
 ## Contributing Code
 
 ### Step 1: Set Up Development Environment

@@ -1,5 +1,31 @@
 # Context Retrieval Index
 
+Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
+`issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
+successor to the historical three-seed diagnostic, freezing six search seeds per method,
+64 candidates per seed per method (384 per method, 768 total with complete
+intention-to-search accounting), the merged PR #6586 runtime-effective candidate space,
+exact cluster-level inference over C(12,6)=924 arm-label assignments, the unweakened
+positive gate, the `issue_5303_search_promotion_result.v2` terminal result schema
+(downstream activation only on `promote` plus at least five admitted candidates plus
+verified hashes), and the deterministic 768-identity check-only manifest. It does not
+authorize the #6145 campaign and rejects the historical v1 contract for promotion-capable
+execution:
+[README.md](evidence/issue_5303_search_promotion_powered_preregistration/README.md).
+
+Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
+[issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
+
+Issue #6875 camera-ready campaign producer for the diagnostic-only
+`report_crosswalk.v1` sidecar, with exact source-artifact/episode provenance,
+fail-closed serialized execution-monitor handling, and final-summary propagation:
+[issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md).
+
+Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
+four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
+gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:
+[issue_6561_pedestrian_speed_protocol.md](issue_6561_pedestrian_speed_protocol.md).
+
 Issue #6103 / Issue #3275 same-planner held-out contract: six frozen eligible
 fit anchors, cross-family same-planner evaluation, exact per-arm outcome
 admission, and the pending human-review boundary:
@@ -32,6 +58,13 @@ fail-closed cross-arm non-radius consistency checks. Gate 1 runtime binding is a
 the configs are still not benchmark evidence and production compute remains blocked by
 the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
+
+Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle for #6600:
+the analysis tooling is merged and fails closed, while the scientific analysis remains
+blocked until Gate 2 supplies complete row identities or a fail-closed missingness ledger.
+The current diagnostic-only handoff, exact reproduction command, and no-verdict boundary are
+recorded here:
+[issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
@@ -104,11 +137,52 @@ campaign evidence remains blocked on a SLURM-capable worker):
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
 
+Issue #6464 BRNE corridor diagnostic: exact native preflight on three frozen
+seeds, non-degenerate execution and goal-reaching counts, fail-closed fallback
+handling, and the bounded `0/3` goal-reaching finding that requires a
+hypothesis-driven follow-up before any benchmark or ranking proposal:
+[issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
+[evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
+
+Issue #6934 BRNE action-weight scaling: upstream source and ROS-controller
+inspection proved that mean-normalized weights require a sample mean at the
+Robot SF adapter boundary; the bounded fix passed the exact three-seed corridor
+diagnostic but did not change the `0/3` goal-reaching boundary:
+[issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md),
+[evidence/issue_6934_brne_action_scaling_summary.json](evidence/issue_6934_brne_action_scaling_summary.json).
+The residual progress mechanism is tracked separately in
+[#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
+
+Issue #6938 BRNE progress mechanism: exact native traces separate pre-clamp and
+selected actions, show no clipping or gross heading/frame mismatch in the frozen
+slice, and reproduce a common post-initial-step low-speed command with positive
+phase progress but `0/3` goal-reaching:
+[issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
+[evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
+
+Issue #6944 BRNE candidate transition: bounded native candidate/weight summaries
+show the candidate distribution itself shifts from `0.400` to `0.040` m/s
+while mean-normalized weights remain uniform; weighting/normalization is
+narrowed as a null explanation, but upstream candidate generation, planner
+state, and control-horizon causes remain unresolved and diagnostic-only:
+[issue_6944_brne_candidate_transition.md](issue_6944_brne_candidate_transition.md),
+[evidence/issue_6944_brne_candidate_transition_summary.json](evidence/issue_6944_brne_candidate_transition_summary.json).
+
+Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
+`orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The
+result measures projection divergence only; it is not benchmark evidence and does not retire the
+ORCA dissertation hedge:
+[issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
+[evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 
 Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
+
+Multi-seed measured emergent-phenomena campaign (10 seeds per scenario x calibration, per-seed run records, aggregate statistics, full provenance manifest) elevating the pinned single-seed exhibit to measured face-validity evidence:
+[README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
 
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).
@@ -227,7 +301,8 @@ or the normal diff wrapper.
 
 | Area | Current entry points | Use for |
 |---|---|---|
-| Agent workflow | [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md), [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md), [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md), [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md), [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md), [Agent Workflow Lessons memory](../../memory/workflows/2026-05-31_agent_workflow_lessons.md) | Issue-to-PR loops, research-result mode, queue exhaustion, batching, issue splitting, state-label routing, live-state checks, delegated-worker proof boundaries, skill consolidation candidates, and GitHub workflow policy. |
+| Diagnosis and execution report crosswalk | [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md) | Versioned episode/campaign reporting crosswalk for deterministic failure diagnosis and execution-deviation monitoring, including denominators, provenance, fallback/degraded states, and diagnostic-only claim boundaries. |
+| Agent workflow | [goal_driven_agent_loops_2026-05-13.md](goal_driven_agent_loops_2026-05-13.md), [open_issue_execution_improvement_plan_2026-05-30.md](open_issue_execution_improvement_plan_2026-05-30.md), [issue_713_batch_first_issue_workflow.md](issue_713_batch_first_issue_workflow.md), [issue_audit_contract.md](issue_audit_contract.md), [issue_1776_state_label_routing.md](issue_1776_state_label_routing.md), [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md), [Agent Workflow Lessons memory](../../memory/workflows/2026-05-31_agent_workflow_lessons.md) | Issue-to-PR loops, research-result mode, queue exhaustion, batching, issue splitting, state-label routing, live-state checks, deterministic versus interactive issue-audit authority, one-at-a-time decision envelopes, delegated-worker proof boundaries, skill consolidation candidates, and GitHub workflow policy. |
 | PR workflow contracts | [issue_3472_pr_body_contracts.md](issue_3472_pr_body_contracts.md), [../code_review.md](../code_review.md) | Live PR body, follow-up disposition, and domain-aware approval CI guard for reviewability and evidence-validity-sensitive PRs. |
 | Context architecture | This file, [../ai/context_packing.md](../ai/context_packing.md), [../ai/retrieval_deferral.md](../ai/retrieval_deferral.md), [issue_728_coding_agents_compatibility.md](issue_728_coding_agents_compatibility.md) | Context-pack decisions, optional external tools, Markdown-first retrieval, and cross-agent compatibility. |
 | Research-engine guide | [../researchers_guide.md](../researchers_guide.md), [research_month_one_synthesis_2026-06.md](research_month_one_synthesis_2026-06.md) | How to define a research question, choose an evidence tier, author a campaign manifest, run validation, interpret evidence grades, and the epic #3057 month-one landed-vs-pending synthesis. Synthesis/docs only — no new benchmark claim. |
@@ -261,6 +336,7 @@ or the normal diff wrapper.
 | Root layout and cleanup | [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md), [issue_2035_path_reference_audit.md](issue_2035_path_reference_audit.md), [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md) | Current root-structure migration, path-reference cleanup validation, and the historical root-layout inventory retained as provenance. Superseded root-layout notes stay discoverable through `catalog.yaml` and the cleanup notes below instead of acting as current entry points. |
 | Adversarial search | [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md), [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md), [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md), [issue_3292_rare_event_probability_plan.md](issue_3292_rare_event_probability_plan.md), [issue_3474_seed_overlap_policy.md](issue_3474_seed_overlap_policy.md), [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md), [issue_2529_llm_manifest_interface.md](issue_2529_llm_manifest_interface.md), [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md), [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md), [issue_3281_naturalistic_vru_priors.md](issue_3281_naturalistic_vru_priors.md), [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md), [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md), [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md), [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md), [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md), [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md), [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md), [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md), [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md), [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md), [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md), [../ai/awesome_copilot_adaptation.md](../ai/awesome_copilot_adaptation.md) | Current #4360 dispatchable inventory and runbook, reactive residual-adversary capability contract, cross-method adversarial generation roadmap, rare-event probability language gates and compact pilot plan, seed-overlap policy for held-out proposal-vs-random evidence, validator-backed manifest generation, guarded LLM-to-manifest interface, route-materialized planner smoke, compact manifest quality metrics, additive naturalistic VRU prior metadata, learned-expansion gate, generated-manifest collision/low-progress smoke, validator-runner compact evidence smoke, generator-readiness and training-readiness gates, bounded generation, manifest freeze, smoke packets, two-family execution evidence, replay determinism, head-on replay determinism, stress synthesis, and workflow adaptation. |
 | Manual control and trace analysis | [issue_1151_manual_control_mvp_foundation.md](issue_1151_manual_control_mvp_foundation.md), [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md), [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md), [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md), [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md), [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md), [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md), [issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md), [issue_3278_real_trace_validation_contract.md](issue_3278_real_trace_validation_contract.md), [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md), [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md), [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md), [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md), [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md), [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md), [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md), [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md), [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md), [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md), [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md), [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md), [issue_1646_analysis_workbench_closeout.md](issue_1646_analysis_workbench_closeout.md), [../debug_visualization.md](../debug_visualization.md) | Recorder workflows, trace export shape, real-trace viewer smoke evidence, trace-mechanism evidence levels, nonzero mechanism-signal gate, trace-level failure predicates with fail-closed `not_available` rows, denominator-aware predicate-table diagnostic evidence, the proposed predeclared trace-predicate benchmark matrix, the metadata-only real-trace validation-contract checker for candidate micromobility datasets, mechanism activation report fields, mechanism-panel input readiness, first AMMV/default diagnostic trace-panel bundle, first compact mechanism-evidence figure pack from existing tracked traces, candidate-trace blockers, AMMV single-row step-export proof, authored waiting/crossing trace metadata, trace-only signal-state proxy smoke, cyclist-like VRU proxy trace metadata, topology-hypothesis explanation diagnostics, primary-route audit, score-overselection diagnostic, the #1646 analysis-workbench epic closeout audit (criterion→evidence map), and debug visualization boundaries. |
+| Worked-example process traces | [issue_6790_worked_example_process_trace.md](issue_6790_worked_example_process_trace.md) | Diagnostic-only `worked_example_process_trace.v1` schema, builder, CLI reproduction command, pair-compatibility gate, and fail-closed route/conflict/encounter/process diagnostics for renderer-neutral worked-example figures. |
 
 ## Catalog Status Cleanup Notes
 

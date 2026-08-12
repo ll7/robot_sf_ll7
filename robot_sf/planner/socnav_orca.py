@@ -1,7 +1,7 @@
 """ORCA + HRVO planner-family implementation extracted from the SocNav facade."""
 
 from dataclasses import dataclass
-from math import atan2, pi
+from math import acos, atan2, cos, pi, sin
 from typing import Any
 
 import numpy as np
@@ -13,6 +13,8 @@ from robot_sf.planner import socnav as _socnav
 SamplingPlannerAdapter = _socnav.SamplingPlannerAdapter
 SocNavPlannerConfig = _socnav.SocNavPlannerConfig
 SocNavPlannerPolicy = _socnav.SocNavPlannerPolicy
+
+_ORCA_ADAPTER_TRACE_SCHEMA_VERSION = "orca_adapter_trace.v1"
 
 
 class ORCAPlannerAdapter(SamplingPlannerAdapter):
@@ -54,6 +56,8 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self.config = config or SocNavPlannerConfig()
         self._allow_fallback = allow_fallback
         self._fallback_warned = False
+        self._adapter_trace: list[dict[str, Any]] = []
+        self._adapter_trace_step = 0
         self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
         self._bound_static_obstacle_spacing = 0.0
         self._rvo2_sim: Any | None = None
@@ -69,6 +73,8 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._last_goal_distance: float | None = None
         self._commit_side = 0
         self._commit_side_ttl = 0
+        self._adapter_trace.clear()
+        self._adapter_trace_step = 0
         self._clear_rvo2_simulator()
 
     def _clear_rvo2_simulator(self) -> None:
@@ -976,6 +982,12 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         """
         speed = float(np.linalg.norm(velocity_world))
         if speed < self._EPS:
+            self._record_adapter_trace(
+                velocity_world=velocity_world,
+                robot_heading=robot_heading,
+                linear=0.0,
+                angular=0.0,
+            )
             return 0.0, 0.0
         world_dir = self._normalize(np.asarray(velocity_world, dtype=float))
         world_dir, occ_penalty = self._get_safe_heading(robot_pos, world_dir, observation)
@@ -1000,7 +1012,132 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
                 * max(0.0, heading_scale),
             )
         )
+        self._record_adapter_trace(
+            velocity_world=velocity_world,
+            robot_heading=robot_heading,
+            linear=linear,
+            angular=angular,
+        )
         return linear, angular
+
+    def _record_adapter_trace(
+        self,
+        *,
+        velocity_world: np.ndarray,
+        robot_heading: float,
+        linear: float,
+        angular: float,
+    ) -> None:
+        """Capture one optional raw-velocity to unicycle-command projection record.
+
+        The realized world velocity is the instantaneous forward velocity implied by the
+        executed unicycle command at the current robot heading.  It intentionally does not
+        integrate the angular command over a timestep; this keeps the record a direct
+        projection diagnostic rather than a trajectory simulator.
+        """
+        if not bool(getattr(self.config, "orca_adapter_trace_enabled", False)):
+            return
+
+        planned = np.asarray(velocity_world, dtype=float).reshape(-1)[:2]
+        if (
+            planned.shape != (2,)
+            or not np.all(np.isfinite(planned))
+            or not np.isfinite(robot_heading)
+            or not np.isfinite(linear)
+            or not np.isfinite(angular)
+        ):
+            raise ValueError("ORCA adapter trace requires finite velocity and command values")
+        planned_speed = float(np.linalg.norm(planned))
+        realized = float(linear) * np.array(
+            [cos(float(robot_heading)), sin(float(robot_heading))], dtype=float
+        )
+        realized_speed = float(np.linalg.norm(realized))
+        if planned_speed > self._EPS and realized_speed > self._EPS:
+            cosine = float(np.dot(planned, realized) / (planned_speed * realized_speed))
+            angle_error = float(acos(float(np.clip(cosine, -1.0, 1.0))))
+        else:
+            angle_error = None
+
+        self._adapter_trace.append(
+            {
+                "schema_version": _ORCA_ADAPTER_TRACE_SCHEMA_VERSION,
+                "step": int(self._adapter_trace_step),
+                "robot_heading_rad": float(robot_heading),
+                "planned_velocity_world_mps": [float(planned[0]), float(planned[1])],
+                "planned_speed_mps": planned_speed,
+                "executed_command_vw": [float(linear), float(angular)],
+                "realized_velocity_world_mps": [float(realized[0]), float(realized[1])],
+                "executed_speed_mps": realized_speed,
+                "angle_error_rad": angle_error,
+                "speed_delta_mps": float(realized_speed - planned_speed),
+            }
+        )
+        self._adapter_trace_step += 1
+
+    def adapter_trace(self) -> list[dict[str, Any]]:
+        """Return a copy of the optional per-step adapter trace."""
+        return [
+            {
+                **record,
+                "planned_velocity_world_mps": list(record["planned_velocity_world_mps"]),
+                "executed_command_vw": list(record["executed_command_vw"]),
+                "realized_velocity_world_mps": list(record["realized_velocity_world_mps"]),
+            }
+            for record in self._adapter_trace
+        ]
+
+    def adapter_trace_summary(self) -> dict[str, Any]:
+        """Summarize optional adapter divergence records for diagnostic reports.
+
+        Returns:
+            JSON-safe summary containing sample counts and angle/speed percentiles.
+        """
+        enabled = bool(getattr(self.config, "orca_adapter_trace_enabled", False))
+        records = self._adapter_trace
+        summary: dict[str, Any] = {
+            "schema_version": _ORCA_ADAPTER_TRACE_SCHEMA_VERSION,
+            "enabled": enabled,
+            "sample_count": len(records),
+            "status": "available" if records else ("enabled_empty" if enabled else "disabled"),
+        }
+        if not records:
+            return summary
+
+        angle_values = np.asarray(
+            [
+                record["angle_error_rad"]
+                for record in records
+                if record["angle_error_rad"] is not None
+            ],
+            dtype=float,
+        )
+        speed_values = np.asarray([record["speed_delta_mps"] for record in records], dtype=float)
+        if angle_values.size:
+            summary.update(
+                {
+                    "angle_error_rad_mean": float(np.mean(angle_values)),
+                    "angle_error_rad_p50": float(np.percentile(angle_values, 50)),
+                    "angle_error_rad_p95": float(np.percentile(angle_values, 95)),
+                    "angle_sample_count": int(angle_values.size),
+                }
+            )
+        else:
+            summary.update(
+                {
+                    "angle_error_rad_mean": None,
+                    "angle_error_rad_p50": None,
+                    "angle_error_rad_p95": None,
+                    "angle_sample_count": 0,
+                }
+            )
+        summary.update(
+            {
+                "speed_delta_mps_mean": float(np.mean(speed_values)),
+                "speed_delta_mps_p50": float(np.percentile(speed_values, 50)),
+                "speed_delta_mps_p95": float(np.percentile(speed_values, 95)),
+            }
+        )
+        return summary
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using ORCA or the heuristic fallback.
@@ -1288,8 +1425,21 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         )
 
     def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "ORCAPlannerAdapter"}
+        """Return execution and optional adapter-projection diagnostics."""
+        payload: dict[str, Any] = {"planner_type": "ORCAPlannerAdapter"}
+        enabled = bool(getattr(getattr(self, "config", None), "orca_adapter_trace_enabled", False))
+        if not enabled:
+            return payload
+
+        payload.update(
+            {
+                "adapter_trace_schema_version": _ORCA_ADAPTER_TRACE_SCHEMA_VERSION,
+                "adapter_trace_enabled": True,
+                "adapter_trace_summary": self.adapter_trace_summary(),
+                "adapter_trace": self.adapter_trace(),
+            }
+        )
+        return payload
 
 
 class HRVOPlannerAdapter(ORCAPlannerAdapter):
@@ -1785,3 +1935,11 @@ def make_hrvo_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlanner
     """
 
     return SocNavPlannerPolicy(adapter=HRVOPlannerAdapter(config=config))
+
+
+__all__ = [
+    "HRVOPlannerAdapter",
+    "ORCAPlannerAdapter",
+    "make_hrvo_policy",
+    "make_orca_policy",
+]

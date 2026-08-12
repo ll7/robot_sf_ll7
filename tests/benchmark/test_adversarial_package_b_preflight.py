@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from robot_sf.benchmark.adversarial_package_b_preflight import preflight_package_b_manifest
+from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
+    preflight_package_b_manifest,
+)
 from scripts.tools import preflight_adversarial_package_b
 
 if TYPE_CHECKING:

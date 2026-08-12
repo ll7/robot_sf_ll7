@@ -1,0 +1,4 @@
+interface:
+  display_name: "Issue Audit Autonomous"
+  short_description: "Run safe unattended issue audits and queue maintainer decisions"
+  default_prompt: "Run the autonomous issue audit using the shared plan, apply only evidence-supported repairs, and emit the pending decision queue."

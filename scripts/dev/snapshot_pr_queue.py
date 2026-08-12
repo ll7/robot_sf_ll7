@@ -138,6 +138,113 @@ def _repo_owner_name(repo: str) -> tuple[str, str]:
     return owner, name
 
 
+def _is_graphql_quota_error(message: str) -> bool:
+    """Return whether a gh error message indicates GraphQL API rate-limit/quota exhaustion."""
+    text = (message or "").lower()
+    if "rate limit" not in text:
+        return False
+    return "graphql" in text or "api rate limit" in text or "too many requests" in text
+
+
+def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:
+    """Fetch a REST endpoint under ``repos/{owner}/{name}/{path}`` and parse JSON.
+
+    Returns the parsed payload, or ``None`` on any HTTP/JSON failure so callers can fall back
+    gracefully. REST remains available when the authenticated user's GraphQL quota is exhausted
+    (issue #6564).
+    """
+    owner, name = _repo_owner_name(repo)
+    if not owner or not name:
+        return None
+    result = _gh(["api", f"repos/{owner}/{name}/{path}"], timeout=timeout)
+    if result.returncode != 0:
+        return None
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
+    """Build a compact PR snapshot from REST endpoints when GraphQL quota is exhausted.
+
+    Maps REST pull/reviews/comments/check-runs payloads into the gh-JSON shape consumed by
+    ``_pr_payload_from_dict`` so the normal compacting logic is reused unchanged. Review threads
+    are GraphQL-only and have no REST endpoint, so the snapshot marks them
+    ``unknown_graphql_quota`` with a fail-closed admission note (issue #6564).
+    """
+    pull = _rest_api_get(f"pulls/{number}", repo=repo)
+    if not isinstance(pull, dict):
+        return {
+            "number": number,
+            "status": "error",
+            "error_kind": "graphql_quota_exhausted",
+            "error": "GraphQL quota exhausted and REST pull fallback failed",
+        }
+    head = pull.get("head") or {}
+    head_sha = str(head.get("sha", "") or "")
+    reviews_raw = _rest_api_get(f"pulls/{number}/reviews", repo=repo)
+    reviews = [
+        {
+            "state": str(review.get("state", "UNKNOWN") or "UNKNOWN"),
+            "authorAssociation": str(review.get("author_association", "") or ""),
+            "body": review.get("body", ""),
+        }
+        for review in (reviews_raw if isinstance(reviews_raw, list) else [])
+        if isinstance(review, dict)
+    ]
+    comments_raw = _rest_api_get(f"issues/{number}/comments", repo=repo)
+    comments = [
+        {
+            "authorAssociation": str(comment.get("author_association", "") or ""),
+            "body": comment.get("body", ""),
+        }
+        for comment in (comments_raw if isinstance(comments_raw, list) else [])
+        if isinstance(comment, dict)
+    ]
+    checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs", repo=repo)
+    check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": str(run.get("name", "") or ""),
+            "status": str(run.get("status", "") or ""),
+            "conclusion": run.get("conclusion") or "",
+            "detailsUrl": str(run.get("details_url", "") or ""),
+            "startedAt": str(run.get("started_at", "") or ""),
+            "workflowName": str(
+                (run.get("workflow") if isinstance(run, dict) else "")
+                or ((run.get("check_suite") or {}).get("workflow") if isinstance(run, dict) else "")
+                or ""
+            ),
+        }
+        for run in check_runs
+        if isinstance(run, dict)
+    ]
+    pr_dict = {
+        "number": pull.get("number", number),
+        "title": str(pull.get("title", "") or ""),
+        "state": str(pull.get("state", "") or ""),
+        "isDraft": bool(pull.get("draft")),
+        "labels": pull.get("labels", []) if isinstance(pull.get("labels"), list) else [],
+        "url": str(pull.get("html_url", "") or ""),
+        "headRefName": str(head.get("ref", "") or ""),
+        "headRefOid": head_sha,
+        "mergeable": str(pull.get("mergeable_state", "unknown") or "unknown").upper(),
+        "statusCheckRollup": rollup,
+        "reviews": reviews,
+        "comments": comments,
+    }
+    payload = _pr_payload_from_dict(
+        pr_dict, default_number=number, expected_head_sha=expected_head_sha
+    )
+    payload["data_source"] = "rest_fallback_graphql_quota"
+    payload["review_threads"] = "unknown_graphql_quota"
+    payload["review_threads_admission"] = "fail_closed_unknown"
+    payload["route_evidence_only"] = True
+    return payload
+
+
 def _dict_or_empty(value: Any) -> dict[str, Any]:
     """Return *value* when it is a dictionary, otherwise an empty dictionary."""
     return value if isinstance(value, dict) else {}
@@ -197,9 +304,19 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
         timeout=45,
     )
     if result.returncode != 0:
+        stderr = result.stderr.strip()
+        if _is_graphql_quota_error(stderr):
+            return {
+                "status": "unknown_graphql_quota",
+                "unresolved": None,
+                "guidance": (
+                    "GraphQL quota exhausted; review threads are GraphQL-only and cannot be "
+                    "refreshed via REST. Never admit a PR to merge-ready from this snapshot."
+                ),
+            }
         return {
             "status": "error",
-            "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            "error": stderr or f"gh returned exit code {result.returncode}",
         }
     try:
         payload = json.loads(result.stdout)
@@ -527,10 +644,13 @@ def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str
         ]
     )
     if result.returncode != 0:
+        stderr = result.stderr.strip()
+        if _is_graphql_quota_error(stderr):
+            return _fetch_pr_rest(number, repo=repo, expected_head_sha=expected_head_sha)
         return {
             "number": number,
             "status": "error",
-            "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            "error": stderr or f"gh returned exit code {result.returncode}",
         }
     try:
         pr = json.loads(result.stdout)

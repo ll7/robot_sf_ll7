@@ -11,6 +11,7 @@ world panels above three absolute-time tracks below.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -97,9 +98,14 @@ def render_publication_figure(
     metadata = {
         "Title": "RobotSF case workbench publication figure",
         "Creator": "robot_sf case-workbench.v1",
-        "Subject": "Observed trajectories and applied controls",
-        "CreationDate": None,
     }
+    if output_format.lower() == "pdf":
+        metadata.update(
+            {
+                "Subject": "Observed trajectories and applied controls",
+                "CreationDate": None,
+            }
+        )
     fig.savefig(output_path, format=output_format, metadata=metadata)
     plt.close(fig)
     sidecar = output_path.with_suffix(output_path.suffix + ".json")
@@ -107,7 +113,7 @@ def render_publication_figure(
         "schema_version": "case-publication-figure.v1",
         "case_ids": [case.get("case_id") for case in selected],
         "release_cell_counts": "see campaign-result-store.v2/cells.parquet",
-        "evidence_grain": "exact recorded trace; proposal not author-admitted",
+        "evidence_grain": "exact recorded trace; diagnostic preview only; proposal not author-admitted",
         "shared_prefix": False,
         "claim_boundary": "Observed result only; competing explanations remain open; no causal pivot.",
         "source_hashes": [case.get("provenance", {}).get("artifact_sha256") for case in selected],
@@ -123,17 +129,17 @@ def render_publication_figure(
             },
             "surface_clearance": {
                 "status": "available"
-                if any(_series(trace, "clearance") for trace in traces)
+                if any(_has_finite_series(_series(trace, "clearance")) for trace in traces)
                 else "unavailable"
             },
             "applied_speed": {
                 "status": "available"
-                if any(_series(trace, "speed") for trace in traces)
+                if any(_has_finite_series(_series(trace, "speed")) for trace in traces)
                 else "unavailable"
             },
             "applied_turn_rate": {
                 "status": "available"
-                if any(_series(trace, "turn") for trace in traces)
+                if any(_has_finite_series(_series(trace, "turn")) for trace in traces)
                 else "unavailable"
             },
         },
@@ -275,17 +281,27 @@ def _scatter_position(
 def _resolve_map_geometry(cases: list[dict[str, Any]]) -> Any | None:
     """Resolve static map geometry for a single-scenario comparison."""
 
-    scenario_ids = {
-        str(case.get("scenario_id")) for case in cases if case.get("scenario_id") not in (None, "")
-    }
-    if len(scenario_ids) != 1:
+    traces = [case.get("trace") for case in cases if isinstance(case.get("trace"), dict)]
+    map_paths = {str(trace.get("map_file")) for trace in traces if trace.get("map_file")}
+    map_hashes = {str(trace.get("map_digest")) for trace in traces if trace.get("map_digest")}
+    if len(map_paths) != 1 or len(map_hashes) != 1:
         return None
-    trace_scene = try_import("robot_sf.benchmark.trace_scene_figure")
-    if trace_scene is None:
+    map_path = Path(next(iter(map_paths)))
+    candidates = [map_path]
+    if not map_path.is_absolute():
+        candidates.extend([Path.cwd() / map_path, Path(__file__).resolve().parents[2] / map_path])
+    resolved = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if resolved is None:
         return None
     try:
-        return trace_scene._load_map_definition(next(iter(scenario_ids)))
-    except (KeyError, OSError, ValueError):
+        digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        if digest != next(iter(map_hashes)):
+            return None
+        svg_map = try_import("robot_sf.nav.svg_map_parser")
+        if svg_map is None:
+            return None
+        return svg_map.SvgMapConverter(str(resolved)).map_definition
+    except (KeyError, OSError, ValueError, AttributeError):
         return None
 
 
@@ -415,6 +431,12 @@ def _series(trace: dict[str, Any] | None, kind: str) -> list[float]:
     return _turn_series(trace)
 
 
+def _has_finite_series(values: list[float]) -> bool:
+    """Return whether a plotted series contains at least one finite observation."""
+
+    return any(np.isfinite(value) for value in values)
+
+
 def _event_times(trace: dict[str, Any]) -> list[float]:
     """Return sorted semantic event times from the recorded trace."""
 
@@ -422,8 +444,12 @@ def _event_times(trace: dict[str, Any]) -> list[float]:
     events = trace.get("events")
     if isinstance(events, list):
         for event in events:
-            if isinstance(event, dict) and isinstance(event.get("time_s"), (int, float)):
-                times.add(float(event["time_s"]))
+            if isinstance(event, dict):
+                value = event.get("time_s")
+                if value is None:
+                    value = event.get("collision_time")
+                if isinstance(value, (int, float)):
+                    times.add(float(value))
     for step in trace.get("steps", []):
         if (
             not isinstance(step, dict)
@@ -475,7 +501,7 @@ def _clearance_series(trace: dict[str, Any]) -> list[float]:
 
 
 def _speed_series(trace: dict[str, Any]) -> list[float]:
-    """Return the applied linear speed, with recorded velocity as a v1 fallback."""
+    """Return only explicitly recorded applied linear speed controls."""
 
     values: list[float] = []
     for step in trace.get("steps", []):
@@ -487,14 +513,7 @@ def _speed_series(trace: dict[str, Any]) -> list[float]:
         if isinstance(applied_speed, (int, float)):
             values.append(float(applied_speed))
             continue
-        velocity = (
-            step.get("robot", {}).get("velocity") if isinstance(step.get("robot"), dict) else None
-        )
-        values.append(
-            float(np.linalg.norm(np.asarray(velocity[:2], dtype=float)))
-            if isinstance(velocity, list) and len(velocity) >= 2
-            else float("nan")
-        )
+        values.append(float("nan"))
     return values
 
 

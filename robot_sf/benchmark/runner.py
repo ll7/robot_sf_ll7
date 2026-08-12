@@ -60,7 +60,12 @@ else:
     _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
-from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
+from robot_sf.benchmark.analysis_trace import (
+    build_analysis_trace,
+    normalize_telemetry_profile,
+    telemetry_from_scenario,
+    trace_artifact_sha256,
+)
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
     _CIRCUIT_BREAKER_MSG_PREFIX_LEN,
     DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
@@ -2081,6 +2086,60 @@ def _build_episode_record(
     return record
 
 
+def _build_lightweight_analysis_steps(
+    *,
+    robot_pos_traj: list[np.ndarray],
+    robot_vel_traj: list[np.ndarray],
+    peds_pos_traj: list[np.ndarray],
+    dt: float,
+    algo: str,
+) -> list[dict[str, Any]]:
+    """Adapt the non-map runner trajectory to the common trace envelope.
+
+    Returns:
+        Post-reset trace frames; unavailable fields remain explicit ``None`` values.
+    """
+
+    steps: list[dict[str, Any]] = []
+    for index in range(1, len(robot_pos_traj)):
+        robot_pos = np.asarray(robot_pos_traj[index], dtype=float).reshape(-1)[:2]
+        robot_vel = np.asarray(robot_vel_traj[index], dtype=float).reshape(-1)[:2]
+        current_peds = np.asarray(peds_pos_traj[index], dtype=float).reshape(-1, 2)
+        previous_peds = np.asarray(peds_pos_traj[index - 1], dtype=float).reshape(-1, 2)
+        pedestrians = []
+        for ped_index, position in enumerate(current_peds):
+            velocity = None
+            if ped_index < len(previous_peds):
+                velocity = ((position - previous_peds[ped_index]) / dt).tolist()
+            pedestrians.append(
+                {
+                    "id": ped_index,
+                    "position": position.tolist(),
+                    "velocity": velocity,
+                }
+            )
+        speed = float(np.linalg.norm(robot_vel)) if robot_vel.size >= 2 else None
+        steps.append(
+            {
+                "step": index - 1,
+                "time_s": float(index * dt),
+                "robot": {
+                    "position": robot_pos.tolist(),
+                    "heading": 0.0,
+                    "velocity": robot_vel.tolist(),
+                },
+                "pedestrians": pedestrians,
+                "planner": {"selected_action": {"planner": algo}},
+                "controls": {
+                    "requested": {"linear_m_s": speed, "turn_rate_rad_s": None},
+                    "applied": {"linear_m_s": speed, "turn_rate_rad_s": None},
+                },
+                "events": [],
+            }
+        )
+    return steps
+
+
 def run_episode(  # noqa: PLR0913
     scenario_params: dict[str, Any],
     seed: int,
@@ -2102,6 +2161,7 @@ def run_episode(  # noqa: PLR0913
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     provenance: dict[str, Any] | None = None,
+    telemetry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a single episode and return a metrics record dict.
 
@@ -2241,6 +2301,46 @@ def run_episode(  # noqa: PLR0913
         provenance=provenance,
     )
 
+    telemetry_payload = dict(scenario_params_record)
+    if telemetry is not None:
+        telemetry_payload["telemetry"] = telemetry
+    telemetry_profile = telemetry_from_scenario(telemetry_payload)
+    if telemetry_profile.analysis_enabled:
+        trace = build_analysis_trace(
+            steps=_build_lightweight_analysis_steps(
+                robot_pos_traj=robot_pos_traj,
+                robot_vel_traj=robot_vel_traj,
+                peds_pos_traj=peds_pos_traj,
+                dt=dt,
+                algo=algo,
+            ),
+            initial_robot_position=robot_pos_traj[0],
+            initial_robot_heading=0.0,
+            initial_pedestrians=peds_pos_traj[0],
+            initial_robot_velocity=robot_vel_traj[0],
+            initial_pedestrian_velocities=None,
+            dt=dt,
+            horizon=horizon,
+            robot_radius_m=robot_radius,
+            pedestrian_radius_m=ped_radius,
+            scenario=scenario_params_record,
+            planner=algo,
+            planner_commit=algo_metadata.get("planner_commit"),
+            config_hash=_config_hash(
+                {
+                    key: value
+                    for key, value in scenario_params_record.items()
+                    if key not in {"seed", "repeats"}
+                }
+            ),
+            git_hash=_git_hash_fallback(),
+            termination_reason=termination_reason,
+            safety_events=[],
+        )
+        record["algorithm_metadata"]["analysis_trace"] = trace
+        record["algorithm_metadata"]["telemetry"] = telemetry_profile.to_mapping()
+        record.setdefault("provenance", {})["artifact_sha256"] = trace_artifact_sha256(trace)
+
     steps_taken = max(0, len(robot_pos_traj) - 1)
 
     # Handle video
@@ -2338,6 +2438,7 @@ def _run_job_worker(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str
         ped_impact_radius_m=float(params.get("ped_impact_radius_m", 2.0)),
         ped_impact_window_steps=int(params.get("ped_impact_window_steps", 5)),
         provenance=params.get("provenance"),
+        telemetry=params.get("telemetry"),
     )
 
 
@@ -2603,6 +2704,7 @@ def _setup_fixed_params(  # noqa: PLR0913
     ped_impact_radius_m: float = 2.0,
     ped_impact_window_steps: int = 5,
     provenance: dict[str, Any] | None = None,
+    telemetry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Set up the fixed parameters dict for job execution.
 
@@ -2625,6 +2727,7 @@ def _setup_fixed_params(  # noqa: PLR0913
         "ped_impact_radius_m": float(ped_impact_radius_m),
         "ped_impact_window_steps": int(ped_impact_window_steps),
         "provenance": provenance,
+        "telemetry": telemetry,
     }
 
 
@@ -2916,6 +3019,7 @@ def run_batch(  # noqa: PLR0913
         ped_impact_radius_m,
         ped_impact_window_steps,
         provenance=provenance,
+        telemetry=telemetry,
     )
 
     # Filter jobs for resume

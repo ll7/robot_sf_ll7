@@ -1709,6 +1709,8 @@ class _EpisodeStepLoopResult:
     initial_robot_pos: np.ndarray
     initial_robot_heading: float
     initial_ped_positions: np.ndarray
+    initial_robot_velocity: np.ndarray | None
+    initial_ped_velocities: np.ndarray | None
     initial_goal_distance: float
     reached_goal_step: int | None
     termination_reason: str
@@ -1783,6 +1785,8 @@ class _StepLoopState:
     initial_robot_pos: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_heading: float = 0.0
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
+    initial_robot_velocity: np.ndarray | None = None
+    initial_ped_velocities: np.ndarray | None = None
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -1937,6 +1941,8 @@ def _init_step_loop_state(
     goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
+    initial_robot_velocity = _initial_robot_velocity(env.simulator)
+    initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
     initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
     state = _StepLoopState(obs=obs)
     state.hybrid_command_sources = [] if hybrid_source_field is not None else None
@@ -1948,8 +1954,60 @@ def _init_step_loop_state(
     state.goal_vec = goal_vec
     state.initial_robot_pos = initial_robot_pos
     state.initial_ped_positions = initial_ped_positions
+    state.initial_robot_velocity = initial_robot_velocity
+    state.initial_ped_velocities = initial_ped_velocities
     state.initial_goal_distance = initial_goal_distance
     return state
+
+
+def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
+    """Read the reset robot velocity without assuming a zero initial state.
+
+    Returns:
+        The finite reset velocity, or ``None`` when the simulator does not expose it.
+    """
+
+    direct = getattr(simulator, "robot_velocity_xy", None)
+    if direct is not None:
+        value = np.asarray(direct, dtype=float).reshape(-1)
+        if value.size >= 2 and np.isfinite(value[:2]).all():
+            return value[:2].copy()
+    robots = getattr(simulator, "robots", None)
+    if isinstance(robots, (list, tuple)) and robots:
+        state = getattr(robots[0], "state", None)
+        for name in ("velocity_xy", "robot_velocity_xy"):
+            value = getattr(state, name, None)
+            if value is not None:
+                array = np.asarray(value, dtype=float).reshape(-1)
+                if array.size >= 2 and np.isfinite(array[:2]).all():
+                    return array[:2].copy()
+    return None
+
+
+def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
+    """Read reset pedestrian velocities, preserving unavailable state explicitly.
+
+    Returns:
+        A finite ``(count, 2)`` array, or ``None`` when reset velocities are unavailable.
+    """
+
+    value = getattr(simulator, "ped_vel", None)
+    if value is None:
+        return None
+    array = np.asarray(value, dtype=float).reshape(-1, 2)
+    if array.shape[0] < count or not np.isfinite(array[:count]).all():
+        return None
+    return array[:count].copy()
+
+
+def _finite_positive_float(value: Any) -> float | None:
+    """Return a finite positive geometry value without substituting a default."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if np.isfinite(result) and result > 0.0 else None
 
 
 def _make_collision_event_context(
@@ -2566,6 +2624,8 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_robot_pos=state.initial_robot_pos,
         initial_robot_heading=state.initial_robot_heading,
         initial_ped_positions=state.initial_ped_positions,
+        initial_robot_velocity=state.initial_robot_velocity,
+        initial_ped_velocities=state.initial_ped_velocities,
         initial_goal_distance=state.initial_goal_distance,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
@@ -2972,6 +3032,9 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     initial_robot_pos: np.ndarray,
     initial_robot_heading: float,
     initial_ped_positions: np.ndarray,
+    initial_robot_velocity: np.ndarray | None,
+    initial_ped_velocities: np.ndarray | None,
+    horizon_val: int,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
 ) -> None:
@@ -3006,6 +3069,17 @@ def _finalize_trace_metadata(  # noqa: PLR0913
         )
         telemetry = telemetry_from_scenario(scenario)
         if telemetry.analysis_enabled:
+            robot_radius = _finite_positive_float(getattr(robot_config, "radius", None))
+            pedestrian_radius = _finite_positive_float(
+                getattr(config.sim_config, "ped_radius", None)
+            )
+            if robot_radius is None or pedestrian_radius is None:
+                algo_meta["analysis_trace_unavailable"] = {
+                    "status": "unavailable",
+                    "reason": "actor_radius_unavailable",
+                }
+                algo_meta["telemetry"] = telemetry.to_mapping()
+                return
             upstream_reference = algo_meta.get("upstream_reference")
             planner_commit = (
                 upstream_reference.get("commit")
@@ -3019,14 +3093,22 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_robot_position=initial_robot_pos,
                 initial_robot_heading=initial_robot_heading,
                 initial_pedestrians=initial_ped_positions,
+                initial_robot_velocity=initial_robot_velocity,
+                initial_pedestrian_velocities=initial_ped_velocities,
                 dt=float(config.sim_config.time_per_step_in_secs),
-                horizon=int(getattr(config.sim_config, "max_episode_steps", 0) or 0),
-                robot_radius_m=float(getattr(robot_config, "radius", 1.0) or 1.0),
-                pedestrian_radius_m=float(getattr(config.sim_config, "ped_radius", 0.4) or 0.4),
+                horizon=int(horizon_val),
+                robot_radius_m=robot_radius,
+                pedestrian_radius_m=pedestrian_radius,
                 scenario=scenario,
                 planner=str(algo_meta.get("algorithm") or algo_meta.get("algo") or "unknown"),
-                planner_commit=str(planner_commit) if planner_commit else _git_hash_fallback(),
-                config_hash=_config_hash(scenario),
+                planner_commit=str(planner_commit) if planner_commit else None,
+                config_hash=_config_hash(
+                    {
+                        key: value
+                        for key, value in scenario.items()
+                        if key not in {"seed", "repeats"}
+                    }
+                ),
                 git_hash=_git_hash_fallback(),
                 termination_reason=termination_reason,
                 safety_events=safety_events,
@@ -3316,6 +3398,9 @@ def _finalize_metadata_outputs(
         initial_robot_pos=loop_result.initial_robot_pos,
         initial_robot_heading=loop_result.initial_robot_heading,
         initial_ped_positions=loop_result.initial_ped_positions,
+        initial_robot_velocity=loop_result.initial_robot_velocity,
+        initial_ped_velocities=loop_result.initial_ped_velocities,
+        horizon_val=ctx.horizon_val,
         termination_reason=loop_result.termination_reason,
         safety_events=loop_result.collision_events,
     )

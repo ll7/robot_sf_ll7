@@ -12,11 +12,12 @@ if TYPE_CHECKING:
 
 from robot_sf.benchmark.analysis_trace import build_analysis_trace, canonical_json, trace_coverage
 from robot_sf.benchmark.case_publication_figure import render_publication_figure
-from robot_sf.benchmark.case_workbench import analyze_cases, apply_admission_overlay
+from robot_sf.benchmark.case_workbench import _candidate, analyze_cases, apply_admission_overlay
 from robot_sf.benchmark.parquet_export import (
     derive_episode_metrics,
     export_campaign_result_store_v2,
 )
+from scripts.tools.trace_viewer import load_episode_bundles, prepared_package_dirs
 
 
 def _trace(seed: int, *, collision: bool = False) -> dict:
@@ -42,6 +43,9 @@ def _trace(seed: int, *, collision: bool = False) -> dict:
         initial_robot_position=[0.0, 0.0],
         initial_robot_heading=0.0,
         initial_pedestrians=[[1.0, 0.0]],
+        initial_robot_velocity=[0.0, 0.0],
+        initial_pedestrian_velocities=[[0.0, 0.0]],
+        initial_pedestrian_ids=[0],
         dt=0.1,
         horizon=1,
         robot_radius_m=0.25,
@@ -53,7 +57,7 @@ def _trace(seed: int, *, collision: bool = False) -> dict:
         },
         planner="ppo",
         planner_commit="commit",
-        config_hash=f"config-{seed}",
+        config_hash="config-doorway",
         git_hash="commit",
         termination_reason="collision" if collision else "max_steps",
         safety_events=[{"event_type": "collision", "time_s": 0.1}] if collision else [],
@@ -72,7 +76,10 @@ def _record(seed: int, *, collision: bool = False) -> dict:
         "status": "collision" if collision else "success",
         "row_status": "native",
         "outcome": {"collision": collision, "success": not collision},
-        "provenance": {"artifact_uri": f"trace-{seed}.json", "artifact_sha256": f"sha-{seed}"},
+        "provenance": {
+            "artifact_uri": f"trace-{seed}.json",
+            "artifact_sha256": trace["artifact_sha256"],
+        },
         "metrics": {
             "surface_clearance_min": -0.1 if collision else 0.2,
             "progress": 1.0,
@@ -96,6 +103,30 @@ def test_analysis_trace_has_explicit_initial_state_and_coverage() -> None:
     assert steps[0]["time_s"] == 0.0
     assert steps[0]["robot"]["actor_id"] == "robot"
     assert steps[0]["pedestrians"][0]["radius_m"] == 0.25
+
+
+def test_trace_coverage_fails_closed_for_missing_reset_state_and_map() -> None:
+    """Absent reset velocities or map provenance cannot be promoted to complete."""
+
+    trace = _trace(113)
+    trace["steps"][0]["robot"]["velocity"] = None
+    trace["steps"][0]["pedestrians"][0]["velocity"] = None
+    trace["map_digest"] = None
+    record = {"algorithm_metadata": {"analysis_trace": trace}}
+    coverage = trace_coverage(record)
+    assert coverage["status"] == "unavailable"
+    assert "finite_states" in coverage["reasons"]
+    assert "provenance" in coverage["reasons"]
+
+
+def test_canonical_outcome_fields_drive_collision_selection() -> None:
+    """Release outcome keys are not silently downgraded to legacy aliases."""
+
+    record = _record(113)
+    record["outcome"] = {"route_complete": False, "collision_event": True}
+    candidate = _candidate(record)
+    assert candidate["outcome"]["collision"] is True
+    assert candidate["outcome"]["success"] is False
 
 
 def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_path: Path) -> None:
@@ -129,13 +160,17 @@ def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_pat
     assert (output / "viewer_blueprint.json").is_file()
     assert (output / "audit_dossier.json").is_file()
     assert (output / "audit_dossier.md").is_file()
-    assert (output / "publication" / "figure.pdf").is_file()
-    sidecar = json.loads((output / "publication" / "figure.pdf.json").read_text(encoding="utf-8"))
+    assert (output / "publication" / "figure.preview.pdf").is_file()
+    sidecar = json.loads(
+        (output / "publication" / "figure.preview.pdf.json").read_text(encoding="utf-8")
+    )
     assert sidecar["panels"]["world"]["map_geometry"] == "available"
     assert sidecar["shared_prefix"] is False
     repeat_figure = tmp_path / "repeat-figure.pdf"
     render_publication_figure(output, output=repeat_figure)
-    assert (output / "publication" / "figure.pdf").read_bytes() == repeat_figure.read_bytes()
+    assert (
+        output / "publication" / "figure.preview.pdf"
+    ).read_bytes() == repeat_figure.read_bytes()
     assert (output / "campaign-result-store.v2").is_dir()
 
 
@@ -280,6 +315,25 @@ def test_campaign_result_store_v2_pair_receipt_derives_only_compatible_deltas(
     assert comparison["control_sequence_difference"] == 0.0
 
 
+def test_package_viewer_and_svg_preview_contracts(tmp_path: Path) -> None:
+    """The package adapter satisfies the viewer schema and SVG uses valid metadata."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    package = tmp_path / "package"
+    proposal = analyze_cases(
+        config_path="configs/analysis/case_workbench.v1.yaml",
+        result_store=source,
+        output=package,
+    )
+    case_id = proposal["portfolio"][0]["case_id"]
+    with prepared_package_dirs(package, case_id=case_id) as bundle_dirs:
+        assert len(load_episode_bundles(bundle_dirs)) == 1
+    svg = tmp_path / "figure.svg"
+    render_publication_figure(package, case_id=case_id, output=svg, output_format="svg")
+    assert svg.is_file()
+
+
 def test_trace_metric_formulas_keep_units_and_timing_explicit() -> None:
     """Core case features derive from the trace without duration normalization."""
 
@@ -321,6 +375,9 @@ def test_trace_metric_formulas_keep_units_and_timing_explicit() -> None:
         initial_robot_position=[0.0, 0.0],
         initial_robot_heading=0.0,
         initial_pedestrians=[[2.0, 0.0]],
+        initial_robot_velocity=[0.0, 0.0],
+        initial_pedestrian_velocities=[[0.0, 0.0]],
+        initial_pedestrian_ids=[0],
         dt=0.1,
         horizon=2,
         robot_radius_m=0.25,

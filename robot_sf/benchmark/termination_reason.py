@@ -15,6 +15,39 @@ TERMINATION_REASONS: tuple[str, ...] = (
 )
 
 
+def canonical_outcome_flags(outcome: Mapping[str, Any] | None) -> tuple[bool, bool]:
+    """Return route-complete and collision flags with canonical-key precedence.
+
+    The release runner uses ``route_complete`` and ``collision_event`` while
+    older JSONL artifacts use ``success`` and ``collision``.  Canonical keys
+    win when both vocabularies are present; this prevents a stale legacy alias
+    from turning a known false canonical flag into true.
+
+    Returns:
+        ``(route_complete, collision_event)`` as strict boolean values.
+    """
+
+    if not isinstance(outcome, Mapping):
+        return False, False
+    route_key = "route_complete" if "route_complete" in outcome else "success"
+    collision_key = "collision_event" if "collision_event" in outcome else "collision"
+    return _strict_bool(outcome.get(route_key)), _strict_bool(outcome.get(collision_key))
+
+
+def _strict_bool(value: Any) -> bool:
+    """Parse only actual booleans and numeric 0/1 values.
+
+    Returns:
+        A strict boolean result; all other values become ``False``.
+    """
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    return False
+
+
 def route_complete_success(info: Mapping[str, Any] | None) -> bool:
     """Return success based strictly on route completion."""
     if not isinstance(info, Mapping):

@@ -389,6 +389,20 @@ def prepared_package_dirs(
             bundle.mkdir(parents=True, exist_ok=True)
             frames = [frame for frame in trace["steps"] if isinstance(frame, dict)]
             derived_rows = _package_derived_rows(frames)
+            finite_distances = [
+                (float(row["min_robot_ped_distance_m"]), int(row["step"]))
+                for row in derived_rows
+                if isinstance(row.get("min_robot_ped_distance_m"), (int, float))
+                and math.isfinite(float(row["min_robot_ped_distance_m"]))
+            ]
+            if not finite_distances:
+                raise TraceViewerError(
+                    f"case {case.get('case_id')} has no finite robot/pedestrian distance"
+                )
+            minimum_distance, minimum_step = min(finite_distances)
+            termination_reason = str(
+                trace.get("termination_reason") or case.get("outcome", {}).get("label", "unknown")
+            )
             metadata = {
                 "schema_version": "case-workbench-viewer-input.v1",
                 "scenario_id": case.get("scenario_id") or trace.get("scenario_id"),
@@ -399,6 +413,10 @@ def prepared_package_dirs(
                 "summary": {
                     "scenario_id": case.get("scenario_id"),
                     "episode_status": case.get("outcome", {}).get("label", "unknown"),
+                    "global_min_robot_ped_distance_m": minimum_distance,
+                    "global_min_distance_step": minimum_step,
+                    "step_count": len(derived_rows),
+                    "termination_reason": termination_reason,
                 },
                 "coordinate_frame": trace.get("coordinate_frame", "world"),
                 "shared_prefix": False,

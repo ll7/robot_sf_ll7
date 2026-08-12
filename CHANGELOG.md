@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **PR #6941 case workbench hardening.** Analysis traces now carry explicit reset-state,
+  event, control, timing, and provenance coverage; campaign-result-store.v2 round-trips
+  verify required tables and checksums; comparisons fail closed on incompatible starts;
+  package viewer inputs include the complete summary contract; and diagnostic publication
+  previews no longer masquerade as admitted figures. The analysis profile remains opt-in.
+
 * **Issue #6814 fail-closed provenance re-export.** Added
   `apply_strict_metadata_projection`, the receipt-capable
   `build_simulation_trace_export*`/`write_simulation_trace_export` APIs,

@@ -24,10 +24,9 @@ controls, typed events, and provenance. The capture path is data-only and must
 not alter actions or outcomes. Raw traces remain outside Git; packages retain
 manifests and checksums.
 
-The camera-ready full-campaign configs (`camera_ready_all_planners*.yaml`,
-`camera_ready_baseline_safe.yaml`, and `camera_ready_map_redundancy_3maps.yaml`)
-carry this profile explicitly. Smoke and historical configs remain opt-in until
-their trace-storage overhead has been measured.
+The dedicated `configs/benchmarks/analysis_ready_full_campaign.yaml` overlay
+is the only canonical opt-in. Camera-ready, smoke, and historical configs remain
+unchanged until trace-storage overhead has been measured.
 
 For an individual legacy run, pass the same profile with
 `robot_sf_bench run ... --telemetry-config configs/benchmarks/analysis_ready_full_campaign.yaml`.
@@ -45,7 +44,7 @@ publication renderer is intentionally reduced:
 
 ```bash
 uv run python scripts/analysis/render_case_publication.py \
-  --package <package> --output <figure.pdf>
+  --package <package> --output <figure.preview.pdf>
 
 uv run --with 'rerun-sdk==0.34.1' python scripts/tools/trace_viewer.py \
   --package <package> --case-id <case-id> --spawn

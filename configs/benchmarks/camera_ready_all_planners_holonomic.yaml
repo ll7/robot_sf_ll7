@@ -12,9 +12,6 @@ snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v1.json
 workers: 2
 horizon: 100
 dt: 0.1
-telemetry:
-  analysis_trace: all
-  planner_debug_trace: none
 record_forces: true
 resume: true
 stop_on_failure: true

@@ -527,6 +527,7 @@ def _execute_campaign_planner_batch(
             record_forces=cfg.record_forces,
             record_planner_decision_trace=cfg.record_planner_decision_trace,
             record_simulation_step_trace=cfg.record_simulation_step_trace,
+            telemetry=cfg.telemetry,
             snqi_weights=context.snqi_weights,
             snqi_baseline=context.snqi_baseline,
             algo=planner.algo,

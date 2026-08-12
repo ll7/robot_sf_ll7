@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
+import shutil
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -22,17 +24,37 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.analysis_trace import canonical_json, trace_coverage
+from robot_sf.benchmark.analysis_trace import (
+    canonical_json,
+    trace_artifact_sha256,
+    trace_coverage,
+)
 from robot_sf.benchmark.parquet_export import (
     derive_episode_metrics,
     export_campaign_result_store_v2,
+    is_comparison_compatible,
 )
+from robot_sf.benchmark.termination_reason import canonical_outcome_flags
 from robot_sf.common.optional_import import try_import
 
 SCHEMA_VERSION = "case-workbench.v1"
 METRIC_PROFILE_VERSION = "case-workbench-metrics.v1"
 ADMISSION_SCHEMA_VERSION = "case-admission-overlay.v1"
-INELIGIBLE_STATUSES = {"fallback", "degraded", "failed", "unavailable", "partial"}
+INELIGIBLE_STATUSES = {
+    "fallback",
+    "degraded",
+    "failed",
+    "failure",
+    "error",
+    "truncated",
+    "terminated",
+    "unavailable",
+    "partial",
+    "partial_failure",
+    "diagnostic_only",
+    "diagnostic_stub",
+    "adapter",
+}
 
 
 def load_workbench_config(path: str | Path) -> dict[str, Any]:
@@ -67,6 +89,8 @@ def analyze_cases(
         if canonical_json(proposal) != canonical_json(repeat):
             raise RuntimeError("case-workbench selection is not deterministic")
 
+    if output_path.exists() and any(output_path.iterdir()):
+        raise FileExistsError(f"output package must be empty: {output_path}")
     output_path.mkdir(parents=True, exist_ok=True)
     if input_path.is_file():
         try:
@@ -77,13 +101,34 @@ def analyze_cases(
                 command=f"analyze-cases --result-store {input_path}",
                 overwrite=True,
             )
-        except RuntimeError:
+        except (ImportError, ModuleNotFoundError) as exc:
             # The proposal still remains useful in a lean environment; the
             # package states that the normalized store could not be materialized.
             (output_path / "campaign-result-store.v2.unavailable").write_text(
-                "PyArrow is required to materialize campaign-result-store.v2\n",
+                f"campaign-result-store.v2 unavailable: {exc}\n",
                 encoding="utf-8",
             )
+    elif (input_path / "episodes.jsonl").is_file() or (input_path / "records.jsonl").is_file():
+        source_jsonl = next(
+            candidate
+            for candidate in (input_path / "episodes.jsonl", input_path / "records.jsonl")
+            if candidate.is_file()
+        )
+        try:
+            export_campaign_result_store_v2(
+                source_jsonl,
+                output_path / "campaign-result-store.v2",
+                study_id="case-workbench",
+                command=f"analyze-cases --result-store {input_path}",
+                overwrite=True,
+            )
+        except (ImportError, ModuleNotFoundError) as exc:
+            (output_path / "campaign-result-store.v2.unavailable").write_text(
+                f"campaign-result-store.v2 unavailable: {exc}\n", encoding="utf-8"
+            )
+    elif input_path.is_dir():
+        destination = output_path / "campaign-result-store.v2"
+        shutil.copytree(input_path, destination)
     (output_path / "config.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
@@ -125,6 +170,8 @@ def apply_admission_overlay(  # noqa: C901
     decisions = overlay.get("decisions", [])
     if not isinstance(decisions, list):
         raise ValueError("admission overlay decisions must be a list")
+    if any(not isinstance(item, Mapping) for item in decisions):
+        raise ValueError("admission overlay decisions must be objects")
     machine_portfolio = [
         dict(case) for case in proposal.get("portfolio", []) if isinstance(case, Mapping)
     ]
@@ -133,10 +180,14 @@ def apply_admission_overlay(  # noqa: C901
     by_id = {str(case.get("case_id")): case for case in working_portfolio}
     final_portfolio = working_portfolio
     admission_records: list[dict[str, Any]] = []
-    for decision in sorted(
-        (item for item in decisions if isinstance(item, Mapping)),
+    normalized_decisions = sorted(
+        decisions,
         key=lambda item: (str(item.get("case_id")), str(item.get("decision"))),
-    ):
+    )
+    decision_ids = [str(item.get("case_id") or "") for item in normalized_decisions]
+    if len(decision_ids) != len(set(decision_ids)):
+        raise ValueError("admission overlay contains duplicate case decisions")
+    for decision in normalized_decisions:
         case_id = str(decision.get("case_id") or "")
         action = str(decision.get("decision") or "").lower()
         rationale = str(decision.get("rationale") or "").strip()
@@ -195,7 +246,7 @@ def apply_admission_overlay(  # noqa: C901
     return result
 
 
-def _load_records(path: Path) -> list[dict[str, Any]]:
+def _load_records(path: Path) -> list[dict[str, Any]]:  # noqa: C901
     """Load source records from JSONL or a v2 Parquet result store."""
 
     if path.is_file():
@@ -208,38 +259,58 @@ def _load_records(path: Path) -> list[dict[str, Any]]:
                     row = json.loads(line)
                 except json.JSONDecodeError as exc:
                     raise ValueError(f"{path}:{line_number} is not valid JSON") from exc
-                if isinstance(row, dict):
-                    rows.append(row)
+                if not isinstance(row, dict):
+                    raise ValueError(f"{path}:{line_number} must contain a JSON object")
+                rows.append(row)
+        _validate_episode_ids(rows, path)
         return rows
     if not path.is_dir():
         raise FileNotFoundError(f"result store does not exist: {path}")
+    episodes_path = path / "episodes.parquet"
+    if episodes_path.is_file():
+        rows = _load_v2_records(path, episodes_path)
+        _validate_episode_ids(rows, path)
+        return rows
     jsonl_candidates = [path / "episodes.jsonl", path / "records.jsonl"]
     for candidate in jsonl_candidates:
         if candidate.is_file():
             return _load_records(candidate)
-    episodes_path = path / "episodes.parquet"
     if not episodes_path.is_file():
         raise ValueError(f"result store has no episodes.jsonl or episodes.parquet: {path}")
-    return _load_v2_records(path, episodes_path)
+    rows = _load_v2_records(path, episodes_path)
+    _validate_episode_ids(rows, path)
+    return rows
+
+
+def _validate_episode_ids(rows: list[dict[str, Any]], source: Path) -> None:
+    """Reject blank or duplicate episode identities before selection."""
+
+    seen: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        episode_id = str(row.get("episode_id") or "").strip()
+        if not episode_id:
+            raise ValueError(f"{source}:row {index} has no episode_id")
+        if episode_id in seen:
+            raise ValueError(f"{source}:duplicate episode_id {episode_id}")
+        seen.add(episode_id)
 
 
 def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:  # noqa: C901
     """Rehydrate v2 episode, step, actor, event, and feature tables."""
 
     episode_rows = _read_parquet_rows(episodes_path)
-    step_rows = (
-        _read_parquet_rows(store / "steps.parquet") if (store / "steps.parquet").is_file() else []
-    )
+    integrity_errors = _v2_integrity_errors(store)
+    required_tables = ("steps", "actors", "events", "features", "cells", "comparisons")
+    missing_tables = {name for name in required_tables if not (store / f"{name}.parquet").is_file()}
+    step_rows = _read_parquet_rows(store / "steps.parquet") if "steps" not in missing_tables else []
     actor_rows = (
-        _read_parquet_rows(store / "actors.parquet") if (store / "actors.parquet").is_file() else []
+        _read_parquet_rows(store / "actors.parquet") if "actors" not in missing_tables else []
     )
     event_rows = (
-        _read_parquet_rows(store / "events.parquet") if (store / "events.parquet").is_file() else []
+        _read_parquet_rows(store / "events.parquet") if "events" not in missing_tables else []
     )
     feature_rows = (
-        _read_parquet_rows(store / "features.parquet")
-        if (store / "features.parquet").is_file()
-        else []
+        _read_parquet_rows(store / "features.parquet") if "features" not in missing_tables else []
     )
     by_episode_steps: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_episode_actors: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
@@ -279,6 +350,7 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
                 pedestrians.append(
                     {
                         "actor_id": actor.get("actor_id"),
+                        "id": _viewer_actor_id(actor.get("actor_id")),
                         "position": [actor.get("x"), actor.get("y")],
                         "velocity": [actor.get("vx"), actor.get("vy")],
                         "radius_m": actor.get("radius_m"),
@@ -305,19 +377,31 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             )
         stored_coverage = _decode_json(row.get("trace_coverage_json")) or {"status": "unavailable"}
         provenance = _decode_json(row.get("provenance_json")) or {}
-        first_step = by_episode_steps.get(episode_id, [None])[0]
-        units = _decode_json(first_step.get("units_json")) if isinstance(first_step, dict) else None
+        artifact_sha = row.get("artifact_sha256")
+        if artifact_sha and provenance.get("artifact_sha256") in (None, ""):
+            provenance["artifact_sha256"] = artifact_sha
+        first_step_row = by_episode_steps.get(episode_id, [None])[0]
+        units = (
+            _decode_json(first_step_row.get("units_json"))
+            if isinstance(first_step_row, dict)
+            else None
+        )
         analysis_trace = {
             "schema_version": "analysis-trace.v1",
             "scenario_id": row.get("scenario_id"),
             "planner": row.get("planner"),
             "map_digest": provenance.get("map_digest"),
+            "map_file": provenance.get("map_file"),
             "scenario_digest": provenance.get("scenario_digest"),
             "config_hash": row.get("config_hash") or provenance.get("config_hash"),
             "git_hash": provenance.get("git_hash"),
             "planner_commit": provenance.get("planner_commit"),
+            "dt": provenance.get("dt"),
+            "horizon": provenance.get("horizon"),
+            "actor_geometry": provenance.get("actor_geometry"),
+            "actor_id_source": provenance.get("actor_id_source"),
             "coordinate_frame": (
-                first_step.get("coordinate_frame") if isinstance(first_step, dict) else None
+                first_step_row.get("coordinate_frame") if isinstance(first_step_row, dict) else None
             ),
             "units": units,
             "steps": trace_steps,
@@ -338,11 +422,62 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
             "algorithm_metadata": {"analysis_trace": analysis_trace},
         }
         computed_coverage = trace_coverage(reconstructed)
-        if stored_coverage.get("status") != "complete":
+        if integrity_errors or missing_tables or stored_coverage.get("status") != "complete":
             computed_coverage = dict(stored_coverage)
+            if integrity_errors or missing_tables:
+                computed_coverage = {
+                    **computed_coverage,
+                    "status": "unavailable",
+                    "reason": "analysis_trace_fields_incomplete",
+                    "missing_tables": sorted(missing_tables),
+                    "integrity_errors": integrity_errors,
+                }
         reconstructed["trace_coverage"] = computed_coverage
         result.append(reconstructed)
     return result
+
+
+def _v2_integrity_errors(store: Path) -> list[str]:
+    """Validate the v2 checksum receipt before trusting reconstructed rows."""
+
+    checksum_path = store / "SHA256SUMS"
+    if not checksum_path.is_file():
+        return ["checksum_receipt_missing"]
+    errors: list[str] = []
+    try:
+        lines = checksum_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return ["checksum_receipt_unreadable"]
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            expected, relative = line.split("  ", 1)
+        except ValueError:
+            errors.append("checksum_receipt_malformed")
+            continue
+        path = store / relative
+        if not path.is_file():
+            errors.append(f"checksum_missing:{relative}")
+            continue
+        if _sha256_file(path) != expected:
+            errors.append(f"checksum_mismatch:{relative}")
+    return errors
+
+
+def _viewer_actor_id(value: Any) -> Any:
+    """Preserve numeric actor ids for legacy viewer adapters when possible."""
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    text = str(value or "")
+    if text.startswith("pedestrian-"):
+        suffix = text.removeprefix("pedestrian-")
+        try:
+            return int(suffix)
+        except ValueError:
+            pass
+    return value
 
 
 def _read_parquet_rows(path: Path) -> list[dict[str, Any]]:
@@ -350,12 +485,10 @@ def _read_parquet_rows(path: Path) -> list[dict[str, Any]]:
 
     duckdb = try_import("duckdb")
     if duckdb is not None:
-        return (
-            duckdb.connect(database=":memory:")
-            .execute("SELECT * FROM read_parquet(?)", [str(path)])
-            .fetchdf()
-            .to_dict(orient="records")
-        )
+        connection = duckdb.connect(database=":memory:")
+        result = connection.execute("SELECT * FROM read_parquet(?)", [str(path)])
+        columns = [str(item[0]) for item in result.description]
+        return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
     import pandas as pd
 
     return pd.read_parquet(path).to_dict(orient="records")
@@ -398,28 +531,67 @@ def _row_from_v2_store(row: Mapping[str, Any], store: Path) -> dict[str, Any]:
     }
 
 
-def _candidate(record: Mapping[str, Any]) -> dict[str, Any]:
+def _candidate(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR0912
     """Normalize one episode into an eligibility and metric candidate."""
 
-    coverage = record.get("trace_coverage")
-    if not isinstance(coverage, Mapping):
-        coverage = trace_coverage(dict(record))
+    raw_record = dict(record)
+    computed_coverage = trace_coverage(raw_record)
+    supplied_coverage = record.get("trace_coverage")
+    coverage = computed_coverage
     provenance = record.get("provenance") if isinstance(record.get("provenance"), Mapping) else {}
     row_status = str(record.get("row_status") or record.get("status") or "native")
     blockers: list[str] = []
-    if row_status in INELIGIBLE_STATUSES:
-        blockers.append(f"execution_status:{row_status}")
+    for status_value in (record.get("row_status"), record.get("status")):
+        normalized_status = str(status_value or "").lower()
+        if normalized_status in INELIGIBLE_STATUSES:
+            blockers.append(f"execution_status:{normalized_status}")
+    metadata = record.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        for key in ("status", "readiness_status", "preflight_status", "execution_mode"):
+            nested = str(metadata.get(key) or "").lower()
+            if nested in INELIGIBLE_STATUSES:
+                blockers.append(f"execution_metadata:{key}={nested}")
+        if metadata.get("evidence_eligible") is False:
+            blockers.append("execution_metadata:evidence_eligible=false")
+        if isinstance(metadata.get("algorithm_metadata"), Mapping):
+            nested_metadata = metadata["algorithm_metadata"]
+            if nested_metadata.get("evidence_eligible") is False:
+                blockers.append("execution_metadata:evidence_eligible=false")
+    if isinstance(record.get("evidence_eligible"), bool) and not record["evidence_eligible"]:
+        blockers.append("evidence_eligible=false")
+    if isinstance(record.get("integrity"), Mapping):
+        contradictions = record["integrity"].get("contradictions")
+        if isinstance(contradictions, list) and contradictions:
+            blockers.append("integrity:contradictions_present")
+    if isinstance(supplied_coverage, Mapping) and supplied_coverage.get("status") == "complete":
+        if computed_coverage.get("status") != "complete":
+            blockers.append("trace_coverage:stored_complete_receipt_conflict")
     if coverage.get("status") != "complete":
         blockers.append(f"trace_coverage:{coverage.get('reason') or 'incomplete'}")
-    if not provenance.get("artifact_sha256"):
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    artifact_sha = provenance.get("artifact_sha256")
+    if not isinstance(artifact_sha, str) or not artifact_sha:
         blockers.append("provenance:artifact_sha256_missing")
-    scenario_id = str(record.get("scenario_id") or "unknown")
-    planner = str(record.get("algo") or record.get("planner") or "unknown")
+    if isinstance(trace, Mapping):
+        embedded_sha = trace.get("artifact_sha256")
+        if isinstance(embedded_sha, str):
+            if artifact_sha != embedded_sha:
+                blockers.append("provenance:artifact_sha256_mismatch")
+            if embedded_sha != trace_artifact_sha256(trace):
+                blockers.append("provenance:artifact_sha256_invalid")
+    episode_id = str(record.get("episode_id") or "").strip()
+    scenario_id = str(record.get("scenario_id") or record.get("scenario") or "").strip()
+    planner = str(record.get("algo") or record.get("planner") or "").strip()
+    if not episode_id:
+        blockers.append("identity:episode_id_missing")
+    if not scenario_id:
+        blockers.append("identity:scenario_id_missing")
+    if not planner:
+        blockers.append("identity:planner_missing")
     outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
-    success = bool(outcome.get("success") or outcome.get("route_complete"))
-    collision = bool(outcome.get("collision"))
+    success, collision = canonical_outcome_flags(outcome)
     return {
-        "episode_id": str(record.get("episode_id") or ""),
+        "episode_id": episode_id,
         "scenario_id": scenario_id,
         "planner": planner,
         "seed": _int(record.get("seed")),
@@ -478,9 +650,10 @@ def _interestingness(record: Mapping[str, Any]) -> float:
     if clearance is not None:
         score += max(0.0, 2.0 - float(clearance))
     outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
-    if outcome.get("collision"):
+    success, collision = canonical_outcome_flags(outcome)
+    if collision:
         score += 1.0
-    if outcome.get("success"):
+    if success:
         score += 0.25
     effort = metrics.get("control_effort")
     if effort is not None:
@@ -533,7 +706,7 @@ def _build_proposal(
             continue
         selected_ids.add(chosen["episode_id"])
         selected.append(_selection_record(role, chosen, options, pareto))
-    selected = selected[:max_cases]
+    selected = _truncate_portfolio_atomically(selected, max_cases)
     selected_ids = {item["case_id"] for item in selected}
     excluded = []
     for candidate in candidates:
@@ -639,6 +812,10 @@ def _comparison_pair(role: str, candidates: list[dict[str, Any]]) -> list[dict[s
             for right in ranked[left_index + 1 :]:
                 if left[dimension] == right[dimension]:
                     continue
+                if dimension == "seed" and (left["seed"] is None or right["seed"] is None):
+                    continue
+                if not is_comparison_compatible(left.get("raw", {}), right.get("raw", {})):
+                    continue
                 selected = sorted([left, right], key=lambda item: item["episode_id"])
                 ids = (str(selected[0]["episode_id"]), str(selected[1]["episode_id"]))
                 pair_options.append(
@@ -647,6 +824,37 @@ def _comparison_pair(role: str, candidates: list[dict[str, Any]]) -> list[dict[s
     if not pair_options:
         return None
     return sorted(pair_options, key=lambda item: (-item[0], item[1], item[2]))[0][3]
+
+
+def _truncate_portfolio_atomically(
+    selected: list[dict[str, Any]], max_cases: int
+) -> list[dict[str, Any]]:
+    """Apply the portfolio bound without splitting a declared comparison pair."""
+
+    if max_cases <= 0:
+        return []
+    kept: list[dict[str, Any]] = []
+    kept_ids: set[str] = set()
+    for item in selected:
+        if item["case_id"] in kept_ids:
+            continue
+        pair_ids = [str(value) for value in item.get("comparison_pair_ids", [])]
+        pair_ids = [value for value in pair_ids if value != str(item["case_id"])]
+        if pair_ids:
+            pair = [
+                item,
+                *[candidate for candidate in selected if candidate["case_id"] in pair_ids],
+            ]
+            if len(kept) + len(pair) > max_cases:
+                continue
+            kept.extend(pair)
+            kept_ids.update(candidate["case_id"] for candidate in pair)
+            continue
+        if len(kept) >= max_cases:
+            break
+        kept.append(item)
+        kept_ids.add(item["case_id"])
+    return kept
 
 
 def _pareto_front(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -785,9 +993,13 @@ def _write_case_files(output: Path, proposal: Mapping[str, Any]) -> None:
     cases.mkdir(exist_ok=True)
     for case in proposal.get("portfolio", []):
         case_id = str(case["case_id"])
-        (cases / f"{case_id}.json").write_text(
-            json.dumps(case, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", case_id).strip("._")
+        if not safe_id or safe_id in {".", ".."}:
+            raise ValueError(f"case id cannot be used as a package filename: {case_id!r}")
+        target = (cases / f"{safe_id}.json").resolve()
+        if cases.resolve() not in target.parents:
+            raise ValueError(f"case id escapes package output: {case_id!r}")
+        target.write_text(json.dumps(case, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _write_viewer_blueprint(output: Path, proposal: Mapping[str, Any]) -> None:
@@ -915,7 +1127,11 @@ def _write_publication_preview(output: Path, proposal: Mapping[str, Any]) -> Non
     try:
         from robot_sf.benchmark.case_publication_figure import render_publication_figure
 
-        render_publication_figure(output, output=publication / "figure.pdf", output_format="pdf")
+        render_publication_figure(
+            output,
+            output=publication / "figure.preview.pdf",
+            output_format="pdf",
+        )
     except RuntimeError as exc:
         (publication / "UNAVAILABLE.json").write_text(
             json.dumps(
@@ -966,7 +1182,9 @@ def _manifest(
         "proposal_sha256": _sha256_json(proposal),
         "source": {
             "path": str(source),
-            "sha256": _sha256_file(source) if source.is_file() else None,
+            "sha256": _sha256_file(source)
+            if source.is_file()
+            else (_sha256_directory(source) if source.is_dir() else None),
         },
         "config": {"path": str(config), "sha256": _sha256_file(Path(config))},
         "evidence_status": "proposed_not_admitted",
@@ -1000,9 +1218,10 @@ def _outcome_label(record: Mapping[str, Any]) -> str:
     """Return a stable descriptive outcome label."""
 
     outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
-    if outcome.get("collision"):
+    success, collision = canonical_outcome_flags(outcome)
+    if collision:
         return "collision"
-    if outcome.get("success") or outcome.get("route_complete"):
+    if success:
         return "success"
     return str(record.get("termination_reason") or record.get("status") or "unknown")
 
@@ -1045,6 +1264,17 @@ def _sha256_file(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_directory(path: Path) -> str:
+    """Hash a directory by sorted relative file names and bytes."""
+
+    digest = hashlib.sha256()
+    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+        digest.update(str(child.relative_to(path)).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(child.read_bytes())
     return digest.hexdigest()
 
 

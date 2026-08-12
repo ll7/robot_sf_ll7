@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.safety_wrapper_factorial_preregistration import (
+from robot_sf.benchmark.safety.safety_wrapper_factorial_preregistration import (
     EXPECTED_WRAPPER_ARMS,
     build_preregistration_plan,
     check_planned_rows,

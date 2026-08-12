@@ -11,14 +11,14 @@ if TYPE_CHECKING:
 
 import yaml
 
-from robot_sf.benchmark.cbf_safety_filter_runtime import (
-    runtime_config_from_mapping as cbf_runtime_config_from_mapping,
-)
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
-from robot_sf.benchmark.safety_wrapper_runtime import runtime_config_from_mapping
+from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
+    runtime_config_from_mapping as cbf_runtime_config_from_mapping,
+)
+from robot_sf.benchmark.safety.safety_wrapper_runtime import runtime_config_from_mapping
 from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,
     tracking_precision_hash,

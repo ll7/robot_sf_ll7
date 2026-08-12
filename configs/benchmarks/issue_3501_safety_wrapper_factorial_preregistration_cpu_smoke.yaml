@@ -22,7 +22,7 @@ out_of_scope:
   - paper or dissertation claim edits
 source_contracts:
   ablation_design: configs/research/safety_wrapper_ablation_v1.yaml
-  runtime_validator: robot_sf/benchmark/safety_wrapper_runtime.py::validate_runtime_config
+  runtime_validator: robot_sf/benchmark/safety/safety_wrapper_runtime.py::validate_runtime_config
   planner_source: configs/benchmarks/paper_experiment_matrix_v1.yaml::planners[].key
 campaign_authorization:
   compute_submit_authorized: false

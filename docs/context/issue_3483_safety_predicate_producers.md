@@ -7,7 +7,7 @@ fields are emitted and validated.
 
 ## What this is
 
-`robot_sf/benchmark/safety_predicates.py` provides in-sim producers for the trace-level
+`robot_sf/benchmark/safety/safety_predicates.py` provides in-sim producers for the trace-level
 safety predicates the thesis motivates, so their fields become reproducible and
 fixture-backed instead of simulation-only assumptions.
 

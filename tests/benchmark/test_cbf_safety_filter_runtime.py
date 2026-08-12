@@ -8,8 +8,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from robot_sf.benchmark import cbf_safety_filter_runtime, map_runner_episode
-from robot_sf.benchmark.cbf_safety_filter_runtime import (
+from robot_sf.benchmark import map_runner_episode
+from robot_sf.benchmark.event_ledger import build_event_ledger
+from robot_sf.benchmark.map_runner_identity import _scenario_identity_payload
+from robot_sf.benchmark.safety import cbf_safety_filter_runtime
+from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
     CBF_COLLISION_CONE_ARM,
     CBF_DYNAMIC_PARABOLIC_V1_ARM,
     CBF_OFF_ARM,
@@ -21,8 +24,6 @@ from robot_sf.benchmark.cbf_safety_filter_runtime import (
     runtime_config_from_mapping,
     summarize_cbf_safety_filter_trace,
 )
-from robot_sf.benchmark.event_ledger import build_event_ledger
-from robot_sf.benchmark.map_runner_identity import _scenario_identity_payload
 
 
 class _Robot:

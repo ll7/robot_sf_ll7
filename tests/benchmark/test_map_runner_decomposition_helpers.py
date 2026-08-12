@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.cbf_safety_filter_runtime import CBFSafetyFilterRuntimeConfig
 from robot_sf.benchmark.map_runner import (
     _build_policy,
     _build_socnav_family_adapter,
@@ -40,7 +39,8 @@ from robot_sf.benchmark.map_runner_episode import (
     _resolve_episode_run_context,
     _run_episode_step_loop,
 )
-from robot_sf.benchmark.safety_wrapper_runtime import SafetyWrapperRuntimeConfig
+from robot_sf.benchmark.safety.cbf_safety_filter_runtime import CBFSafetyFilterRuntimeConfig
+from robot_sf.benchmark.safety.safety_wrapper_runtime import SafetyWrapperRuntimeConfig
 from robot_sf.benchmark.types import NoiseConfig, PlannerRuntime
 
 # ---------------------------------------------------------------------------

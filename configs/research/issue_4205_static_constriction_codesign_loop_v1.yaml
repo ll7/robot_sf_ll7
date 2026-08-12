@@ -102,7 +102,7 @@ arms:
     cbf_safety_filter:
       enabled: true
       arm_key: cbf_collision_cone_on
-    cbf_config_source: robot_sf.benchmark.cbf_safety_filter_runtime::cbf_collision_cone_on
+    cbf_config_source: robot_sf.benchmark.safety.cbf_safety_filter_runtime::cbf_collision_cone_on
 campaign_authorization:
   compute_submit_authorized: false
   requires_merge_before_submit: true

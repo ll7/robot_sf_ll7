@@ -131,6 +131,7 @@ class BRNEPlanner:
         self._brne: ModuleType | None = None
         self._lmat: np.ndarray | None = None
         self._jit_warmup_done = False
+        self._last_effective_num_samples: int | None = None
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -189,11 +190,13 @@ class BRNEPlanner:
             self._seed = seed
         self._lmat = None
         self._jit_warmup_done = False
+        self._last_effective_num_samples = None
 
     def configure(self, config: dict[str, Any] | BRNEPlannerConfig) -> None:
         """Update the BRNE wrapper configuration."""
         self.config = self._parse_config(config)
         self._lmat = None
+        self._last_effective_num_samples = None
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         """Compute a BRNE action for the current observation.
@@ -251,13 +254,29 @@ class BRNEPlanner:
             plan_steps,
             dt,
         )
+        effective_num_samples = int(ulist.shape[1])
+        self._last_effective_num_samples = effective_num_samples
 
         if not self._jit_warmup_done:
-            self._brne_solve(brne, xtraj, ytraj, num_agents, plan_steps, num_samples)
+            self._brne_solve(
+                brne,
+                xtraj,
+                ytraj,
+                num_agents,
+                plan_steps,
+                effective_num_samples,
+            )
             self._jit_warmup_done = True
 
         t0 = time.perf_counter()
-        weights = self._brne_solve(brne, xtraj, ytraj, num_agents, plan_steps, num_samples)
+        weights = self._brne_solve(
+            brne,
+            xtraj,
+            ytraj,
+            num_agents,
+            plan_steps,
+            effective_num_samples,
+        )
         elapsed_s = time.perf_counter() - t0
 
         if weights is None or not np.all(np.isfinite(weights)):
@@ -275,7 +294,20 @@ class BRNEPlanner:
             return {"v": 0.0, "omega": 0.0}
 
         robot_weights = weights[0]
-        cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        if ulist.ndim != 3 or robot_weights.ndim != 1:
+            _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
+            return {"v": 0.0, "omega": 0.0}
+        if ulist.shape[1] == robot_weights.size:
+            cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
+        elif ulist.shape[0] == robot_weights.size:
+            # Preserve compatibility with isolated adapters that expose samples first;
+            # the pinned upstream helper uses the plan-step-first layout above.
+            cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        else:
+            _LOGGER.debug(
+                "BRNE weights and control ensemble shapes disagree; returning zero motion"
+            )
+            return {"v": 0.0, "omega": 0.0}
         if not np.all(np.isfinite(cmd)):
             _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
             return {"v": 0.0, "omega": 0.0}
@@ -379,30 +411,32 @@ class BRNEPlanner:
         )
         nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
         ulist = brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples)
+        effective_num_samples = int(ulist.shape[1])
         traj = brne.traj_sim_essemble(
-            np.tile(robot_pose, reps=(num_samples, 1)).T,
+            np.tile(robot_pose, reps=(effective_num_samples, 1)).T,
             ulist,
             dt,
         )
         rx = traj[:, 0, :].T
         ry = traj[:, 1, :].T
-        xtraj = np.zeros((num_agents * num_samples, plan_steps))
-        ytraj = np.zeros((num_agents * num_samples, plan_steps))
-        xtraj[:num_samples] = rx
-        ytraj[:num_samples] = ry
+        xtraj = np.zeros((num_agents * effective_num_samples, plan_steps))
+        ytraj = np.zeros((num_agents * effective_num_samples, plan_steps))
+        xtraj[:effective_num_samples] = rx
+        ytraj[:effective_num_samples] = ry
         for ped_local_idx, (_, agent_idx) in enumerate(selected):
             agent = agents[agent_idx]
             a_pos = np.asarray(agent["position"], dtype=np.float64)
             a_vel = np.asarray(agent.get("velocity", [0.0, 0.0]), dtype=np.float64)
             speed_factor = float(np.linalg.norm(a_vel))
-            xp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)
-            yp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)
+            xp = brne.mvn_sample_normal(effective_num_samples, plan_steps, lmat)
+            yp = brne.mvn_sample_normal(effective_num_samples, plan_steps, lmat)
             xmean = a_pos[0] + np.arange(plan_steps) * dt * a_vel[0]
             ymean = a_pos[1] + np.arange(plan_steps) * dt * a_vel[1]
             scale = speed_factor + cfg.ped_sample_scale
-            row_start = (ped_local_idx + 1) * num_samples
-            xtraj[row_start : row_start + num_samples] = xp * scale + xmean
-            ytraj[row_start : row_start + num_samples] = yp * scale + ymean
+            row_start = (ped_local_idx + 1) * effective_num_samples
+            row_end = row_start + effective_num_samples
+            xtraj[row_start:row_end] = xp * scale + xmean
+            ytraj[row_start:row_end] = yp * scale + ymean
         return xtraj, ytraj, ulist
 
     def _clamp_action(self, action: dict[str, float]) -> None:
@@ -417,6 +451,7 @@ class BRNEPlanner:
         """Release BRNE wrapper resources."""
         self._brne = None
         self._lmat = None
+        self._last_effective_num_samples = None
 
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the BRNE planner."""
@@ -431,6 +466,11 @@ class BRNEPlanner:
             "config": cfg,
             "config_hash": config_hash,
             "status": status,
+            "effective_num_samples": self._last_effective_num_samples,
+            "sample_count_note": (
+                "The pinned upstream grid helper may return fewer samples than the requested "
+                "num_samples; all trajectory and weight tensors use that effective count."
+            ),
             "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
         }
 

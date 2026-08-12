@@ -1,0 +1,69 @@
+{
+  "schema_version": "issue-6464-brne-corridor-diagnostic-summary.v1",
+  "issue": 6464,
+  "status": "diagnostic_complete",
+  "evidence_tier": "smoke_diagnostic",
+  "claim_boundary": "Native BRNE execution, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
+  "base_commit": "cf1ddec1c68b33320b18f4185e8cbf53727fe815",
+  "source_worktree_dirty_at_capture": true,
+  "scenario": {
+    "name": "classic_head_on_corridor_low",
+    "seeds": [111, 112, 113],
+    "horizon_steps": 500,
+    "timestep_s": 0.1,
+    "geometry": "constant_width_corridor_only"
+  },
+  "upstream": {
+    "repo": "https://github.com/MurpheyLab/brne",
+    "commit": "633a5cd",
+    "license": "GPL-3.0",
+    "redistribution": "local_only",
+    "requested_samples": 49,
+    "effective_samples": 42,
+    "provenance_sha256": "e7238f672ba9dbc2e31cc40c48996d62ba6f2398879bb53f7c8455674de077d9"
+  },
+  "fallback_policy": {
+    "enabled": false,
+    "fallback_or_degraded_rows_count_as_success": false,
+    "over_cap_rows_count_as_success": false
+  },
+  "arms": {
+    "brne": {
+      "exact_runs": "3/3",
+      "native_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "0/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    },
+    "orca_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "3/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    },
+    "social_force_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "2/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    }
+  },
+  "artifact": {
+    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_20260812T014200Z",
+    "report_json_sha256": "5c69e90e4173cae63e2706df14f831d3f01761c436fb161d1c99e516e809c1a1",
+    "raw_artifacts": "ignored_worktree_local"
+  },
+  "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching before any broader or ranking campaign."
+}

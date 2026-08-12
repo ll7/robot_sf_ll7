@@ -4,8 +4,8 @@
 Drives the REAL upstream BRNE core algorithm -- ``MurpheyLab/brne`` at the pinned
 commit staged by ``scripts/tools/manage_external_repos.py`` -- against synthetic
 Robot SF-shaped observations, and measures per-step wall-clock vs the benchmark
-control budget. This is the go/no-go control-budget evidence; it is NOT a
-benchmark or paper claim and it registers no robot_sf planner.
+control budget. This is source-side control-budget evidence; it is NOT a
+benchmark or paper claim and does not exercise the Robot SF map-runner adapter.
 
 What is exercised
 -----------------

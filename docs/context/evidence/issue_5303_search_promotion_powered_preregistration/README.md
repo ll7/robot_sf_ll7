@@ -53,6 +53,16 @@ Every pre-existing input hash was reproduced byte-for-byte on the exact green
   CLI) did not exist at the base commit; their hashes are frozen as committed with this
   packet, and the checker recomputes every hash at each run.
 
+## Outcome-free provenance refresh (2026-08-12)
+
+Issue #6464 adds diagnostic-only BRNE entries to the shared algorithm metadata
+registry. Because this registry is an explicitly hashed input to the powered
+contract, its raw SHA-256 and the derived contract/manifest hashes were refreshed
+before any #6145 outcome was generated. The target planner, family split, candidate
+space, budget, estimator, gates, denominator, uncertainty, null tests, decision rule,
+and evidence boundary are unchanged; this refresh does not authorize execution or
+re-preregister the study's design.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen family-disjoint design and matched candidate (64 per search seed per

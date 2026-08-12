@@ -5,8 +5,9 @@ Exercises the REAL upstream BRNE core algorithm
 skips cleanly when the staged checkout or the numpy/numba/scipy stack is absent
 (CI default), so it does not regress environments without the external clone.
 
-This is source-side smoke only: no robot_sf planner is registered, no benchmark
-claim is made, and no BRNE source is vendored (GPL-3.0, local-only reference).
+This remains source-side smoke only: it does not exercise the Robot SF
+map-runner adapter or a benchmark arm, no benchmark claim is made, and no BRNE
+source is vendored (GPL-3.0, local-only reference).
 """
 
 from __future__ import annotations

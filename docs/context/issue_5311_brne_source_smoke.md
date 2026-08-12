@@ -4,9 +4,11 @@
 upstream pure-numpy/numba core runs end-to-end against the staged source on the
 redistributable dependency path and is under the 100 ms control budget for crowds
 below the upstream default agent cap; it reaches ~1.0–1.2× budget at the default
-8-agent cap. This note records the contract mapping and go/no-go data only —
-**no robot_sf planner registration, no benchmark arm, no campaign, no vendoring**
-(external source stays external). BRNE is planner candidate #4.
+8-agent cap. This note records the source contract mapping and go/no-go data
+only — no benchmark arm or campaign is authorized here, and no source is
+vendored (external source stays external). The later issue #6464 note records
+the bounded map-runner adapter diagnostic; neither note promotes BRNE to a
+benchmark-ready or paper-facing planner. BRNE is planner candidate #4.
 
 ## Provenance
 

@@ -12,6 +12,46 @@ def _default_if_none(value: Any, default: Any) -> Any:
     return default if value is None else value
 
 
+def normalize_map_observation(obs: dict[str, Any]) -> dict[str, Any]:
+    """Normalize flattened SocNav observations into the nested adapter contract.
+
+    The map environment flattens the structured observation when an occupancy grid
+    is present. Planner bridges should see the same robot/goal/pedestrian fields in
+    either mode so that adding a grid does not silently turn the state into zeros.
+
+    Returns:
+        dict[str, Any]: Original payload with flattened fields mirrored into nested blocks.
+    """
+    if any(key in obs for key in ("robot", "goal", "pedestrians", "sim")):
+        return obs
+    if not any(key in obs for key in ("robot_position", "goal_current", "pedestrians_positions")):
+        return obs
+    normalized = dict(obs)
+    normalized.update(
+        {
+            "robot": {
+                "position": obs.get("robot_position"),
+                "velocity": obs.get("robot_velocity_xy"),
+                "heading": obs.get("robot_heading"),
+                "speed": obs.get("robot_speed"),
+                "radius": obs.get("robot_radius"),
+            },
+            "goal": {
+                "current": obs.get("goal_current"),
+                "next": obs.get("goal_next"),
+            },
+            "pedestrians": {
+                "positions": obs.get("pedestrians_positions"),
+                "velocities": obs.get("pedestrians_velocities"),
+                "radius": obs.get("pedestrians_radius"),
+                "count": obs.get("pedestrians_count"),
+            },
+            "sim": {"timestep": obs.get("sim_timestep", obs.get("dt"))},
+        }
+    )
+    return normalized
+
+
 def normalize_xy_rows(values: Any) -> np.ndarray:
     """Normalize scalar/list/ndarray payloads to an ``(N, 2)`` float array.
 
@@ -87,6 +127,7 @@ def obs_to_ppo_format(obs: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Mapping compatible with ``robot_sf.baselines.ppo.PPOPlanner.step``.
     """
+    obs = normalize_map_observation(obs)
     robot = obs.get("robot", {}) if isinstance(obs.get("robot"), dict) else {}
     goal = obs.get("goal", {}) if isinstance(obs.get("goal"), dict) else {}
     pedestrians = obs.get("pedestrians", {}) if isinstance(obs.get("pedestrians"), dict) else {}
@@ -163,4 +204,40 @@ def obs_to_external_mpc_format(obs: dict[str, Any]) -> dict[str, Any]:
     obstacles = obs.get("obstacles")
     if isinstance(obstacles, list):
         payload["obstacles"] = obstacles
+    return payload
+
+
+def obs_to_brne_format(obs: dict[str, Any]) -> dict[str, Any]:
+    """Convert a map-runner observation into the BRNE baseline contract.
+
+    BRNE consumes the canonical ``dt``/``robot``/``agents`` payload used by the
+    baseline registry. Map observations expose heading and speed separately, so
+    this bridge reconstructs a world-frame velocity when an explicit velocity
+    vector is unavailable. Static obstacles are preserved for provenance even
+    though the bounded upstream BRNE core only uses corridor bounds.
+
+    Returns:
+        Mapping compatible with :class:`robot_sf.baselines.brne.BRNEPlanner`.
+    """
+    normalized = normalize_map_observation(obs)
+    payload = obs_to_ppo_format(normalized)
+    robot_source = normalized.get("robot") if isinstance(normalized.get("robot"), dict) else {}
+    robot = payload["robot"]
+
+    explicit_velocity = robot_source.get("velocity")
+    if explicit_velocity is None:
+        explicit_velocity = robot_source.get("velocity_xy")
+    if explicit_velocity is None:
+        speed_values = np.asarray(robot_source.get("speed", [0.0]), dtype=float).reshape(-1)
+        heading_values = np.asarray(robot_source.get("heading", [0.0]), dtype=float).reshape(-1)
+        speed = float(speed_values[0]) if speed_values.size else 0.0
+        heading = float(heading_values[0]) if heading_values.size else 0.0
+        explicit_velocity = [speed * np.cos(heading), speed * np.sin(heading)]
+    velocity = np.asarray(explicit_velocity, dtype=float).reshape(-1)
+    if velocity.size < 2 or not np.all(np.isfinite(velocity[:2])):
+        velocity = np.zeros(2, dtype=float)
+    robot["velocity"] = [float(velocity[0]), float(velocity[1])]
+
+    obstacles = normalized.get("obstacles")
+    payload["obstacles"] = obstacles if isinstance(obstacles, list) else []
     return payload

@@ -1,0 +1,9 @@
+# Issue #6464: one approved corridor-class scenario for a diagnostic preflight.
+# This manifest is deliberately not part of any baseline-safe or paper suite.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - archetypes/classic_head_on_corridor.yaml
+select_scenarios:
+  - classic_head_on_corridor_low
+map_search_paths:
+  - ../../maps/svg_maps

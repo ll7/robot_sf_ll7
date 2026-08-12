@@ -741,6 +741,36 @@ class TestProgressWeightedBCTrainer:
         with pytest.raises(ProgressWeightedBcError, match="observations .* shorter than actions"):
             trainer._unpack_demonstrations()
 
+    def test_trainer_rejects_zero_action_episode(self) -> None:
+        """An empty action trajectory must not silently produce a no-op training run."""
+        import gymnasium as gym
+
+        from robot_sf.training.progress_weighted_bc import (
+            ProgressWeightedBCTrainer,
+            ProgressWeightedObjectiveConfig,
+        )
+
+        obs_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        act_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        class _Policy:
+            def parameters(self):
+                return []
+
+        class _Traj:
+            obs = np.zeros((1, 2), dtype=np.float32)
+            acts = np.zeros((0, 1), dtype=np.float32)
+
+        trainer = ProgressWeightedBCTrainer(
+            observation_space=obs_space,
+            action_space=act_space,
+            demonstrations=[_Traj()],
+            policy=_Policy(),
+            config=ProgressWeightedObjectiveConfig.arm_a(),
+        )
+        with pytest.raises(ProgressWeightedBcError, match="actions must contain at least one step"):
+            trainer._unpack_demonstrations()
+
     def test_trainer_rejects_nonfinite_loss_before_backward(self) -> None:
         """A non-finite weighted loss must fail before optimizer state is updated."""
         import gymnasium as gym

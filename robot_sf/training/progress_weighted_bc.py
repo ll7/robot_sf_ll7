@@ -764,6 +764,10 @@ class ProgressWeightedBCTrainer:
                     f"Episode {ep_idx}: observations ({obs_ep.shape[0]}) are shorter than "
                     f"actions ({n_actions})"
                 )
+            if n_actions <= 0:
+                raise ProgressWeightedBcError(
+                    f"Episode {ep_idx}: actions must contain at least one step"
+                )
 
             # Flatten observations if they are dict-like
             if (obs_ep.ndim == 1 and obs_ep.dtype == object) or (

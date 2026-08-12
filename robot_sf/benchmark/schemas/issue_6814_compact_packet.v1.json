@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/issue_6814_compact_packet.v1.json",
+  "title": "Issue #6814 compact provenance packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "source_package",
+    "full_packet",
+    "disposition",
+    "check_results",
+    "source_contracts",
+    "pairs",
+    "evidence_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "issue_6814_compact_packet.v1"},
+    "issue": {"const": 6814},
+    "source_package": {"type": "object"},
+    "full_packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_retrieval_key", "manifest_sha256"],
+      "properties": {
+        "manifest_retrieval_key": {"type": "string", "minLength": 1},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "disposition": {"enum": ["supported", "unsupported", "blocked"]},
+    "check_results": {"type": "object", "minProperties": 4},
+    "source_contracts": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {"$ref": "#/$defs/sourceContract"}
+    },
+    "pairs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"$ref": "#/$defs/pair"}
+    },
+    "evidence_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "visualization_only",
+        "new_simulation_performed",
+        "episode_substitution_performed",
+        "tolerance_profile_modified"
+      ],
+      "properties": {
+        "visualization_only": {"const": true},
+        "new_simulation_performed": {"const": false},
+        "episode_substitution_performed": {"const": false},
+        "tolerance_profile_modified": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "sourceContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "status", "trace_identity"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "status": {"enum": ["available", "unsupported", "unavailable", "blocked"]},
+        "trace_identity": {"type": "object"}
+      }
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pair_id",
+        "comparison_grammar",
+        "comparison_grain",
+        "full_receipt",
+        "pair_compatibility",
+        "semantic_inputs",
+        "process_validation",
+        "renderer_admission"
+      ],
+      "properties": {
+        "pair_id": {"type": "string", "minLength": 1},
+        "comparison_grammar": {"type": "string", "minLength": 1},
+        "comparison_grain": {"type": "string", "minLength": 1},
+        "full_receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["retrieval_key", "sha256"],
+          "properties": {
+            "retrieval_key": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "pair_compatibility": {"type": "object"},
+        "semantic_inputs": {"type": "object"},
+        "process_validation": {"type": "object"},
+        "renderer_admission": {"type": "object"}
+      }
+    }
+  }
+}

@@ -54,6 +54,7 @@ SOURCE_ISSUE = 6412
 SOURCE_CONTRACT_SCHEMA = "issue_6814_trace_source_contract.v1"
 PAIR_RECEIPT_SCHEMA = "issue_6814_pair_compatibility_receipt.v1"
 PACKET_MANIFEST_SCHEMA = "issue_6814_packet_manifest.v1"
+COMPACT_PACKET_SCHEMA = "issue_6814_compact_packet.v1"
 STATIC_CONFIG_SCHEMA = "chapter7_static_run_config.v1"
 INITIAL_STATE_SCHEMA = "chapter7_initial_state.v1"
 CANONICALIZATION = "strict-json-sort-keys-utf8-no-newline.v1"
@@ -505,17 +506,26 @@ def _matrix_authorities(
         matrix = inputs.get("scenario_matrix") if isinstance(inputs, Mapping) else None
         if isinstance(matrix, Mapping):
             matrix_path = matrix.get("path")
-            if not isinstance(matrix_path, str) or posixpath.normpath(matrix_path) != expected_path:
+            # Historical #6412 provenance uses ``path: .`` with a null digest
+            # to declare that the matrix was not retained.  Treat that
+            # placeholder as unavailable; reject a non-placeholder path that
+            # claims a different artifact owner.
+            if matrix_path in {None, "", "."} and matrix.get("sha256") in {None, ""}:
+                matrix = None
+            elif (
+                not isinstance(matrix_path, str) or posixpath.normpath(matrix_path) != expected_path
+            ):
                 raise TraceReexportPackagingError(
                     "issue #6814 scenario-matrix path disagrees with producing commit"
                 )
-            candidates.append(
-                (
-                    "result_provenance",
-                    matrix.get("sha256"),
-                    "/inputs/scenario_matrix/sha256",
+            if matrix is not None:
+                candidates.append(
+                    (
+                        "result_provenance",
+                        matrix.get("sha256"),
+                        "/inputs/scenario_matrix/sha256",
+                    )
                 )
-            )
     for role, payload, pointer in (
         ("preflight", source.preflight, "/scenario_matrix_sha256"),
         ("run_summary", source.run_summary, "/scenario_matrix_sha256"),
@@ -1153,12 +1163,153 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.write_bytes(_canonical_bytes(payload) + b"\n")
 
 
+def _read_json_object(path: Path) -> dict[str, Any]:
+    """Read one JSON object from a packet-owned file."""
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise Issue6814Error(f"invalid packet JSON: {path}") from exc
+    if not isinstance(payload, Mapping):
+        raise Issue6814Error(f"packet JSON must be an object: {path}")
+    return dict(payload)
+
+
 def _relative_hashes(root: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_file():
             result[path.relative_to(root).as_posix()] = sha256_file(path)
     return result
+
+
+def _compact_initial_state(pair: Mapping[str, Any]) -> dict[str, Any]:
+    """Project pair initial-state evidence without retaining frame payloads."""
+
+    initial = pair.get("initial_state_equivalence")
+    if not isinstance(initial, Mapping):
+        return {"status": "unavailable", "reason_code": "initial_state_receipt_missing"}
+    fields = (
+        "equivalent",
+        "status",
+        "position_tolerance_m",
+        "heading_tolerance_rad",
+        "robot_position_delta_m",
+        "robot_velocity_delta_mps",
+        "robot_heading_delta_rad",
+        "max_actor_position_delta_m",
+        "max_actor_velocity_delta_mps",
+        "max_actor_radius_delta_m",
+        "actor_id_sets_equal",
+    )
+    return {field: initial[field] for field in fields if field in initial}
+
+
+def _compact_pair_receipt(
+    *, receipt: Mapping[str, Any], receipt_sha256: str, retrieval_key: str
+) -> dict[str, Any]:
+    """Build a deterministic, frame-free projection of one pair receipt."""
+
+    compatibility = receipt.get("pair_compatibility")
+    if not isinstance(compatibility, Mapping):
+        compatibility = {"status": "unavailable", "reason_code": "compatibility_missing"}
+    provenance = compatibility.get("provenance_gate")
+    shared_prefix = compatibility.get("shared_prefix")
+    separation = compatibility.get("route_spawn_separation")
+    return {
+        "pair_id": receipt.get("pair_id"),
+        "comparison_grammar": receipt.get("comparison_grammar"),
+        "comparison_grain": receipt.get("comparison_grain"),
+        "full_receipt": {
+            "retrieval_key": retrieval_key,
+            "sha256": receipt_sha256,
+        },
+        "pair_compatibility": {
+            "profile_version": compatibility.get("profile_version"),
+            "status": compatibility.get("status"),
+            "provenance_gate": provenance,
+            "initial_state_equivalence": _compact_initial_state(compatibility),
+            "shared_prefix": shared_prefix,
+            "route_spawn_separation": separation,
+        },
+        "semantic_inputs": receipt.get("semantic_inputs", {}),
+        "process_validation": receipt.get("process_validation", {}),
+        "renderer_admission": receipt.get("renderer_admission", {}),
+    }
+
+
+def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
+    """Project a full packet into a deterministic, frame-free audit payload."""
+
+    packet_root = packet_root.resolve()
+    manifest_path = packet_root / "packet_manifest.json"
+    manifest = _read_json_object(manifest_path)
+    manifest_sha256 = sha256_file(manifest_path)
+    source_contracts = []
+    for item in manifest.get("source_contracts", []):
+        if not isinstance(item, Mapping):
+            raise Issue6814Error("packet source-contract index contains a non-object")
+        source_contracts.append(
+            {
+                "path": item.get("path"),
+                "sha256": item.get("sha256"),
+                "status": item.get("status"),
+                "trace_identity": item.get("trace_identity"),
+            }
+        )
+    pair_summaries = []
+    for item in manifest.get("pair_compatibility_receipts", []):
+        if not isinstance(item, Mapping):
+            raise Issue6814Error("packet pair-receipt index contains a non-object")
+        path = item.get("path")
+        if not isinstance(path, str) or not path.startswith("pair_receipts/"):
+            raise Issue6814Error("packet pair-receipt path is unsafe or unavailable")
+        receipt_path = packet_root / path
+        if receipt_path.resolve().parent != (packet_root / "pair_receipts").resolve():
+            raise Issue6814Error("packet pair-receipt path escapes pair_receipts")
+        receipt = _read_json_object(receipt_path)
+        pair_summaries.append(
+            _compact_pair_receipt(
+                receipt=receipt,
+                receipt_sha256=str(item.get("sha256")),
+                retrieval_key=f"issue6814/full-packet/{manifest_sha256}/{path}",
+            )
+        )
+    pair_summaries.sort(key=lambda item: str(item.get("pair_id")))
+    source_contracts.sort(key=lambda item: str(item.get("path")))
+    projection = {
+        "schema_version": COMPACT_PACKET_SCHEMA,
+        "issue": ISSUE,
+        "source_package": manifest.get("source_package"),
+        "full_packet": {
+            "manifest_retrieval_key": f"issue6814/full-packet/{manifest_sha256}/packet_manifest.json",
+            "manifest_sha256": manifest_sha256,
+        },
+        "disposition": manifest.get("disposition"),
+        "check_results": manifest.get("check_results"),
+        "source_contracts": source_contracts,
+        "pairs": pair_summaries,
+        "evidence_boundary": {
+            "visualization_only": True,
+            "new_simulation_performed": False,
+            "episode_substitution_performed": False,
+            "tolerance_profile_modified": False,
+        },
+    }
+    _schema_validate(projection, "issue_6814_compact_packet.v1.json")
+    return projection
+
+
+def _write_compact_output(output: Path, projection: Mapping[str, Any]) -> None:
+    """Write a compact projection and checksum ledger without overwriting files."""
+
+    if output.exists():
+        raise Issue6814Error(f"refusing to overwrite existing compact output: {output}")
+    output.mkdir(parents=True)
+    payload_path = output / "compact_packet.json"
+    _write_json(payload_path, projection)
+    sums = f"{sha256_file(payload_path)}  compact_packet.json\n".encode("ascii")
+    (output / "SHA256SUMS").write_bytes(sums)
 
 
 def _selected_pair_id(left: TraceIdentity, right: TraceIdentity) -> str:
@@ -1592,7 +1743,6 @@ def build_issue_6814_trace_packet(
     )
     second: Path | None = None
     renamed = False
-    compact_started = False
     published = False
     try:
         manifest = _build_packet_once(
@@ -1620,23 +1770,25 @@ def build_issue_6814_trace_packet(
             _mark_deterministic_rebuild_ok(second)
             _compare_trees(first, second)
             manifest = json.loads((first / "packet_manifest.json").read_text(encoding="utf-8"))
+            if build_issue_6814_compact_projection(first) != build_issue_6814_compact_projection(
+                second
+            ):
+                raise Issue6814DeterminismError(
+                    "issue #6814 compact projection changed during rebuild"
+                )
+        compact_projection = build_issue_6814_compact_projection(first)
         first.rename(external_output_root)
         renamed = True
         if compact_output is not None:
             compact_output.parent.mkdir(parents=True, exist_ok=True)
-            compact_started = True
-            compact_output.mkdir()
-            shutil.copy2(
-                external_output_root / "packet_manifest.json",
-                compact_output / "packet_manifest.json",
-            )
+            _write_compact_output(compact_output, compact_projection)
         published = True
         return manifest
     finally:
         if not published:
             if renamed:
                 shutil.rmtree(external_output_root, ignore_errors=True)
-            if compact_started and compact_output is not None:
+            if compact_output is not None and compact_output.exists():
                 shutil.rmtree(compact_output, ignore_errors=True)
             shutil.rmtree(first, ignore_errors=True)
         if second is not None and second.exists():
@@ -1645,6 +1797,7 @@ def build_issue_6814_trace_packet(
 
 __all__ = [
     "CANONICALIZATION",
+    "COMPACT_PACKET_SCHEMA",
     "EXECUTION_COMMIT",
     "Issue6814DeterminismError",
     "Issue6814Error",
@@ -1653,6 +1806,7 @@ __all__ = [
     "SELECTED_TRACE_IDENTITIES",
     "TraceIdentity",
     "build_initial_state_record",
+    "build_issue_6814_compact_projection",
     "build_issue_6814_trace_packet",
     "build_issue_6814_trace_source_contract",
     "build_static_run_config",

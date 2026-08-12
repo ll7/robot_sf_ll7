@@ -81,6 +81,29 @@ gate passed. Before admission, use the package's audit dossier and interactive
 viewer for review, or request an explicitly diagnostic-only preview through the
 private API flag; such a preview is not evidence.
 
+## Issue #6814 compact closeout
+
+The strict #6814 re-export can additionally write a frame-free compact projection for issue
+tracking and review:
+
+```bash
+uv run python scripts/analysis/build_issue_6814_trace_packet.py \
+  --source-package <approved-package> \
+  --arm-root doorway_ppo=<external-arm-root> \
+  --arm-root double_bottleneck_goal=<external-arm-root> \
+  --arm-root double_bottleneck_ppo=<external-arm-root> \
+  --external-output-root <full-receipt-root> \
+  --compact-output <compact-root> \
+  --execution-repository <robot-sf-checkout> \
+  --check-determinism
+```
+
+`compact-root/compact_packet.json` conforms to `issue_6814_compact_packet.v1`. It retains case
+identities, source and receipt hashes, compatibility fields, start-state deltas, `shared_prefix`,
+and typed unavailable reasons while leaving full trace-bearing receipts at their external retrieval
+keys. The compact output is an audit projection, not an admission or publication artifact. If a
+source digest, receipt, or deterministic rebuild check fails, the command fails closed.
+
 The full audit dossier and interactive viewer are diagnostic artifacts. The
 publication renderer is intentionally reduced:
 

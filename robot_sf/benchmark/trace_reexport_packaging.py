@@ -2917,8 +2917,13 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
         if provenance_commit != ISSUE_6814_EXECUTION_COMMIT:
             raise RealReexportBindingError("issue #6814 result provenance commit mismatch")
         jsonl_line = result_provenance_row.get("jsonl_line")
-        if jsonl_line is not None and jsonl_line != row_index:
-            raise RealReexportBindingError("issue #6814 result provenance row index mismatch")
+        if jsonl_line is not None:
+            # The approved #6412 sidecars use zero-based JSONL line numbers,
+            # while the immutable mapping receipt uses one-based row indexes.
+            # Accept that exact historical representation only after the
+            # selected episode/config identity has already matched above.
+            if jsonl_line not in {row_index, row_index - 1}:
+                raise RealReexportBindingError("issue #6814 result provenance row index mismatch")
         artifact_sha = result_provenance_row.get("trace_artifact_sha256")
         if artifact_sha is not None and artifact_sha != pointer["episodes_sha256"]:
             raise RealReexportBindingError("issue #6814 result provenance artifact hash mismatch")

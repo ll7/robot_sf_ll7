@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6814 compact provenance projection.** The strict trace-packet builder can now emit a
+  frame-free, schema-validated `issue_6814_compact_packet.v1` projection with retrieval keys and
+  checksums for the full receipts. It preserves the unsupported comparison disposition and typed
+  unavailable reasons without copying raw traces into Git.
+
 * **PR #6941 case workbench hardening.** Analysis traces now carry explicit reset-state,
   event, control, timing, and provenance coverage; campaign-result-store.v2 round-trips
   verify required tables and checksums; comparisons fail closed on incompatible starts;

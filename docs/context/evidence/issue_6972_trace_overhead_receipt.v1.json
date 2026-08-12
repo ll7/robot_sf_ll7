@@ -1,0 +1,203 @@
+{
+  "claim_boundary": "not benchmark evidence; does not authorize source admission",
+  "environment": {
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.1"
+  },
+  "fixture": {
+    "dt_s": 0.1,
+    "first_sample_is_cold": true,
+    "horizon": 5,
+    "raw_artifacts_retained": false,
+    "samples": 5,
+    "scenario": {
+      "density": "low",
+      "flow": "uni",
+      "goal_topology": "point",
+      "groups": 0.0,
+      "id": "smoke-telemetry-measurement",
+      "obstacle": "open",
+      "repeats": 1,
+      "robot_context": "embedded",
+      "speed_var": "low"
+    },
+    "seed": 123
+  },
+  "issue": "https://github.com/ll7/robot_sf_ll7/issues/6972",
+  "profiles": {
+    "off": [
+      {
+        "analysis_trace_gzip_bytes": 0,
+        "elapsed_s": 3.867629417,
+        "jsonl_gzip_bytes": 4076,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 0,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": null
+      },
+      {
+        "analysis_trace_gzip_bytes": 0,
+        "elapsed_s": 0.148336834,
+        "jsonl_gzip_bytes": 4076,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 1,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": null
+      },
+      {
+        "analysis_trace_gzip_bytes": 0,
+        "elapsed_s": 0.070491875,
+        "jsonl_gzip_bytes": 4076,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 2,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": null
+      },
+      {
+        "analysis_trace_gzip_bytes": 0,
+        "elapsed_s": 0.06303625,
+        "jsonl_gzip_bytes": 4074,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 3,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": null
+      },
+      {
+        "analysis_trace_gzip_bytes": 0,
+        "elapsed_s": 0.13242475,
+        "jsonl_gzip_bytes": 4071,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 4,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": null
+      }
+    ],
+    "on": [
+      {
+        "analysis_trace_gzip_bytes": 1078,
+        "elapsed_s": 0.151497,
+        "jsonl_gzip_bytes": 5228,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 0,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": "unavailable"
+      },
+      {
+        "analysis_trace_gzip_bytes": 1078,
+        "elapsed_s": 0.162396834,
+        "jsonl_gzip_bytes": 5228,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 1,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": "unavailable"
+      },
+      {
+        "analysis_trace_gzip_bytes": 1078,
+        "elapsed_s": 0.111957041,
+        "jsonl_gzip_bytes": 5228,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 2,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": "unavailable"
+      },
+      {
+        "analysis_trace_gzip_bytes": 1078,
+        "elapsed_s": 0.149649416,
+        "jsonl_gzip_bytes": 5230,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 3,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": "unavailable"
+      },
+      {
+        "analysis_trace_gzip_bytes": 1078,
+        "elapsed_s": 0.100080375,
+        "jsonl_gzip_bytes": 5231,
+        "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
+        "outcome": {
+          "collision_event": false,
+          "route_complete": false,
+          "timeout_event": true
+        },
+        "sample": 4,
+        "termination_reason": "max_steps",
+        "trace_coverage_status": "unavailable"
+      }
+    ]
+  },
+  "schema_version": "issue_6972_trace_overhead_receipt.v1",
+  "source_commit": "6d5cae230404b4ffb1824a56c364bddd993fb20b",
+  "status": "diagnostic_software_fixture",
+  "summary": {
+    "action_sequence_comparison": {
+      "note": "The non-map fixture itself has no off-profile action trace and is not used to infer one.",
+      "status": "covered_by_map_runner_regression",
+      "test": "tests/benchmark/test_map_runner_utils.py::test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome"
+    },
+    "policy_decision": "keep analysis_trace: all opt-in; median overhead is compared with the 10% threshold",
+    "stable_projection_equal": true,
+    "warm_max_runtime_s": {
+      "off": 0.148336834,
+      "on": 0.162396834
+    },
+    "warm_median_analysis_trace_gzip_bytes": 1078.0,
+    "warm_median_jsonl_gzip_bytes": {
+      "off": 4075.0,
+      "on": 5229.0
+    },
+    "warm_median_overhead_fraction": 0.28923126431853463,
+    "warm_median_runtime_s": {
+      "off": 0.10145831250000001,
+      "on": 0.1308032285
+    },
+    "warm_p90_runtime_s": {
+      "off": 0.148336834,
+      "on": 0.162396834
+    }
+  }
+}

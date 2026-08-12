@@ -53,7 +53,7 @@ EXPECTED_PLANNER_CONFIGS = {
 EXPECTED_PLANNER_FIELDS = {
     "brne": {
         "num_samples": 49,
-        "effective_num_samples": 42,
+        "expected_effective_num_samples": 42,
         "plan_steps": 25,
         "dt": 0.1,
         "maximum_agents": 8,
@@ -249,11 +249,11 @@ def _validate_planners(config: dict[str, Any]) -> tuple[list[dict[str, Any]], in
     if maximum_agents < 1:
         raise ValueError("BRNE maximum_agents must be a positive integer")
     try:
-        expected_effective_num_samples = int(brne_config["effective_num_samples"])
+        expected_effective_num_samples = int(brne_config["expected_effective_num_samples"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("BRNE effective_num_samples must be a positive integer") from exc
+        raise ValueError("BRNE expected_effective_num_samples must be a positive integer") from exc
     if expected_effective_num_samples < 1:
-        raise ValueError("BRNE effective_num_samples must be a positive integer")
+        raise ValueError("BRNE expected_effective_num_samples must be a positive integer")
     return planners, maximum_agents - 1, expected_effective_num_samples
 
 
@@ -461,10 +461,7 @@ def classify_record(
         )
         lower = float(corridor["y_min"])
         upper = float(corridor["y_max"])
-        radius = float(corridor["robot_radius_m"])
-        center_lower = lower + radius
-        center_upper = upper - radius
-        violation_count = sum(y < center_lower or y > center_upper for _, y in positions)
+        violation_count = sum(y < lower or y > upper for _, y in positions)
 
     metrics = record.get("metrics")
     metrics = metrics if isinstance(metrics, dict) else {}

@@ -192,7 +192,7 @@ def test_brne_requires_native_dependency_status() -> None:
                         "source_commit": BRNE_PINNED_SHA,
                         "source_pin": BRNE_PINNED_SHA,
                         "source_integrity": "clean_pinned_worktree",
-                        "effective_num_samples": 49,
+                        "effective_num_samples": 41,
                     }
                 },
             }
@@ -260,6 +260,19 @@ def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() ->
     assert summary["missing_pairs"] == [["classic_head_on_corridor_low", 113]]
     assert summary["goal_reached_rows"] == 2
     assert summary["goal_reached_unavailable_rows"] == 1
+
+
+def test_corridor_uses_approved_direct_feasible_band() -> None:
+    """The approved y-band is not silently shrunk by the robot radius."""
+    config = _config()
+    classified = classify_record(
+        _record(positions=[[0.0, 3.0], [0.0, 37.0]]),
+        config,
+        planner_key="social_force",
+    )
+
+    assert classified["corridor_valid"] is True
+    assert classified["corridor_violation_count"] == 0
 
 
 def test_campaign_rejects_mutated_frozen_inputs() -> None:

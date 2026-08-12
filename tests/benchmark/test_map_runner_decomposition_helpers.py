@@ -39,9 +39,48 @@ from robot_sf.benchmark.map_runner_episode import (
     _prepare_policy_and_observation_contract,
     _resolve_episode_run_context,
     _run_episode_step_loop,
+    _step_build_planner_decision_entry,
 )
 from robot_sf.benchmark.safety_wrapper_runtime import SafetyWrapperRuntimeConfig
 from robot_sf.benchmark.types import NoiseConfig, PlannerRuntime
+
+
+def test_planner_decision_trace_preserves_brne_mechanism_payload() -> None:
+    """Planner traces must retain the BRNE mechanism payload without widening the schema."""
+    state = SimpleNamespace(
+        goal_vec=np.array([2.0, 0.0]),
+        initial_goal_distance=2.0,
+        planner_decision_trace=[],
+    )
+    config = SimpleNamespace(record_planner_decision_trace=True)
+    simulation = SimpleNamespace(
+        robot_pos=np.array([1.0, 0.0]),
+        planner_step_decision={
+            "selected_command": [1.0, 0.0],
+            "brne_mechanism": {"schema_version": "brne-mechanism-step.v1"},
+        },
+    )
+
+    _step_build_planner_decision_entry(state, config, step_idx=3, sim=simulation)
+
+    assert state.planner_decision_trace == [
+        {
+            "step": 3,
+            "selected_source": "unknown",
+            "selected_command": [1.0, 0.0],
+            "selected_score": None,
+            "static_recenter": 0.0,
+            "route_arc_progress": 0.0,
+            "goal_progress": 0.0,
+            "progress_windows": {},
+            "distance_to_goal_m": 1.0,
+            "route_progress_from_start_m": 1.0,
+            "robot_x_m": 1.0,
+            "robot_y_m": 0.0,
+            "brne_mechanism": {"schema_version": "brne-mechanism-step.v1"},
+        }
+    ]
+
 
 # ---------------------------------------------------------------------------
 # map_runner: holonomic world-velocity helpers

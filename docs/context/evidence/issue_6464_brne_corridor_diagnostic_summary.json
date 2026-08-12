@@ -1,10 +1,10 @@
 {
-  "schema_version": "issue-6464-brne-corridor-diagnostic-summary.v1",
+  "schema_version": "issue-6464-brne-corridor-diagnostic-summary.v2",
   "issue": 6464,
   "status": "diagnostic_complete",
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Native upstream BRNE core through the Robot SF adapter, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
-  "base_commit": "cb5ee5700ebe262733dd29e8e97c74deaff03cc7",
+  "base_commit": "2f617879125c2113bfb35914a63fb3739fe6ec10",
   "source_worktree_dirty_at_capture": false,
   "scenario": {
     "name": "classic_head_on_corridor_low",
@@ -85,7 +85,67 @@
     "report_markdown_sha256": "b30a2b7ba441f4b86c558b837c8198cf8bb57f7e0bf2e811938cf36b6d8125e0",
     "raw_artifacts": "ignored_worktree_local"
   },
+  "mechanism_trace": {
+    "status": "complete",
+    "claim_boundary": "Trace-backed mechanism diagnostics only; no planner ranking, benchmark, safety, realism, matched-compute, or paper claim.",
+    "report_dir": "output/benchmarks/issue_6923_brne_mechanism_trace_final_20260812T061200Z",
+    "report_json_sha256": "cb235855d142b1d59f8f54acb0f9ada2ae34d8a301a9ad76c43610e173604151",
+    "report_markdown_sha256": "13129a70e9bab718e018ed1ec2d6773569a7dc328313b2588563c69275990d01",
+    "mechanism_table_sha256": "5fcb7493b7136636cc55491d14c00976896f1adb1292498d7cf6b64739cf7d3c",
+    "exact_native_rows": "3/3",
+    "runtime_ok_rows": "3/3",
+    "effective_samples": 42,
+    "aggregation_layout": "plan_step_sample_command",
+    "raw_action_clipped_all_steps": true,
+    "observed": {
+      "initial_declared_heading_goal_delta_rad": {
+        "seed_111": -0.1179428142,
+        "seed_112": -0.1124040759,
+        "seed_113": 0.057713824
+      },
+      "progress_by_phase_m": {
+        "seed_111": {
+          "early": 1.3556025655,
+          "middle": -5.7476161025,
+          "final": -11.1236266564
+        },
+        "seed_112": {
+          "early": -0.0322566728,
+          "middle": -11.4005989071,
+          "final": -18.5506919175
+        },
+        "seed_113": {
+          "early": 0.1760851165,
+          "middle": -12.0105279406,
+          "final": -19.6780396882
+        }
+      },
+      "raw_linear_velocity_ranges_m_s": {
+        "seed_111": [4.2000000928, 89.8709528166],
+        "seed_112": [4.2000000928, 87.4347455929],
+        "seed_113": [4.2000000928, 88.4727060005]
+      },
+      "raw_angular_velocity_abs_max_rad_s": {
+        "seed_111": 41.373154546,
+        "seed_112": 15.1221063628,
+        "seed_113": 19.3262277283
+      },
+      "minimum_clearance_m": {
+        "seed_111": 0.2510807648,
+        "seed_112": 2.5800768188,
+        "seed_113": 1.4651953713
+      },
+      "termination": "collision for all three BRNE rows; collision steps 141, 172, and 183"
+    },
+    "interpretation": {
+      "observed": "The native runtime, frame metadata, exact pair coverage, and effective sample count are valid; all raw BRNE actions exceeded at least one configured limit and were clamped before application.",
+      "hypothesis": "The pinned mean-normalized upstream weights and adapter weighted-sum action construction may use incompatible control scales or units. The trace does not establish causality because no aggregation intervention was run.",
+      "decision": "diagnostic_only_retention",
+      "next_smallest_proof": "Issue #6934 isolates the upstream weight/action-unit contract on a hand-checkable fixture before any planner behavior change or broader campaign."
+    }
+  },
   "follow_up_issue": 6923,
   "contract_follow_up_issue": 6932,
-  "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching in #6923 before any broader or ranking campaign."
+  "mechanism_follow_up_issue": 6934,
+  "next_step": "Retain the #6923 result as diagnostic-only and isolate the BRNE weight/action contract in #6934 before any broader or ranking campaign."
 }

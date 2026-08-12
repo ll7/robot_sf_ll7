@@ -54,6 +54,7 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_profile,
 )
 from robot_sf.benchmark.tuning_run_provenance import (
+    TuningRunSpec,
     parse_tuning_run_spec,
     validate_tuning_run_spec,
 )
@@ -1420,7 +1421,7 @@ class _ParsedCampaignConfig:
     radius_sweep: RadiusSweepConfig | None
     synthetic_actuation_raw: dict[str, Any] | None
     kinematics_matrix: tuple[str, ...]
-    tuning_run_provenance: Any
+    tuning_run_provenance: TuningRunSpec | None
 
 
 def _build_amv_profile_config(
@@ -1647,10 +1648,12 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     kinematics_matrix = _normalize_kinematics_matrix(
         payload.get("kinematics_matrix", ["differential_drive"])
     )
-    tuning_run_raw = payload.get("tuning_run_provenance")
+    tuning_run_key = "tuning_run_provenance"
+    tuning_run_raw = payload.get(tuning_run_key)
     if tuning_run_raw is None and "tuning_run" in payload:
-        tuning_run_raw = payload.get("tuning_run")
-    tuning_run_provenance = parse_tuning_run_spec(tuning_run_raw)
+        tuning_run_key = "tuning_run"
+        tuning_run_raw = payload.get(tuning_run_key)
+    tuning_run_provenance = parse_tuning_run_spec(tuning_run_raw, source=tuning_run_key)
     parsed = _ParsedCampaignConfig(
         name=name,
         scenario_matrix_path=scenario_matrix_path,

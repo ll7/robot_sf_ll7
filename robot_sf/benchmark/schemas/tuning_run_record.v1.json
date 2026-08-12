@@ -81,7 +81,8 @@
       "type": ["string", "null"]
     },
     "recorded_at_utc": {
-      "type": ["string", "null"]
+      "type": ["string", "null"],
+      "format": "date-time"
     },
     "counts_toward_tuning": {
       "type": "boolean"

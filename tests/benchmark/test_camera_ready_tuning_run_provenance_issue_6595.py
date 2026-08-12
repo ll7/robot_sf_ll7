@@ -17,6 +17,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     TuningSpec,
 )
 from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
+from robot_sf.benchmark.camera_ready._util import _repo_relative
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.tuning_run_provenance import (
     TUNING_LEDGER_SCHEMA,
@@ -182,7 +183,24 @@ def test_generated_record_matches_versioned_json_schema() -> None:
     jsonschema.validate(record.to_mapping(), schema)
 
 
-def _write_campaign(tmp_path: Path, *, strict: bool = True) -> Path:
+def test_generated_ledger_matches_versioned_json_schema() -> None:
+    """The deterministic ledger envelope stays aligned with its checked-in schema."""
+    schema_path = Path(__file__).parents[2] / "robot_sf/benchmark/schemas/tuning_ledger.v1.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    ledger = aggregate_tuning_records(
+        [
+            TuningRunRecord(
+                run_id="tuning-1",
+                run_class=TUNING_RUN_CLASS_TUNING,
+                planner_id="planner-a",
+                attempted_configurations=2,
+            )
+        ]
+    )
+    jsonschema.validate(ledger, schema)
+
+
+def _write_campaign(tmp_path: Path, *, strict: bool = True, with_provenance: bool = True) -> Path:
     """Write a compact camera-ready config exercising automatic ledger emission."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")
     scenario_path = tmp_path / scenario_rel
@@ -192,7 +210,8 @@ def _write_campaign(tmp_path: Path, *, strict: bool = True) -> Path:
         encoding="utf-8",
     )
     strict_block = "tuning_effort_enforcement: error\n" if strict else ""
-    tuning_block = """
+    tuning_block = (
+        """
 tuning_run_provenance:
   run_class: tuning
   run_id: tuning-job-6595
@@ -205,6 +224,9 @@ tuning_run_provenance:
   stopping_rule: stop after four valid configurations
   compute_resource: local-cpu
 """
+        if with_provenance
+        else ""
+    )
     config_path = tmp_path / "campaign.yaml"
     config_path.write_text(
         """name: issue_6595_smoke
@@ -245,20 +267,13 @@ def test_campaign_preflight_emits_ledger_and_manifest_link(tmp_path: Path) -> No
     assert ledger["by_planner"]["planner_a"]["attempted_configurations"] == 4
     assert ledger["records"][0]["person_hours"] is None
     assert load_tuning_records(ledger_path)[0].run_id == ledger["records"][0]["run_id"]
-    assert manifest["artifacts"]["tuning_ledger"] == str(ledger_path.resolve())
+    assert manifest["artifacts"]["tuning_ledger"] == _repo_relative(ledger_path)
     assert manifest["tuning_run_provenance"]["ledger_sha256"] == ledger["ledger_sha256"]
 
 
 def test_strict_campaign_rejects_missing_prospective_provenance(tmp_path: Path) -> None:
     """The publication-style gate rejects an otherwise declared arm without a run record block."""
-    config_path = _write_campaign(tmp_path)
-    config_path.write_text(
-        config_path.read_text(encoding="utf-8").replace(
-            "tuning_run_provenance:\n  run_class: tuning\n  run_id: tuning-job-6595\n  objective: minimize validation collision rate\n  development_split: development-v1\n  eval_set_disjoint: true\n  attempted_configurations: 4\n  simulator_episodes: 80\n  simulator_calls: 80\n  stopping_rule: stop after four valid configurations\n  compute_resource: local-cpu\n",
-            "",
-        ),
-        encoding="utf-8",
-    )
+    config_path = _write_campaign(tmp_path, with_provenance=False)
     with pytest.raises(ValueError, match="complete 'tuning_run_provenance' block"):
         load_campaign_config(config_path)
 

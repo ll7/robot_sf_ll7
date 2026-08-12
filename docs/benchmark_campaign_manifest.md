@@ -250,7 +250,9 @@ asymmetry is reviewable; it does not change any measured outcome.
 Future campaign launches also emit a machine-readable `reports/tuning_ledger.json`. Its individual
 records use the versioned schema
 [`robot_sf/benchmark/schemas/tuning_run_record.v1.json`](../robot_sf/benchmark/schemas/tuning_run_record.v1.json)
-and are grouped into three explicit run classes:
+and the ledger envelope uses
+[`robot_sf/benchmark/schemas/tuning_ledger.v1.json`](../robot_sf/benchmark/schemas/tuning_ledger.v1.json).
+Records are grouped into three explicit run classes:
 
 - `debug`: launch metadata only; never contributes to tuning totals.
 - `tuning`: contributes only counters that the record actually captured, such as attempted

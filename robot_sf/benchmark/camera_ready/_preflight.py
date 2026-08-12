@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -38,6 +37,7 @@ from robot_sf.benchmark.camera_ready._summaries import (
     _build_matrix_summary_rows,
 )
 from robot_sf.benchmark.camera_ready._util import (
+    _config_hash_payload,
     _hash_payload,
     _jsonable_repo_relative,
     _latency_stress_metadata,
@@ -664,11 +664,7 @@ def _compute_campaign_metadata(
         schedule_path=cfg.scenario_horizons_path,
     )
     git_meta = _git_context()
-    config_payload = asdict(cfg)
-    if cfg.tuning_run_provenance is None:
-        # Preserve hashes for legacy configs that predate the optional prospective block.
-        config_payload.pop("tuning_run_provenance", None)
-    config_hash = _config_hash(_jsonable_repo_relative(config_payload))
+    config_hash = _config_hash(_config_hash_payload(cfg))
     noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     noise_hash = observation_noise_hash(noise_spec)
     return {

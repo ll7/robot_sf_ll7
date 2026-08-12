@@ -2709,7 +2709,7 @@ def _execute_step_loop(
             selected_action_payload=sel_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
-            goal_position=np.asarray(env.simulator.goal_pos[0], dtype=float),
+            goal_position=np.array(env.simulator.goal_pos[0], dtype=float, copy=True),
         )
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
         state.goal_vec = np.array(sim.goal_position, dtype=float, copy=True)
@@ -2952,6 +2952,17 @@ def _finalize_planner_runtime_metadata(
     return algo_meta
 
 
+def _required_trace_radius(value: Any, *, field: str) -> float:
+    """Return a configured finite non-negative radius for trace geometry."""
+    try:
+        radius = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} is required for simulation-step-trace.v1") from exc
+    if not math.isfinite(radius) or radius < 0.0:
+        raise ValueError(f"{field} must be finite and non-negative for simulation-step-trace.v1")
+    return radius
+
+
 def _finalize_trace_metadata(  # noqa: PLR0913
     algo_meta: AlgoMeta,
     *,
@@ -2987,8 +2998,12 @@ def _finalize_trace_metadata(  # noqa: PLR0913
         if topology_episode is not None:
             algo_meta["topology_guided_episode"] = topology_episode
     if record_simulation_step_trace:
-        robot_radius = float(getattr(robot_config, "radius", 1.0))
-        ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+        robot_radius = _required_trace_radius(
+            getattr(robot_config, "radius", None), field="robot_config.radius"
+        )
+        ped_radius = _required_trace_radius(
+            getattr(config.sim_config, "ped_radius", None), field="sim_config.ped_radius"
+        )
         envelope: dict[str, Any] = {
             "schema_version": "simulation-step-trace.v1",
             "dt": float(config.sim_config.time_per_step_in_secs),

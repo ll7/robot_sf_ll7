@@ -114,6 +114,7 @@ def _brne_metadata(
     aggregation_layout: dict[str, Any] | None = None,
     status: str = "ok",
     runtime_status: str = "ok",
+    failure_count: int = 0,
 ) -> dict[str, Any]:
     """Build minimal BRNE-native algorithm_metadata for provenance tests."""
     agg = aggregation_layout or {
@@ -134,7 +135,7 @@ def _brne_metadata(
             "planner_metadata": {
                 "status": status,
                 "runtime_status": runtime_status,
-                "failure_count": 0,
+                "failure_count": failure_count,
                 "source_commit": BRNE_PINNED_SHA,
                 "source_pin": BRNE_PINNED_SHA,
                 "source_integrity": "clean_pinned_worktree",
@@ -345,6 +346,44 @@ class TestSignedPhaseProgress:
         switched = table["steps"][1]
         assert switched["goal_switched"] is True
         assert switched["signed_progress_delta_m"] == 0.0
+        assert table["episode"]["progress_by_phase"]["all"]["goal_switch_steps"] == 1
+
+    def test_first_step_goal_switch_does_not_create_artificial_progress_jump(self) -> None:
+        """A route switch before step zero must not look like instantaneous progress."""
+        steps = [
+            {
+                "step": 0,
+                "time_s": 0.1,
+                "robot": {"position": [0.0, 4.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+                "goal_position": [20.0, 4.0],
+                "pedestrians": [],
+                "planner": {
+                    "event": "step",
+                    "selected_action": {"linear_velocity": 1.0, "angular_velocity": 0.0},
+                },
+                "rl": {"reward": 0.0, "terminated": False, "truncated": False},
+            },
+            {
+                "step": 1,
+                "time_s": 0.2,
+                "robot": {"position": [1.0, 4.0], "heading": 0.0, "velocity": [1.0, 0.0]},
+                "goal_position": [20.0, 4.0],
+                "pedestrians": [],
+                "planner": {
+                    "event": "step",
+                    "selected_action": {"linear_velocity": 1.0, "angular_velocity": 0.0},
+                },
+                "rl": {"reward": 1.0, "terminated": True, "truncated": False},
+            },
+        ]
+        trace = _minimal_trace(goal_position=[20.0, 4.0], steps=steps)
+        trace["initial_goal_position"] = [10.0, 4.0]
+        trace["initial_goal_distance_m"] = 10.0
+        table = build_trace_table(_record(trace))
+
+        first_step = table["steps"][0]
+        assert first_step["goal_switched"] is True
+        assert first_step["signed_progress_delta_m"] == 0.0
         assert table["episode"]["progress_by_phase"]["all"]["goal_switch_steps"] == 1
 
 
@@ -585,6 +624,22 @@ class TestMalformedMissingFallbackRuntimeFailed:
         record = _record(trace)
         with pytest.raises(ValueError, match="non-empty list"):
             build_trace_table(record)
+
+    def test_runtime_status_failed_raises(self) -> None:
+        """Runtime-failed BRNE rows cannot enter the native diagnostic table."""
+        metadata = _brne_metadata(runtime_status="failed")
+        record = _record(_minimal_trace(), algo="brne")
+        record["algorithm_metadata"].update(metadata)
+        with pytest.raises(ValueError, match="BRNE runtime is not successful"):
+            build_trace_table(record, planner_key="brne")
+
+    def test_nonzero_failure_count_raises(self) -> None:
+        """Any recorded BRNE failure count invalidates native evidence admission."""
+        metadata = _brne_metadata(failure_count=1)
+        record = _record(_minimal_trace(), algo="brne")
+        record["algorithm_metadata"].update(metadata)
+        with pytest.raises(ValueError, match="failure_count must be zero"):
+            build_trace_table(record, planner_key="brne")
 
     def test_missing_robot_position_raises(self) -> None:
         steps = [

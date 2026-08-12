@@ -219,6 +219,9 @@ def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch
 
     action = planner.step(_make_observation(num_agents=1))
     assert action == pytest.approx({"v": 0.7, "omega": 0.25})
+    aggregation = planner.get_metadata()["aggregation_layout"]
+    assert aggregation["ensemble_layout"] == "samples_first_compatibility"
+    assert aggregation["aggregation_axis"] == "sample_axis_0"
 
 
 def test_brne_declared_heading_takes_precedence_over_velocity() -> None:

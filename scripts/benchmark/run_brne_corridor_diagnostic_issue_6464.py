@@ -802,7 +802,11 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
             records = _read_jsonl(episodes_path)
         except Exception as exc:  # noqa: BLE001 - a failed arm must be reported, not promoted.
             execution_error = str(exc)
-        records = _read_jsonl(episodes_path)
+            try:
+                records = _read_jsonl(episodes_path) if episodes_path.is_file() else []
+            except Exception as read_exc:  # noqa: BLE001 - preserve failed-arm reporting.
+                execution_error = f"{execution_error}; episode read failed: {read_exc}"
+                records = []
         arm = summarize_records(
             planner_key=key,
             records=records,

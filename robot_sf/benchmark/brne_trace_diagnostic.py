@@ -375,6 +375,7 @@ def _step_row(
     *,
     previous: dict[str, Any] | None,
     initial_goal_distance: float,
+    initial_goal_position: list[float],
     robot_radius: float,
     ped_radius: float,
     aggregation_layout: dict[str, Any] | None,
@@ -394,7 +395,8 @@ def _step_row(
     goal_bearing = math.atan2(goal_position[1] - position[1], goal_position[0] - position[0])
     distance_to_goal = math.dist(position, goal_position)
     previous_distance = previous["distance_to_goal_m"] if previous else initial_goal_distance
-    goal_switched = previous is not None and previous["goal_position"] != goal_position
+    previous_goal_position = previous["goal_position"] if previous else initial_goal_position
+    goal_switched = previous_goal_position != goal_position
     signed_progress_delta = 0.0 if goal_switched else previous_distance - distance_to_goal
     selected = step["selected_action"]
     previous_selected = previous["selected_command"] if previous else None
@@ -512,6 +514,7 @@ def build_trace_table(
             step,
             previous=previous,
             initial_goal_distance=envelope["initial_goal_distance_m"],
+            initial_goal_position=envelope["initial_goal_position"],
             robot_radius=envelope["robot_radius_m"],
             ped_radius=envelope["ped_radius_m"],
             aggregation_layout=aggregation_layout,

@@ -62,6 +62,7 @@ from robot_sf.benchmark.map_runner_batch_plan import (
 )
 from robot_sf.benchmark.map_runner_episode import (
     _CollisionEventContext,
+    _required_trace_radius,
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
@@ -78,6 +79,14 @@ from robot_sf.nav.map_config import MapDefinition
 from robot_sf.robot.action_adapters import holonomic_to_diff_drive_action
 from robot_sf.robot.differential_drive import DifferentialDriveSettings
 from robot_sf.robot.holonomic_drive import HolonomicDriveSettings
+
+
+def test_required_trace_radius_rejects_missing_or_invalid_geometry() -> None:
+    """Simulation traces must not publish fabricated or non-finite radii."""
+    assert _required_trace_radius(0.4, field="radius") == pytest.approx(0.4)
+    for value in (None, float("nan"), -0.1):
+        with pytest.raises(ValueError, match="radius"):
+            _required_trace_radius(value, field="radius")
 
 
 class _KinematicsStub:
@@ -2750,7 +2759,14 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "ped_radius": 0.4})(),
+            "robot_config": DifferentialDriveSettings(radius=1.0),
+        },
+    )
 
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner._build_env_config",
@@ -3622,7 +3638,14 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
             return None
 
     map_def = _minimal_map_def()
-    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "ped_radius": 0.4})(),
+            "robot_config": DifferentialDriveSettings(radius=1.0),
+        },
+    )
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
@@ -5885,7 +5908,7 @@ def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkey
     from robot_sf.gym_env.unified_config import ObservationVisibilitySettings
 
     dummy_config = SimpleNamespace(
-        sim_config=SimpleNamespace(time_per_step_in_secs=0.1),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.1, ped_radius=0.4),
         robot_config=HolonomicDriveSettings(max_speed=1.0, max_angular_speed=1.0),
         observation_visibility=ObservationVisibilitySettings(enabled=True),
     )

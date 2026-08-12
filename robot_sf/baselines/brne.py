@@ -182,6 +182,7 @@ class BRNEPlanner:
         self._jit_warmup_done = False
         self._upstream_rng_seeded = False
         self._last_effective_num_samples: int | None = None
+        self._last_aggregation_layout: dict[str, Any] | None = None
         self._step_count = 0
         self._failure_count = 0
         self._failure_reasons: list[str] = []
@@ -251,6 +252,7 @@ class BRNEPlanner:
         self._jit_warmup_done = False
         self._upstream_rng_seeded = False
         self._last_effective_num_samples = None
+        self._last_aggregation_layout = None
         self._reset_runtime_diagnostics()
 
     def configure(self, config: dict[str, Any] | BRNEPlannerConfig) -> None:
@@ -259,6 +261,7 @@ class BRNEPlanner:
         self._lmat = None
         self._upstream_rng_seeded = False
         self._last_effective_num_samples = None
+        self._last_aggregation_layout = None
         self._reset_runtime_diagnostics()
 
     def _reset_runtime_diagnostics(self) -> None:
@@ -398,10 +401,26 @@ class BRNEPlanner:
             _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
             return self._zero_action("invalid_control_ensemble_shape")
         if ulist.shape[1] == robot_weights.size:
+            self._last_aggregation_layout = {
+                "method": "weighted_first_command",
+                "ensemble_layout": "plan_step_first",
+                "aggregation_axis": "sample_axis_1",
+                "ensemble_shape": [int(value) for value in ulist.shape],
+                "weight_count": int(robot_weights.size),
+                "observed": True,
+            }
             cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
         elif ulist.shape[0] == robot_weights.size:
             # Preserve compatibility with isolated adapters that expose samples first;
             # the pinned upstream helper uses the plan-step-first layout above.
+            self._last_aggregation_layout = {
+                "method": "weighted_first_command",
+                "ensemble_layout": "samples_first_compatibility",
+                "aggregation_axis": "sample_axis_0",
+                "ensemble_shape": [int(value) for value in ulist.shape],
+                "weight_count": int(robot_weights.size),
+                "observed": True,
+            }
             cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
         else:
             _LOGGER.debug(
@@ -593,6 +612,7 @@ class BRNEPlanner:
         self._brne = None
         self._lmat = None
         self._upstream_rng_seeded = False
+        self._last_aggregation_layout = None
         self._last_effective_num_samples = None
 
     def get_metadata(self) -> dict[str, Any]:
@@ -644,9 +664,12 @@ class BRNEPlanner:
                 "The pinned upstream grid helper may return fewer samples than the requested "
                 "num_samples; all trajectory and weight tensors use that effective count."
             ),
-            "aggregation_layout": {
+            "aggregation_layout": self._last_aggregation_layout
+            or {
                 "method": "weighted_first_command",
                 "ensemble_layout": "plan_step_first",
+                "aggregation_axis": "sample_axis_1",
+                "observed": False,
                 "description": (
                     "BRNE uses a plan-step-first control ensemble layout "
                     "(plan_steps, samples, 2) and aggregates via weighted sum "

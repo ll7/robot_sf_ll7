@@ -153,6 +153,14 @@ diagnostic but did not change the `0/3` goal-reaching boundary:
 The residual progress mechanism is tracked separately in
 [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
 
+Issue #6938 BRNE progress mechanism: exact native traces separate pre-clamp and
+selected actions, show no clipping or gross heading/frame mismatch in the frozen
+slice, and reproduce a common post-initial-step low-speed command with positive
+phase progress but `0/3` goal-reaching:
+[issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
+[evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
+The bounded command-generation follow-up is [#6944](https://github.com/ll7/robot_sf_ll7/issues/6944).
+
 Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
 `orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The
 result measures projection divergence only; it is not benchmark evidence and does not retire the

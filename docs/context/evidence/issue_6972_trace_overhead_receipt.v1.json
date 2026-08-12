@@ -24,12 +24,13 @@
     "seed": 123
   },
   "issue": "https://github.com/ll7/robot_sf_ll7/issues/6972",
+  "measurement_command": "uv run python scripts/analysis/measure_issue_6972_trace_overhead.py --output docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
   "profiles": {
     "off": [
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 3.867629417,
-        "jsonl_gzip_bytes": 4076,
+        "elapsed_s": 2.117420208,
+        "jsonl_gzip_bytes": 4077,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -42,8 +43,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.148336834,
-        "jsonl_gzip_bytes": 4076,
+        "elapsed_s": 0.0547335,
+        "jsonl_gzip_bytes": 4073,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -56,8 +57,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.070491875,
-        "jsonl_gzip_bytes": 4076,
+        "elapsed_s": 0.053054333,
+        "jsonl_gzip_bytes": 4077,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -70,8 +71,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.06303625,
-        "jsonl_gzip_bytes": 4074,
+        "elapsed_s": 0.053398083,
+        "jsonl_gzip_bytes": 4072,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -84,8 +85,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.13242475,
-        "jsonl_gzip_bytes": 4071,
+        "elapsed_s": 0.052997625,
+        "jsonl_gzip_bytes": 4074,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -99,9 +100,9 @@
     ],
     "on": [
       {
-        "analysis_trace_gzip_bytes": 1078,
-        "elapsed_s": 0.151497,
-        "jsonl_gzip_bytes": 5228,
+        "analysis_trace_gzip_bytes": 1076,
+        "elapsed_s": 0.064696583,
+        "jsonl_gzip_bytes": 5230,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -113,8 +114,8 @@
         "trace_coverage_status": "unavailable"
       },
       {
-        "analysis_trace_gzip_bytes": 1078,
-        "elapsed_s": 0.162396834,
+        "analysis_trace_gzip_bytes": 1076,
+        "elapsed_s": 0.065428,
         "jsonl_gzip_bytes": 5228,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
@@ -127,9 +128,9 @@
         "trace_coverage_status": "unavailable"
       },
       {
-        "analysis_trace_gzip_bytes": 1078,
-        "elapsed_s": 0.111957041,
-        "jsonl_gzip_bytes": 5228,
+        "analysis_trace_gzip_bytes": 1076,
+        "elapsed_s": 0.063668584,
+        "jsonl_gzip_bytes": 5229,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -141,9 +142,9 @@
         "trace_coverage_status": "unavailable"
       },
       {
-        "analysis_trace_gzip_bytes": 1078,
-        "elapsed_s": 0.149649416,
-        "jsonl_gzip_bytes": 5230,
+        "analysis_trace_gzip_bytes": 1076,
+        "elapsed_s": 0.064426208,
+        "jsonl_gzip_bytes": 5229,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -155,9 +156,9 @@
         "trace_coverage_status": "unavailable"
       },
       {
-        "analysis_trace_gzip_bytes": 1078,
-        "elapsed_s": 0.100080375,
-        "jsonl_gzip_bytes": 5231,
+        "analysis_trace_gzip_bytes": 1076,
+        "elapsed_s": 0.066143292,
+        "jsonl_gzip_bytes": 5228,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -171,7 +172,7 @@
     ]
   },
   "schema_version": "issue_6972_trace_overhead_receipt.v1",
-  "source_commit": "6d5cae230404b4ffb1824a56c364bddd993fb20b",
+  "source_commit": "14f2b12c0d2f53e00b6e732d9169ea5e9ad0e398",
   "status": "diagnostic_software_fixture",
   "summary": {
     "action_sequence_comparison": {
@@ -182,22 +183,22 @@
     "policy_decision": "keep analysis_trace: all opt-in; median overhead is compared with the 10% threshold",
     "stable_projection_equal": true,
     "warm_max_runtime_s": {
-      "off": 0.148336834,
-      "on": 0.162396834
+      "off": 0.0547335,
+      "on": 0.066143292
     },
-    "warm_median_analysis_trace_gzip_bytes": 1078.0,
+    "warm_median_analysis_trace_gzip_bytes": 1076.0,
     "warm_median_jsonl_gzip_bytes": {
-      "off": 4075.0,
-      "on": 5229.0
+      "off": 4073.5,
+      "on": 5228.5
     },
-    "warm_median_overhead_fraction": 0.28923126431853463,
+    "warm_median_overhead_fraction": 0.2198333572814355,
     "warm_median_runtime_s": {
-      "off": 0.10145831250000001,
-      "on": 0.1308032285
+      "off": 0.053226208,
+      "on": 0.064927104
     },
     "warm_p90_runtime_s": {
-      "off": 0.148336834,
-      "on": 0.162396834
+      "off": 0.0547335,
+      "on": 0.066143292
     }
   }
 }

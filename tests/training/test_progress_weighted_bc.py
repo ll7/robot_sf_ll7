@@ -104,6 +104,18 @@ class TestArmAUniform:
         assert cfg.weight_min == 1.0
         assert cfg.weight_max == 1.0
 
+    def test_arm_a_direct_and_mapping_defaults_are_one(self) -> None:
+        """Omitted Arm-A bounds must remain a strict uniform-control contract."""
+        direct = ProgressWeightedObjectiveConfig(
+            objective_name="mean_expert_action_nll",
+            arm="A",
+        )
+        mapped = ProgressWeightedObjectiveConfig.from_mapping(
+            {"objective_name": "mean_expert_action_nll", "arm": "A"}
+        )
+        assert (direct.weight_min, direct.weight_max) == (1.0, 1.0)
+        assert (mapped.weight_min, mapped.weight_max) == (1.0, 1.0)
+
     def test_arm_a_does_not_require_route_progress(self) -> None:
         """Arm A can construct its uniform weights without route provenance."""
         cfg = ProgressWeightedObjectiveConfig.arm_a()
@@ -231,6 +243,24 @@ class TestMalformedData:
         path = tmp_path / "data.npz"
         np.savez(path, remaining_route_length=np.array(10.0))
         with pytest.raises(ProgressWeightedBcError, match="scalar"):
+            load_remaining_route_length_from_npz(path)
+
+    def test_missing_actions_fails_closed(self, tmp_path: Path) -> None:
+        """Arm-B route progress without action alignment must fail closed."""
+        path = tmp_path / "data.npz"
+        np.savez(
+            path,
+            remaining_route_length=np.array([[10.0, 8.0, 6.0]]),
+            remaining_route_length_metadata=_ROUTE_LENGTH_PROVENANCE,
+        )
+        with pytest.raises(ProgressWeightedBcError, match="requires an actions array"):
+            load_remaining_route_length_from_npz(path)
+
+    def test_high_rank_array_fails_closed(self, tmp_path: Path) -> None:
+        """Route-progress arrays above episode-by-step rank must fail closed."""
+        path = tmp_path / "data.npz"
+        np.savez(path, remaining_route_length=np.zeros((1, 2, 3)))
+        with pytest.raises(ProgressWeightedBcError, match="unexpected ndim=3"):
             load_remaining_route_length_from_npz(path)
 
     def test_alignment_mismatch_fails_closed(self, tmp_path: Path) -> None:
@@ -650,3 +680,75 @@ class TestProgressWeightedBCTrainer:
         trainer.train(n_epochs=2)
         # 9 samples, batch_size=4 -> 3 batches per epoch -> 6 total updates
         assert trainer._n_updates == 6
+
+    def test_trainer_rejects_short_observation_episode(self) -> None:
+        """Every action must have a corresponding observation before training."""
+        import gymnasium as gym
+
+        from robot_sf.training.progress_weighted_bc import (
+            ProgressWeightedBCTrainer,
+            ProgressWeightedObjectiveConfig,
+        )
+
+        obs_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        act_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        class _Policy:
+            def parameters(self):
+                return []
+
+        class _Traj:
+            obs = np.zeros((2, 2), dtype=np.float32)
+            acts = np.zeros((3, 1), dtype=np.float32)
+
+        trainer = ProgressWeightedBCTrainer(
+            observation_space=obs_space,
+            action_space=act_space,
+            demonstrations=[_Traj()],
+            policy=_Policy(),
+            config=ProgressWeightedObjectiveConfig.arm_a(),
+        )
+        with pytest.raises(ProgressWeightedBcError, match="observations .* shorter than actions"):
+            trainer._unpack_demonstrations()
+
+    def test_trainer_rejects_nonfinite_loss_before_backward(self) -> None:
+        """A non-finite weighted loss must fail before optimizer state is updated."""
+        import gymnasium as gym
+        import torch
+        from torch import nn
+
+        from robot_sf.training.progress_weighted_bc import (
+            ProgressWeightedBCTrainer,
+            ProgressWeightedObjectiveConfig,
+        )
+
+        obs_space = gym.spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        act_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        class _Policy(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self._parameter = nn.Parameter(torch.zeros(1))
+
+            def get_distribution(self, obs: torch.Tensor) -> Any:
+                from torch.distributions import Normal
+
+                mean = self._parameter.expand(obs.shape[0], 1) * float("nan")
+                return Normal(mean, torch.ones_like(mean), validate_args=False)
+
+        policy = _Policy()
+
+        class _Traj:
+            obs = np.zeros((3, 2), dtype=np.float32)
+            acts = np.zeros((2, 1), dtype=np.float32)
+
+        trainer = ProgressWeightedBCTrainer(
+            observation_space=obs_space,
+            action_space=act_space,
+            demonstrations=[_Traj()],
+            policy=policy,
+            config=ProgressWeightedObjectiveConfig.arm_a(),
+        )
+        with pytest.raises(ProgressWeightedBcError, match="loss is non-finite"):
+            trainer.train(n_epochs=1)
+        assert trainer._n_updates == 0

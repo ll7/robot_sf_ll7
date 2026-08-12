@@ -285,6 +285,7 @@ def _load_route_length_and_compute_weights(
     Returns a list of 1-D weight arrays, one per episode.
     """
     from robot_sf.training.progress_weighted_bc import (
+        ProgressWeightedBcError,
         compute_progress_weights,
         load_remaining_route_length_from_npz,
     )
@@ -293,6 +294,13 @@ def _load_route_length_and_compute_weights(
         dataset_path,
         array_key=objective_config.remaining_route_length_key,
     )
+    configured_digest = objective_config.dataset_digest
+    actual_digest = str(result["dataset_digest"])
+    if configured_digest and configured_digest.lower() != actual_digest.lower():
+        raise ProgressWeightedBcError(
+            "remaining-route-length dataset digest does not match the configured digest: "
+            f"configured={configured_digest}, actual={actual_digest}"
+        )
     return compute_progress_weights(result["remaining_route_length"], objective_config)
 
 
@@ -312,7 +320,7 @@ def run_bc_pretraining(
     objective_config = _parse_progress_weighted_objective(config.progress_weighted_objective)
     objective_manifest: dict[str, object] | None = None
     objective_weights: list[np.ndarray] | None = None
-    if objective_config is not None and objective_config.arm == "B" and not dry_run:
+    if objective_config is not None and objective_config.arm == "B":
         # Validate and materialize the explicit route-progress contract before
         # constructing an environment or policy, so malformed provenance fails
         # closed without leaving runtime resources open.

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6951 progress-shaped behavioral-cloning objective.** Added a named,
+  config-first uniform control arm and a progress-weighted arm for expert-action
+  negative log-likelihood. Arm B consumes only explicitly aligned,
+  provenance-checked remaining-route-length data, records objective and dataset
+  digests in the training manifest, and validates the route-progress contract in
+  dry-run mode without launching training.
+
 * **PR #6941 case workbench hardening.** Analysis traces now carry explicit reset-state,
   event, control, timing, and provenance coverage; campaign-result-store.v2 round-trips
   verify required tables and checksums; comparisons fail closed on incompatible starts;

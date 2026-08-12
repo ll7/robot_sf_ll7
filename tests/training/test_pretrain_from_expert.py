@@ -14,9 +14,14 @@ from gymnasium.spaces.utils import flatten as flatten_space
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.training.progress_weighted_bc import (
+    ProgressWeightedBcError,
+    ProgressWeightedObjectiveConfig,
+)
 from scripts.training.pretrain_from_expert import (
     ImitationDependencyWarning,
     _convert_to_transitions,
+    _load_route_length_and_compute_weights,
     _load_trajectory_dataset,
     _require_imitation_bc,
     _warn_imitation_dependency_mode,
@@ -189,3 +194,30 @@ def test_load_trajectory_dataset_requires_regular_file(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError, match="not a file"):
         _load_trajectory_dataset(dataset_dir)
+
+
+def test_progress_weighted_loader_rejects_dataset_digest_mismatch(tmp_path: Path) -> None:
+    """A configured Arm-B dataset digest must match the loaded NPZ bytes."""
+    dataset_path = tmp_path / "route_progress.npz"
+    route_metadata = {
+        "schema_version": "remaining_route_length.v1",
+        "alignment": "one_value_per_observation",
+        "derived_signal": "remaining_before_minus_after",
+        "semantics": "remaining_route_length_meters",
+        "units": "m",
+        "source": "recorded_route_remaining_length",
+    }
+    np.savez(
+        dataset_path,
+        remaining_route_length=np.array([[3.0, 2.0, 1.0]], dtype=np.float64),
+        actions=np.zeros((1, 2, 1), dtype=np.float32),
+        remaining_route_length_metadata=route_metadata,
+    )
+    config = ProgressWeightedObjectiveConfig.arm_b(
+        progress_lambda=0.5,
+        progress_normalization_scale=1.0,
+        dataset_digest="0" * 64,
+    )
+
+    with pytest.raises(ProgressWeightedBcError, match="dataset digest does not match"):
+        _load_route_length_and_compute_weights(dataset_path, config)

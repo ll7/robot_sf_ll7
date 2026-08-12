@@ -26,9 +26,10 @@ import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
+from loguru import logger
 
 from robot_sf.errors import RobotSfError
 
@@ -86,21 +87,27 @@ class ProgressWeightedObjectiveConfig:
     arm: str
     progress_lambda: float = 0.0
     progress_normalization_scale: float = 1.0
-    weight_min: float = 0.5
-    weight_max: float = 2.0
+    weight_min: float | None = None
+    weight_max: float | None = None
     remaining_route_length_key: str = _REMAINING_ROUTE_LENGTH_KEY
     dataset_digest: str = ""
     random_seed: int = 0
 
-    def __post_init__(self) -> None:  # noqa: C901
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Validate config coherence after construction."""
         if self.arm not in ("A", "B"):
             raise ProgressWeightedBcError(f"arm must be 'A' or 'B', got {self.arm!r}")
+        if self.weight_min is None:
+            object.__setattr__(self, "weight_min", 1.0 if self.arm == "A" else 0.5)
+        if self.weight_max is None:
+            object.__setattr__(self, "weight_max", 1.0 if self.arm == "A" else 2.0)
+        weight_min = cast("float", self.weight_min)
+        weight_max = cast("float", self.weight_max)
         numeric_values = {
             "progress_lambda": self.progress_lambda,
             "progress_normalization_scale": self.progress_normalization_scale,
-            "weight_min": self.weight_min,
-            "weight_max": self.weight_max,
+            "weight_min": weight_min,
+            "weight_max": weight_max,
         }
         for name, value in numeric_values.items():
             if not np.isfinite(value):
@@ -126,18 +133,18 @@ class ProgressWeightedObjectiveConfig:
             raise ProgressWeightedBcError(
                 f"progress_normalization_scale must be > 0, got {self.progress_normalization_scale}"
             )
-        if self.weight_min <= 0.0:
-            raise ProgressWeightedBcError(f"weight_min must be > 0, got {self.weight_min}")
-        if self.weight_max < self.weight_min:
+        if weight_min <= 0.0:
+            raise ProgressWeightedBcError(f"weight_min must be > 0, got {weight_min}")
+        if weight_max < weight_min:
             raise ProgressWeightedBcError(
-                f"weight_max ({self.weight_max}) must be >= weight_min ({self.weight_min})"
+                f"weight_max ({weight_max}) must be >= weight_min ({weight_min})"
             )
         if self.remaining_route_length_key != _REMAINING_ROUTE_LENGTH_KEY:
             raise ProgressWeightedBcError(
                 f"remaining_route_length_key must be {_REMAINING_ROUTE_LENGTH_KEY!r}, "
                 f"got {self.remaining_route_length_key!r}"
             )
-        if self.arm == "A" and (self.weight_min != 1.0 or self.weight_max != 1.0):
+        if self.arm == "A" and (weight_min != 1.0 or weight_max != 1.0):
             raise ProgressWeightedBcError("Arm A requires weight_min=weight_max=1.0")
         if self.dataset_digest and (
             len(self.dataset_digest) != 64
@@ -161,8 +168,8 @@ class ProgressWeightedObjectiveConfig:
                 arm=str(raw["arm"]),
                 progress_lambda=float(raw.get("progress_lambda", 0.0)),
                 progress_normalization_scale=float(raw.get("progress_normalization_scale", 1.0)),
-                weight_min=float(raw.get("weight_min", 0.5)),
-                weight_max=float(raw.get("weight_max", 2.0)),
+                weight_min=float(raw["weight_min"]) if "weight_min" in raw else None,
+                weight_max=float(raw["weight_max"]) if "weight_max" in raw else None,
                 remaining_route_length_key=str(
                     raw.get("remaining_route_length_key", _REMAINING_ROUTE_LENGTH_KEY)
                 ),
@@ -256,6 +263,7 @@ def load_remaining_route_length_from_npz(
     npz_path: Path,
     *,
     array_key: str = _REMAINING_ROUTE_LENGTH_KEY,
+    require_action_alignment: bool = True,
 ) -> dict[str, Any]:
     """Load and validate the per-episode remaining-route-length array from an NPZ.
 
@@ -271,6 +279,8 @@ def load_remaining_route_length_from_npz(
     Args:
         npz_path: Path to the trajectory dataset NPZ.
         array_key: Expected array key for remaining-route-length data.
+        require_action_alignment: Require an ``actions`` array and validate
+            one route-length value per action observation boundary.
 
     Returns:
         A mapping with keys ``"remaining_route_length"`` (list of 1-D arrays,
@@ -288,6 +298,9 @@ def load_remaining_route_length_from_npz(
     dataset_sha256 = _sha256_file(path)
 
     raw_actions: np.ndarray | None = None
+    # Ragged per-episode arrays are represented as object arrays in the local
+    # trajectory artifact format; this loader validates their contents before
+    # admitting them to the objective.
     with np.load(str(path), allow_pickle=True) as npz:
         if array_key not in npz.files:
             raise ProgressWeightedBcError(
@@ -299,7 +312,12 @@ def load_remaining_route_length_from_npz(
             raw_actions = npz["actions"]
 
     remaining = _normalize_remaining_route_length(raw, array_key=array_key)
-    _validate_alignment_with_actions(remaining, raw_actions, array_key=array_key)
+    _validate_alignment_with_actions(
+        remaining,
+        raw_actions,
+        array_key=array_key,
+        require_actions=require_action_alignment,
+    )
     _validate_route_length_provenance(provenance)
 
     return {
@@ -395,7 +413,7 @@ def _normalize_remaining_route_length(raw: np.ndarray, *, array_key: str) -> lis
         episodes = [np.asarray(entry, dtype=np.float64).ravel() for entry in data]
     elif data.ndim == 1:
         episodes = [np.asarray(data, dtype=np.float64).ravel()]
-    elif data.ndim >= 1:
+    elif data.ndim == 2:
         episodes = [np.asarray(row, dtype=np.float64).ravel() for row in data]
     else:
         raise ProgressWeightedBcError(f"NPZ array {array_key!r} has unexpected ndim={data.ndim}")
@@ -419,16 +437,21 @@ def _validate_alignment_with_actions(
     raw_actions: np.ndarray | None,
     *,
     array_key: str,
+    require_actions: bool,
 ) -> None:
     """Validate that remaining-route-length has one value per observation (actions+1).
 
     This function also checks alignment against the ``actions`` array in the
-    same NPZ when available.
+    same NPZ.  Action alignment is required for Arm-B route-progress inputs.
 
     Raises:
         ProgressWeightedBcError: When alignment is wrong.
     """
     if raw_actions is None:
+        if require_actions:
+            raise ProgressWeightedBcError(
+                f"NPZ array {array_key!r} requires an actions array for per-step alignment"
+            )
         return
     actions_episodes = _count_action_episodes(raw_actions, episode_count=len(remaining))
 
@@ -565,7 +588,11 @@ def compute_progress_weights(  # noqa: C901
 
         normalized = progress / config.progress_normalization_scale
         raw_weights = 1.0 + config.progress_lambda * normalized
-        clipped = np.clip(raw_weights, config.weight_min, config.weight_max)
+        clipped = np.clip(
+            raw_weights,
+            cast("float", config.weight_min),
+            cast("float", config.weight_max),
+        )
         per_episode_weights.append(clipped.astype(np.float64))
 
     return per_episode_weights
@@ -668,10 +695,11 @@ class ProgressWeightedBCTrainer:
         self._config = config
         self._weights = weights
         self._batch_size = batch_size
-        self._rng = rng or np.random.default_rng(0)
+        self._rng = rng if rng is not None else np.random.default_rng(config.random_seed)
         self._device = device
         self._learning_rate = float(learning_rate)
         self._n_updates = 0
+        self._last_loss = float("nan")
         self._optimizer: Any = None
 
     def set_demonstrations(self, demonstrations: list[Any]) -> None:
@@ -700,6 +728,10 @@ class ProgressWeightedBCTrainer:
 
                 self._update_step(batch_obs, batch_acts, batch_w)
                 self._n_updates += 1
+            logger.bind(
+                arm=self._config.arm,
+                objective=self._config.objective_name,
+            ).info("weighted BC epoch complete epoch={} loss={}", _epoch + 1, self._last_loss)
 
     def _unpack_demonstrations(  # noqa: C901
         self,
@@ -739,6 +771,11 @@ class ProgressWeightedBCTrainer:
 
             # observations[0..T-1] pair with actions[0..T-1]
             n_actions = acts_ep.shape[0]
+            if obs_ep.shape[0] < n_actions:
+                raise ProgressWeightedBcError(
+                    f"Episode {ep_idx}: observations ({obs_ep.shape[0]}) are shorter than "
+                    f"actions ({n_actions})"
+                )
             obs_slice = obs_ep[:n_actions]
 
             if self._weights is None:
@@ -804,10 +841,13 @@ class ProgressWeightedBCTrainer:
             log_probs = log_probs.sum(dim=-1)
 
         loss_tensor = -torch.sum(w_t * log_probs) / torch.sum(w_t)
+        if not bool(torch.isfinite(loss_tensor).item()):
+            raise ProgressWeightedBcError("weighted BC loss is non-finite")
 
         self._optimizer.zero_grad()
         loss_tensor.backward()
         self._optimizer.step()
+        self._last_loss = float(loss_tensor.detach().cpu().item())
 
 
 def serialize_objective_config(

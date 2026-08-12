@@ -9,9 +9,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from robot_sf.benchmark import map_runner_episode, safety_wrapper_runtime
+from robot_sf.benchmark import map_runner_episode
 from robot_sf.benchmark.event_ledger import build_event_ledger
-from robot_sf.benchmark.safety_wrapper_runtime import (
+from robot_sf.benchmark.safety import safety_wrapper_runtime
+from robot_sf.benchmark.safety.safety_wrapper_runtime import (
     SAFETY_WRAPPER_EPISODE_SUMMARY_SCHEMA,
     SAFETY_WRAPPER_FALSE_STOP_DIAGNOSTIC_SCHEMA,
     SAFETY_WRAPPER_RUNTIME_STEP_SCHEMA,
@@ -676,7 +677,7 @@ def test_summary_proxy_unsupported_when_dt_missing() -> None:
 
 # --- Fourth wrapper stage: deadlock-recovery runtime wiring (issue #3501) -------------------
 
-from robot_sf.benchmark.safety_wrapper_runtime import (  # noqa: E402
+from robot_sf.benchmark.safety.safety_wrapper_runtime import (  # noqa: E402
     deadlock_recovery_config,
     make_deadlock_recovery_monitor,
 )

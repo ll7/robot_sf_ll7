@@ -15,7 +15,7 @@ from itertools import count
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.safety_margin_calibration import (
+from robot_sf.benchmark.safety.safety_margin_calibration import (
     DEFAULT_PREFERRED_WEIGHTS,
     METHOD_ADAPTIVE,
     METHOD_ADAPTIVE_CONFORMAL,

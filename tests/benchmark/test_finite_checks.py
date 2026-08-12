@@ -24,9 +24,9 @@ from robot_sf.benchmark import (
     pedestrian_flow_validation,
     pedestrian_model_fixture_diagnostics,
     reactivity_ablation,
-    safety_predicates,
     trajectory_verifier,
 )
+from robot_sf.benchmark.safety import safety_predicates
 from robot_sf.benchmark.scenario_generation import catalog_schema
 from robot_sf.common import validation
 from robot_sf.nav import occupancy_grid, proxemic_costmap

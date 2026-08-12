@@ -54,8 +54,8 @@ EXPECTED_SOURCE_PATHS = {
     "metric_contract": "configs/benchmarks/paired_effect_metric_contract_v1.yaml",
     "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
     "seed_sets": "configs/benchmarks/seed_sets_v1.yaml",
-    "runtime_validator": "robot_sf/benchmark/safety_wrapper_runtime.py",
-    "report_builder": "robot_sf/benchmark/safety_wrapper_factorial_report.py",
+    "runtime_validator": "robot_sf/benchmark/safety/safety_wrapper_runtime.py",
+    "report_builder": "robot_sf/benchmark/safety/safety_wrapper_factorial_report.py",
     "timing_reference": (
         "docs/context/evidence/camera_ready_all_planners_2026-05-04/reports/campaign_summary.json"
     ),
@@ -63,11 +63,11 @@ EXPECTED_SOURCE_PATHS = {
 EXPECTED_SOURCE_SHA256 = {
     "campaign_config": "1f4c958c5c1d97f37127f1925041cec3ca0ff0267233c6bc572e7302592011d6",
     "design_config": "635262978e20bf1427b4545dff7d1e6e9f315b2d19cc5b0c9b38cdb90836fef3",
-    "metric_contract": "851c5642f530f9c0260a177629d70a343336bdf260da50bbb02113e53d3b7390",
+    "metric_contract": "51e52d9e300a0152cf834fbcbc02b577c8aaede36faab5298d2629bbe5cc329b",
     "scenario_matrix": "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5",
     "seed_sets": "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6",
     "runtime_validator": "a8941e1344c7d566636d0a9938275dafc55659635bd62b18e5f00d0d05f3b155",
-    "report_builder": "fa3944013d268b9f3b007729f85a8aa25826b64768e65781606cba28211bce25",
+    "report_builder": "bbaceebbf38d9b427a7c8b7fe9ed7bd04357bcdbb4684eb3c5610b8269c89ada",
     "timing_reference": "2211bf0c13815bf6af34afa2798b50da8559153be76d7b84650f8c970c2539b6",
 }
 EXPECTED_REFERENCE_RATES = {

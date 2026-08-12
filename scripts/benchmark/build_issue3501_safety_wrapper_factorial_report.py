@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import load_safety_wrapper_ablation_rows
-from robot_sf.benchmark.safety_wrapper_factorial_report import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
+    load_safety_wrapper_ablation_rows,
+)
+from robot_sf.benchmark.safety.safety_wrapper_factorial_report import (
     build_safety_wrapper_factorial_report,
     write_safety_wrapper_factorial_report,
 )

@@ -67,7 +67,7 @@ checks used in benchmark rows and planner verification. Social preference labels
 dimensions that live at a higher level: they describe the quality of the robot's social behavior
 without determining pass or fail for the benchmark contract.
 
-See ``robot_sf/benchmark/safety_predicates.py`` for the hard safety predicate definitions and
+See ``robot_sf/benchmark/safety/safety_predicates.py`` for the hard safety predicate definitions and
 ``robot_sf/benchmark/thresholds.py`` for the collision/near-miss distance contracts.
 
 ## Follow-Up

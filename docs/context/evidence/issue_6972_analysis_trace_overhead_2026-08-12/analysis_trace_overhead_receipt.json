@@ -1,0 +1,142 @@
+{
+  "schema_version": "issue_6972_analysis_trace_overhead_comparison_receipt.v1",
+  "issue": 6972,
+  "status": "diagnostic_only",
+  "claim_boundary": "Local synthetic-runner wall-clock and serialized-size diagnostic; not benchmark, paper-facing, real-world, or safety evidence.",
+  "environment": {
+    "python": "3.13.14",
+    "platform": "Linux-6.8.0-87-generic-x86_64-with-glibc2.39",
+    "machine": "x86_64"
+  },
+  "fixture": {
+    "scenario": {
+      "id": "issue-6972-overhead",
+      "density": "low",
+      "flow": "uni",
+      "obstacle": "open",
+      "groups": 0.0,
+      "speed_var": "low",
+      "goal_topology": "point",
+      "robot_context": "embedded",
+      "repeats": 1
+    },
+    "seed": 123,
+    "horizon": 5,
+    "dt": 0.1,
+    "record_forces": false,
+    "telemetry_on": {
+      "analysis_trace": "all",
+      "planner_debug_trace": "none"
+    }
+  },
+  "method": {
+    "script": "scripts/benchmark/measure_analysis_trace_overhead_issue_6972.py",
+    "samples_per_arm": 6,
+    "warmups_per_arm": 1,
+    "timer": "time.perf_counter",
+    "serialization": "analysis_trace.canonical_json",
+    "compression": "gzip.compress(mtime=0)",
+    "upper_tail_summary": "maximum measured sample; not a statistical percentile",
+    "baseline_command": "LOGURU_LEVEL=ERROR uv run python scripts/benchmark/measure_analysis_trace_overhead_issue_6972.py --samples 6 --warmups 1 --output /tmp/issue-6972-baseline-receipt.json",
+    "optimized_command": "LOGURU_LEVEL=ERROR uv run python scripts/benchmark/measure_analysis_trace_overhead_issue_6972.py --samples 6 --warmups 1 --output /tmp/issue-6972-post-receipt-v3.json"
+  },
+  "baseline": {
+    "commit": "36cc9fca4c8f0b2325feffafc529c76b91c3e978",
+    "analysis_trace_off": {
+      "elapsed_sec_samples": [
+        0.01265734015032649,
+        0.012821390992030501,
+        0.012828971026465297,
+        0.012608540011569858,
+        0.012673539808019996,
+        0.012371918186545372
+      ],
+      "elapsed_sec_median": 0.012665439979173243,
+      "elapsed_sec_max": 0.012828971026465297,
+      "trace_compressed_bytes_samples": [0, 0, 0, 0, 0, 0],
+      "trace_compressed_bytes_median": 0.0,
+      "record_compressed_bytes_samples": [3575, 3573, 3577, 3575, 3573, 3576],
+      "record_compressed_bytes_median": 3575.0
+    },
+    "analysis_trace_on": {
+      "elapsed_sec_samples": [
+        0.023992151953279972,
+        0.02373489993624389,
+        0.02367118000984192,
+        0.02442476386204362,
+        0.02373294997960329,
+        0.028049906948581338
+      ],
+      "elapsed_sec_median": 0.023863525944761932,
+      "elapsed_sec_max": 0.028049906948581338,
+      "trace_compressed_bytes_samples": [1070, 1070, 1070, 1070, 1070, 1070],
+      "trace_compressed_bytes_median": 1070.0,
+      "record_compressed_bytes_samples": [4712, 4717, 4715, 4714, 4715, 4718],
+      "record_compressed_bytes_median": 4715.0
+    },
+    "median_overhead_fraction": 0.8841450422569261,
+    "median_overhead_percent": 88.41450422569261,
+    "median_trace_compressed_bytes": 1070.0,
+    "median_record_compressed_bytes_delta": 1140.0,
+    "checks": {
+      "paired_outcomes_and_metrics_equal": true,
+      "control_sequence_digest_stable": true,
+      "trace_git_hash_matches_commit": true,
+      "trace_artifact_matches_provenance": true
+    }
+  },
+  "optimized": {
+    "commit": "2fe5b888b90f1ff16030c6d7860d6175c7ac0bbd",
+    "analysis_trace_off": {
+      "elapsed_sec_samples": [
+        0.013349693967029452,
+        0.013067313004285097,
+        0.012771280016750097,
+        0.012880190974101424,
+        0.012799830874428153,
+        0.012670709984377027
+      ],
+      "elapsed_sec_median": 0.012840010924264789,
+      "elapsed_sec_max": 0.013349693967029452,
+      "trace_compressed_bytes_samples": [0, 0, 0, 0, 0, 0],
+      "trace_compressed_bytes_median": 0.0,
+      "record_compressed_bytes_samples": [3577, 3572, 3576, 3572, 3576, 3578],
+      "record_compressed_bytes_median": 3576.0
+    },
+    "analysis_trace_on": {
+      "elapsed_sec_samples": [
+        0.013556565856561065,
+        0.013713407097384334,
+        0.013498944928869605,
+        0.013531836215406656,
+        0.013636125950142741,
+        0.017125607933849096
+      ],
+      "elapsed_sec_median": 0.013596345903351903,
+      "elapsed_sec_max": 0.017125607933849096,
+      "trace_compressed_bytes_samples": [1068, 1068, 1068, 1068, 1068, 1068],
+      "trace_compressed_bytes_median": 1068.0,
+      "record_compressed_bytes_samples": [4708, 4708, 4707, 4711, 4709, 4709],
+      "record_compressed_bytes_median": 4708.5
+    },
+    "median_overhead_fraction": 0.05890454327089456,
+    "median_overhead_percent": 5.890454327089456,
+    "median_trace_compressed_bytes": 1068.0,
+    "median_record_compressed_bytes_delta": 1132.5,
+    "checks": {
+      "paired_outcomes_and_metrics_equal": true,
+      "control_sequence_digest_stable": true,
+      "trace_git_hash_matches_commit": true,
+      "trace_artifact_matches_provenance": true
+    }
+  },
+  "comparison": {
+    "target_overhead_percent": 10.0,
+    "target_met": true,
+    "overhead_reduction_fraction": 0.9333768324702347,
+    "overhead_reduction_percent": 93.33768324702348,
+    "trace_on_median_runtime_reduction_fraction": 0.43024572584855947,
+    "trace_on_median_runtime_reduction_percent": 43.024572584855946,
+    "interpretation": "The measured local synthetic-runner trace-on overhead fell below the 10% target after reusing the episode commit hash and the trace builder's existing artifact digest. Trace-only compressed payload size was also recorded separately from full episode-record size. This is a diagnostic result for the pinned fixture and environment only."
+  }
+}

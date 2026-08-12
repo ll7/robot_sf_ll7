@@ -41,6 +41,10 @@ def _rows_with_success(success_by_planner: dict[str, float]) -> list[dict[str, s
                     "near_miss_event_rate": "0.1",
                     "timeout_rate": "0.05",
                     "snqi_mean": str(round(0.4 + success * 0.5, 3)),
+                    "algorithm_metadata_status": "ok",
+                    "execution_mode": "native",
+                    "availability_status": "available",
+                    "readiness_status": "native",
                 }
             )
     return rows
@@ -60,8 +64,11 @@ def _write_rows(tmp_path: Path, name: str, rows: list[dict[str, str]]) -> Path:
                 "near_miss_event_rate",
                 "timeout_rate",
                 "snqi_mean",
+                "algorithm_metadata",
+                "algorithm_metadata_status",
                 "execution_mode",
                 "availability_status",
+                "readiness_status",
             ],
             lineterminator="\n",
             extrasaction="ignore",
@@ -282,6 +289,10 @@ def _identical_dyadic_rows(planner_keys: list[str]) -> list[dict[str, str]]:
             "near_miss_event_rate": "0.125",
             "timeout_rate": "0.0625",
             "snqi_mean": "0.5",
+            "algorithm_metadata_status": "ok",
+            "execution_mode": "native",
+            "availability_status": "available",
+            "readiness_status": "native",
         }
         for planner in planner_keys
     ]
@@ -297,6 +308,10 @@ def _identical_decimal_rows(planner_keys: list[str]) -> list[dict[str, str]]:
             "near_miss_event_rate": "0.3",
             "timeout_rate": "0.4",
             "snqi_mean": "0.5",
+            "algorithm_metadata_status": "ok",
+            "execution_mode": "native",
+            "availability_status": "available",
+            "readiness_status": "native",
         }
         for planner in planner_keys
     ]
@@ -366,25 +381,27 @@ def test_decimal_equal_score_tuples_remain_tied() -> None:
     assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
 
 
-def test_rejects_incomplete_snqi_coverage() -> None:
-    """Partial optional SNQI coverage must not become an imputed ranking value."""
+def test_averages_present_snqi_values_without_imputation() -> None:
+    """Partial optional SNQI coverage averages present values and leaves missing ties."""
     planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
     rows = _identical_dyadic_rows(sorted(planner_to_class))
-    rows = [
-        row for row in rows if row["planner_key"] not in PLANNERS_BY_CLASS["learned_policy"]
-    ] + [
-        {
-            "planner_key": planner,
-            "success_rate": "0.75",
-            "collision_event_rate": "0.25",
-            "near_miss_event_rate": "0.125",
-            "timeout_rate": "0.0625",
-        }
-        for planner in PLANNERS_BY_CLASS["learned_policy"]
+    for row in rows:
+        if row["planner_key"] in PLANNERS_BY_CLASS["baseline_reactive"]:
+            row.pop("snqi_mean")
+    learned_rows = [
+        row for row in rows if row["planner_key"] in PLANNERS_BY_CLASS["learned_policy"]
     ]
+    learned_rows[0].pop("snqi_mean")
+    learned_rows[1]["snqi_mean"] = "0.9"
 
-    with pytest.raises(metric.RankingMetricError, match="incomplete snqi_mean coverage"):
-        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+    assert ranking["learned_policy"] == 1
+    assert ranking["constraint_first_hybrid"] == 2
+    assert ranking["predictive"] == 2
+    # No SNQI value is available for this class, so it cannot be strictly ranked
+    # below or above the classes whose primary metrics are exactly equal.
+    assert ranking["baseline_reactive"] == 1
 
 
 def test_rejects_nested_invalid_execution_metadata() -> None:
@@ -401,6 +418,55 @@ def test_rejects_nested_invalid_execution_metadata() -> None:
         metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
 
+@pytest.mark.parametrize("execution_mode", ["", "adapter", "mixed", "unknown", "fallback"])
+def test_rejects_missing_or_non_native_flat_execution_metadata(execution_mode: str) -> None:
+    """Flat campaign metadata must explicitly identify native execution."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["execution_mode"] = execution_mode
+
+    with pytest.raises(metric.RankingMetricError, match="execution_mode"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+def test_rejects_missing_flat_execution_metadata() -> None:
+    """A row without nested metadata or an explicit flat mode fails closed."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0].pop("execution_mode")
+
+    with pytest.raises(metric.RankingMetricError, match="execution_mode"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+
+def test_accepts_json_encoded_native_metadata_from_csv(tmp_path: Path) -> None:
+    """CSV aggregate rows may carry the canonical nested metadata as JSON."""
+    import json
+
+    rows = _identical_dyadic_rows(sorted(metric._planner_to_class(metric._load_packet(PACKET))))
+    for row in rows:
+        row.pop("algorithm_metadata_status")
+        row.pop("execution_mode")
+        row.pop("availability_status")
+        row.pop("readiness_status")
+        row["algorithm_metadata"] = json.dumps(
+            {
+                "status": "ok",
+                "availability_status": "available",
+                "readiness_status": "native",
+                "planner_kinematics": {"execution_mode": "native"},
+            }
+        )
+
+    ranking = metric.build_ranking_for_matrix(
+        packet_path=PACKET,
+        episode_rows_path=_write_rows(tmp_path, "json_metadata_rows.csv", rows),
+        output_path=tmp_path / "ranking.csv",
+    )
+
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
 def test_accepts_complete_native_execution_metadata() -> None:
     """Valid native metadata remains eligible when the aggregate carries it."""
     planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
@@ -415,6 +481,21 @@ def test_accepts_complete_native_execution_metadata() -> None:
     ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
     assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+def test_rejects_inconsistent_flat_and_nested_execution_metadata() -> None:
+    """A contradictory flattened mode cannot override nested native provenance."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["algorithm_metadata"] = {
+        "status": "ok",
+        "availability_status": "available",
+        "planner_kinematics": {"execution_mode": "native"},
+    }
+    rows[0]["execution_mode"] = "adapter"
+
+    with pytest.raises(metric.RankingMetricError, match="inconsistent flattened"):
+        metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
 
 def test_agreement_builder_emits_non_identifiable_tied_ranking(tmp_path: Path) -> None:
@@ -539,5 +620,6 @@ def test_cli_rejection_is_prominent_and_actionable(tmp_path: Path, capsys) -> No
     assert "fallback" in captured.err
     assert "RECOMMENDED FIX - REQUIRED BEFORE RERUN:" in captured.err
     assert "do not hand-edit a rank" in captured.err
+    assert "execution_mode=native" in captured.err
     assert "Exit code remains non-zero by design" in captured.err
     assert not output.exists()

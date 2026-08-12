@@ -31,9 +31,9 @@ tied class outperformed the other.
 
 Metric cells are parsed from their decimal representation and compared with exact rational
 means, so mathematically equal decimal inputs cannot become rank differences through binary
-floating-point summation. Unit-interval rates are validated, nested execution metadata is
-accepted only for status ``ok`` and native execution, and SNQI is either complete for the
-frozen roster or absent for the frozen roster.
+floating-point summation. Unit-interval rates are validated, execution metadata must identify
+an ``ok`` native row, and optional SNQI is averaged over the finite values that are present.
+Missing SNQI is never imputed as a performance value or used to break a primary-metric tie.
 """
 
 from __future__ import annotations
@@ -71,8 +71,8 @@ RANKING_COLUMNS = ["structural_class", "rank", "roster_signature"]
 ROSTER_SIGNATURE_COLUMN = "roster_signature"
 # Core per-planner metric fields every episode-aggregate row must carry so the
 # ranking cannot silently impute a best-case (0.0 collision/timeout) value for a
-# missing safety metric. ``snqi_mean`` remains optional for the full roster and
-# is handled as an all-present or all-absent tie-breaker.
+# missing safety metric. ``snqi_mean`` remains optional and is averaged only over
+# finite values that are present.
 REQUIRED_METRIC_FIELDS = (
     "success_rate",
     "collision_event_rate",
@@ -98,6 +98,9 @@ INVALID_STATUS_VALUES = frozenset(
 
 class RankingMetricError(ValueError):
     """Raised when issue #5592 ranking inputs or the pre-registration are malformed."""
+
+
+ScoreTuple = tuple[Fraction, Fraction, Fraction, Fraction, Fraction | None]
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -166,6 +169,27 @@ def _normalise_status(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _first_present(row: Mapping[str, Any], keys: tuple[str, ...]) -> tuple[bool, Any]:
+    """Return whether any alias exists and its raw value, preserving blank fields."""
+    for key in keys:
+        if key in row:
+            return True, row[key]
+    return False, None
+
+
+def _decode_algorithm_metadata(value: Any) -> Mapping[str, Any] | None:
+    """Decode nested metadata from a mapping or a JSON object in a CSV cell."""
+    if isinstance(value, Mapping):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        decoded = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+    return decoded if isinstance(decoded, Mapping) else None
+
+
 def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     """Return an ineligibility reason for nested algorithm metadata, if any."""
     if not isinstance(metadata, Mapping):
@@ -182,6 +206,9 @@ def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     availability_status = _normalise_status(metadata.get("availability_status"))
     if availability_status and availability_status != "available":
         return f"algorithm_metadata.availability_status={availability_status!r}"
+    readiness_status = _normalise_status(metadata.get("readiness_status"))
+    if readiness_status and readiness_status != "native":
+        return f"algorithm_metadata.readiness_status={readiness_status!r}"
     for key in ("readiness_status", "preflight_status"):
         value = _normalise_status(metadata.get(key))
         if value in INVALID_STATUS_VALUES:
@@ -189,8 +216,93 @@ def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     return None
 
 
+def _flat_metadata_ineligibility_reason(
+    row: Mapping[str, Any], *, require_status: bool
+) -> str | None:
+    """Validate flattened metadata used by aggregate CSV compatibility inputs."""
+    status_present, status_raw = _first_present(
+        row, ("algorithm_metadata_status", "planner_metadata_status")
+    )
+    mode_present, mode_raw = _first_present(
+        row, ("planner_kinematics_execution_mode", "execution_mode")
+    )
+    availability_present, availability_raw = _first_present(
+        row, ("algorithm_metadata_availability_status", "availability_status")
+    )
+    readiness_present, readiness_raw = _first_present(
+        row, ("algorithm_metadata_readiness_status", "readiness_status")
+    )
+
+    if require_status and (not status_present or not _normalise_status(status_raw)):
+        return "algorithm_metadata.status is missing or blank"
+    if status_present and _normalise_status(status_raw) != "ok":
+        return f"algorithm_metadata.status={_normalise_status(status_raw)!r}"
+    if not mode_present or not _normalise_status(mode_raw):
+        return "algorithm_metadata.planner_kinematics.execution_mode is missing or blank"
+    if _normalise_status(mode_raw) != "native":
+        return (
+            f"algorithm_metadata.planner_kinematics.execution_mode={_normalise_status(mode_raw)!r}"
+        )
+    if availability_present:
+        availability = _normalise_status(availability_raw)
+        if not availability or availability != "available":
+            return f"algorithm_metadata.availability_status={availability!r}"
+    if readiness_present:
+        readiness = _normalise_status(readiness_raw)
+        if not readiness or readiness != "native":
+            return f"algorithm_metadata.readiness_status={readiness!r}"
+    return None
+
+
+def _flat_metadata_consistency_reason(
+    row: Mapping[str, Any], metadata: Mapping[str, Any]
+) -> str | None:
+    """Reject contradictory flattened and nested execution metadata."""
+    comparisons = (
+        (
+            ("algorithm_metadata_status", "planner_metadata_status"),
+            metadata.get("status"),
+            "algorithm_metadata.status",
+        ),
+        (
+            ("planner_kinematics_execution_mode", "execution_mode"),
+            (metadata.get("planner_kinematics") or {}).get("execution_mode")
+            if isinstance(metadata.get("planner_kinematics"), Mapping)
+            else None,
+            "algorithm_metadata.planner_kinematics.execution_mode",
+        ),
+        (
+            ("algorithm_metadata_availability_status", "availability_status"),
+            metadata.get("availability_status"),
+            "algorithm_metadata.availability_status",
+        ),
+        (
+            ("algorithm_metadata_readiness_status", "readiness_status"),
+            metadata.get("readiness_status"),
+            "algorithm_metadata.readiness_status",
+        ),
+    )
+    for keys, nested_value, label in comparisons:
+        present, flat_value = _first_present(row, keys)
+        if not present:
+            continue
+        flat_status = _normalise_status(flat_value)
+        nested_status = _normalise_status(nested_value)
+        if not flat_status or not nested_status:
+            continue
+        if flat_status != nested_status:
+            return f"inconsistent flattened {label}: {flat_status!r} != {nested_status!r}"
+    return None
+
+
 def _ineligible_execution_reason(row: Mapping[str, Any]) -> str | None:
-    """Return the reason a row cannot enter the native ranking, if any."""
+    """Return the reason a row cannot enter the native ranking, if any.
+
+    Campaign aggregates may preserve the nested ``algorithm_metadata`` object or
+    expose its fields in flattened CSV columns. Either representation must carry
+    an explicit successful native-execution declaration; absent or blank metadata
+    is not treated as an eligible default.
+    """
     for key in (
         "status",
         "run_status",
@@ -202,17 +314,25 @@ def _ineligible_execution_reason(row: Mapping[str, Any]) -> str | None:
         value = _normalise_status(row.get(key))
         if value in INVALID_STATUS_VALUES:
             return f"{key}={value!r}"
-    return (
-        _metadata_ineligibility_reason(row["algorithm_metadata"])
-        if "algorithm_metadata" in row
-        else None
-    )
+
+    if "algorithm_metadata" in row:
+        raw_metadata = row["algorithm_metadata"]
+        if raw_metadata is not None and (not isinstance(raw_metadata, str) or raw_metadata.strip()):
+            metadata = _decode_algorithm_metadata(raw_metadata)
+            if metadata is None:
+                return "algorithm_metadata is malformed"
+            reason = _metadata_ineligibility_reason(metadata)
+            if reason is not None:
+                return reason
+            return _flat_metadata_consistency_reason(row, metadata)
+
+    return _flat_metadata_ineligibility_reason(row, require_status=True)
 
 
 def _score(
     structural_class: str,
     class_aggregates: Sequence[Mapping[str, Any]],
-) -> tuple[Fraction, Fraction, Fraction, Fraction, Fraction]:
+) -> ScoreTuple:
     """Aggregate a structural class across its planners into a comparable score tuple.
 
     Lower collision/near-miss/timeout and higher success/SNQI rank better. Returns a
@@ -225,24 +345,28 @@ def _score(
     timeout = [a["timeout_rate"] for a in class_aggregates]
     snqi = [a.get("snqi_mean") for a in class_aggregates]
     present_snqi = [value for value in snqi if value is not None]
-    if present_snqi and len(present_snqi) != len(snqi):
-        raise RankingMetricError(
-            f"incomplete snqi_mean coverage for structural class {structural_class!r}; "
-            "SNQI must be present for every planner in a class or absent for the full roster"
-        )
 
     def _mean(values: Sequence[Decimal]) -> Fraction:
         return sum((Fraction(value) for value in values), Fraction(0, 1)) / len(values)
 
-    snqi_mean = _mean(present_snqi) if present_snqi else Fraction(0, 1)
+    snqi_mean = _mean(present_snqi) if present_snqi else None
 
     return (
         -_mean(success),
         _mean(collision),
         _mean(near_miss),
         _mean(timeout),
-        -snqi_mean,
+        -snqi_mean if snqi_mean is not None else None,
     )
+
+
+def _score_is_better(left: ScoreTuple, right: ScoreTuple) -> bool:
+    """Compare score tuples without using absent SNQI as a performance value."""
+    if left[:4] != right[:4]:
+        return left[:4] < right[:4]
+    if left[4] is None or right[4] is None:
+        return False
+    return left[4] < right[4]
 
 
 def _parse_metric_aggregate(row: Mapping[str, Any], planner_key: str) -> dict[str, Decimal | None]:
@@ -318,15 +442,7 @@ def compute_structural_ranking(
             f"extra planner key(s): {extra_planner_keys}"
         )
 
-    snqi_values = [aggregate.get("snqi_mean") for rows in by_class.values() for aggregate in rows]
-    present_snqi_count = sum(value is not None for value in snqi_values)
-    if present_snqi_count not in (0, len(snqi_values)):
-        raise RankingMetricError(
-            "incomplete snqi_mean coverage across the frozen planner roster; "
-            "SNQI must be present for every planner or absent for every planner"
-        )
-
-    class_scores: dict[str, tuple[Fraction, Fraction, Fraction, Fraction, Fraction]] = {}
+    class_scores: dict[str, ScoreTuple] = {}
     for klass, rows in by_class.items():
         class_scores[klass] = _score(klass, rows)
 
@@ -335,7 +451,11 @@ def compute_structural_ranking(
     # stable structural-class identity order.
     return {
         klass: 1
-        + sum(1 for other in STRUCTURAL_CLASS_ORDER if class_scores[other] < class_scores[klass])
+        + sum(
+            1
+            for other in STRUCTURAL_CLASS_ORDER
+            if _score_is_better(class_scores[other], class_scores[klass])
+        )
         for klass in STRUCTURAL_CLASS_ORDER
     }
 

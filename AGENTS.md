@@ -99,8 +99,13 @@ common Git dir, symlink the main `local.machine.md` when present, then run
 `uv venv .venv && uv sync --all-extras`. The `uv venv .venv` step is required: `uv sync --all-extras`
 alone may silently detect and reuse the main checkout's `.venv` without creating one locally,
 leaving `.venv/bin/activate` missing. After sync, verify `.venv/bin/python` exists before
-continuing; if absent, the environment is not usable and the caller must fail closed. Then
-`source .venv/bin/activate` before Python tooling. For quick targeted validation, prefer
+continuing; if absent, the environment is not usable and the caller must fail closed. The
+bootstrap script pins sync to the local `.venv` and adds `UV_NO_SYNC=1` to its activation script,
+so `source .venv/bin/activate` before Python tooling. For a dependency-only check that separates
+missing optional packages from changed-code failures, run
+`python scripts/dev/check_worktree_optional_deps.py --profile all-extras`. Use a matching named
+profile such as `--profile training` when bootstrap was invoked with `--extra training`. For quick
+targeted validation, prefer
 `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized current-worktree
 `.venv` when available, otherwise reuses the main checkout `.venv`, while `PYTHONPATH` points at
 the active worktree. Use a full local `.venv` and final PR readiness for merge proof. Do not include
@@ -203,6 +208,13 @@ not-applicable changes, state why. Research, benchmark, metric, paper-facing, or
 PRs must state target claim/hypothesis/blocker, comparator/baseline, evidence tier, result
 classification, decision/stop rule, and synthesis/update target. Support/tooling/docs-only PRs with
 no research claim may use `NA` and explain why.
+
+Because repository merges default to squash, the final PR title and body are part of the delivered
+change. After every revision or fix push, rebuild the body from the final diff, validation, claims,
+and follow-ups and run `scripts/dev/gh_pr_body_rest.py --reconcile` with the final title. The helper
+is idempotent; change the title only when final scope, intent, type, or issue linkage changed. A
+trusted exact-head review must carry `pr-metadata: reconciled @ <digest>` for the resulting title/body,
+and direct or native queue admission must fail closed when that evidence is missing or stale.
 
 Use repository-root-relative paths in PRs, issue comments, docs, and agent responses. For GitHub
 comments with Markdown-heavy bodies, do not pass body inline through the shell; use

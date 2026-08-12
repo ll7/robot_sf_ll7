@@ -173,9 +173,9 @@ treating a loose keyword, a change in the same file, or historical failure outpu
 evidence.
 
 Two regression fixtures are required:
-- #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
+- Issue #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
   `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
-- #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: #5480 was dispatched after PR #5486
+- Issue #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: Issue #5480 was dispatched after PR #5486
   merged under #5482 (not #5480), so an issue-number-only merged-PR search missed it; the covering
   PR is found only by mapping the named failing test
   `test_run_batch_sequential_worker_failure_logs_warning` and its
@@ -483,11 +483,14 @@ Route remaining issues by their blocker:
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
    - If validation or proof is insufficient, instruct the sub-agent to repair it, or mark the issue blocked.
 10. Commit/push the completed changes from the worktree and prepare the PR handoff using `gh-pr-opener`.
-11. Open the PR and release the transient claim with:
+11. Open the PR and keep the transient claim while the PR is open. Release it only after terminal
+    delivery, with an explicit reason:
     ```bash
-    uv run python scripts/dev/issue_claim.py release <issue-number>
+    uv run python scripts/dev/issue_claim.py release <issue-number> --reason merged
+    # or --reason closed / --reason abandoned
     ```
-    Ensure the PR visibly covers the issue before releasing the claim.
+    Ensure the PR visibly covers the issue before eventual release. An open covering PR must retain
+    the claim; an abandoned run must record the handoff before using `--reason abandoned`.
 12. Tear down the worktree:
     - Follow `AGENTS.md` "Worktree Teardown And Preservation" to clean up the linked worktree and prune references.
     - Move to the next queue item.
@@ -522,6 +525,13 @@ Use the minimum required tier for changed surfaces:
 
 Before PR creation, rerun freshness gate after latest `origin/main` sync.
 Do not use stale validation as proof.
+
+For issue-to-PR publication, also use `scripts/dev/check_prepublication_state.py`: capture the
+issue/base/remote-branch/local-HEAD baseline before expensive readiness, then run `check` immediately
+before opening the PR. Treat `superseded` and `blocked` as stops, and treat `refresh-required` as
+stale evidence; `sync --integrate` may merge changed remote refs only from a clean worktree. Record
+the decision and exact SHAs in the run ledger, then rerun readiness and capture a new baseline after
+any integration.
 
 ## Proof and Artifact Rules
 
@@ -577,7 +587,7 @@ Each child skill or worker may fail. Handle failures per scenario:
 
 - `gh-pr-opener` failure:
    - If the PR already exists for the branch, update the existing PR body with
-     `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
+     `uv run python scripts/dev/gh_pr_body_rest.py <pr-number> --reconcile --title "<final title>" --repo ll7/robot_sf_ll7 --body-file <prepared_body.md>`
      instead of creating a duplicate. Do not use `gh pr edit --body-file` while its GraphQL query
      requests retired Projects Classic fields.
      For label operations, use

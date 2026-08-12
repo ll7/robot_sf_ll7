@@ -31,6 +31,8 @@ paper-facing claim.
 | Route/start-state generation | `scripts/tools/generate_adversarial_routes.py`, `robot_sf/nav/adversarial_route_generation.py` | Head-on corridor route optimization prototype | Route-generation smoke, not a benchmark row. |
 | Failure archive | `scripts/tools/curate_adversarial_failure_archive.py`, `robot_sf/adversarial/archive.py` | Compact `adversarial_failure_archive.v1` replay pointers for selected failures | Archive curation only; raw bundles stay local unless separately promoted. |
 | Rerun readiness | `scripts/validation/check_failure_archive_rerun_readiness.py`, `scripts/adversarial/produce_rerun_closure_packet.py` | Fail-closed checks for disjoint certified archive reruns | Readiness or diagnostic blocker packet, not model-quality evidence. |
+| Residual adversary smoke | `robot_sf/ped_npc/residual_adversary.py`, `tests/adversarial/test_residual_adversary.py`, `tests/sim/test_residual_adversary_wiring.py` | Deterministic bounded residual-control reactive adversary: bound pipeline, macro-action cadence, opt-in gating, perturb-not-replace, simulator wiring | Capability-only smoke evidence; no benchmark, metric, or safety claim. |
+| Residual search-baseline smoke | `robot_sf/ped_npc/residual_search.py`, `configs/adversarial/issue_6911_residual_search.yaml`, `docs/context/issue_6911_residual_search.md` | Tiny deterministic finite-grid proposal search; every candidate is evaluated through `BoundedResidualAdversary` and emits portable candidate/bound accounting | Capability-only diagnostic evidence; no stress-strength, planner-ranking, benchmark, safety, or paper claim. |
 
 ## Scenarios And Seeds
 
@@ -69,6 +71,15 @@ Current lanes report candidate and smoke accounting only:
   `degraded`, and `not_available`;
 - archive counts and rerun-readiness blocker counts when using archive tools.
 
+The residual controller also exposes a versioned
+`residual_adversary_behavior.v1` summary for diagnostic runtime accounting:
+steps, macro-actions, targeted-row fraction, applied residual norm
+mean/max/integral, nonzero fraction, proposal-to-applied adjustment fraction,
+and finite/bound-safe status. It is resettable, returned through the simulator's
+read-only `residual_adversary_behavior_summary` property after lazy allocation,
+and is not an episode-schema field or benchmark metric. Invalid, non-finite, or
+bound-unsafe execution remains diagnostic/blocker evidence only.
+
 New stress-case metrics are out of scope for this dispatchable slice.
 
 ## Canonical Commands
@@ -102,6 +113,21 @@ Run the route/start-state prototype:
 uv run python scripts/tools/generate_adversarial_routes.py \
   --config configs/adversarial_routes/default.yaml
 ```
+
+Run the residual adversary deterministic CPU smoke:
+
+```bash
+uv run pytest tests/adversarial/test_residual_adversary.py \
+  tests/sim/test_residual_adversary_wiring.py -q
+```
+
+This proves the bounded residual-control reactive adversary's runtime wiring,
+bound enforcement, deterministic scripted-policy reproducibility, and the
+diagnostic `residual_adversary_behavior.v1` summary. The reproducibility test
+loads `configs/adversarial/issue_4360_residual_adversary.yaml`, uses fixed seed
+`42`, and runs `20` fixed `0.1 s` steps; repeated runs compare the canonical
+summary values. It is capability-only smoke evidence — not a benchmark, metric,
+or safety claim.
 
 The historical crossing/TTC SLURM smoke launcher remains available, but this
 issue #4360 slice does not submit compute:

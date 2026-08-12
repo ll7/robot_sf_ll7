@@ -42,6 +42,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
+
 # Reuse the existing, verified probe machinery instead of reinventing it.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "scripts" / "tools") not in sys.path:
@@ -281,13 +283,13 @@ def _write_markdown(summary: dict[str, Any], path: Path) -> None:
     lines += ["## Limitations", ""]
     lines += [f"- {item}" for item in summary.get("limitations", [])]
     lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    write_text(path, "\n".join(lines), issue_ref="robot_sf#2444")
 
 
 def _write_outputs(summary: dict[str, Any], output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_path = output_dir / "ammv_divergence_classification.json"
-    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(summary_path, summary)
     _write_markdown(summary, output_dir / "README.md")
 
 

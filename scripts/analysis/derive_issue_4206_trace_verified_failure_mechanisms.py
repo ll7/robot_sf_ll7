@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: JSONL and one-line JSON outputs are consumed line-by-line; inline markers would break those exact-byte reader contracts.
 """Derive trace-verified failure-mechanism labels from h600 rerun episode JSONL.
 
 Reads campaign episode JSONL files and derives failure-mechanism labels from
@@ -22,6 +23,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     MECHANISM_SCHEMA_VERSION,
     validate_failure_mechanism_record,
 )
+from robot_sf.evidence.writers import write_sha256sums, write_text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -630,7 +632,7 @@ def _write_readmes(
         "the episode JSONL. Confidence levels reflect the strength of derivation evidence.",
         "Labels are diagnostic, not paper-facing claims.",
     ]
-    (output_dir / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(output_dir / "README.md", "\n".join(lines), issue_ref="robot_sf#4831")
 
 
 def _write_label_coverage_md(output_dir: Path, coverage: Mapping[str, Any]) -> None:
@@ -687,7 +689,7 @@ def _write_label_coverage_md(output_dir: Path, coverage: Mapping[str, Any]) -> N
         "",
         f"- guarded_ppo status: {coverage.get('guarded_ppo_status', 'N/A')}",
     ]
-    (output_dir / "label_coverage.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(output_dir / "label_coverage.md", "\n".join(lines), issue_ref="robot_sf#4831")
 
 
 def _write_input_audit(
@@ -779,7 +781,7 @@ def _write_input_audit(
         "",
         f"- Status: {audit['status']}",
     ]
-    (output_dir / "input_audit.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(output_dir / "input_audit.md", "\n".join(lines), issue_ref="robot_sf#4831")
 
 
 def _write_crosscut_interpretation(
@@ -863,22 +865,14 @@ def _write_crosscut_interpretation(
         "",
         interpretation["claim_boundary"],
     ]
-    (output_dir / "crosscut_interpretation.md").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
+    write_text(
+        output_dir / "crosscut_interpretation.md", "\n".join(lines), issue_ref="robot_sf#4831"
     )
 
 
 def _write_sha256sums(output_dir: Path) -> None:
     """Write SHA256SUMS for all generated artifacts."""
-    import hashlib
-
-    sums = []
-    for file_path in sorted(output_dir.iterdir()):
-        if file_path.is_file() and file_path.name != "SHA256SUMS":
-            sha256 = hashlib.sha256(file_path.read_bytes()).hexdigest()
-            sums.append(f"{sha256}  {file_path.name}")
-
-    (output_dir / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
+    write_sha256sums(output_dir)
 
 
 def main(argv: list[str] | None = None) -> int:

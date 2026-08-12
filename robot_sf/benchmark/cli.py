@@ -50,6 +50,7 @@ from robot_sf.benchmark.canonical_table_export import (
     export_canonical_table as _export_canonical_table,
 )
 from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
+from robot_sf.benchmark.case_workbench import admit_package, analyze_cases
 from robot_sf.benchmark.collision_scenario_similarity import (
     build_collision_scenario_similarity_report,
     write_collision_scenario_similarity_report,
@@ -389,6 +390,7 @@ def _handle_run(args) -> int:
             benchmark_track=getattr(args, "benchmark_track", None),
             track_schema_version=getattr(args, "track_schema_version", None),
             record_simulation_step_trace=bool(getattr(args, "record_simulation_step_trace", False)),
+            telemetry=_load_telemetry_config(getattr(args, "telemetry_config", None)),
             observation_noise=(
                 load_observation_noise_spec(args.observation_noise)
                 if getattr(args, "observation_noise", None)
@@ -797,6 +799,51 @@ def _handle_export_parquet(args) -> int:
         return 0
     except _CLI_INPUT_ERRORS:  # pragma: no cover - input boundary exercised by sibling commands
         logging.exception("Parquet analytics export failed")
+        return 2
+
+
+def _handle_analyze_cases(args) -> int:
+    """Build a provenance-first case proposal package.
+
+    Returns:
+        ``0`` on success, or ``2`` for an invalid/unreadable input package.
+    """
+
+    try:
+        proposal = analyze_cases(
+            config_path=args.config,
+            result_store=args.result_store,
+            output=args.output,
+            check_determinism=bool(args.check_determinism),
+            source_gate_receipt=getattr(args, "source_gate_receipt", None),
+        )
+        logging.info(
+            "Case workbench wrote %d proposed cases to %s",
+            len(proposal.get("portfolio", [])),
+            args.output,
+        )
+        return 0
+    except (OSError, TypeError, ValueError, RuntimeError):
+        logging.exception("Case workbench analysis failed")
+        return 2
+
+
+def _handle_admit_cases(args) -> int:
+    """Apply an author overlay and refresh the package receipts.
+
+    Returns:
+        Process exit code.
+    """
+
+    try:
+        result = admit_package(args.package, args.overlay)
+        logging.info(
+            "Case workbench package admitted with %d cases",
+            len(result.get("portfolio", [])),
+        )
+        return 0
+    except (OSError, TypeError, ValueError, RuntimeError):
+        logging.exception("Case workbench admission failed")
         return 2
 
 
@@ -1253,6 +1300,23 @@ def _handle_mapf_oracle(args: argparse.Namespace) -> int:
     if report.get("status") == "error":
         return 1
     return 0
+
+
+def _load_telemetry_config(path: str | None) -> dict[str, object] | None:
+    """Load either a direct telemetry mapping or a ``telemetry:`` wrapper.
+
+    Returns:
+        Normalized telemetry profile mapping, or ``None`` when no path is supplied.
+    """
+
+    if not path:
+        return None
+    payload = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    if not isinstance(payload, Mapping):
+        raise ValueError("telemetry config must contain a YAML mapping")
+    nested = payload.get("telemetry")
+    selected = nested if isinstance(nested, Mapping) else payload
+    return dict(selected)
 
 
 def _handle_list_scenarios(args) -> int:
@@ -1883,6 +1947,11 @@ def _add_run_subparser(
         help="Embed analysis-only per-step trace frames in each aggregate episode row.",
     )
     p.add_argument(
+        "--telemetry-config",
+        default=None,
+        help="Optional YAML mapping with analysis_trace: all and planner_debug_trace: none.",
+    )
+    p.add_argument(
         "--structured-output",
         choices=["none", "json", "jsonl"],
         default="none",
@@ -2365,6 +2434,47 @@ def _add_export_parquet_subparser(
         help="Replace existing export files in the output directory",
     )
     p.set_defaults(cmd="export-parquet")
+
+
+def _add_analyze_cases_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the canonical case discovery command."""
+
+    p = subparsers.add_parser(
+        "analyze-cases",
+        help="Discover and explain interesting cases from a result store",
+    )
+    p.add_argument("--config", required=True, help="case-workbench.v1 YAML configuration")
+    p.add_argument("--result-store", required=True, help="Episode JSONL or campaign result store")
+    p.add_argument("--output", required=True, help="Output proposal package directory")
+    p.add_argument(
+        "--check-determinism",
+        action="store_true",
+        help="Run selection twice and fail if the proposal bytes differ",
+    )
+    p.add_argument(
+        "--source-gate-receipt",
+        help=(
+            "Optional exact-source gate receipt; without a verified passed receipt, "
+            "publication rendering remains unavailable"
+        ),
+    )
+    p.set_defaults(cmd="analyze-cases")
+
+
+def _add_admit_cases_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the digest-bound author admission command."""
+
+    p = subparsers.add_parser(
+        "admit-cases",
+        help="Apply an author admission overlay to a source-gated case package",
+    )
+    p.add_argument("--package", required=True, help="Case-workbench package directory")
+    p.add_argument("--overlay", required=True, help="Digest-bound author overlay JSON")
+    p.set_defaults(cmd="admit-cases")
 
 
 def _add_snqi_ablate_subparser(
@@ -3304,6 +3414,8 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     _add_claim_subparser(subparsers)
     _add_validate_row_claims_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
+    _add_analyze_cases_subparser(subparsers)
+    _add_admit_cases_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_flakiness_audit_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
@@ -3474,6 +3586,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         "claim": _handle_claim,
         "validate-row-claims": _handle_validate_row_claims,
         "export-parquet": _handle_export_parquet,
+        "analyze-cases": _handle_analyze_cases,
+        "admit-cases": _handle_admit_cases,
         "seed-variance": _handle_seed_variance,
         "flakiness-audit": _handle_flakiness_audit,
         "extract-failures": _handle_extract_failures,

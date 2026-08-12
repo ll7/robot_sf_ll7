@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
     main,
@@ -745,7 +746,10 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
     """Gate verdict trailers past 180 chars must be extracted into gate_verdicts before excerpt truncation."""
     sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
     long_prefix = "Detailed review feedback paragraph line. " * 6  # > 200 chars
-    long_review_body = f"{long_prefix}\n\ngate-verdict: accepted @ {sha}"
+    digest = metadata_digest("long body review PR", "")
+    long_review_body = (
+        f"{long_prefix}\n\ngate-verdict: accepted @ {sha}\n\n{metadata_trailer(digest)}"
+    )
 
     pr_payload = {
         "number": 6130,
@@ -777,6 +781,8 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
 
     pr = payload["prs"][0]
     assert pr["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
+    assert pr["metadata_digest"] == digest
+    assert pr["metadata_verdicts"] == [metadata_trailer(digest)]
     excerpt = pr["review_snapshot"]["latest"][0]["body_excerpt"]
     assert len(excerpt) <= 180
     assert excerpt.endswith("...")

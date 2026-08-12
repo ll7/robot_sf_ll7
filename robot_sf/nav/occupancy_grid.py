@@ -600,7 +600,7 @@ class OccupancyGrid:
             grid_origin_x = robot_x - self.config.width / 2
             grid_origin_y = robot_y - self.config.height / 2
             logger.debug(
-                "World-frame grid centered on robot: origin=(%.2f, %.2f)",
+                "World-frame grid centered on robot: origin=({:.2f}, {:.2f})",
                 grid_origin_x,
                 grid_origin_y,
             )

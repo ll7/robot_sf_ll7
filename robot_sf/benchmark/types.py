@@ -241,6 +241,7 @@ class EpisodeRecordDict(TypedDict, total=False):
     observation_level: str
     config_hash: str
     git_hash: str
+    provenance: dict[str, Any]
     timestamps: dict[str, str]
     status: str
     steps: int
@@ -468,6 +469,7 @@ class MapBatchConfig:
     cbf_safety_filter: dict[str, object] | None = None
     record_planner_decision_trace: bool = False
     record_simulation_step_trace: bool = False
+    telemetry: dict[str, object] | None = None
     multiprocessing_context: BaseContext | None = None
     workers: int = 1
     resume: bool = True

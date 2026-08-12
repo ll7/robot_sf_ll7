@@ -36,7 +36,7 @@ def main() -> None:
     obs, _info = env.reset(seed=42)
     grid_obs = obs["occupancy_grid"]
     logger.info(
-        "Grid observation initialised: shape=%s dtype=%s range=[%.3f, %.3f]",
+        "Grid observation initialised: shape={} dtype={} range=[{:.3f}, {:.3f}]",
         grid_obs.shape,
         grid_obs.dtype,
         float(grid_obs.min()),
@@ -52,7 +52,7 @@ def main() -> None:
     )
     result = grid.query(query)
     logger.info(
-        "Center query -> occupied=%s safe_to_spawn=%s occupancy_fraction=%.3f",
+        "Center query -> occupied={} safe_to_spawn={} occupancy_fraction={:.3f}",
         result.is_occupied,
         result.safe_to_spawn,
         result.occupancy_fraction,
@@ -63,7 +63,7 @@ def main() -> None:
         obs, reward, terminated, truncated, _ = env.step(action)
         grid_obs = obs["occupancy_grid"]
         logger.debug(
-            "Step %02d: grid max=%.3f reward=%.3f",
+            "Step {:02d}: grid max={:.3f} reward={:.3f}",
             step_idx,
             float(grid_obs.max()),
             float(reward),

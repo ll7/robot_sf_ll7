@@ -36,6 +36,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
     "social_force": "classical",
     "orca": "classical",
+    "brne": "diagnostic",
     "hrvo": "classical",
     "social_navigation_pyenvs_orca": "classical",
     "social_navigation_pyenvs_socialforce": "classical",
@@ -101,6 +102,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
     "orca": "orca_adapter",
+    "brne": "bounded_bayesian_recursive_nash_equilibrium_diagnostic",
     "socnav_orca_nonholonomic": "orca_adapter",
     "socnav_orca_dd": "orca_adapter",
     "socnav_orca_relaxed": "orca_adapter",
@@ -186,6 +188,15 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "social_force": _DEFAULT_OBSERVATION_SPEC,
     "orca": _DEFAULT_OBSERVATION_SPEC,
+    "brne": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "robot_heading", "goal", "pedestrians"),
+        "notes": (
+            "BRNE diagnostic consumes privileged world-frame robot velocity and pedestrian "
+            "state; the bounded upstream core is restricted to corridor bounds."
+        ),
+    },
     "hrvo": _DEFAULT_OBSERVATION_SPEC,
     "socnav_orca_nonholonomic": _DEFAULT_OBSERVATION_SPEC,
     "socnav_orca_dd": _DEFAULT_OBSERVATION_SPEC,
@@ -369,6 +380,16 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
 }
 
 _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
+    "brne": {
+        "repo_url": "https://github.com/MurpheyLab/brne",
+        "commit": "633a5cd",
+        "checkout_path": "third_party/external_repos/brne",
+        "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
+        "adapter_boundary": (
+            "Map Robot SF corridor observations into the pinned upstream BRNE pure-numpy/numba "
+            "core and retain its native unicycle command; this bounded path is diagnostic-only."
+        ),
+    },
     "orca": {
         "repo_url": "https://github.com/mit-acl/Python-RVO2",
         "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
@@ -635,6 +656,19 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "benchmark_command_space": "unicycle_vw",
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
+    },
+    "brne": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "BRNEPlanner",
+        "upstream_command_space": "unicycle_vw",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_brne_unicycle_vw_with_bounded_feasibility_projection",
+        "projection_documented": True,
+        "testing_only_adapter": True,
+        "prototype_only": True,
     },
     "socnav_orca_nonholonomic": {
         "planner_command_space": "unicycle_vw",

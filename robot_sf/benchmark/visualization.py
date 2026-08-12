@@ -1236,8 +1236,8 @@ def _generate_frames_from_replay(replay_episode, fps: int, max_frames: int) -> l
         List of numpy arrays representing video frames
     """
     steps = list(getattr(replay_episode, "steps", []))
-    if not steps:
-        logger.warning("Replay episode %s has no steps", getattr(replay_episode, "episode_id", "?"))
+    if not steps:  # pragma: no cover - diagnostic empty-replay path
+        logger.warning("Replay episode {} has no steps", getattr(replay_episode, "episode_id", "?"))
         return []
 
     # Extract positions and calculate bounds

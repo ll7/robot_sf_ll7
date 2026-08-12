@@ -1,0 +1,145 @@
+{
+  "schema_version": "issue-6464-brne-corridor-diagnostic-summary.v1",
+  "issue": 6464,
+  "status": "diagnostic_complete",
+  "evidence_tier": "smoke_diagnostic",
+  "claim_boundary": "Native upstream BRNE core through the Robot SF adapter, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
+  "base_commit": "cb5ee5700ebe262733dd29e8e97c74deaff03cc7",
+  "source_worktree_dirty_at_capture": false,
+  "scenario": {
+    "name": "classic_head_on_corridor_low",
+    "seeds": [111, 112, 113],
+    "horizon_steps": 500,
+    "timestep_s": 0.1,
+    "geometry": "constant_width_corridor_only"
+  },
+  "upstream": {
+    "repo": "https://github.com/MurpheyLab/brne",
+    "commit": "633a5cd",
+    "pinned_sha": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "license": "GPL-3.0",
+    "redistribution": "local_only",
+    "requested_samples": 49,
+    "effective_samples": 42,
+    "provenance_sha256": "e7238f672ba9dbc2e31cc40c48996d62ba6f2398879bb53f7c8455674de077d9"
+  },
+  "fallback_policy": {
+    "enabled": false,
+    "fallback_or_degraded_rows_count_as_success": false,
+    "over_cap_rows_count_as_success": false
+  },
+  "reproducibility": {
+    "planner_rng": "upstream BRNE default_rng rebound from the declared episode seed at reset",
+    "exact_pair_coverage": true,
+    "runtime_failure_rows_excluded": true,
+    "completed_run_environment": {
+      "NUMBA_NUM_THREADS": "1",
+      "reason": "single-thread isolation for the native BRNE timing path"
+    },
+    "default_thread_repeat": {
+      "status": "diagnostic_incomplete",
+      "reason": "seed-112 hit the known load-sensitive BRNE step-budget failure",
+      "related_resolution": {
+        "issue": 6924,
+        "pull_request": 6931,
+        "status": "merged"
+      }
+    }
+  },
+  "arms": {
+    "brne": {
+      "exact_runs": "3/3",
+      "native_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "0/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    },
+    "orca_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "3/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    },
+    "social_force_comparator": {
+      "exact_runs": "3/3",
+      "execution_ok": "3/3",
+      "diagnostic_eligible": "3/3",
+      "goal_reached": "2/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "fallback_or_degraded": 0,
+      "over_cap": 0
+    }
+  },
+  "artifact": {
+    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_followup_20260812T031500Z",
+    "report_json_sha256": "b76c1fc9ab08e1272b67fe78c85d341f56e56b62a31b3299c75c293f00a6e62f",
+    "report_markdown_sha256": "b30a2b7ba441f4b86c558b837c8198cf8bb57f7e0bf2e811938cf36b6d8125e0",
+    "raw_artifacts": "ignored_worktree_local"
+  },
+  "follow_up_issue": 6923,
+  "contract_follow_up_issue": 6932,
+  "next_step": "Retain the bounded #6923 negative diagnostic; any BRNE objective or runtime-budget change requires a separately scoped experiment before broader or ranking work.",
+  "follow_up_6923": {
+    "status": "diagnostic_complete",
+    "result_classification": "diagnostic_only",
+    "generated_at": "2026-08-12T04:15:11.951012+00:00",
+    "base_commit": "4ee87d61bf8f8b2627f316b3de06f4190c397b57",
+    "command": "NUMBA_NUM_THREADS=1 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_diagnosis_20260812T061500Z",
+    "claim_boundary": "Smoke/diagnostic evidence for native BRNE execution, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
+    "exact_pair_coverage": true,
+    "fallback_or_degraded_rows": 0,
+    "source": {
+      "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+      "integrity": "clean_pinned_worktree",
+      "requested_samples": 49,
+      "effective_samples": 42
+    },
+    "arms": {
+      "brne": {
+        "exact_runs": "3/3",
+        "mechanism_trace_valid": "3/3",
+        "runtime_eligible": "3/3",
+        "goal_reached": "0/3",
+        "runtime_failed": "0/3",
+        "failure_counts_by_seed": {"111": 0, "112": 0, "113": 0},
+        "failure_reasons": [],
+        "budget_s": 0.1,
+        "non_degenerate": "3/3",
+        "corridor_violations": 0,
+        "collision_steps_by_seed": {"111": 141, "112": 172, "113": 183},
+        "signed_goal_progress_pattern": "early negative, middle positive, late negative on all three trace-valid rows"
+      },
+      "orca_comparator": {
+        "exact_runs": "3/3",
+        "diagnostic_eligible": "3/3",
+        "eligible_goal_reached": "3/3",
+        "corridor_violations": 0
+      },
+      "social_force_comparator": {
+        "exact_runs": "3/3",
+        "diagnostic_eligible": "3/3",
+        "eligible_goal_reached": "2/3",
+        "corridor_violations": 0,
+        "collision_rows": 1
+      }
+    },
+    "artifact": {
+      "local_report_dir": "output/benchmarks/issue_6923_brne_trace_diagnosis_20260812T061500Z",
+      "report_json_sha256": "38afc5acbee0b40cdb049d895b2ac12dee5ae3e5f08a4fb1c6138a803f09ef3c",
+      "report_markdown_sha256": "f312c0d4b1147a900446619ee81618edfe47146d4d84743e907493c8b6532a13",
+      "raw_artifacts": "ignored_worktree_local",
+      "tracked_summary_is_not_raw_episode_archive": true
+    },
+    "decision": "diagnostic-only retention; no bounded adapter revision and no broader campaign",
+    "next_empirical_action": "If BRNE is pursued, separately test the observed progress reversal and collision mechanism on the same frozen matrix; do not change the adapter, widen the scenario, or make a ranking or paper claim from this result."
+  }
+}

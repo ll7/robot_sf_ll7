@@ -13,14 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   event, control, timing, and provenance coverage; campaign-result-store.v2 round-trips
   verify required tables and checksums; comparisons fail closed on incompatible starts;
   package viewer inputs include the complete summary contract; and diagnostic publication
-  previews no longer masquerade as admitted figures. The analysis profile remains opt-in.
+  previews no longer masquerade as admitted figures. Source-gate receipts now require a
+  repository-controlled approval registry, and admission regenerates owned projections.
+  The analysis profile remains opt-in.
+
 * **Issue #6960 per-phenomenon replay videos for the issue #5149 emergence campaign.** Added
   `scripts/validation/render_issue_5149_emergent_phenomena_videos.py`, which renders one animated
   replay GIF per phenomenon x speed calibration (lane formation in the bidirectional corridor;
   oscillation at the narrow doorway) plus one two-row grid GIF per phenomenon, directly into the
   committed campaign bundle
-  `docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/`. Representative seeds
-  are selected deterministically from the campaign's `runs.jsonl` (majority-verdict pool, median
+  `docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/`. Representative seeds are
+  selected deterministically from the campaign's `runs.jsonl` (majority-verdict pool, median
   primary order parameter), trajectories are re-simulated with the pinned harness and seeds, and
   provenance (seed, scenario, calibration, source commit) is carried in each filename and in a new
   `videos_manifest.json`; `SHA256SUMS` is refreshed to cover the videos. Claim boundary: replay

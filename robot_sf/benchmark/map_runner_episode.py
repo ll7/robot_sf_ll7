@@ -1711,7 +1711,7 @@ class _EpisodeStepLoopResult:
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
     initial_ped_velocities: np.ndarray | None
-    trace_actor_ids: list[str]
+    trace_actor_ids: list[str] | None
     initial_goal_distance: float
     reached_goal_step: int | None
     termination_reason: str
@@ -1788,7 +1788,7 @@ class _StepLoopState:
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
     initial_ped_velocities: np.ndarray | None = None
-    trace_actor_ids: list[str] = field(default_factory=list)
+    trace_actor_ids: list[str] | None = field(default_factory=list)
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -1984,7 +1984,7 @@ def _reset_robot_heading(simulator: Any, obs: Any) -> float:
     return _observation_heading(obs)
 
 
-def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
+def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:  # noqa: C901
     """Read the reset robot velocity without assuming a zero initial state.
 
     Returns:
@@ -2002,6 +2002,13 @@ def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
     robots = getattr(simulator, "robots", None)
     if isinstance(robots, (list, tuple)) and robots:
         state = getattr(robots[0], "state", None)
+        pose = getattr(state, "pose", None)
+        heading = None
+        if isinstance(pose, (list, tuple)) and len(pose) > 1:
+            try:
+                heading = float(pose[1])
+            except (TypeError, ValueError):
+                heading = None
         for name in ("velocity_xy", "robot_velocity_xy"):
             value = getattr(state, name, None)
             if value is not None:
@@ -2011,6 +2018,15 @@ def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
                     continue
                 if array.size >= 2 and np.isfinite(array[:2]).all():
                     return array[:2].copy()
+        polar = getattr(state, "velocity", None)
+        if heading is not None:
+            try:
+                values = np.asarray(polar, dtype=float).reshape(-1)
+            except (TypeError, ValueError):
+                values = np.asarray([], dtype=float)
+            if values.size >= 1 and np.isfinite(values[0]):
+                speed = float(values[0])
+                return np.asarray([speed * np.cos(heading), speed * np.sin(heading)], dtype=float)
     return None
 
 
@@ -2033,7 +2049,7 @@ def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
     return array[:count].copy()
 
 
-def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str]:
+def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str] | None:
     """Return stable simulator-slot IDs for the reset pedestrian population.
 
     The benchmark simulator stores pedestrian state in fixed rows.  When an
@@ -2043,7 +2059,9 @@ def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str]:
     v1 traces cannot be mistaken for stable identities by the analysis gate.
 
     Returns:
-        Stable, unique identifiers aligned with ``simulator.ped_pos``.
+        Stable, unique identifiers aligned with ``simulator.ped_pos``.  ``None``
+        means that an exposed registry was malformed and the trace must remain
+        unavailable rather than falling back to a guessed identity.
     """
     if count <= 0:
         return []
@@ -2058,12 +2076,18 @@ def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str]:
             try:
                 values = list(raw)
             except TypeError:
-                continue
+                return None
             if len(values) != count:
-                continue
+                return None
             identifiers = [str(value).strip() for value in values]
-            if all(identifiers) and len(set(identifiers)) == len(identifiers):
+            if all(
+                identifier
+                and identifier.lower() not in {"none", "nan", "null"}
+                and not isinstance(value, bool)
+                for value, identifier in zip(values, identifiers, strict=True)
+            ) and len(set(identifiers)) == len(identifiers):
                 return identifiers
+            return None
     return [f"simulator-slot-{index}" for index in range(count)]
 
 
@@ -2705,7 +2729,9 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
-        trace_actor_ids=list(state.trace_actor_ids),
+        trace_actor_ids=(
+            list(state.trace_actor_ids) if state.trace_actor_ids is not None else None
+        ),
         initial_goal_distance=state.initial_goal_distance,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
@@ -3186,7 +3212,9 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_robot_velocity=initial_robot_velocity,
                 initial_pedestrian_velocities=initial_ped_velocities,
                 initial_pedestrian_ids=trace_actor_ids,
-                initial_pedestrian_id_source="simulator_slot",
+                initial_pedestrian_id_source=(
+                    "simulator_slot" if trace_actor_ids is not None else None
+                ),
                 dt=float(config.sim_config.time_per_step_in_secs),
                 horizon=int(horizon_val),
                 robot_radius_m=robot_radius,

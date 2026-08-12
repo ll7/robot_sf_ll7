@@ -58,6 +58,10 @@ class CampaignResultStoreV2Result:
     checksum_path: Path
 
 
+class ParquetDependencyError(RuntimeError):
+    """Raised when the optional analytics dependencies are not installed."""
+
+
 def export_episodes_jsonl_to_parquet(
     input_paths: Sequence[str | Path] | str | Path,
     output_dir: str | Path,
@@ -166,7 +170,7 @@ def export_campaign_result_store_v2(
         "schema_version": CAMPAIGN_RESULT_STORE_SCHEMA_VERSION,
         "study_id": str(study_id),
         "command": str(command),
-        "source_files": [{"path": str(path), "sha256": _path_sha256(path)} for path in paths],
+        "source_files": [{"path": path.name, "sha256": _path_sha256(path)} for path in paths],
         "tables": {
             name: {"file": path.name, "rows": len(tables[name])}
             for name, path in table_paths.items()
@@ -276,6 +280,7 @@ def _campaign_v2_schemas(pa_mod: Any) -> dict[str, Any]:
                 ("planner", string),
                 ("scenario_id", string),
                 ("config_hash", string),
+                ("config_digest", string),
                 ("scenario_digest", string),
                 ("map_digest", string),
                 ("outcome_counts_json", string),
@@ -316,14 +321,13 @@ def _build_campaign_v2_rows(
 ) -> dict[str, list[dict[str, Any]]]:
     """Normalize records into the seven v2 tables."""
 
-    source_uri = str(paths[0]) if paths else ""
     source_sha = _path_sha256(paths[0]) if paths and paths[0].is_file() else None
     episodes: list[dict[str, Any]] = []
     steps: list[dict[str, Any]] = []
     actors: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
     features: list[dict[str, Any]] = []
-    by_cell: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
+    by_cell: dict[tuple[str, str, str, str, str, str], list[dict[str, Any]]] = {}
     for record in records:
         episode_id = str(record.get("episode_id") or "")
         planner = _resolve_algo(record) or "unknown"
@@ -334,8 +338,12 @@ def _build_campaign_v2_rows(
             record.get("provenance") if isinstance(record.get("provenance"), Mapping) else {}
         )
         provenance = dict(provenance)
-        record_source_uri = _string_or_none(record.get("_source_path")) or source_uri
+        source_path = _string_or_none(record.get("_source_path"))
         record_source_sha = _string_or_none(record.get("_source_sha256")) or source_sha
+        if source_path:
+            # This is source-file lineage, not an inferred trace artifact URI.
+            provenance.setdefault("source_file", Path(source_path).name)
+            provenance.setdefault("source_file_sha256", record_source_sha)
         result_provenance = record.get("result_provenance")
         if isinstance(result_provenance, Mapping):
             for key, value in result_provenance.items():
@@ -350,6 +358,7 @@ def _build_campaign_v2_rows(
                 "map_digest",
                 "scenario_digest",
                 "config_hash",
+                "config_digest",
                 "git_hash",
                 "planner_commit",
                 "dt",
@@ -380,8 +389,7 @@ def _build_campaign_v2_rows(
                 "scenario_family": scenario_family,
                 "seed": _int_or_none(record.get("seed")),
                 "row_status": row_status,
-                "artifact_uri": _string_or_none(provenance.get("artifact_uri"))
-                or record_source_uri,
+                "artifact_uri": _string_or_none(provenance.get("artifact_uri")),
                 "artifact_sha256": explicit_artifact_sha,
                 "trace_coverage_json": _json_or_none(coverage),
                 "analysis_trace_json": _json_or_none(trace),
@@ -423,6 +431,7 @@ def _build_campaign_v2_rows(
                 planner,
                 scenario_id,
                 str(trace_mapping.get("config_hash") or provenance.get("config_hash") or ""),
+                str(trace_mapping.get("config_digest") or provenance.get("config_digest") or ""),
                 str(
                     trace_mapping.get("scenario_digest") or provenance.get("scenario_digest") or ""
                 ),
@@ -997,14 +1006,19 @@ def _sha256_text(value: str) -> str:
 
 
 def _campaign_cell_rows(
-    by_cell: Mapping[tuple[str, str, str, str, str], list[dict[str, Any]]],
+    by_cell: Mapping[tuple[str, str, str, str, str, str], list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Aggregate outcome mixtures and entropy per planner/scenario cell."""
 
     rows: list[dict[str, Any]] = []
-    for (planner, scenario_id, config_hash, scenario_digest, map_digest), records in sorted(
-        by_cell.items()
-    ):
+    for (
+        planner,
+        scenario_id,
+        config_hash,
+        config_digest,
+        scenario_digest,
+        map_digest,
+    ), records in sorted(by_cell.items()):
         eligible_records = [record for record in records if _cell_record_eligible(record)]
         if not eligible_records:
             eligible_records = []
@@ -1041,13 +1055,16 @@ def _campaign_cell_rows(
         boundary_status = _cell_boundary_status(eligible_records)
         first_record = eligible_records[0] if eligible_records else {}
         aggregate = _canonical_uncertainty(first_record)
-        identity_suffix = _sha256_text("|".join((config_hash, scenario_digest, map_digest)))[:12]
+        identity_suffix = _sha256_text(
+            "|".join((config_hash, config_digest, scenario_digest, map_digest))
+        )[:12]
         rows.append(
             {
                 "cell_id": f"{scenario_id}::{planner}::{identity_suffix}",
                 "planner": planner,
                 "scenario_id": scenario_id,
                 "config_hash": config_hash,
+                "config_digest": config_digest,
                 "scenario_digest": scenario_digest,
                 "map_digest": map_digest,
                 "outcome_counts_json": _json_or_none(dict(sorted(counts.items()))),
@@ -1113,6 +1130,17 @@ def _cell_record_eligible(record: Mapping[str, Any]) -> bool:
         return False
     coverage = record.get("trace_coverage")
     if isinstance(coverage, Mapping) and coverage.get("status") not in {None, "complete"}:
+        return False
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    provenance = record.get("provenance")
+    artifact_sha = provenance.get("artifact_sha256") if isinstance(provenance, Mapping) else None
+    if (
+        not isinstance(trace, Mapping)
+        or not isinstance(artifact_sha, str)
+        or artifact_sha != trace.get("artifact_sha256")
+        or artifact_sha != trace_artifact_sha256(trace)
+    ):
         return False
     return True
 
@@ -1226,8 +1254,8 @@ def _comparison_compatibility(
     right_trace = _analysis_trace(right)
     if left_trace is None or right_trace is None:
         return False, "analysis_trace_unavailable"
-    left_config = _string_or_none(left_trace.get("config_hash"))
-    right_config = _string_or_none(right_trace.get("config_hash"))
+    left_config = _string_or_none(left_trace.get("config_digest"))
+    right_config = _string_or_none(right_trace.get("config_digest"))
     if left_config is None or right_config is None or left_config != right_config:
         return False, "config_digest_mismatch"
     for field, reason in (
@@ -1331,6 +1359,7 @@ def _comparison_receipt(
             "planner": record.get("algo") or record.get("planner"),
             "seed": record.get("seed"),
             "config_hash": trace.get("config_hash"),
+            "config_digest": trace.get("config_digest"),
             "scenario_digest": trace.get("scenario_digest"),
             "map_digest": trace.get("map_digest"),
             "coordinate_frame": trace.get("coordinate_frame"),
@@ -1595,7 +1624,7 @@ def _load_pyarrow() -> tuple[Any, Any]:
             "Parquet export requires optional analytics dependencies. "
             "Install them with `uv sync --extra analytics` or `uv sync --all-extras`."
         )
-        raise RuntimeError(msg)
+        raise ParquetDependencyError(msg)
     return pa, pq
 
 
@@ -2008,7 +2037,7 @@ def _build_metadata(
         "record_count": record_count,
         "source_files": [
             {
-                "path": str(path),
+                "path": path.name,
                 "sha256": _path_sha256(path) if path.is_file() else None,
             }
             for path in paths

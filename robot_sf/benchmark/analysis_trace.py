@@ -317,23 +317,29 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 if isinstance(planner_payload, dict)
                 else None
             )
+            applied_action = (
+                planner_payload.get("applied_environment_action")
+                if isinstance(planner_payload, Mapping)
+                else None
+            )
             if isinstance(selected_action, Mapping):
-                linear = selected_action.get("linear_m_s")
-                if linear is None:
-                    linear = selected_action.get("linear_velocity")
-                turn = selected_action.get("turn_rate_rad_s")
-                if turn is None:
-                    turn = selected_action.get("angular_velocity")
-                if linear is None and turn is None:
-                    vx = selected_action.get("vx")
-                    vy = selected_action.get("vy")
-                    if _finite_number(vx) and _finite_number(vy):
-                        linear = math.hypot(float(vx), float(vy))
-                if _finite_number(linear) or _finite_number(turn):
+                requested_linear, requested_turn = _action_control_values(selected_action)
+                applied_linear, applied_turn = _action_control_values(applied_action)
+                if _finite_number(requested_linear) or _finite_number(requested_turn):
                     item["controls"] = {
-                        "requested": {"linear_m_s": linear, "turn_rate_rad_s": turn},
-                        "applied": {"linear_m_s": linear, "turn_rate_rad_s": turn},
-                        "source": "planner.selected_action",
+                        "requested": {
+                            "linear_m_s": requested_linear,
+                            "turn_rate_rad_s": requested_turn,
+                        },
+                        "applied": {
+                            "linear_m_s": applied_linear,
+                            "turn_rate_rad_s": applied_turn,
+                        },
+                        "source": (
+                            "planner.selected_action+environment_action"
+                            if isinstance(applied_action, Mapping)
+                            else "planner.selected_action"
+                        ),
                     }
                 elif not isinstance(item.get("controls"), Mapping):
                     item["controls"] = {"requested": None, "applied": None}
@@ -373,6 +379,13 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "scenario_id": scenario.get("id") or scenario.get("name") or scenario.get("scenario_id"),
         "map_file": scenario.get("map_file") or scenario.get("map"),
         "scenario_digest": sha256_json(scenario_identity),
+        # Keep the legacy short ``config_hash`` for v1 readers, but bind pair
+        # comparisons to a full digest that also includes the effective trace
+        # timing.  This prevents the short legacy fingerprint from becoming an
+        # exact provenance claim.
+        "config_digest": sha256_json(
+            {**scenario_identity, "dt": float(dt), "horizon": int(horizon)}
+        ),
         "map_digest": map_digest(scenario),
         "config_hash": str(config_hash),
         "git_hash": git_hash,
@@ -380,6 +393,7 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "events": _normalize_events(safety_events, actor_ids=resolved_initial_ids),
         "steps": normalized_steps,
     }
+    _deduplicate_trace_event_ids(payload)
     payload["artifact_sha256"] = sha256_json(payload)
     return payload
 
@@ -428,7 +442,6 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
     finite_states = bool(has_steps)
     monotonic_time = bool(has_steps)
     prior_time: float | None = None
-    actor_sets: list[set[str]] = []
     actor_radii: dict[str, float] = {}
     for index, step in enumerate(steps if has_steps else []):
         if not isinstance(step, dict) or not isinstance(step.get("robot"), dict):
@@ -450,7 +463,6 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         if not _finite_vector(robot.get("velocity"), 2):
             finite_states = False
         seen_ids = {"robot"}
-        current_ids: set[str] = set()
         pedestrians = step.get("pedestrians", [])
         if not isinstance(pedestrians, list):
             actor_ids = False
@@ -464,7 +476,6 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
                 actor_ids = False
             else:
                 seen_ids.add(actor_id)
-                current_ids.add(actor_id)
             if not _finite_positive(actor.get("radius_m")):
                 radii = False
             elif isinstance(actor.get("actor_id"), str):
@@ -477,7 +488,6 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
                 actor.get("velocity"), 2
             ):
                 finite_states = False
-        actor_sets.append(current_ids)
         controls_payload = step.get("controls")
         if not isinstance(controls_payload, dict):
             controls = False
@@ -485,8 +495,6 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
             controls = False
         elif _control_payload_has_value(controls_payload):
             control_observed = True
-    if actor_sets and any(actor_set != actor_sets[0] for actor_set in actor_sets[1:]):
-        actor_ids = False
     controls = controls and control_observed
     actor_ids = actor_ids and trace.get("actor_id_source") in {
         "explicit",
@@ -507,6 +515,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         and str(trace.get(key)).strip().lower() not in {"unknown", "none", "null", "unavailable"}
         for key in (
             "config_hash",
+            "config_digest",
             "scenario_digest",
             "map_digest",
             "git_hash",
@@ -516,7 +525,12 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
     )
     provenance = provenance and all(
         isinstance(trace.get(key), str) and bool(re.fullmatch(_SHA256_RE, str(trace.get(key))))
-        for key in ("scenario_digest", "map_digest")
+        for key in ("scenario_digest", "map_digest", "config_digest")
+    )
+    provenance = provenance and all(
+        isinstance(trace.get(key), str)
+        and bool(re.fullmatch(r"[0-9a-f]{7,64}", str(trace.get(key)).lower()))
+        for key in ("git_hash", "planner_commit")
     )
     artifact_hash = (
         isinstance(trace.get("artifact_sha256"), str)
@@ -637,6 +651,29 @@ def _control_payload_has_value(payload: Mapping[str, Any]) -> bool:
     return False
 
 
+def _action_control_values(action: Any) -> tuple[float | None, float | None]:
+    """Extract canonical linear and turn controls from a runtime action payload.
+
+    Returns:
+        The linear and turn controls, or ``None`` for unavailable dimensions.
+    """
+
+    if not isinstance(action, Mapping):
+        return None, None
+    linear = action.get("linear_m_s")
+    if linear is None:
+        linear = action.get("linear_velocity")
+    turn = action.get("turn_rate_rad_s")
+    if turn is None:
+        turn = action.get("angular_velocity")
+    if linear is None and turn is None:
+        vx = action.get("vx")
+        vy = action.get("vy")
+        if _finite_number(vx) and _finite_number(vy):
+            linear = math.hypot(float(vx), float(vy))
+    return linear, turn
+
+
 def _normalize_events(
     events: Any,
     *,
@@ -652,14 +689,19 @@ def _normalize_events(
     if not isinstance(events, list):
         return []
     normalized: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
     for index, event in enumerate(events):
-        normalized.append(
-            _normalize_event(
-                event,
-                event_id=f"event-{index_offset:04d}-{index:04d}",
-                actor_ids=actor_ids,
-            )
+        item = _normalize_event(
+            event,
+            event_id=f"event-{index_offset:04d}-{index:04d}",
+            actor_ids=actor_ids,
         )
+        if item["event_id"] in seen_ids:
+            item["event_id"] = f"duplicate-{index_offset:04d}-{index:04d}"
+            item["status"] = "unavailable"
+            item["reason"] = "duplicate_event_id"
+        seen_ids.add(item["event_id"])
+        normalized.append(item)
     return normalized
 
 
@@ -720,6 +762,28 @@ def _normalize_event(event: Any, *, event_id: str, actor_ids: list[Any] | None) 
         "partner_id": partner,
         "details": raw,
     }
+
+
+def _deduplicate_trace_event_ids(trace: dict[str, Any]) -> None:
+    """Namespace duplicate event IDs across top-level and step event ledgers."""
+
+    seen: set[str] = set()
+    ledgers = [trace.get("events", [])]
+    ledgers.extend(
+        step.get("events", []) for step in trace.get("steps", []) if isinstance(step, Mapping)
+    )
+    for ledger_index, ledger in enumerate(ledgers):
+        if not isinstance(ledger, list):
+            continue
+        for event_index, event in enumerate(ledger):
+            if not isinstance(event, dict):
+                continue
+            event_id = str(event.get("event_id") or "")
+            if event_id in seen:
+                event["event_id"] = f"duplicate-ledger-{ledger_index:04d}-{event_index:04d}"
+                event["status"] = "unavailable"
+                event["reason"] = "duplicate_event_id"
+            seen.add(str(event.get("event_id")))
 
 
 def trace_artifact_sha256(trace: Mapping[str, Any]) -> str:

@@ -30,6 +30,7 @@ from robot_sf.benchmark.analysis_trace import (
     trace_coverage,
 )
 from robot_sf.benchmark.parquet_export import (
+    ParquetDependencyError,
     derive_episode_metrics,
     export_campaign_result_store_v2,
     is_comparison_compatible,
@@ -41,6 +42,10 @@ SCHEMA_VERSION = "case-workbench.v1"
 METRIC_PROFILE_VERSION = "case-workbench-metrics.v1"
 ADMISSION_SCHEMA_VERSION = "case-admission-overlay.v1"
 SOURCE_GATE_SCHEMA_VERSION = "case-source-integrity-gate.v1"
+SOURCE_GATE_REGISTRY_SCHEMA_VERSION = "case-source-integrity-registry.v1"
+TRUSTED_SOURCE_GATE_REGISTRY = (
+    Path(__file__).resolve().parents[2] / "configs/analysis/source_gate_registry.v1.json"
+)
 INELIGIBLE_STATUSES = {
     "fallback",
     "degraded",
@@ -99,7 +104,10 @@ def load_workbench_config(path: str | Path) -> dict[str, Any]:  # noqa: C901, PL
     return payload
 
 
-def _load_source_gate_receipt(source: Path, receipt_path: str | Path | None) -> dict[str, Any]:
+def _load_source_gate_receipt(  # noqa: C901
+    source: Path,
+    receipt_path: str | Path | None,
+) -> dict[str, Any]:
     """Resolve the exact-source gate without promoting a guessed package."""
 
     expected_source_sha = _sha256_file(source) if source.is_file() else _sha256_directory(source)
@@ -114,21 +122,54 @@ def _load_source_gate_receipt(source: Path, receipt_path: str | Path | None) -> 
         ],
         "dissertation_issue": "https://github.com/ll7/diss/issues/698",
     }
+    registry_path = TRUSTED_SOURCE_GATE_REGISTRY
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {**blocked, "reason": "source_gate_registry_unavailable"}
+    if (
+        not isinstance(registry, Mapping)
+        or registry.get("schema_version") != SOURCE_GATE_REGISTRY_SCHEMA_VERSION
+    ):
+        return {**blocked, "reason": "source_gate_registry_invalid"}
+    registry_digest = _sha256_file(registry_path)
+    approved_sources = registry.get("approved_sources")
+    if not isinstance(approved_sources, list):
+        return {
+            **blocked,
+            "reason": "source_gate_registry_invalid",
+            "registry_sha256": registry_digest,
+        }
     if receipt_path is None:
-        return blocked
+        return {
+            **blocked,
+            "reason": "source_gate_receipt_missing",
+            "registry_sha256": registry_digest,
+        }
     path = Path(receipt_path)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {**blocked, "reason": "source_gate_receipt_unreadable", "receipt_path": str(path)}
+        return {
+            **blocked,
+            "reason": "source_gate_receipt_unreadable",
+            "receipt_path": str(path),
+            "registry_sha256": registry_digest,
+        }
     if not isinstance(payload, Mapping):
-        return {**blocked, "reason": "source_gate_receipt_invalid", "receipt_path": str(path)}
+        return {
+            **blocked,
+            "reason": "source_gate_receipt_invalid",
+            "receipt_path": str(path),
+            "registry_sha256": registry_digest,
+        }
     if payload.get("schema_version") != SOURCE_GATE_SCHEMA_VERSION:
         return {
             **blocked,
             "reason": "source_gate_schema_mismatch",
             "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
+            "registry_sha256": registry_digest,
         }
     status = str(payload.get("status") or "").lower()
     supplied_sha = str(payload.get("source_sha256") or payload.get("digest") or "")
@@ -138,6 +179,7 @@ def _load_source_gate_receipt(source: Path, receipt_path: str | Path | None) -> 
             "reason": f"source_gate_status:{status or 'missing'}",
             "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
+            "registry_sha256": registry_digest,
         }
     if not re.fullmatch(r"[0-9a-f]{64}", supplied_sha) or supplied_sha != expected_source_sha:
         return {
@@ -147,12 +189,33 @@ def _load_source_gate_receipt(source: Path, receipt_path: str | Path | None) -> 
             "receipt_sha256": _sha256_file(path),
             "supplied_source_sha256": supplied_sha or None,
         }
+    matching_entry = next(
+        (
+            entry
+            for entry in approved_sources
+            if isinstance(entry, Mapping)
+            and entry.get("source_sha256") == expected_source_sha
+            and entry.get("approval_id") == payload.get("approval_id")
+        ),
+        None,
+    )
+    if not isinstance(matching_entry, Mapping):
+        return {
+            **blocked,
+            "reason": "source_gate_source_not_approved",
+            "receipt_path": str(path),
+            "receipt_sha256": _sha256_file(path),
+            "registry_sha256": registry_digest,
+            "supplied_source_sha256": supplied_sha,
+        }
     return {
         "schema_version": SOURCE_GATE_SCHEMA_VERSION,
         "status": "passed",
         "source_sha256": expected_source_sha,
         "receipt_path": str(path),
         "receipt_sha256": _sha256_file(path),
+        "registry_sha256": registry_digest,
+        "approval_id": str(matching_entry["approval_id"]),
         "robot_sf_issues": [
             "https://github.com/ll7/robot_sf_ll7/issues/6792",
             "https://github.com/ll7/robot_sf_ll7/issues/6814",
@@ -173,7 +236,45 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     return payload
 
 
-def analyze_cases(
+def _source_gate_is_trusted(gate: Mapping[str, Any]) -> bool:
+    """Verify a stored gate against the repository-controlled approval registry."""
+
+    if gate.get("status") != "passed":
+        return False
+    registry_path = TRUSTED_SOURCE_GATE_REGISTRY
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if (
+        not isinstance(registry, Mapping)
+        or registry.get("schema_version") != SOURCE_GATE_REGISTRY_SCHEMA_VERSION
+    ):
+        return False
+    if gate.get("registry_sha256") != _sha256_file(registry_path):
+        return False
+    approved_sources = registry.get("approved_sources")
+    if not isinstance(approved_sources, list):
+        return False
+    return any(
+        isinstance(entry, Mapping)
+        and entry.get("approval_id") == gate.get("approval_id")
+        and entry.get("source_sha256") == gate.get("source_sha256")
+        for entry in approved_sources
+    )
+
+
+def _portable_source_gate(gate: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove invocation-specific paths from the package-bound gate receipt."""
+
+    portable = dict(gate)
+    receipt_path = portable.get("receipt_path")
+    if receipt_path:
+        portable["receipt_path"] = Path(str(receipt_path)).name
+    return portable
+
+
+def analyze_cases(  # noqa: C901
     *,
     config_path: str | Path,
     result_store: str | Path,
@@ -186,8 +287,13 @@ def analyze_cases(
     config = load_workbench_config(config_path)
     input_path = Path(result_store)
     output_path = Path(output)
+    if input_path.is_dir():
+        resolved_input = input_path.resolve()
+        resolved_output = output_path.resolve()
+        if resolved_output == resolved_input or resolved_input in resolved_output.parents:
+            raise ValueError("output package must not be the result-store directory or its child")
     records = _load_records(input_path)
-    source_gate = _load_source_gate_receipt(input_path, source_gate_receipt)
+    source_gate = _portable_source_gate(_load_source_gate_receipt(input_path, source_gate_receipt))
     interestingness_weights = config.get("interestingness", {}).get("weights", {})
     candidates = [
         _candidate(record, interestingness_weights=interestingness_weights) for record in records
@@ -207,10 +313,10 @@ def analyze_cases(
                 input_path,
                 output_path / "campaign-result-store.v2",
                 study_id="case-workbench",
-                command=f"analyze-cases --result-store {input_path}",
+                command="analyze-cases --result-store <result-store>",
                 overwrite=True,
             )
-        except ImportError as exc:
+        except (ImportError, ParquetDependencyError) as exc:
             # The proposal still remains useful in a lean environment; the
             # package states that the normalized store could not be materialized.
             (output_path / "campaign-result-store.v2.unavailable").write_text(
@@ -234,10 +340,10 @@ def analyze_cases(
                 source_jsonl,
                 output_path / "campaign-result-store.v2",
                 study_id="case-workbench",
-                command=f"analyze-cases --result-store {input_path}",
+                command="analyze-cases --result-store <result-store>",
                 overwrite=True,
             )
-        except ImportError as exc:
+        except (ImportError, ParquetDependencyError) as exc:
             (output_path / "campaign-result-store.v2.unavailable").write_text(
                 f"campaign-result-store.v2 unavailable: {exc}\n", encoding="utf-8"
             )
@@ -301,6 +407,7 @@ def apply_admission_overlay(  # noqa: C901, PLR0912, PLR0915
     by_id = {str(case.get("case_id")): case for case in working_portfolio}
     final_portfolio = working_portfolio
     admission_records: list[dict[str, Any]] = []
+    replacement_artifacts: dict[str, str] = {}
     normalized_decisions = sorted(
         decisions,
         key=lambda item: (str(item.get("case_id")), str(item.get("decision"))),
@@ -331,7 +438,12 @@ def apply_admission_overlay(  # noqa: C901, PLR0912, PLR0915
             replacement = decision.get("replacement")
             if not isinstance(replacement, Mapping) or not replacement.get("case_id"):
                 raise ValueError(f"replacement case is required for {case_id}")
-            replacement_case = _validate_replacement_case(replacement, case_id=case_id)
+            replacement_case = _validate_replacement_case(
+                replacement,
+                case_id=case_id,
+                artifact_inventory=proposal.get("artifact_inventory"),
+                portfolio=proposal.get("portfolio"),
+            )
             replacement_case["author_status"] = "replacement"
             replacement_case["machine_recommendation"] = case_id
             replacement_case["author_rationale"] = rationale
@@ -344,6 +456,9 @@ def apply_admission_overlay(  # noqa: C901, PLR0912, PLR0915
                     f"replacement case id is already in the portfolio: {replacement_id}"
                 )
             final_portfolio.append(replacement_case)
+            replacement_artifacts[replacement_id] = str(
+                replacement_case["provenance"]["artifact_sha256"]
+            )
         else:
             selected = by_id[case_id]
             selected["author_status"] = "approved" if action == "approve" else "rejected"
@@ -360,12 +475,21 @@ def apply_admission_overlay(  # noqa: C901, PLR0912, PLR0915
             }
         )
     result = json.loads(canonical_json(proposal))
+    result["artifact_inventory"] = {
+        **(
+            dict(proposal.get("artifact_inventory"))
+            if isinstance(proposal.get("artifact_inventory"), Mapping)
+            else {}
+        ),
+        **replacement_artifacts,
+    }
     result["machine_portfolio"] = machine_portfolio
     result["portfolio"] = final_portfolio
     result["author_admission"] = {
         "schema_version": ADMISSION_SCHEMA_VERSION,
         "status": overlay_status,
         "overlay_sha256": _sha256_json(overlay),
+        "machine_proposal_sha256": expected_digest,
         "decisions": admission_records,
     }
     return result
@@ -385,21 +509,39 @@ def admit_package(package: str | Path, overlay_path: str | Path) -> dict[str, An
     proposal = _read_json_object(proposal_path)
     overlay = _read_json_object(Path(overlay_path))
     manifest = _read_json_object(manifest_path)
+    machine_digest = _sha256_json(proposal)
+    if manifest.get("proposal_sha256") != machine_digest:
+        raise ValueError("package manifest proposal digest does not match proposal.json")
+    if overlay.get("proposal_sha256") != machine_digest:
+        raise ValueError("admission overlay is not bound to the machine proposal")
     gate = manifest.get("source_integrity_gate")
-    if not isinstance(gate, Mapping) or gate.get("status") != "passed":
+    source_manifest = manifest.get("source")
+    if (
+        not isinstance(gate, Mapping)
+        or not _source_gate_is_trusted(gate)
+        or not isinstance(source_manifest, Mapping)
+        or gate.get("source_sha256") != source_manifest.get("sha256")
+    ):
         raise ValueError("author admission is blocked by the source-integrity gate")
     result = apply_admission_overlay(proposal, overlay)
     if str(overlay.get("status") or "").lower() == "admitted" and not overlay.get("decisions"):
         raise ValueError("an admitted package requires at least one author decision")
+    result["author_admission"]["machine_proposal_sha256"] = machine_digest
     proposal_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (package_path / "admission_overlay.json").write_text(
         json.dumps(overlay, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     publication = package_path / "publication"
-    for stale in (publication / "figure.preview.pdf", publication / "figure.preview.pdf.json"):
-        if stale.is_file():
-            stale.unlink()
+    if publication.is_dir():
+        for stale in publication.iterdir():
+            if stale.is_file():
+                stale.unlink()
+    _clear_case_files(package_path)
+    _write_case_files(package_path, result)
+    _write_viewer_blueprint(package_path, result)
     _write_audit_dossier(package_path, result)
+    (package_path / "review_memo.md").write_text(_review_memo(result), encoding="utf-8")
+    manifest["machine_proposal_sha256"] = machine_digest
     manifest["proposal_sha256"] = _sha256_json(result)
     manifest["evidence_status"] = (
         "admitted" if str(overlay.get("status") or "").lower() == "admitted" else "reviewed"
@@ -416,8 +558,12 @@ def admit_package(package: str | Path, overlay_path: str | Path) -> dict[str, An
     return result
 
 
-def _validate_replacement_case(  # noqa: C901
-    replacement: Mapping[str, Any], *, case_id: str
+def _validate_replacement_case(  # noqa: C901, PLR0912
+    replacement: Mapping[str, Any],
+    *,
+    case_id: str,
+    artifact_inventory: Any,
+    portfolio: Any,
 ) -> dict[str, Any]:
     """Require an author replacement to carry a complete, self-hashed trace."""
 
@@ -435,6 +581,10 @@ def _validate_replacement_case(  # noqa: C901
     artifact_sha = str(provenance.get("artifact_sha256") or "")
     if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha):
         raise ValueError(f"replacement case requires a full SHA-256 artifact hash for {case_id}")
+    if not isinstance(artifact_inventory, Mapping):
+        raise ValueError("replacement cases require a source artifact inventory")
+    if artifact_inventory.get(replacement_id) != artifact_sha:
+        raise ValueError(f"replacement case is not a registered source artifact: {replacement_id}")
     trace = replacement_case.get("trace")
     if not isinstance(trace, Mapping):
         metadata = replacement_case.get("algorithm_metadata")
@@ -446,6 +596,8 @@ def _validate_replacement_case(  # noqa: C901
     if embedded_sha != artifact_sha or trace_artifact_sha256(trace) != artifact_sha:
         raise ValueError(f"replacement case artifact hash is not bound to its trace for {case_id}")
     coverage_record = {
+        "scenario_id": scenario_id,
+        "algo": planner,
         "provenance": dict(provenance),
         "algorithm_metadata": {"analysis_trace": trace},
     }
@@ -461,6 +613,54 @@ def _validate_replacement_case(  # noqa: C901
     replacement_case["trace"] = trace
     replacement_case["coverage"] = coverage
     replacement_case["provenance"] = dict(provenance)
+    pair_ids = replacement_case.get("comparison_pair_ids")
+    if pair_ids:
+        if not isinstance(pair_ids, list) or len(pair_ids) != 2:
+            raise ValueError(
+                f"replacement comparison pair must contain exactly two cases for {case_id}"
+            )
+        pair_ids = [str(value) for value in pair_ids]
+        if replacement_id not in pair_ids or len(set(pair_ids)) != 2:
+            raise ValueError(f"replacement comparison pair is not bound to {replacement_id}")
+        if not isinstance(portfolio, list):
+            raise ValueError("replacement comparison pair requires the machine portfolio")
+        counterpart = next(
+            (
+                candidate
+                for candidate in portfolio
+                if isinstance(candidate, Mapping)
+                and str(candidate.get("case_id") or "") in set(pair_ids)
+                and str(candidate.get("case_id") or "") != replacement_id
+            ),
+            None,
+        )
+        if not isinstance(counterpart, Mapping):
+            raise ValueError(
+                "replacement comparison pair counterpart is not in the machine portfolio"
+            )
+        replacement_raw = {
+            "episode_id": replacement_id,
+            "scenario_id": scenario_id,
+            "algo": planner,
+            "seed": replacement_case.get("seed"),
+            "provenance": dict(provenance),
+            "algorithm_metadata": {"analysis_trace": trace},
+        }
+        counterpart_raw = {
+            "episode_id": counterpart.get("case_id"),
+            "scenario_id": counterpart.get("scenario_id"),
+            "algo": counterpart.get("planner"),
+            "seed": counterpart.get("seed"),
+            "provenance": counterpart.get("provenance", {}),
+            "algorithm_metadata": {"analysis_trace": counterpart.get("trace")},
+        }
+        if not is_comparison_compatible(replacement_raw, counterpart_raw):
+            raise ValueError("replacement comparison pair is not physically compatible")
+        replacement_case["comparison_compatibility"] = {
+            "status": "compatible",
+            "pair_ids": sorted(pair_ids),
+            "shared_prefix": False,
+        }
     return replacement_case
 
 
@@ -556,7 +756,7 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
     by_episode_actors: dict[tuple[str, int], list[dict[str, Any]]] = defaultdict(list)
     by_episode_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_episode_features: dict[str, dict[str, float]] = defaultdict(dict)
-    by_cell: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    by_cell: dict[tuple[str, str, str, str, str, str], dict[str, Any]] = {}
     by_episode_comparisons: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in step_rows:
         by_episode_steps[str(row.get("episode_id"))].append(row)
@@ -575,12 +775,14 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
             str(row.get("planner") or ""),
             str(row.get("scenario_id") or ""),
             str(row.get("config_hash") or ""),
+            str(row.get("config_digest") or ""),
             str(row.get("scenario_digest") or ""),
             str(row.get("map_digest") or ""),
         )
         by_cell[key] = {
             "cell_id": row.get("cell_id"),
             "outcome_counts": _decode_json(row.get("outcome_counts_json")),
+            "config_digest": row.get("config_digest"),
             "entropy": row.get("entropy"),
             "seed_count": row.get("seed_count"),
             "uncertainty": _decode_json(row.get("uncertainty_json")),
@@ -644,8 +846,14 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
                     "events": [],
                 }
             )
-        stored_coverage = _decode_json(row.get("trace_coverage_json")) or {"status": "unavailable"}
-        provenance = _decode_json(row.get("provenance_json")) or {}
+        stored_coverage = _decode_json(row.get("trace_coverage_json"))
+        if not isinstance(stored_coverage, Mapping):
+            stored_coverage = {"status": "unavailable", "reason": "coverage_receipt_invalid"}
+        provenance = _decode_json(row.get("provenance_json"))
+        if not isinstance(provenance, Mapping):
+            provenance = {}
+        else:
+            provenance = dict(provenance)
         artifact_sha = row.get("artifact_sha256")
         if artifact_sha and provenance.get("artifact_sha256") in (None, ""):
             provenance["artifact_sha256"] = artifact_sha
@@ -667,6 +875,7 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
             "map_file": provenance.get("map_file"),
             "scenario_digest": provenance.get("scenario_digest"),
             "config_hash": row.get("config_hash") or provenance.get("config_hash"),
+            "config_digest": provenance.get("config_digest"),
             "git_hash": provenance.get("git_hash"),
             "planner_commit": provenance.get("planner_commit"),
             "dt": provenance.get("dt"),
@@ -697,6 +906,7 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
             "outcome": _decode_json(row.get("outcome_json")) or {},
             "provenance": provenance,
             "config_hash": row.get("config_hash") or provenance.get("config_hash"),
+            "config_digest": provenance.get("config_digest"),
             "git_hash": provenance.get("git_hash"),
             "metrics": by_episode_features.get(episode_id, {}),
             "algorithm_metadata": {"analysis_trace": analysis_trace},
@@ -705,6 +915,7 @@ def _load_v2_records(  # noqa: C901, PLR0912, PLR0915
                     str(row.get("planner") or ""),
                     str(row.get("scenario_id") or ""),
                     str(row.get("config_hash") or provenance.get("config_hash") or ""),
+                    str(row.get("config_digest") or provenance.get("config_digest") or ""),
                     str(row.get("scenario_digest") or provenance.get("scenario_digest") or ""),
                     str(row.get("map_digest") or provenance.get("map_digest") or ""),
                 )
@@ -834,11 +1045,16 @@ def _read_parquet_rows(path: Path) -> list[dict[str, Any]]:
     duckdb = try_import("duckdb")
     if duckdb is not None:
         connection = duckdb.connect(database=":memory:")
-        result = connection.execute("SELECT * FROM read_parquet(?)", [str(path)])
-        columns = [str(item[0]) for item in result.description]
-        return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
-    import pandas as pd
-
+        try:
+            result = connection.execute("SELECT * FROM read_parquet(?)", [str(path)])
+            columns = [str(item[0]) for item in result.description]
+            return [dict(zip(columns, row, strict=True)) for row in result.fetchall()]
+        finally:
+            connection.close()
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError("Parquet analysis requires duckdb or pandas") from exc
     return pd.read_parquet(path).to_dict(orient="records")
 
 
@@ -1111,6 +1327,11 @@ def _build_proposal(
         "excluded": sorted(excluded, key=lambda item: item["case_id"]),
         "unavailable_roles": unavailable_roles,
         "runner_ups": _runner_up_ledger(role_candidates, selected),
+        "artifact_inventory": {
+            item["episode_id"]: item["provenance"].get("artifact_sha256")
+            for item in candidates
+            if item.get("episode_id") and item.get("provenance", {}).get("artifact_sha256")
+        },
         "candidate_count": len(candidates),
         "eligible_count": len(eligible),
     }
@@ -1341,6 +1562,12 @@ def _selection_record(
 
     ranked = sorted(options, key=lambda item: (-_role_score(role, item), item["episode_id"]))
     runner_up = next((item for item in ranked if item["episode_id"] != chosen["episode_id"]), None)
+    raw_trace = (
+        chosen.get("raw", {}).get("algorithm_metadata", {}).get("analysis_trace")
+        if isinstance(chosen.get("raw"), Mapping)
+        and isinstance(chosen.get("raw", {}).get("algorithm_metadata"), Mapping)
+        else {}
+    )
     return {
         "case_id": chosen["episode_id"],
         "primary_role": role,
@@ -1372,14 +1599,23 @@ def _selection_record(
         "metrics": chosen["metrics"],
         "coverage": chosen["coverage"],
         "provenance": chosen["provenance"],
-        "trace": (
-            chosen.get("raw", {}).get("algorithm_metadata", {}).get("analysis_trace")
-            if isinstance(chosen.get("raw"), Mapping)
-            and isinstance(chosen.get("raw", {}).get("algorithm_metadata"), Mapping)
-            else None
-        ),
+        "config_hash": raw_trace.get("config_hash"),
+        "config_digest": raw_trace.get("config_digest"),
+        "scenario_digest": raw_trace.get("scenario_digest"),
+        "map_digest": raw_trace.get("map_digest"),
+        "cell_context": chosen.get("cell_context"),
+        "trace": raw_trace or None,
         "shared_prefix": False,
         "comparison_pair_ids": comparison_pair_ids or [],
+        "comparison_compatibility": (
+            {
+                "status": "compatible",
+                "pair_ids": sorted(str(value) for value in comparison_pair_ids),
+                "shared_prefix": False,
+            }
+            if comparison_pair_ids
+            else None
+        ),
         "author_status": "proposed",
     }
 
@@ -1424,6 +1660,7 @@ def _write_case_files(output: Path, proposal: Mapping[str, Any]) -> None:
 
     cases = output / "cases"
     cases.mkdir(exist_ok=True)
+    seen_targets: set[Path] = set()
     for case in proposal.get("portfolio", []):
         case_id = str(case["case_id"])
         safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", case_id).strip("._")
@@ -1432,7 +1669,21 @@ def _write_case_files(output: Path, proposal: Mapping[str, Any]) -> None:
         target = (cases / f"{safe_id}.json").resolve()
         if cases.resolve() not in target.parents:
             raise ValueError(f"case id escapes package output: {case_id!r}")
+        if target in seen_targets or target.exists():
+            raise ValueError(f"case ids collide after package filename sanitization: {case_id!r}")
+        seen_targets.add(target)
         target.write_text(json.dumps(case, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _clear_case_files(output: Path) -> None:
+    """Remove only owned case projections before regenerating a package."""
+
+    cases = output / "cases"
+    if not cases.is_dir():
+        return
+    for child in cases.iterdir():
+        if child.is_file() and child.suffix == ".json":
+            child.unlink()
 
 
 def _write_viewer_blueprint(output: Path, proposal: Mapping[str, Any]) -> None:
@@ -1643,13 +1894,14 @@ def _manifest(
         "schema_version": "case-workbench-package.v1",
         "workbench_schema_version": SCHEMA_VERSION,
         "proposal_sha256": _sha256_json(proposal),
+        "machine_proposal_sha256": _sha256_json(proposal),
         "source": {
-            "path": str(source),
+            "path": source.name,
             "sha256": _sha256_file(source)
             if source.is_file()
             else (_sha256_directory(source) if source.is_dir() else None),
         },
-        "config": {"path": str(config), "sha256": _sha256_file(Path(config))},
+        "config": {"path": Path(config).name, "sha256": _sha256_file(Path(config))},
         "evidence_status": "proposed_not_admitted",
         "source_integrity_gate": dict(source_gate),
         "claim_boundary": "No causal divergence point; no planner ranking; source integrity remains separate.",

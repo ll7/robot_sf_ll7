@@ -1039,6 +1039,14 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             return
 
         planned = np.asarray(velocity_world, dtype=float).reshape(-1)[:2]
+        if (
+            planned.shape != (2,)
+            or not np.all(np.isfinite(planned))
+            or not np.isfinite(robot_heading)
+            or not np.isfinite(linear)
+            or not np.isfinite(angular)
+        ):
+            raise ValueError("ORCA adapter trace requires finite velocity and command values")
         planned_speed = float(np.linalg.norm(planned))
         realized = float(linear) * np.array(
             [cos(float(robot_heading)), sin(float(robot_heading))], dtype=float

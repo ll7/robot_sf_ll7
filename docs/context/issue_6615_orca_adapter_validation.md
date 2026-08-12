@@ -24,6 +24,8 @@ Each record contains:
 
 The realized vector is intentionally instantaneous. The trace does not integrate angular velocity
 over a timestep and therefore measures projection divergence, not closed-loop trajectory quality.
+When tracing is enabled, non-finite velocity or command values fail closed instead of entering the
+JSON-facing trace.
 
 ## Analytic validation
 

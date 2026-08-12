@@ -438,6 +438,22 @@ def test_orca_velocity_projection_records_optional_adapter_trace():
     assert summary["speed_delta_mps_mean"] == pytest.approx(0.0)
 
 
+def test_orca_velocity_projection_trace_rejects_nonfinite_values():
+    """Enabled traces must fail closed instead of serializing non-finite JSON values."""
+    adapter = ORCAPlannerAdapter(
+        SocNavPlannerConfig(orca_adapter_trace_enabled=True),
+    )
+    obs = _make_obs(goal=(5.0, 0.0), heading=0.0)
+
+    with pytest.raises(ValueError, match="finite"):
+        adapter._velocity_world_to_command(
+            velocity_world=np.array([np.nan, 0.0], dtype=float),
+            robot_pos=np.array([0.0, 0.0], dtype=float),
+            robot_heading=0.0,
+            observation=obs,
+        )
+
+
 def test_orca_slowdown_with_head_on_pedestrian(monkeypatch):
     """ORCA-like heuristic reduces speed for a head-on pedestrian."""
     adapter = _orca_fallback_adapter(monkeypatch)

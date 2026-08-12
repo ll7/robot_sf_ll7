@@ -271,6 +271,18 @@ def test_campaign_preflight_emits_ledger_and_manifest_link(tmp_path: Path) -> No
     assert manifest["tuning_run_provenance"]["ledger_sha256"] == ledger["ledger_sha256"]
 
 
+def test_legacy_tuning_run_alias_loads_provenance_block(tmp_path: Path) -> None:
+    """The short legacy key remains accepted while preserving the typed provenance block."""
+    config_path = _write_campaign(tmp_path)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace("tuning_run_provenance:", "tuning_run:", 1),
+        encoding="utf-8",
+    )
+    cfg = load_campaign_config(config_path)
+    assert cfg.tuning_run_provenance is not None
+    assert cfg.tuning_run_provenance.run_id == "tuning-job-6595"
+
+
 def test_strict_campaign_rejects_missing_prospective_provenance(tmp_path: Path) -> None:
     """The publication-style gate rejects an otherwise declared arm without a run record block."""
     config_path = _write_campaign(tmp_path, with_provenance=False)

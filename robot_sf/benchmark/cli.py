@@ -50,7 +50,7 @@ from robot_sf.benchmark.canonical_table_export import (
     export_canonical_table as _export_canonical_table,
 )
 from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
-from robot_sf.benchmark.case_workbench import analyze_cases
+from robot_sf.benchmark.case_workbench import admit_package, analyze_cases
 from robot_sf.benchmark.collision_scenario_similarity import (
     build_collision_scenario_similarity_report,
     write_collision_scenario_similarity_report,
@@ -815,6 +815,7 @@ def _handle_analyze_cases(args) -> int:
             result_store=args.result_store,
             output=args.output,
             check_determinism=bool(args.check_determinism),
+            source_gate_receipt=getattr(args, "source_gate_receipt", None),
         )
         logging.info(
             "Case workbench wrote %d proposed cases to %s",
@@ -824,6 +825,25 @@ def _handle_analyze_cases(args) -> int:
         return 0
     except (OSError, TypeError, ValueError, RuntimeError):
         logging.exception("Case workbench analysis failed")
+        return 2
+
+
+def _handle_admit_cases(args) -> int:
+    """Apply an author overlay and refresh the package receipts.
+
+    Returns:
+        Process exit code.
+    """
+
+    try:
+        result = admit_package(args.package, args.overlay)
+        logging.info(
+            "Case workbench package admitted with %d cases",
+            len(result.get("portfolio", [])),
+        )
+        return 0
+    except (OSError, TypeError, ValueError, RuntimeError):
+        logging.exception("Case workbench admission failed")
         return 2
 
 
@@ -2433,7 +2453,28 @@ def _add_analyze_cases_subparser(
         action="store_true",
         help="Run selection twice and fail if the proposal bytes differ",
     )
+    p.add_argument(
+        "--source-gate-receipt",
+        help=(
+            "Optional exact-source gate receipt; without a verified passed receipt, "
+            "publication rendering remains unavailable"
+        ),
+    )
     p.set_defaults(cmd="analyze-cases")
+
+
+def _add_admit_cases_subparser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """Register the digest-bound author admission command."""
+
+    p = subparsers.add_parser(
+        "admit-cases",
+        help="Apply an author admission overlay to a source-gated case package",
+    )
+    p.add_argument("--package", required=True, help="Case-workbench package directory")
+    p.add_argument("--overlay", required=True, help="Digest-bound author overlay JSON")
+    p.set_defaults(cmd="admit-cases")
 
 
 def _add_snqi_ablate_subparser(
@@ -3374,6 +3415,7 @@ def _attach_core_subcommands(parser: argparse.ArgumentParser) -> None:
     _add_validate_row_claims_subparser(subparsers)
     _add_export_parquet_subparser(subparsers)
     _add_analyze_cases_subparser(subparsers)
+    _add_admit_cases_subparser(subparsers)
     _add_seed_variance_subparser(subparsers)
     _add_flakiness_audit_subparser(subparsers)
     _add_extract_failures_subparser(subparsers)
@@ -3545,6 +3587,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         "validate-row-claims": _handle_validate_row_claims,
         "export-parquet": _handle_export_parquet,
         "analyze-cases": _handle_analyze_cases,
+        "admit-cases": _handle_admit_cases,
         "seed-variance": _handle_seed_variance,
         "flakiness-audit": _handle_flakiness_audit,
         "extract-failures": _handle_extract_failures,

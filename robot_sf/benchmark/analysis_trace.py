@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ import numpy as np
 ANALYSIS_TRACE_SCHEMA_VERSION = "analysis-telemetry-profile.v1"
 ANALYSIS_TRACE_RECORD_SCHEMA_VERSION = "analysis-trace.v1"
 TRACE_COVERAGE_VERSION = "analysis-trace-coverage.v1"
+_SHA256_RE = r"[0-9a-f]{64}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +136,45 @@ def map_digest(scenario: dict[str, Any]) -> str | None:
     return None
 
 
-def build_analysis_trace(  # noqa: C901, PLR0913
+def _infer_initial_pedestrian_ids(steps: list[dict[str, Any]], count: int) -> list[Any] | None:
+    """Use explicit simulator actor labels from the first frame when available.
+
+    Returns:
+        Stable source labels, or ``None`` when the first frame cannot provide a
+        complete unique registry.
+    """
+
+    if count == 0 or not steps or not isinstance(steps[0], Mapping):
+        return [] if count == 0 else None
+    pedestrians = steps[0].get("pedestrians")
+    if not isinstance(pedestrians, list) or len(pedestrians) != count:
+        return None
+    ids: list[Any] = []
+    for actor in pedestrians:
+        if not isinstance(actor, Mapping):
+            return None
+        # ``id`` is the legacy positional slot emitted by the map runner.  It
+        # is not a stable simulator identity, so it cannot establish an
+        # analysis-ready actor registry on its own.
+        actor_id = actor.get("actor_id")
+        if actor_id is None:
+            actor_id = actor.get("pedestrian_id")
+        if actor_id is None:
+            return None
+        ids.append(actor_id)
+    if len({str(value) for value in ids}) != len(ids):
+        return None
+    return ids
+
+
+def _canonical_actor_id(value: Any) -> str:
+    """Return the canonical trace identifier for one pedestrian label."""
+
+    text = str(value)
+    return text if text.startswith("pedestrian-") else f"pedestrian-{text}"
+
+
+def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     steps: list[dict[str, Any]],
     initial_robot_position: Any,
@@ -177,8 +217,19 @@ def build_analysis_trace(  # noqa: C901, PLR0913
             _vector2_or_none(value) for value in ped_velocity_array[: len(initial_peds)]
         ]
         ped_velocities.extend([None] * (len(initial_peds) - len(ped_velocities)))
-    pedestrian_ids = list(initial_pedestrian_ids or range(len(initial_peds)))
+    inferred_ids = _infer_initial_pedestrian_ids(steps, len(initial_peds))
+    resolved_initial_ids = (
+        list(initial_pedestrian_ids) if initial_pedestrian_ids is not None else inferred_ids
+    )
+    pedestrian_ids = list(
+        resolved_initial_ids if resolved_initial_ids is not None else range(len(initial_peds))
+    )
     pedestrian_ids.extend(range(len(pedestrian_ids), len(initial_peds)))
+    initial_pedestrian_radii = [float(pedestrian_radius_m)] * len(initial_peds)
+    if steps and isinstance(steps[0], Mapping) and isinstance(steps[0].get("pedestrians"), list):
+        for index, actor in enumerate(steps[0]["pedestrians"][: len(initial_peds)]):
+            if isinstance(actor, Mapping) and _finite_positive(actor.get("radius_m")):
+                initial_pedestrian_radii[index] = float(actor["radius_m"])
     resolved_units = units or {
         "position": "m",
         "velocity": "m/s",
@@ -197,11 +248,15 @@ def build_analysis_trace(  # noqa: C901, PLR0913
         },
         "pedestrians": [
             {
-                "actor_id": f"pedestrian-{pedestrian_ids[index]}",
+                "actor_id": (
+                    _canonical_actor_id(pedestrian_ids[index])
+                    if resolved_initial_ids is not None
+                    else None
+                ),
                 "id": pedestrian_ids[index],
                 "position": [float(pos[0]), float(pos[1])],
                 "velocity": ped_velocities[index],
-                "radius_m": float(pedestrian_radius_m),
+                "radius_m": initial_pedestrian_radii[index],
             }
             for index, pos in enumerate(initial_peds)
         ],
@@ -225,10 +280,21 @@ def build_analysis_trace(  # noqa: C901, PLR0913
                 if not isinstance(actor, dict):
                     continue
                 actor_id = actor.get("actor_id")
-                if not isinstance(actor_id, str) or not actor_id:
+                if actor_id is None:
+                    actor_id = actor.get("pedestrian_id")
+                if isinstance(actor_id, str) and actor_id:
+                    actor["actor_id"] = _canonical_actor_id(actor_id)
+                    actor.setdefault("id", actor_id)
+                else:
                     actor.setdefault("id", index)
-                    actor_id = f"pedestrian-{actor['id']}"
-                    actor["actor_id"] = actor_id
+                    if resolved_initial_ids is not None and index < len(resolved_initial_ids):
+                        actor["id"] = resolved_initial_ids[index]
+                        actor["actor_id"] = _canonical_actor_id(resolved_initial_ids[index])
+                    else:
+                        # Keep positional legacy identity visible for review,
+                        # but leave the canonical actor_id unavailable so the
+                        # coverage gate cannot promote it as stable.
+                        actor["actor_id"] = None
                 if not _finite_positive(actor.get("radius_m")):
                     actor["radius_m"] = float(pedestrian_radius_m)
         planner_payload = item.get("planner")
@@ -257,14 +323,26 @@ def build_analysis_trace(  # noqa: C901, PLR0913
                 turn = selected_action.get("turn_rate_rad_s")
                 if turn is None:
                     turn = selected_action.get("angular_velocity")
-                item["controls"] = {
-                    "requested": {"linear_m_s": linear, "turn_rate_rad_s": turn},
-                    "applied": {"linear_m_s": linear, "turn_rate_rad_s": turn},
-                    "source": "planner.selected_action",
-                }
+                if linear is None and turn is None:
+                    vx = selected_action.get("vx")
+                    vy = selected_action.get("vy")
+                    if _finite_number(vx) and _finite_number(vy):
+                        linear = math.hypot(float(vx), float(vy))
+                if _finite_number(linear) or _finite_number(turn):
+                    item["controls"] = {
+                        "requested": {"linear_m_s": linear, "turn_rate_rad_s": turn},
+                        "applied": {"linear_m_s": linear, "turn_rate_rad_s": turn},
+                        "source": "planner.selected_action",
+                    }
+                elif not isinstance(item.get("controls"), Mapping):
+                    item["controls"] = {"requested": None, "applied": None}
             else:
                 item.setdefault("controls", {"requested": None, "applied": None})
-        item["events"] = _normalize_events(item.get("events"), index_offset=normalized_index)
+        item["events"] = _normalize_events(
+            item.get("events"),
+            index_offset=normalized_index,
+            actor_ids=resolved_initial_ids,
+        )
         normalized_steps.append(item)
 
     scenario_identity = {
@@ -280,7 +358,11 @@ def build_analysis_trace(  # noqa: C901, PLR0913
             "robot_radius_m": float(robot_radius_m),
             "pedestrian_radius_m": float(pedestrian_radius_m),
         },
-        "actor_id_source": "explicit" if initial_pedestrian_ids is not None else "positional_index",
+        "actor_id_source": (
+            "explicit"
+            if initial_pedestrian_ids is not None
+            else ("simulator" if resolved_initial_ids is not None else "positional_index")
+        ),
         "planner": str(planner),
         "planner_commit": planner_commit,
         "scenario_id": scenario.get("id") or scenario.get("name") or scenario.get("scenario_id"),
@@ -290,7 +372,7 @@ def build_analysis_trace(  # noqa: C901, PLR0913
         "config_hash": str(config_hash),
         "git_hash": git_hash,
         "termination_reason": str(termination_reason),
-        "events": _normalize_events(safety_events),
+        "events": _normalize_events(safety_events, actor_ids=resolved_initial_ids),
         "steps": normalized_steps,
     }
     payload["artifact_sha256"] = sha256_json(payload)
@@ -320,6 +402,9 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
             "stable_actor_ids": False,
             "radii": False,
             "controls": False,
+            "finite_states": False,
+            "monotonic_time": False,
+            "timing": False,
             "provenance": False,
             "map_digest": False,
         }
@@ -339,6 +424,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
     monotonic_time = bool(has_steps)
     prior_time: float | None = None
     actor_sets: list[set[str]] = []
+    actor_radii: dict[str, float] = {}
     for index, step in enumerate(steps if has_steps else []):
         if not isinstance(step, dict) or not isinstance(step.get("robot"), dict):
             actor_ids = radii = finite_states = False
@@ -376,6 +462,12 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
                 current_ids.add(actor_id)
             if not _finite_positive(actor.get("radius_m")):
                 radii = False
+            elif isinstance(actor.get("actor_id"), str):
+                actor_id = str(actor["actor_id"])
+                radius = float(actor["radius_m"])
+                previous_radius = actor_radii.setdefault(actor_id, radius)
+                if not math.isclose(radius, previous_radius, rel_tol=0.0, abs_tol=1.0e-9):
+                    radii = False
             if not _finite_vector(actor.get("position"), 2) or not _finite_vector(
                 actor.get("velocity"), 2
             ):
@@ -401,7 +493,9 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         and _positive_int(trace.get("horizon"))
     )
     provenance = all(
-        isinstance(trace.get(key), str) and bool(trace.get(key))
+        isinstance(trace.get(key), str)
+        and bool(str(trace.get(key)).strip())
+        and str(trace.get(key)).strip().lower() not in {"unknown", "none", "null", "unavailable"}
         for key in (
             "config_hash",
             "scenario_digest",
@@ -410,6 +504,15 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
             "planner_commit",
             "planner",
         )
+    )
+    provenance = provenance and all(
+        isinstance(trace.get(key), str) and bool(re.fullmatch(_SHA256_RE, str(trace.get(key))))
+        for key in ("scenario_digest", "map_digest")
+    )
+    artifact_hash = (
+        isinstance(trace.get("artifact_sha256"), str)
+        and bool(re.fullmatch(_SHA256_RE, str(trace.get("artifact_sha256"))))
+        and str(trace.get("artifact_sha256")) == trace_artifact_sha256(trace)
     )
     complete = (
         trace.get("schema_version") == ANALYSIS_TRACE_RECORD_SCHEMA_VERSION
@@ -424,6 +527,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         and units
         and timing
         and provenance
+        and artifact_hash
     )
     reasons = []
     for name, valid in (
@@ -437,6 +541,7 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         ("units", units),
         ("timing", timing),
         ("provenance", provenance),
+        ("artifact_hash", artifact_hash),
     ):
         if not valid:
             reasons.append(name)
@@ -450,9 +555,13 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
         "stable_actor_ids": actor_ids,
         "radii": radii,
         "controls": controls,
+        "finite_states": finite_states,
+        "monotonic_time": monotonic_time,
+        "timing": timing,
         "coordinate_frame": coordinate_frame,
         "units": units,
         "provenance": provenance,
+        "artifact_hash": artifact_hash,
         "map_digest": trace.get("map_digest") not in (None, ""),
     }
 
@@ -492,7 +601,10 @@ def _vector2_or_none(value: Any) -> list[float] | None:
 
     if value is None:
         return None
-    array = np.asarray(value, dtype=float).reshape(-1)
+    try:
+        array = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return None
     if len(array) < 2 or not np.isfinite(array[:2]).all():
         return None
     return [float(array[0]), float(array[1])]
@@ -516,7 +628,12 @@ def _control_payload_has_value(payload: Mapping[str, Any]) -> bool:
     return False
 
 
-def _normalize_events(events: Any, *, index_offset: int = 0) -> list[dict[str, Any]]:
+def _normalize_events(
+    events: Any,
+    *,
+    index_offset: int = 0,
+    actor_ids: list[Any] | None = None,
+) -> list[dict[str, Any]]:
     """Normalize runtime and legacy safety events to one canonical shape.
 
     Returns:
@@ -527,52 +644,73 @@ def _normalize_events(events: Any, *, index_offset: int = 0) -> list[dict[str, A
         return []
     normalized: list[dict[str, Any]] = []
     for index, event in enumerate(events):
-        if not isinstance(event, Mapping):
-            normalized.append(
-                {
-                    "event_id": f"unavailable-{index_offset:04d}-{index:04d}",
-                    "event_type": "unavailable",
-                    "time_s": None,
-                    "status": "unavailable",
-                    "reason": "event_not_mapping",
-                    "details": event,
-                }
-            )
-            continue
-        raw = dict(event)
-        event_type = raw.get("event_type") or raw.get("type")
-        if event_type is None and (
-            raw.get("collision_time") is not None
-            or raw.get("collision_partner_id") is not None
-            or raw.get("collision") is True
-        ):
-            event_type = "collision"
-        event_type = str(event_type or "unknown")
-        time_value = raw.get("time_s")
-        if time_value is None:
-            time_value = raw.get("collision_time")
-        partner = raw.get("actor_id") or raw.get("partner_id") or raw.get("collision_partner_id")
-        if (
-            event_type == "collision"
-            and partner is not None
-            and not str(partner).startswith("pedestrian-")
-        ):
-            partner = f"pedestrian-{partner}"
         normalized.append(
-            {
-                "event_id": str(
-                    raw.get("event_id") or f"{event_type}-{index_offset:04d}-{index:04d}"
-                ),
-                "event_type": event_type,
-                "time_s": float(time_value) if _finite_number(time_value) else None,
-                "status": str(raw.get("status") or "observed"),
-                "reason": raw.get("reason"),
-                "actor_id": raw.get("actor_id"),
-                "partner_id": partner,
-                "details": raw,
-            }
+            _normalize_event(
+                event,
+                event_id=f"event-{index_offset:04d}-{index:04d}",
+                actor_ids=actor_ids,
+            )
         )
     return normalized
+
+
+def _normalize_event(event: Any, *, event_id: str, actor_ids: list[Any] | None) -> dict[str, Any]:
+    """Normalize one event while retaining the unmodified source details.
+
+    Returns:
+        A canonical event mapping with typed unavailable fields when the input
+        is not an event object.
+    """
+
+    if not isinstance(event, Mapping):
+        return {
+            "event_id": f"unavailable-{event_id}",
+            "event_type": "unavailable",
+            "time_s": None,
+            "status": "unavailable",
+            "reason": "event_not_mapping",
+            "details": event,
+        }
+    raw = dict(event)
+    event_type = raw.get("event_type") or raw.get("type")
+    if event_type is None and (
+        raw.get("collision_time") is not None
+        or raw.get("collision_partner_id") is not None
+        or raw.get("collision") is True
+    ):
+        event_type = "collision"
+    event_type = str(event_type or "unknown")
+    time_value = raw.get("time_s")
+    if time_value is None:
+        time_value = raw.get("collision_time")
+    partner = raw.get("actor_id")
+    if partner is None:
+        partner = raw.get("partner_id")
+    if partner is None:
+        partner = raw.get("collision_partner_id")
+    if actor_ids is not None and partner is not None:
+        try:
+            partner_index = int(partner)
+        except (TypeError, ValueError):
+            partner_index = -1
+        if 0 <= partner_index < len(actor_ids):
+            partner = actor_ids[partner_index]
+    if (
+        event_type == "collision"
+        and partner is not None
+        and not str(partner).startswith("pedestrian-")
+    ):
+        partner = f"pedestrian-{partner}"
+    return {
+        "event_id": str(raw.get("event_id") or event_id),
+        "event_type": event_type,
+        "time_s": float(time_value) if _finite_number(time_value) else None,
+        "status": str(raw.get("status") or "observed"),
+        "reason": raw.get("reason"),
+        "actor_id": raw.get("actor_id"),
+        "partner_id": partner,
+        "details": raw,
+    }
 
 
 def trace_artifact_sha256(trace: Mapping[str, Any]) -> str:

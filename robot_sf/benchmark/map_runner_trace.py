@@ -92,6 +92,10 @@ def _trace_pedestrians(
         max(0, int(np.asarray(positions).shape[0]) - metadata_count) if metadata_count else None
     )
     for ped_idx, ped_pos in enumerate(np.asarray(positions, dtype=float)):
+        if ped_pos.shape[0] < 2 or not np.isfinite(ped_pos[:2]).all():
+            # Simulator buffers use NaN slots for absent actors.  Do not leak
+            # those placeholders into world geometry or distance metrics.
+            continue
         if (
             previous_positions is not None
             and previous_positions.shape == positions.shape
@@ -621,6 +625,7 @@ def _vru_trace_payload(
     payload_key = str(metadata.get("diagnostic_payload_key") or "cyclist_like_vru")
     return {
         "pedestrian_id": metadata["pedestrian_id"],
+        "radius_m": float(metadata["actor_radius_m"]),
         "actor_type": metadata["actor_type"],
         "interaction_role": metadata["interaction_role"],
         "interaction_class": metadata.get("interaction_class", metadata["interaction_role"]),

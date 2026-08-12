@@ -18,11 +18,27 @@ robot_sf_bench analyze-cases \
   --check-determinism
 ```
 
+The command is intentionally source-gate aware. Without a receipt from the
+reviewed source-restoration step it still writes an audit package, but emits
+`publication/UNAVAILABLE.json` and does not create a publication figure. Once
+the exact source package has been restored and its digest verified, pass the
+receipt explicitly:
+
+```bash
+robot_sf_bench analyze-cases \
+  --config configs/analysis/case_workbench.v1.yaml \
+  --result-store <episodes.jsonl-or-store> \
+  --output <package> \
+  --source-gate-receipt <source-integrity-gate.json>
+```
+
 `analysis_trace: all` is opt-in and additive to the legacy trace booleans. It
-records an explicit `t=0` state, stable actor IDs/radii, world-frame units,
-controls, typed events, and provenance. The capture path is data-only and must
-not alter actions or outcomes. Raw traces remain outside Git; packages retain
-manifests and checksums.
+records an explicit `t=0` state and, when the simulator supplies the required
+identity/geometry/control fields, stable actor IDs/radii, world-frame units,
+controls, typed events, and provenance. Missing or positional-only identities
+remain typed `unavailable` and cannot enter an evidence portfolio. The capture
+path is data-only and must not alter actions or outcomes. Raw traces remain
+outside Git; packages retain manifests and checksums.
 
 The dedicated `configs/benchmarks/analysis_ready_full_campaign.yaml` overlay
 is the only canonical opt-in. Camera-ready, smoke, and historical configs remain
@@ -39,6 +55,20 @@ values. Machine selection is never author admission: edit the digest-bound
 The `apply_admission_overlay` API verifies the proposal digest and keeps the
 original machine portfolio beside the admitted/rejected/replaced result.
 
+The canonical admission command verifies the package manifest, checksums, source
+gate, and overlay before refreshing the package receipts:
+
+```bash
+robot_sf_bench admit-cases \
+  --package <package> \
+  --overlay <package>/admission_overlay.json
+```
+
+The default publication renderer accepts only an admitted package whose source
+gate passed. Before admission, use the package's audit dossier and interactive
+viewer for review, or request an explicitly diagnostic-only preview through the
+private API flag; such a preview is not evidence.
+
 The full audit dossier and interactive viewer are diagnostic artifacts. The
 publication renderer is intentionally reduced:
 
@@ -49,6 +79,10 @@ uv run python scripts/analysis/render_case_publication.py \
 uv run --with 'rerun-sdk==0.34.1' python scripts/tools/trace_viewer.py \
   --package <package> --case-id <case-id> --spawn
 ```
+
+Package traces use the recorded robot and actor radii. Legacy bundles without
+those fields show surface-clearance tracks as unavailable instead of applying a
+default geometry assumption.
 
 Doorway seed 113/114 remains `shared_prefix=false`; the package must not claim
 a first divergence, causal pivot, or planner superiority. Source restoration

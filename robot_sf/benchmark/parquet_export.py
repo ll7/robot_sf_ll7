@@ -210,6 +210,7 @@ def _campaign_v2_schemas(pa_mod: Any) -> dict[str, Any]:
                 ("artifact_uri", string),
                 ("artifact_sha256", string),
                 ("trace_coverage_json", string),
+                ("analysis_trace_json", string),
                 ("outcome_json", string),
                 ("provenance_json", string),
                 ("execution_status", string),
@@ -274,6 +275,9 @@ def _campaign_v2_schemas(pa_mod: Any) -> dict[str, Any]:
                 ("cell_id", string),
                 ("planner", string),
                 ("scenario_id", string),
+                ("config_hash", string),
+                ("scenario_digest", string),
+                ("map_digest", string),
                 ("outcome_counts_json", string),
                 ("entropy", number),
                 ("seed_count", integer),
@@ -292,11 +296,14 @@ def _campaign_v2_schemas(pa_mod: Any) -> dict[str, Any]:
                 ("right_episode_id", string),
                 ("compatibility_status", string),
                 ("reason", string),
+                ("compatibility_receipt_json", string),
                 ("outcome_delta", number),
                 ("clearance_delta_m", number),
                 ("event_time_shift_s", number),
                 ("trajectory_separation_m", number),
                 ("control_sequence_difference", number),
+                ("linear_control_sequence_difference_m_s", number),
+                ("turn_control_sequence_difference_rad_s", number),
                 ("progress_delta_m", number),
                 ("shared_prefix", boolean),
             ]
@@ -316,7 +323,7 @@ def _build_campaign_v2_rows(
     actors: list[dict[str, Any]] = []
     events: list[dict[str, Any]] = []
     features: list[dict[str, Any]] = []
-    by_cell: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    by_cell: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
     for record in records:
         episode_id = str(record.get("episode_id") or "")
         planner = _resolve_algo(record) or "unknown"
@@ -327,6 +334,8 @@ def _build_campaign_v2_rows(
             record.get("provenance") if isinstance(record.get("provenance"), Mapping) else {}
         )
         provenance = dict(provenance)
+        record_source_uri = _string_or_none(record.get("_source_path")) or source_uri
+        record_source_sha = _string_or_none(record.get("_source_sha256")) or source_sha
         result_provenance = record.get("result_provenance")
         if isinstance(result_provenance, Mapping):
             for key, value in result_provenance.items():
@@ -360,7 +369,10 @@ def _build_campaign_v2_rows(
         episodes.append(
             {
                 "run_id": str(
-                    record.get("run_id") or provenance.get("run_id") or source_sha or "unknown"
+                    record.get("run_id")
+                    or provenance.get("run_id")
+                    or record_source_sha
+                    or "unknown"
                 ),
                 "episode_id": episode_id,
                 "planner": planner,
@@ -369,9 +381,10 @@ def _build_campaign_v2_rows(
                 "seed": _int_or_none(record.get("seed")),
                 "row_status": row_status,
                 "artifact_uri": _string_or_none(provenance.get("artifact_uri"))
-                or str(record.get("_source_path") or source_uri),
+                or record_source_uri,
                 "artifact_sha256": explicit_artifact_sha,
                 "trace_coverage_json": _json_or_none(coverage),
+                "analysis_trace_json": _json_or_none(trace),
                 "outcome_json": _json_or_none(record.get("outcome")),
                 "provenance_json": _json_or_none(provenance),
                 "execution_status": str(record.get("status") or "unknown"),
@@ -404,7 +417,19 @@ def _build_campaign_v2_rows(
             )
         episode_features = _campaign_feature_rows(record, episode_id, trace_steps, coverage)
         features.extend(episode_features)
-        by_cell.setdefault((planner, scenario_id), []).append(record)
+        trace_mapping = trace if isinstance(trace, Mapping) else {}
+        by_cell.setdefault(
+            (
+                planner,
+                scenario_id,
+                str(trace_mapping.get("config_hash") or provenance.get("config_hash") or ""),
+                str(
+                    trace_mapping.get("scenario_digest") or provenance.get("scenario_digest") or ""
+                ),
+                str(trace_mapping.get("map_digest") or provenance.get("map_digest") or ""),
+            ),
+            [],
+        ).append(record)
 
     cells = _campaign_cell_rows(by_cell)
     comparisons = _campaign_comparison_rows(records)
@@ -492,10 +517,17 @@ def _campaign_event_row(episode_id: str, index: int, event: Mapping[str, Any]) -
     event_time = event.get("time_s")
     if event_time is None:
         event_time = event.get("collision_time")
+    event_type = event.get("event_type") or event.get("type")
+    if event_type is None and (
+        event.get("collision_time") is not None
+        or event.get("collision_partner_id") is not None
+        or event.get("collision") is True
+    ):
+        event_type = "collision"
     return {
         "episode_id": episode_id,
         "event_id": str(event.get("event_id") or event.get("id") or f"event-{index:04d}"),
-        "event_type": str(event.get("event_type") or event.get("type") or "unknown"),
+        "event_type": str(event_type or "unknown"),
         "time_s": _float_or_none(event_time),
         "status": str(event.get("status") or "observed"),
         "reason": _string_or_none(event.get("reason")),
@@ -510,11 +542,13 @@ def _campaign_feature_rows(
 
     profile = "case-workbench-metrics.v1"
     rows: list[dict[str, Any]] = []
-    if not isinstance(trace_steps, list) or not trace_steps or coverage.get("status") != "complete":
+    if not isinstance(trace_steps, list) or not trace_steps or not _trace_metrics_usable(coverage):
         for name, units in (
             ("surface_clearance_min", "m"),
             ("progress", "m"),
-            ("control_effort", "mixed"),
+            ("control_effort", "composite"),
+            ("applied_linear_control_effort", "m"),
+            ("applied_turn_control_effort", "rad"),
             ("applied_linear_speed_mean", "m/s"),
             ("applied_turn_rate_abs_integral", "rad"),
             ("event_time", "s"),
@@ -547,17 +581,11 @@ def _campaign_feature_rows(
     speeds: list[float] = []
     applied_speeds: list[float] = []
     turns: list[float] = []
-    start_xy: tuple[float, float] | None = None
-    end_xy: tuple[float, float] | None = None
     for step in trace_steps:
         if not isinstance(step, Mapping):
             continue
         robot = step.get("robot") if isinstance(step.get("robot"), Mapping) else {}
         pos = robot.get("position") if isinstance(robot.get("position"), list) else []
-        if len(pos) >= 2 and all(isinstance(v, (int, float)) for v in pos[:2]):
-            xy = (float(pos[0]), float(pos[1]))
-            start_xy = xy if start_xy is None else start_xy
-            end_xy = xy
         velocity = robot.get("velocity") if isinstance(robot.get("velocity"), list) else []
         if len(velocity) >= 2 and all(isinstance(v, (int, float)) for v in velocity[:2]):
             speeds.append(float((float(velocity[0]) ** 2 + float(velocity[1]) ** 2) ** 0.5))
@@ -587,31 +615,14 @@ def _campaign_feature_rows(
                     + (float(pos[1]) - float(actor_pos[1])) ** 2
                 ) ** 0.5
                 clearance_values.append(distance - robot_radius - actor_radius)
-    first_time = (
-        _float_or_none(trace_steps[0].get("time_s"))
-        if isinstance(trace_steps[0], Mapping)
-        else None
-    )
-    second_time = (
-        _float_or_none(trace_steps[1].get("time_s"))
-        if len(trace_steps) > 1 and isinstance(trace_steps[1], Mapping)
-        else None
-    )
-    trace_dt = (
-        second_time - first_time if first_time is not None and second_time is not None else None
-    )
-    dt = _float_or_none(record.get("dt")) or trace_dt
-    if dt is None or dt <= 0.0:
-        metadata = record.get("algorithm_metadata")
-        trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
-        dt = _float_or_none(trace.get("dt")) if isinstance(trace, Mapping) else None
-    if dt is None or dt <= 0.0:
-        dt = 0.0
-    progress = (
-        None
-        if start_xy is None or end_xy is None
-        else ((end_xy[0] - start_xy[0]) ** 2 + (end_xy[1] - start_xy[1]) ** 2) ** 0.5
-    )
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    trace_declared_dt = _float_or_none(trace.get("dt")) if isinstance(trace, Mapping) else None
+    dt = trace_declared_dt if trace_declared_dt is not None else _float_or_none(record.get("dt"))
+    if dt is None or not math.isfinite(dt) or dt <= 0.0:
+        # A complete analysis trace always carries its actual simulator timestep.
+        # Do not silently turn an absent value into the historical 0.1 s default.
+        return _unavailable_feature_rows(episode_id, "analysis_trace_timestep_unavailable")
     metric_mapping = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
     recorded_clearance = _mapping_number(
         metric_mapping, "surface_clearance_min", "min_surface_clearance", "min_separation"
@@ -642,10 +653,21 @@ def _campaign_feature_rows(
             "m/s",
         ),
         "applied_turn_rate_abs_integral": (sum(turns) * dt if turns else None, "rad"),
-        "progress": (recorded_progress if recorded_progress is not None else progress, "m"),
+        "progress": (
+            recorded_progress if recorded_progress is not None else traveled,
+            "m",
+        ),
         "control_effort": (
             (sum(applied_speeds) * dt + sum(turns) * dt) if applied_speeds or turns else None,
-            "mixed",
+            "composite",
+        ),
+        "applied_linear_control_effort": (
+            sum(applied_speeds) * dt if applied_speeds else None,
+            "m",
+        ),
+        "applied_turn_control_effort": (
+            sum(turns) * dt if turns else None,
+            "rad",
         ),
         "event_time": (event_time, "s"),
         "outcome_score": (outcome_score, "indicator"),
@@ -672,6 +694,70 @@ def _campaign_feature_rows(
     return rows
 
 
+def _trace_metrics_usable(coverage: Mapping[str, Any]) -> bool:
+    """Return whether local trace fields support formula derivation.
+
+    Provenance failures keep an episode ineligible for evidence admission, but
+    they do not make otherwise valid local kinematics mathematically
+    unavailable.  Structural/timing/artifact failures remain fail-closed.
+    """
+
+    if coverage.get("status") == "complete":
+        return True
+    required = (
+        "has_initial_state",
+        "stable_actor_ids",
+        "radii",
+        "controls",
+        "finite_states",
+        "monotonic_time",
+        "coordinate_frame",
+        "units",
+        "artifact_hash",
+    )
+    return all(coverage.get(name) is True for name in required) and coverage.get("timing") is True
+
+
+def _unavailable_feature_rows(episode_id: str, reason: str) -> list[dict[str, Any]]:
+    """Return the complete v1 feature vocabulary with typed unavailable values."""
+
+    profile = "case-workbench-metrics.v1"
+    names = (
+        ("surface_clearance_min", "m"),
+        ("progress", "m"),
+        ("control_effort", "composite"),
+        ("applied_linear_control_effort", "m"),
+        ("applied_turn_control_effort", "rad"),
+        ("applied_linear_speed_mean", "m/s"),
+        ("applied_turn_rate_abs_integral", "rad"),
+        ("event_time", "s"),
+        ("ttc_min", "s"),
+        ("cpa_min", "m"),
+        ("closing_speed_max", "m/s"),
+        ("braking_response_time", "s"),
+        ("turning_response_time", "s"),
+        ("critical_duration_integral", "s"),
+        ("stall_duration", "s"),
+        ("reversal_count", "count"),
+        ("detour_ratio", "ratio"),
+        ("clipping_steps", "count"),
+        ("fallback_steps", "count"),
+        ("outcome_score", "indicator"),
+    )
+    return [
+        {
+            "episode_id": episode_id,
+            "feature_name": name,
+            "value_number": None,
+            "units": units,
+            "profile_version": profile,
+            "status": "unavailable",
+            "unavailable_reason": reason,
+        }
+        for name, units in names
+    ]
+
+
 def derive_episode_metrics(record: Mapping[str, Any]) -> dict[str, float]:
     """Return available v2 feature values for one episode without writing files."""
 
@@ -685,7 +771,7 @@ def derive_episode_metrics(record: Mapping[str, Any]) -> dict[str, float]:
         record,
         str(record.get("episode_id") or ""),
         trace_steps,
-        {"status": "complete"} if isinstance(trace_steps, list) else coverage,
+        coverage,
     )
     return {
         str(row["feature_name"]): float(row["value_number"])
@@ -865,13 +951,60 @@ def _time_to_contact(
     return first if first >= 0.0 else None
 
 
+def _record_metric_view(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return recorded metrics augmented only by deterministic trace features."""
+
+    recorded = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+    derived = derive_episode_metrics(record)
+    merged = dict(derived)
+    merged.update(recorded)
+    return merged
+
+
+def _outcome_label(record: Mapping[str, Any]) -> str:
+    """Return a canonical outcome label for cell context."""
+
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
+    route_complete, collision = canonical_outcome_flags(outcome)
+    if collision:
+        return "collision"
+    if route_complete:
+        return "success"
+    return str(
+        outcome.get("termination_reason")
+        or record.get("termination_reason")
+        or record.get("status")
+        or "unknown"
+    )
+
+
+def _canonical_uncertainty(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Preserve canonical aggregate uncertainty when the source supplied it."""
+
+    for container_name in ("cell", "aggregate", "canonical_aggregate"):
+        container = record.get(container_name)
+        if isinstance(container, Mapping):
+            uncertainty = container.get("uncertainty")
+            if isinstance(uncertainty, Mapping):
+                return dict(uncertainty)
+    return {"source": "canonical_aggregate", "status": "unavailable"}
+
+
+def _sha256_text(value: str) -> str:
+    """Return a stable SHA-256 digest for a short identity string."""
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _campaign_cell_rows(
-    by_cell: Mapping[tuple[str, str], list[dict[str, Any]]],
+    by_cell: Mapping[tuple[str, str, str, str, str], list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Aggregate outcome mixtures and entropy per planner/scenario cell."""
 
     rows: list[dict[str, Any]] = []
-    for (planner, scenario_id), records in sorted(by_cell.items()):
+    for (planner, scenario_id, config_hash, scenario_digest, map_digest), records in sorted(
+        by_cell.items()
+    ):
         eligible_records = [record for record in records if _cell_record_eligible(record)]
         if not eligible_records:
             eligible_records = []
@@ -906,17 +1039,21 @@ def _campaign_cell_rows(
         )
         representative, representative_status = _cell_medoid(eligible_records)
         boundary_status = _cell_boundary_status(eligible_records)
+        first_record = eligible_records[0] if eligible_records else {}
+        aggregate = _canonical_uncertainty(first_record)
+        identity_suffix = _sha256_text("|".join((config_hash, scenario_digest, map_digest)))[:12]
         rows.append(
             {
-                "cell_id": f"{scenario_id}::{planner}",
+                "cell_id": f"{scenario_id}::{planner}::{identity_suffix}",
                 "planner": planner,
                 "scenario_id": scenario_id,
+                "config_hash": config_hash,
+                "scenario_digest": scenario_digest,
+                "map_digest": map_digest,
                 "outcome_counts_json": _json_or_none(dict(sorted(counts.items()))),
                 "entropy": entropy,
                 "seed_count": len(eligible_records),
-                "uncertainty_json": _json_or_none(
-                    {"source": "canonical_aggregate", "status": "unavailable"}
-                ),
+                "uncertainty_json": _json_or_none(aggregate),
                 "boundary_context_json": _json_or_none(
                     {
                         "status": boundary_status,
@@ -950,6 +1087,7 @@ def _cell_record_eligible(record: Mapping[str, Any]) -> bool:
         "terminated",
         "unavailable",
         "partial",
+        "partial_failure",
         "diagnostic_only",
         "diagnostic_stub",
         "adapter",
@@ -964,6 +1102,18 @@ def _cell_record_eligible(record: Mapping[str, Any]) -> bool:
             return False
         if str(metadata.get("execution_mode") or "").lower() in {"fallback", "degraded"}:
             return False
+        foresight = metadata.get("foresight_prediction")
+        if isinstance(foresight, Mapping) and (
+            foresight.get("evidence_eligible") is False
+            or str(foresight.get("status") or "").lower() in {"fallback", "degraded"}
+        ):
+            return False
+    integrity = record.get("integrity")
+    if isinstance(integrity, Mapping) and integrity.get("contradictions"):
+        return False
+    coverage = record.get("trace_coverage")
+    if isinstance(coverage, Mapping) and coverage.get("status") not in {None, "complete"}:
+        return False
     return True
 
 
@@ -974,7 +1124,7 @@ def _cell_medoid(records: Sequence[Mapping[str, Any]]) -> tuple[str | None, str]
         return None, "unavailable:no_records"
     vectors = []
     for record in records:
-        metrics = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+        metrics = _record_metric_view(record)
         vectors.append(
             (
                 _mapping_number(metrics, "surface_clearance_min", "min_surface_clearance"),
@@ -1004,20 +1154,10 @@ def _cell_medoid(records: Sequence[Mapping[str, Any]]) -> tuple[str | None, str]
 def _cell_boundary_status(records: Sequence[Mapping[str, Any]]) -> str:
     """Classify observed outcome/clearance boundary context without geometry claims."""
 
-    labels = {
-        str(
-            (record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}).get(
-                "termination_reason"
-            )
-            or record.get("termination_reason")
-            or record.get("status")
-            or "unknown"
-        )
-        for record in records
-    }
+    labels = {_outcome_label(record) for record in records}
     clearances = []
     for record in records:
-        metrics = record.get("metrics") if isinstance(record.get("metrics"), Mapping) else {}
+        metrics = _record_metric_view(record)
         value = _mapping_number(metrics, "surface_clearance_min", "min_surface_clearance")
         if value is not None:
             clearances.append(value)
@@ -1047,6 +1187,7 @@ def _campaign_comparison_rows(records: Sequence[dict[str, Any]]) -> list[dict[st
                 continue
             compatible, reason = _comparison_compatibility(left, right)
             deltas = _comparison_deltas(left, right) if compatible else {}
+            receipt = _comparison_receipt(left, right, compatible=compatible, reason=reason)
             rows.append(
                 {
                     "comparison_id": f"{left.get('episode_id')}__{right.get('episode_id')}",
@@ -1054,11 +1195,18 @@ def _campaign_comparison_rows(records: Sequence[dict[str, Any]]) -> list[dict[st
                     "right_episode_id": str(right.get("episode_id") or ""),
                     "compatibility_status": "compatible" if compatible else "incompatible",
                     "reason": None if compatible else reason,
+                    "compatibility_receipt_json": _json_or_none(receipt),
                     "outcome_delta": deltas.get("outcome_delta"),
                     "clearance_delta_m": deltas.get("clearance_delta_m"),
                     "event_time_shift_s": deltas.get("event_time_shift_s"),
                     "trajectory_separation_m": deltas.get("trajectory_separation_m"),
                     "control_sequence_difference": deltas.get("control_sequence_difference"),
+                    "linear_control_sequence_difference_m_s": deltas.get(
+                        "linear_control_sequence_difference_m_s"
+                    ),
+                    "turn_control_sequence_difference_rad_s": deltas.get(
+                        "turn_control_sequence_difference_rad_s"
+                    ),
                     "progress_delta_m": deltas.get("progress_delta_m"),
                     "shared_prefix": False,
                 }
@@ -1071,6 +1219,9 @@ def _comparison_compatibility(
 ) -> tuple[bool, str]:
     """Check the receipts required before deriving pair deltas."""
 
+    for record in (left, right):
+        if not _comparison_record_eligible(record):
+            return False, "execution_or_provenance_ineligible"
     left_trace = _analysis_trace(left)
     right_trace = _analysis_trace(right)
     if left_trace is None or right_trace is None:
@@ -1094,6 +1245,8 @@ def _comparison_compatibility(
         return False, "dt_mismatch"
     if left_trace.get("horizon") != right_trace.get("horizon"):
         return False, "horizon_mismatch"
+    if left_trace.get("actor_geometry") != right_trace.get("actor_geometry"):
+        return False, "actor_geometry_mismatch"
     for record, record_trace in ((left, left_trace), (right, right_trace)):
         for status_value in (record.get("row_status"), record.get("status")):
             status = str(status_value or "").lower()
@@ -1127,6 +1280,80 @@ def _comparison_compatibility(
     return True, ""
 
 
+def _comparison_record_eligible(record: Mapping[str, Any]) -> bool:
+    """Apply the same fail-closed execution caveats used by case selection."""
+
+    blocked = {
+        "fallback",
+        "degraded",
+        "failed",
+        "failure",
+        "error",
+        "truncated",
+        "terminated",
+        "unavailable",
+        "partial",
+        "partial_failure",
+        "diagnostic_only",
+        "diagnostic_stub",
+        "adapter",
+    }
+    if any(str(record.get(key) or "").lower() in blocked for key in ("row_status", "status")):
+        return False
+    metadata = record.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        if metadata.get("evidence_eligible") is False:
+            return False
+        if any(
+            str(metadata.get(key) or "").lower() in blocked
+            for key in ("status", "readiness_status", "preflight_status", "execution_mode")
+        ):
+            return False
+        foresight = metadata.get("foresight_prediction")
+        if isinstance(foresight, Mapping) and (
+            foresight.get("evidence_eligible") is False
+            or str(foresight.get("status") or "").lower() in blocked
+        ):
+            return False
+    integrity = record.get("integrity")
+    return not (isinstance(integrity, Mapping) and integrity.get("contradictions"))
+
+
+def _comparison_receipt(
+    left: Mapping[str, Any], right: Mapping[str, Any], *, compatible: bool, reason: str
+) -> dict[str, Any]:
+    """Serialize the exact compatibility inputs so a delta is auditable."""
+
+    def trace_fields(record: Mapping[str, Any]) -> dict[str, Any]:
+        trace = _analysis_trace(record) or {}
+        return {
+            "episode_id": record.get("episode_id"),
+            "planner": record.get("algo") or record.get("planner"),
+            "seed": record.get("seed"),
+            "config_hash": trace.get("config_hash"),
+            "scenario_digest": trace.get("scenario_digest"),
+            "map_digest": trace.get("map_digest"),
+            "coordinate_frame": trace.get("coordinate_frame"),
+            "units": trace.get("units"),
+            "dt": trace.get("dt"),
+            "horizon": trace.get("horizon"),
+            "actor_geometry": trace.get("actor_geometry"),
+            "artifact_sha256": trace.get("artifact_sha256"),
+            "start_signature": _trace_start_signature(trace),
+        }
+
+    return {
+        "schema_version": "comparison-receipt.v1",
+        "status": "compatible" if compatible else "incompatible",
+        "reason": reason or None,
+        "left": trace_fields(left),
+        "right": trace_fields(right),
+        "shared_prefix": False,
+        "alignment": "absolute_time_and_recorded_step_index",
+        "dtw": False,
+    }
+
+
 def is_comparison_compatible(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     """Return whether two records have a complete physical compatibility receipt."""
 
@@ -1148,6 +1375,8 @@ def _comparison_deltas(
     aligned = _aligned_trace_pairs(left_trace, right_trace)
     trajectory = None
     control = None
+    linear_control = None
+    turn_control = None
     if aligned:
         trajectory = sum(
             math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1])) for a, b in aligned
@@ -1158,6 +1387,18 @@ def _comparison_deltas(
             if a[2] is not None and a[3] is not None and b[2] is not None and b[3] is not None
         ]
         control = sum(control_values) / len(control_values) if control_values else None
+        linear_values = [
+            abs(float(a[2]) - float(b[2]))
+            for a, b in aligned
+            if a[2] is not None and b[2] is not None
+        ]
+        turn_values = [
+            abs(float(a[3]) - float(b[3]))
+            for a, b in aligned
+            if a[3] is not None and b[3] is not None
+        ]
+        linear_control = sum(linear_values) / len(linear_values) if linear_values else None
+        turn_control = sum(turn_values) / len(turn_values) if turn_values else None
     return {
         "outcome_delta": _outcome_number(right) - _outcome_number(left),
         "clearance_delta_m": _difference(
@@ -1168,6 +1409,8 @@ def _comparison_deltas(
         ),
         "trajectory_separation_m": trajectory,
         "control_sequence_difference": control,
+        "linear_control_sequence_difference_m_s": linear_control,
+        "turn_control_sequence_difference_rad_s": turn_control,
         "progress_delta_m": _difference(
             right_metrics.get("progress"), left_metrics.get("progress")
         ),
@@ -1640,7 +1883,10 @@ def _first_trace_event_time(record: Mapping[str, Any], trace_steps: Any) -> floa
     if isinstance(events, list):
         for event in events:
             if isinstance(event, Mapping):
-                value = _float_or_none(event.get("time_s"))
+                raw_time = event.get("time_s")
+                if raw_time is None:
+                    raw_time = event.get("collision_time")
+                value = _float_or_none(raw_time)
                 if value is not None and math.isfinite(value):
                     candidates.append(value)
     if isinstance(trace_steps, list):
@@ -1721,6 +1967,7 @@ def _read_jsonl_files(
     for path in paths:
         if not path.is_file():
             raise FileNotFoundError(f"Benchmark episode JSONL input is not a file: {path}")
+        source_sha = _path_sha256(path)
         with path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 text = line.strip()
@@ -1741,6 +1988,7 @@ def _read_jsonl_files(
                     )
                 if annotate_source_path:
                     record["_source_path"] = str(path)
+                    record["_source_sha256"] = source_sha
                 records.append(record)
     return records
 

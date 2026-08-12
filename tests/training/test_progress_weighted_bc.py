@@ -221,14 +221,17 @@ class TestMalformedData:
     def test_missing_npz_fails_closed(self, tmp_path: Path) -> None:
         """Missing NPZ file must raise ProgressWeightedBcError."""
         with pytest.raises(ProgressWeightedBcError, match="not found"):
-            load_remaining_route_length_from_npz(tmp_path / "missing.npz")
+            load_remaining_route_length_from_npz(
+                tmp_path / "missing.npz",
+                trusted_root=tmp_path,
+            )
 
     def test_missing_array_key_fails_closed(self, tmp_path: Path) -> None:
         """NPZ without the required remaining_route_length array must fail closed."""
         path = tmp_path / "data.npz"
         np.savez(path, actions=np.zeros((2, 5, 2)))
         with pytest.raises(ProgressWeightedBcError, match="missing required array"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_non_finite_values_fail_closed(self, tmp_path: Path) -> None:
         """NaN or Inf in remaining route length must fail closed."""
@@ -236,14 +239,14 @@ class TestMalformedData:
         rl = np.array([[10.0, np.nan, 8.0, 6.0]])
         np.savez(path, remaining_route_length=rl, actions=np.zeros((1, 3, 2)))
         with pytest.raises(ProgressWeightedBcError, match="non-finite"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_scalar_array_fails_closed(self, tmp_path: Path) -> None:
         """Scalar remaining_route_length must fail closed."""
         path = tmp_path / "data.npz"
         np.savez(path, remaining_route_length=np.array(10.0))
         with pytest.raises(ProgressWeightedBcError, match="scalar"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_missing_actions_fails_closed(self, tmp_path: Path) -> None:
         """Arm-B route progress without action alignment must fail closed."""
@@ -254,14 +257,14 @@ class TestMalformedData:
             remaining_route_length_metadata=_ROUTE_LENGTH_PROVENANCE,
         )
         with pytest.raises(ProgressWeightedBcError, match="requires an actions array"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_high_rank_array_fails_closed(self, tmp_path: Path) -> None:
         """Route-progress arrays above episode-by-step rank must fail closed."""
         path = tmp_path / "data.npz"
         np.savez(path, remaining_route_length=np.zeros((1, 2, 3)))
         with pytest.raises(ProgressWeightedBcError, match="unexpected ndim=3"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_alignment_mismatch_fails_closed(self, tmp_path: Path) -> None:
         """remaining_route_length steps != actions+1 must fail closed."""
@@ -271,7 +274,7 @@ class TestMalformedData:
         actions = np.zeros((1, 3, 2))
         np.savez(path, remaining_route_length=rl, actions=actions)
         with pytest.raises(ProgressWeightedBcError, match="expected 4"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_zero_steps_episode_fails_closed(self, tmp_path: Path) -> None:
         """An episode with zero remaining-route-length steps must fail closed."""
@@ -279,7 +282,7 @@ class TestMalformedData:
         rl = np.empty((1, 0), dtype=np.float64)
         np.savez(path, remaining_route_length=rl, actions=np.zeros((1, 0, 2)))
         with pytest.raises(ProgressWeightedBcError, match="zero steps"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_missing_provenance_fails_closed_after_alignment(self, tmp_path: Path) -> None:
         """Aligned route lengths without declared provenance are not admissible."""
@@ -290,7 +293,7 @@ class TestMalformedData:
             actions=np.zeros((1, 2, 2)),
         )
         with pytest.raises(ProgressWeightedBcError, match="provenance"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
 
     def test_proxy_provenance_fails_closed(self, tmp_path: Path) -> None:
         """Goal/displacement provenance cannot masquerade as route progress."""
@@ -305,7 +308,17 @@ class TestMalformedData:
             },
         )
         with pytest.raises(ProgressWeightedBcError, match="source"):
-            load_remaining_route_length_from_npz(path)
+            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+
+    def test_dataset_path_must_stay_under_trusted_root(self, tmp_path: Path) -> None:
+        """Reject an NPZ outside the curated artifact root before object-array loading."""
+        trusted_root = tmp_path / "trusted"
+        trusted_root.mkdir()
+        path = tmp_path / "outside.npz"
+        np.savez(path, remaining_route_length=np.array([[2.0, 1.0]]))
+
+        with pytest.raises(ProgressWeightedBcError, match="trusted trajectory artifact directory"):
+            load_remaining_route_length_from_npz(path, trusted_root=trusted_root)
 
     def test_progress_computation_fails_on_non_finite(self) -> None:
         """Non-finite remaining route length must fail in weight computation."""
@@ -551,7 +564,7 @@ class TestRectangularAlignment:
             actions=actions,
             remaining_route_length_metadata=_ROUTE_LENGTH_PROVENANCE,
         )
-        result = load_remaining_route_length_from_npz(path)
+        result = load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
         assert len(result["remaining_route_length"]) == 2
         assert result["remaining_route_length"][0].shape == (5,)
         assert result["remaining_route_length"][1].shape == (5,)
@@ -711,6 +724,44 @@ class TestProgressWeightedBCTrainer:
         with pytest.raises(ProgressWeightedBcError, match="observations .* shorter than actions"):
             trainer._unpack_demonstrations()
 
+    def test_trainer_flattens_object_dict_observations(self) -> None:
+        """Object-backed dictionary observations must reach the space flattener."""
+        import gymnasium as gym
+
+        from robot_sf.training.progress_weighted_bc import (
+            ProgressWeightedBCTrainer,
+            ProgressWeightedObjectiveConfig,
+        )
+
+        obs_space = gym.spaces.Dict({"value": gym.spaces.Box(-1, 1, shape=(1,))})
+        act_space = gym.spaces.Box(-1, 1, shape=(1,))
+
+        class _Policy:
+            def parameters(self):
+                return []
+
+        observations = np.empty((3,), dtype=object)
+        observations[0] = {"value": np.array([0.1], dtype=np.float32)}
+        observations[1] = {"value": np.array([0.2], dtype=np.float32)}
+        observations[2] = {"value": np.array([0.3], dtype=np.float32)}
+
+        class _Traj:
+            obs = observations
+            acts = np.zeros((2, 1), dtype=np.float32)
+
+        trainer = ProgressWeightedBCTrainer(
+            observation_space=obs_space,
+            action_space=act_space,
+            demonstrations=[_Traj()],
+            policy=_Policy(),
+            config=ProgressWeightedObjectiveConfig.arm_a(),
+        )
+
+        flat_obs, flat_acts, flat_weights = trainer._unpack_demonstrations()
+        assert flat_obs.shape == (2, 1)
+        assert flat_acts.shape == (2, 1)
+        np.testing.assert_array_equal(flat_weights, np.ones(2))
+
     def test_trainer_rejects_empty_observations_before_dict_flattening(self) -> None:
         """Empty observations must fail closed without indexing an empty object array."""
         import gymnasium as gym
@@ -797,6 +848,7 @@ class TestProgressWeightedBCTrainer:
                 return Normal(mean, torch.ones_like(mean), validate_args=False)
 
         policy = _Policy()
+        parameter_before = policy._parameter.detach().clone()
 
         class _Traj:
             obs = np.zeros((3, 2), dtype=np.float32)
@@ -812,3 +864,4 @@ class TestProgressWeightedBCTrainer:
         with pytest.raises(ProgressWeightedBcError, match="loss is non-finite"):
             trainer.train(n_epochs=1)
         assert trainer._n_updates == 0
+        torch.testing.assert_close(policy._parameter.detach(), parameter_before)

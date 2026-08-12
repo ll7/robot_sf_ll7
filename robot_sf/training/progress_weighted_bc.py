@@ -264,6 +264,8 @@ def load_remaining_route_length_from_npz(
     *,
     array_key: str = _REMAINING_ROUTE_LENGTH_KEY,
     require_action_alignment: bool = True,
+    trusted_root: Path,
+    expected_dataset_digest: str | None = None,
 ) -> dict[str, Any]:
     """Load and validate the per-episode remaining-route-length array from an NPZ.
 
@@ -283,6 +285,10 @@ def load_remaining_route_length_from_npz(
         array_key: Expected array key for remaining-route-length data.
         require_action_alignment: Require an ``actions`` array and validate
             one route-length value per action observation boundary.
+        trusted_root: Canonical directory under which the NPZ must resolve. This
+            path constraint is checked before opening the pickle-capable NPZ.
+        expected_dataset_digest: Optional SHA-256 digest checked before opening
+            the pickle-capable NPZ.
 
     Returns:
         A mapping with keys ``"remaining_route_length"`` (list of 1-D arrays,
@@ -294,10 +300,11 @@ def load_remaining_route_length_from_npz(
             non-finite.
     """
     path = Path(npz_path)
-    if not path.is_file():
-        raise ProgressWeightedBcError(f"remaining-route-length dataset not found at {path}")
-
-    dataset_sha256 = _sha256_file(path)
+    dataset_sha256 = validate_trajectory_npz_integrity(
+        path,
+        trusted_root=trusted_root,
+        expected_dataset_digest=expected_dataset_digest,
+    )
 
     raw_actions: np.ndarray | None = None
     # Ragged per-episode arrays are represented as object arrays in the local
@@ -752,7 +759,10 @@ class ProgressWeightedBCTrainer:
 
         ep_idx = 0
         for traj in self._demonstrations:
-            obs_ep = np.asarray(traj.obs, dtype=np.float32)
+            # Preserve object/dict observations until after the transition
+            # contract is checked and the observation-space flattening branch
+            # has had a chance to process them.
+            obs_ep = np.asarray(traj.obs)
             acts_ep = np.asarray(traj.acts, dtype=np.float32)
 
             # Validate the transition-length contract before any observation
@@ -782,8 +792,10 @@ class ProgressWeightedBCTrainer:
                     except (AssertionError, ValueError, TypeError):
                         flat_obs.append(np.asarray(o, dtype=np.float32).ravel())
                 obs_ep = np.stack(flat_obs)
-            elif obs_ep.ndim > 2:
-                obs_ep = obs_ep.reshape(obs_ep.shape[0], -1).astype(np.float32)
+            else:
+                obs_ep = np.asarray(obs_ep, dtype=np.float32)
+                if obs_ep.ndim > 2:
+                    obs_ep = obs_ep.reshape(obs_ep.shape[0], -1)
 
             # observations[0..T-1] pair with actions[0..T-1]
             obs_slice = obs_ep[:n_actions]
@@ -926,6 +938,54 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def validate_trajectory_npz_integrity(
+    npz_path: Path,
+    *,
+    trusted_root: Path,
+    expected_dataset_digest: str | None = None,
+) -> str:
+    """Validate an NPZ path and optional digest before any pickle-capable load.
+
+    Trajectory NPZ files may contain object arrays for ragged episodes and
+    provenance metadata, so callers must establish both the trusted artifact
+    boundary and, when configured, the expected bytes before calling
+    ``numpy.load(..., allow_pickle=True)``.
+
+    Returns:
+        The verified SHA-256 digest of ``npz_path``.
+
+    Raises:
+        ProgressWeightedBcError: If the file is missing, escapes ``trusted_root``,
+            or does not match ``expected_dataset_digest``.
+    """
+    path = Path(npz_path)
+    if not path.is_file():
+        raise ProgressWeightedBcError(f"trajectory dataset not found or not a file: {path}")
+
+    resolved_path = path.resolve()
+    resolved_root = Path(trusted_root).resolve()
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise ProgressWeightedBcError(
+            f"trajectory dataset path escapes the trusted trajectory artifact directory: {path}"
+        ) from exc
+
+    actual_digest = _sha256_file(resolved_path)
+    if expected_dataset_digest:
+        expected = str(expected_dataset_digest)
+        if len(expected) != 64 or any(char not in "0123456789abcdefABCDEF" for char in expected):
+            raise ProgressWeightedBcError(
+                "expected trajectory dataset digest must be a 64-character SHA-256 hex digest"
+            )
+        if expected.lower() != actual_digest.lower():
+            raise ProgressWeightedBcError(
+                "trajectory dataset digest does not match the configured digest before NPZ load: "
+                f"configured={expected}, actual={actual_digest}"
+            )
+    return actual_digest
+
+
 __all__ = [
     "ProgressWeightedBCTrainer",
     "ProgressWeightedBcError",
@@ -935,5 +995,6 @@ __all__ = [
     "objective_config_json",
     "serialize_objective_config",
     "sha256_objective_config",
+    "validate_trajectory_npz_integrity",
     "weighted_expert_action_nll",
 ]

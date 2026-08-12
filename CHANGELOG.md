@@ -2543,7 +2543,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (#3067).
 
 * Added a bounded, same-seed forecast-risk closed-loop coupling gate (#2916): a deterministic risk
-  adapter [`robot_sf/benchmark/forecast_risk_adapter.py`](robot_sf/benchmark/forecast_risk_adapter.py)
+  adapter [`robot_sf/benchmark/forecast/forecast_risk_adapter.py`](robot_sf/benchmark/forecast/forecast_risk_adapter.py)
   mapping a `ForecastBatch.v1` to a bounded `[0,1]` per-step risk signal (fail-closed on
   degraded/fallback/oracle batches), a config
   [`configs/research/forecast_risk_coupling_issue_2916.yaml`](configs/research/forecast_risk_coupling_issue_2916.yaml)

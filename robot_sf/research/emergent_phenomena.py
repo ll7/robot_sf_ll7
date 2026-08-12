@@ -52,10 +52,14 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 __all__ = [
+    "ARCH_DENSITY_RATIO_CLEAR",
     "DEFAULT_LITERATURE_DESIRED_SPEED",
     "DEFAULT_RELEASED_DESIRED_SPEED",
     "INITIAL_SPEED_RELEASED",
+    "LANE_SEGREGATION_CLEAR",
+    "LANE_SEGREGATION_WEAK",
     "MAX_SPEED_MULTIPLIER",
+    "OSCILLATION_FLIPS_CLEAR",
     "EmergentPhenomenaReport",
     "ScenarioConfig",
     "ScenarioResult",
@@ -64,6 +68,8 @@ __all__ = [
     "build_bidirectional_corridor",
     "build_high_density_exit",
     "build_narrow_doorway",
+    "default_scenario_set",
+    "derive_phenomenon_verdict",
     "doorway_oscillation",
     "exit_arching",
     "lane_purity",
@@ -71,6 +77,7 @@ __all__ = [
     "released_default_config",
     "run_emergent_phenomena_demo",
     "run_scenario",
+    "simulator_config_snapshot",
 ]
 
 # Released-default speed derivation (fast-pysf config.py / scene.py).
@@ -84,6 +91,48 @@ DEFAULT_LITERATURE_DESIRED_SPEED: float = 1.3
 # Released-default force factors (fast-pysf config.py SimulatorConfig defaults) are
 # materialized explicitly by ``released_default_config()`` below so the demo's
 # parameterization is self-describing and pinned even if upstream defaults drift.
+
+# Conservative documented verdict thresholds shared by the pinned single-seed
+# demonstration bundle (2026-07) and the multi-seed measured campaign. Values
+# are intentionally conservative so the demonstration does not overclaim.
+LANE_SEGREGATION_CLEAR: float = 0.5
+LANE_SEGREGATION_WEAK: float = 0.15
+# Int, not float: the pinned 2026-07 README interpolates this value verbatim,
+# so its repr must stay `2` for byte-stable re-runs of that bundle.
+OSCILLATION_FLIPS_CLEAR: int = 2
+ARCH_DENSITY_RATIO_CLEAR: float = 2.0
+
+
+def derive_phenomenon_verdict(scenario_name: str, order_parameters: dict[str, float]) -> str:
+    """Map order parameters to a coarse phenomenon-present verdict.
+
+    Uses the conservative documented thresholds above. ``clearly_present``
+    means the primary order parameter crossed its threshold; ``weak_partial``
+    (lane formation only) means a detectable but non-robust signal;
+    ``absent_or_negligible`` means the phenomenon did not emerge in this run.
+
+    Args:
+        scenario_name: One of the canonical scenario names.
+        order_parameters: Order-parameter dict as produced by
+            :func:`run_scenario`.
+
+    Returns:
+        Verdict label, or ``"unknown"`` for an unrecognized scenario name.
+    """
+    if scenario_name == "bidirectional_corridor":
+        value = order_parameters.get("lane_segregation_index", 0.0)
+        if value >= LANE_SEGREGATION_CLEAR:
+            return "clearly_present"
+        if value >= LANE_SEGREGATION_WEAK:
+            return "weak_partial"
+        return "absent_or_negligible"
+    if scenario_name == "narrow_doorway":
+        flips = order_parameters.get("oscillation_flips", 0.0)
+        return "clearly_present" if flips >= OSCILLATION_FLIPS_CLEAR else "absent_or_negligible"
+    if scenario_name == "high_density_exit":
+        ratio = order_parameters.get("exit_density_ratio", 0.0)
+        return "clearly_present" if ratio >= ARCH_DENSITY_RATIO_CLEAR else "absent_or_negligible"
+    return "unknown"
 
 
 def released_default_config() -> SimulatorConfig:
@@ -116,6 +165,42 @@ def released_default_config() -> SimulatorConfig:
         ),
         obstacle_force_config=ObstacleForceConfig(factor=10.0, sigma=0.0, threshold=-0.57),
     )
+
+
+def simulator_config_snapshot(sim_config: SimulatorConfig) -> dict:
+    """Return a JSON-serializable snapshot of the simulator configuration.
+
+    Captures the scene, social-force, and obstacle-force parameters that
+    determine the demonstration's dynamics, for provenance manifests.
+
+    Args:
+        sim_config: The simulator configuration to snapshot.
+
+    Returns:
+        Nested dict of plain Python scalars.
+    """
+    return {
+        "scene": {
+            "enable_group": sim_config.scene_config.enable_group,
+            "agent_radius": sim_config.scene_config.agent_radius,
+            "dt_secs": sim_config.scene_config.dt_secs,
+            "max_speed_multiplier": sim_config.scene_config.max_speed_multiplier,
+            "tau": sim_config.scene_config.tau,
+        },
+        "social_force": {
+            "factor": sim_config.social_force_config.factor,
+            "lambda_importance": sim_config.social_force_config.lambda_importance,
+            "gamma": sim_config.social_force_config.gamma,
+            "n": sim_config.social_force_config.n,
+            "n_prime": sim_config.social_force_config.n_prime,
+            "activation_threshold": sim_config.social_force_config.activation_threshold,
+        },
+        "obstacle_force": {
+            "factor": sim_config.obstacle_force_config.factor,
+            "sigma": sim_config.obstacle_force_config.sigma,
+            "threshold": sim_config.obstacle_force_config.threshold,
+        },
+    }
 
 
 @dataclass(frozen=True)
@@ -751,8 +836,15 @@ def _compute_order_parameters(
 # --------------------------------------------------------------------------- #
 
 
-def _default_scenario_set() -> list[ScenarioConfig]:
-    """Return the canonical demonstration scenario set (small CPU compute)."""
+def default_scenario_set() -> list[ScenarioConfig]:
+    """Return the canonical demonstration scenario set (small CPU compute).
+
+    Public entry point so multi-seed campaigns can rebuild the same canonical
+    scenarios with replaced seeds (``dataclasses.replace(scenario, seed=...)``).
+
+    Returns:
+        The three canonical scenario configurations with the pinned demo seed.
+    """
     return [
         ScenarioConfig(
             name="bidirectional_corridor",
@@ -804,7 +896,7 @@ def run_emergent_phenomena_demo(
         EmergentPhenomenaReport with all results and provenance.
     """
     if scenarios is None:
-        scenarios = _default_scenario_set()
+        scenarios = default_scenario_set()
     if calibrations is None:
         calibrations = [RELEASED_DEFAULT_CALIBRATION, LITERATURE_CALIBRATION]
     if sim_config is None:
@@ -815,28 +907,7 @@ def run_emergent_phenomena_demo(
         for cal in calibrations:
             results.append(run_scenario(scenario, cal, sim_config=sim_config))
 
-    config_json = {
-        "scene": {
-            "enable_group": sim_config.scene_config.enable_group,
-            "agent_radius": sim_config.scene_config.agent_radius,
-            "dt_secs": sim_config.scene_config.dt_secs,
-            "max_speed_multiplier": sim_config.scene_config.max_speed_multiplier,
-            "tau": sim_config.scene_config.tau,
-        },
-        "social_force": {
-            "factor": sim_config.social_force_config.factor,
-            "lambda_importance": sim_config.social_force_config.lambda_importance,
-            "gamma": sim_config.social_force_config.gamma,
-            "n": sim_config.social_force_config.n,
-            "n_prime": sim_config.social_force_config.n_prime,
-            "activation_threshold": sim_config.social_force_config.activation_threshold,
-        },
-        "obstacle_force": {
-            "factor": sim_config.obstacle_force_config.factor,
-            "sigma": sim_config.obstacle_force_config.sigma,
-            "threshold": sim_config.obstacle_force_config.threshold,
-        },
-    }
+    config_json = simulator_config_snapshot(sim_config)
     return EmergentPhenomenaReport(
         results=results,
         substrate_version=getattr(pysf, "__version__", "unknown"),

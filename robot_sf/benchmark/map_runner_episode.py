@@ -1947,7 +1947,7 @@ def _init_step_loop_state(
     state = _StepLoopState(obs=obs)
     state.hybrid_command_sources = [] if hybrid_source_field is not None else None
     state.previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
-    state.previous_trace_heading = _observation_heading(obs)
+    state.previous_trace_heading = _reset_robot_heading(env.simulator, obs)
     state.initial_robot_heading = state.previous_trace_heading
     state.previous_collision_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
     state.map_def = map_def
@@ -1960,6 +1960,25 @@ def _init_step_loop_state(
     return state
 
 
+def _reset_robot_heading(simulator: Any, obs: Any) -> float:
+    """Read a reset heading from simulator state before observation fallback.
+
+    Returns:
+        The finite reset heading in radians, or ``0.0`` when no heading is
+        available from the simulator or observation.
+    """
+
+    for name in ("robot_heading", "robot_theta", "heading"):
+        value = getattr(simulator, name, None)
+        try:
+            numeric = float(np.asarray(value).reshape(-1)[0]) if value is not None else None
+        except (TypeError, ValueError, IndexError):
+            numeric = None
+        if numeric is not None and np.isfinite(numeric):
+            return numeric
+    return _observation_heading(obs)
+
+
 def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
     """Read the reset robot velocity without assuming a zero initial state.
 
@@ -1969,7 +1988,10 @@ def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
 
     direct = getattr(simulator, "robot_velocity_xy", None)
     if direct is not None:
-        value = np.asarray(direct, dtype=float).reshape(-1)
+        try:
+            value = np.asarray(direct, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            value = np.asarray([], dtype=float)
         if value.size >= 2 and np.isfinite(value[:2]).all():
             return value[:2].copy()
     robots = getattr(simulator, "robots", None)
@@ -1978,7 +2000,10 @@ def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
         for name in ("velocity_xy", "robot_velocity_xy"):
             value = getattr(state, name, None)
             if value is not None:
-                array = np.asarray(value, dtype=float).reshape(-1)
+                try:
+                    array = np.asarray(value, dtype=float).reshape(-1)
+                except (TypeError, ValueError):
+                    continue
                 if array.size >= 2 and np.isfinite(array[:2]).all():
                     return array[:2].copy()
     return None
@@ -1994,7 +2019,10 @@ def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
     value = getattr(simulator, "ped_vel", None)
     if value is None:
         return None
-    array = np.asarray(value, dtype=float).reshape(-1, 2)
+    try:
+        array = np.asarray(value, dtype=float).reshape(-1, 2)
+    except (TypeError, ValueError):
+        return None
     if array.shape[0] < count or not np.isfinite(array[:count]).all():
         return None
     return array[:count].copy()
@@ -3087,7 +3115,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 else None
             )
             if not planner_commit:
-                planner_commit = algo_meta.get("planner_commit") or algo_meta.get("commit")
+                planner_commit = algo_meta.get("planner_commit")
             analysis_trace = build_analysis_trace(
                 steps=simulation_step_trace,
                 initial_robot_position=initial_robot_pos,

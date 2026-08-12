@@ -61,7 +61,7 @@ def validate_visual_manifests(base_dir: Path, contracts_dir: Path) -> list[str]:
             continue
         schema_path = contracts_dir / schema_name
         if not schema_path.exists():  # defensive; should exist
-            logger.warning("Schema file missing for %s", manifest_name)
+            logger.warning("Schema file missing for {}", manifest_name)
             continue
         try:
             data = _load_json(manifest_path)

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_report import validate_package_b_report
+from robot_sf.benchmark.adversarial.adversarial_package_b_report import validate_package_b_report
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

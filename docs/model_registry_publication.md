@@ -29,6 +29,8 @@ maintainer explicitly promotes them.
 For each selected W&B-backed registry entry, publish:
 
 - the model artifact, for example `model.zip` or `predictive_model.pt`,
+- a legal bundle containing `LICENSE`, `MODEL_CARD.md`, `PROVENANCE.json`, and any
+  declared notices,
 - `<model_id>-metadata.json` with registry provenance,
 - release-level `manifest.json`,
 - release-level `SHA256SUMS`.
@@ -61,6 +63,20 @@ benchmark_promotion:
 Use a non-benchmark boundary such as `research_only` or `smoke_only` plus
 `non_benchmark_reason` when the entry is preserved for analysis or launch checks but is not eligible
 for benchmark claims.
+
+Every publishable entry must also include a `licensing` mapping. It must state the
+SPDX license expression, copyright holder, redistribution basis, source repository
+and revision, source-archive checksum, weights origin, training-code and
+training-data licenses, and repository-relative `license_file`, `model_card_file`,
+and `included_notices` paths. Publication fails closed when any of this rights
+evidence is missing; repository or inference-code licensing is not inferred as a
+weights license.
+
+The publisher also audits every existing `github_release` row before staging a new release. A
+public row without the licensing mapping or its hashed `legal_bundle` blocks the entire operation;
+this prevents a new release from masking older unverified public artifacts. Missing local model
+files likewise block the operation rather than producing a partial release; use
+`--download-missing` only when the registry's immutable source metadata is available.
 
 ## How
 

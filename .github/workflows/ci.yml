@@ -363,6 +363,9 @@ jobs:
       - name: Build wheel
         run: uv build
 
+      - name: Check distribution license payloads
+        run: uv run python scripts/tools/check_distribution_licenses.py dist
+
       - name: Clean wheel install/import smoke
         run: bash scripts/validation/wheel_install_smoke.sh
 
@@ -378,8 +381,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout (attempt 1)
+        id: checkout_attempt_1
+        continue-on-error: true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Checkout (attempt 2)
+        id: checkout_attempt_2
+        if: steps.checkout_attempt_1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Checkout (attempt 3)
+        id: checkout_attempt_3
+        if: steps.checkout_attempt_1.outcome == 'failure' && steps.checkout_attempt_2.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fail-closed guard when checkout fails
+        if: steps.checkout_attempt_1.outcome == 'failure' && steps.checkout_attempt_2.outcome == 'failure' && steps.checkout_attempt_3.outcome == 'failure'
+        run: |
+          {
+            echo "## Checkout failed: examples-smoke did not run"
+            echo ""
+            echo "All three bounded checkout attempts failed before the local repository could be set up."
+            echo "No example smoke tests ran."
+            echo "TLS certificate verification was **not** bypassed."
+            echo ""
+            echo "After the underlying infrastructure recovers, rerun the failed job with:"
+            echo ""
+            echo '```bash'
+            echo 'gh run rerun "$GITHUB_RUN_ID" --failed'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::examples-smoke checkout failed after 3 attempts; no example tests ran. TLS verification was not bypassed. Rerun with: gh run rerun '$GITHUB_RUN_ID' --failed"
+          exit 1
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python

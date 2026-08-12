@@ -69,7 +69,7 @@ def _observation_heading(obs: Any, *, default: float = 0.0) -> float:
     return default
 
 
-def _trace_pedestrians(
+def _trace_pedestrians(  # noqa: C901
     positions: np.ndarray,
     previous_positions: np.ndarray | None,
     dt_seconds: float,
@@ -77,6 +77,7 @@ def _trace_pedestrians(
     vru_metadata: list[dict[str, Any] | None] | None = None,
     robot_position: np.ndarray | None = None,
     robot_velocity: np.ndarray | None = None,
+    actor_ids: list[Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build trace-export pedestrian frames from simulator position buffers.
 
@@ -92,6 +93,10 @@ def _trace_pedestrians(
         max(0, int(np.asarray(positions).shape[0]) - metadata_count) if metadata_count else None
     )
     for ped_idx, ped_pos in enumerate(np.asarray(positions, dtype=float)):
+        if ped_pos.shape[0] < 2 or not np.isfinite(ped_pos[:2]).all():
+            # Simulator buffers use NaN slots for absent actors.  Do not leak
+            # those placeholders into world geometry or distance metrics.
+            continue
         if (
             previous_positions is not None
             and previous_positions.shape == positions.shape
@@ -100,11 +105,16 @@ def _trace_pedestrians(
             velocity = (ped_pos - previous_positions[ped_idx]) / dt_seconds
         else:
             velocity = np.zeros(2, dtype=float)
+        actor_id = (
+            actor_ids[ped_idx] if actor_ids is not None and ped_idx < len(actor_ids) else None
+        )
         frame = {
-            "id": int(ped_idx),
+            "id": actor_id if actor_id is not None else int(ped_idx),
             "position": [float(ped_pos[0]), float(ped_pos[1])],
             "velocity": [float(velocity[0]), float(velocity[1])],
         }
+        if actor_id is not None:
+            frame["actor_id"] = str(actor_id)
         if single_offset is not None and ped_idx >= single_offset:
             single_idx = ped_idx - single_offset
             if 0 <= single_idx < len(intent_metadata or []):
@@ -621,6 +631,7 @@ def _vru_trace_payload(
     payload_key = str(metadata.get("diagnostic_payload_key") or "cyclist_like_vru")
     return {
         "pedestrian_id": metadata["pedestrian_id"],
+        "radius_m": float(metadata["actor_radius_m"]),
         "actor_type": metadata["actor_type"],
         "interaction_role": metadata["interaction_role"],
         "interaction_class": metadata.get("interaction_class", metadata["interaction_role"]),

@@ -266,7 +266,7 @@ def emit_resume_plan_log(verdicts: list[ArmResumeVerdict]) -> None:
     """Emit a structured log summary of the resume plan."""
     summary = resume_plan_summary(verdicts)
     logger.info(
-        "Resume plan: %d arms (%d skip, %d continue, %d fresh); %d episodes banked, %d to-run",
+        "Resume plan: {} arms ({} skip, {} continue, {} fresh); {} episodes banked, {} to-run",
         summary["total_arms"],
         summary["arms_skip_complete"],
         summary["arms_continue"],
@@ -276,7 +276,7 @@ def emit_resume_plan_log(verdicts: list[ArmResumeVerdict]) -> None:
     )
     for v in verdicts:
         logger.info(
-            "  arm '%s' (%s): %d/%d episodes -> %s",
+            "  arm '{}' ({}): {}/{} episodes -> {}",
             v.planner_key,
             v.kinematics,
             v.episodes_found,

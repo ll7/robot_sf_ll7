@@ -16,7 +16,6 @@ convergence:
   collision_rate: 0.05
   plateau_window: 10
 evaluation:
-  frequency_episodes: 1
   evaluation_episodes: 1
   hold_out_scenarios: []
   step_schedule:

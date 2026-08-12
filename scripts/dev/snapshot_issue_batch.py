@@ -11,6 +11,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
+from scripts.dev import gh_issue_rest
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.issue_claim import short_claim_ref, status_issue
 
@@ -82,13 +83,33 @@ def _assignees(issue: dict[str, Any]) -> list[str]:
     )
 
 
+def _issue_state(issue: dict[str, Any]) -> str:
+    """Return the normalized GitHub issue state, or an empty string when unknown."""
+    state = issue.get("state")
+    if not isinstance(state, str):
+        return ""
+    return state.strip().upper()
+
+
+def _non_open_state_classification(state: str) -> tuple[str, str] | None:
+    """Return a fail-closed classification for missing or non-open issue state."""
+    if not state:
+        return "state_unknown", "issue state missing or unknown; skip autonomous claim"
+    if state != "OPEN":
+        return "closed", f"issue state is {state}; skip autonomous claim"
+    return None
+
+
 def _issue_classification(
     *,
     assignees: list[str],
     claim: dict[str, Any],
     labels: list[str],
+    state: str,
 ) -> tuple[str, str]:
     """Return a short claimability classification and rationale."""
+    if state_classification := _non_open_state_classification(state):
+        return state_classification
     if assignees:
         return "assigned", "assigned; skip auto-claim"
     if _is_blocked_external_issue(labels):
@@ -212,43 +233,85 @@ def _recommended_context_pack(number: int, labels: list[str], title: str) -> str
     return f"docs/context/issue_{number}* if present, otherwise docs/context/INDEX.md"
 
 
+def _validate_explicit_rest_issue(issue: Any, *, requested_number: int) -> str | None:
+    """Return an error for malformed successful REST issue payloads."""
+    if not isinstance(issue, dict):
+        return "REST issue response was not an object"
+    issue_number = issue.get("number")
+    if type(issue_number) is not int or issue_number < 1:
+        return "REST issue response has no positive integer number"
+    if issue_number != requested_number:
+        return (
+            f"REST issue response number {issue_number} does not match requested issue "
+            f"{requested_number}"
+        )
+    for field in ("title", "body", "state", "url"):
+        if not isinstance(issue.get(field), str):
+            return f"REST issue response field {field!r} is not a string"
+    state = issue["state"].strip().upper()
+    if state not in {"OPEN", "CLOSED"}:
+        return f"REST issue response has unknown state {issue['state']!r}"
+    for field in ("labels", "assignees"):
+        values = issue.get(field)
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            return f"REST issue response field {field!r} is not a list of strings"
+    return None
+
+
 def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict[str, Any]:
-    """Fetch one issue and return a compact orchestration snapshot."""
-    result = _gh(
-        [
-            "issue",
-            "view",
-            str(number),
-            "--repo",
-            repo,
-            "--json",
-            "number,title,body,state,labels,url,assignees",
-        ]
-    )
-    if result.returncode != 0:
+    """Fetch one issue and return a compact orchestration snapshot.
+
+    The explicit read routes through the REST-backed normalized reader
+    :func:`scripts.dev.gh_issue_rest.fetch_issue` instead of the GraphQL-backed
+    ``gh issue view --json``, so explicit snapshots keep succeeding when GraphQL
+    quota is exhausted but the REST API is healthy (issue #6845). Missing,
+    malformed, and REST-failed responses remain fail-closed error rows.
+    """
+    try:
+        issue = gh_issue_rest.fetch_issue(number, repo=repo)
+    except (TypeError, ValueError, KeyError) as exc:
         return {
             "number": number,
             "status": "error",
-            "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+            "error": f"REST issue read returned malformed data: {exc}",
         }
-    try:
-        issue = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
-    labels = _labels(issue)
-    assignees = _assignees(issue)
+    if not isinstance(issue, dict):
+        return {
+            "number": number,
+            "status": "error",
+            "error": "REST issue read returned a non-object response",
+        }
+    if issue.get("status") != "ok":
+        return {
+            "number": number,
+            "status": "error",
+            "error": str(issue.get("error", "REST issue read failed")),
+        }
+    if error := _validate_explicit_rest_issue(issue, requested_number=number):
+        return {
+            "number": number,
+            "status": "error",
+            "error": f"REST issue read returned malformed data: {error}",
+        }
+    # The REST reader already normalizes labels/assignees to sorted name lists and
+    # uppercases state; re-sorting and re-applying ``_issue_state`` keep the
+    # snapshot contract stable and defensive against future reader drift.
+    labels = sorted(issue.get("labels") or [])
+    assignees = sorted(issue.get("assignees") or [])
+    state = _issue_state(issue)
     claim = status_issue(number, remote=remote)
     classification, reason = _issue_classification(
         assignees=assignees,
         claim=claim,
         labels=labels,
+        state=state,
     )
     excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
         "number": issue.get("number", number),
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,
@@ -275,6 +338,7 @@ def _snapshot_from_issue_list(
 
     labels = _labels(issue)
     assignees = _assignees(issue)
+    state = _issue_state(issue)
     claim = (
         claim_statuses.get(number)
         if claim_statuses is not None
@@ -293,12 +357,13 @@ def _snapshot_from_issue_list(
         assignees=assignees,
         claim=claim,
         labels=labels,
+        state=state,
     )
     return {
         "number": number,
         "status": "ok",
         "title": issue.get("title", ""),
-        "state": issue.get("state", ""),
+        "state": state,
         "url": issue.get("url", ""),
         "labels": labels,
         "assignees": assignees,

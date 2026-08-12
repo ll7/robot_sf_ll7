@@ -14,6 +14,16 @@ authors = [
     {name = "Marco Tröster", email = "marco.troester.student@uni-augsburg.de"}
 ]
 license = "GPL-3.0-only"
+license-files = [
+    "LICENSE",
+    "fast-pysf/LICENSE",
+    "third_party/python-rvo2/LICENSE",
+    "third_party/python-rvo2/UPSTREAM.md",
+    "third_party/python-rvo2/LOCAL_CHANGES.patch",
+    "third_party/socnavbench/LICENSE",
+    "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+    "THIRD_PARTY_NOTICES.md",
+]
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -181,6 +191,10 @@ include = [
     "/third_party",
     "/README.md",
     "/LICENSE",
+    "/fast-pysf/LICENSE",
+    "/third_party/python-rvo2/LICENSE",
+    "/third_party/socnavbench/LICENSE",
+    "/THIRD_PARTY_NOTICES.md",
 ]
 exclude = [
     "/tests",
@@ -197,7 +211,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.1"
+required-version = "==0.16.2"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
@@ -668,7 +682,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-cov>=7.1.0",
     "scalene>=2.3.0",
-    "ruff==0.16.1",
+    "ruff==0.16.2",
     "pre-commit>=4.6.1",
     "setuptools>=83.0.0",
     "pylint>=4.0.6",

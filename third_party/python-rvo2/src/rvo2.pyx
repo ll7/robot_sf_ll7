@@ -1,4 +1,6 @@
 # distutils: language = c++
+# Robot SF local modification: expose the collaboration-coefficient API.
+
 from libcpp.vector cimport vector
 from libcpp cimport bool
 

@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json",
+  "artifact_sha256": "c55efe5f7b8157f2bd3447d9592338211e47b145ec6ebfc638c3633442f48fea",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -194,6 +194,7 @@ class CampaignConfig:
     record_forces: bool = True
     record_planner_decision_trace: bool = False
     record_simulation_step_trace: bool = False
+    telemetry: dict[str, object] | None = None
     resume: bool = True
     bootstrap_samples: int = 400
     bootstrap_confidence: float = 0.95

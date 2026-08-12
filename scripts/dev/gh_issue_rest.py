@@ -186,25 +186,63 @@ def _normalize_state(raw: Any) -> str:
     return str(raw).upper() if raw else ""
 
 
+def _validate_named_objects(value: Any, *, field: str, key: str) -> None:
+    """Validate a REST list whose entries must expose one non-empty string key."""
+    if not isinstance(value, list):
+        raise ValueError(f"issue payload {field} must be a list")
+    if any(
+        not isinstance(item, dict) or not isinstance(item.get(key), str) or not item[key]
+        for item in value
+    ):
+        raise ValueError(f"issue payload {field} must contain named objects")
+
+
+def _validate_issue_payload(raw: dict[str, Any]) -> None:
+    """Validate the required fields used by the normalized issue contract."""
+    raw_number = raw.get("number")
+    if type(raw_number) is not int or raw_number < 1:
+        raise ValueError("issue payload number must be a positive integer")
+    title = raw.get("title")
+    if not isinstance(title, str) or not title:
+        raise ValueError("issue payload title must be a non-empty string")
+    if "body" not in raw:
+        raise ValueError("issue payload body field is missing")
+    body = raw["body"]
+    if body is not None and not isinstance(body, str):
+        raise ValueError("issue payload body must be a string or null")
+    state = raw.get("state")
+    if not isinstance(state, str) or not state.strip():
+        raise ValueError("issue payload state must be a non-empty string")
+    raw_url = raw.get("html_url", raw.get("url", ""))
+    if not isinstance(raw_url, str) or not raw_url:
+        raise ValueError("issue payload html_url must be a non-empty string")
+    _validate_named_objects(raw.get("labels"), field="labels", key="name")
+    _validate_named_objects(raw.get("assignees"), field="assignees", key="login")
+    raw_user = raw.get("user")
+    if raw_user is not None and not isinstance(raw_user, dict):
+        raise ValueError("issue payload user must be an object or null")
+
+
 def _normalize_issue(raw: dict[str, Any]) -> dict[str, Any]:
     """Normalize a raw REST issue payload to the stable output shape."""
-    labels = sorted(
-        str(label.get("name", ""))
-        for label in raw.get("labels", [])
-        if isinstance(label, dict) and label.get("name")
-    )
-    assignees = sorted(
-        str(user.get("login", ""))
-        for user in raw.get("assignees", [])
-        if isinstance(user, dict) and user.get("login")
-    )
-    user = raw.get("user") or {}
+    _validate_issue_payload(raw)
+    raw_number = raw["number"]
+    title = raw["title"]
+    body = raw["body"]
+    state = raw["state"]
+    raw_url = raw.get("html_url", raw.get("url", ""))
+    raw_labels = raw["labels"]
+    raw_assignees = raw["assignees"]
+    raw_user = raw.get("user")
+    labels = sorted(label["name"] for label in raw_labels)
+    assignees = sorted(user["login"] for user in raw_assignees)
+    user = raw_user or {}
     return {
-        "number": int(raw.get("number", 0)),
-        "title": _as_str(raw.get("title")),
-        "body": _as_str(raw.get("body")),
-        "state": _normalize_state(raw.get("state", "")),
-        "url": _as_str(raw.get("html_url", raw.get("url", ""))),
+        "number": raw_number,
+        "title": title,
+        "body": _as_str(body),
+        "state": _normalize_state(state),
+        "url": raw_url,
         "user": _as_str(user.get("login") if isinstance(user, dict) else ""),
         "author_association": _as_str(raw.get("author_association")),
         "labels": labels,
@@ -244,7 +282,23 @@ def fetch_issue(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
             "status": "error",
             "error": f"issue {number} payload was not an object",
         }
-    payload = _normalize_issue(data)
+    try:
+        payload = _normalize_issue(data)
+    except (TypeError, ValueError) as exc:
+        return {
+            "number": number,
+            "status": "error",
+            "error": f"issue {number} payload is malformed: {exc}",
+        }
+    if payload["number"] != number:
+        return {
+            "number": number,
+            "status": "error",
+            "error": (
+                f"issue {number} payload is malformed: "
+                f"number does not match requested issue ({payload['number']})"
+            ),
+        }
     payload["status"] = "ok"
     return payload
 

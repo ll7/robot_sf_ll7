@@ -1227,6 +1227,67 @@ def test_issue_6820_new_non_legacy_dirty_evidence_still_rejected_alongside_legac
     assert any("absolute local filesystem paths" in m for m in messages), diagnostics
 
 
+def test_figure_render_registry_legacy_dirty_evidence_accepted(
+    tmp_path: Path,
+) -> None:
+    """The figure-render registry is accepted as legacy dirty evidence.
+
+    Regression for issue #6882: ``docs/context/figure_render_registry.v1.yaml``
+    is a tracked evidence registry that legitimately contains ``output/``
+    artifact paths from cataloged build commands.  It must be accepted when
+    marked ``legacy_dirty_evidence: true`` while new unmarked dirty entries
+    still fail.
+    """
+    repo_root = tmp_path
+    registry_dir = repo_root / "docs/context"
+    registry_dir.mkdir(parents=True)
+    registry = registry_dir / "figure_render_registry.v1.yaml"
+    registry.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- id: cmd1\n"
+        "  expected_outputs:\n"
+        "  - output/benchmarks/issue_1344\n"
+        "  classification_notes:\n"
+        "  - command writes to the untracked output/ root\n",
+        encoding="utf-8",
+    )
+
+    new_dirty = repo_root / "docs/context/evidence/new_dirty.json"
+    new_dirty.parent.mkdir(parents=True)
+    new_dirty.write_text('{"artifact": "output/run/new_result.json"}\n', encoding="utf-8")
+
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        "version: 1\n"
+        "entries:\n"
+        "- path: docs/context/figure_render_registry.v1.yaml\n"
+        "  status: evidence\n"
+        "  freshness: maintained\n"
+        "  area: workflow_evidence\n"
+        "  legacy_dirty_evidence: true\n"
+        "- path: docs/context/evidence/new_dirty.json\n"
+        "  status: evidence\n"
+        "  freshness: evidence\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    registry_msgs = [d for d in diagnostics if "figure_render_registry" in d.message]
+    output_msgs = [d for d in diagnostics if "ignored output/" in d.message]
+    assert registry_msgs == [], (
+        f"figure_render_registry must be accepted as legacy dirty evidence, "
+        f"but got: {registry_msgs}"
+    )
+    assert len(output_msgs) == 1, (
+        f"Expected exactly one diagnostic for the unmarked dirty entry, but got: {output_msgs}"
+    )
+
+
 def test_context_catalog_skips_binary_evidence_scan(tmp_path: Path) -> None:
     """Binary evidence entries should not crash text-only provenance checks."""
     repo_root = tmp_path

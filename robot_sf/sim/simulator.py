@@ -65,6 +65,7 @@ from robot_sf.ped_npc.ped_robot_force import PedRobotForce, PedRobotForceConfig
 from robot_sf.ped_npc.ped_zone import sample_zone
 from robot_sf.ped_npc.residual_adversary import (
     BoundedResidualAdversary,
+    ResidualAdversaryBehaviorSummary,
     ResidualAdversaryConfig,
     build_default_residual_adversary,
 )
@@ -614,6 +615,19 @@ class Simulator:
         robot_pose = robot_poses[0]
         residual = adversary.step_residual(positions, velocities, max_speeds, robot_pose)
         return forces_array + residual
+
+    @property
+    def residual_adversary_behavior_summary(self) -> ResidualAdversaryBehaviorSummary | None:
+        """Return an immutable diagnostic summary after lazy adversary allocation.
+
+        The property is ``None`` while the adversary is inactive or has not yet
+        processed an active non-empty crowd. The summary is diagnostic-only and is
+        not included in benchmark episode schemas.
+        """
+        if not self.config.residual_adversary.is_active:
+            return None
+        adversary = self._residual_adversary
+        return adversary.behavior_summary if adversary is not None else None
 
     def _step_pedestrians(self, ped_forces: np.ndarray, groups: list[list[int]]) -> None:
         """Advance pedestrians through the configured pedestrian-model implementation."""

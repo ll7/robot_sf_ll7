@@ -191,6 +191,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
     ),
     AlgorithmReadiness(
+        canonical_name="brne",
+        tier="experimental",
+        aliases=("brne",),
+        note=(
+            "Pinned upstream BRNE corridor-only native diagnostic; requires explicit opt-in and "
+            "is not benchmark or paper evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="guarded_ppo",
         tier="experimental",
         aliases=("guarded_ppo",),

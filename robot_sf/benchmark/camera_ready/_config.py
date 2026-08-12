@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.camera_ready._config_types import (
     _AMV_DIMENSIONS,
     _CHECKPOINT_PROVENANCE_ENFORCEMENT,
@@ -1503,6 +1504,11 @@ def _assemble_campaign_config(
         record_forces=bool(payload.get("record_forces", True)),
         record_planner_decision_trace=bool(payload.get("record_planner_decision_trace", False)),
         record_simulation_step_trace=bool(payload.get("record_simulation_step_trace", False)),
+        telemetry=(
+            normalize_telemetry_profile(payload.get("telemetry")).to_mapping()
+            if payload.get("telemetry") is not None
+            else None
+        ),
         resume=bool(payload.get("resume", True)),
         bootstrap_samples=int(payload.get("bootstrap_samples", 400)),
         bootstrap_confidence=float(payload.get("bootstrap_confidence", 0.95)),

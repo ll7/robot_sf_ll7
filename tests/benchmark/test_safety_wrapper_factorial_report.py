@@ -60,6 +60,7 @@ def _row(
                 "check for typos against the base metric set."
             )
         base_metrics.update(metrics)
+    base_metrics["wrapper_intervention_rate"] = 0.25 if enabled else 0.0
     return {
         "study_id": "issue_3501_safety_wrapper_ablation_v1",
         "planner": "orca",
@@ -151,6 +152,20 @@ def test_report_blocks_missing_primary_outcome_metric() -> None:
             "metrics": ["near_miss_probability"],
         }
     ]
+
+
+def test_report_does_not_use_legacy_root_metric_alias() -> None:
+    """A root-level legacy metric cannot replace the contract-owned metric_values field."""
+
+    rows = _complete_rows()
+    del rows[1]["metric_values"]["wrapper_intervention_rate"]  # type: ignore[index]
+    rows[1]["wrapper_intervention_rate"] = 0.25
+
+    report = build_safety_wrapper_factorial_report(rows)
+
+    assert report["status"] == "blocked"
+    assert report["reason"] == "metric_values_incomplete"
+    assert report["missing_metrics"][0]["metrics"] == ["wrapper_intervention_rate"]
 
 
 def test_write_report_outputs_expected_artifacts(tmp_path: Path) -> None:

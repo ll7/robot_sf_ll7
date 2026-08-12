@@ -517,6 +517,11 @@ def _execute_campaign_planner_batch(
     dependencies = context.dependencies
     status = "ok"
     warnings: list[str] = []
+    retained_metric_contract_kwargs = (
+        {"retained_metric_contract_path": cfg.retained_metric_contract_path}
+        if cfg.retained_metric_contract_path is not None
+        else {}
+    )
     try:
         summary = dependencies.run_batch(
             run.scoped_scenarios,
@@ -553,6 +558,7 @@ def _execute_campaign_planner_batch(
             workers=run.effective_workers,
             resume=cfg.resume,
             safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
+            **retained_metric_contract_kwargs,
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":
@@ -971,6 +977,7 @@ def _build_subprocess_arm_params(
         resume=cfg.resume,
         scoped_scenarios_path=scoped_scenarios_path,
         safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
+        retained_metric_contract_path=cfg.retained_metric_contract_path,
     )
     # The Path-typed fields on _SubprocessArmParams must be str-converted before
     # json.dumps or the handoff crashes (issue #4957); _serialize_subprocess_arm_params

@@ -3,8 +3,8 @@
   "issue": 6464,
   "status": "diagnostic_complete",
   "evidence_tier": "smoke_diagnostic",
-  "claim_boundary": "Native BRNE execution, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
-  "base_commit": "cf1ddec1c68b33320b18f4185e8cbf53727fe815",
+  "claim_boundary": "Native upstream BRNE core through the Robot SF adapter, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
+  "base_commit": "af394c62bc349d1edcaa069bbf266b2296512d34",
   "source_worktree_dirty_at_capture": true,
   "scenario": {
     "name": "classic_head_on_corridor_low",
@@ -26,6 +26,11 @@
     "enabled": false,
     "fallback_or_degraded_rows_count_as_success": false,
     "over_cap_rows_count_as_success": false
+  },
+  "reproducibility": {
+    "planner_rng": "upstream BRNE default_rng rebound from the declared episode seed at reset",
+    "exact_pair_coverage": true,
+    "runtime_failure_rows_excluded": true
   },
   "arms": {
     "brne": {
@@ -61,9 +66,11 @@
     }
   },
   "artifact": {
-    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_20260812T014200Z",
-    "report_json_sha256": "5c69e90e4173cae63e2706df14f831d3f01761c436fb161d1c99e516e809c1a1",
+    "local_report_dir": "output/benchmarks/issue_6464_brne_diagnostic_20260812T022300Z",
+    "report_json_sha256": "a9679f3aa636381d79269e6adfe1817f3c8db3d6982debe0473162ba47da9306",
+    "report_markdown_sha256": "b30a2b7ba441f4b86c558b837c8198cf8bb57f7e0bf2e811938cf36b6d8125e0",
     "raw_artifacts": "ignored_worktree_local"
   },
-  "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching before any broader or ranking campaign."
+  "follow_up_issue": 6923,
+  "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching in #6923 before any broader or ranking campaign."
 }

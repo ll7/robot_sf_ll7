@@ -4,8 +4,8 @@ Status: **diagnostic complete; no planner-ranking or benchmark claim**.
 
 BRNE (Bayesian Recursive Nash Equilibrium) now has a fail-closed map-runner
 adapter for the approved corridor-only preflight. The bounded run below proves
-that the pinned upstream core can execute through the Robot SF path and emit
-non-degenerate native actions. It does not establish safety, realism,
+that the pinned upstream core can execute through the Robot SF adapter and emit
+non-degenerate native-core actions. It does not establish safety, realism,
 matched-compute parity, planner superiority, or paper evidence.
 
 ## Frozen contract
@@ -20,8 +20,12 @@ matched-compute parity, planner superiority, or paper evidence.
 - The upstream request is `49` samples; its pinned grid produces `42` actual
   samples. The adapter records the effective count and handles the upstream
   plan-step-first tensor layout.
+- The upstream random generator is rebound from each declared episode seed at
+  planner reset, so repeated runs use the same BRNE sampling stream.
 - Fallback is disabled. Fallback, degraded, unknown, failed, over-cap, or
-  degenerate rows are unavailable rather than success evidence.
+  degenerate rows are unavailable rather than success evidence. Solver stop
+  actions carry runtime failure provenance and are excluded even when the
+  trace has non-zero displacement.
 
 ## Observed result
 
@@ -34,8 +38,9 @@ paired diagnostic coverage only; they are not a ranking or benchmark result.
 | ORCA comparator | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 0 | 0 | 0 |
 | Social-force comparator | 3/3 | 3/3 | 3/3 | 2/3 | 3/3 | 0 | 0 | 0 |
 
-The principal finding is therefore bounded and mixed: BRNE executed natively
-with non-zero motion and stayed inside the declared corridor, but reached the
+The principal finding is therefore bounded and mixed: the native upstream BRNE
+core executed through the Robot SF adapter with non-zero motion and stayed
+inside the declared corridor, but reached the
 goal in none of the three predeclared episodes. This is a hypothesis signal,
 not evidence to widen the scenario class or promote the planner.
 
@@ -49,8 +54,14 @@ not evidence to widen the scenario class or promote the planner.
    correctly classified as incomplete.
 2. The upstream sample generator can return fewer samples than requested and
    returns plan-step-first action tensors. The source wrapper now sizes its
-   arrays from the effective upstream count and aggregates both the pinned
-   layout and the legacy test fixture layout fail-closed.
+   arrays from the effective upstream count and normalizes both the pinned
+   plan-step-first layout and the legacy samples-first fixture layout fail-closed.
+3. The SocNav observation contract stores pedestrian velocities in robot-ego
+   coordinates. The BRNE bridge rotates them back to world coordinates before
+   prediction and preserves the declared robot heading when it is available.
+4. Report completion requires unique exact scenario/seed pairs. Goal-reaching
+   counts are restricted to eligible rows; unavailable rows are retained only
+   as explicit diagnostics.
 
 ## Reproduction and evidence
 
@@ -65,17 +76,20 @@ uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
 ```
 
 The corrected local report was written to
-`output/benchmarks/issue_6464_brne_diagnostic_20260812T014200Z/` and has
+`output/benchmarks/issue_6464_brne_diagnostic_20260812T022300Z/` and has
 report JSON SHA-256
-`5c69e90e4173cae63e2706df14f831d3f01761c436fb161d1c99e516e809c1a1`.
+`a9679f3aa636381d79269e6adfe1817f3c8db3d6982debe0473162ba47da9306`.
+The report's episode provenance records implementation commit
+`af394c62bc349d1edcaa069bbf266b2296512d34`.
 Raw episode files and the staged GPL source remain ignored, worktree-local
 artifacts. The compact evidence handoff is tracked in
 `docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json`.
 
 ## Next decision
 
-Open a separate hypothesis-driven diagnostic for the `0/3` BRNE goal-reaching
-result before any broader campaign. Candidate checks are goal/heading frame
-alignment, progress-versus-interaction weighting, and whether the pinned
-upstream action aggregation is appropriate for this control loop. Any follow-up
-must preserve the same native-only, corridor-only, fail-closed boundary.
+Open follow-up issue [#6923](https://github.com/ll7/robot_sf_ll7/issues/6923)
+for a hypothesis-driven diagnostic of the `0/3` BRNE goal-reaching result before
+any broader campaign. Candidate checks are goal/heading frame alignment,
+progress-versus-interaction weighting, and whether the pinned upstream action
+aggregation is appropriate for this control loop. The follow-up preserves the
+same native-core-via-adapter, corridor-only, fail-closed boundary.

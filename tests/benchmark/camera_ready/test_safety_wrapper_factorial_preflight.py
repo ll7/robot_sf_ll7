@@ -330,6 +330,7 @@ class TestSafetyWrapperWorkerExecutionPath:
             return {"status": "ok"}
 
         with (
+            patch("loguru.logger"),
             patch.object(
                 resource_lifecycle,
                 "_run_single_arm_subprocess",

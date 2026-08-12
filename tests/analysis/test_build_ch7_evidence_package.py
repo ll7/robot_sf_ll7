@@ -227,10 +227,13 @@ def _make_compact(tmp_path: Path, source_digest: str) -> Path:
                         "retrieval_key": f"issue6814/full/pair-{i}",
                         "sha256": f"{i + 11:064x}",
                     },
-                    "pair_compatibility": {},
+                    "pair_compatibility": {
+                        "status": "incompatible",
+                        "shared_prefix": {"shared_prefix": False},
+                    },
                     "semantic_inputs": {},
                     "process_validation": {},
-                    "renderer_admission": {},
+                    "renderer_admission": {"disposition": "unsupported"},
                 }
                 for i in range(2)
             ],
@@ -250,6 +253,14 @@ def _make_compact(tmp_path: Path, source_digest: str) -> Path:
 def fixture_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     source, source_digest = _make_source(tmp_path)
     archive, archive_digest = _make_release(tmp_path)
+    mapping_path = source / "mapping_receipt.json"
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    mapping["provenance"] = {
+        "release_bundle_sha256": archive_digest,
+        "release_tag": "0.0.3",
+    }
+    _write_json(mapping_path, mapping)
+    source_digest = _write_sums(source)
     compact = _make_compact(tmp_path, source_digest)
     portfolio = tmp_path / "portfolio.yaml"
     portfolio.write_text(
@@ -390,6 +401,41 @@ def test_compact_schema_and_checksum_path_are_fail_closed(
         )
 
 
+def test_compact_unsupported_semantics_are_fail_closed(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    compact = fixture_inputs["compact"]
+    payload_path = compact / "compact_packet.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["pairs"][0]["renderer_admission"]["disposition"] = "supported"
+    _write_json(payload_path, payload)
+    _write_sums(compact)
+    with pytest.raises(builder.Ch7EvidencePackageError, match="renderer admission"):
+        builder.build_ch7_evidence_package(
+            source_package=fixture_inputs["source"],
+            release_archive=fixture_inputs["archive"],
+            issue6814_compact=compact,
+            output=tmp_path / "package",
+            portfolio_config=fixture_inputs["portfolio"],
+        )
+
+
+def test_unlisted_package_complete_requires_binding(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    source = fixture_inputs["source"]
+    entries = [
+        line
+        for line in (source / "SHA256SUMS").read_text(encoding="ascii").splitlines()
+        if not line.endswith("  package_complete.json")
+    ]
+    sums_path = source / "SHA256SUMS"
+    sums_path.write_text("\n".join(entries) + "\n", encoding="ascii")
+    digest = _sha256(sums_path)
+    with pytest.raises(builder.Ch7EvidencePackageError, match="package_complete"):
+        builder.verify_source_package(source, digest)
+
+
 def test_frozen_portfolio_mutation_is_rejected(
     fixture_inputs: dict[str, Path], tmp_path: Path
 ) -> None:
@@ -409,3 +455,48 @@ def test_frozen_portfolio_mutation_is_rejected(
             output=tmp_path / "package",
             portfolio_config=portfolio,
         )
+
+
+def test_source_release_provenance_is_required(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    mapping_path = fixture_inputs["source"] / "mapping_receipt.json"
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    mapping.pop("provenance")
+    _write_json(mapping_path, mapping)
+    digest = _write_sums(fixture_inputs["source"])
+    with pytest.raises(builder.Ch7EvidencePackageError, match="provenance"):
+        builder.verify_source_package(fixture_inputs["source"], digest)
+
+
+def test_duplicate_selected_cell_is_rejected(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    # Exercise the selection gate directly so the fixture remains small and deterministic.
+    cells = [
+        {"scenario_id": "classic_realworld_double_bottleneck_high", "planner_key": "ppo"},
+        {"scenario_id": "classic_realworld_double_bottleneck_high", "planner_key": "ppo"},
+    ]
+    with pytest.raises(builder.Ch7EvidencePackageError, match="duplicate"):
+        builder._validate_selected_cells(cells)
+
+
+def test_selected_cell_matrix_and_denominator_are_fail_closed() -> None:
+    cells = [
+        {"scenario_id": scenario, "planner_key": planner, "episodes": 30}
+        for scenario in builder.REQUIRED_SCENARIOS[:2]
+        for planner in ("ppo", *builder.HYBRID_ARMS)
+    ]
+    cells.extend(
+        {
+            "scenario_id": builder.REQUIRED_SCENARIOS[2],
+            "planner_key": planner,
+            "episodes": 30,
+        }
+        for planner in builder.DOORWAY_ARMS
+    )
+    with pytest.raises(builder.Ch7EvidencePackageError, match="does not match"):
+        builder._validate_selected_cells(cells[:-1])
+    cells[-1]["episodes"] = 29
+    with pytest.raises(builder.Ch7EvidencePackageError, match="exactly 30"):
+        builder._validate_selected_cells(cells)

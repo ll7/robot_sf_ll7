@@ -12,7 +12,10 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 import shutil
+import struct
+import subprocess
 import tarfile
 import tempfile
 from collections import Counter, defaultdict
@@ -28,6 +31,7 @@ COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
 PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
 EXPECTED_SOURCE_SHA256SUMS = "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 EXPECTED_RELEASE_ARCHIVE_SHA256 = "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_CONFIG = Path("configs/analysis/ch7_evidence_package.v1.yaml")
 REQUIRED_SCENARIOS = (
     "classic_realworld_double_bottleneck_high",
@@ -134,7 +138,7 @@ def _parse_sha256sums(path: Path) -> list[tuple[str, str]]:
     return entries
 
 
-def verify_source_package(  # noqa: C901
+def verify_source_package(  # noqa: C901, PLR0912
     source_package: Path, expected_sha256sums: str
 ) -> dict[str, Any]:
     """Verify every source-package member and return compact source metadata."""
@@ -150,11 +154,22 @@ def verify_source_package(  # noqa: C901
     paths = [relative for _expected, relative in entries]
     if len(paths) != len(set(paths)):
         raise Ch7EvidencePackageError("approved source SHA256SUMS contains duplicate paths")
-    required_members = {"package_manifest.json", "mapping_receipt.json"}
+    required_members = {"package_manifest.json", "mapping_receipt.json", "package_complete.json"}
     if not required_members.issubset(paths):
-        raise Ch7EvidencePackageError("approved source SHA256SUMS omits required metadata")
-    if not (source_package / "package_complete.json").is_file():
-        raise Ch7EvidencePackageError("approved source package_complete.json is missing")
+        # The approved historical #6412 package carries package_complete.json with an
+        # internal binding to this exact SHA256SUMS, although that file predates the
+        # pinned ledger and is not itself listed.  Preserve that reviewed exception;
+        # every other source must list all canonical metadata.
+        if "package_complete.json" not in paths:
+            package_complete_path = source_package / "package_complete.json"
+            if (
+                expected_sha256sums != EXPECTED_SOURCE_SHA256SUMS
+                or not package_complete_path.is_file()
+                or _read_json(package_complete_path).get("sha256sums_sha256") != expected_sha256sums
+            ):
+                raise Ch7EvidencePackageError(
+                    "approved source SHA256SUMS omits required package_complete metadata"
+                )
     for expected, relative in entries:
         member = source_package / relative
         if not member.is_file() or _sha256_file(member) != expected:
@@ -166,11 +181,11 @@ def verify_source_package(  # noqa: C901
         or package_manifest.get("visualization_only") is not True
     ):
         raise Ch7EvidencePackageError("source package must remain visualization-only")
-    if (
-        package_complete.get("sha256sums_sha256") is not None
-        and package_complete.get("sha256sums_sha256") != expected_sha256sums
-    ):
+    package_complete_binding = package_complete.get("sha256sums_sha256")
+    if package_complete_binding is not None and package_complete_binding != expected_sha256sums:
         raise Ch7EvidencePackageError("package_complete does not bind the approved SHA256SUMS")
+    if "package_complete.json" not in paths and package_complete_binding != expected_sha256sums:
+        raise Ch7EvidencePackageError("unlisted package_complete must bind the approved SHA256SUMS")
     counts = {
         "requested": package_manifest.get("n_requested"),
         "admitted": package_manifest.get("n_admitted"),
@@ -179,6 +194,14 @@ def verify_source_package(  # noqa: C901
     if counts != {"requested": 90, "admitted": 88, "excluded": 2}:
         raise Ch7EvidencePackageError(f"unexpected source mapping counts: {counts}")
     mapping = _read_json(source_package / "mapping_receipt.json")
+    provenance = mapping.get("provenance")
+    if not isinstance(provenance, Mapping):
+        raise Ch7EvidencePackageError("source mapping provenance is missing")
+    release_digest = provenance.get("release_bundle_sha256")
+    if not isinstance(release_digest, str) or not _SHA256_RE.fullmatch(release_digest):
+        raise Ch7EvidencePackageError("source mapping release provenance is incomplete")
+    if provenance.get("release_tag") != "0.0.3":
+        raise Ch7EvidencePackageError("source mapping release tag is missing or unexpected")
     rows = mapping.get("rows")
     if mapping.get("n_rows") != 90 or not isinstance(rows, list) or len(rows) != 90:
         raise Ch7EvidencePackageError("source mapping receipt is not the complete 90-row ledger")
@@ -476,6 +499,65 @@ def _selected_rows(
     return selected
 
 
+def _validate_selected_cells(selected: Sequence[Mapping[str, Any]]) -> None:
+    """Require the frozen 20-cell Chapter 7 projection exactly once."""
+
+    keys = [(str(row["scenario_id"]), str(row["planner_key"])) for row in selected]
+    if len(keys) != len(set(keys)):
+        raise Ch7EvidencePackageError(
+            "selected release atlas contains duplicate scenario/planner cells"
+        )
+    expected = {
+        (scenario, planner)
+        for scenario in REQUIRED_SCENARIOS[:2]
+        for planner in ("ppo", *HYBRID_ARMS)
+    }
+    expected.update((REQUIRED_SCENARIOS[2], planner) for planner in DOORWAY_ARMS)
+    if set(keys) != expected:
+        missing = sorted(expected - set(keys))
+        extra = sorted(set(keys) - expected)
+        raise Ch7EvidencePackageError(
+            f"selected release atlas does not match frozen 20-cell projection; missing={missing}, extra={extra}"
+        )
+    if any(row.get("episodes") != 30 for row in selected):
+        raise Ch7EvidencePackageError(
+            "selected release atlas must contain exactly 30 episodes per cell"
+        )
+
+
+def _validate_compact_semantics(compact: Mapping[str, Any]) -> None:
+    """Require the compact packet to preserve its unsupported evidence boundary."""
+
+    contracts = compact.get("source_contracts")
+    if not isinstance(contracts, list) or any(
+        not isinstance(contract, Mapping) or contract.get("status") != "unsupported"
+        for contract in contracts
+    ):
+        raise Ch7EvidencePackageError("#6814 compact source contracts must all remain unsupported")
+    pairs = compact.get("pairs")
+    if not isinstance(pairs, list) or len(pairs) != 2:
+        raise Ch7EvidencePackageError("#6814 compact packet must contain two pair receipts")
+    for pair in pairs:
+        if not isinstance(pair, Mapping):
+            raise Ch7EvidencePackageError("#6814 compact pair receipt is malformed")
+        compatibility = pair.get("pair_compatibility")
+        renderer = pair.get("renderer_admission")
+        if not isinstance(compatibility, Mapping) or compatibility.get("status") != "incompatible":
+            raise Ch7EvidencePackageError(
+                "#6814 compact pair compatibility must remain incompatible"
+            )
+        shared_prefix = compatibility.get("shared_prefix")
+        if (
+            not isinstance(shared_prefix, Mapping)
+            or shared_prefix.get("shared_prefix") is not False
+        ):
+            raise Ch7EvidencePackageError("#6814 compact pair must preserve shared_prefix=false")
+        if not isinstance(renderer, Mapping) or renderer.get("disposition") != "unsupported":
+            raise Ch7EvidencePackageError(
+                "#6814 compact renderer admission must remain unsupported"
+            )
+
+
 def _mapping_projection(mapping: Mapping[str, Any]) -> dict[str, Any]:
     rows = mapping.get("rows")
     if not isinstance(rows, list):
@@ -541,6 +623,36 @@ def _sidecar(
         "causal_language_allowed": False,
         "dtw_used": False,
     }
+
+
+def _inspect_rendered_pdf(path_pdf: Path) -> tuple[int, int]:
+    """Rasterize one PDF page and enforce a final-width inspection minimum."""
+
+    pdftoppm = shutil.which("pdftoppm")
+    if pdftoppm is None:
+        raise Ch7EvidencePackageError("pdftoppm is required for rendered-page QA")
+    with tempfile.TemporaryDirectory(prefix="ch7-figure-qa-") as qa_root:
+        prefix = Path(qa_root) / "page"
+        try:
+            subprocess.run(
+                [pdftoppm, "-png", "-singlefile", "-r", "150", str(path_pdf), str(prefix)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise Ch7EvidencePackageError("rendered-page PDF rasterization failed") from exc
+        raster = prefix.with_suffix(".png")
+        if not raster.is_file() or raster.stat().st_size < 1024:
+            raise Ch7EvidencePackageError("rendered-page raster is missing or implausibly small")
+        with raster.open("rb") as stream:
+            header = stream.read(24)
+        if header[:8] != b"\x89PNG\r\n\x1a\n":
+            raise Ch7EvidencePackageError("rendered-page raster is not a PNG")
+        width, height = struct.unpack(">II", header[16:24])
+        if width < 800 or height < 800:
+            raise Ch7EvidencePackageError("rendered-page raster is below final-width QA resolution")
+        return width, height
 
 
 def _render_figure(
@@ -639,6 +751,7 @@ def _render_figure(
         "\n".join(line.rstrip() for line in svg_text.splitlines()) + "\n",
         encoding="utf-8",
     )
+    width, height = _inspect_rendered_pdf(path_pdf)
     plt.close(figure)
     luminances = {
         label: (
@@ -668,8 +781,10 @@ def _render_figure(
         "greyscale_review": {"status": "passed", "method": "palette_luminance_check"},
         "rendered_page_inspection": {
             "status": "passed",
-            "method": "final_width_raster_inspection",
+            "method": "pdftoppm_png_dimension_check",
             "page_count": 1,
+            "raster_width_px": width,
+            "raster_height_px": height,
         },
     }
 
@@ -737,32 +852,32 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
         raise Ch7EvidencePackageError("#6814 compact source digest does not match approved package")
     if not all(value is True for value in compact["check_results"].values()):
         raise Ch7EvidencePackageError("#6814 compact integrity checks are not all passed")
+    _validate_compact_semantics(compact)
     portfolio = _load_portfolio_contract(portfolio_config)
     payload, release_temp, release = verify_release_archive(
         release_archive, EXPECTED_RELEASE_ARCHIVE_SHA256
     )
     try:
-        provenance = source["mapping"].get("provenance")
-        if isinstance(provenance, Mapping):
-            if (
-                provenance.get("release_bundle_sha256") is not None
-                and provenance.get("release_bundle_sha256") != release["archive_sha256"]
-            ):
-                raise Ch7EvidencePackageError(
-                    "source mapping release digest does not match verified release archive"
-                )
-            if (
-                provenance.get("release_tag") is not None
-                and provenance.get("release_tag") != release["release_tag"]
-            ):
-                raise Ch7EvidencePackageError("source mapping release tag does not match archive")
+        provenance = source["mapping"]["provenance"]
+        if provenance["release_bundle_sha256"] != release["archive_sha256"]:
+            raise Ch7EvidencePackageError(
+                "source mapping release digest does not match verified release archive"
+            )
+        if provenance["release_tag"] != release["release_tag"]:
+            raise Ch7EvidencePackageError("source mapping release tag does not match archive")
         arm_context = _arm_context(payload)
         cells = _cell_rows(payload, arm_context)
         terminal = _episode_terminal_counts(payload, REQUIRED_SCENARIOS)
         selected = _selected_rows(cells, terminal, portfolio)
         if not selected:
             raise Ch7EvidencePackageError("no Chapter 7 release cells selected")
+        _validate_selected_cells(selected)
         for cell in selected:
+            if cell["episodes"] != 30:
+                raise Ch7EvidencePackageError(
+                    "release cell does not have the canonical 30-episode denominator: "
+                    f"{cell['scenario_id']}/{cell['planner_key']} episodes={cell['episodes']}"
+                )
             observed = sum(terminal.get((cell["scenario_id"], cell["planner_key"]), {}).values())
             if observed != cell["episodes"]:
                 raise Ch7EvidencePackageError(
@@ -843,7 +958,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
             blind_hybrid = success_count("francis2023_blind_corner", HYBRID_ARMS[0])
             claim_double = (
                 "Across the observed release cells, the selected hybrid arm completes the double-bottleneck cell "
-                f"at {double_hybrid}/{next(item['episodes'] for item in selected if item['scenario_id'] == 'classic_realworld_double_bottleneck_high' and item['planner_key'] == HYBRID_ARMS[0])} episodes while PPO completes {double_ppo}/30; "
+                f"at {double_hybrid}/30 episodes while PPO completes {double_ppo}/30; "
                 f"in the blind-corner cell PPO completes {blind_ppo}/30 while the selected hybrid arm completes {blind_hybrid}/30. "
                 "This is a cross-cell descriptive inversion, not a causal mechanism or universal ranking."
             )

@@ -1244,6 +1244,7 @@ def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
     packet_root = packet_root.resolve()
     manifest_path = packet_root / "packet_manifest.json"
     manifest = _read_json_object(manifest_path)
+    _schema_validate(manifest, "issue_6814_packet_manifest.v1.json")
     if manifest.get("schema_version") != PACKET_MANIFEST_SCHEMA or manifest.get("issue") != ISSUE:
         raise Issue6814Error("packet manifest is not the approved issue #6814 schema")
     source_package = manifest.get("source_package")
@@ -1271,6 +1272,16 @@ def build_issue_6814_compact_projection(packet_root: Path) -> dict[str, Any]:
         raise Issue6814Error("packet source-contract index is incomplete")
     if not isinstance(indexed_pairs, list) or len(indexed_pairs) != 2:
         raise Issue6814Error("packet pair-receipt index is incomplete")
+    expected_source_paths = {
+        f"source_contracts/{identity.arm}_{identity.seed}.json"
+        for identity in SELECTED_TRACE_IDENTITIES
+    }
+    source_index_paths = {item.get("path") for item in indexed_sources if isinstance(item, Mapping)}
+    if source_index_paths != expected_source_paths:
+        raise Issue6814Error("packet source-contract index does not match approved identities")
+    pair_index_paths = [item.get("path") for item in indexed_pairs if isinstance(item, Mapping)]
+    if len(pair_index_paths) != len(set(pair_index_paths)):
+        raise Issue6814Error("packet pair-receipt index contains duplicate paths")
     manifest_sha256 = sha256_file(manifest_path)
     source_contracts = []
     for item in indexed_sources:

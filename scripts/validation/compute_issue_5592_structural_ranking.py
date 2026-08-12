@@ -32,7 +32,8 @@ tied class outperformed the other.
 Metric cells are parsed from their decimal representation and compared with exact rational
 means, so mathematically equal decimal inputs cannot become rank differences through binary
 floating-point summation. Unit-interval rates are validated, execution metadata must identify
-an ``ok`` native row, and optional SNQI is averaged over the finite values that are present.
+an ``ok`` row from an eligible native, adapter, or mixed execution, and optional SNQI is
+averaged over the finite values that are present.
 Missing SNQI is never imputed as a performance value or used to break a primary-metric tie.
 """
 
@@ -52,6 +53,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from scripts.validation.issue_5592_diagnostics import format_fail_closed_warning
+from scripts.validation.run_issue_5592_cross_matrix import ELIGIBLE_EXECUTION_MODES
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -201,13 +203,13 @@ def _metadata_ineligibility_reason(metadata: Any) -> str | None:
     if not isinstance(kinematics, Mapping):
         return "algorithm_metadata.planner_kinematics is missing or malformed"
     execution_mode = _normalise_status(kinematics.get("execution_mode"))
-    if execution_mode != "native":
+    if execution_mode not in ELIGIBLE_EXECUTION_MODES:
         return f"algorithm_metadata.planner_kinematics.execution_mode={execution_mode!r}"
     availability_status = _normalise_status(metadata.get("availability_status"))
     if availability_status and availability_status != "available":
         return f"algorithm_metadata.availability_status={availability_status!r}"
     readiness_status = _normalise_status(metadata.get("readiness_status"))
-    if readiness_status and readiness_status != "native":
+    if readiness_status and readiness_status not in ELIGIBLE_EXECUTION_MODES:
         return f"algorithm_metadata.readiness_status={readiness_status!r}"
     for key in ("readiness_status", "preflight_status"):
         value = _normalise_status(metadata.get(key))
@@ -239,7 +241,7 @@ def _flat_metadata_ineligibility_reason(
         return f"algorithm_metadata.status={_normalise_status(status_raw)!r}"
     if not mode_present or not _normalise_status(mode_raw):
         return "algorithm_metadata.planner_kinematics.execution_mode is missing or blank"
-    if _normalise_status(mode_raw) != "native":
+    if _normalise_status(mode_raw) not in ELIGIBLE_EXECUTION_MODES:
         return (
             f"algorithm_metadata.planner_kinematics.execution_mode={_normalise_status(mode_raw)!r}"
         )
@@ -249,7 +251,7 @@ def _flat_metadata_ineligibility_reason(
             return f"algorithm_metadata.availability_status={availability!r}"
     if readiness_present:
         readiness = _normalise_status(readiness_raw)
-        if not readiness or readiness != "native":
+        if not readiness or readiness not in ELIGIBLE_EXECUTION_MODES:
             return f"algorithm_metadata.readiness_status={readiness!r}"
     return None
 
@@ -296,12 +298,12 @@ def _flat_metadata_consistency_reason(
 
 
 def _ineligible_execution_reason(row: Mapping[str, Any]) -> str | None:
-    """Return the reason a row cannot enter the native ranking, if any.
+    """Return the reason a row cannot enter the structural ranking, if any.
 
     Campaign aggregates may preserve the nested ``algorithm_metadata`` object or
     expose its fields in flattened CSV columns. Either representation must carry
-    an explicit successful native-execution declaration; absent or blank metadata
-    is not treated as an eligible default.
+    an explicit successful native, adapter, or mixed execution declaration; absent
+    or blank metadata is not treated as an eligible default.
     """
     for key in (
         "status",

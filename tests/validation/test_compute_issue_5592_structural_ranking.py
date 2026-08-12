@@ -418,9 +418,9 @@ def test_rejects_nested_invalid_execution_metadata() -> None:
         metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
 
-@pytest.mark.parametrize("execution_mode", ["", "adapter", "mixed", "unknown", "fallback"])
-def test_rejects_missing_or_non_native_flat_execution_metadata(execution_mode: str) -> None:
-    """Flat campaign metadata must explicitly identify native execution."""
+@pytest.mark.parametrize("execution_mode", ["", "unknown", "fallback"])
+def test_rejects_missing_or_ineligible_flat_execution_metadata(execution_mode: str) -> None:
+    """Flat campaign metadata must explicitly identify eligible execution."""
     planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
     rows = _identical_dyadic_rows(sorted(planner_to_class))
     rows[0]["execution_mode"] = execution_mode
@@ -467,16 +467,35 @@ def test_accepts_json_encoded_native_metadata_from_csv(tmp_path: Path) -> None:
     assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
 
 
-def test_accepts_complete_native_execution_metadata() -> None:
-    """Valid native metadata remains eligible when the aggregate carries it."""
+@pytest.mark.parametrize("execution_mode", ["native", "adapter", "mixed"])
+def test_accepts_complete_eligible_execution_metadata(execution_mode: str) -> None:
+    """Valid native, adapter, and mixed metadata remains eligible."""
     planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
     rows = _identical_dyadic_rows(sorted(planner_to_class))
     for row in rows:
+        row.pop("algorithm_metadata_status")
+        row.pop("execution_mode")
+        row.pop("availability_status")
+        row.pop("readiness_status")
         row["algorithm_metadata"] = {
             "status": "ok",
             "availability_status": "available",
-            "planner_kinematics": {"execution_mode": "native"},
+            "readiness_status": execution_mode,
+            "planner_kinematics": {"execution_mode": execution_mode},
         }
+
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+@pytest.mark.parametrize("execution_mode", ["adapter", "mixed"])
+def test_accepts_flat_eligible_execution_metadata(execution_mode: str) -> None:
+    """Flattened aggregate metadata accepts canonical adapter and mixed rows."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    rows[0]["execution_mode"] = execution_mode
+    rows[0]["readiness_status"] = execution_mode
 
     ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
 
@@ -620,6 +639,6 @@ def test_cli_rejection_is_prominent_and_actionable(tmp_path: Path, capsys) -> No
     assert "fallback" in captured.err
     assert "RECOMMENDED FIX - REQUIRED BEFORE RERUN:" in captured.err
     assert "do not hand-edit a rank" in captured.err
-    assert "execution_mode=native" in captured.err
+    assert "execution_mode as native, adapter," in captured.err
     assert "Exit code remains non-zero by design" in captured.err
     assert not output.exists()

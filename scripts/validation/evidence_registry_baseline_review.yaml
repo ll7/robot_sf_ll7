@@ -19,8 +19,8 @@ latest_reviewed_date: 2026-08-12
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 419
-refreshed_baseline_files_with_findings: 91
+refreshed_baseline_total_findings: 421
+refreshed_baseline_files_with_findings: 93
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -176,11 +176,13 @@ reviewed_files:
       Campaign atlas catalog references untracked atlas caption/provenance/summary/svg artifacts
       and a /tmp inventory path; artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_summary.json
-    codes: [missing_commit, missing_config_path, missing_config_sha256]
+    codes: [duplicate_campaign_id, missing_commit, missing_config_path, missing_config_sha256]
     disposition: baseline
     reason: >-
       Campaign atlas summary record lacks the producing commit and producing config provenance;
-      provenance-backfill-required legacy debt.
+      provenance-backfill-required legacy debt. The Chapter 7 package deliberately retains the
+      same source campaign identity and records it as `source_campaign_id`; this duplicate is a
+      cross-bundle identity reference, not an independent campaign replication.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml
     codes: [uncommitted_artifact_missing_location]
     disposition: baseline
@@ -315,3 +317,19 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      The blocked #6792 package records the digest of the approved external source package. The
+      source is intentionally outside Git and independently verified by its exact SHA256SUMS
+      digest; the generic registry linter cannot bind this external hash to a repository path.
+      The package remains visualization-only and domain approval is still pending.
+  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/materialization_overlay.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The materialization overlay intentionally records the frozen external portfolio contract
+      and configuration digest without copying that source into the evidence package. The
+      package is not admitted evidence; source and portfolio digests are verified by the builder
+      and issue checkpoint rather than by a repository-relative artifact path.

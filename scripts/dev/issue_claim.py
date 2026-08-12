@@ -21,6 +21,11 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_SOURCE_REF = "origin/main"
 CLAIM_PREFIX = "agent-claims"
 ISSUE_RE = re.compile(r"^[1-9][0-9]*$")
+ISSUE_COVERAGE_REFERENCE = re.compile(
+    r"(?i)\b(?P<verb>refs?|references?|close(?:s|d)?|fix(?:es|ed)?|"
+    r"resolve(?:s|d)?|implement(?:s|ed)?)\s*:?[ \t]*`?#(?P<issue>\d+)\b`?"
+)
+TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned"})
 
 
 @dataclass(frozen=True)
@@ -86,9 +91,117 @@ def build_acquire_command(issue_number: int, *, repo: str, sha: str) -> list[str
     ]
 
 
-def build_release_command(issue_number: int, *, remote: str) -> list[str]:
-    """Build the command that deletes a remote claim ref."""
-    return ["git", "push", remote, f":{claim_ref(issue_number)}"]
+def build_release_command(issue_number: int, *, remote: str, expected_sha: str) -> list[str]:
+    """Build a compare-and-delete command for the observed remote claim ref."""
+    return [
+        "git",
+        "push",
+        f"--force-with-lease={claim_ref(issue_number)}:{expected_sha}",
+        remote,
+        f":{claim_ref(issue_number)}",
+    ]
+
+
+def build_open_pr_command(*, repo: str) -> list[str]:
+    """Build the read-only open-PR query used by terminal claim release."""
+    return [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        repo,
+        "--state",
+        "open",
+        "--limit",
+        "500",
+        "--json",
+        "number,body,closingIssuesReferences",
+    ]
+
+
+def _validate_open_pr_reference(
+    reference: Any, *, row_index: int, reference_index: int
+) -> tuple[int | None, str | None]:
+    """Validate one closing-issue reference from the GitHub CLI response."""
+    if not isinstance(reference, dict):
+        return None, f"open PR row {row_index} reference {reference_index} is not an object"
+    reference_number = reference.get("number")
+    if (
+        not isinstance(reference_number, int)
+        or isinstance(reference_number, bool)
+        or reference_number <= 0
+    ):
+        return (
+            None,
+            f"open PR row {row_index} reference {reference_index} has an invalid number",
+        )
+    return reference_number, None
+
+
+def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
+    """Validate one open-PR row before using it for claim-release safety."""
+    if not isinstance(row, dict):
+        return {"ok": False, "error": f"open PR row {index} is not an object"}
+    raw_number = row.get("number")
+    if not isinstance(raw_number, int) or isinstance(raw_number, bool) or raw_number <= 0:
+        return {"ok": False, "error": f"open PR row {index} has an invalid number"}
+    body = row.get("body")
+    if not isinstance(body, str):
+        return {"ok": False, "error": f"open PR row {index} has an invalid body"}
+    references = row.get("closingIssuesReferences")
+    if not isinstance(references, list):
+        return {
+            "ok": False,
+            "error": f"open PR row {index} has invalid closing issue references",
+        }
+    reference_numbers: list[int] = []
+    for reference_index, reference in enumerate(references):
+        reference_number, error = _validate_open_pr_reference(
+            reference, row_index=index, reference_index=reference_index
+        )
+        if error is not None:
+            return {"ok": False, "error": error}
+        reference_numbers.append(reference_number)
+    return {
+        "ok": True,
+        "number": raw_number,
+        "body": body,
+        "reference_numbers": reference_numbers,
+    }
+
+
+def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
+    """Parse one authoritative open-PR response for explicit issue coverage."""
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "covering_prs": [],
+            "error": (result.stderr or result.stdout).strip(),
+        }
+    raw_payload = result.stdout.strip()
+    if not raw_payload:
+        return {"ok": False, "covering_prs": [], "error": "open PR response is empty"}
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError as exc:
+        return {"ok": False, "covering_prs": [], "error": str(exc)}
+    if not isinstance(payload, list):
+        return {"ok": False, "covering_prs": [], "error": "open PR response is not a list"}
+    covering: set[int] = set()
+    for index, row in enumerate(payload):
+        validated = _validate_open_pr_row(row, index=index)
+        if not validated["ok"]:
+            return {"ok": False, "covering_prs": [], "error": validated["error"]}
+        number = validated["number"]
+        if int(issue_number) in validated["reference_numbers"]:
+            covering.add(number)
+            continue
+        if any(
+            int(match.group("issue")) == int(issue_number)
+            for match in ISSUE_COVERAGE_REFERENCE.finditer(validated["body"])
+        ):
+            covering.add(number)
+    return {"ok": True, "covering_prs": sorted(covering), "error": None}
 
 
 def _status_from_ls_remote(
@@ -197,8 +310,14 @@ def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str)
     }
 
 
-def release_issue(issue_number: int, *, remote: str) -> dict[str, Any]:
-    """Delete the remote claim ref."""
+def release_issue(
+    issue_number: int,
+    *,
+    remote: str,
+    repo: str = DEFAULT_REPO,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Release a claim only after a terminal lifecycle reason is supplied."""
     status = status_issue(issue_number, remote=remote)
     if status["ok"] and not status["claimed"]:
         return {
@@ -213,9 +332,105 @@ def release_issue(issue_number: int, *, remote: str) -> dict[str, Any]:
             "stdout": "Ref does not exist, nothing to release.",
             "stderr": "",
             "error": None,
+            "release_class": "terminal",
+            "reason": reason,
         }
 
-    result = _run(build_release_command(issue_number, remote=remote))
+    if not status["ok"]:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": None,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": status.get("error", ""),
+            "error": "claim_status_unavailable; do not release an unknown claim",
+            "release_class": None,
+            "reason": reason,
+        }
+
+    if reason not in TERMINAL_RELEASE_REASONS:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "terminal_release_reason_required",
+            "release_class": None,
+            "reason": reason,
+        }
+
+    observed_sha = status.get("sha")
+    if not isinstance(observed_sha, str) or not observed_sha:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": None,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "claim_status_missing_sha; do not release an unknown claim",
+            "release_class": None,
+            "reason": reason,
+        }
+
+    open_prs = _run(build_open_pr_command(repo=repo))
+    coverage = _open_prs_covering_issue(open_prs, issue_number=issue_number)
+    if not coverage["ok"]:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": coverage["error"],
+            "error": "open_pr_snapshot_unavailable; retain the claim",
+            "release_class": None,
+            "reason": reason,
+            "covering_prs": [],
+        }
+    if coverage["covering_prs"]:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "",
+            "error": "open_covering_pr_exists; retain the claim until the PR reaches a terminal state",
+            "release_class": None,
+            "reason": reason,
+            "covering_prs": coverage["covering_prs"],
+        }
+
+    result = _run(build_release_command(issue_number, remote=remote, expected_sha=observed_sha))
     ok = result.returncode == 0
     return {
         "schema": "issue_claim.v1",
@@ -231,6 +446,9 @@ def release_issue(issue_number: int, *, remote: str) -> dict[str, Any]:
         "error": None
         if ok
         else "claim_ref_release_failed; inspect remote branch state before retrying",
+        "release_class": "terminal" if ok else None,
+        "reason": reason,
+        "covering_prs": [],
     }
 
 
@@ -245,6 +463,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--source-ref",
         default=DEFAULT_SOURCE_REF,
         help="Local ref to push when acquiring the claim. Defaults to origin/main.",
+    )
+    parser.add_argument(
+        "--reason",
+        choices=sorted(TERMINAL_RELEASE_REASONS),
+        help="Terminal lifecycle reason required when releasing a claimed ref.",
     )
     return parser
 
@@ -267,7 +490,12 @@ def main(argv: list[str] | None = None) -> int:
             source_ref=args.source_ref,
         )
     else:
-        payload = release_issue(args.issue, remote=args.remote)
+        payload = release_issue(
+            args.issue,
+            remote=args.remote,
+            repo=args.repo,
+            reason=args.reason,
+        )
 
     _dump_json(payload)
     return 0 if payload["ok"] else 1

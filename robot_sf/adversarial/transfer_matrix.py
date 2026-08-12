@@ -19,14 +19,28 @@ objectives).
 
 Gate A repair (#6146): the matrix is now built from immutable
 candidate x evaluated-planner x fresh-seed rows. It rejects stress_only,
-pre-correction, fallback, degraded, unavailable, duplicate, malformed, and
-lineage-incomplete inputs. It reports candidate-clustered uncertainty with
-explicit candidate and seed denominators, a scalar robustness diagnostic only,
-and no minimax or regret claims. A side-effect-free
+pre-correction, fallback, degraded, unavailable, duplicate, malformed,
+blind-corner, and lineage-incomplete inputs. It reports candidate-clustered
+uncertainty with explicit candidate and seed denominators, a scalar robustness
+diagnostic only, and no minimax or regret claims. A side-effect-free
 :func:`check_issue_6145_activation` helper is provided so that downstream
 activation can remain fail-closed on ``promote``, ``>= 5`` admitted candidates,
 required hashes, and valid lineage; issue closure alone never activates
 anything.
+
+Version boundary
+----------------
+
+- ``build_gate_a_transfer_matrix`` emits ``adversarial_transfer_matrix.v2``
+  with full candidate x planner x seed rows and candidate-clustered
+  uncertainty. It requires complete Gate A provenance.
+- ``build_transfer_matrix`` is the legacy v1 entry point. It emits
+  ``adversarial_transfer_matrix.v1`` and only builds cells and the historical
+  per-planner ranking. It does not emit the required Gate A rows, so it cannot
+  be mistaken for a bounded Gate A evidence packet.
+- ``PlannerRanking`` and ``minimax_regret`` are retained only for the legacy
+  v1 compatibility boundary; Gate A v2 emits capability diagnostics without
+  a conventional regret field.
 
 Capability-not-evidence boundary: the matrix is built only from archive paths
 and pinned configs/seeds. No benchmark or paper-facing claim is made here; the
@@ -39,12 +53,13 @@ reported benchmark metrics.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import math
 import random
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -59,8 +74,16 @@ from robot_sf.adversarial.provenance import (
     write_execution_context,
     write_receipt_manifest,
 )
+from robot_sf.adversarial.transfer_schema import (
+    CandidateProvenance,
+    ConstraintsFirstOutcome,
+    GateATransferRow,
+    PlannerEvalProvenance,
+)
 
-_TRANSFER_MATRIX_SCHEMA_VERSION = "adversarial_transfer_matrix.v2"
+_TRANSFER_MATRIX_SCHEMA_VERSION_V2 = "adversarial_transfer_matrix.v2"
+_TRANSFER_MATRIX_SCHEMA_VERSION_V1 = "adversarial_transfer_matrix.v1"
+_TRANSFER_MATRIX_SCHEMA_VERSION = _TRANSFER_MATRIX_SCHEMA_VERSION_V2
 
 # Durable archive subpath for the K x N transfer run inside the adversarial
 # archive. The issue pins "adversarial archive path — never the release
@@ -87,6 +110,8 @@ _GATE_A_EXCLUDED_ROW_CLASSES: tuple[str, ...] = (
     "pre_correction",
     "malformed",
     "lineage_incomplete",
+    "blind_corner",
+    "blind-corner",
 )
 
 # Frozen #6145 terminal result schema that Gate A activation checks.
@@ -104,6 +129,11 @@ _PROMOTION_RESULT_DECISION_VALUES = ("promote", "stop", "inconclusive")
 _PROMOTION_MIN_ADMITTED_CANDIDATES = 5
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+
+# Gate A frozen pilot contract: exactly one 3-planner roster and five fresh
+# seeds per candidate/planner unless #6147 preregisters a stricter design.
+_GATE_A_REQUIRED_PLANNERS = 3
+_GATE_A_SEEDS_PER_PLANNER = 5
 
 
 def _validated_run_id(run_id: str) -> str:
@@ -153,6 +183,11 @@ class CertifiedConfig:
         Pinned scenario seed for replay reproducibility.
     primary_mechanism : str
         Predeclared primary failure mechanism for mechanism-retention checks.
+    row_class : str
+        Normalized row class used for Gate A exclusion checks.
+    candidate_provenance : CandidateProvenance | None
+        Immutable Gate A candidate lineage. Required for
+        :func:`build_gate_a_transfer_matrix`.
     """
 
     config_id: str
@@ -164,6 +199,27 @@ class CertifiedConfig:
     certification_tier: str
     scenario_seed: int | None
     primary_mechanism: str = "unspecified"
+    row_class: str = "eligible"
+    candidate_provenance: CandidateProvenance | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serialisable payload."""
+        provenance: dict[str, Any] | None = None
+        if self.candidate_provenance is not None:
+            provenance = self.candidate_provenance.to_json()
+        return {
+            "config_id": self.config_id,
+            "target_planner": self.target_planner,
+            "candidate": self.candidate,
+            "objective_value": self.objective_value,
+            "source_manifest": self.source_manifest,
+            "source_candidate_index": self.source_candidate_index,
+            "certification_tier": self.certification_tier,
+            "scenario_seed": self.scenario_seed,
+            "primary_mechanism": self.primary_mechanism,
+            "row_class": self.row_class,
+            "candidate_provenance": provenance,
+        }
 
 
 @dataclass(frozen=True)
@@ -186,6 +242,10 @@ class PlannerEval:
         Observed primary failure mechanism for mechanism-retention checks.
     eval_seed : int | None
         Alias for ``seed`` kept for explicit readability in Gate A rows.
+    constraints_first_outcome : ConstraintsFirstOutcome | None
+        Ordered safety/liveness/comfort outcome vector. Required for Gate A.
+    planner_provenance : PlannerEvalProvenance | None
+        Immutable evaluated-planner lineage. Required for Gate A.
     """
 
     config_id: str
@@ -195,11 +255,35 @@ class PlannerEval:
     seed: int | None
     mechanism: str = "unspecified"
     eval_seed: int | None = None
+    constraints_first_outcome: ConstraintsFirstOutcome | None = None
+    planner_provenance: PlannerEvalProvenance | None = None
+    attribution_review_status: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serialisable payload."""
+        outcome: dict[str, Any] | None = None
+        if self.constraints_first_outcome is not None:
+            outcome = self.constraints_first_outcome.to_json()
+        provenance: dict[str, Any] | None = None
+        if self.planner_provenance is not None:
+            provenance = self.planner_provenance.to_json()
+        return {
+            "config_id": self.config_id,
+            "planner": self.planner,
+            "robustness": self.robustness,
+            "failed": self.failed,
+            "seed": self.seed,
+            "mechanism": self.mechanism,
+            "eval_seed": self.eval_seed,
+            "constraints_first_outcome": outcome,
+            "planner_provenance": provenance,
+            "attribution_review_status": self.attribution_review_status,
+        }
 
 
 @dataclass(frozen=True)
 class TransferCell:
-    """One cell of the K x N transfer matrix."""
+    """One cell of the K x N transfer matrix (legacy v1 aggregation unit)."""
 
     config_id: str
     planner: str
@@ -208,28 +292,8 @@ class TransferCell:
     transferred: bool
 
 
-@dataclass(frozen=True)
-class TransferRow:
-    """One immutable candidate x evaluated-planner x fresh-seed Gate A row.
-
-    This is the atomic unit of the capability-only transfer contract: every
-    row pins the scenario seed, the independent fresh evaluation seed, the
-    observed robustness, the predeclared and observed mechanisms, and whether
-    the row's lineage is complete enough to count.
-    """
-
-    config_id: str
-    target_planner: str
-    evaluated_planner: str
-    scenario_seed: int
-    eval_seed: int
-    robustness: float
-    failed: bool
-    transferred: bool
-    primary_mechanism: str
-    observed_mechanism: str
-    mechanism_retained: bool
-    lineage_complete: bool
+# Gate A v2 row is the authoritative transfer-contract row.
+TransferRow = GateATransferRow
 
 
 @dataclass(frozen=True)
@@ -248,6 +312,8 @@ class CandidateCluster:
     n_evaluated_seeds: int
     n_failed: int
     n_transferred: int
+    n_non_target_seeds: int
+    n_non_target_transferred: int
     primary_mechanism: str
     mechanism_retained: bool
     robustness_diagnostic: float
@@ -264,6 +330,27 @@ class CapabilityRanking:
 
 
 @dataclass(frozen=True)
+class PlannerRanking:
+    """Legacy v1 ranking shape retained for compatibility only."""
+
+    planner: str
+    worst_case_robustness: float
+    transfer_failure_rate: float
+    minimax_regret: float
+    rank: int
+
+
+def minimax_regret(worst_case_robustness: float) -> float:
+    """Return the historical v1 compatibility value for one diagnostic.
+
+    This helper exists only for legacy v1 consumers. Gate A reports
+    ``worst_case_robustness`` as a descriptive diagnostic and makes no
+    conventional regret claim.
+    """
+    return -worst_case_robustness if math.isfinite(worst_case_robustness) else float("nan")
+
+
+@dataclass(frozen=True)
 class TransferMatrix:
     """The full K x N transfer measurement plus summary statistics."""
 
@@ -275,10 +362,12 @@ class TransferMatrix:
     cells: tuple[TransferCell, ...] = ()
     rows: tuple[TransferRow, ...] = ()
     clusters: tuple[CandidateCluster, ...] = ()
-    ranking: tuple[CapabilityRanking, ...] = ()
+    ranking: tuple[CapabilityRanking | PlannerRanking, ...] = ()
     overall_transfer_rate: float = 0.0
     transfer_rate_ci: tuple[float, float] = (0.0, 0.0)
     transfer_rate_bootstrap_n: int = 0
+    n_candidates: int = 0
+    n_seed_evals: int = 0
     capability_only: bool = True
 
     def to_json(self) -> dict[str, Any]:
@@ -286,16 +375,18 @@ class TransferMatrix:
         return {
             "schema_version": self.schema_version,
             "target_planner": self.target_planner,
-            "configs": [config.__dict__ for config in self.configs],
+            "configs": [config.to_json() for config in self.configs],
             "config_ids": list(self.config_ids),
             "planners": list(self.planners),
             "cells": [c.__dict__ for c in self.cells],
-            "rows": [r.__dict__ for r in self.rows],
+            "rows": [r.to_json() for r in self.rows],
             "clusters": [c.__dict__ for c in self.clusters],
             "ranking": [r.__dict__ for r in self.ranking],
             "overall_transfer_rate": self.overall_transfer_rate,
             "transfer_rate_ci": list(self.transfer_rate_ci),
             "transfer_rate_bootstrap_n": self.transfer_rate_bootstrap_n,
+            "n_candidates": self.n_candidates,
+            "n_seed_evals": self.n_seed_evals,
             "capability_only": self.capability_only,
         }
 
@@ -366,6 +457,59 @@ def _candidate_primary_mechanism(candidate_payload: dict[str, Any]) -> str:
             if isinstance(classification, str) and classification.strip():
                 return classification.strip()
     return "unspecified"
+
+
+def _candidate_row_class(candidate_payload: dict[str, Any]) -> str:
+    """Return the normalized row class from the first certificate classification."""
+    if not isinstance(candidate_payload, dict):
+        return "malformed"
+    cert = candidate_payload.get("certification_status")
+    details = cert.get("details") if isinstance(cert, dict) else {}
+    certificates = details.get("certificates") if isinstance(details, dict) else []
+    if isinstance(certificates, list) and certificates:
+        first = certificates[0]
+        if isinstance(first, dict):
+            classification = str(first.get("classification", "")).strip().lower()
+            if classification:
+                return classification
+    return "eligible"
+
+
+def _extract_candidate_provenance(
+    candidate_payload: dict[str, Any],
+    *,
+    config_id: str,
+    target_planner: str,
+) -> CandidateProvenance | None:
+    """Build Gate A candidate provenance from an explicit payload block.
+
+    Returns ``None`` when no provenance block is supplied. Gate A builders fail
+    closed on missing provenance; legacy builders tolerate its absence.
+    """
+    if not isinstance(candidate_payload, dict):
+        return None
+    provenance = candidate_payload.get("candidate_provenance")
+    if not isinstance(provenance, dict):
+        return None
+    return CandidateProvenance(
+        source_target_planner=str(provenance.get("source_target_planner", "")),
+        source_campaign_identity=str(provenance.get("source_campaign_identity", "")),
+        source_candidate_identity=str(provenance.get("source_candidate_identity", "")),
+        normalized_candidate_hash=str(provenance.get("normalized_candidate_hash", "")),
+        certification_hash=str(provenance.get("certification_hash", "")),
+        recertification_hash=(
+            str(provenance.get("recertification_hash"))
+            if provenance.get("recertification_hash") is not None
+            else None
+        ),
+        scenario_family_hash=str(provenance.get("scenario_family_hash", "")),
+        scenario_config_hash=str(provenance.get("scenario_config_hash", "")),
+        execution_commit=str(provenance.get("execution_commit", "")),
+        execution_context_path=str(provenance.get("execution_context_path", "")),
+        record_hash=str(provenance.get("record_hash", "")),
+        admission_status=str(provenance.get("admission_status", "")),
+        admission_reason=str(provenance.get("admission_reason", "")),
+    )
 
 
 def _is_excluded_row_class(candidate_payload: dict[str, Any]) -> str | None:
@@ -461,8 +605,9 @@ def _certified_config_from_payload(
     scenario_seed = _candidate_scenario_seed(candidate)
     if not candidate or objective_value is None or scenario_seed is None:
         return None
+    config_id = f"{manifest_path.as_posix()}#{index}"
     return CertifiedConfig(
-        config_id=f"{manifest_path.as_posix()}#{index}",
+        config_id=config_id,
         target_planner=target_planner,
         candidate=candidate,
         objective_value=objective_value,
@@ -471,6 +616,12 @@ def _certified_config_from_payload(
         certification_tier=_candidate_certification_tier(candidate_payload) or "unknown",
         scenario_seed=scenario_seed,
         primary_mechanism=_candidate_primary_mechanism(candidate_payload),
+        row_class=_candidate_row_class(candidate_payload),
+        candidate_provenance=_extract_candidate_provenance(
+            candidate_payload,
+            config_id=config_id,
+            target_planner=target_planner,
+        ),
     )
 
 
@@ -546,6 +697,12 @@ def select_certified_configs(
     return configs[:K]
 
 
+def _sha256_json(payload: dict[str, Any]) -> str:
+    """Return the SHA-256 hex digest of a deterministic JSON encoding."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _bootstrap_transfer_rate(
     failures: list[int],
     evaluations: list[int],
@@ -585,6 +742,58 @@ def _bootstrap_transfer_rate(
     return point, low, high
 
 
+def _candidate_clustered_transfer_rate_ci(
+    rows: list[TransferRow],
+    target_planner: str,
+    *,
+    n_resamples: int = 1000,
+    seed: int = 0,
+) -> tuple[float, tuple[float, float], int, int, int]:
+    """Candidate-clustered bootstrap CI for the transfer rate.
+
+    Seeds are nested within candidate x planner. The bootstrap resamples
+    candidates (clusters) with replacement and computes the mean cluster
+    transfer rate. Both candidate-level and seed-level denominators are
+    returned so reports can label small-K intervals as exploratory.
+    """
+    by_candidate: dict[str, list[TransferRow]] = {}
+    for row in rows:
+        if row.evaluated_planner == target_planner:
+            continue
+        by_candidate.setdefault(row.config_id, []).append(row)
+
+    n_candidates = len(by_candidate)
+    if n_candidates == 0:
+        return 0.0, (0.0, 0.0), 0, 0, 0
+
+    cluster_rates: list[float] = []
+    n_seed_evals = 0
+    n_transferred = 0
+    for candidate_rows in by_candidate.values():
+        failed = sum(1 for r in candidate_rows if r.transferred)
+        total = len(candidate_rows)
+        n_seed_evals += total
+        n_transferred += failed
+        cluster_rates.append(failed / total if total else 0.0)
+
+    point = n_transferred / n_seed_evals if n_seed_evals else 0.0
+    if n_resamples <= 0:
+        return point, (point, point), n_candidates, n_seed_evals, n_transferred
+
+    rng = random.Random(seed)
+    resampled_means: list[float] = []
+    for _ in range(n_resamples):
+        sample_total = 0.0
+        for _ in range(n_candidates):
+            idx = rng.randrange(n_candidates)
+            sample_total += cluster_rates[idx]
+        resampled_means.append(sample_total / n_candidates)
+    resampled_means.sort()
+    low = resampled_means[max(0, int(0.025 * len(resampled_means)))]
+    high = resampled_means[min(len(resampled_means) - 1, int(0.975 * len(resampled_means)))]
+    return point, (low, high), n_candidates, n_seed_evals, n_transferred
+
+
 def _build_cells(
     config_ids: tuple[str, ...],
     planners: tuple[str, ...],
@@ -606,6 +815,39 @@ def _build_cells(
                     robustness=ev.robustness,
                     failed=ev.failed,
                     transferred=ev.failed,
+                )
+            )
+    return cells
+
+
+def _build_cells_from_rows(
+    rows: list[TransferRow],
+    config_ids: tuple[str, ...],
+    planners: tuple[str, ...],
+) -> list[TransferCell]:
+    """Derive K x N legacy cells from Gate A rows (worst robustness per cell)."""
+    by_key: dict[tuple[str, str], TransferRow] = {}
+    for row in rows:
+        key = (row.config_id, row.evaluated_planner)
+        if key not in by_key or (
+            math.isfinite(row.robustness_diagnostic)
+            and row.robustness_diagnostic < by_key[key].robustness_diagnostic
+        ):
+            by_key[key] = row
+
+    cells: list[TransferCell] = []
+    for cfg_id in config_ids:
+        for planner in planners:
+            row = by_key.get((cfg_id, planner))
+            if row is None:
+                raise ValueError(f"Missing row for config={cfg_id!r}, planner={planner!r}")
+            cells.append(
+                TransferCell(
+                    config_id=cfg_id,
+                    planner=planner,
+                    robustness=row.robustness_diagnostic,
+                    failed=row.outcome.failed(),
+                    transferred=row.transferred,
                 )
             )
     return cells
@@ -749,6 +991,263 @@ def _index_complete_evaluations(
     return indexed
 
 
+def _validate_gate_a_candidate_identity(
+    provenance: CandidateProvenance,
+    *,
+    expected_target_planner: str,
+) -> list[str]:
+    """Validate candidate identity and non-hash scalar provenance fields."""
+    errors: list[str] = []
+    if not provenance.source_target_planner:
+        errors.append("candidate provenance missing source_target_planner")
+    elif provenance.source_target_planner != expected_target_planner:
+        errors.append(
+            "candidate provenance source_target_planner does not match the matrix target planner"
+        )
+
+    for field, label in (
+        ("source_campaign_identity", "source_campaign_identity"),
+        ("source_candidate_identity", "source_candidate_identity"),
+        ("execution_context_path", "execution_context_path"),
+        ("admission_reason", "admission_reason"),
+    ):
+        if not getattr(provenance, field):
+            errors.append(f"candidate provenance missing {label}")
+
+    if not _FULL_COMMIT_RE.fullmatch(provenance.execution_commit):
+        errors.append("candidate provenance execution_commit must be a 40-hex git SHA")
+    return errors
+
+
+def _validate_gate_a_candidate_hashes(provenance: CandidateProvenance) -> list[str]:
+    """Validate candidate provenance hashes."""
+    errors: list[str] = []
+    for field, label in (
+        ("normalized_candidate_hash", "normalized_candidate_hash"),
+        ("certification_hash", "certification_hash"),
+        ("scenario_family_hash", "scenario_family_hash"),
+        ("scenario_config_hash", "scenario_config_hash"),
+        ("record_hash", "record_hash"),
+    ):
+        if not _SHA256_RE.fullmatch(getattr(provenance, field)):
+            errors.append(f"candidate provenance {label} must be a 64-hex SHA-256")
+
+    if not _SHA256_RE.fullmatch(provenance.recertification_hash or ""):
+        errors.append("candidate provenance recertification_hash must be a 64-hex SHA-256")
+    return errors
+
+
+def _validate_gate_a_candidate_provenance(
+    provenance: CandidateProvenance,
+    *,
+    expected_target_planner: str,
+) -> list[str]:
+    """Validate one candidate provenance block; return a list of error strings."""
+    errors = _validate_gate_a_candidate_identity(
+        provenance, expected_target_planner=expected_target_planner
+    )
+    errors.extend(_validate_gate_a_candidate_hashes(provenance))
+    if provenance.admission_status not in {"admitted", "excluded"}:
+        errors.append("candidate provenance admission_status must be 'admitted' or 'excluded'")
+    if provenance.admission_status != "admitted":
+        errors.append(f"candidate provenance admission_status is {provenance.admission_status!r}")
+    return errors
+
+
+def _validate_gate_a_planner_provenance(
+    provenance: PlannerEvalProvenance,
+    *,
+    expected_planner: str,
+) -> list[str]:
+    """Validate one evaluated-planner lineage block; return a list of error strings."""
+    errors: list[str] = []
+    if provenance.evaluated_planner != expected_planner:
+        errors.append("planner provenance evaluated_planner does not match the row planner")
+
+    for field, label in (
+        ("planner_config_hash", "planner_config_hash"),
+        ("scenario_config_hash", "scenario_config_hash"),
+        ("record_hash", "record_hash"),
+    ):
+        if not _SHA256_RE.fullmatch(getattr(provenance, field)):
+            errors.append(f"planner provenance {label} must be a 64-hex SHA-256")
+
+    if provenance.execution_mode not in {"native", "fallback", "degraded", "unavailable"}:
+        errors.append(
+            "planner provenance execution_mode must be one of native/fallback/degraded/unavailable"
+        )
+    if provenance.execution_mode in {"fallback", "degraded", "unavailable"}:
+        errors.append(
+            f"Gate A rejects execution_mode {provenance.execution_mode!r} "
+            f"for planner {expected_planner!r}"
+        )
+
+    for field, label in (
+        ("deterministic_replay_lineage", "deterministic_replay_lineage"),
+        ("independent_confirmation_lineage", "independent_confirmation_lineage"),
+        ("execution_context_path", "execution_context_path"),
+    ):
+        if not getattr(provenance, field):
+            errors.append(f"planner provenance missing {label}")
+
+    if not _FULL_COMMIT_RE.fullmatch(provenance.execution_commit):
+        errors.append("planner provenance execution_commit must be a 40-hex git SHA")
+    return errors
+
+
+def _validate_gate_a_outcome(outcome: ConstraintsFirstOutcome) -> list[str]:
+    """Validate one constraints-first outcome vector; return a list of error strings."""
+    errors: list[str] = []
+    if outcome.status != "observed":
+        errors.append(f"Gate A rejects unavailable outcome status {outcome.status!r}")
+        return errors
+    # observed
+    if not isinstance(outcome.collision_or_severe_intrusion, bool):
+        errors.append("observed outcome collision_or_severe_intrusion must be a boolean")
+    if not isinstance(outcome.liveness_or_goal_completion, bool):
+        errors.append("observed outcome liveness_or_goal_completion must be a boolean")
+    if not isinstance(outcome.comfort_and_efficiency, dict):
+        errors.append("observed outcome comfort_and_efficiency must be a mapping")
+    else:
+        for field in ("snqi", "near_misses", "path_efficiency"):
+            if field not in outcome.comfort_and_efficiency:
+                errors.append(f"observed outcome comfort_and_efficiency missing {field!r}")
+    return errors
+
+
+def _resolve_gate_a_eval_context(
+    evaluation: PlannerEval,
+    *,
+    config_by_id: dict[str, CertifiedConfig],
+    planners: tuple[str, ...],
+    seen: set[tuple[str, str, int]],
+    expected_seeds: dict[tuple[str, str], set[int]],
+) -> tuple[CertifiedConfig, int]:
+    """Validate one evaluation's config/planner/seed context and return (config, eval_seed)."""
+    config = config_by_id.get(evaluation.config_id)
+    if config is None:
+        raise ValueError(f"Gate A row references unknown config: {evaluation.config_id!r}")
+    if evaluation.planner not in planners:
+        raise ValueError(f"Gate A row references unknown planner: {evaluation.planner!r}")
+    if (
+        evaluation.eval_seed is not None
+        and evaluation.seed is not None
+        and evaluation.eval_seed != evaluation.seed
+    ):
+        raise ValueError(
+            f"Gate A row has mismatched seed and eval_seed for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        )
+    eval_seed = evaluation.eval_seed if evaluation.eval_seed is not None else evaluation.seed
+    if (
+        eval_seed is None
+        or isinstance(eval_seed, bool)
+        or not isinstance(eval_seed, int)
+        or eval_seed < 0
+    ):
+        raise ValueError(
+            f"Gate A row missing fresh eval seed for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        )
+    if config.scenario_seed is None:
+        raise ValueError(f"Gate A row missing scenario seed for config={evaluation.config_id!r}")
+    if eval_seed == config.scenario_seed:
+        raise ValueError(
+            f"Gate A fresh eval seed must differ from scenario seed for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        )
+
+    key = (evaluation.config_id, evaluation.planner, eval_seed)
+    if key in seen:
+        raise ValueError(
+            f"Gate A duplicate row for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}, eval_seed={eval_seed}"
+        )
+    seen.add(key)
+    expected_seeds[(evaluation.config_id, evaluation.planner)].add(eval_seed)
+    return config, eval_seed
+
+
+def _validate_gate_a_row_lineage(
+    config: CertifiedConfig,
+    evaluation: PlannerEval,
+) -> list[str]:
+    """Return a list of lineage errors for one evaluation, or empty if valid."""
+    if config.candidate_provenance is None:
+        return [f"Gate A row missing candidate_provenance for config={config.config_id!r}"]
+    if evaluation.constraints_first_outcome is None:
+        return [
+            f"Gate A row missing constraints_first_outcome for config={config.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        ]
+    if evaluation.planner_provenance is None:
+        return [
+            f"Gate A row missing planner_provenance for config={config.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        ]
+
+    errors = _validate_gate_a_candidate_provenance(
+        config.candidate_provenance,
+        expected_target_planner=config.target_planner,
+    )
+    errors.extend(
+        _validate_gate_a_planner_provenance(
+            evaluation.planner_provenance,
+            expected_planner=evaluation.planner,
+        )
+    )
+    errors.extend(_validate_gate_a_outcome(evaluation.constraints_first_outcome))
+    if not math.isfinite(evaluation.robustness):
+        errors.append("Gate A robustness_diagnostic must be finite")
+    if (
+        not isinstance(evaluation.attribution_review_status, str)
+        or not evaluation.attribution_review_status.strip()
+    ):
+        errors.append("Gate A row missing attribution_review_status")
+    if (
+        config.candidate_provenance.scenario_config_hash
+        != evaluation.planner_provenance.scenario_config_hash
+    ):
+        errors.append("candidate and planner scenario_config_hash values do not match")
+    return errors
+
+
+def _make_gate_a_transfer_row(
+    config: CertifiedConfig,
+    evaluation: PlannerEval,
+    eval_seed: int,
+) -> TransferRow:
+    """Build one Gate A transfer row with a deterministic immutable record hash."""
+    mechanism = evaluation.mechanism or "unspecified"
+    primary = config.primary_mechanism or "unspecified"
+    mechanism_retained = primary in {"unspecified", mechanism}
+    # The authoritative failure is the ordered constraints-first outcome;
+    # scalar robustness is descriptive only.
+    failed = evaluation.constraints_first_outcome.failed()
+    transferred = failed and evaluation.planner != config.target_planner and mechanism_retained
+
+    row = TransferRow(
+        config_id=evaluation.config_id,
+        target_planner=config.target_planner,
+        evaluated_planner=evaluation.planner,
+        scenario_seed=config.scenario_seed,
+        eval_seed=eval_seed,
+        candidate_provenance=config.candidate_provenance,
+        planner_provenance=evaluation.planner_provenance,
+        outcome=evaluation.constraints_first_outcome,
+        robustness_diagnostic=evaluation.robustness,
+        transferred=transferred,
+        mechanism_retained=mechanism_retained,
+        primary_mechanism=primary,
+        observed_mechanism=mechanism,
+        attribution_review_status=evaluation.attribution_review_status.strip(),
+        lineage_complete=True,
+        immutable_record_hash="",
+    )
+    row_json = {k: v for k, v in row.to_json().items() if k != "immutable_record_hash"}
+    return replace(row, immutable_record_hash=_sha256_json(row_json))
+
+
 def _build_gate_a_rows(
     configs: list[CertifiedConfig],
     evaluations: list[PlannerEval],
@@ -756,10 +1255,8 @@ def _build_gate_a_rows(
 ) -> list[TransferRow]:
     """Build immutable candidate x planner x fresh-seed Gate A rows.
 
-    Each config must contribute one row per evaluated planner per fresh seed.
-    The current architecture supports a single fresh seed per config/planner
-    pair (the standard seed protocol); the row still makes the seed explicit so
-    future multi-seed confirmation can be added without a schema break.
+    Each config must contribute exactly one row per evaluated planner per
+    fresh seed. Missing, repeated, extra, or mismatched seeds fail closed.
     """
     config_by_id = {config.config_id: config for config in configs}
     expected_seeds: dict[tuple[str, str], set[int]] = {
@@ -769,55 +1266,36 @@ def _build_gate_a_rows(
     seen: set[tuple[str, str, int]] = set()
 
     for evaluation in evaluations:
-        config = config_by_id.get(evaluation.config_id)
-        if config is None:
-            raise ValueError(f"Gate A row references unknown config: {evaluation.config_id!r}")
-        if evaluation.planner not in planners:
-            raise ValueError(f"Gate A row references unknown planner: {evaluation.planner!r}")
-        eval_seed = evaluation.eval_seed if evaluation.eval_seed is not None else evaluation.seed
-        if eval_seed is None or eval_seed < 0:
-            raise ValueError(
-                f"Gate A row missing fresh eval seed for config={evaluation.config_id!r}, "
-                f"planner={evaluation.planner!r}"
-            )
-        if config.scenario_seed is None:
-            raise ValueError(
-                f"Gate A row missing scenario seed for config={evaluation.config_id!r}"
-            )
-        key = (evaluation.config_id, evaluation.planner, eval_seed)
-        if key in seen:
-            raise ValueError(
-                f"Gate A duplicate row for config={evaluation.config_id!r}, "
-                f"planner={evaluation.planner!r}, eval_seed={eval_seed}"
-            )
-        seen.add(key)
-        expected_seeds[(evaluation.config_id, evaluation.planner)].add(eval_seed)
-        mechanism = evaluation.mechanism or "unspecified"
-        rows.append(
-            TransferRow(
-                config_id=evaluation.config_id,
-                target_planner=config.target_planner,
-                evaluated_planner=evaluation.planner,
-                scenario_seed=config.scenario_seed,
-                eval_seed=eval_seed,
-                robustness=evaluation.robustness,
-                failed=evaluation.failed,
-                transferred=evaluation.failed and evaluation.planner != config.target_planner,
-                primary_mechanism=config.primary_mechanism,
-                observed_mechanism=mechanism,
-                mechanism_retained=(config.primary_mechanism in ("unspecified", mechanism)),
-                lineage_complete=True,
-            )
+        config, eval_seed = _resolve_gate_a_eval_context(
+            evaluation,
+            config_by_id=config_by_id,
+            planners=planners,
+            seen=seen,
+            expected_seeds=expected_seeds,
         )
+        errors = _validate_gate_a_row_lineage(config, evaluation)
+        if errors:
+            raise ValueError(
+                f"Gate A lineage validation failed for config={evaluation.config_id!r}, "
+                f"planner={evaluation.planner!r}, eval_seed={eval_seed}: " + "; ".join(errors)
+            )
+        rows.append(_make_gate_a_transfer_row(config, evaluation, eval_seed))
 
-    missing = [
-        (config_id, planner) for (config_id, planner), seeds in expected_seeds.items() if not seeds
-    ]
-    if missing:
-        config_id, planner = missing[0]
-        raise ValueError(
-            f"Gate A matrix missing fresh-seed rows for config={config_id!r}, planner={planner!r}"
-        )
+    for (config_id, planner), seeds in expected_seeds.items():
+        if len(seeds) != _GATE_A_SEEDS_PER_PLANNER:
+            raise ValueError(
+                f"Gate A matrix expected {_GATE_A_SEEDS_PER_PLANNER} distinct seeds "
+                f"for config={config_id!r}, planner={planner!r}; got {sorted(seeds)}"
+            )
+    planner_config_hashes: dict[str, str] = {}
+    for row in rows:
+        planner = row.evaluated_planner
+        config_hash = row.planner_provenance.planner_config_hash
+        prior = planner_config_hashes.setdefault(planner, config_hash)
+        if prior != config_hash:
+            raise ValueError(
+                f"Gate A planner roster has conflicting planner_config_hash values for {planner!r}"
+            )
     return rows
 
 
@@ -839,22 +1317,59 @@ def _build_candidate_clusters(rows: list[TransferRow]) -> list[CandidateCluster]
             first.primary_mechanism in {"unspecified", row.observed_mechanism}
             for row in config_rows
         )
-        finite_robustness = [row.robustness for row in config_rows if math.isfinite(row.robustness)]
+        finite_robustness = [
+            row.robustness_diagnostic
+            for row in config_rows
+            if math.isfinite(row.robustness_diagnostic)
+        ]
         robustness_diagnostic = min(finite_robustness) if finite_robustness else float("nan")
+        non_target_rows = [r for r in config_rows if r.evaluated_planner != first.target_planner]
         clusters.append(
             CandidateCluster(
                 config_id=config_id,
                 target_planner=first.target_planner,
                 scenario_seed=first.scenario_seed,
                 n_evaluated_seeds=len(config_rows),
-                n_failed=sum(1 for row in config_rows if row.failed),
+                n_failed=sum(1 for row in config_rows if row.outcome.failed()),
                 n_transferred=sum(1 for row in config_rows if row.transferred),
+                n_non_target_seeds=len(non_target_rows),
+                n_non_target_transferred=sum(1 for r in non_target_rows if r.transferred),
                 primary_mechanism=primary,
                 mechanism_retained=mechanism_retained,
                 robustness_diagnostic=robustness_diagnostic,
             )
         )
     return clusters
+
+
+def _validate_gate_a_configs(configs: list[CertifiedConfig]) -> None:
+    """Fail closed when configs carry excluded classes or non-admitted status."""
+    for config in configs:
+        if config.certification_tier != "eligible":
+            raise ValueError(
+                f"Gate A rejects certification_tier {config.certification_tier!r} "
+                f"for config={config.config_id!r}"
+            )
+        row_class = config.row_class.strip().lower()
+        if not row_class or row_class == "excluded" or row_class in _GATE_A_EXCLUDED_ROW_CLASSES:
+            raise ValueError(
+                f"Gate A rejects row class {config.row_class!r} for config={config.config_id!r}"
+            )
+        if not isinstance(config.scenario_seed, int) or isinstance(config.scenario_seed, bool):
+            raise ValueError(f"Gate A requires an integer scenario_seed for {config.config_id!r}")
+        if not config.primary_mechanism.strip() or config.primary_mechanism == "unspecified":
+            raise ValueError(
+                f"Gate A requires a predeclared primary mechanism for {config.config_id!r}"
+            )
+        if config.candidate_provenance is None:
+            raise ValueError(
+                f"Gate A requires candidate_provenance for config={config.config_id!r}"
+            )
+        if config.candidate_provenance.admission_status != "admitted":
+            raise ValueError(
+                f"Gate A rejects non-admitted config {config.config_id!r}: "
+                f"{config.candidate_provenance.admission_status!r}"
+            )
 
 
 def build_gate_a_transfer_matrix(
@@ -865,23 +1380,37 @@ def build_gate_a_transfer_matrix(
     bootstrap_n: int = 1000,
     bootstrap_seed: int = 0,
 ) -> TransferMatrix:
-    """Build the Gate A capability-only transfer matrix.
+    """Build the Gate A capability-only transfer matrix (v2 schema).
 
-    The caller is responsible for selecting configs with ``eligible_only=True``
-    so that stress_only and excluded row classes are already rejected. This
-    builder adds the immutable row contract, candidate clustering, and
-    capability-only ranking.
+    This builder enforces the full Gate A contract itself: it rejects
+    ``stress_only``, excluded row classes, fallback/degraded/unavailable
+    execution, malformed lineage, missing or repeated seeds, and any roster
+    other than exactly three planners. It does not depend on callers having
+    used ``eligible_only=True``.
     """
     config_ids, target_planner = _validate_matrix_configs(configs, bootstrap_n=bootstrap_n)
+    requested_planners = DEFAULT_TRANSFER_ROSTER if planners is None else tuple(planners)
+    if requested_planners != DEFAULT_TRANSFER_ROSTER:
+        raise ValueError(
+            "Gate A requires the frozen three-planner roster "
+            f"{DEFAULT_TRANSFER_ROSTER!r}; got {requested_planners!r}"
+        )
     planners = _resolve_matrix_planners(
-        evaluations, target_planner=target_planner, planners=planners
+        evaluations, target_planner=target_planner, planners=requested_planners
     )
-    eval_by_key = _index_complete_evaluations(evaluations, config_ids=config_ids, planners=planners)
+    if len(planners) != _GATE_A_REQUIRED_PLANNERS:
+        raise ValueError(
+            f"Gate A requires exactly {_GATE_A_REQUIRED_PLANNERS} planners; got {len(planners)}"
+        )
+
+    # Gate A rejects excluded classes and non-admitted configs regardless of
+    # how the caller selected them.
+    _validate_gate_a_configs(configs)
 
     rows = _build_gate_a_rows(configs, evaluations, planners)
     clusters = _build_candidate_clusters(rows)
 
-    cells = _build_cells(config_ids, planners, eval_by_key)
+    cells = _build_cells_from_rows(rows, config_ids, planners)
     ranking_rows = _build_ranking(cells, planners)
     ranking_rows.sort(
         key=lambda row: (
@@ -898,28 +1427,15 @@ def build_gate_a_transfer_matrix(
             rank=rank,
         )
 
-    other_planners = [p for p in planners if p != target_planner]
-    if other_planners:
-        failures_per_planner: list[int] = []
-        evals_per_planner: list[int] = []
-        grouped = _group_cells_by_planner(cells, planners)
-        for planner in other_planners:
-            planner_cells = grouped[planner]
-            failures_per_planner.append(sum(1 for c in planner_cells if c.failed))
-            evals_per_planner.append(len(planner_cells))
-        rate, ci_low, ci_high = _bootstrap_transfer_rate(
-            failures_per_planner,
-            evals_per_planner,
-            n_resamples=bootstrap_n,
-            seed=bootstrap_seed,
-        )
-        overall_rate = rate
-        ci = (ci_low, ci_high)
-    else:
-        overall_rate = 0.0
-        ci = (0.0, 0.0)
+    rate, ci, n_candidates, n_seed_evals, _ = _candidate_clustered_transfer_rate_ci(
+        rows,
+        target_planner,
+        n_resamples=bootstrap_n,
+        seed=bootstrap_seed,
+    )
 
     return TransferMatrix(
+        schema_version=_TRANSFER_MATRIX_SCHEMA_VERSION_V2,
         target_planner=target_planner,
         configs=tuple(configs),
         config_ids=config_ids,
@@ -928,9 +1444,11 @@ def build_gate_a_transfer_matrix(
         rows=tuple(rows),
         clusters=tuple(clusters),
         ranking=tuple(ranking_rows),
-        overall_transfer_rate=overall_rate,
+        overall_transfer_rate=rate,
         transfer_rate_ci=ci,
-        transfer_rate_bootstrap_n=bootstrap_n if other_planners else 0,
+        transfer_rate_bootstrap_n=bootstrap_n,
+        n_candidates=n_candidates,
+        n_seed_evals=n_seed_evals,
         capability_only=True,
     )
 
@@ -1029,7 +1547,12 @@ def build_transfer_matrix(
     bootstrap_n: int = 1000,
     bootstrap_seed: int = 0,
 ) -> TransferMatrix:
-    """Build the K x N transfer matrix from certified configs + eval results.
+    """Build the legacy v1 K x N transfer matrix from certified configs + eval results.
+
+    This is the historical slice-1 entry point. It emits
+    ``adversarial_transfer_matrix.v1`` and builds cells plus the per-planner
+    capability ranking. It does not require Gate A provenance and does not
+    emit the required v2 candidate x planner x seed rows.
 
     Parameters
     ----------
@@ -1048,7 +1571,7 @@ def build_transfer_matrix(
     Returns
     -------
     TransferMatrix
-        The transfer measurement, per-planner minimax ranking, and bootstrap CI.
+        The v1 transfer measurement, per-planner ranking, and bootstrap CI.
     """
     config_ids, target_planner = _validate_matrix_configs(configs, bootstrap_n=bootstrap_n)
     planners = _resolve_matrix_planners(
@@ -1066,10 +1589,11 @@ def build_transfer_matrix(
         )
     )
     for rank, row in enumerate(ranking_rows, start=1):
-        ranking_rows[rank - 1] = CapabilityRanking(
+        ranking_rows[rank - 1] = PlannerRanking(
             planner=row.planner,
             worst_case_robustness=row.worst_case_robustness,
             transfer_failure_rate=row.transfer_failure_rate,
+            minimax_regret=minimax_regret(row.worst_case_robustness),
             rank=rank,
         )
 
@@ -1097,6 +1621,7 @@ def build_transfer_matrix(
         ci = (0.0, 0.0)
 
     return TransferMatrix(
+        schema_version=_TRANSFER_MATRIX_SCHEMA_VERSION_V1,
         target_planner=target_planner,
         configs=tuple(configs),
         config_ids=config_ids,
@@ -1108,8 +1633,81 @@ def build_transfer_matrix(
         overall_transfer_rate=overall_rate,
         transfer_rate_ci=ci,
         transfer_rate_bootstrap_n=bootstrap_n if other_planners else 0,
+        n_candidates=0,
+        n_seed_evals=0,
         capability_only=True,
     )
+
+
+def _constraints_first_report_tier(outcome: ConstraintsFirstOutcome) -> str:
+    """Return the worst observed constraints-first tier for report rendering."""
+    if outcome.status != "observed":
+        return "not_available"
+    if outcome.collision_or_severe_intrusion is True:
+        return "collision_or_severe_intrusion"
+    if outcome.liveness_or_goal_completion is True:
+        return "liveness_or_goal_completion"
+    return "comfort_and_efficiency"
+
+
+def _append_gate_a_report_diagnostics(matrix: TransferMatrix, lines: list[str]) -> None:
+    """Append row-derived Gate A denominators and mechanism diagnostics."""
+    if not matrix.rows:
+        return
+    non_target_rows = [row for row in matrix.rows if row.evaluated_planner != matrix.target_planner]
+    candidate_clusters = {cluster.config_id: cluster for cluster in matrix.clusters}
+    candidate_transfers = sum(
+        cluster.n_non_target_transferred > 0 for cluster in candidate_clusters.values()
+    )
+    lines.append("## Gate A row-derived diagnostics")
+    lines.append("")
+    lines.append(
+        "- Candidate clusters: "
+        f"{len(candidate_clusters)}; transferred candidates: {candidate_transfers}; "
+        f"candidate denominator: {matrix.n_candidates}"
+    )
+    lines.append(
+        "- Non-target seed evaluations: "
+        f"{len(non_target_rows)}; seed denominator: {matrix.n_seed_evals}"
+    )
+    lines.append(
+        "- Scalar robustness is a descriptive diagnostic only; it cannot compensate "
+        "for a hard constraints-first failure."
+    )
+    lines.append("")
+    lines.append(
+        "| evaluated planner | transferred seed rows | seed denominator | transfer rate | worst observed tier |"
+    )
+    lines.append("|---|---:|---:|---:|---|")
+    for planner in matrix.planners:
+        if planner == matrix.target_planner:
+            continue
+        planner_rows = [row for row in non_target_rows if row.evaluated_planner == planner]
+        transferred = sum(row.transferred for row in planner_rows)
+        tiers = {_constraints_first_report_tier(row.outcome) for row in planner_rows}
+        ordered_tiers = (
+            "collision_or_severe_intrusion",
+            "liveness_or_goal_completion",
+            "comfort_and_efficiency",
+            "not_available",
+        )
+        worst_tier = next((tier for tier in ordered_tiers if tier in tiers), "not_available")
+        denominator = len(planner_rows)
+        rate = transferred / denominator if denominator else 0.0
+        lines.append(f"| `{planner}` | {transferred} | {denominator} | {rate:.3f} | {worst_tier} |")
+    lines.append("")
+    lines.append("### Observed mechanism distribution (non-target rows)")
+    lines.append("")
+    lines.append("| mechanism | seed rows |")
+    lines.append("|---|---:|")
+    mechanism_counts: dict[str, int] = {}
+    for row in non_target_rows:
+        mechanism_counts[row.observed_mechanism] = (
+            mechanism_counts.get(row.observed_mechanism, 0) + 1
+        )
+    for mechanism, count in sorted(mechanism_counts.items()):
+        lines.append(f"| `{mechanism}` | {count} |")
+    lines.append("")
 
 
 def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedConfig]) -> str:
@@ -1117,7 +1715,10 @@ def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedCon
     if tuple(config.config_id for config in configs) != matrix.config_ids:
         raise ValueError("Report configs must match the transfer matrix config order")
     lines: list[str] = []
-    lines.append("# Cross-planner adversarial transfer matrix (slice 1, capability-only)")
+    schema_label = "v2" if matrix.schema_version == _TRANSFER_MATRIX_SCHEMA_VERSION_V2 else "v1"
+    lines.append(
+        f"# Cross-planner adversarial transfer matrix (slice 1, capability-only, {schema_label})"
+    )
     lines.append("")
     lines.append(
         "> Capability-not-evidence boundary: built only from archive paths and "
@@ -1128,12 +1729,19 @@ def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedCon
     lines.append(f"- Certified configs (K): {len(matrix.config_ids)}")
     lines.append(f"- Evaluated planners (N): {len(matrix.planners)}")
     lines.append(f"- Overall transfer rate (excl. target): {matrix.overall_transfer_rate:.3f}")
+    ci_label = (
+        "Transfer-rate 95% CI (exploratory, small K)"
+        if matrix.n_candidates < 10
+        else "Transfer-rate 95% CI"
+    )
     lines.append(
-        f"- Transfer-rate 95% CI: [{matrix.transfer_rate_ci[0]:.3f}, "
-        f"{matrix.transfer_rate_ci[1]:.3f}] (bootstrap n={matrix.transfer_rate_bootstrap_n})"
+        f"- {ci_label}: [{matrix.transfer_rate_ci[0]:.3f}, "
+        f"{matrix.transfer_rate_ci[1]:.3f}] "
+        f"(bootstrap n={matrix.transfer_rate_bootstrap_n}, "
+        f"candidates={matrix.n_candidates}, seed-evaluations={matrix.n_seed_evals})"
     )
     lines.append("")
-    lines.append("## Capability-only ranking")
+    lines.append("## Capability-only ranking (diagnostic order; not a general planner rank)")
     lines.append("")
     lines.append("| rank | planner | worst-case robustness | transfer-failure rate |")
     lines.append("|---|---|---|---|")
@@ -1145,6 +1753,7 @@ def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedCon
         )
         lines.append(f"| {row.rank} | `{row.planner}` | {wc} | {row.transfer_failure_rate:.3f} |")
     lines.append("")
+    _append_gate_a_report_diagnostics(matrix, lines)
     lines.append(
         "## Transfer matrix (rows=configs, cols=planners; X=transferred failure, .=ok, ?=untested)"
     )
@@ -1223,7 +1832,8 @@ def archive_transfer_run(
     Parameters
     ----------
     matrix : TransferMatrix
-        The built transfer matrix (from :func:`build_transfer_matrix`).
+        The built transfer matrix (from :func:`build_transfer_matrix` or
+        :func:`build_gate_a_transfer_matrix`).
     archive_root : str | Path
         Root of the adversarial archive. The run is written under
         ``<archive_root>/transfer_matrix/<run_id>/``.
@@ -1294,6 +1904,7 @@ __all__ = [
     "CapabilityRanking",
     "CertifiedConfig",
     "PlannerEval",
+    "PlannerRanking",
     "TransferCell",
     "TransferMatrix",
     "TransferRow",
@@ -1301,6 +1912,7 @@ __all__ = [
     "build_gate_a_transfer_matrix",
     "build_transfer_matrix",
     "check_issue_6145_activation",
+    "minimax_regret",
     "render_transfer_report",
     "select_certified_configs",
     "write_transfer_artifact",

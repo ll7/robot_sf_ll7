@@ -33,26 +33,56 @@ result.
 
 ### Changed surfaces
 
+- `robot_sf/adversarial/transfer_schema.py` (new):
+  - `ConstraintsFirstOutcome` — ordered safety/liveness/comfort vector.
+  - `CandidateProvenance` — source identity, normalized hash, cert/recert
+    hashes, scenario hashes, execution commit/context, record hash, and
+    admission status/reason.
+  - `PlannerEvalProvenance` — evaluated planner, config hash, scenario hash,
+    execution mode, deterministic replay / independent-confirmation lineage,
+    execution commit/context, and record hash.
+  - `GateATransferRow` — one immutable candidate x evaluated-planner x
+    fresh-seed row.
+
 - `robot_sf/adversarial/transfer_matrix.py`:
-  - New schema `adversarial_transfer_matrix.v2`.
-  - `CertifiedConfig` gains `primary_mechanism`.
-  - `PlannerEval` gains `mechanism` and `eval_seed`.
-  - New `TransferRow` (candidate x evaluated-planner x fresh-seed).
-  - New `CandidateCluster` (per-candidate uncertainty with explicit
-    denominators).
-  - New `CapabilityRanking` (no `minimax_regret` claim).
-  - `select_certified_configs(..., eligible_only=True)` rejects `stress_only`,
-    `fallback`, `degraded`, `unavailable`, `duplicate`, `pre_correction`,
-    malformed, and lineage-incomplete rows.
-  - `build_gate_a_transfer_matrix` builds immutable rows and clusters.
+  - New schema `adversarial_transfer_matrix.v2` for
+    `build_gate_a_transfer_matrix`.
+  - Legacy `build_transfer_matrix` emits `adversarial_transfer_matrix.v1`
+    with cells and ranking only; it never emits the required Gate A rows.
+  - `CertifiedConfig` gains `primary_mechanism`, `row_class`, and
+    `candidate_provenance`.
+  - `PlannerEval` gains `mechanism`, `eval_seed`,
+    `constraints_first_outcome`, `planner_provenance`, and explicit
+    `attribution_review_status`.
+  - `TransferRow` is an alias for the new `GateATransferRow`.
+  - `CandidateCluster` reports candidate-level and seed-level denominators
+    separately (`n_non_target_seeds`, `n_non_target_transferred`).
+  - `CapabilityRanking` replaces the old minimax/regret vocabulary.
+  - `PlannerRanking` and `minimax_regret` kept as public-compatibility
+    aliases for the version boundary.
+  - `select_certified_configs(..., eligible_only=True)` rejects
+    `stress_only`, `fallback`, `degraded`, `unavailable`, `duplicate`,
+    `pre_correction`, `blind_corner`/`blind-corner`, malformed, and
+    lineage-incomplete rows.
+  - `build_gate_a_transfer_matrix` enforces the full contract itself:
+    exactly one frozen 3-planner roster, exactly 5 distinct fresh seeds per
+    candidate/planner, constraints-first outcomes as the authoritative
+    failure source, candidate-clustered uncertainty, explicit row-derived
+    mechanism/denominator diagnostics, and rejection of
+    excluded classes / fallback / degraded / unavailable rows regardless of
+    caller filtering.
   - `check_issue_6145_activation` side-effect-free structural activation
     checker.
-  - Capability-only report text replaces the historical minimax/regret wording.
+  - Capability-only report text replaces the historical minimax/regret
+    wording and labels small-K intervals as exploratory.
 
 - `tests/adversarial/test_transfer_matrix_issue_5303.py`:
   - Regression tests for stress-only rejection, excluded row classes,
-    opposite mechanism, repeated/missing seeds, misleading ranking,
-    missing lineage, and closure-without-promote.
+    blind-corner rejection, fallback execution-mode rejection, opposite
+    mechanism, repeated/missing seeds, misleading ranking,
+    missing lineage, builder-level rejection of stress_only without
+    `eligible_only=True`, exact roster/seed enforcement, candidate-clustered
+    uncertainty denominators, and closure-without-promote.
 
 ### Frozen activation contract (`check_issue_6145_activation`)
 
@@ -91,19 +121,23 @@ until Gate B passes.
 
 ## Remaining acceptance gaps
 
-- The current `TransferRow` supports one fresh seed per config/planner pair,
-  matching the existing standard-seed protocol. Multi-seed confirmation rows
-  will extend `eval_seed` to a set or list without breaking the schema.
 - Byte-level hash verification of `candidate_manifest_sha256` and
   `evidence_packet_sha256` is delegated to Gate B; `check_issue_6145_activation`
   only checks hash well-formedness and optional contract-hash matching.
 - Real candidate-roster binding and final `#6147` manifest freeze are outside
   this Gate A slice.
+- Gate A requires explicit re-certification hashes, native execution, fresh
+  evaluation seeds distinct from the scenario seed, and attribution/review
+  status on every row; absent values are not inferred from config or source
+  paths.
 
 ## Validation
 
 ```bash
-uv run pytest tests/adversarial/test_transfer_matrix_issue_5303.py -v
-uv run ruff check robot_sf/adversarial/transfer_matrix.py tests/adversarial/test_transfer_matrix_issue_5303.py
-uv run ruff format robot_sf/adversarial/transfer_matrix.py tests/adversarial/test_transfer_matrix_issue_5303.py
+uv run pytest tests/adversarial/test_transfer_matrix_issue_5303.py -q
+uv run pytest tests/adversarial/test_transfer_archive_issue_5303.py -q
+uv run pytest tests/adversarial/ -q -k "transfer or 5303" --timeout=60
+uv run ruff check robot_sf/adversarial/transfer_matrix.py robot_sf/adversarial/transfer_schema.py tests/adversarial/test_transfer_matrix_issue_5303.py
+uv run ruff format --check robot_sf/adversarial/transfer_matrix.py robot_sf/adversarial/transfer_schema.py tests/adversarial/test_transfer_matrix_issue_5303.py
+git diff --check
 ```

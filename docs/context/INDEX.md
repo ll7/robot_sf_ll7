@@ -13,6 +13,16 @@ authorize the #6145 campaign and rejects the historical v1 contract for promotio
 execution:
 [README.md](evidence/issue_5303_search_promotion_powered_preregistration/README.md).
 
+Issue #6146 Gate A transfer-contract repair (capability-only): adds immutable
+candidate x evaluated-planner x fresh-seed rows, candidate-clustered uncertainty
+with explicit denominators, rejection of stress_only / fallback / degraded /
+unavailable / duplicate / pre_correction / malformed / lineage-incomplete rows,
+capability-only ranking without minimax/regret claims, and a side-effect-free
+`check_issue_6145_activation` helper. Gate B remains responsible for byte-level
+hash verification and full semantic promote; issue closure alone never activates
+downstream work:
+[issue_6146_gate_a_transfer_contract_repair.md](issue_6146_gate_a_transfer_contract_repair.md).
+
 Issue #6155 release environment packet: separates tag-side dependency and lock evidence from historical campaign runtime records, with the exact-head capture command and publication hold boundary:
 [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md).
 

@@ -89,3 +89,5 @@ result_contract:
     Report both positive and negative/transfer-poorly effects. Any effect must be
     reported as diagnostic until durable, paired-seed evidence over the full scenario
     distribution is collected; a single arm or unpaired seed is not a valid contrast.
+
+retained_metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml

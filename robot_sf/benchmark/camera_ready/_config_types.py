@@ -238,6 +238,9 @@ class CampaignConfig:
     # as per-arm overrides). Raw mapping consumed by ``runtime_config_from_mapping``; ``None`` keeps
     # the wrapper off.
     safety_wrapper: dict[str, Any] | None = None
+    # Versioned retained-row contract for paired safety-wrapper outcomes (issue #6970). When set,
+    # camera-ready preflight validates the contract and each runner arm must retain its fields.
+    retained_metric_contract_path: Path | None = None
     # The immutable campaign YAML that produced this object.  The digest is captured from the
     # exact bytes parsed by ``load_campaign_config`` so preflight never rehashes a potentially
     # changed path after loading.

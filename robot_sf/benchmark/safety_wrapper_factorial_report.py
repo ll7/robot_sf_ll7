@@ -15,6 +15,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.paired_effect_metric_contract import REQUIRED_METRIC_NAMES
 from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
     PAIRING_KEY_FIELDS,
     SAFETY_WRAPPER_MODE_FIELD,
@@ -25,16 +26,7 @@ from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
 
 REPORT_SCHEMA_VERSION = "robot_sf.issue_3501_safety_wrapper_factorial_report.v1"
 
-SAFETY_WRAPPER_FACTORIAL_METRICS: tuple[str, ...] = (
-    "exact_collision_probability",
-    "near_miss_probability",
-    "min_predicted_separation_m",
-    "completion_probability",
-    "progress_at_timeout",
-    "false_positive_stop_rate",
-    "stop_yield_latency_s",
-    "wrapper_intervention_rate",
-)
+SAFETY_WRAPPER_FACTORIAL_METRICS: tuple[str, ...] = REQUIRED_METRIC_NAMES
 
 LOWER_IS_BETTER_METRICS = {
     "exact_collision_probability",

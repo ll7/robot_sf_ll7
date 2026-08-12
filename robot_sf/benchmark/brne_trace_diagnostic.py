@@ -395,9 +395,7 @@ def _step_row(
     distance_to_goal = math.dist(position, goal_position)
     previous_distance = previous["distance_to_goal_m"] if previous else initial_goal_distance
     goal_switched = previous is not None and previous["goal_position"] != goal_position
-    signed_progress_delta = (
-        0.0 if goal_switched else previous_distance - distance_to_goal
-    )
+    signed_progress_delta = 0.0 if goal_switched else previous_distance - distance_to_goal
     selected = step["selected_action"]
     previous_selected = previous["selected_command"] if previous else None
     amv = step["amv"]

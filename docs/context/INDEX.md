@@ -153,11 +153,36 @@ diagnostic but did not change the `0/3` goal-reaching boundary:
 The residual progress mechanism is tracked separately in
 [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
 
+Issue #6938 BRNE progress mechanism: exact native traces separate pre-clamp and
+selected actions, show no clipping or gross heading/frame mismatch in the frozen
+slice, and reproduce a common post-initial-step low-speed command with positive
+phase progress but `0/3` goal-reaching:
+[issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
+[evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
+
+Issue #6944 BRNE candidate transition: bounded native candidate/weight summaries
+show the candidate distribution itself shifts from `0.400` to `0.040` m/s
+while mean-normalized weights remain uniform; weighting/normalization is
+narrowed as a null explanation, but upstream candidate generation, planner
+state, and control-horizon causes remain unresolved and diagnostic-only:
+[issue_6944_brne_candidate_transition.md](issue_6944_brne_candidate_transition.md),
+[evidence/issue_6944_brne_candidate_transition_summary.json](evidence/issue_6944_brne_candidate_transition_summary.json).
+
+Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
+`orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The
+result measures projection divergence only; it is not benchmark evidence and does not retire the
+ORCA dissertation hedge:
+[issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
+[evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 
 Registered emergent-phenomena demonstration for the released pedestrian substrate (lane formation, doorway oscillation, exit arching) at released + literature-typical speed:
 [README.md](evidence/issue_5149_emergent_phenomena_2026-07/README.md).
+
+Multi-seed measured emergent-phenomena campaign (10 seeds per scenario x calibration, per-seed run records, aggregate statistics, full provenance manifest) elevating the pinned single-seed exhibit to measured face-validity evidence:
+[README.md](evidence/issue_5149_emergent_phenomena_multiseed_2026-08/README.md).
 
 Publication figure style pack (opt-in vector export, colorblind-safe planner palette, provenance sidecars, LaTeX-safe captions):
 [issue_4777_publication_figure_style_pack.md](issue_4777_publication_figure_style_pack.md).

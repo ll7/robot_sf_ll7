@@ -176,3 +176,30 @@ goal-reaching remains `0/3`. This remains diagnostic-only evidence; the
 separately scoped [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938)
 progress/mechanism experiment is required before any broader or ranked BRNE
 campaign.
+
+## #6938 progress mechanism follow-up
+
+After the source-aligned action aggregation correction in [#6934](https://github.com/ll7/robot_sf_ll7/issues/6934),
+issue [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938) added the
+smallest trace fields needed to distinguish the weighted command before safety
+clipping from the selected command after clipping. The exact native rerun used
+the same scenario, seeds `111/112/113`, horizon `500`, timestep `0.1`, pinned
+source `633a5cdcb39ab27f18b596cb8cb1968644f82391`, and single-thread isolation.
+
+All three BRNE rows were native, mechanism-trace-valid, runtime-eligible,
+non-degenerate, and corridor-valid. They had `0/3` goal-reaching, zero
+fallback/degraded rows, and zero clipping steps. Each row emitted approximately
+`0.40 -> 0.04 m/s` with `omega=0`, while signed goal-distance progress was
+positive in early, middle, and late phases. The bounded heading/goal deltas
+provide no gross frame-mismatch signal in this slice. This is a reproducible
+trace-level mechanism signal, not a causal, benchmark, ranking, safety,
+realism, matched-compute, or paper claim.
+
+The tracked context note is
+[`issue_6938_brne_progress_mechanism.md`](issue_6938_brne_progress_mechanism.md),
+with compact evidence in
+[`evidence/issue_6938_brne_progress_mechanism_summary.json`](evidence/issue_6938_brne_progress_mechanism_summary.json).
+The raw report and episode files remain ignored and worktree-local. The narrow
+next probe is [#6944](https://github.com/ll7/robot_sf_ll7/issues/6944), which
+owns candidate command-generation, weighting/normalization, or control-horizon
+explanations on the same frozen matrix.

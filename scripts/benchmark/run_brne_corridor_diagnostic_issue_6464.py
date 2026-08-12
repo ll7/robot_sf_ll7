@@ -374,6 +374,85 @@ def _finite_optional(value: Any, *, field: str) -> float | None:
     return parsed
 
 
+def _finite_required(value: Any, *, field: str) -> float:
+    """Validate a required finite scalar."""
+    if value is None:
+        raise ValueError(f"{field} is required")
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"{field} must be finite when present")
+    return parsed
+
+
+def _validate_candidate_distribution(  # noqa: C901
+    value: Any, *, step_index: int
+) -> None:
+    """Validate bounded candidate/weight summaries without accepting raw tensors."""
+    if not isinstance(value, dict):
+        raise ValueError(f"step {step_index} has malformed candidate distribution")
+    status = value.get("status")
+    if status == "unavailable":
+        if not isinstance(value.get("reason"), str) or not value["reason"].strip():
+            raise ValueError(
+                f"step {step_index} has an unavailable candidate distribution without reason"
+            )
+        return
+    if status != "available" or value.get("schema_version") != "brne-candidate-distribution.v1":
+        raise ValueError(f"step {step_index} has an invalid candidate distribution status")
+    sample_count = value.get("sample_count")
+    plan_step_count = value.get("plan_step_count")
+    if (
+        isinstance(sample_count, bool)
+        or not isinstance(sample_count, int)
+        or sample_count < 1
+        or isinstance(plan_step_count, bool)
+        or not isinstance(plan_step_count, int)
+        or plan_step_count < 1
+    ):
+        raise ValueError(f"step {step_index} has invalid candidate distribution dimensions")
+
+    def validate_stats(summary: Any, *, field: str) -> None:
+        if not isinstance(summary, dict):
+            raise ValueError(f"step {step_index} has malformed {field} distribution")
+        for statistic in ("min", "q25", "median", "mean", "q75", "max", "std"):
+            _finite_required(summary.get(statistic), field=f"{field}.{statistic}")
+
+    def validate_step_summary(summary: Any, *, field: str) -> None:
+        if not isinstance(summary, dict):
+            raise ValueError(f"step {step_index} has malformed {field} candidate summary")
+        controls = summary.get("candidate_controls")
+        if not isinstance(controls, dict):
+            raise ValueError(f"step {step_index} is missing {field} candidate controls")
+        validate_stats(controls.get("v_m_s"), field=f"{field}.v_m_s")
+        validate_stats(controls.get("omega_rad_s"), field=f"{field}.omega_rad_s")
+        validate_stats(summary.get("weights"), field=f"{field}.weights")
+        weighted_mean = summary.get("weighted_mean")
+        if not isinstance(weighted_mean, dict):
+            raise ValueError(f"step {step_index} is missing {field} weighted mean")
+        _finite_required(weighted_mean.get("v_m_s"), field=f"{field}.weighted_mean.v_m_s")
+        _finite_required(
+            weighted_mean.get("omega_rad_s"), field=f"{field}.weighted_mean.omega_rad_s"
+        )
+
+    validate_step_summary(value.get("first"), field="first")
+    second = value.get("second")
+    if plan_step_count > 1:
+        validate_step_summary(second, field="second")
+    elif second is not None:
+        validate_step_summary(second, field="second")
+    first_to_second = value.get("first_to_second")
+    if plan_step_count > 1:
+        if not isinstance(first_to_second, dict):
+            raise ValueError(f"step {step_index} is missing first-to-second candidate deltas")
+        for field in (
+            "candidate_mean_delta_v_m_s",
+            "weighted_mean_delta_v_m_s",
+            "candidate_mean_delta_omega_rad_s",
+            "weighted_mean_delta_omega_rad_s",
+        ):
+            _finite_required(first_to_second.get(field), field=f"first_to_second.{field}")
+
+
 def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
     record: dict[str, Any],
 ) -> tuple[dict[str, Any] | None, str]:
@@ -426,6 +505,24 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
             _finite_optional(selected_action.get("omega_rad_s"), field="selected omega")
             if selected_action.get("v_m_s") is None or selected_action.get("omega_rad_s") is None:
                 raise ValueError(f"step {index} has incomplete selected action")
+            pre_clamp_action = step.get("pre_clamp_action")
+            if pre_clamp_action is not None:
+                if not isinstance(pre_clamp_action, dict):
+                    raise ValueError(f"step {index} has malformed pre-clamp action")
+                _finite_optional(pre_clamp_action.get("v_m_s"), field="pre-clamp v")
+                _finite_optional(pre_clamp_action.get("omega_rad_s"), field="pre-clamp omega")
+                if (
+                    pre_clamp_action.get("v_m_s") is None
+                    or pre_clamp_action.get("omega_rad_s") is None
+                ):
+                    raise ValueError(f"step {index} has incomplete pre-clamp action")
+            action_clipping = step.get("action_clipping")
+            if action_clipping is not None:
+                if not isinstance(action_clipping, dict) or any(
+                    not isinstance(action_clipping.get(field), bool)
+                    for field in ("v_clipped", "omega_clipped", "any_clipped")
+                ):
+                    raise ValueError(f"step {index} has malformed action clipping")
             action_delta = step.get("action_delta")
             if action_delta is not None:
                 if not isinstance(action_delta, dict) or not isinstance(
@@ -454,6 +551,15 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
                 "samples_first",
             }:
                 raise ValueError(f"step {index} has unknown aggregation mode")
+            expected_formula = {
+                "not_applied": "not_applied",
+                "plan_step_first": "mean_plan_step_first_over_samples",
+                "samples_first": "mean_samples_first_over_samples",
+            }[ensemble["aggregation_mode"]]
+            if ensemble.get("aggregation_formula") != expected_formula:
+                raise ValueError(f"step {index} has an inconsistent aggregation formula")
+            candidate_distribution = ensemble.get("candidate_distribution")
+            _validate_candidate_distribution(candidate_distribution, step_index=index)
             runtime_step = step.get("runtime")
             if not isinstance(runtime_step, dict):
                 raise ValueError(f"step {index} is missing runtime metadata")
@@ -470,6 +576,16 @@ def _validate_brne_mechanism_trace(  # noqa: C901, PLR0912, PLR0915
                 not isinstance(reason, str) for reason in runtime_step["failure_reasons"]
             ):
                 raise ValueError(f"step {index} has malformed runtime failure reasons")
+            if (
+                runtime_step.get("status") == "ok"
+                and ensemble.get("aggregation_mode") != "not_applied"
+            ):
+                if pre_clamp_action is None:
+                    raise ValueError(f"step {index} is missing pre-clamp action")
+                if action_clipping is None:
+                    raise ValueError(f"step {index} is missing action clipping metadata")
+                if candidate_distribution.get("status") != "available":
+                    raise ValueError(f"step {index} is missing candidate distribution")
             _finite_optional(runtime_step.get("elapsed_s"), field="solver elapsed time")
             _finite_optional(runtime_step.get("budget_s"), field="solver budget")
     except (TypeError, ValueError) as exc:
@@ -530,6 +646,124 @@ def _simulation_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
         "first": actions[0] if actions else None,
         "last": actions[-1] if actions else None,
         "action_change_count": changes,
+    }
+
+
+def _mechanism_action_summary(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize finite pre-clamp actions and observed safety clipping."""
+    actions: list[dict[str, float]] = []
+    clipped_steps = 0
+    for step in steps:
+        payload = step.get("pre_clamp_action") if isinstance(step, dict) else None
+        if not isinstance(payload, dict):
+            continue
+        try:
+            linear_value = float(payload.get("v_m_s"))
+            angular_value = float(payload.get("omega_rad_s"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(linear_value) and math.isfinite(angular_value):
+            actions.append({"v_m_s": linear_value, "omega_rad_s": angular_value})
+        clipping = step.get("action_clipping") if isinstance(step, dict) else None
+        if isinstance(clipping, dict) and clipping.get("any_clipped") is True:
+            clipped_steps += 1
+    changes = sum(
+        not math.isclose(previous["v_m_s"], current["v_m_s"])
+        or not math.isclose(previous["omega_rad_s"], current["omega_rad_s"])
+        for previous, current in pairwise(actions)
+    )
+    return {
+        "source": "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[].pre_clamp_action",
+        "available": bool(actions),
+        "first": actions[0] if actions else None,
+        "last": actions[-1] if actions else None,
+        "v_range_m_s": (
+            [min(action["v_m_s"] for action in actions), max(action["v_m_s"] for action in actions)]
+            if actions
+            else None
+        ),
+        "omega_range_rad_s": (
+            [
+                min(action["omega_rad_s"] for action in actions),
+                max(action["omega_rad_s"] for action in actions),
+            ]
+            if actions
+            else None
+        ),
+        "action_change_count": changes,
+        "clipped_steps": clipped_steps,
+    }
+
+
+def _candidate_distribution_summary(ensemble_steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Retain only first-to-second candidate/weight summaries for the compact report."""
+    distributions = [item.get("candidate_distribution") for item in ensemble_steps]
+    if not distributions:
+        return {
+            "status": "unavailable",
+            "reason": "candidate_distribution_not_recorded",
+        }
+    first_distribution = distributions[0]
+    if not isinstance(first_distribution, dict) or first_distribution.get("status") != "available":
+        reason = (
+            first_distribution.get("reason", "candidate_distribution_unavailable")
+            if isinstance(first_distribution, dict)
+            else "candidate_distribution_malformed"
+        )
+        return {"status": "unavailable", "reason": str(reason)}
+    second_distribution = distributions[1] if len(distributions) > 1 else None
+    first_observation = first_distribution.get("first")
+    second_observation = (
+        second_distribution.get("first") if isinstance(second_distribution, dict) else None
+    )
+    observation_step_transition = {"status": "unavailable", "reason": "second_trace_step_missing"}
+    if isinstance(first_observation, dict) and isinstance(second_observation, dict):
+        first_controls = first_observation.get("candidate_controls", {})
+        second_controls = second_observation.get("candidate_controls", {})
+        first_v = first_controls.get("v_m_s", {})
+        second_v = second_controls.get("v_m_s", {})
+        first_omega = first_controls.get("omega_rad_s", {})
+        second_omega = second_controls.get("omega_rad_s", {})
+        first_weights = first_observation.get("weights", {})
+        second_weights = second_observation.get("weights", {})
+        first_mean = first_observation.get("weighted_mean", {})
+        second_mean = second_observation.get("weighted_mean", {})
+        observation_step_transition = {
+            "status": "available",
+            "from_trace_step": 0,
+            "to_trace_step": 1,
+            "from": first_observation,
+            "to": second_observation,
+            "delta": {
+                "candidate_mean_delta_v_m_s": float(second_v["mean"] - first_v["mean"]),
+                "weighted_mean_delta_v_m_s": float(second_mean["v_m_s"] - first_mean["v_m_s"]),
+                "candidate_mean_delta_omega_rad_s": float(
+                    second_omega["mean"] - first_omega["mean"]
+                ),
+                "weighted_mean_delta_omega_rad_s": float(
+                    second_mean["omega_rad_s"] - first_mean["omega_rad_s"]
+                ),
+                "weight_mean_delta": float(second_weights["mean"] - first_weights["mean"]),
+                "weight_std_delta": float(second_weights["std"] - first_weights["std"]),
+            },
+        }
+    return {
+        "status": "available",
+        "schema_version": "brne-candidate-distribution.v1",
+        "sample_count": first_distribution.get("sample_count"),
+        "plan_step_count": first_distribution.get("plan_step_count"),
+        "first": first_distribution.get("first"),
+        "second": first_distribution.get("second"),
+        "first_to_second": (
+            first_distribution.get("first_to_second")
+            if isinstance(first_distribution, dict)
+            else None
+        ),
+        "observation_step_transition": observation_step_transition,
+        "source": (
+            "algorithm_metadata.planner_runtime.planner_metadata.mechanism_trace.steps[]"
+            ".ensemble.candidate_distribution"
+        ),
     }
 
 
@@ -625,6 +859,7 @@ def _mechanism_table_row(
     runtime_steps = [item for item in runtime_steps if isinstance(item, dict)]
     ensemble_steps = [step.get("ensemble", {}) for step in mechanism_steps]
     ensemble_steps = [item for item in ensemble_steps if isinstance(item, dict)]
+    pre_clamp_action = _mechanism_action_summary(mechanism_steps)
     selected_pedestrians = [step.get("selected_pedestrians", []) for step in mechanism_steps]
     selected_pedestrians = [item for item in selected_pedestrians if isinstance(item, list)]
     runtime_meta = metadata.get("planner_runtime")
@@ -658,7 +893,12 @@ def _mechanism_table_row(
             ),
             "unavailable_reason": None if observations else "goal_geometry_not_recorded",
         },
+        "pre_clamp_action": pre_clamp_action,
         "selected_action": _simulation_action_summary(simulation_steps),
+        "action_clipping": {
+            "available": pre_clamp_action["available"],
+            "clipped_steps": pre_clamp_action["clipped_steps"],
+        },
         "runtime": {
             "status": runtime_planner_meta.get("runtime_status", "not_applicable"),
             "failure_count": runtime_planner_meta.get("failure_count", 0),
@@ -738,6 +978,7 @@ def _mechanism_table_row(
                 {json.dumps(item.get("weight_shape"), sort_keys=True) for item in ensemble_steps}
             ),
             "modes": sorted({item.get("aggregation_mode") for item in ensemble_steps}),
+            "candidate_distribution": _candidate_distribution_summary(ensemble_steps),
             "unavailable_reason": None
             if planner_key == "brne"
             else "upstream_aggregation_not_exposed_by_comparator",
@@ -1042,6 +1283,61 @@ def _markdown_cell(value: Any) -> str:
     return "not available" if value is None else str(value)
 
 
+def _markdown_action_summary(summary: Any, *, include_clipped: bool = False) -> str:
+    """Render a compact first-to-last action summary for the mechanism table."""
+    if not isinstance(summary, dict) or summary.get("available") is not True:
+        return "not available"
+    first = summary.get("first")
+    last = summary.get("last")
+    if not isinstance(first, dict) or not isinstance(last, dict):
+        return "not available"
+    try:
+        text = (
+            f"{float(first['v_m_s']):.3f}/{float(first['omega_rad_s']):.3f}"
+            f" -> {float(last['v_m_s']):.3f}/{float(last['omega_rad_s']):.3f}"
+        )
+    except (KeyError, TypeError, ValueError):
+        return "not available"
+    if include_clipped:
+        text += f"; clipped={summary.get('clipped_steps', 'not available')}"
+    return text
+
+
+def _markdown_candidate_transition(summary: Any) -> str:
+    """Render the first-to-second planner-observation candidate transition."""
+    if not isinstance(summary, dict) or summary.get("status") != "available":
+        return "not available"
+    transition = summary.get("observation_step_transition")
+    if not isinstance(transition, dict) or transition.get("status") != "available":
+        return "not available"
+    source = transition.get("from")
+    target = transition.get("to")
+    if not isinstance(source, dict) or not isinstance(target, dict):
+        return "not available"
+    source_controls = source.get("candidate_controls")
+    target_controls = target.get("candidate_controls")
+    if not isinstance(source_controls, dict) or not isinstance(target_controls, dict):
+        return "not available"
+    source_v = source_controls.get("v_m_s")
+    target_v = target_controls.get("v_m_s")
+    source_weights = source.get("weights")
+    target_weights = target.get("weights")
+    if not isinstance(source_v, dict) or not isinstance(target_v, dict):
+        return "not available"
+    if not isinstance(source_weights, dict) or not isinstance(target_weights, dict):
+        return "not available"
+    try:
+        return (
+            f"v mean {float(source_v['mean']):.3f}->{float(target_v['mean']):.3f}; "
+            f"weighted {float(source['weighted_mean']['v_m_s']):.3f}"
+            f"->{float(target['weighted_mean']['v_m_s']):.3f}; "
+            f"w mean {float(source_weights['mean']):.3f}"
+            f"->{float(target_weights['mean']):.3f}"
+        )
+    except (KeyError, TypeError, ValueError):
+        return "not available"
+
+
 def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     """Write machine-readable and human-readable diagnostic reports."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1080,16 +1376,29 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
             "Rows retain diagnostic telemetry even when native eligibility is unavailable. "
             "`not available` is a fail-closed state, not a zero or a success.",
             "",
-            "| planner | seed | status | runtime | failures | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | collision step | goal step |",
-            "| --- | ---: | --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
+            "| planner | seed | status | runtime | failures | pre-clamp action (v/omega) | selected action (v/omega) | candidate transition (v mean/weighted; weight mean) | heading/goal first (decl/vel/goal rad) | goal start -> end (m) | phase progress (m) | displacement (m) | interaction share | min clearance (m) | terminal | collision step | goal step |",
+            "| --- | ---: | --- | --- | ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: |",
         ]
     )
     for row in report["mechanism_table"]:
         goal = row.get("goal", {})
         runtime = row.get("runtime", {})
+        heading = row.get("heading", {})
         motion = row.get("motion", {})
         interaction = row.get("interaction_zone", {})
         clearance = row.get("clearance", {})
+        candidate_transition = _markdown_candidate_transition(
+            row.get("aggregation", {}).get("candidate_distribution")
+            if isinstance(row.get("aggregation"), dict)
+            else None
+        )
+        pre_clamp_text = _markdown_action_summary(row.get("pre_clamp_action"), include_clipped=True)
+        selected_text = _markdown_action_summary(row.get("selected_action"))
+        heading_text = (
+            f"{_markdown_cell(heading.get('declared_first_rad'))}/"
+            f"{_markdown_cell(heading.get('velocity_derived_first_rad'))}/"
+            f"{_markdown_cell(heading.get('goal_bearing_first_rad'))}"
+        )
         phase_progress = goal.get("signed_progress_by_phase")
         phase_text = (
             ", ".join(
@@ -1108,10 +1417,12 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         lines.append(
             f"| {row.get('planner', 'unknown')} | {row.get('seed', 'unknown')} | "
             f"{row.get('status', 'unavailable')} | {runtime.get('status', 'not available')} | "
-            f"{runtime.get('failure_count', 'not available')} | {goal_text} | {phase_text} | "
+            f"{runtime.get('failure_count', 'not available')} | {pre_clamp_text} | "
+            f"{selected_text} | {candidate_transition} | {heading_text} | {goal_text} | {phase_text} | "
             f"{_markdown_cell(motion.get('displacement_m'))} | "
             f"{_markdown_cell(interaction.get('exposure_share'))} | "
             f"{_markdown_cell(clearance.get('min_clearance_m'))} | "
+            f"{_markdown_cell(row.get('events', {}).get('termination_reason'))} | "
             f"{_markdown_cell(row.get('events', {}).get('collision_step'))} | "
             f"{_markdown_cell(row.get('events', {}).get('goal_step'))} |"
         )

@@ -2652,3 +2652,227 @@ def test_issue_6484_baseline_promotion_variants_keep_distinct_overrides() -> Non
         != long_mapping["tracking"]["wandb"]["job_type"]
     )
     assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]
+
+
+# Issue #6484: the issue-1024 h500 schedule retrain variants share one base
+# config. The constants below pin the family and its frozen pre-change
+# resolved-config fingerprints.
+_ISSUE_6484_ISSUE_1024_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_ISSUE_1024_BASE_NAME = (
+    "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_base.yaml"
+)
+_ISSUE_6484_ISSUE_1024_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_issue_1024_resolved.json"
+)
+_ISSUE_6484_ISSUE_1024_VARIANTS = [
+    "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml",
+    "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml",
+]
+
+
+def _issue_6484_issue_1024_baseline() -> dict:
+    """Load and integrity-check the frozen issue-1024 config baseline."""
+    assert _ISSUE_6484_ISSUE_1024_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_ISSUE_1024_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_6484_issue_1024_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for an issue-1024 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ISSUE_1024_VARIANTS)
+def test_issue_6484_issue_1024_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated issue-1024 variant matches its pre-refactor mapping."""
+    path = (_ISSUE_6484_ISSUE_1024_DIR / variant).resolve()
+    baseline = _issue_6484_issue_1024_baseline()
+
+    assert _issue_6484_issue_1024_fingerprint(path) == baseline["variants"][variant]
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.total_timesteps == 12000000
+    assert config.evaluation.step_schedule
+
+
+def test_issue_6484_issue_1024_base_inheritance_and_no_launch_identity() -> None:
+    """The shared base carries common settings but no launch identity."""
+    base_path = (_ISSUE_6484_ISSUE_1024_DIR / _ISSUE_6484_ISSUE_1024_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    for variant in _ISSUE_6484_ISSUE_1024_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_ISSUE_1024_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_ISSUE_1024_BASE_NAME
+        assert set(variant_yaml) == {"base_config", "policy_id", "num_envs", "tracking"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_issue_1024_variants_keep_distinct_launch_metadata() -> None:
+    """The env22 and env30-l40s launch identities remain explicit and distinct."""
+    env22 = load_expert_training_config(
+        (
+            _ISSUE_6484_ISSUE_1024_DIR
+            / "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml"
+        ).resolve()
+    )
+    env30 = load_expert_training_config(
+        (
+            _ISSUE_6484_ISSUE_1024_DIR
+            / "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml"
+        ).resolve()
+    )
+    env22_mapping = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_ISSUE_1024_DIR
+            / "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml"
+        ).resolve()
+    )
+    env30_mapping = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_ISSUE_1024_DIR
+            / "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml"
+        ).resolve()
+    )
+
+    assert env22.num_envs == 22
+    assert env30.num_envs == 30
+    assert env22.policy_id.endswith("_env22")
+    assert env30.policy_id.endswith("_env30_l40s")
+    assert env22_mapping["tracking"]["wandb"]["job_type"] == (
+        "expert-ppo-12m-all-available-h500-env22"
+    )
+    assert (
+        env30_mapping["tracking"]["wandb"]["job_type"]
+        == "expert-ppo-12m-all-available-h500-env30-l40s"
+    )
+    assert env22_mapping["tracking"]["wandb"]["tags"] != env30_mapping["tracking"]["wandb"]["tags"]
+
+
+# Issue #4014: the issue_4014 PPO smoke config family was migrated to inherit
+# shared settings from a single base config. The constants below pin that
+# contract and the frozen pre-change resolved-config baseline.
+_ISSUE_4014_FAMILY_DIR = Path("configs/training/ppo")
+_ISSUE_4014_BASE_NAME = "issue_4014_ppo_smoke_base.yaml"
+_ISSUE_4014_BASELINE_PATH = Path("tests/integration/_baseline_issue_4014_ppo_smoke_resolved.json")
+_ISSUE_4014_VARIANTS = [
+    "issue_4014_ppo_smoke_matched.yaml",
+    "issue_4014_ppo_mamba_smoke.yaml",
+    "issue_4014_ppo_mamba_smoke_matched.yaml",
+]
+
+
+def _issue_4014_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    assert _ISSUE_4014_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_4014_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_4014_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_4014_VARIANTS)
+def test_issue_4014_ppo_smoke_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated variant must resolve byte-identically to the frozen pre-change mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant.
+    """
+    path = (_ISSUE_4014_FAMILY_DIR / variant).resolve()
+    baseline = _issue_4014_baseline()
+
+    actual_fingerprint = _issue_4014_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+
+
+def test_issue_4014_ppo_smoke_base_inherits_and_no_launch_identity() -> None:
+    """Every variant inherits its shared base and the base stays lean."""
+    for variant in _ISSUE_4014_VARIANTS:
+        variant_path = (_ISSUE_4014_FAMILY_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == _ISSUE_4014_BASE_NAME
+
+        base_path = (_ISSUE_4014_FAMILY_DIR / _ISSUE_4014_BASE_NAME).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+
+
+@pytest.mark.parametrize("variant", _ISSUE_4014_VARIANTS)
+def test_issue_4014_ppo_smoke_loads_through_loader(variant: str) -> None:
+    """Each migrated variant loads through load_expert_training_config successfully."""
+    path = (_ISSUE_4014_FAMILY_DIR / variant).resolve()
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.total_timesteps == 2048
+    assert config.seeds == (4014,)
+    assert config.evaluation.step_schedule
+
+
+def test_issue_4014_ppo_smoke_variants_keep_distinct_overrides() -> None:
+    """The three inherited variants retain distinct policy_id, feature_extractor, and observation_mode."""
+    matched = load_expert_training_config(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_smoke_matched.yaml").resolve()
+    )
+    mamba = load_expert_training_config(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_mamba_smoke.yaml").resolve()
+    )
+    mamba_matched = load_expert_training_config(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_mamba_smoke_matched.yaml").resolve()
+    )
+
+    assert matched.policy_id == "ppo_issue_4014_smoke_matched"
+    assert mamba.policy_id == "ppo_mamba_issue_4014_smoke"
+    assert mamba_matched.policy_id == "ppo_mamba_issue_4014_smoke_matched"
+
+    assert matched.feature_extractor == "default"
+    assert mamba.feature_extractor == "mamba"
+    assert mamba_matched.feature_extractor == "mamba"
+
+    assert matched.env_overrides["observation_mode"] == "default_gym"
+    assert mamba.env_overrides["observation_mode"] == "default"
+    assert mamba_matched.env_overrides["observation_mode"] == "default_gym"
+
+    assert matched.num_envs == 1
+    assert matched.worker_mode == "dummy"
+    assert mamba.num_envs is None
+    assert mamba.worker_mode == "auto"
+    assert mamba_matched.num_envs == 1
+    assert mamba_matched.worker_mode == "dummy"
+
+    matched_mapping = _load_expert_training_config_mapping(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_smoke_matched.yaml").resolve()
+    )
+    mamba_mapping = _load_expert_training_config_mapping(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_mamba_smoke.yaml").resolve()
+    )
+    mamba_matched_mapping = _load_expert_training_config_mapping(
+        (_ISSUE_4014_FAMILY_DIR / "issue_4014_ppo_mamba_smoke_matched.yaml").resolve()
+    )
+
+    assert matched_mapping["tracking"]["tensorboard"] is False
+    assert "tracking" not in mamba_mapping
+    assert mamba_matched_mapping["tracking"]["tensorboard"] is False

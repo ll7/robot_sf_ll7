@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "a31686e51f624638255d22968b89cda0257c2e4c",
+  "variants": {
+    "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env22.yaml": "40fc1c6084b85269daf09a526164984744749eb37490d4a8ea3f9df862c0aa1e",
+    "expert_ppo_issue_1024_reward_curriculum_all_available_h500_schedule_12m_env30_l40s.yaml": "50a1fd9180326708962c319e5ab285064c5ec4e0a9f320a4385b7f61936d2114"
+  }
+}

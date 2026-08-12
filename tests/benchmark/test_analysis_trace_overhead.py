@@ -109,3 +109,21 @@ def test_measurement_with_unstable_batches_is_inconclusive(
     assert receipt["checks"]["same_commit_repeated_batch_stable"] is False
     assert receipt["derived"]["target_met"] is None
     assert receipt["derived"]["target_decision"] == "inconclusive"
+
+
+def test_measurement_does_not_hide_a_failed_batch_behind_the_aggregate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stable aggregate cannot pass when one repeated batch exceeds 10 percent."""
+
+    _patch_deterministic_fixture(monkeypatch, elapsed_seconds=[1.0, 1.15, 1.05, 1.0])
+
+    receipt = measurement.measure(samples=1, warmups=0, batches=2)
+
+    assert receipt["derived"]["batch_overhead_fractions"] == pytest.approx([0.15, 0.05])
+    assert receipt["derived"]["stability_status"] == "stable"
+    assert receipt["derived"]["batch_target_met"] is False
+    assert receipt["derived"]["target_met"] is False
+    assert receipt["derived"]["target_decision"] == "not_met"
+    assert receipt["issue"] == 6987
+    assert receipt["source_issue"] == 6972

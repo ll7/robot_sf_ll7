@@ -22,6 +22,7 @@ from robot_sf.benchmark.analysis_trace import canonical_json
 from robot_sf.benchmark.runner import run_episode
 
 ISSUE = 6972
+MEASUREMENT_ISSUE = 6987
 SCENARIO = {
     "id": "issue-6972-overhead",
     "density": "low",
@@ -35,6 +36,7 @@ SCENARIO = {
 }
 TRACE_TELEMETRY = {"analysis_trace": "all", "planner_debug_trace": "none"}
 DEFAULT_STABILITY_TOLERANCE_FRACTION = 0.25
+RECEIPT_SCHEMA_VERSION = "analysis_trace_overhead_measurement_receipt.v2"
 
 
 def _git_hash() -> str:
@@ -327,6 +329,8 @@ def measure(
         ),
         "trace_artifact_matches_provenance": all(on["trace_artifact_matches_provenance"]),
         "same_commit_repeated_batch_stable": stability["stable"],
+        "repeated_batch_overheads_defined": len(batch_summaries)
+        == sum(summary["overhead_fraction"] is not None for summary in batch_summaries),
     }
     integrity_ok = all(
         checks[key]
@@ -340,14 +344,30 @@ def measure(
     off_median = off["elapsed_sec_median"]
     on_median = on["elapsed_sec_median"]
     overhead_ratio = on_median / off_median - 1.0 if off_median > 0 else None
+    batch_overheads_defined = checks["repeated_batch_overheads_defined"]
+    batch_target_met = (
+        all(
+            summary["overhead_fraction"] <= 0.10
+            for summary in batch_summaries
+            if summary["overhead_fraction"] is not None
+        )
+        if batch_overheads_defined
+        else None
+    )
     target_met = (
         None
-        if overhead_ratio is None or not integrity_ok or not stability["stable"]
-        else overhead_ratio <= 0.10
+        if (
+            overhead_ratio is None
+            or not integrity_ok
+            or not stability["stable"]
+            or not batch_overheads_defined
+        )
+        else batch_target_met
     )
     return {
-        "schema_version": "issue_6972_analysis_trace_overhead_receipt.v2",
-        "issue": ISSUE,
+        "schema_version": RECEIPT_SCHEMA_VERSION,
+        "issue": MEASUREMENT_ISSUE,
+        "source_issue": ISSUE,
         "status": "diagnostic_only",
         "claim_boundary": (
             "Local synthetic-runner wall-clock and serialized-size diagnostic; "
@@ -377,7 +397,11 @@ def measure(
             "serialization": "analysis_trace.canonical_json",
             "compression": "gzip.compress(mtime=0)",
             "upper_tail_summary": "maximum measured sample; not a statistical percentile",
-            "target_rule": "target_met is null unless repeated batch medians are stable and integrity checks pass",
+            "target_rule": (
+                "target_met is null unless repeated batch medians are stable, every batch "
+                "overhead is within 10%, and integrity checks pass; an aggregate median "
+                "cannot hide a failed batch"
+            ),
         },
         "batches": batch_results,
         "arms": {"analysis_trace_off": off, "analysis_trace_on": on},
@@ -399,6 +423,7 @@ def measure(
             "batch_relative_spread_fraction": stability["relative_spread_fraction"],
             "stability_status": stability["status"],
             "stability_passed": stability["stable"],
+            "batch_target_met": batch_target_met,
             "target_percent": 10.0,
             "target_met": target_met,
             "target_decision": (

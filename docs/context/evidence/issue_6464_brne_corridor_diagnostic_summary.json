@@ -87,13 +87,13 @@
   },
   "follow_up_issue": 6923,
   "contract_follow_up_issue": 6932,
-  "next_step": "Hypothesis-driven diagnosis of BRNE 0/3 goal-reaching in #6923 before any broader or ranking campaign.",
+  "next_step": "Retain the bounded #6923 negative diagnostic; any BRNE objective or runtime-budget change requires a separately scoped experiment before broader or ranking work.",
   "follow_up_6923": {
-    "status": "diagnostic_incomplete",
+    "status": "diagnostic_complete",
     "result_classification": "diagnostic_only",
-    "generated_at": "2026-08-12T03:57:58.485413+00:00",
-    "base_commit": "dce2c6b3011015f6a95bb367fb07cc0975d9a974",
-    "command": "uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_diagnosis_<timestamp>",
+    "generated_at": "2026-08-12T04:15:11.951012+00:00",
+    "base_commit": "4ee87d61bf8f8b2627f316b3de06f4190c397b57",
+    "command": "NUMBA_NUM_THREADS=1 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_diagnosis_20260812T061500Z",
     "claim_boundary": "Smoke/diagnostic evidence for native BRNE execution, budget observability, goal-reaching, and non-degenerate corridor behavior only; no benchmark ranking, safety, realism, matched-compute, or paper claim.",
     "exact_pair_coverage": true,
     "fallback_or_degraded_rows": 0,
@@ -107,37 +107,39 @@
       "brne": {
         "exact_runs": "3/3",
         "mechanism_trace_valid": "3/3",
-        "runtime_eligible": "0/3",
+        "runtime_eligible": "3/3",
         "goal_reached": "0/3",
-        "runtime_failed": "3/3",
-        "failure_counts_by_seed": {"111": 500, "112": 499, "113": 500},
-        "failure_reasons": ["step_budget_exceeded"],
+        "runtime_failed": "0/3",
+        "failure_counts_by_seed": {"111": 0, "112": 0, "113": 0},
+        "failure_reasons": [],
         "budget_s": 0.1,
-        "non_degenerate": "0/3",
-        "corridor_violations": 1
+        "non_degenerate": "3/3",
+        "corridor_violations": 0,
+        "collision_steps_by_seed": {"111": 141, "112": 172, "113": 183},
+        "signed_goal_progress_pattern": "early negative, middle positive, late negative on all three trace-valid rows"
       },
       "orca_comparator": {
         "exact_runs": "3/3",
-        "diagnostic_eligible": "2/3",
-        "eligible_goal_reached": "2/2",
-        "corridor_violations": 1
+        "diagnostic_eligible": "3/3",
+        "eligible_goal_reached": "3/3",
+        "corridor_violations": 0
       },
       "social_force_comparator": {
         "exact_runs": "3/3",
-        "diagnostic_eligible": "2/3",
-        "eligible_goal_reached": "1/2",
-        "corridor_violations": 1,
+        "diagnostic_eligible": "3/3",
+        "eligible_goal_reached": "2/3",
+        "corridor_violations": 0,
         "collision_rows": 1
       }
     },
     "artifact": {
-      "local_report_dir": "output/benchmarks/issue_6923_brne_trace_diagnosis_20260812T060000Z",
-      "report_json_sha256": "06ef955c486e4b42997bf0214a53a70907d807598b7ce95827c6908372ce62e9",
-      "report_markdown_sha256": "e8bbccfeed01e2bc9e0502f1ee1be730b5b13753feed8f697ee49635ac3faf5c",
+      "local_report_dir": "output/benchmarks/issue_6923_brne_trace_diagnosis_20260812T061500Z",
+      "report_json_sha256": "38afc5acbee0b40cdb049d895b2ac12dee5ae3e5f08a4fb1c6138a803f09ef3c",
+      "report_markdown_sha256": "f312c0d4b1147a900446619ee81618edfe47146d4d84743e907493c8b6532a13",
       "raw_artifacts": "ignored_worktree_local",
       "tracked_summary_is_not_raw_episode_archive": true
     },
     "decision": "diagnostic-only retention; no bounded adapter revision and no broader campaign",
-    "next_empirical_action": "If pursued, calibrate the native runtime budget on the same frozen matrix in a separately scoped follow-up; do not reinterpret this run as objective, safety, ranking, or paper evidence."
+    "next_empirical_action": "If BRNE is pursued, separately test the observed progress reversal and collision mechanism on the same frozen matrix; do not change the adapter, widen the scenario, or make a ranking or paper claim from this result."
   }
 }

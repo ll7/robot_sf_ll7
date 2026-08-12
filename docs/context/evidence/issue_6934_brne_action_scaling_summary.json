@@ -1,0 +1,84 @@
+{
+  "schema_version": "issue-6934-brne-action-scaling-summary.v1",
+  "issue": 6934,
+  "status": "bounded_fix_validated",
+  "evidence_tier": "smoke_diagnostic",
+  "claim_boundary": "Source-aligned BRNE action aggregation and native corridor diagnostic behavior only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
+  "implementation": {
+    "base_commit": "77330613a9a29a7438a1d764297996ca38156cfe",
+    "implementation_commit": "980b8e415",
+    "changed_files": [
+      "robot_sf/baselines/brne.py",
+      "tests/baselines/test_brne_planner.py"
+    ],
+    "adapter_behavior": {
+      "before": "np.sum(weighted_control, axis=samples)",
+      "after": "np.mean(weighted_control, axis=samples)",
+      "safety_clamp_changed": false
+    }
+  },
+  "source_contract": {
+    "repository": "https://github.com/MurpheyLab/brne",
+    "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "license": "GPL-3.0 (local-only staging; not vendored or redistributed)",
+    "weight_normalization": {
+      "path": "third_party/external_repos/brne/brne_nav/brne_py/brne_py/brne.py",
+      "formula": "agent_weights /= np.mean(agent_weights)",
+      "requested_samples": 49,
+      "effective_samples": 42,
+      "mean_weight": 1.0,
+      "weight_sum": 42.0
+    },
+    "controller_aggregation": {
+      "path": "third_party/external_repos/brne/brne_nav/brne_py/brne_nav.py",
+      "linear_formula": "np.mean(ulist_essemble[:, :, 0] * weights[0], axis=1)",
+      "angular_formula": "np.mean(ulist_essemble[:, :, 1] * weights[0], axis=1)"
+    }
+  },
+  "tests": {
+    "command": "NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py tests/baselines/test_brne_planner.py",
+    "result": "47 passed"
+  },
+  "diagnostic": {
+    "config": "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",
+    "scenario": "classic_head_on_corridor_low",
+    "seeds": [111, 112, 113],
+    "horizon": 500,
+    "dt": 0.1,
+    "numba_threads": 1,
+    "command": "LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 NUMBA_NUM_THREADS=1 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir <ignored-worktree-diagnostic-output-dir>",
+    "status": "diagnostic_complete",
+    "exact_pair_coverage": true,
+    "fallback_or_degraded_rows": 0,
+    "brne": {
+      "exact_runs": "3/3",
+      "native_runs": "3/3",
+      "mechanism_trace_valid": "3/3",
+      "runtime_eligible": "3/3",
+      "runtime_failures": "0/3",
+      "goal_reached": "0/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "aggregation_formula": "mean_plan_step_first_over_samples",
+      "aggregation_mode": "plan_step_first",
+      "control_ensemble_shape": [25, 42, 2],
+      "requested_effective_samples": "49/42",
+      "selected_linear_action_range_mps": [0.039999997966771374, 0.4000000000000001],
+      "selected_angular_action_max_abs_radps": 0.0,
+      "per_seed": {
+        "111": {"first_v_mps": 0.4000000000000001, "last_v_mps": 0.039999997966771374},
+        "112": {"first_v_mps": 0.4000000000000001, "last_v_mps": 0.039999997966771374},
+        "113": {"first_v_mps": 0.4000000000000001, "last_v_mps": 0.039999997966771374}
+      }
+    },
+    "artifact": {
+      "local_report_dir": "ignored_worktree_diagnostic_artifact_issue_6934_brne_action_scaling_final_20260812T050300Z",
+      "report_json_sha256": "4f704e9bf8e69edb952ea26f55a4c5fd2a6a64e25f097d8cebe33a832137b38c",
+      "report_markdown_sha256": "6facf42ee476cf5b23c957b99abbee2f12b785fbb651309bd7bf7a4af3675292",
+      "raw_artifacts": "ignored_worktree_local",
+      "tracked_summary_is_not_raw_episode_archive": true
+    }
+  },
+  "decision": "Close #6934 after merging the bounded source-aligned mean aggregation fix; retain BRNE as diagnostic-only because goal-reaching remains 0/3.",
+  "next_empirical_action": "Issue #6938 tracks the separately scoped BRNE progress/mechanism diagnosis on the same frozen matrix before any broader or ranked campaign."
+}

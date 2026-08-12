@@ -142,6 +142,8 @@ knowledge, not every transient iteration detail.
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 * Issue #6875 camera-ready report crosswalk producer:
   [issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md)
+* Issue #6934 BRNE action-weight scaling and source-aligned aggregation:
+  [issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md)
 
 * Issue #6155 release environment packet:
   [issue_6155_release_environment_packet.md](issue_6155_release_environment_packet.md)

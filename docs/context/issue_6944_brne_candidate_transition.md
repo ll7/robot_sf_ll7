@@ -19,8 +19,8 @@ ranking, safety, realism, matched-compute parity, or paper evidence.
 - Upstream source: `MurpheyLab/brne` at
   `633a5cdcb39ab27f18b596cb8cb1968644f82391`, GPL-3.0, staged locally and not
   vendored or redistributed.
-- Integration base after refresh: `3461f4160209aea148585903799510fb23bb9f44`.
-- Implementation commit: `bdb85f7aa95bf90149a06e1f96fd27dc09b29536`.
+- Integration base after refresh: `3ad422e9d299d9a1ed787c19cf8d17dcdc6bd2ac`.
+- Implementation commit: `1e8652efeb8a8f2e92d59984f1d5c85d6502e1b8`.
 
 Reproduce with:
 
@@ -101,9 +101,9 @@ fix or benchmark result.
 ## Report integrity
 
 The exact local report directory is
-`output/benchmarks/issue_6944_controller_parity_20260812T114800Z/`.
+`output/benchmarks/issue_6944_controller_parity_20260812T120500Z/`.
 
 - `diagnostic_report.json` SHA-256:
-  `c5b7d80b7f7e73bc10ce51f8c1b1542b558e5fe5742ef309c9d96ab4fb9aea83`
+  `f6845773ee76f3afa7c7c6e515023027d781f881ed225fcdf35dac2852f1670e`
 - `diagnostic_report.md` SHA-256:
   `8abc23a4e0449168c481d10aae2501ebc586f9b8eba9b336cc21fad0349ffbb8`

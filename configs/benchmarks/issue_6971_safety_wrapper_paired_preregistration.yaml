@@ -1,0 +1,387 @@
+# Issue #6971: metric-capable safety-wrapper paired-campaign preregistration.
+#
+# Plain-language summary: this packet freezes the question, retained fields, analysis,
+# promotion rules, and execution cost before a future wrapper-on/off campaign. It is
+# a design contract only; authoring it does not submit compute or create benchmark evidence.
+schema_version: robot_sf.issue_6971_safety_wrapper_paired_preregistration.v1
+issue: 6971
+parent_issue: 4830
+origin_issue: 3501
+metric_contract_issue: 6970
+paired_report_builder_issue: 4598
+study_id: issue_6971_safety_wrapper_metric_capable_paired_campaign_v1
+status: preregistered_design_cost_only
+
+claim_boundary: >-
+  This packet is a preregistered design and planning estimate only. It does not run a
+  benchmark campaign, establish a measured safety gain, certify deployment safety, support
+  a universal claim, generalize beyond the configured planners/scenario suite, or change
+  paper/dissertation claims. A future result is eligible for interpretation only when every
+  native paired row, retained metric, provenance field, and fail-closed analysis gate passes.
+
+execution_boundary:
+  campaign_execution_allowed_in_this_pr: false
+  compute_submit_authorized: false
+  benchmark_evidence: false
+  paper_claim_promotion: false
+  metric_semantics_changes: false
+  post_hoc_metric_substitution_allowed: false
+  fallback_or_degraded_success_allowed: false
+
+source_contracts:
+  executable_campaign_config: configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml
+  design_contract: configs/research/safety_wrapper_ablation_v1.yaml
+  retained_metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  predecessor_evidence_snapshot: docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/README.md
+  metric_contract_claim_boundary: >-
+    A complete retained row proves only that the declared fields were emitted without alias
+    substitution; it is not itself a safety result.
+
+design:
+  research_question: >-
+    For each declared planner, does enabling the fixed planner-agnostic safety wrapper reduce
+    episode-level exact collision probability on the fixed 48-scenario suite without making
+    route completion or timeout progress materially worse?
+  scenario_contract:
+    selection_rule: >-
+      Resolve the complete included scenario manifest at execution time from the pinned
+      scenario_matrix path and SHA-256. The resolved suite must contain exactly 48 scenario IDs;
+      no scenario may be added, removed, reordered, or replaced after the first campaign row.
+    resolved_scenario_count: 48
+    resolved_scenario_ids_sha256: de656a95c5502c1a54900097065ba4dfeb8300ff5ad879a09bbf81d5e94ca3a9
+    resolved_scenario_ids_hash_definition: >-
+      SHA-256 of the UTF-8 JSON array of resolved scenario IDs in loader order, serialized with
+      separators=(',', ':'); this pins included-file expansion in addition to the manifest digest.
+    resolution_command: >-
+      uv run python -c "from robot_sf.benchmark.runner import load_scenario_matrix;
+      print(len(load_scenario_matrix('configs/scenarios/classic_interactions_francis2023.yaml')))"
+    population_type: fixed_suite
+    generalization_boundary: >-
+      The analysis describes this fixed suite and its paired stochastic repetitions. It does
+      not estimate performance on unseen scenarios or claim that the wrapper is universally safe.
+
+  planner_roster:
+    - planner_id: orca
+      arm_keys: [orca__wrapper_off, orca__wrapper_on]
+      source: configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml
+    - planner_id: social_force
+      arm_keys: [social_force__wrapper_off, social_force__wrapper_on]
+      source: configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml
+    - planner_id: prediction_planner
+      arm_keys: [prediction_planner__wrapper_off, prediction_planner__wrapper_on]
+      source: configs/benchmarks/issue_4830_safety_wrapper_factorial_v1.yaml
+
+  wrapper_arms:
+    - arm_key: wrapper_off
+      enabled: false
+      role: paired_counterfactual_baseline
+      fixed_config: null
+    - arm_key: wrapper_on
+      enabled: true
+      role: preregistered_intervention
+      fixed_config:
+        pedestrian_caution_radius_m: 2.0
+        capped_speed_m_s: 0.5
+        ttc_veto_threshold_s: 1.0
+        clearance_veto_m: 0.3
+      tuning_policy: no per-planner or post-hoc threshold tuning
+
+  pairing:
+    key_fields: [planner, scenario_id, seed]
+    same_scenario_seed_set_across_wrapper_arms: true
+    same_planner_config_across_wrapper_arms: true
+    scenario_order_frozen: true
+    no_seed_substitution: true
+    wrapper_arms_per_pair: 2
+    pair_count_per_planner: 144
+    total_pair_count: 432
+    retained_row_count: 864
+    retained_row_count_formula: 48 scenarios x 3 seeds x 3 planners x 2 wrapper arms
+
+seed_policy:
+  source_path: configs/benchmarks/seed_sets_v1.yaml
+  mode: fixed-list
+  seeds: [111, 112, 113]
+  seed_range_inclusive: [111, 113]
+  seed_count: 3
+  seeds_per_scenario_and_planner: 3
+  budget_justification: >-
+    The existing #4830 design already fixes three paired seeds over 48 scenarios, giving
+    144 complete paired blocks per planner and 432 blocks across the three planner strata.
+    This is a bounded diagnostic precision slice, not a claim of population-level power.
+
+estimand:
+  primary:
+    name: exact_collision_probability
+    path: metric_values.exact_collision_probability
+    unit: absolute probability difference
+    definition: >-
+      For each planner, scenario, and seed, delta equals the wrapper_on episode-level Bernoulli
+      collision indicator minus the wrapper_off indicator. The planner-specific estimand is the
+      arithmetic mean of those 144 paired deltas. The pooled summary is the equal-weight mean of
+      the three planner-specific estimates; planner-specific estimates remain mandatory outputs.
+    direction: >-
+      Negative delta means fewer exact-collision episodes with the wrapper enabled. A measured
+      safety gain requires a preregistered reduction of at least 0.05 absolute probability.
+  safety_gain_does_not_mean: >-
+    It does not mean deployment safety, absence of all near misses, causal validity outside the
+    fixed software/scenario/seed contract, or transfer to unconfigured planners, environments,
+    pedestrian behavior, hardware, or real-world populations.
+
+outcomes:
+  primary:
+    - name: exact_collision_probability
+      path: metric_values.exact_collision_probability
+      role: one_primary_safety_outcome
+      unit: probability [0, 1]
+  secondary_safety:
+    - name: near_miss_probability
+      path: metric_values.near_miss_probability
+      unit: probability [0, 1]
+    - name: min_predicted_separation_m
+      path: metric_values.min_predicted_separation_m
+      unit: meters
+    - name: false_positive_stop_rate
+      path: metric_values.false_positive_stop_rate
+      unit: rate [0, 1]
+    - name: stop_yield_latency_s
+      path: metric_values.stop_yield_latency_s
+      unit: seconds
+    - name: wrapper_intervention_rate
+      path: metric_values.wrapper_intervention_rate
+      unit: rate [0, 1]
+  task_performance_cost:
+    - name: completion_probability
+      path: metric_values.completion_probability
+      unit: probability [0, 1]
+      interpretation: route-completion cost guard
+    - name: progress_at_timeout
+      path: metric_values.progress_at_timeout
+      unit: normalized progress [0, 1]
+      interpretation: timeout-progress cost guard
+  outcome_policy: >-
+    The primary outcome is fixed before execution. Secondary outcomes and both task-performance
+    cost measures must be reported even when they do not favor the wrapper. No secondary outcome
+    may be promoted to primary after inspecting rows.
+
+retained_field_manifest:
+  identity_fields:
+    - planner
+    - scenario_id
+    - seed
+    - wrapper_arm
+  metric_contract_schema: paired_effect_metric_contract.v1
+  retained_row_path: metric_values
+  required_metric_fields:
+    - name: exact_collision_probability
+      path: metric_values.exact_collision_probability
+    - name: near_miss_probability
+      path: metric_values.near_miss_probability
+    - name: min_predicted_separation_m
+      path: metric_values.min_predicted_separation_m
+    - name: completion_probability
+      path: metric_values.completion_probability
+    - name: progress_at_timeout
+      path: metric_values.progress_at_timeout
+    - name: false_positive_stop_rate
+      path: metric_values.false_positive_stop_rate
+    - name: stop_yield_latency_s
+      path: metric_values.stop_yield_latency_s
+    - name: wrapper_intervention_rate
+      path: metric_values.wrapper_intervention_rate
+  validation_rules:
+    - every_expected_pair_has_exactly_one_wrapper_off_and_one_wrapper_on_row
+    - every_required_metric_path_is_present_and_finite
+    - booleans_are_not_accepted_as_numeric_metric_values
+    - declared_probability_and_rate_bounds_are_enforced
+    - legacy_root_fields_are_not_aliases_for_metric_values
+    - missing_intervention_or_recovery_observations_fail_closed_instead_of_becoming_zero
+    - incomplete_or_non_native_rows_block_analysis_and_promotion
+
+inference_contract:
+  resampling_unit:
+    method: scenario-seed-pair bootstrap within fixed planner strata
+    rationale: >-
+      Resample complete (scenario_id, seed) blocks with replacement separately within each
+      planner, preserving the wrapper_off/wrapper_on pairing and the three-seed contribution of
+      each scenario. Planner strata are not resampled into one another. The pooled interval is
+      computed from the equal-weight mean of the three stratum estimates.
+    bootstrap_confidence: 0.95
+    bootstrap_samples: 2000
+    bootstrap_seed: 6971
+    resampling_order: planner -> scenario_seed_pair
+  inference_population:
+    type: fixed_suite
+    rationale: >-
+      The 48 resolved scenarios are the deliberately frozen target suite for this design. The
+      interval quantifies variation over the paired scenario-seed blocks in that suite, not a
+      sampled-population claim about unseen maps.
+  estimand:
+    type: paired_delta
+    description: >-
+      The mean of wrapper_on minus wrapper_off paired episode-level values for the named metric,
+      first within each planner over its 144 scenario-seed pairs and then as an equal-weight
+      three-planner summary. The same estimator is applied to the primary, secondary, and cost
+      outcomes; only the preregistered primary drives the safety-gain classification.
+  decision_rule:
+    rule: >-
+      Classify the complete native result from the 95% paired-bootstrap interval against the
+      preregistered meaningful-effect threshold; never classify from a point estimate alone and
+      never use a significance test or post-hoc threshold search.
+    threshold: >-
+      A meaningful safety reduction is delta <= -0.05 absolute probability. Support requires the
+      pooled primary interval upper bound <= -0.05, pooled primary interval total width <= 0.10,
+      pooled completion and timeout-progress lower bounds >= -0.05, and no planner-specific
+      primary point estimate > +0.05. A pooled primary interval lower bound > -0.05 shows no
+      meaningful gain. All other complete cases are inconclusive; incomplete or invalid cases are
+      blocked, not inconclusive results.
+  primary_metrics:
+    metrics: [exact_collision_probability]
+    ordered_by_importance: true
+  multiplicity_handling:
+    strategy: >-
+      No multiplicity correction is applied to the single primary metric and single pooled
+      safety-gain classification. Secondary safety and task-cost intervals are descriptive
+      preregistered diagnostics; they cannot rescue, replace, or silently become the primary.
+    rationale: >-
+      The design has one primary metric and one primary pooled contrast. Keeping secondary
+      outcomes descriptive makes the decision boundary observable without turning outcome
+      shopping into an inferential claim.
+    adjustment_method: none_single_metric
+
+precision_and_power:
+  smallest_effect_worth_detecting: 0.05
+  effect_scale: absolute probability reduction in exact_collision_probability
+  interval_target:
+    confidence: 0.95
+    maximum_total_width: 0.10
+    maximum_half_width: 0.05
+    applies_to: pooled_primary_paired_delta
+  seed_budget_resolution: >-
+    Three fixed seeds across 48 scenarios provide 144 paired blocks per planner. The analysis
+    reports the observed interval width; if the pooled primary interval is wider than 0.10, the
+    result is inconclusive regardless of the point estimate. The width target is a precision
+    criterion, not a guarantee and not a significance threshold. Increasing seeds or changing
+    scenarios requires a dated amendment before execution, not a post-hoc rescue.
+  no_adaptive_power_tuning: true
+
+analysis_plan:
+  paired_aggregation:
+    order:
+      - validate_all_rows_against_paired_effect_metric_contract_v1
+      - join_wrapper_off_and_wrapper_on_by_planner_scenario_id_seed
+      - compute_on_minus_off_delta_for_each_retained_metric
+      - compute_equal_weight_planner_stratum_means
+      - compute_equal_weight_pooled_three_planner_summary
+  ties_and_degenerate_episodes:
+    binary_ties: >-
+      Equal off/on binary outcomes produce a valid zero delta and remain in the denominator.
+      They are not dropped as uninformative ties.
+    repeated_values: >-
+      Repeated or constant finite metric values remain valid observations; a degenerate interval
+      is reported as degenerate and cannot be promoted by a point estimate.
+    missing_or_nonfinite: >-
+      Missing, nonfinite, boolean-typed, out-of-range, or semantically substituted values fail
+      closed. No imputation, alias fallback, row deletion, or denominator change is allowed.
+  stopping_rule:
+    campaign_completion: all 864 retained rows and all 432 pairing keys are required
+    early_stop: none after execution begins, except infrastructure safety termination
+    infrastructure_failure: >-
+      Preserve failed rows and classify the campaign blocked; do not restart with replacement
+      seeds and do not report a partial result.
+    post_hoc_changes_forbidden:
+      - metric names or paths
+      - planner roster or wrapper thresholds
+      - scenario matrix or pairing key
+      - seed list
+      - meaningful-effect threshold
+      - interval method or promotion criteria
+
+promotion_criteria:
+  report_all_outcomes: true
+  measured_safety_gain:
+    required: >-
+      Complete native provenance; pooled primary 95% interval upper bound <= -0.05; pooled primary
+      interval total width <= 0.10; pooled completion_probability and progress_at_timeout 95%
+      interval lower bounds >= -0.05; and no planner-specific primary point estimate > +0.05.
+      Report all planner strata and every secondary outcome before using the bounded phrase
+      measured safety gain on this fixed suite.
+    claim_limit: >-
+      This permits only a fixed-suite, configured-pipeline diagnostic claim. It does not authorize
+      a universal safety, deployment, real-world, or paper-facing claim.
+  no_gain:
+    required: >-
+      Complete native provenance and pooled primary 95% interval lower bound > -0.05. Report no
+      meaningful reduction on the fixed suite, disclose any interval that indicates harm, and
+      retain all secondary and task-cost outcomes.
+  inconclusive:
+    required: >-
+      Complete native provenance but neither the measured-safety-gain nor no-gain rule is met,
+      including a pooled primary interval whose width exceeds 0.10. Report inconclusive rather
+      than selecting a more favorable metric, threshold, planner subset, or seed subset.
+  blocked:
+    required: >-
+      Any missing/invalid retained field, incomplete pairing, fallback/degraded row, provenance
+      mismatch, or infrastructure failure. Blocked is not evidence for or against the wrapper.
+
+acceptance:
+  required_sections_populated: true
+  retained_schema_identifiability:
+    status: confirmed_after_independent_review
+    basis: >-
+      Each of the eight required outcome names maps one-to-one to the exact finite metric_values
+      path in paired_effect_metric_contract.v1; no legacy alias or post-hoc substitute is used.
+  independent_review:
+    status: passed_after_reconciliation
+    scope: >-
+      Review covered estimand identifiability, retained-field paths, planner/scenario/seed counts,
+      interval-width decision precedence, cost estimate, claim boundary, and no-submit controls.
+    unresolved_findings: []
+  cost_estimate_stated: true
+  explicit_no_submission: true
+  maintainer_go_or_no_go_for_campaign: pending_separate_decision
+
+cost_estimate:
+  estimate_status: planning_estimate_only
+  basis:
+    prior_campaign_id: issue4830_safety_wrapper_factorial_v1
+    prior_evidence_path: docs/context/evidence/issue_4830_safety_wrapper_factorial_v1/run_meta.json
+    prior_episode_count: 864
+    prior_runtime_seconds: 800.6803789430123
+    prior_episodes_per_second: 1.07908226893305
+    prior_workers: 2
+    future_episode_count: 864
+    derivation: >-
+      The future design has the same 864-row factorial shape and the same two-worker runner
+      contract as the prior #4830 campaign. The estimate doubles the observed wall time to allow
+      for metric instrumentation, validation, and ordinary scheduling variance.
+  estimated_compute_hours: 1.0
+  estimated_wall_clock_hours: 0.5
+  estimated_storage_gib: 0.5
+  storage_scope: >-
+    Reserve 0.5 GiB for 864 retained JSON rows, manifests, logs, and validation artifacts with
+    videos disabled. The 152 KiB public evidence snapshot is metadata-only and is not used as a
+    raw-row size proxy.
+  uncertainty: >-
+    Planning uncertainty is approximately plus or minus 50 percent for compute and wall time and
+    up to 2x for storage. Measure actual usage in the separate preflight/go decision; do not submit
+    compute from this packet alone.
+  submission_decision: separate maintainer go_or_no_go_after_preregistration_review
+
+validation:
+  contract_commands:
+    - uv run python scripts/validation/check_preregistration_inference_contract.py --json configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml
+    - uv run python scripts/benchmark/check_paired_effect_metric_contract.py --contract configs/benchmarks/paired_effect_metric_contract_v1.yaml --json
+    - uv run pytest -q tests/benchmark/test_issue_6971_safety_wrapper_preregistration.py
+  execution_policy: >-
+    These checks validate the design and source contracts only. No campaign runner, scheduler,
+    model download, or benchmark submission is invoked by this preregistration PR.
+
+readiness_decision:
+  status: preregistered_no_submission
+  benchmark_campaign_run: false
+  compute_submit_authorized: false
+  paper_claim_promotion: false
+  fallback_degraded_success_allowed: false

@@ -41,6 +41,11 @@ config/preflight provenance, fail-closed producer validation, and a config-expos
 #13775 non-identifiability boundary; no campaign or result claim:
 [issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md).
 
+Issue #6971 safety-wrapper paired-campaign preregistration: freezes the estimand, one primary
+outcome, all retained #6970 fields, fixed-suite pairing and seed budget, interval-width precision
+rule, gain/no-gain/inconclusive/blocked promotion criteria, and a no-submit cost estimate:
+[issue_6971_safety_wrapper_paired_preregistration.md](issue_6971_safety_wrapper_paired_preregistration.md).
+
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
 gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:

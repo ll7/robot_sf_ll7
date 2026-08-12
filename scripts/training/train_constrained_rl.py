@@ -171,8 +171,10 @@ def load_constrained_rl_config(config_path: str | Path) -> ConstrainedRLConfig:
     """Load and validate a constrained-RL YAML config."""
 
     path = Path(config_path).resolve()
-    with path.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
+    # Reuse PPO's canonical recursive resolver so constrained-RL config families
+    # preserve the same base_config contract, including deep merges and fail-closed
+    # cycle/missing-base errors.
+    raw = train_ppo._load_expert_training_config_mapping(path)
     if not isinstance(raw, Mapping):
         raise ValueError("Constrained-RL config must be a YAML mapping.")
     _reject_unknown_keys(raw, _TOP_LEVEL_KEYS, "config")

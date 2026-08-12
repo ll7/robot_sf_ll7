@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "237f4d8b0a3f08e43bdafdb40ff80fc5258eb1e1",
+  "variants": {
+    "issue_4017_constrained_smoke.yaml": "656a79090ec23dc48f5df3ed5d946d3d5e9ff65ac633280943ee3b0e38e48b7a",
+    "issue_4017_unconstrained_smoke.yaml": "27024912e11d1a4aa9c271f051c960fb4b1519af2c022cd01a087320a4c0df9e"
+  }
+}

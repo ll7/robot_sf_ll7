@@ -29,6 +29,42 @@
       "type": "array",
       "items": {
         "type": "object",
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "debug"
+                  },
+                  "counts_toward_tuning": {
+                    "const": false
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "tuning"
+                  },
+                  "counts_toward_tuning": {
+                    "const": true
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "run_class": {
+                    "const": "evidence"
+                  },
+                  "counts_toward_tuning": {
+                    "const": false
+                  }
+                }
+              }
+            ]
+          }
+        ],
         "required": [
           "schema_version",
           "run_id",

@@ -20,7 +20,7 @@ evidence.
   vendored or redistributed.
 - Diagnostic-run base: `b9232a265682309e4c804336987c2216674ca824` (historical
   report provenance; the run predates the later ORCA merge).
-- Integration base for the refreshed PR: `195bd2a399bec8243214976e39bf3ce82e1fe083`.
+- Integration base for the refreshed PR: `804bb1b57c7ed1fef67e98ef7b9e5cd4f7991381`.
 - Telemetry implementation: `0d704bd88`.
 
 Reproduce with:

@@ -5,7 +5,7 @@
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Trace-level native BRNE progress mechanism only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
   "implementation": {
-    "base_commit": "195bd2a399bec8243214976e39bf3ce82e1fe083",
+    "base_commit": "804bb1b57c7ed1fef67e98ef7b9e5cd4f7991381",
     "diagnostic_run_base_commit": "b9232a265682309e4c804336987c2216674ca824",
     "implementation_commit": "0d704bd88",
     "changed_files": [

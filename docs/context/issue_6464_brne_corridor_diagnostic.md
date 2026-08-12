@@ -159,3 +159,20 @@ Markdown SHA-256 is
 `f312c0d4b1147a900446619ee81618edfe47146d4d84743e907493c8b6532a13`.
 Raw episode files remain ignored and worktree-local; the tracked summary is a
 compact handoff, not a raw episode archive.
+
+## #6934 action-weight contract follow-up
+
+Issue [#6934](https://github.com/ll7/robot_sf_ll7/issues/6934) resolved the
+aggregation ambiguity identified after this trace. The staged upstream source
+mean-normalizes weights, and its ROS controller applies a sample mean; Robot SF
+now matches that contract for both supported ensemble layouts. The exact
+three-seed rerun is recorded in
+[`issue_6934_brne_action_scaling.md`](issue_6934_brne_action_scaling.md) and
+[`evidence/issue_6934_brne_action_scaling_summary.json`](evidence/issue_6934_brne_action_scaling_summary.json).
+
+The correction removes the effective-sample-count scale error and yields
+bounded selected actions (`0.04`–`0.40 m/s`) without changing safety limits, but
+goal-reaching remains `0/3`. This remains diagnostic-only evidence; the
+separately scoped [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938)
+progress/mechanism experiment is required before any broader or ranked BRNE
+campaign.

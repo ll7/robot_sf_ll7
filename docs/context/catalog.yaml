@@ -28,7 +28,19 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6934_brne_action_scaling_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6934_brne_action_scaling_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_6464_brne_corridor_diagnostic.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6934_brne_action_scaling.md
   status: current
   freshness: maintained
   area: benchmark_evidence

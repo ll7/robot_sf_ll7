@@ -115,27 +115,8 @@ def build_open_pr_command(*, repo: str) -> list[str]:
         "--limit",
         "500",
         "--json",
-        "number,body,closingIssuesReferences",
+        "number,body,title",
     ]
-
-
-def _validate_open_pr_reference(
-    reference: Any, *, row_index: int, reference_index: int
-) -> tuple[int | None, str | None]:
-    """Validate one closing-issue reference from the GitHub CLI response."""
-    if not isinstance(reference, dict):
-        return None, f"open PR row {row_index} reference {reference_index} is not an object"
-    reference_number = reference.get("number")
-    if (
-        not isinstance(reference_number, int)
-        or isinstance(reference_number, bool)
-        or reference_number <= 0
-    ):
-        return (
-            None,
-            f"open PR row {row_index} reference {reference_index} has an invalid number",
-        )
-    return reference_number, None
 
 
 def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
@@ -148,25 +129,14 @@ def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
     body = row.get("body")
     if not isinstance(body, str):
         return {"ok": False, "error": f"open PR row {index} has an invalid body"}
-    references = row.get("closingIssuesReferences")
-    if not isinstance(references, list):
-        return {
-            "ok": False,
-            "error": f"open PR row {index} has invalid closing issue references",
-        }
-    reference_numbers: list[int] = []
-    for reference_index, reference in enumerate(references):
-        reference_number, error = _validate_open_pr_reference(
-            reference, row_index=index, reference_index=reference_index
-        )
-        if error is not None:
-            return {"ok": False, "error": error}
-        reference_numbers.append(reference_number)
+    title = row.get("title")
+    if not isinstance(title, str):
+        return {"ok": False, "error": f"open PR row {index} has an invalid title"}
     return {
         "ok": True,
         "number": raw_number,
         "body": body,
-        "reference_numbers": reference_numbers,
+        "title": title,
     }
 
 
@@ -187,18 +157,16 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
         return {"ok": False, "covering_prs": [], "error": str(exc)}
     if not isinstance(payload, list):
         return {"ok": False, "covering_prs": [], "error": "open PR response is not a list"}
+    target = int(issue_number)
     covering: set[int] = set()
     for index, row in enumerate(payload):
         validated = _validate_open_pr_row(row, index=index)
         if not validated["ok"]:
             return {"ok": False, "covering_prs": [], "error": validated["error"]}
         number = validated["number"]
-        if int(issue_number) in validated["reference_numbers"]:
-            covering.add(number)
-            continue
+        text = f"{validated['body']} {validated['title']}"
         if any(
-            int(match.group("issue")) == int(issue_number)
-            for match in ISSUE_COVERAGE_REFERENCE.finditer(validated["body"])
+            int(match.group("issue")) == target for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
         ):
             covering.add(number)
     return {"ok": True, "covering_prs": sorted(covering), "error": None}

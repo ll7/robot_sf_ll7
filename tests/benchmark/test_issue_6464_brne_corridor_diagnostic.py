@@ -77,7 +77,13 @@ def _native_mechanism_trace() -> dict[str, Any]:
         },
         "selected_pedestrians": [],
         "adapter_input_frame": "world",
+        "pre_clamp_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
         "selected_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
+        "action_clipping": {
+            "v_clipped": False,
+            "omega_clipped": False,
+            "any_clipped": False,
+        },
         "action_delta": None,
         "ensemble": {
             "requested_num_samples": 49,
@@ -85,7 +91,7 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "control_ensemble_shape": [25, 42, 2],
             "weight_shape": [8, 42],
             "aggregation_mode": "plan_step_first",
-            "aggregation_formula": "sum_plan_step_first_over_samples",
+            "aggregation_formula": "mean_plan_step_first_over_samples",
         },
         "runtime": {
             "status": "ok",
@@ -246,6 +252,8 @@ def test_brne_requires_native_dependency_status() -> None:
     assert mechanism_row["trace_status"] == "available"
     assert mechanism_row["goal"]["signed_progress_by_phase"]
     assert mechanism_row["aggregation"]["modes"] == ["plan_step_first"]
+    assert mechanism_row["pre_clamp_action"]["available"] is True
+    assert mechanism_row["action_clipping"]["clipped_steps"] == 0
 
     wrong_sample_count = classify_record(
         _record(
@@ -395,8 +403,37 @@ def test_report_writer_marks_missing_mechanism_cells_explicitly(tmp_path: Path) 
     _, markdown_path = _write_report(report, tmp_path)
     markdown = markdown_path.read_text(encoding="utf-8")
     assert "goal start -> end (m)" in markdown
+    assert "pre-clamp action (v/omega)" in markdown
     assert "not available" in markdown
     assert "| None |" not in markdown
+
+
+def test_native_mechanism_trace_requires_pre_clamp_action() -> None:
+    """Native successful steps must expose the weighted command before safety clipping."""
+    config = _config()
+    trace = _native_mechanism_trace()
+    trace["steps"][0].pop("pre_clamp_action")
+    metadata = {
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": trace,
+            }
+        },
+    }
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "pre-clamp action" in classified["mechanism_trace_status"]
 
 
 def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:

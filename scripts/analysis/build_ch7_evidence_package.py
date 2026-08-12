@@ -70,6 +70,11 @@ COLOR_SAFE = {
     "collision_event": "#D55E00",
     "timeout": "#0072B2",
 }
+WIREFRAME_FILES = (
+    "campaign_atlas.md",
+    "publication_comparison.md",
+    "interactive_dossier.md",
+)
 
 
 class Ch7EvidencePackageError(ValueError):
@@ -846,6 +851,22 @@ def _write_checksums(root: Path) -> None:
     (root / "SHA256SUMS").write_text("\n".join(rows) + "\n", encoding="ascii")
 
 
+def _write_wireframes(staging: Path) -> None:
+    """Materialize the committed package wireframes without changing their bytes."""
+
+    source_root = (
+        Path(__file__).parents[2]
+        / "docs/context/evidence/issue_6792_ch7_evidence_package_v1/sketches"
+    )
+    for name in WIREFRAME_FILES:
+        source = source_root / name
+        if not source.is_file():
+            raise Ch7EvidencePackageError(f"required package wireframe is unavailable: {source}")
+        destination = staging / "sketches" / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+
+
 def _build_once(  # noqa: C901, PLR0912, PLR0915
     *,
     output: Path,
@@ -941,6 +962,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
             raise Ch7EvidencePackageError(f"refusing to reuse staging directory: {staging}")
         staging.mkdir(parents=True)
         try:
+            _write_wireframes(staging)
             _write_json(staging / "mapping_ledger.json", _mapping_projection(source["mapping"]))
             _write_csv(staging / "audit/campaign_atlas.csv", cells, tuple(cells[0].keys()))
             _write_json(

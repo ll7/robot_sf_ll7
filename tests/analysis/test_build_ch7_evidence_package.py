@@ -389,6 +389,9 @@ def test_build_is_deterministic_and_retains_unavailable_trace_boundaries(
     assert not list(output.rglob("*.jsonl"))
     assert not list(output.rglob("*.tar.gz"))
     assert len((output / "SHA256SUMS").read_text().splitlines()) >= 10
+    assert {path.name for path in (output / "sketches").glob("*.md")} == set(
+        builder.WIREFRAME_FILES
+    )
 
 
 def test_package_schema_rejects_contradictory_admission_states(

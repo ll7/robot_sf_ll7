@@ -367,6 +367,12 @@ def test_build_is_deterministic_and_retains_unavailable_trace_boundaries(
     assert manifest["counts"] == {"requested": 90, "admitted": 88, "excluded": 2}
     assert manifest["atlas"]["audit_cells"] == 42
     assert manifest["atlas"]["publication_cells"] == 20
+    assert (
+        json.loads((output / "review/source_verification.json").read_text(encoding="utf-8"))[
+            "status"
+        ]
+        == "verified_but_domain_approval_pending"
+    )
     assert (output / "publication/chapter7_release_cells.pdf").stat().st_size > 0
     assert (output / "publication/chapter7_release_cells.svg").stat().st_size > 0
     assert (

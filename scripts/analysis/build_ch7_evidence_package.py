@@ -1099,7 +1099,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
             _write_json(
                 staging / "review/source_verification.json",
                 {
-                    "status": "verified",
+                    "status": "verified_but_domain_approval_pending",
                     "source": source,
                     "release": release,
                     "issue6814": {

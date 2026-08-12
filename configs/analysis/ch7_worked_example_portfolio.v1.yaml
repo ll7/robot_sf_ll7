@@ -54,6 +54,33 @@ selection:
     feasibility_criticism: ch7-role-feasibility-criticism--francis2023-narrow-doorway
     metric_disagreement: ch7-role-cross-cell-inversion--hybrid-vs-ppo--double-bottleneck-vs-blind-corner
 
+# Release-cell projection consumed by the Chapter 7 evidence builder.  This is
+# deliberately explicit so a changed frozen portfolio cannot be silently ignored.
+release_cell_selection:
+  scenarios:
+    - classic_realworld_double_bottleneck_high
+    - francis2023_blind_corner
+    - francis2023_narrow_doorway
+  non_doorway_planners:
+    - ppo
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+  doorway_planners:
+    - goal
+    - guarded_ppo
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - orca
+    - ppo
+    - prediction_planner
+    - predictive_mppi
+    - risk_dwa
+    - sacadrl
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - social_force
+    - socnav_sampling
+
 evidence_units:
   - case_id: ch7-role-planner-upset--classic-realworld-double-bottleneck-high--goal-vs-ppo--seed-118
     candidate_manifest_id: planner_upset::classic_realworld_double_bottleneck_high::goal>ppo

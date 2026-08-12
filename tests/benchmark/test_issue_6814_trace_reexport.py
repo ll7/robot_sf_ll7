@@ -331,14 +331,13 @@ def _make_synthetic_packet_inputs(
         },
     )
     (package / "README.md").write_text("synthetic\n", encoding="utf-8")
+    names = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and path.name not in {"SHA256SUMS", "package_complete.json"}
+    )
     sums = "".join(
-        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n"
-        for name in (
-            "README.md",
-            "package_manifest.json",
-            "source_pointer.json",
-            "mapping_receipt.json",
-        )
+        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
     ).encode()
     (package / "SHA256SUMS").write_bytes(sums)
     package_sha = _sha256_bytes(sums)
@@ -417,7 +416,11 @@ def _write_result_provenance_sidecar(root: Path, identity: TraceIdentity) -> Pat
 def _refresh_synthetic_package_sums(package: Path) -> str:
     """Refresh the synthetic package's listed-artifact digest and completion pin."""
 
-    names = ("README.md", "package_manifest.json", "source_pointer.json", "mapping_receipt.json")
+    names = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and path.name not in {"SHA256SUMS", "package_complete.json"}
+    )
     sums = "".join(
         f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
     ).encode()
@@ -572,12 +575,47 @@ def test_source_loader_rejects_package_complete_drift(
         )
 
 
+def test_source_loader_rejects_bound_package_complete_metadata_drift(
+    tmp_path: Path,
+) -> None:
+    """Reject edits to the historical unlisted completion metadata when pinned."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    complete_path = package / "package_complete.json"
+    approved_complete_sha = _sha256_bytes(complete_path.read_bytes())
+    complete = json.loads(complete_path.read_text(encoding="utf-8"))
+    complete["forged_extra"] = True
+    _write_json(complete_path, complete)
+    with pytest.raises(TraceReexportPackagingError, match="package_complete"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+            expected_package_complete_sha256=approved_complete_sha,
+        )
+
+
 def test_source_loader_rejects_missing_package_sums(tmp_path: Path) -> None:
     """Reject a package with no integrity ledger before reading source rows."""
 
     package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
     (package / "SHA256SUMS").unlink()
     with pytest.raises(RealReexportBindingError, match="SHA256SUMS is unavailable"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_unlisted_package_artifact(tmp_path: Path) -> None:
+    """Reject an artifact added outside the approved package checksum ledger."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    (package / "UNLISTED.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(RealReexportBindingError, match="unlisted artifacts"):
         load_verified_real_reexport_row_source(
             package_root=package,
             external_arm_root=roots[identities[0].arm],
@@ -785,6 +823,23 @@ def test_source_contract_validates_result_provenance_row_link(tmp_path: Path) ->
     )
     assert source.result_provenance_row is not None
     assert source.result_provenance_manifest is not None
+
+
+def test_source_contract_accepts_approved_zero_based_jsonl_line(tmp_path: Path) -> None:
+    """Accept the approved sidecar's zero-based JSONL line convention."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    sidecar = _write_result_provenance_sidecar(roots[identities[0].arm], identities[0])
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    payload["rows"][0]["jsonl_line"] = identities[0].row_index - 1
+    _write_json(sidecar, payload)
+    source = load_verified_real_reexport_row_source(
+        package_root=package,
+        external_arm_root=roots[identities[0].arm],
+        expected_identity=identities[0],
+        expected_package_sha256=package_sha,
+    )
+    assert source.row_index == identities[0].row_index
 
 
 def test_source_contract_rejects_result_provenance_row_mismatch(tmp_path: Path) -> None:
@@ -1370,6 +1425,41 @@ def test_packet_generation_is_content_hash_deterministic(
             }
         )
         == 4
+    )
+
+
+def test_compact_packet_projection_is_frame_free_and_digest_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write a compact projection with receipt keys and no embedded frame payloads."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    monkeypatch.setattr(issue6814, "SELECTED_TRACE_IDENTITIES", identities)
+    output = tmp_path / "packet"
+    compact = tmp_path / "compact"
+    build_issue_6814_trace_packet(
+        package_root=package,
+        arm_roots=roots,
+        external_output_root=output,
+        compact_output=compact,
+        execution_repository=Path(__file__).parents[2],
+        check_determinism=True,
+        expected_package_sha256=package_sha,
+    )
+    payload = json.loads((compact / "compact_packet.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "issue_6814_compact_packet.v1"
+    assert payload["disposition"] == "unsupported"
+    assert payload["full_packet"]["manifest_sha256"] == _sha256_bytes(
+        (output / "packet_manifest.json").read_bytes()
+    )
+    assert len(payload["pairs"]) == 2
+    for pair in payload["pairs"]:
+        assert pair["full_receipt"]["retrieval_key"].startswith("issue6814/full-packet/")
+        assert "right_source_trace" not in json.dumps(pair, sort_keys=True)
+    sums = (compact / "SHA256SUMS").read_text(encoding="ascii")
+    assert (
+        sums
+        == f"{_sha256_bytes((compact / 'compact_packet.json').read_bytes())}  compact_packet.json\n"
     )
 
 

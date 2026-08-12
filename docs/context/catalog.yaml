@@ -5044,3 +5044,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

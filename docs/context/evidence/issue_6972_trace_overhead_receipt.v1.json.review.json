@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
+  "artifact_sha256": "fce625b30f16c056c1d7fdde6568c011046f02c654172a82131074819fb6f309",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

@@ -6,7 +6,10 @@ redistributable dependency path and is under the 100 ms control budget for crowd
 below the upstream default agent cap; it reaches ~1.0–1.2× budget at the default
 8-agent cap. This note records the contract mapping and go/no-go data only —
 **no robot_sf planner registration, no benchmark arm, no campaign, no vendoring**
-(external source stays external). BRNE is planner candidate #4.
+(external source stays external). BRNE is planner candidate #4. The
+control-budget test (`test_brne_solve_completes_within_control_budget_for_small_crowd`)
+sets Numba's runtime pool to one thread and uses a median-of-5 statistic to
+classify environment noise vs algorithm regressions (issue #6924).
 
 ## Provenance
 
@@ -79,6 +82,17 @@ matrix `(num_agents·num_samples)² × plan_steps` plus 10 best-response weight
 updates; both are numba-parallelized. At fixed `num_samples=196` the cost scales
 roughly **linearly** with agent count. The JIT compile (~2.4 s) is a one-time
 warmup paid once per process, amortized across the whole episode.
+
+**Control-budget test measurement protocol** (issue #6924). The pytest
+control-budget guard sets Numba's runtime pool to one thread to reduce
+parallel-scheduling noise, warms up the JIT across 3 solves, and collects a
+median-of-5 timing statistic for a 4-agent, `num_samples=49` scene. The budget
+assertion remains the 100 ms control budget used by the runtime table above. If
+the median is within budget but an individual timed solve exceeds 50 ms, the
+test emits an explicit *unsupported-environment* skip rather than a clean pass;
+a consistently over-budget median fails first. The full runtime table uses
+`num_samples=196` and the default parallel thread count, so its absolute times
+are not directly comparable to this smoke guard.
 
 **Verdict: BORDERLINE / conditional go.** Under the 100 ms control budget for
 every crowd below the upstream default agent cap (8 agents / 7 pedestrians);

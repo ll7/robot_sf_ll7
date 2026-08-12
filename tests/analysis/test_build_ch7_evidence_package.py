@@ -48,9 +48,14 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _write_sums(root: Path) -> str:
+def _write_sums(root: Path, *, exclude: set[str] | None = None) -> str:
+    exclude = exclude or set()
     rows = []
-    for path in sorted(p for p in root.rglob("*") if p.is_file() and p.name != "SHA256SUMS"):
+    for path in sorted(
+        p
+        for p in root.rglob("*")
+        if p.is_file() and p.name != "SHA256SUMS" and p.relative_to(root).as_posix() not in exclude
+    ):
         rows.append(f"{_sha256(path)}  {path.relative_to(root).as_posix()}")
     sums = root / "SHA256SUMS"
     sums.write_text("\n".join(rows) + "\n", encoding="ascii")
@@ -65,7 +70,13 @@ def _make_source(tmp_path: Path) -> tuple[Path, str]:
     )
     _write_json(
         root / "package_complete.json",
-        {"n_requested": 90, "n_admitted": 88, "n_excluded": 2, "visualization_only": True},
+        {
+            "n_requested": 90,
+            "n_admitted": 88,
+            "n_excluded": 2,
+            "visualization_only": True,
+            "sha256sums_sha256": "pending",
+        },
     )
     rows = [{"admission_status": "admitted", "episode_id": f"episode-{i}"} for i in range(88)]
     rows.extend({"admission_status": "excluded", "episode_id": f"excluded-{i}"} for i in range(2))
@@ -78,7 +89,11 @@ def _make_source(tmp_path: Path) -> tuple[Path, str]:
             "provenance": {},
         },
     )
-    return root, _write_sums(root)
+    source_digest = _write_sums(root, exclude={"package_complete.json"})
+    complete = json.loads((root / "package_complete.json").read_text(encoding="utf-8"))
+    complete["sha256sums_sha256"] = source_digest
+    _write_json(root / "package_complete.json", complete)
+    return root, source_digest
 
 
 def _scenario_values(scenario: str, planner: str) -> tuple[float, float, float, float]:
@@ -211,16 +226,23 @@ def _make_compact(tmp_path: Path, source_digest: str) -> Path:
             },
             "source_contracts": [
                 {
-                    "path": f"source_contracts/source-{i}.json",
+                    "path": path,
                     "sha256": f"{i + 1:064x}",
                     "status": "unsupported",
                     "trace_identity": {},
                 }
-                for i in range(4)
+                for i, path in enumerate(
+                    (
+                        "source_contracts/doorway_ppo_113.json",
+                        "source_contracts/doorway_ppo_114.json",
+                        "source_contracts/double_bottleneck_goal_118.json",
+                        "source_contracts/double_bottleneck_ppo_118.json",
+                    )
+                )
             ],
             "pairs": [
                 {
-                    "pair_id": f"pair-{i}",
+                    "pair_id": pair_id,
                     "comparison_grammar": "matched_start",
                     "comparison_grain": "matched_planner_pair",
                     "full_receipt": {
@@ -235,7 +257,12 @@ def _make_compact(tmp_path: Path, source_digest: str) -> Path:
                     "process_validation": {},
                     "renderer_admission": {"disposition": "unsupported"},
                 }
-                for i in range(2)
+                for i, pair_id in enumerate(
+                    (
+                        "classic_doorway_medium--ppo--113-114",
+                        "classic_realworld_double_bottleneck_high--goal--118-118",
+                    )
+                )
             ],
             "evidence_boundary": {
                 "visualization_only": True,
@@ -260,8 +287,17 @@ def fixture_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str,
         "release_tag": "0.0.3",
     }
     _write_json(mapping_path, mapping)
-    source_digest = _write_sums(source)
+    source_digest = _write_sums(source, exclude={"package_complete.json"})
+    complete = json.loads((source / "package_complete.json").read_text(encoding="utf-8"))
+    complete["sha256sums_sha256"] = source_digest
+    _write_json(source / "package_complete.json", complete)
     compact = _make_compact(tmp_path, source_digest)
+    monkeypatch.setattr(
+        builder, "EXPECTED_COMPACT_PACKET_SHA256", _sha256(compact / "compact_packet.json")
+    )
+    monkeypatch.setattr(
+        builder, "EXPECTED_COMPACT_SHA256SUMS_SHA256", _sha256(compact / "SHA256SUMS")
+    )
     portfolio = tmp_path / "portfolio.yaml"
     portfolio.write_text(
         """schema_version: ch7_case_portfolio.v2
@@ -301,7 +337,18 @@ release_cell_selection:
     )
     monkeypatch.setattr(builder, "EXPECTED_SOURCE_SHA256SUMS", source_digest)
     monkeypatch.setattr(builder, "EXPECTED_RELEASE_ARCHIVE_SHA256", archive_digest)
-    return {"source": source, "archive": archive, "compact": compact, "portfolio": portfolio}
+    monkeypatch.setattr(
+        builder,
+        "EXPECTED_APPROVED_PACKAGE_COMPLETE_SHA256",
+        _sha256(source / "package_complete.json"),
+    )
+    return {
+        "source": source,
+        "source_digest": source_digest,
+        "archive": archive,
+        "compact": compact,
+        "portfolio": portfolio,
+    }
 
 
 def test_build_is_deterministic_and_retains_unavailable_trace_boundaries(
@@ -383,14 +430,15 @@ def test_source_digest_mismatch_stops_before_package_creation(
 
 
 def test_compact_schema_and_checksum_path_are_fail_closed(
-    fixture_inputs: dict[str, Path], tmp_path: Path
+    fixture_inputs: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     compact = fixture_inputs["compact"]
     payload_path = compact / "compact_packet.json"
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     payload.pop("pairs")
     _write_json(payload_path, payload)
-    _write_sums(compact)
+    monkeypatch.setattr(builder, "EXPECTED_COMPACT_PACKET_SHA256", _sha256(payload_path))
+    monkeypatch.setattr(builder, "EXPECTED_COMPACT_SHA256SUMS_SHA256", _write_sums(compact))
     with pytest.raises(builder.Ch7EvidencePackageError, match="compact input schema error"):
         builder.build_ch7_evidence_package(
             source_package=fixture_inputs["source"],
@@ -401,15 +449,35 @@ def test_compact_schema_and_checksum_path_are_fail_closed(
         )
 
 
-def test_compact_unsupported_semantics_are_fail_closed(
+def test_compact_digest_pin_rejects_self_consistent_forgery(
     fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    compact = fixture_inputs["compact"]
+    payload_path = compact / "compact_packet.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["full_packet"]["manifest_sha256"] = "b" * 64
+    _write_json(payload_path, payload)
+    _write_sums(compact)
+    with pytest.raises(builder.Ch7EvidencePackageError, match="approved digest"):
+        builder.build_ch7_evidence_package(
+            source_package=fixture_inputs["source"],
+            release_archive=fixture_inputs["archive"],
+            issue6814_compact=compact,
+            output=tmp_path / "package",
+            portfolio_config=fixture_inputs["portfolio"],
+        )
+
+
+def test_compact_unsupported_semantics_are_fail_closed(
+    fixture_inputs: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     compact = fixture_inputs["compact"]
     payload_path = compact / "compact_packet.json"
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     payload["pairs"][0]["renderer_admission"]["disposition"] = "supported"
     _write_json(payload_path, payload)
-    _write_sums(compact)
+    monkeypatch.setattr(builder, "EXPECTED_COMPACT_PACKET_SHA256", _sha256(payload_path))
+    monkeypatch.setattr(builder, "EXPECTED_COMPACT_SHA256SUMS_SHA256", _write_sums(compact))
     with pytest.raises(builder.Ch7EvidencePackageError, match="renderer admission"):
         builder.build_ch7_evidence_package(
             source_package=fixture_inputs["source"],
@@ -424,16 +492,17 @@ def test_unlisted_package_complete_requires_binding(
     fixture_inputs: dict[str, Path], tmp_path: Path
 ) -> None:
     source = fixture_inputs["source"]
-    entries = [
-        line
-        for line in (source / "SHA256SUMS").read_text(encoding="ascii").splitlines()
-        if not line.endswith("  package_complete.json")
-    ]
-    sums_path = source / "SHA256SUMS"
-    sums_path.write_text("\n".join(entries) + "\n", encoding="ascii")
-    digest = _sha256(sums_path)
+    complete = json.loads((source / "package_complete.json").read_text(encoding="utf-8"))
+    complete.pop("sha256sums_sha256")
+    _write_json(source / "package_complete.json", complete)
     with pytest.raises(builder.Ch7EvidencePackageError, match="package_complete"):
-        builder.verify_source_package(source, digest)
+        builder.verify_source_package(source, fixture_inputs["source_digest"])
+
+
+def test_unlisted_source_file_is_rejected(fixture_inputs: dict[str, Path], tmp_path: Path) -> None:
+    (fixture_inputs["source"] / "unlisted-trace.jsonl").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(builder.Ch7EvidencePackageError, match="unlisted files"):
+        builder.verify_source_package(fixture_inputs["source"], fixture_inputs["source_digest"])
 
 
 def test_frozen_portfolio_mutation_is_rejected(
@@ -458,13 +527,24 @@ def test_frozen_portfolio_mutation_is_rejected(
 
 
 def test_source_release_provenance_is_required(
-    fixture_inputs: dict[str, Path], tmp_path: Path
+    fixture_inputs: dict[str, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     mapping_path = fixture_inputs["source"] / "mapping_receipt.json"
     mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
     mapping.pop("provenance")
     _write_json(mapping_path, mapping)
-    digest = _write_sums(fixture_inputs["source"])
+    digest = _write_sums(fixture_inputs["source"], exclude={"package_complete.json"})
+    complete = json.loads(
+        (fixture_inputs["source"] / "package_complete.json").read_text(encoding="utf-8")
+    )
+    complete["sha256sums_sha256"] = digest
+    _write_json(fixture_inputs["source"] / "package_complete.json", complete)
+    monkeypatch.setattr(builder, "EXPECTED_SOURCE_SHA256SUMS", digest)
+    monkeypatch.setattr(
+        builder,
+        "EXPECTED_APPROVED_PACKAGE_COMPLETE_SHA256",
+        _sha256(fixture_inputs["source"] / "package_complete.json"),
+    )
     with pytest.raises(builder.Ch7EvidencePackageError, match="provenance"):
         builder.verify_source_package(fixture_inputs["source"], digest)
 

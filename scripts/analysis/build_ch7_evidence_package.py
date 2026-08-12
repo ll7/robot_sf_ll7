@@ -31,6 +31,13 @@ COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
 PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
 EXPECTED_SOURCE_SHA256SUMS = "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 EXPECTED_RELEASE_ARCHIVE_SHA256 = "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
+EXPECTED_COMPACT_PACKET_SHA256 = "44360d5da575233131ac8e93c25a0dd539d980a2c8a0146651017d686c45dadb"
+EXPECTED_COMPACT_SHA256SUMS_SHA256 = (
+    "59ef90567c2eba5ef1f8431bc19e0962a9ddceec15ac81afce0b360c6ecac3b7"
+)
+EXPECTED_APPROVED_PACKAGE_COMPLETE_SHA256 = (
+    "1457877aca9e6ff892e4d82030d26a63f5fa9413b8eab57a5cc653328db0045b"
+)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_CONFIG = Path("configs/analysis/ch7_evidence_package.v1.yaml")
 REQUIRED_SCENARIOS = (
@@ -138,7 +145,7 @@ def _parse_sha256sums(path: Path) -> list[tuple[str, str]]:
     return entries
 
 
-def verify_source_package(  # noqa: C901, PLR0912
+def verify_source_package(  # noqa: C901, PLR0912, PLR0915
     source_package: Path, expected_sha256sums: str
 ) -> dict[str, Any]:
     """Verify every source-package member and return compact source metadata."""
@@ -170,6 +177,25 @@ def verify_source_package(  # noqa: C901, PLR0912
                 raise Ch7EvidencePackageError(
                     "approved source SHA256SUMS omits required package_complete metadata"
                 )
+    listed_paths = set(paths)
+    actual_paths = {
+        path.relative_to(source_package).as_posix()
+        for path in source_package.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    allowed_paths = listed_paths
+    if "package_complete.json" not in listed_paths:
+        allowed_paths = listed_paths | {"package_complete.json"}
+    unexpected_paths = sorted(actual_paths - allowed_paths)
+    missing_paths = sorted(listed_paths - actual_paths)
+    if unexpected_paths:
+        raise Ch7EvidencePackageError(
+            f"approved source contains unlisted files: {unexpected_paths}"
+        )
+    if missing_paths:
+        raise Ch7EvidencePackageError(
+            f"approved source SHA256SUMS lists missing files: {missing_paths}"
+        )
     for expected, relative in entries:
         member = source_package / relative
         if not member.is_file() or _sha256_file(member) != expected:
@@ -181,11 +207,18 @@ def verify_source_package(  # noqa: C901, PLR0912
         or package_manifest.get("visualization_only") is not True
     ):
         raise Ch7EvidencePackageError("source package must remain visualization-only")
+    package_complete_digest = _sha256_file(source_package / "package_complete.json")
     package_complete_binding = package_complete.get("sha256sums_sha256")
-    if package_complete_binding is not None and package_complete_binding != expected_sha256sums:
+    if package_complete_binding != expected_sha256sums:
         raise Ch7EvidencePackageError("package_complete does not bind the approved SHA256SUMS")
-    if "package_complete.json" not in paths and package_complete_binding != expected_sha256sums:
-        raise Ch7EvidencePackageError("unlisted package_complete must bind the approved SHA256SUMS")
+    if "package_complete.json" not in paths:
+        if (
+            expected_sha256sums != EXPECTED_SOURCE_SHA256SUMS
+            or package_complete_digest != EXPECTED_APPROVED_PACKAGE_COMPLETE_SHA256
+        ):
+            raise Ch7EvidencePackageError(
+                "unlisted package_complete is not the approved historical metadata"
+            )
     counts = {
         "requested": package_manifest.get("n_requested"),
         "admitted": package_manifest.get("n_admitted"),
@@ -214,7 +247,7 @@ def verify_source_package(  # noqa: C901, PLR0912
     return {
         "sha256sums_sha256": sums_digest,
         "package_manifest_sha256": _sha256_file(source_package / "package_manifest.json"),
-        "package_complete_sha256": _sha256_file(source_package / "package_complete.json"),
+        "package_complete_sha256": package_complete_digest,
         "mapping_receipt_sha256": _sha256_file(source_package / "mapping_receipt.json"),
         "counts": counts,
         "member_count": len(entries),
@@ -830,6 +863,10 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
     if compact_sha != compact_entries[0][0]:
         raise Ch7EvidencePackageError("#6814 compact packet checksum mismatch")
     compact_sums = _sha256_file(issue6814_compact / "SHA256SUMS")
+    if compact_sha != EXPECTED_COMPACT_PACKET_SHA256:
+        raise Ch7EvidencePackageError("#6814 compact packet is not the approved digest")
+    if compact_sums != EXPECTED_COMPACT_SHA256SUMS_SHA256:
+        raise Ch7EvidencePackageError("#6814 compact SHA256SUMS is not the approved digest")
     compact = _read_json(issue6814_compact / "compact_packet.json")
     compact_schema_path = (
         Path(__file__).parents[2] / "robot_sf/benchmark/schemas/issue_6814_compact_packet.v1.json"

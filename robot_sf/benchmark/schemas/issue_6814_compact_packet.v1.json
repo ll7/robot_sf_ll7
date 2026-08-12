@@ -18,7 +18,14 @@
   "properties": {
     "schema_version": {"const": "issue_6814_compact_packet.v1"},
     "issue": {"const": 6814},
-    "source_package": {"type": "object"},
+    "source_package": {
+      "type": "object",
+      "required": ["source_issue", "source_package_sha256sums_sha256"],
+      "properties": {
+        "source_issue": {"const": 6412},
+        "source_package_sha256sums_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
     "full_packet": {
       "type": "object",
       "additionalProperties": false,
@@ -29,18 +36,43 @@
       }
     },
     "disposition": {"enum": ["supported", "unsupported", "blocked"]},
-    "check_results": {"type": "object", "minProperties": 4},
+    "check_results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package_digest_ok",
+        "row_contract_digest_ok",
+        "artifact_integrity_ok",
+        "deterministic_rebuild_ok"
+      ],
+      "properties": {
+        "package_digest_ok": {"const": true},
+        "row_contract_digest_ok": {"const": true},
+        "artifact_integrity_ok": {"const": true},
+        "deterministic_rebuild_ok": {"const": true}
+      }
+    },
     "source_contracts": {
       "type": "array",
       "minItems": 4,
       "maxItems": 4,
-      "items": {"$ref": "#/$defs/sourceContract"}
+      "items": {"$ref": "#/$defs/sourceContract"},
+      "allOf": [
+        {"contains": {"properties": {"path": {"const": "source_contracts/doorway_ppo_113.json"}}}},
+        {"contains": {"properties": {"path": {"const": "source_contracts/doorway_ppo_114.json"}}}},
+        {"contains": {"properties": {"path": {"const": "source_contracts/double_bottleneck_goal_118.json"}}}},
+        {"contains": {"properties": {"path": {"const": "source_contracts/double_bottleneck_ppo_118.json"}}}}
+      ]
     },
     "pairs": {
       "type": "array",
       "minItems": 2,
       "maxItems": 2,
-      "items": {"$ref": "#/$defs/pair"}
+      "items": {"$ref": "#/$defs/pair"},
+      "allOf": [
+        {"contains": {"properties": {"pair_id": {"const": "classic_doorway_medium--ppo--113-114"}}}},
+        {"contains": {"properties": {"pair_id": {"const": "classic_realworld_double_bottleneck_high--goal--118-118"}}}}
+      ]
     },
     "evidence_boundary": {
       "type": "object",

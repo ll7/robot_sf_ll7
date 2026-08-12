@@ -153,21 +153,18 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_receipt_unreadable",
-            "receipt_path": str(path),
             "registry_sha256": registry_digest,
         }
     if not isinstance(payload, Mapping):
         return {
             **blocked,
             "reason": "source_gate_receipt_invalid",
-            "receipt_path": str(path),
             "registry_sha256": registry_digest,
         }
     if payload.get("schema_version") != SOURCE_GATE_SCHEMA_VERSION:
         return {
             **blocked,
             "reason": "source_gate_schema_mismatch",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
         }
@@ -177,7 +174,6 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": f"source_gate_status:{status or 'missing'}",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
         }
@@ -185,7 +181,6 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_digest_mismatch",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "supplied_source_sha256": supplied_sha or None,
         }
@@ -203,7 +198,6 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_source_not_approved",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
             "supplied_source_sha256": supplied_sha,
@@ -212,7 +206,6 @@ def _load_source_gate_receipt(  # noqa: C901
         "schema_version": SOURCE_GATE_SCHEMA_VERSION,
         "status": "passed",
         "source_sha256": expected_source_sha,
-        "receipt_path": str(path),
         "receipt_sha256": _sha256_file(path),
         "registry_sha256": registry_digest,
         "approval_id": str(matching_entry["approval_id"]),
@@ -265,13 +258,12 @@ def _source_gate_is_trusted(gate: Mapping[str, Any]) -> bool:
 
 
 def _portable_source_gate(gate: Mapping[str, Any]) -> dict[str, Any]:
-    """Remove invocation-specific paths from the package-bound gate receipt."""
+    """Return only digest-bound gate metadata suitable for package storage."""
 
-    portable = dict(gate)
-    receipt_path = portable.get("receipt_path")
-    if receipt_path:
-        portable["receipt_path"] = Path(str(receipt_path)).name
-    return portable
+    # The gate deliberately contains no receipt path or raw receipt payload.  Besides
+    # making packages reproducible across machines, this prevents an author-supplied
+    # path or receipt contents from being copied into a review artifact.
+    return dict(gate)
 
 
 def analyze_cases(  # noqa: C901

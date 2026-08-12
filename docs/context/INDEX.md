@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #6972 analysis-trace overhead repair: reuses the episode commit hash and
+trace builder digest on the opt-in path, with action-sequence regression proof
+and a pinned local before/after receipt (5.890% post-change overhead; diagnostic
+only): [issue_6972_analysis_trace_overhead_2026-08-12/README.md](evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md).
+
 Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
 `issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
 successor to the historical three-seed diagnostic, freezing six search seeds per method,

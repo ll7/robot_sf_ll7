@@ -258,6 +258,22 @@ reviewed_files:
       (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
       class as the other dangling_commit entries; recorded here rather than rewriting the
       producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
+  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      The blocked #6792 package records the digest of the approved external source package. The
+      source is intentionally outside Git and independently verified by its exact SHA256SUMS
+      digest; the generic registry linter cannot bind this external hash to a repository path.
+      The package remains visualization-only and domain approval is still pending.
+  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/materialization_overlay.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      The materialization overlay intentionally records the frozen external portfolio contract
+      and configuration digest without copying that source into the evidence package. The
+      package is not admitted evidence; source and portfolio digests are verified by the builder
+      and issue checkpoint rather than by a repository-relative artifact path.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]
@@ -317,19 +333,3 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
-  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json
-    codes: [hash_without_artifact_path]
-    disposition: baseline
-    reason: >-
-      The blocked #6792 package records the digest of the approved external source package. The
-      source is intentionally outside Git and independently verified by its exact SHA256SUMS
-      digest; the generic registry linter cannot bind this external hash to a repository path.
-      The package remains visualization-only and domain approval is still pending.
-  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/materialization_overlay.json
-    codes: [uncommitted_artifact_missing_location]
-    disposition: baseline
-    reason: >-
-      The materialization overlay intentionally records the frozen external portfolio contract
-      and configuration digest without copying that source into the evidence package. The
-      package is not admitted evidence; source and portfolio digests are verified by the builder
-      and issue checkpoint rather than by a repository-relative artifact path.

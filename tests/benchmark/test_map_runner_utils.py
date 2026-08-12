@@ -62,6 +62,9 @@ from robot_sf.benchmark.map_runner_batch_plan import (
 )
 from robot_sf.benchmark.map_runner_episode import (
     _CollisionEventContext,
+    _initial_ped_velocities,
+    _initial_pedestrian_actor_ids,
+    _initial_robot_velocity,
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
@@ -71,6 +74,7 @@ from robot_sf.benchmark.map_runner_metrics import (
 )
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
+from robot_sf.benchmark.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -108,6 +112,29 @@ class _KinematicsStub:
         """Return empty kinematics diagnostics for the stub."""
         del command, projected
         return {}
+
+
+def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> None:
+    """Map-runner trace capture carries reset velocities and stable slot identities."""
+
+    simulator = SimpleNamespace(
+        ped_vel=np.array([[0.1, 0.2], [-0.2, 0.3]], dtype=float),
+        robots=[SimpleNamespace(state=SimpleNamespace(velocity_xy=(0.4, -0.1)))],
+    )
+    assert _initial_robot_velocity(simulator).tolist() == [0.4, -0.1]
+    np.testing.assert_allclose(
+        _initial_ped_velocities(simulator, 2),
+        np.array([[0.1, 0.2], [-0.2, 0.3]], dtype=float),
+    )
+    actor_ids = _initial_pedestrian_actor_ids(simulator, 2)
+    assert actor_ids == ["simulator-slot-0", "simulator-slot-1"]
+    frames = _trace_pedestrians(
+        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+        None,
+        0.1,
+        actor_ids=actor_ids,
+    )
+    assert [frame["actor_id"] for frame in frames] == actor_ids
 
 
 def test_command_action_payload_preserves_structured_holonomic_trace_fields() -> None:

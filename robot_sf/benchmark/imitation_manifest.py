@@ -234,6 +234,7 @@ def serialize_training_run(artifact: TrainingRunArtifact) -> dict[str, Any]:
             key: int(value) for key, value in sorted(artifact.scenario_coverage.items())
         },
         "notes": [str(note) for note in artifact.notes],
+        "metadata": _to_json_ready(artifact.metadata),
     }
 
 

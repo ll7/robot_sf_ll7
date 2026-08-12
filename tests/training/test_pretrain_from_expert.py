@@ -14,11 +14,17 @@ from gymnasium.spaces.utils import flatten as flatten_space
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.training.progress_weighted_bc import (
+    ProgressWeightedBcError,
+    ProgressWeightedObjectiveConfig,
+)
 from scripts.training.pretrain_from_expert import (
     ImitationDependencyWarning,
     _convert_to_transitions,
+    _load_route_length_and_compute_weights,
     _load_trajectory_dataset,
     _require_imitation_bc,
+    _validate_progress_objective_seed,
     _warn_imitation_dependency_mode,
 )
 
@@ -188,4 +194,132 @@ def test_load_trajectory_dataset_requires_regular_file(tmp_path: Path) -> None:
     dataset_dir.mkdir()
 
     with pytest.raises(FileNotFoundError, match="not a file"):
-        _load_trajectory_dataset(dataset_dir)
+        _load_trajectory_dataset(dataset_dir, trusted_root=tmp_path)
+
+
+def test_progress_weighted_loader_rejects_dataset_digest_mismatch(tmp_path: Path) -> None:
+    """A configured Arm-B dataset digest must match the loaded NPZ bytes."""
+    dataset_path = tmp_path / "route_progress.npz"
+    route_metadata = {
+        "schema_version": "remaining_route_length.v1",
+        "alignment": "one_value_per_observation",
+        "derived_signal": "remaining_before_minus_after",
+        "semantics": "remaining_route_length_meters",
+        "units": "m",
+        "source": "recorded_route_remaining_length",
+    }
+    np.savez(
+        dataset_path,
+        remaining_route_length=np.array([[3.0, 2.0, 1.0]], dtype=np.float64),
+        actions=np.zeros((1, 2, 1), dtype=np.float32),
+        remaining_route_length_metadata=route_metadata,
+    )
+    config = ProgressWeightedObjectiveConfig.arm_b(
+        progress_lambda=0.5,
+        progress_normalization_scale=1.0,
+        dataset_digest="0" * 64,
+    )
+
+    with pytest.raises(ProgressWeightedBcError, match="dataset digest does not match"):
+        _load_route_length_and_compute_weights(dataset_path, config, trusted_root=tmp_path)
+
+
+def test_trajectory_loader_checks_digest_before_np_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A digest mismatch must stop the initial loader before pickle-capable np.load."""
+    dataset_path = tmp_path / "trajectory.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    def fail_if_loaded(*args: object, **kwargs: object) -> None:
+        raise AssertionError("numpy.load must not run before digest validation")
+
+    monkeypatch.setattr(np, "load", fail_if_loaded)
+    with pytest.raises(ProgressWeightedBcError, match="before NPZ load"):
+        _load_trajectory_dataset(
+            dataset_path,
+            trusted_root=tmp_path,
+            expected_dataset_digest="0" * 64,
+        )
+
+
+def test_trajectory_loader_requires_digest_before_np_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An absent configured digest must stop loading before object arrays are opened."""
+    dataset_path = tmp_path / "trajectory.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    def fail_if_loaded(*args: object, **kwargs: object) -> None:
+        raise AssertionError("numpy.load must not run without a configured digest")
+
+    monkeypatch.setattr(np, "load", fail_if_loaded)
+    with pytest.raises(ProgressWeightedBcError, match="digest is required"):
+        _load_trajectory_dataset(
+            dataset_path,
+            trusted_root=tmp_path,
+            require_dataset_digest=True,
+        )
+
+
+def test_standard_trajectory_loader_preserves_no_digest_compatibility(tmp_path: Path) -> None:
+    """Ordinary BC datasets remain loadable without the new Arm-B digest contract."""
+    dataset_path = tmp_path / "trajectory.npz"
+    positions = np.zeros((1, 2, 2), dtype=np.float32)
+    actions = np.zeros((1, 1, 1), dtype=np.float32)
+    observations = np.zeros((1, 2, 1), dtype=np.float32)
+    np.savez(dataset_path, positions=positions, actions=actions, observations=observations)
+
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=tmp_path,
+        require_dataset_digest=False,
+    )
+
+    np.testing.assert_array_equal(dataset["positions"], positions)
+    np.testing.assert_array_equal(dataset["actions"], actions)
+    np.testing.assert_array_equal(dataset["observations"], observations)
+
+
+def test_trajectory_loader_allows_explicit_legacy_unpinned_mode(tmp_path: Path) -> None:
+    """The existing standard BC path may load a trusted dataset without a config digest."""
+    dataset_path = tmp_path / "standard_bc.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=tmp_path,
+        require_dataset_digest=False,
+    )
+
+    assert dataset["episode_count"] == 1
+    assert dataset["actions"].shape == (1, 1, 1)
+
+
+def test_progress_objective_seed_must_match_primary_run_seed() -> None:
+    """Divergent objective and run seeds must fail closed to preserve manifest reproducibility."""
+    config = ProgressWeightedObjectiveConfig.arm_b(
+        progress_lambda=0.5,
+        progress_normalization_scale=1.0,
+        random_seed=112,
+    )
+
+    with pytest.raises(ProgressWeightedBcError, match="must match the primary"):
+        _validate_progress_objective_seed(config, (111, 112, 113))

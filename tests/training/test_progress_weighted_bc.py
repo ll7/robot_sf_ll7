@@ -711,6 +711,36 @@ class TestProgressWeightedBCTrainer:
         with pytest.raises(ProgressWeightedBcError, match="observations .* shorter than actions"):
             trainer._unpack_demonstrations()
 
+    def test_trainer_rejects_empty_observations_before_dict_flattening(self) -> None:
+        """Empty observations must fail closed without indexing an empty object array."""
+        import gymnasium as gym
+
+        from robot_sf.training.progress_weighted_bc import (
+            ProgressWeightedBCTrainer,
+            ProgressWeightedObjectiveConfig,
+        )
+
+        obs_space = gym.spaces.Dict({"value": gym.spaces.Box(-1, 1, shape=(1,))})
+        act_space = gym.spaces.Box(-1, 1, shape=(1,))
+
+        class _Policy:
+            def parameters(self):
+                return []
+
+        class _Traj:
+            obs = np.empty((0,), dtype=object)
+            acts = np.zeros((1, 1), dtype=np.float32)
+
+        trainer = ProgressWeightedBCTrainer(
+            observation_space=obs_space,
+            action_space=act_space,
+            demonstrations=[_Traj()],
+            policy=_Policy(),
+            config=ProgressWeightedObjectiveConfig.arm_a(),
+        )
+        with pytest.raises(ProgressWeightedBcError, match="observations .* shorter than actions"):
+            trainer._unpack_demonstrations()
+
     def test_trainer_rejects_nonfinite_loss_before_backward(self) -> None:
         """A non-finite weighted loss must fail before optimizer state is updated."""
         import gymnasium as gym

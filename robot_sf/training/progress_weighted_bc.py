@@ -755,6 +755,16 @@ class ProgressWeightedBCTrainer:
             obs_ep = np.asarray(traj.obs, dtype=np.float32)
             acts_ep = np.asarray(traj.acts, dtype=np.float32)
 
+            # Validate the transition-length contract before any observation
+            # flattening.  In particular, an empty object/dict observation
+            # array cannot be safely indexed by the flattening probe below.
+            n_actions = acts_ep.shape[0]
+            if obs_ep.shape[0] < n_actions:
+                raise ProgressWeightedBcError(
+                    f"Episode {ep_idx}: observations ({obs_ep.shape[0]}) are shorter than "
+                    f"actions ({n_actions})"
+                )
+
             # Flatten observations if they are dict-like
             if (obs_ep.ndim == 1 and obs_ep.dtype == object) or (
                 obs_ep.ndim > 1 and hasattr(obs_ep[0], "keys")
@@ -772,12 +782,6 @@ class ProgressWeightedBCTrainer:
                 obs_ep = obs_ep.reshape(obs_ep.shape[0], -1).astype(np.float32)
 
             # observations[0..T-1] pair with actions[0..T-1]
-            n_actions = acts_ep.shape[0]
-            if obs_ep.shape[0] < n_actions:
-                raise ProgressWeightedBcError(
-                    f"Episode {ep_idx}: observations ({obs_ep.shape[0]}) are shorter than "
-                    f"actions ({n_actions})"
-                )
             obs_slice = obs_ep[:n_actions]
 
             if self._weights is None:

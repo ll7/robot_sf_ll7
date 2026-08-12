@@ -196,9 +196,26 @@ def test_brne_solve_fails_closed_on_nonfinite_weights(monkeypatch: pytest.Monkey
     assert metadata["failure_reasons"] == ["nonfinite_weights"]
 
 
-def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Normalized sample weights preserve, rather than divide, control magnitude."""
+def test_brne_solve_uses_plan_step_first_mean_normalized_weighted_mean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mean-normalized BRNE weights are aggregated by sample-weighted mean."""
     planner = BRNEPlanner({})
+    plan_step_first_ensemble = np.array(
+        [
+            [[0.1, -0.2], [0.4, 0.0], [0.8, 0.3]],
+            [[1.0, 0.5], [0.2, -0.4], [0.0, 0.2]],
+        ]
+    )
+    mean_normalized_weights = np.array([[0.5, 1.0, 1.5]])
+    expected_first_step_command = np.array([0.55, 0.1166666667])
+    raw_weighted_sum = expected_first_step_command * mean_normalized_weights.size
+
+    assert mean_normalized_weights.mean() == pytest.approx(1.0)
+    assert mean_normalized_weights.sum() == pytest.approx(mean_normalized_weights.size)
+    assert expected_first_step_command[0] <= planner.config.v_max
+    assert abs(expected_first_step_command[1]) <= planner.config.omega_max
+
     monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
     monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
     monkeypatch.setattr(
@@ -207,18 +224,74 @@ def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch
         lambda *_args: (
             np.zeros((1, 1)),
             np.zeros((1, 1)),
-            np.array([[[0.4, 0.1]], [[0.8, 0.3]]]),
+            plan_step_first_ensemble,
         ),
     )
     monkeypatch.setattr(
         planner,
         "_brne_solve",
-        lambda *_args: np.array([[0.25, 0.75]]),
+        lambda *_args: mean_normalized_weights,
     )
     planner._jit_warmup_done = True
 
     action = planner.step(_make_observation(num_agents=1))
-    assert action == pytest.approx({"v": 0.7, "omega": 0.25})
+    assert action == pytest.approx(
+        {"v": expected_first_step_command[0], "omega": expected_first_step_command[1]}
+    )
+    assert action != pytest.approx({"v": raw_weighted_sum[0], "omega": raw_weighted_sum[1]})
+
+    mechanism_step = planner.get_metadata()["mechanism_trace"]["steps"][0]
+    assert mechanism_step["ensemble"]["control_ensemble_shape"] == [2, 3, 2]
+    assert mechanism_step["ensemble"]["weight_shape"] == [1, 3]
+    assert mechanism_step["ensemble"]["aggregation_mode"] == "plan_step_first"
+    assert mechanism_step["ensemble"]["aggregation_formula"] == "mean_plan_step_first_over_samples"
+
+
+def test_brne_solve_uses_samples_first_mean_normalized_weighted_mean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy samples-first adapters use the same upstream weighted mean."""
+    planner = BRNEPlanner({})
+    samples_first_ensemble = np.array(
+        [
+            [[0.1, -0.2], [1.0, 0.5]],
+            [[0.4, 0.0], [0.2, -0.4]],
+            [[0.8, 0.3], [0.0, 0.2]],
+        ]
+    )
+    mean_normalized_weights = np.array([[0.5, 1.0, 1.5]])
+    expected_first_step_command = np.array([0.55, 0.1166666667])
+    raw_weighted_sum = expected_first_step_command * mean_normalized_weights.size
+
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((1, 1)),
+            np.zeros((1, 1)),
+            samples_first_ensemble,
+        ),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_brne_solve",
+        lambda *_args: mean_normalized_weights,
+    )
+    planner._jit_warmup_done = True
+
+    action = planner.step(_make_observation(num_agents=1))
+    assert action == pytest.approx(
+        {"v": expected_first_step_command[0], "omega": expected_first_step_command[1]}
+    )
+    assert action != pytest.approx({"v": raw_weighted_sum[0], "omega": raw_weighted_sum[1]})
+
+    mechanism_step = planner.get_metadata()["mechanism_trace"]["steps"][0]
+    assert mechanism_step["ensemble"]["control_ensemble_shape"] == [3, 2, 2]
+    assert mechanism_step["ensemble"]["weight_shape"] == [1, 3]
+    assert mechanism_step["ensemble"]["aggregation_mode"] == "samples_first"
+    assert mechanism_step["ensemble"]["aggregation_formula"] == "mean_samples_first_over_samples"
 
 
 def test_brne_declared_heading_takes_precedence_over_velocity() -> None:

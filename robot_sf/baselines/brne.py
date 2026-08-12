@@ -407,9 +407,9 @@ class BRNEPlanner:
                     "weight_shape": list(weights_shape) if weights_shape is not None else None,
                     "aggregation_mode": aggregation_mode,
                     "aggregation_formula": (
-                        "sum_plan_step_first_over_samples"
+                        "mean_plan_step_first_over_samples"
                         if aggregation_mode == "plan_step_first"
-                        else "sum_samples_first_over_samples"
+                        else "mean_samples_first_over_samples"
                         if aggregation_mode == "samples_first"
                         else "not_applied"
                     ),
@@ -589,12 +589,14 @@ class BRNEPlanner:
             )
         aggregation_mode: str
         if ulist.shape[1] == robot_weights.size:
-            cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
+            # Match the pinned upstream ROS controller, which takes the sample
+            # mean after mean-normalizing the BRNE weights.
+            cmd = np.mean(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
             aggregation_mode = "plan_step_first"
         elif ulist.shape[0] == robot_weights.size:
             # Preserve compatibility with isolated adapters that expose samples first;
             # the pinned upstream helper uses the plan-step-first layout above.
-            cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+            cmd = np.mean(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
             aggregation_mode = "samples_first"
         else:
             _LOGGER.debug(

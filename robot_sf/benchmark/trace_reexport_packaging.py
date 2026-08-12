@@ -489,10 +489,6 @@ def campaign_expectations(repo_root: Path) -> dict[str, CampaignExpectation]:
             str(row.get("name") or row.get("scenario_id") or row.get("id")) for row in scenarios
         )
         seeds = tuple(sorted({int(seed) for row in scenarios for seed in row.get("seeds", [])}))
-        config_payload = asdict(cfg)
-        if cfg.tuning_run_provenance is None:
-            # Preserve hashes for legacy configs that predate the optional prospective block.
-            config_payload.pop("tuning_run_provenance", None)
         expectations[label] = CampaignExpectation(
             label=label,
             name=cfg.name,
@@ -500,7 +496,7 @@ def campaign_expectations(repo_root: Path) -> dict[str, CampaignExpectation]:
             scenarios=scenario_names,
             scenario_candidates=cfg.scenario_candidates.names,
             seeds=seeds,
-            config_hash=_config_hash(_jsonable_repo_relative(config_payload)),
+            config_hash=_config_hash(_jsonable_repo_relative(asdict(cfg))),
             scenario_matrix_hash=_hash_payload(scenarios),
         )
     return expectations

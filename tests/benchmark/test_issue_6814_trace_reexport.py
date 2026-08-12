@@ -575,6 +575,27 @@ def test_source_loader_rejects_package_complete_drift(
         )
 
 
+def test_source_loader_rejects_bound_package_complete_metadata_drift(
+    tmp_path: Path,
+) -> None:
+    """Reject edits to the historical unlisted completion metadata when pinned."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    complete_path = package / "package_complete.json"
+    approved_complete_sha = _sha256_bytes(complete_path.read_bytes())
+    complete = json.loads(complete_path.read_text(encoding="utf-8"))
+    complete["forged_extra"] = True
+    _write_json(complete_path, complete)
+    with pytest.raises(TraceReexportPackagingError, match="package_complete"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+            expected_package_complete_sha256=approved_complete_sha,
+        )
+
+
 def test_source_loader_rejects_missing_package_sums(tmp_path: Path) -> None:
     """Reject a package with no integrity ledger before reading source rows."""
 

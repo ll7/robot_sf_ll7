@@ -82,7 +82,10 @@ report JSON SHA-256
 The report's episode provenance records implementation commit
 `af394c62bc349d1edcaa069bbf266b2296512d34`.
 Raw episode files and the staged GPL source remain ignored, worktree-local
-artifacts. The compact evidence handoff is tracked in
+artifacts. Because this capture was made from a dirty historical worktree and
+the raw report is ignored, the tracked summary is a historical diagnostic
+handoff only, not exact-head or paper-facing evidence; reproduce from the
+current commit before making any stronger claim. The compact evidence handoff is tracked in
 `docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json`.
 
 ## Next decision

@@ -53,6 +53,7 @@ EXPECTED_PLANNER_CONFIGS = {
 EXPECTED_PLANNER_FIELDS = {
     "brne": {
         "num_samples": 49,
+        "effective_num_samples": 42,
         "plan_steps": 25,
         "dt": 0.1,
         "maximum_agents": 8,
@@ -248,11 +249,11 @@ def _validate_planners(config: dict[str, Any]) -> tuple[list[dict[str, Any]], in
     if maximum_agents < 1:
         raise ValueError("BRNE maximum_agents must be a positive integer")
     try:
-        expected_effective_num_samples = int(brne_config["num_samples"])
+        expected_effective_num_samples = int(brne_config["effective_num_samples"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("BRNE num_samples must be a positive integer") from exc
+        raise ValueError("BRNE effective_num_samples must be a positive integer") from exc
     if expected_effective_num_samples < 1:
-        raise ValueError("BRNE num_samples must be a positive integer")
+        raise ValueError("BRNE effective_num_samples must be a positive integer")
     return planners, maximum_agents - 1, expected_effective_num_samples
 
 

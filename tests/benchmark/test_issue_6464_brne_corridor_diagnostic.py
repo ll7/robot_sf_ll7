@@ -65,6 +65,7 @@ def test_issue_6464_config_is_frozen_and_opt_in() -> None:
     assert config["scenario_ids"] == ["classic_head_on_corridor_low"]
     assert config["seeds"] == [111, 112, 113]
     assert config["max_pedestrians"] == 7
+    assert config["expected_effective_num_samples"] == 42
     assert [planner["key"] for planner in config["planners"]] == [
         "brne",
         "orca",
@@ -166,7 +167,7 @@ def test_brne_requires_native_dependency_status() -> None:
                 "source_commit": BRNE_PINNED_SHA,
                 "source_pin": BRNE_PINNED_SHA,
                 "source_integrity": "clean_pinned_worktree",
-                "effective_num_samples": 49,
+                "effective_num_samples": 42,
                 "step_count": 1,
             }
         },
@@ -191,7 +192,7 @@ def test_brne_requires_native_dependency_status() -> None:
                         "source_commit": BRNE_PINNED_SHA,
                         "source_pin": BRNE_PINNED_SHA,
                         "source_integrity": "clean_pinned_worktree",
-                        "effective_num_samples": 42,
+                        "effective_num_samples": 49,
                     }
                 },
             }

@@ -1,6 +1,8 @@
 # Pinned, local-only BRNE settings for issue #6464's approved diagnostic slice.
 stage_path: third_party/external_repos/brne
 num_samples: 49
+# The pinned upstream grid helper returns 42 samples for this request.
+effective_num_samples: 42
 plan_steps: 25
 dt: 0.1
 maximum_agents: 8

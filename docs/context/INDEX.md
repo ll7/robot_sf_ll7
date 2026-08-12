@@ -144,6 +144,15 @@ hypothesis-driven follow-up before any benchmark or ranking proposal:
 [issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
 [evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
 
+Issue #6934 BRNE action-weight scaling: upstream source and ROS-controller
+inspection proved that mean-normalized weights require a sample mean at the
+Robot SF adapter boundary; the bounded fix passed the exact three-seed corridor
+diagnostic but did not change the `0/3` goal-reaching boundary:
+[issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md),
+[evidence/issue_6934_brne_action_scaling_summary.json](evidence/issue_6934_brne_action_scaling_summary.json).
+The residual progress mechanism is tracked separately in
+[#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

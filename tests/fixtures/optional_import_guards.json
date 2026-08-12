@@ -119,7 +119,7 @@
         "robot_sf/baselines/sicnav.py:300",
         "robot_sf/benchmark/case_workbench.py:1037",
         "robot_sf/benchmark/cli.py:225",
-        "robot_sf/benchmark/collision_causal_report.py:55",
+        "robot_sf/benchmark/collision/collision_causal_report.py:55",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",

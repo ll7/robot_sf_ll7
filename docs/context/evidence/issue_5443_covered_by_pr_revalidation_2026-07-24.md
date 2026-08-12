@@ -21,7 +21,7 @@ as kinematic scenarios in `last_avoidable_fixtures.py` with a rule-based transla
 from replay branches, or as full simulator configs. PR #6173 chose the former and merged
 it to `origin/main`:
 
-- `robot_sf/benchmark/collision_cause_analyser.py` — the rule-based cause analyser.
+- `robot_sf/benchmark/collision/collision_cause_analyser.py` — the rule-based cause analyser.
 - `robot_sf/benchmark/last_avoidable_fixtures.py` — the 14 `KinematicScenario` fixtures
   plus `ObservableTraceEvent` records and counterfactual repairs.
 - `robot_sf/benchmark/schemas/collision_cause_analyser_run.v1.json` — the run payload schema.

@@ -227,7 +227,9 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
     its shared keys are validated transitively through the runnable variants
     that inherit them. A referenced overlay may still be independently
     loadable (as with the predictive sub-base after #6748), but it is not a
-    leaf and remains covered through its descendants.
+    leaf and remains covered through its descendants. Constrained-RL variants
+    are owned by their dedicated loader and are not ExpertTrainingConfig
+    leaves, even when they inherit an expert-shaped base.
     """
     required_keys = {
         "convergence",
@@ -262,6 +264,7 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
         raw_keys = set(raw)
         is_full_config = required_keys <= raw_keys
         is_expert_overlay = "base_config" in raw_keys and "candidates" not in raw_keys
+        is_constrained_rl_config = "safety_constraints" in raw_keys
         # A runnable overlay has its own execution controls.  The predictive
         # sub-base is independently loadable after #6748, but intentionally
         # lacks those controls and remains an intermediate shared overlay.
@@ -272,7 +275,9 @@ def _canonical_expert_configs(config_root: Path = _CONFIG_ROOT) -> tuple[Path, .
             and not is_runnable_expert_overlay
             and config_path.resolve() in base_reference_paths
         )
-        if is_full_config or (is_expert_overlay and not is_intermediate_base):
+        if not is_constrained_rl_config and (
+            is_full_config or (is_expert_overlay and not is_intermediate_base)
+        ):
             selected.append(config_path)
     return tuple(selected)
 
@@ -292,6 +297,16 @@ def test_all_tracked_canonical_expert_configs_load() -> None:
             failures.append(f"{relative_path}: {type(exc).__name__}: {exc}")
 
     assert not failures, "\n".join(failures)
+
+
+def test_constrained_rl_variants_are_not_expert_config_leaves() -> None:
+    """Dedicated constrained-RL configs stay out of the expert inventory."""
+    selected_relative = {str(path.relative_to(_REPO_ROOT)) for path in _canonical_expert_configs()}
+    for config_name in (
+        "issue_4017_constrained_smoke.yaml",
+        "issue_4017_unconstrained_smoke.yaml",
+    ):
+        assert f"configs/training/ppo/{config_name}" not in selected_relative
 
 
 def test_chained_intermediate_base_is_not_a_canonical_expert_leaf() -> None:

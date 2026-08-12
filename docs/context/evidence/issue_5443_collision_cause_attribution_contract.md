@@ -21,7 +21,7 @@ legal or moral fault.
   `ObservableTraceEvent` records with expected and observed channel values. The
   analyser input contains neither `cause_class` nor an answer-key activation
   window.
-- `robot_sf/benchmark/collision_cause_analyser.py` maps observable patterns to
+- `robot_sf/benchmark/collision/collision_cause_analyser.py` maps observable patterns to
   cause classes, derives onset from the first matching event, and verifies
   counterfactual decisiveness by replaying a mechanism-specific repair.
 - The eight avoidable single-cause events occur before the shared baseline

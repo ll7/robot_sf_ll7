@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.collision_cause_attribution import (
+from robot_sf.benchmark.collision.collision_cause_attribution import (
     REPORT_STATUS_SCORED,
     VERDICT_PASS,
     CollisionCauseAttributionError,

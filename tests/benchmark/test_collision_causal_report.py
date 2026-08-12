@@ -17,7 +17,7 @@ import copy
 
 import pytest
 
-from robot_sf.benchmark.collision_causal_report import (
+from robot_sf.benchmark.collision.collision_causal_report import (
     CollisionCausalReportError,
     abstained_collision_causal_report,
     reconcile_collision_causal_report,

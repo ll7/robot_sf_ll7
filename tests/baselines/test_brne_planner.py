@@ -10,12 +10,15 @@ from __future__ import annotations
 import importlib.util
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from robot_sf.baselines import brne as brne_module
 from robot_sf.baselines import get_baseline, list_baselines
 from robot_sf.baselines.brne import BRNEPlanner, BRNEPlannerConfig, build_brne_config
+from robot_sf.baselines.interface import Observation
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BRNE_STAGE_PATH = REPO_ROOT / "third_party" / "external_repos" / "brne"
@@ -336,6 +339,207 @@ def test_brne_fallback_on_error_returns_zero_motion(
     action = planner.step(_make_observation(num_agents=2))
     assert action["v"] == 0.0
     assert action["omega"] == 0.0
+
+
+def test_brne_solver_error_without_fallback_is_recorded_and_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The native diagnostic path must surface solver failures when fallback is disabled."""
+    planner = BRNEPlanner({"fallback_on_error": False})
+    monkeypatch.setattr(
+        planner,
+        "_ensure_brne_loaded",
+        lambda: (_ for _ in ()).throw(RuntimeError("solver boom")),
+    )
+
+    with pytest.raises(RuntimeError, match="BRNE solve failed: solver boom"):
+        planner.step(_make_observation())
+
+    metadata = planner.get_metadata()
+    assert metadata["runtime_status"] == "failed"
+    assert metadata["failure_reasons"] == ["solver_exception"]
+
+
+def test_brne_step_accepts_canonical_observation_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The planner accepts both mapping and canonical Observation inputs."""
+    planner = BRNEPlanner({})
+    seen: list[Observation] = []
+
+    def _solve(observation: Observation) -> dict[str, float]:
+        seen.append(observation)
+        return {"v": 0.0, "omega": 0.0}
+
+    monkeypatch.setattr(planner, "_solve", _solve)
+    observation = Observation(
+        dt=0.1,
+        robot={"position": [0.0, 0.0], "goal": [1.0, 0.0]},
+        agents=[],
+    )
+    assert planner.step(observation) == {"v": 0.0, "omega": 0.0}
+    assert seen == [observation]
+
+
+def test_brne_seed_binding_is_cached_and_resettable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The upstream sampler receives the episode seed once per planner reset."""
+    module = SimpleNamespace(rng=object())
+    load_calls: list[Path] = []
+
+    def _load(stage: Path) -> object:
+        load_calls.append(stage)
+        return module
+
+    monkeypatch.setattr(brne_module, "_load_brne_module", _load)
+    planner = BRNEPlanner({"stage_path": str(tmp_path / "brne")}, seed=12)
+
+    assert planner._ensure_brne_loaded() is module
+    assert isinstance(module.rng, np.random.Generator)
+    assert planner._ensure_brne_loaded() is module
+    assert len(load_calls) == 1
+
+    planner.reset(seed=13)
+    planner._ensure_brne_loaded()
+    assert isinstance(module.rng, np.random.Generator)
+    assert len(load_calls) == 1
+
+
+def test_brne_loader_without_upstream_rng_is_still_cached(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Adapters without an upstream RNG attribute remain loadable."""
+    module = SimpleNamespace()
+    monkeypatch.setattr(brne_module, "_load_brne_module", lambda _stage: module)
+    planner = BRNEPlanner({"stage_path": str(tmp_path / "brne")}, seed=12)
+
+    assert planner._ensure_brne_loaded() is module
+    assert planner._upstream_rng_seeded is True
+
+
+def test_brne_covariance_and_runtime_state_caches_are_reset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Covariance caching and runtime diagnostics reset at episode/config boundaries."""
+    calls = 0
+
+    def _get_lmat(*_args: object) -> tuple[np.ndarray, None]:
+        nonlocal calls
+        calls += 1
+        return np.eye(2), None
+
+    planner = BRNEPlanner({"stage_path": str(tmp_path / "brne")})
+    module = SimpleNamespace(get_Lmat_nb=_get_lmat)
+    assert planner._ensure_cov(module).shape == (2, 2)
+    assert planner._ensure_cov(module).shape == (2, 2)
+    assert calls == 1
+
+    planner._record_failure("duplicate")
+    planner._record_failure("duplicate")
+    assert planner.get_metadata()["failure_reasons"] == ["duplicate"]
+    planner.reset(seed=23)
+    assert planner.get_metadata()["runtime_status"] == "not_started"
+    assert planner.get_metadata()["seed"] == 23
+    planner.configure({"num_samples": 17})
+    assert planner.get_metadata()["runtime_status"] == "not_started"
+    planner.close()
+    assert planner._brne is None
+
+
+def test_brne_module_loader_rejects_missing_import_spec(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Malformed staged source must fail before attempting an import."""
+    core = tmp_path / "brne_nav" / "brne_py" / "brne_py"
+    core.mkdir(parents=True)
+    (core / "brne.py").write_text("# fixture\n", encoding="utf-8")
+    monkeypatch.delitem(brne_module.sys.modules, brne_module._BRNE_MODULE_NAME, raising=False)
+    monkeypatch.setattr(brne_module.importlib.util, "spec_from_file_location", lambda *_args: None)
+
+    with pytest.raises(ImportError, match="Could not build import spec"):
+        brne_module._load_brne_module(tmp_path)
+
+
+def test_brne_pose_falls_back_to_goal_or_zero_heading() -> None:
+    """Legacy observations without motion use goal bearing, then zero heading."""
+    zero_velocity = np.zeros(2)
+    pose_to_goal = BRNEPlanner._infer_robot_pose(
+        np.array([0.0, 0.0]), zero_velocity, np.array([0.0, 2.0])
+    )
+    pose_without_goal = BRNEPlanner._infer_robot_pose(
+        np.array([0.0, 0.0]), zero_velocity, np.array([0.0, 0.0])
+    )
+    assert pose_to_goal[2] == pytest.approx(math.pi / 2.0)
+    assert pose_without_goal[2] == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize(
+    ("ensemble", "plan_steps", "error"),
+    [
+        (np.zeros((3, 5, 2)), 4, "invalid_control_ensemble_plan_axis"),
+        (np.zeros((4, 0, 2)), 4, "invalid_control_ensemble_sample_axis"),
+        (np.full((4, 2, 2), np.nan), 4, "nonfinite_control_ensemble"),
+    ],
+)
+def test_brne_rejects_ambiguous_or_nonfinite_control_ensembles(
+    ensemble: np.ndarray, plan_steps: int, error: str
+) -> None:
+    """Only finite tensors with an explicit plan-step axis enter the solver."""
+    with pytest.raises(ValueError, match=error):
+        BRNEPlanner._normalize_control_ensemble(ensemble, plan_steps=plan_steps)
+
+
+@pytest.mark.parametrize(
+    ("ensemble", "weights", "reason"),
+    [
+        (np.zeros((2, 1)), np.ones((1, 2)), "invalid_control_ensemble_shape"),
+        (np.zeros((2, 2, 2)), np.ones((1, 2, 1)), "invalid_control_ensemble_shape"),
+        (np.zeros((2, 2, 2)), np.ones((1, 3)), "sample_weight_shape_mismatch"),
+        (np.full((2, 2, 2), np.nan), np.ones((1, 2)), "nonfinite_control_command"),
+    ],
+)
+def test_brne_solver_records_control_shape_and_finiteness_failures(
+    ensemble: np.ndarray,
+    weights: np.ndarray,
+    reason: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed upstream outputs become classified stop actions."""
+    planner = BRNEPlanner({})
+
+    def _ensure_brne_loaded() -> object:
+        return object()
+
+    def _ensure_cov(_brne: object) -> np.ndarray:
+        return np.eye(1)
+
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _ensure_brne_loaded)
+    monkeypatch.setattr(planner, "_ensure_cov", _ensure_cov)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (np.zeros((1, 2)), np.zeros((1, 2)), ensemble),
+    )
+    monkeypatch.setattr(planner, "_brne_solve", lambda *_args: weights)
+    planner._jit_warmup_done = True
+
+    observation = _make_observation()
+    observation["robot"]["heading"] = (
+        "invalid" if reason != "nonfinite_control_command" else math.nan
+    )
+
+    action = planner.step(observation)
+    assert action == {"v": 0.0, "omega": 0.0}
+    assert planner.get_metadata()["failure_reasons"] == [reason]
+
+
+def test_brne_clamp_can_be_disabled() -> None:
+    """The diagnostic wrapper preserves the configured unclamped action path."""
+    planner = BRNEPlanner({"safety_clamp": False})
+    action = {"v": 4.0, "omega": 3.0}
+    planner._clamp_action(action)
+    assert action == {"v": 4.0, "omega": 3.0}
 
 
 def test_brne_reset_clears_state(staged_brne_available: bool) -> None:

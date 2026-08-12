@@ -1418,16 +1418,19 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution and optional adapter-projection diagnostics."""
-        payload: dict[str, Any] = {
-            "planner_type": "ORCAPlannerAdapter",
-            "adapter_trace_schema_version": _ORCA_ADAPTER_TRACE_SCHEMA_VERSION,
-            "adapter_trace_enabled": bool(
-                getattr(self.config, "orca_adapter_trace_enabled", False)
-            ),
-            "adapter_trace_summary": self.adapter_trace_summary(),
-        }
-        if payload["adapter_trace_enabled"]:
-            payload["adapter_trace"] = self.adapter_trace()
+        payload: dict[str, Any] = {"planner_type": "ORCAPlannerAdapter"}
+        enabled = bool(getattr(getattr(self, "config", None), "orca_adapter_trace_enabled", False))
+        if not enabled:
+            return payload
+
+        payload.update(
+            {
+                "adapter_trace_schema_version": _ORCA_ADAPTER_TRACE_SCHEMA_VERSION,
+                "adapter_trace_enabled": True,
+                "adapter_trace_summary": self.adapter_trace_summary(),
+                "adapter_trace": self.adapter_trace(),
+            }
+        )
         return payload
 
 

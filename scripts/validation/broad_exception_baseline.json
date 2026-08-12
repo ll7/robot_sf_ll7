@@ -21,6 +21,7 @@
       "scripts/analysis/compare_trace_vs_live_replay_issue_2790.py": 1,
       "scripts/analyze_feature_extractors.py": 2,
       "scripts/benchmark/build_horizon_timestep_ablation_report.py": 1,
+      "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py": 1,
       "scripts/benchmark/run_cv_forecast_eval.py": 1,
       "scripts/benchmark/run_forecast_baseline_comparison.py": 1,
       "scripts/benchmark/run_issue_5578_speed_tier_campaign.py": 2,
@@ -104,7 +105,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 177
+    "total": 178
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -113,7 +114,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "e53eb792397aafba",
       "handler": "Exception",
-      "lineno": 560,
+      "lineno": 563,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:  # noqa: BLE001 - campaign fault isolation: failed arm, not crash"
     },
@@ -221,7 +222,7 @@
       "context": "_preflight_policy",
       "fingerprint": "669b2ff25f68c9e9",
       "handler": "Exception",
-      "lineno": 874,
+      "lineno": 881,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
@@ -230,7 +231,7 @@
       "context": "_preflight_policy",
       "fingerprint": "eaed931d8e0c298c",
       "handler": "Exception",
-      "lineno": 904,
+      "lineno": 911,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
@@ -302,7 +303,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2340,
+      "lineno": 2397,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -311,7 +312,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "3e85dca65fdc0caf",
       "handler": "Exception",
-      "lineno": 2342,
+      "lineno": 2399,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -320,7 +321,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2358,
+      "lineno": 2415,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -329,7 +330,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2442,
+      "lineno": 2502,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -338,7 +339,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "83f25d3b1aad5e1e",
       "handler": "Exception",
-      "lineno": 2444,
+      "lineno": 2504,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -347,7 +348,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2460,
+      "lineno": 2520,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -419,7 +420,7 @@
       "context": "resolve_staging_mode",
       "fingerprint": "5f5df56cc23530c4",
       "handler": "Exception",
-      "lineno": 70,
+      "lineno": 72,
       "path": "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py",
       "source": "except Exception as exc:"
     },
@@ -428,7 +429,7 @@
       "context": "main",
       "fingerprint": "d4a39140f62a5740",
       "handler": "Exception",
-      "lineno": 536,
+      "lineno": 538,
       "path": "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py",
       "source": "except Exception as e:"
     },
@@ -467,6 +468,15 @@
       "lineno": 370,
       "path": "scripts/benchmark/build_horizon_timestep_ablation_report.py",
       "source": "except Exception as exc:  # noqa: BLE001 - per-cell fail-closed isolation (#6690)"
+    },
+    {
+      "col_offset": 8,
+      "context": "run_campaign",
+      "fingerprint": "82abbbc68ff4ae7f",
+      "handler": "Exception",
+      "lineno": 675,
+      "path": "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - a failed arm must be reported, not promoted."
     },
     {
       "col_offset": 4,
@@ -1004,7 +1014,7 @@
       "context": "stage_repo",
       "fingerprint": "8b5f4a2c9bce3c5d",
       "handler": "Exception",
-      "lineno": 390,
+      "lineno": 392,
       "path": "scripts/tools/manage_external_repos.py",
       "source": "except Exception:"
     },
@@ -1130,7 +1140,7 @@
       "context": "_source_path_for",
       "fingerprint": "90fcd650a1b21cf4",
       "handler": "Exception",
-      "lineno": 157,
+      "lineno": 160,
       "path": "scripts/tools/publish_model_registry_release.py",
       "source": "except Exception as exc:"
     },

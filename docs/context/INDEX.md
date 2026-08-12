@@ -153,6 +153,13 @@ diagnostic but did not change the `0/3` goal-reaching boundary:
 The residual progress mechanism is tracked separately in
 [#6938](https://github.com/ll7/robot_sf_ll7/issues/6938).
 
+Issue #6615 ORCA adapter-validation harness: analytic projection cases, an off-by-default
+`orca_adapter_trace.v1` pre/post command trace, and one native diagnostic smoke summary. The
+result measures projection divergence only; it is not benchmark evidence and does not retire the
+ORCA dissertation hedge:
+[issue_6615_orca_adapter_validation.md](issue_6615_orca_adapter_validation.md),
+[evidence/issue_6615_orca_adapter_validation_summary.json](evidence/issue_6615_orca_adapter_validation_summary.json).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

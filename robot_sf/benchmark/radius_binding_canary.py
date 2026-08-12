@@ -381,7 +381,7 @@ def probe_contact_logic(
     try:
         if require_runtime and runtime_binding is None:
             raise RuntimeError("initialized contact binding is unavailable")
-        from robot_sf.benchmark.collision_definition_inventory import (  # noqa: PLC0415
+        from robot_sf.benchmark.collision.collision_definition_inventory import (  # noqa: PLC0415
             LABEL_COLLISION,
             LABEL_NEAR_MISS,
             classify_clearance_regime,

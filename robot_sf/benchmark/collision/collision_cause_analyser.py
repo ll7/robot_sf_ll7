@@ -20,7 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.collision_cause_attribution import (
+from robot_sf.benchmark.collision.collision_cause_attribution import (
     CAUSE_ALREADY_UNAVOIDABLE_CONTACT,
     CAUSE_BAD_SELECTION,
     CAUSE_CANDIDATE_OMISSION,

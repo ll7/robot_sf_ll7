@@ -31,7 +31,7 @@ import pathlib
 import sys
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.collision_definition_inventory import (
+from robot_sf.benchmark.collision.collision_definition_inventory import (
     DEFAULT_PED_RADIUS,
     DEFAULT_ROBOT_RADIUS,
     collision_definition_inventory,

@@ -25,7 +25,7 @@ from typing import Any
 import jsonschema
 
 from robot_sf.benchmark import last_avoidable_fixtures as fx
-from robot_sf.benchmark.collision_causal_report import (
+from robot_sf.benchmark.collision.collision_causal_report import (
     CausalJoinMetadata,
     collide_causal_report_from_last_avoidable,
 )

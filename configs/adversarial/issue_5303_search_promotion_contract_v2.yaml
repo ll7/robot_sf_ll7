@@ -143,7 +143,7 @@ input_provenance:
       # Refreshed after the additive, outcome-free BRNE diagnostic registry metadata
       # change in issue #6464; no target, split, budget, estimator, gate, or decision
       # field changed.
-      sha256: 262f3db515cfbc304d420047898d99abd3b1630332615e526e690cdb78635e4c
+      sha256: 3ea3c8b38101ca1b218a01e906114fd51364ae98a4c9ea0f8ea6aa0ec374bd5c
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

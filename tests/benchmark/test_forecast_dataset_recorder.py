@@ -11,7 +11,7 @@ import pytest
 from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
 )
-from robot_sf.benchmark.forecast_dataset_recorder import (
+from robot_sf.benchmark.forecast.forecast_dataset_recorder import (
     FORECAST_DATASET_SCHEMA_VERSION,
     _pedestrian_by_id,
     record_forecast_dataset_from_trace_exports,

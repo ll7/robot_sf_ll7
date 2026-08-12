@@ -44,8 +44,8 @@ DEFAULT_CLOSED_LOOP_OUTPUT_ROOT = (
 )
 
 REQUIRED_CODE: tuple[str, ...] = (
-    "robot_sf/benchmark/forecast_metrics.py",
-    "robot_sf/benchmark/forecast_batch.py",
+    "robot_sf/benchmark/forecast/forecast_metrics.py",
+    "robot_sf/benchmark/forecast/forecast_batch.py",
     "robot_sf/benchmark/pedestrian_forecast.py",
     "robot_sf/benchmark/runner.py",
     SCRIPT_OBSERVATION_REPLAY,

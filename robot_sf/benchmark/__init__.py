@@ -41,7 +41,7 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         validate_case_dossier_manifest,
     )
     from robot_sf.benchmark.errors import AggregationMetadataError
-    from robot_sf.benchmark.forecast_batch import (
+    from robot_sf.benchmark.forecast.forecast_batch import (
         FORECAST_BATCH_SCHEMA_VERSION,
         ActorForecast,
         CoordinateFrame,
@@ -51,32 +51,32 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         save_forecast_batch,
         validate_forecast_batch,
     )
-    from robot_sf.benchmark.forecast_calibration_report import (
+    from robot_sf.benchmark.forecast.forecast_calibration_report import (
         FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION,
         build_forecast_calibration_report,
         format_forecast_calibration_markdown,
         write_forecast_calibration_report,
     )
-    from robot_sf.benchmark.forecast_conformal_pilot import (
+    from robot_sf.benchmark.forecast.forecast_conformal_pilot import (
         FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION,
         build_forecast_conformal_pilot_report,
         format_forecast_conformal_pilot_markdown,
         write_forecast_conformal_pilot_report,
     )
-    from robot_sf.benchmark.forecast_dataset_recorder import (
+    from robot_sf.benchmark.forecast.forecast_dataset_recorder import (
         DEFAULT_FORECAST_DATASET_ID,
         FORECAST_DATASET_SCHEMA_VERSION,
         ForecastDatasetRecordResult,
         record_forecast_dataset_from_trace_exports,
         validate_forecast_dataset_manifest,
     )
-    from robot_sf.benchmark.forecast_metrics import (
+    from robot_sf.benchmark.forecast.forecast_metrics import (
         FORECAST_METRICS_SCHEMA_VERSION,
         ForecastMetricRow,
         evaluate_forecast_batch,
         format_forecast_metrics_markdown,
     )
-    from robot_sf.benchmark.forecast_observation_adapters import (
+    from robot_sf.benchmark.forecast.forecast_observation_adapters import (
         ForecastActorObservation,
         ForecastObservationAdapter,
         ForecastObservationBatch,
@@ -84,7 +84,7 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         TrackedAgentsForecastAdapter,
         build_constant_velocity_forecast_batch,
     )
-    from robot_sf.benchmark.forecast_transferability_stress_matrix import (
+    from robot_sf.benchmark.forecast.forecast_transferability_stress_matrix import (
         DEFAULT_TRANSFER_DIMENSIONS,
         FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION,
         build_forecast_transferability_stress_matrix,
@@ -152,48 +152,48 @@ _LAZY: dict[str, str] = {
     # errors
     "AggregationMetadataError": "errors",
     # forecast_batch
-    "FORECAST_BATCH_SCHEMA_VERSION": "forecast_batch",
-    "ActorForecast": "forecast_batch",
-    "CoordinateFrame": "forecast_batch",
-    "ForecastBatch": "forecast_batch",
-    "ForecastBatchProvenance": "forecast_batch",
-    "load_forecast_batch": "forecast_batch",
-    "save_forecast_batch": "forecast_batch",
-    "validate_forecast_batch": "forecast_batch",
+    "FORECAST_BATCH_SCHEMA_VERSION": "forecast.forecast_batch",
+    "ActorForecast": "forecast.forecast_batch",
+    "CoordinateFrame": "forecast.forecast_batch",
+    "ForecastBatch": "forecast.forecast_batch",
+    "ForecastBatchProvenance": "forecast.forecast_batch",
+    "load_forecast_batch": "forecast.forecast_batch",
+    "save_forecast_batch": "forecast.forecast_batch",
+    "validate_forecast_batch": "forecast.forecast_batch",
     # forecast_calibration_report
-    "FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION": "forecast_calibration_report",
-    "build_forecast_calibration_report": "forecast_calibration_report",
-    "format_forecast_calibration_markdown": "forecast_calibration_report",
-    "write_forecast_calibration_report": "forecast_calibration_report",
+    "FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION": "forecast.forecast_calibration_report",
+    "build_forecast_calibration_report": "forecast.forecast_calibration_report",
+    "format_forecast_calibration_markdown": "forecast.forecast_calibration_report",
+    "write_forecast_calibration_report": "forecast.forecast_calibration_report",
     # forecast_conformal_pilot
-    "FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION": "forecast_conformal_pilot",
-    "build_forecast_conformal_pilot_report": "forecast_conformal_pilot",
-    "format_forecast_conformal_pilot_markdown": "forecast_conformal_pilot",
-    "write_forecast_conformal_pilot_report": "forecast_conformal_pilot",
+    "FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION": "forecast.forecast_conformal_pilot",
+    "build_forecast_conformal_pilot_report": "forecast.forecast_conformal_pilot",
+    "format_forecast_conformal_pilot_markdown": "forecast.forecast_conformal_pilot",
+    "write_forecast_conformal_pilot_report": "forecast.forecast_conformal_pilot",
     # forecast_dataset_recorder
-    "DEFAULT_FORECAST_DATASET_ID": "forecast_dataset_recorder",
-    "FORECAST_DATASET_SCHEMA_VERSION": "forecast_dataset_recorder",
-    "ForecastDatasetRecordResult": "forecast_dataset_recorder",
-    "record_forecast_dataset_from_trace_exports": "forecast_dataset_recorder",
-    "validate_forecast_dataset_manifest": "forecast_dataset_recorder",
+    "DEFAULT_FORECAST_DATASET_ID": "forecast.forecast_dataset_recorder",
+    "FORECAST_DATASET_SCHEMA_VERSION": "forecast.forecast_dataset_recorder",
+    "ForecastDatasetRecordResult": "forecast.forecast_dataset_recorder",
+    "record_forecast_dataset_from_trace_exports": "forecast.forecast_dataset_recorder",
+    "validate_forecast_dataset_manifest": "forecast.forecast_dataset_recorder",
     # forecast_metrics
-    "FORECAST_METRICS_SCHEMA_VERSION": "forecast_metrics",
-    "ForecastMetricRow": "forecast_metrics",
-    "evaluate_forecast_batch": "forecast_metrics",
-    "format_forecast_metrics_markdown": "forecast_metrics",
+    "FORECAST_METRICS_SCHEMA_VERSION": "forecast.forecast_metrics",
+    "ForecastMetricRow": "forecast.forecast_metrics",
+    "evaluate_forecast_batch": "forecast.forecast_metrics",
+    "format_forecast_metrics_markdown": "forecast.forecast_metrics",
     # forecast_observation_adapters
-    "ForecastActorObservation": "forecast_observation_adapters",
-    "ForecastObservationAdapter": "forecast_observation_adapters",
-    "ForecastObservationBatch": "forecast_observation_adapters",
-    "OracleFullStateForecastAdapter": "forecast_observation_adapters",
-    "TrackedAgentsForecastAdapter": "forecast_observation_adapters",
-    "build_constant_velocity_forecast_batch": "forecast_observation_adapters",
+    "ForecastActorObservation": "forecast.forecast_observation_adapters",
+    "ForecastObservationAdapter": "forecast.forecast_observation_adapters",
+    "ForecastObservationBatch": "forecast.forecast_observation_adapters",
+    "OracleFullStateForecastAdapter": "forecast.forecast_observation_adapters",
+    "TrackedAgentsForecastAdapter": "forecast.forecast_observation_adapters",
+    "build_constant_velocity_forecast_batch": "forecast.forecast_observation_adapters",
     # forecast_transferability_stress_matrix
-    "DEFAULT_TRANSFER_DIMENSIONS": "forecast_transferability_stress_matrix",
-    "FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION": "forecast_transferability_stress_matrix",
-    "build_forecast_transferability_stress_matrix": "forecast_transferability_stress_matrix",
-    "format_forecast_transferability_stress_markdown": "forecast_transferability_stress_matrix",
-    "write_forecast_transferability_stress_matrix": "forecast_transferability_stress_matrix",
+    "DEFAULT_TRANSFER_DIMENSIONS": "forecast.forecast_transferability_stress_matrix",
+    "FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION": "forecast.forecast_transferability_stress_matrix",
+    "build_forecast_transferability_stress_matrix": "forecast.forecast_transferability_stress_matrix",
+    "format_forecast_transferability_stress_markdown": "forecast.forecast_transferability_stress_matrix",
+    "write_forecast_transferability_stress_matrix": "forecast.forecast_transferability_stress_matrix",
     # helper_catalog
     "load_trained_policy": "helper_catalog",
     "prepare_classic_env": "helper_catalog",

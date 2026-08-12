@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.forecast_baseline_comparison import compare_forecast_baselines
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_baseline_comparison import compare_forecast_baselines
+from robot_sf.benchmark.forecast.forecast_batch import (
     ActorForecast,
     CoordinateFrame,
     ForecastBatch,

@@ -14,8 +14,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.forecast_batch import ForecastBatch, validate_forecast_batch
-from robot_sf.benchmark.forecast_metrics import GroundTruthPositions, evaluate_forecast_batch
+from robot_sf.benchmark.forecast.forecast_batch import ForecastBatch, validate_forecast_batch
+from robot_sf.benchmark.forecast.forecast_metrics import (
+    GroundTruthPositions,
+    evaluate_forecast_batch,
+)
 from robot_sf.benchmark.pedestrian_forecast import chi_square_2d_threshold
 
 PREDICTION_OPEN_CLOSED_SCHEMA_VERSION = "PredictionOpenClosedEval.v1"

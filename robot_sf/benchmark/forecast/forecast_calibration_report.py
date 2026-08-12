@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.forecast_metrics import FORECAST_METRICS_SCHEMA_VERSION
+from robot_sf.benchmark.forecast.forecast_metrics import FORECAST_METRICS_SCHEMA_VERSION
 
 FORECAST_CALIBRATION_REPORT_SCHEMA_VERSION = "ForecastCalibrationReport.v1"
 

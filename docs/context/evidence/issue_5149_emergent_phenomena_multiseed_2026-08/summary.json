@@ -1,0 +1,264 @@
+{
+  "aggregates": [
+    {
+      "calibration": "literature_typical",
+      "majority_verdict": "absent_or_negligible",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "lane_purity": {
+          "max": 0.41459369817578773,
+          "mean": 0.325,
+          "median": 0.3171641791044776,
+          "min": 0.27197346600331673,
+          "std": 0.04765702012177881
+        },
+        "lane_segregation_index": {
+          "max": 0.2829526668850843,
+          "mean": 0.15128632081029997,
+          "median": 0.12872417127445282,
+          "min": 0.041208217343209966,
+          "std": 0.10126204569738431
+        }
+      },
+      "scenario": "bidirectional_corridor",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "absent_or_negligible": 6,
+        "weak_partial": 4
+      }
+    },
+    {
+      "calibration": "released_default",
+      "majority_verdict": "absent_or_negligible",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "lane_purity": {
+          "max": 0.45107794361525705,
+          "mean": 0.363971807628524,
+          "median": 0.39054726368159204,
+          "min": 0.24253731343283583,
+          "std": 0.07541337936014621
+        },
+        "lane_segregation_index": {
+          "max": 0.2807373469093893,
+          "mean": 0.15269610852324902,
+          "median": 0.14092514227824085,
+          "min": 0.05171811100107775,
+          "std": 0.08845113338196872
+        }
+      },
+      "scenario": "bidirectional_corridor",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "absent_or_negligible": 5,
+        "weak_partial": 5
+      }
+    },
+    {
+      "calibration": "literature_typical",
+      "majority_verdict": "clearly_present",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "arch_lateral_spread": {
+          "max": 0.743132181519976,
+          "mean": 0.701502747096889,
+          "median": 0.7079274715736972,
+          "min": 0.6542936727734895,
+          "std": 0.029260115615516894
+        },
+        "exit_density_ratio": {
+          "max": 7.910002781842269,
+          "mean": 7.44090842530367,
+          "median": 7.399650188739911,
+          "min": 7.0640977362569,
+          "std": 0.23724240998271393
+        }
+      },
+      "scenario": "high_density_exit",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "clearly_present": 10
+      }
+    },
+    {
+      "calibration": "released_default",
+      "majority_verdict": "clearly_present",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "arch_lateral_spread": {
+          "max": 0.8856462990739212,
+          "mean": 0.8431712296342202,
+          "median": 0.8350737066801677,
+          "min": 0.8174284056436364,
+          "std": 0.024193859042303936
+        },
+        "exit_density_ratio": {
+          "max": 7.227597201423765,
+          "mean": 6.953324559976375,
+          "median": 6.911172321998437,
+          "min": 6.583085020949216,
+          "std": 0.18754852935968766
+        }
+      },
+      "scenario": "high_density_exit",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "clearly_present": 10
+      }
+    },
+    {
+      "calibration": "literature_typical",
+      "majority_verdict": "absent_or_negligible",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "mean_burst_windows": {
+          "max": 3.0,
+          "mean": 2.041666666666667,
+          "median": 1.75,
+          "min": 1.25,
+          "std": 0.689706056551952
+        },
+        "oscillation_flips": {
+          "max": 3.0,
+          "mean": 1.8,
+          "median": 1.5,
+          "min": 0.0,
+          "std": 1.1352924243950935
+        },
+        "throughput_peds_per_sec": {
+          "max": 0.3992015968063872,
+          "mean": 0.36327345309381237,
+          "median": 0.3592814371257485,
+          "min": 0.3393213572854291,
+          "std": 0.020614681816140613
+        }
+      },
+      "scenario": "narrow_doorway",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "absent_or_negligible": 5,
+        "clearly_present": 5
+      }
+    },
+    {
+      "calibration": "released_default",
+      "majority_verdict": "clearly_present",
+      "n_seeds": 10,
+      "order_parameter_stats": {
+        "mean_burst_windows": {
+          "max": 4.0,
+          "mean": 2.191666666666667,
+          "median": 2.0,
+          "min": 1.5,
+          "std": 0.7273429574676432
+        },
+        "oscillation_flips": {
+          "max": 5.0,
+          "mean": 3.2,
+          "median": 3.0,
+          "min": 1.0,
+          "std": 1.0327955589886444
+        },
+        "throughput_peds_per_sec": {
+          "max": 0.3992015968063872,
+          "mean": 0.35129740518962077,
+          "median": 0.3592814371257485,
+          "min": 0.2994011976047904,
+          "std": 0.02853973465006949
+        }
+      },
+      "scenario": "narrow_doorway",
+      "seeds": [
+        5149,
+        5150,
+        5151,
+        5152,
+        5153,
+        5154,
+        5155,
+        5156,
+        5157,
+        5158
+      ],
+      "verdict_counts": {
+        "absent_or_negligible": 1,
+        "clearly_present": 9
+      }
+    }
+  ],
+  "claim_boundary": "measured face-validity (smoke-tier) evidence across a pinned seed list; not benchmark-matrix evidence and not paper-grade validation against real trajectory data (#4975)",
+  "evidence_status": "smoke evidence",
+  "generated_at_utc": "2026-08-12T08:56:51Z",
+  "git_head": "a31686e51f624638255d22968b89cda0257c2e4c",
+  "issue": "robot_sf_ll7#5149",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "seeds": [
+    5149,
+    5150,
+    5151,
+    5152,
+    5153,
+    5154,
+    5155,
+    5156,
+    5157,
+    5158
+  ],
+  "substrate": "pysocialforce",
+  "substrate_version": "2.0.0"
+}

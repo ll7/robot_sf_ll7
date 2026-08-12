@@ -96,6 +96,7 @@ comparison_contract:
     - disagreement
     - blocked_missing_matrix
     - blocked_incomparable_roster
+    - tie_not_identifiable
   must_emit_disagreement_rows: true
   interpretation: >-
     Compare the structural ordering independently on each matrix and report

@@ -62,6 +62,11 @@ from robot_sf.benchmark.map_runner_batch_plan import (
 )
 from robot_sf.benchmark.map_runner_episode import (
     _CollisionEventContext,
+    _finite_positive_float,
+    _initial_ped_velocities,
+    _initial_pedestrian_actor_ids,
+    _initial_robot_velocity,
+    _reset_robot_heading,
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
@@ -71,6 +76,7 @@ from robot_sf.benchmark.map_runner_metrics import (
 )
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
+from robot_sf.benchmark.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -108,6 +114,63 @@ class _KinematicsStub:
         """Return empty kinematics diagnostics for the stub."""
         del command, projected
         return {}
+
+
+def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> None:
+    """Map-runner trace capture carries reset velocities and stable slot identities."""
+
+    simulator = SimpleNamespace(
+        ped_vel=np.array([[0.1, 0.2], [-0.2, 0.3]], dtype=float),
+        robots=[SimpleNamespace(state=SimpleNamespace(velocity_xy=(0.4, -0.1)))],
+    )
+    assert _initial_robot_velocity(simulator).tolist() == [0.4, -0.1]
+    np.testing.assert_allclose(
+        _initial_ped_velocities(simulator, 2),
+        np.array([[0.1, 0.2], [-0.2, 0.3]], dtype=float),
+    )
+    actor_ids = _initial_pedestrian_actor_ids(simulator, 2)
+    assert actor_ids == ["simulator-slot-0", "simulator-slot-1"]
+    frames = _trace_pedestrians(
+        np.array([[1.0, 2.0], [3.0, 4.0]], dtype=float),
+        None,
+        0.1,
+        actor_ids=actor_ids,
+    )
+    assert [frame["actor_id"] for frame in frames] == actor_ids
+    direct = SimpleNamespace(robot_velocity_xy=(0.6, -0.2), robot_theta=1.25)
+    np.testing.assert_allclose(_initial_robot_velocity(direct), np.array([0.6, -0.2]))
+    assert _reset_robot_heading(direct, {}) == pytest.approx(1.25)
+    fallback = SimpleNamespace(robot_theta="invalid", ped_vel=None)
+    assert _reset_robot_heading(fallback, {"robot_heading": [0.5]}) == pytest.approx(0.5)
+    assert _initial_robot_velocity(SimpleNamespace(robot_velocity_xy="invalid")) is None
+    assert _initial_ped_velocities(SimpleNamespace(ped_vel=None), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids="ab"), 2) is None
+    polar = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, 0.5), velocity=(0.4,)))],
+    )
+    np.testing.assert_allclose(
+        _initial_robot_velocity(polar),
+        np.array([0.4 * np.cos(0.5), 0.4 * np.sin(0.5)]),
+    )
+    invalid_pose = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, "bad"), velocity=(0.4,)))],
+    )
+    assert _initial_robot_velocity(invalid_pose) is None
+    invalid_polar = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, 0.5), velocity="bad"))],
+    )
+    assert _initial_robot_velocity(invalid_polar) is None
+
+    class NonIterable:
+        def __iter__(self):
+            raise TypeError("not iterable")
+
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=NonIterable()), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=["one"]), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=[None, "two"]), 2) is None
+    assert _finite_positive_float(0.4) == pytest.approx(0.4)
+    assert _finite_positive_float(0.0) is None
+    assert _finite_positive_float("invalid") is None
 
 
 def test_command_action_payload_preserves_structured_holonomic_trace_fields() -> None:
@@ -3250,6 +3313,9 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     assert first_frame["robot"]["velocity"] == [0.0, 0.0]
     assert first_frame["pedestrians"] == []
     assert first_frame["planner"]["selected_action"]["linear_velocity"] == pytest.approx(0.0)
+    assert first_frame["planner"]["applied_environment_action"]["linear_velocity"] == pytest.approx(
+        0.0
+    )
     assert first_frame["planner"]["amv"]["requested_linear_m_s"] == pytest.approx(3.0)
     assert first_frame["planner"]["amv"]["yaw_rate_saturated"] is False
     assert float(record["metrics"]["command_clip_fraction"]) > 0.0
@@ -5690,6 +5756,131 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
         norm1 = _normalize_episode_record(rec1)
         norm2 = _normalize_episode_record(rec2)
         assert norm1 == norm2, f"Episode {i} records differ: {norm1} vs {norm2}"
+
+
+def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The opt-in analysis profile adds data only; legacy actions/outcomes stay identical."""
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+
+    class _DummySim:
+        """Minimal deterministic simulator state for the profile regression."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.array([[1.2, 0.0]], dtype=float)
+            self.goal_pos = [np.array([2.0, 0.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((1, 2), dtype=float)
+
+    class _DummyEnv:
+        """Deterministic environment with one terminal step."""
+
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+            self.action_space = None
+
+        def reset(self, seed: int | None = None):
+            """Return the same observation for both profile variants."""
+            _ = seed
+            return {
+                "robot": {
+                    "position": np.array([0.0, 0.0], dtype=np.float32),
+                    "heading": np.array([0.0], dtype=np.float32),
+                    "speed": np.array([0.0, 0.0], dtype=np.float32),
+                    "radius": np.array([0.5], dtype=np.float32),
+                },
+                "goal": {
+                    "current": np.array([2.0, 0.0], dtype=np.float32),
+                    "next": np.array([0.0, 0.0], dtype=np.float32),
+                },
+                "pedestrians": {
+                    "positions": np.array([[1.2, 0.0]], dtype=np.float32),
+                    "velocities": np.zeros((1, 2), dtype=np.float32),
+                    "radius": np.array([0.4], dtype=np.float32),
+                    "count": np.array([1.0], dtype=np.float32),
+                },
+                "map": {"size": np.array([5.0, 4.0], dtype=np.float32)},
+                "sim": {"timestep": np.array([0.1], dtype=np.float32)},
+            }, {}
+
+        def step(self, action):
+            """Terminate with a deterministic successful outcome."""
+            _ = action
+            obs, _ = self.reset()
+            return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
+
+        def close(self) -> None:
+            """Close the no-op environment."""
+
+    dummy_config = type(
+        "Cfg",
+        (),
+        {
+            "sim_config": type("SC", (), {"time_per_step_in_secs": 0.1, "ped_radius": 0.4})(),
+            "robot_config": HolonomicDriveSettings(
+                max_speed=1.0, max_angular_speed=1.0, command_mode="vx_vy"
+            ),
+        },
+    )
+    scenario = {
+        "name": "analysis_trace_profile",
+        "metadata": {"supported": True},
+        "robot_config": {"type": "holonomic", "command_mode": "vx_vy"},
+        "simulation_config": {"max_episode_steps": 1},
+        "seeds": [1],
+    }
+    schema_path = tmp_path / "episode.schema.json"
+    schema_path.write_text('{"type":"object"}', encoding="utf-8")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics", lambda metrics, **kwargs: metrics
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
+    )
+    off_path = tmp_path / "off.jsonl"
+    on_path = tmp_path / "on.jsonl"
+    common = {
+        "scenarios_or_path": [scenario],
+        "schema_path": schema_path,
+        "algo": "hrvo",
+        "algo_config_path": "configs/algos/hrvo_camera_ready.yaml",
+        "benchmark_profile": "experimental",
+        "workers": 1,
+        "resume": False,
+    }
+    run_map_batch(out_path=off_path, **common)
+    run_map_batch(
+        out_path=on_path,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+        record_simulation_step_trace=True,
+        **common,
+    )
+    off = json.loads(off_path.read_text(encoding="utf-8").splitlines()[0])
+    on = json.loads(on_path.read_text(encoding="utf-8").splitlines()[0])
+    assert off["outcome"] == on["outcome"]
+    assert off["metrics"] == on["metrics"]
+    assert "simulation_step_trace" not in off["algorithm_metadata"]
+    assert "simulation_step_trace" in on["algorithm_metadata"]
+    assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
 
 
 def test_policy_command_to_env_action_holonomic_vx_vy_uses_midpoint_heading() -> None:

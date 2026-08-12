@@ -527,6 +527,7 @@ def _execute_campaign_planner_batch(
             record_forces=cfg.record_forces,
             record_planner_decision_trace=cfg.record_planner_decision_trace,
             record_simulation_step_trace=cfg.record_simulation_step_trace,
+            telemetry=cfg.telemetry,
             snqi_weights=context.snqi_weights,
             snqi_baseline=context.snqi_baseline,
             algo=planner.algo,
@@ -615,14 +616,16 @@ def _prepare_campaign_planner_variant_run(
             planner.benchmark_profile,
             effective_workers,
         )
-    scoped_scenarios = [
-        _scenario_with_kinematics(
-            sc,
+    scoped_scenarios = []
+    for scenario in context.scenarios:
+        scoped = _scenario_with_kinematics(
+            scenario,
             kinematics=kinematics,
             holonomic_command_mode=cfg.holonomic_command_mode,
         )
-        for sc in context.scenarios
-    ]
+        if cfg.telemetry is not None:
+            scoped["telemetry"] = dict(cfg.telemetry)
+        scoped_scenarios.append(scoped)
     return _CampaignPlannerVariantRun(
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,

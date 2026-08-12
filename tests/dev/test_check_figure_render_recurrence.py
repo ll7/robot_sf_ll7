@@ -40,6 +40,15 @@ WORKFLOW = (
 sys.path.insert(0, str(SCRIPT.parent))
 import check_figure_render_recurrence as guard  # noqa: E402
 
+# The guard fails closed without strace (Linux-only), so every test that reaches
+# ``run_recurrence``'s strace gate can only pass where strace exists. Linux CI
+# (.github/workflows/figure-render-recurrence.yml) installs strace and arbitrates;
+# on macOS dev machines these tests skip instead of failing pr_ready_check.
+requires_strace = pytest.mark.skipif(
+    shutil.which("strace") is None,
+    reason="strace is Linux-only and required for the guard's write containment",
+)
+
 # ---------------------------------------------------------------------------
 # Helpers: synthetic registries and writer scripts
 # ---------------------------------------------------------------------------
@@ -326,6 +335,7 @@ def _writer_body(*, escape: bool = False, extra: bool = False, write_output: boo
     return "\n".join(parts) + "\n"
 
 
+@requires_strace
 def test_success_reproduces(tmp_path):
     script = _writer_script(tmp_path, "ok.py", _writer_body())
     entry = _entry_in(tmp_path, "ok_cmd", _out_cmd(script, "out/report.json"), ["out/report.json"])
@@ -338,6 +348,7 @@ def test_success_reproduces(tmp_path):
     assert report["commands"][0]["containment_check"] == "ok"
 
 
+@requires_strace
 def test_timeout_fails(tmp_path):
     body = "import sys, time; time.sleep(30); sys.exit(0)\n"
     script = _writer_script(tmp_path, "slow.py", body)
@@ -353,6 +364,7 @@ def test_timeout_fails(tmp_path):
     assert result["error_reason"] == "timeout"
 
 
+@requires_strace
 def test_missing_output_fails(tmp_path):
     script = _writer_script(tmp_path, "noop.py", _writer_body(write_output=False))
     entry = _entry_in(
@@ -366,6 +378,7 @@ def test_missing_output_fails(tmp_path):
     assert result["output_check"].startswith("missing:")
 
 
+@requires_strace
 def test_extra_output_fails(tmp_path):
     script = _writer_script(tmp_path, "extra.py", _writer_body(extra=True))
     entry = _entry_in(
@@ -379,6 +392,7 @@ def test_extra_output_fails(tmp_path):
     assert result["output_check"].startswith("extra:")
 
 
+@requires_strace
 def test_path_escape_fails(tmp_path):
     script = _writer_script(tmp_path, "escape.py", _writer_body(escape=True))
     entry = _entry_in(
@@ -392,6 +406,7 @@ def test_path_escape_fails(tmp_path):
     assert result["containment_check"].startswith("escape:")
 
 
+@requires_strace
 def test_input_drift_fails_without_execution(tmp_path):
     fixture = tmp_path / "input.json"
     fixture.write_text("payload", encoding="utf-8")
@@ -412,6 +427,7 @@ def test_input_drift_fails_without_execution(tmp_path):
     assert result["containment_check"] == "not_run"
 
 
+@requires_strace
 def test_unsafe_command_fails_without_execution(tmp_path):
     unsafe = ["sh", "-c", "echo hi && echo bad", "--out", "out/report.json"]
     entry = _entry_in(tmp_path, "unsafe_cmd", unsafe, ["out/report.json"])
@@ -424,6 +440,7 @@ def test_unsafe_command_fails_without_execution(tmp_path):
     assert result["output_check"] == "not_run"
 
 
+@requires_strace
 def test_undeclared_nonzero_exit_fails(tmp_path):
     script = _writer_script(tmp_path, "fail.py", _writer_body())
     entry = _entry_in(
@@ -440,6 +457,7 @@ def test_undeclared_nonzero_exit_fails(tmp_path):
     assert result["exit_code"] == 1
 
 
+@requires_strace
 def test_declared_negative_control_passes_on_expected_nonzero(tmp_path, monkeypatch):
     script = _writer_script(tmp_path, "detector.py", _writer_body())
     entry = _entry_in(
@@ -463,6 +481,7 @@ def test_declared_negative_control_passes_on_expected_nonzero(tmp_path, monkeypa
     assert result["exit_code"] == 1
 
 
+@requires_strace
 def test_declared_negative_control_fails_on_wrong_exit(tmp_path, monkeypatch):
     # Declared to exit 1, but the command exits 0 (detector failed to detect): must fail.
     script = _writer_script(tmp_path, "ok.py", _writer_body())
@@ -483,6 +502,7 @@ def test_declared_negative_control_fails_on_wrong_exit(tmp_path, monkeypatch):
     assert report["commands"][0]["error_reason"] == "nonzero_exit"
 
 
+@requires_strace
 def test_excluded_entries_reported_and_never_executed(tmp_path):
     script = _writer_script(tmp_path, "ok.py", _writer_body())
     eligible = _entry_in(tmp_path, "ok_cmd", _out_cmd(script, "out/a.json"), ["out/a.json"])
@@ -502,6 +522,7 @@ def test_excluded_entries_reported_and_never_executed(tmp_path):
     assert report["executed_count"] == 1
 
 
+@requires_strace
 def test_stable_ordering_matches_registry_order(tmp_path):
     # Commands share command_index=0 (per-source); the report must still preserve registry order.
     entries = []
@@ -521,6 +542,7 @@ def test_stable_ordering_matches_registry_order(tmp_path):
     assert [c["id"] for c in report["commands"]] == ["a_cmd", "b_cmd", "c_cmd"]
 
 
+@requires_strace
 def test_empty_eligible_fails_closed(tmp_path):
     excluded = _entry(
         "excluded_cmd", ["sh", "-c", "true"], ["o.json"], eligible=False, reason="unsafe_command"
@@ -532,6 +554,7 @@ def test_empty_eligible_fails_closed(tmp_path):
     assert report["executed_count"] == 0
 
 
+@requires_strace
 def test_empty_eligible_with_policy_exits_zero(tmp_path):
     excluded = _entry(
         "excluded_cmd", ["sh", "-c", "true"], ["o.json"], eligible=False, reason="unsafe_command"
@@ -546,6 +569,19 @@ def test_structural_error_on_missing_registry(tmp_path):
     report, exit_code, _ = _run(tmp_path, tmp_path / "does_not_exist.yaml")
     assert exit_code == 2
     assert report["structural_error"].startswith("registry_load_error:")
+
+
+def test_missing_strace_fails_closed_without_execution(tmp_path, monkeypatch):
+    """Without strace the guard must exit 2 with strace_missing and execute nothing."""
+    script = _writer_script(tmp_path, "ok.py", _writer_body())
+    entry = _entry_in(tmp_path, "ok_cmd", _out_cmd(script, "out/report.json"), ["out/report.json"])
+    registry = _make_registry(tmp_path, [entry])
+    monkeypatch.setattr(guard.shutil, "which", lambda _name: None)
+    report, exit_code, _ = _run(tmp_path, registry)
+    assert exit_code == 2
+    assert report["structural_error"] == "strace_missing"
+    assert report["executed_count"] == 0
+    assert report["commands"] == []
 
 
 def test_pull_request_paths_cover_all_eligible_inputs():
@@ -631,6 +667,7 @@ def test_tracked_report_paths_are_repository_relative():
 # ---------------------------------------------------------------------------
 
 
+@requires_strace
 def test_real_registry_recurrence_passes(tmp_path):
     """The nine recurrence-eligible entries reproduce under isolation at the pinned commit."""
     if not REGISTRY.is_file():
@@ -650,6 +687,7 @@ def test_real_registry_recurrence_passes(tmp_path):
     assert negative[0]["expected_exit_code"] == 1
 
 
+@requires_strace
 def test_cli_runs_against_committed_registry(tmp_path):
     """The CLI entry point exits 0 against the committed registry (smoke for the CI job)."""
     if not REGISTRY.is_file():

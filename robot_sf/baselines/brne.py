@@ -64,6 +64,7 @@ _DEFAULT_PED_SAMPLE_SCALE = 0.1
 _DEFAULT_CORRIDOR_Y_MIN = -0.65
 _DEFAULT_CORRIDOR_Y_MAX = 0.65
 _DEFAULT_STEP_BUDGET_S = 0.1
+_UPSTREAM_BRNE_ACTIVATION_RADIUS_M = 3.5
 
 
 @dataclass
@@ -189,6 +190,7 @@ class BRNEPlanner:
         self._last_step_status = "not_started"
         self._mechanism_trace_steps: list[dict[str, Any]] = []
         self._previous_action: dict[str, float] | None = None
+        self._last_nominal_command: dict[str, Any] | None = None
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -272,6 +274,7 @@ class BRNEPlanner:
         self._last_step_status = "not_started"
         self._mechanism_trace_steps = []
         self._previous_action = None
+        self._last_nominal_command = None
 
     def _record_failure(self, reason: str) -> None:
         """Record a fail-closed step without hiding it behind zero motion."""
@@ -302,6 +305,93 @@ class BRNEPlanner:
         """
         return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
 
+    @staticmethod
+    def _summarize_control_candidates(
+        ulist: np.ndarray,
+        robot_weights: np.ndarray,
+        *,
+        aggregation_mode: str,
+    ) -> dict[str, Any]:
+        """Summarize candidate controls and weights without retaining raw tensors.
+
+        Returns:
+            A finite, bounded candidate/weight distribution summary.
+        """
+        candidates = np.asarray(ulist, dtype=float)
+        weights = np.asarray(robot_weights, dtype=float)
+        if aggregation_mode == "samples_first":
+            candidates = np.transpose(candidates, (1, 0, 2))
+        if (
+            aggregation_mode not in {"plan_step_first", "samples_first"}
+            or candidates.ndim != 3
+            or candidates.shape[2] != 2
+            or weights.ndim != 1
+            or candidates.shape[1] != weights.size
+            or not np.all(np.isfinite(candidates))
+            or not np.all(np.isfinite(weights))
+        ):
+            return {
+                "status": "unavailable",
+                "reason": "invalid_candidate_or_weight_tensor",
+            }
+
+        def stats(values: np.ndarray) -> dict[str, float]:
+            quantiles = np.quantile(values, [0.0, 0.25, 0.5, 0.75, 1.0])
+            return {
+                "min": float(quantiles[0]),
+                "q25": float(quantiles[1]),
+                "median": float(quantiles[2]),
+                "mean": float(np.mean(values)),
+                "q75": float(quantiles[3]),
+                "max": float(quantiles[4]),
+                "std": float(np.std(values)),
+            }
+
+        def step_summary(step_index: int) -> dict[str, Any]:
+            controls = candidates[step_index]
+            weighted_mean = np.mean(controls * weights[:, np.newaxis], axis=0)
+            return {
+                "candidate_controls": {
+                    "v_m_s": stats(controls[:, 0]),
+                    "omega_rad_s": stats(controls[:, 1]),
+                },
+                "weights": stats(weights),
+                "weighted_mean": {
+                    "v_m_s": float(weighted_mean[0]),
+                    "omega_rad_s": float(weighted_mean[1]),
+                },
+            }
+
+        first = step_summary(0)
+        second = step_summary(1) if candidates.shape[0] > 1 else None
+        first_to_second = None
+        if second is not None:
+            first_to_second = {
+                "candidate_mean_delta_v_m_s": float(
+                    second["candidate_controls"]["v_m_s"]["mean"]
+                    - first["candidate_controls"]["v_m_s"]["mean"]
+                ),
+                "weighted_mean_delta_v_m_s": float(
+                    second["weighted_mean"]["v_m_s"] - first["weighted_mean"]["v_m_s"]
+                ),
+                "candidate_mean_delta_omega_rad_s": float(
+                    second["candidate_controls"]["omega_rad_s"]["mean"]
+                    - first["candidate_controls"]["omega_rad_s"]["mean"]
+                ),
+                "weighted_mean_delta_omega_rad_s": float(
+                    second["weighted_mean"]["omega_rad_s"] - first["weighted_mean"]["omega_rad_s"]
+                ),
+            }
+        return {
+            "status": "available",
+            "schema_version": "brne-candidate-distribution.v1",
+            "sample_count": int(candidates.shape[1]),
+            "plan_step_count": int(candidates.shape[0]),
+            "first": first,
+            "second": second,
+            "first_to_second": first_to_second,
+        }
+
     def _record_mechanism_step(  # noqa: PLR0913
         self,
         *,
@@ -310,6 +400,7 @@ class BRNEPlanner:
         declared_heading: float | None,
         goal_position: np.ndarray,
         selected_agents: list[tuple[float, int]],
+        pedestrian_selection: dict[str, Any],
         agents: list[dict[str, Any]],
         action: dict[str, float],
         runtime_status: str,
@@ -320,6 +411,8 @@ class BRNEPlanner:
         aggregation_mode: str,
         effective_num_samples: int,
         pre_clamp_action: dict[str, float] | None,
+        candidate_distribution: dict[str, Any] | None,
+        nominal_command: dict[str, Any] | None,
     ) -> None:
         """Record compact BRNE mechanism telemetry for one planner observation.
 
@@ -421,6 +514,12 @@ class BRNEPlanner:
                     ),
                 },
                 "selected_pedestrians": selected_pedestrians,
+                "pedestrian_selection": dict(pedestrian_selection),
+                "nominal_command": (
+                    dict(nominal_command)
+                    if nominal_command is not None
+                    else {"status": "unavailable", "reason": "not_recorded"}
+                ),
                 "adapter_input_frame": "world",
                 "pre_clamp_action": pre_clamp_payload,
                 "selected_action": {
@@ -442,6 +541,9 @@ class BRNEPlanner:
                         if aggregation_mode == "samples_first"
                         else "not_applied"
                     ),
+                    "candidate_distribution": candidate_distribution
+                    if candidate_distribution is not None
+                    else {"status": "unavailable", "reason": "not_recorded"},
                 },
                 "runtime": {
                     "status": runtime_status,
@@ -506,6 +608,11 @@ class BRNEPlanner:
             robot_heading = None
         robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal, r_heading=robot_heading)
         selected = self._select_agents(obs.agents, r_pos)
+        pedestrian_selection = self._summarize_pedestrian_selection(
+            obs.agents,
+            r_pos,
+            selected,
+        )
         num_peds = len(selected)
         num_agents = num_peds + 1
         num_samples = cfg.num_samples
@@ -537,6 +644,7 @@ class BRNEPlanner:
             weights_shape: tuple[int, ...] | None = None,
             aggregation_mode: str = "not_applied",
             pre_clamp_action: dict[str, float] | None = None,
+            candidate_distribution: dict[str, Any] | None = None,
         ) -> dict[str, float]:
             """Record runtime state and compact telemetry before returning an action.
 
@@ -555,6 +663,7 @@ class BRNEPlanner:
                 declared_heading=robot_heading,
                 goal_position=r_goal,
                 selected_agents=selected,
+                pedestrian_selection=pedestrian_selection,
                 agents=obs.agents,
                 action=action,
                 runtime_status=runtime_status,
@@ -565,6 +674,8 @@ class BRNEPlanner:
                 aggregation_mode=aggregation_mode,
                 effective_num_samples=effective_num_samples,
                 pre_clamp_action=pre_clamp_action,
+                candidate_distribution=candidate_distribution,
+                nominal_command=self._last_nominal_command,
             )
             return action
 
@@ -649,6 +760,11 @@ class BRNEPlanner:
                 aggregation_mode=aggregation_mode,
             )
         pre_clamp_action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
+        candidate_distribution = self._summarize_control_candidates(
+            ulist,
+            robot_weights,
+            aggregation_mode=aggregation_mode,
+        )
         action = dict(pre_clamp_action)
         self._clamp_action(action)
         return finish(
@@ -657,6 +773,7 @@ class BRNEPlanner:
             weights_shape=tuple(int(value) for value in weights.shape),
             aggregation_mode=aggregation_mode,
             pre_clamp_action=pre_clamp_action,
+            candidate_distribution=candidate_distribution,
         )
 
     def _brne_solve(
@@ -763,6 +880,62 @@ class BRNEPlanner:
         agent_dists.sort(key=lambda x: x[0])
         return agent_dists[: max(0, cfg.maximum_agents - 1)]
 
+    @staticmethod
+    def _summarize_pedestrian_selection(
+        agents: list[dict[str, Any]],
+        r_pos: np.ndarray,
+        selected: list[tuple[float, int]],
+    ) -> dict[str, Any]:
+        """Record adapter selection counts against the pinned upstream gate.
+
+        The adapter intentionally keeps its current nearest-agent selection semantics. This
+        summary exposes how those semantics differ from the upstream controller's 3.5 m
+        activation threshold without applying that threshold to runtime behavior.
+
+        Returns:
+            Compact counts and provenance for the observed and selected pedestrians.
+        """
+        distances = [
+            float(np.linalg.norm(np.asarray(agent["position"], dtype=np.float64) - r_pos))
+            for agent in agents
+        ]
+        return {
+            "observed_count": len(agents),
+            "within_upstream_activation_radius_count": sum(
+                distance < _UPSTREAM_BRNE_ACTIVATION_RADIUS_M for distance in distances
+            ),
+            "passed_to_brne_count": len(selected),
+            "upstream_activation_radius_m": _UPSTREAM_BRNE_ACTIVATION_RADIUS_M,
+            "activation_gate_applied": False,
+            "selection_mode": "nearest_up_to_maximum_agents",
+        }
+
+    def _build_nominal_commands(
+        self,
+        r_pos: np.ndarray,
+        r_vel: np.ndarray,
+        r_goal: np.ndarray,
+        plan_steps: int,
+    ) -> tuple[np.ndarray, dict[str, Any]]:
+        """Build the adapter's constant nominal command and its trace metadata.
+
+        Returns:
+            The plan-step-first nominal commands and a compact trace payload.
+        """
+        cfg = self.config
+        direction = r_goal - r_pos
+        speed = (
+            min(float(np.linalg.norm(r_vel)) or 0.4, cfg.v_max)
+            if np.linalg.norm(direction) > 1e-6
+            else 0.0
+        )
+        nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
+        return nominal_cmds, {
+            "v_m_s": float(speed),
+            "omega_rad_s": 0.0,
+            "construction_mode": "straight_constant",
+        }
+
     def _build_trajectories(  # noqa: PLR0913
         self,
         brne: ModuleType,
@@ -784,13 +957,13 @@ class BRNEPlanner:
             The stacked ``xtraj``/``ytraj`` arrays and the control ensemble ``ulist``.
         """
         cfg = self.config
-        direction = r_goal - r_pos
-        speed = (
-            min(float(np.linalg.norm(r_vel)) or 0.4, cfg.v_max)
-            if np.linalg.norm(direction) > 1e-6
-            else 0.0
+        nominal_cmds, nominal_command = self._build_nominal_commands(
+            r_pos,
+            r_vel,
+            r_goal,
+            plan_steps,
         )
-        nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
+        self._last_nominal_command = nominal_command
         ulist = self._normalize_control_ensemble(
             brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples),
             plan_steps=plan_steps,

@@ -13,7 +13,9 @@ from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
+    _candidate_distribution_summary,
     _mechanism_table_row,
+    _validate_candidate_distribution,
     _write_report,
     classify_record,
     summarize_records,
@@ -44,6 +46,10 @@ def _record(
         {
             "robot": {"position": position},
             "pedestrians": pedestrians,
+            "planner": {
+                "selected_action": {"v": 0.0, "omega": 0.0},
+                "applied_environment_action": {"v": 0.0, "omega": 0.0},
+            },
         }
         for position in positions
     ]
@@ -57,6 +63,41 @@ def _record(
             "status": "ok",
             "simulation_step_trace": {"steps": steps},
             **(metadata or {}),
+        },
+    }
+
+
+def _candidate_distribution() -> dict[str, Any]:
+    """Return bounded candidate/weight summaries for native trace fixtures."""
+    stats = {
+        "min": 0.0,
+        "q25": 0.0,
+        "median": 0.0,
+        "mean": 0.0,
+        "q75": 0.0,
+        "max": 0.0,
+        "std": 0.0,
+    }
+    step = {
+        "candidate_controls": {
+            "v_m_s": stats.copy(),
+            "omega_rad_s": stats.copy(),
+        },
+        "weights": stats.copy(),
+        "weighted_mean": {"v_m_s": 0.0, "omega_rad_s": 0.0},
+    }
+    return {
+        "status": "available",
+        "schema_version": "brne-candidate-distribution.v1",
+        "sample_count": 42,
+        "plan_step_count": 25,
+        "first": step,
+        "second": step,
+        "first_to_second": {
+            "candidate_mean_delta_v_m_s": 0.0,
+            "weighted_mean_delta_v_m_s": 0.0,
+            "candidate_mean_delta_omega_rad_s": 0.0,
+            "weighted_mean_delta_omega_rad_s": 0.0,
         },
     }
 
@@ -76,6 +117,19 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "heading_reference": "declared_heading",
         },
         "selected_pedestrians": [],
+        "pedestrian_selection": {
+            "observed_count": 0,
+            "within_upstream_activation_radius_count": 0,
+            "passed_to_brne_count": 0,
+            "upstream_activation_radius_m": 3.5,
+            "activation_gate_applied": False,
+            "selection_mode": "nearest_up_to_maximum_agents",
+        },
+        "nominal_command": {
+            "v_m_s": 0.4,
+            "omega_rad_s": 0.0,
+            "construction_mode": "straight_constant",
+        },
         "adapter_input_frame": "world",
         "pre_clamp_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
         "selected_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
@@ -92,6 +146,7 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "weight_shape": [8, 42],
             "aggregation_mode": "plan_step_first",
             "aggregation_formula": "mean_plan_step_first_over_samples",
+            "candidate_distribution": _candidate_distribution(),
         },
         "runtime": {
             "status": "ok",
@@ -252,7 +307,12 @@ def test_brne_requires_native_dependency_status() -> None:
     assert mechanism_row["trace_status"] == "available"
     assert mechanism_row["goal"]["signed_progress_by_phase"]
     assert mechanism_row["aggregation"]["modes"] == ["plan_step_first"]
+    assert mechanism_row["aggregation"]["candidate_distribution"]["status"] == "available"
     assert mechanism_row["pre_clamp_action"]["available"] is True
+    assert mechanism_row["selected_post_clamp_command"]["available"] is True
+    assert mechanism_row["nominal_command"]["construction_modes"] == ["straight_constant"]
+    assert mechanism_row["pedestrian_selection"]["first"]["passed_to_brne_count"] == 0
+    assert mechanism_row["applied_environment_command"]["available"] is True
     assert mechanism_row["action_clipping"]["clipped_steps"] == 0
 
     wrong_sample_count = classify_record(
@@ -434,6 +494,108 @@ def test_native_mechanism_trace_requires_pre_clamp_action() -> None:
     )
     assert classified["mechanism_trace_valid"] is False
     assert "pre-clamp action" in classified["mechanism_trace_status"]
+
+
+def test_native_mechanism_trace_requires_controller_parity_fields() -> None:
+    """Native rows fail closed when nominal or pedestrian-selection telemetry is absent."""
+    config = _config()
+    trace = _native_mechanism_trace()
+    trace["steps"][0].pop("nominal_command")
+    metadata = {
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": trace,
+            }
+        }
+    }
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "nominal command" in classified["mechanism_trace_status"]
+
+    trace = _native_mechanism_trace()
+    trace["steps"][0].pop("pedestrian_selection")
+    metadata["planner_runtime"]["planner_metadata"]["mechanism_trace"] = trace
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "pedestrian selection" in classified["mechanism_trace_status"]
+
+    metadata["planner_runtime"]["planner_metadata"]["mechanism_trace"] = _native_mechanism_trace()
+    record = _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]])
+    for simulation_step in record["algorithm_metadata"]["simulation_step_trace"]["steps"]:
+        simulation_step["planner"].pop("applied_environment_action")
+    classified = classify_record(record, config, planner_key="brne")
+    assert classified["mechanism_trace_valid"] is False
+    assert "applied environment action" in classified["mechanism_trace_status"]
+
+
+def test_native_mechanism_trace_requires_candidate_distribution() -> None:
+    """Native mechanism rows must expose bounded candidate/weight summaries."""
+    config = _config()
+    trace = _native_mechanism_trace()
+    trace["steps"][0]["ensemble"].pop("candidate_distribution")
+    metadata = {
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": trace,
+            }
+        }
+    }
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "candidate distribution" in classified["mechanism_trace_status"]
+
+
+def test_available_candidate_distribution_requires_complete_finite_fields() -> None:
+    """Available summaries must not pass validation with omitted telemetry."""
+    candidate = _candidate_distribution()
+    candidate["first"]["weights"].pop("mean")
+
+    with pytest.raises(ValueError, match="first.weights.mean"):
+        _validate_candidate_distribution(candidate, step_index=0)
+
+
+def test_candidate_summary_keeps_plan_step_and_observation_transitions_separate() -> None:
+    """The plan-step second summary must come from the first observation."""
+    first_distribution = _candidate_distribution()
+    second_distribution = deepcopy(_candidate_distribution())
+    first_distribution["second"]["weighted_mean"]["v_m_s"] = 1.0
+    second_distribution["second"]["weighted_mean"]["v_m_s"] = 2.0
+
+    summary = _candidate_distribution_summary(
+        [
+            {"candidate_distribution": first_distribution},
+            {"candidate_distribution": second_distribution},
+        ]
+    )
+
+    assert summary["second"]["weighted_mean"]["v_m_s"] == 1.0
+    assert summary["observation_step_transition"]["to"] == second_distribution["first"]
 
 
 def test_summary_requires_unique_exact_pairs_and_excludes_unavailable_goals() -> None:

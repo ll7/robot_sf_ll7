@@ -44,6 +44,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6944_brne_candidate_transition_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6944_brne_candidate_transition_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6615_orca_adapter_validation_summary.json
   status: evidence
   freshness: evidence
@@ -61,6 +69,10 @@ entries:
   freshness: maintained
   area: benchmark_evidence
 - path: docs/context/issue_6938_brne_progress_mechanism.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_6944_brne_candidate_transition.md
   status: current
   freshness: maintained
   area: benchmark_evidence
@@ -5005,6 +5017,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6657_continual_adaptation_campaign/shift_result.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08
   status: evidence
   freshness: evidence
   area: benchmark_evidence

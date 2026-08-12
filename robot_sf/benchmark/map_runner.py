@@ -31,6 +31,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
     require_algorithm_allowed,
 )
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency_stress import (
@@ -2704,6 +2705,7 @@ class _BatchContext:
     cbf_safety_filter: dict[str, Any] | None
     record_planner_decision_trace: bool
     record_simulation_step_trace: bool
+    telemetry: dict[str, Any] | None
     multiprocessing_context: BaseContext | None
     workers: int
     resume: bool
@@ -2777,6 +2779,7 @@ def _init_batch_context(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
+    telemetry: dict[str, Any] | None,
     multiprocessing_context: BaseContext | None,
     workers: int,
     resume: bool,
@@ -2817,6 +2820,7 @@ def _init_batch_context(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        telemetry=telemetry,
         multiprocessing_context=multiprocessing_context,
         workers=workers,
         resume=resume,
@@ -2860,6 +2864,15 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
             Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
         )
         ctx.scenarios = list(ctx.scenarios_or_path)
+
+    if ctx.telemetry is not None:
+        profile = normalize_telemetry_profile(ctx.telemetry)
+        for scenario in ctx.scenarios:
+            metadata = scenario.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                scenario["metadata"] = metadata
+            metadata["telemetry"] = profile.to_mapping()
 
     errors = validate_scenario_list([dict(s) for s in ctx.scenarios])
     if errors:
@@ -3428,6 +3441,7 @@ def run_map_batch(  # noqa: PLR0913
     cbf_safety_filter: dict[str, object] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    telemetry: dict[str, object] | None = None,
     multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
@@ -3465,6 +3479,7 @@ def run_map_batch(  # noqa: PLR0913
         cbf_safety_filter = batch_config.cbf_safety_filter
         record_planner_decision_trace = batch_config.record_planner_decision_trace
         record_simulation_step_trace = batch_config.record_simulation_step_trace
+        telemetry = batch_config.telemetry
         multiprocessing_context = batch_config.multiprocessing_context
         workers = batch_config.workers
         resume = batch_config.resume
@@ -3494,6 +3509,7 @@ def run_map_batch(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        telemetry=telemetry,
         multiprocessing_context=multiprocessing_context,
         workers=workers, resume=resume,
         circuit_breaker_threshold=circuit_breaker_threshold,

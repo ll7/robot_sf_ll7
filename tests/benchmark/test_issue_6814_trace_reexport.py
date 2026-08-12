@@ -33,6 +33,7 @@ from robot_sf.benchmark.trace_reexport_packaging import (
     RealReexportBindingError,
     TraceReexportPackagingError,
     VerifiedRealReexportRowSource,
+    _issue_6814_read_run_summary,
     load_verified_real_reexport_row_source,
 )
 
@@ -491,6 +492,47 @@ def test_source_loader_accepts_mapping_identity(tmp_path: Path) -> None:
     assert source.manifest_retrieval_key == "synthetic/doorway_ppo/manifest.json"
     assert source.run_summary_retrieval_key == "synthetic/doorway_ppo/run_summary.yaml"
     assert source.preflight_retrieval_key == "synthetic/doorway_ppo/validate_config.json"
+
+
+def test_source_loader_accepts_approved_6412_legacy_mapping_schema(tmp_path: Path) -> None:
+    """Accept the versioned mapping schema used by the approved #6412 package."""
+
+    package, roots, identities, _package_sha = _make_synthetic_packet_inputs(tmp_path)
+    mapping = json.loads((package / "mapping_receipt.json").read_text(encoding="utf-8"))
+    mapping["schema_version"] = "issue_5756_trace_mapping_receipt.v1"
+    _write_json(package / "mapping_receipt.json", mapping)
+    package_sha = _refresh_synthetic_package_sums(package)
+
+    source = load_verified_real_reexport_row_source(
+        package_root=package,
+        external_arm_root=roots[identities[0].arm],
+        expected_identity=_mapping_identity(identities[0]),
+        expected_package_sha256=package_sha,
+    )
+    assert source.episode_id == identities[0].episode_id
+
+
+def test_legacy_run_summary_reader_repairs_only_known_command_block(tmp_path: Path) -> None:
+    """Repair the approved malformed shell block but reject unrelated YAML errors."""
+
+    summary = tmp_path / "run_summary.yaml"
+    summary.write_text(
+        "label: doorway-butterfly-w1\n"
+        "command: |\n"
+        "  set -euo pipefail\n"
+        'R="${PUBLIC_COMMAND_RESULTS_DIR}"\n'
+        "uv run python scripts/tools/run_camera_ready_benchmark.py\n"
+        "exit_code: 0\n"
+        "completed_at: 2026-07-16T00:42:51+02:00\n",
+        encoding="utf-8",
+    )
+    payload = _issue_6814_read_run_summary(summary)
+    assert payload["exit_code"] == 0
+    assert "PUBLIC_COMMAND_RESULTS_DIR" in payload["command"]
+
+    summary.write_text("label: [broken\n", encoding="utf-8")
+    with pytest.raises(RealReexportBindingError, match="run summary is not valid YAML"):
+        _issue_6814_read_run_summary(summary)
 
 
 def test_source_loader_rejects_missing_package_root(tmp_path: Path) -> None:

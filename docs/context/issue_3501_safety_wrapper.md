@@ -65,7 +65,7 @@ motion into a hazard. Predeclared defaults: `patience_steps=20`, `recovery_steps
 `apply_safety_wrapper` is a pure per-step transform and `DeadlockRecoveryMonitor` is off by default,
 so the wrapper **changes no runtime/benchmark behavior** unless explicitly opted in. Deferred
 follow-ups: **wiring `DeadlockRecoveryMonitor` into the benchmark runtime step loop**
-(`robot_sf/benchmark/safety_wrapper_runtime.py` + `map_runner_episode.py`, currently stateless), the
+(`robot_sf/benchmark/safety/safety_wrapper_runtime.py` + `map_runner_episode.py`, currently stateless), the
 factorial `planner × {off, on}` **ablation campaign** (runs over a fixed scenario set + paired
 seeds, emitting into the #3482 ledger), and live wiring into `robot_sf/robot/action_adapters.py`.
 

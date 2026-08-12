@@ -19,7 +19,7 @@ to detect a stall), so it lives in :class:`DeadlockRecoveryMonitor` — an opt-i
 monitor that composes *around* the per-step transform. It only ever overrides angular velocity to
 rotate free of a freeze; it never adds forward speed, so it cannot override the hard stop/yield veto
 or worsen a collision. The monitor is wired into the benchmark runtime step loop via
-:func:`robot_sf.benchmark.safety_wrapper_runtime.make_deadlock_recovery_monitor` (opt-in on the
+:func:`robot_sf.benchmark.safety.safety_wrapper_runtime.make_deadlock_recovery_monitor` (opt-in on the
 wrapper_on arm); running the paired ablation campaign remains a deliberate follow-up.
 
 Thresholds are predeclared modeling choices, diagnostic until durable evidence.

@@ -50,7 +50,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from robot_sf.benchmark.safety_predicates import (
+from robot_sf.benchmark.safety.safety_predicates import (
     LATE_EVASIVE_PREDICATE_SCHEMA,
     OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
     OSCILLATORY_PREDICATE_SCHEMA,

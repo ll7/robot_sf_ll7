@@ -23,8 +23,13 @@ class RunSummary:
     task_class: str
     status: str
     validation: str
-    changed_files: int
+    changed_files: int | None
+    artifact_complete: bool
     path: Path
+
+
+REQUIRED_ARTIFACTS = ("result.json", "RESULT.md", "diffstat.txt", "validation.json")
+LEGACY_ARTIFACTS = ("result.json", "status.txt", "diffstat.txt", "changed_files.txt")
 
 
 def common_git_dir() -> Path:
@@ -43,10 +48,10 @@ def run_root() -> Path:
     return common_git_dir() / "codex-agent-runs"
 
 
-def nonblank_count(path: Path) -> int:
+def nonblank_count(path: Path) -> int | None:
     """Count nonblank lines without reading worker logs."""
     if not path.is_file():
-        return 0
+        return None
     return sum(
         1
         for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -54,11 +59,51 @@ def nonblank_count(path: Path) -> int:
     )
 
 
-def validation_status(run_dir: Path, metrics: dict[str, Any]) -> str:
+def read_json_object(path: Path) -> tuple[dict[str, Any], bool]:
+    """Read one compact JSON object and report whether it is well-formed."""
+    if not path.is_file():
+        return {}, False
+    try:
+        value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return {}, False
+    return (value, True) if isinstance(value, dict) else ({}, False)
+
+
+def normalized_result_status(data: dict[str, Any]) -> str:
+    """Normalize current and legacy worker completion fields."""
+    value = data.get("status", data.get("worker_status", "unknown"))
+    if value == 0 or str(value).lower() in {"success", "passed", "complete", "completed"}:
+        return "complete"
+    if str(value).lower() in {"failed", "failure", "error", "nonzero"}:
+        return "failed"
+    return str(value)
+
+
+def validation_status(run_dir: Path, metrics: dict[str, Any], validation: dict[str, Any]) -> str:
     """Return explicit validation state or detect compact evidence markers."""
     value = metrics.get("validation_status")
     if isinstance(value, str) and value:
         return value
+    value = validation.get("status")
+    if isinstance(value, str) and value:
+        lowered = value.lower()
+        if "pass" in lowered:
+            return "passed"
+        if "fail" in lowered:
+            return "failed"
+        return value
+    commands = validation.get("commands")
+    if isinstance(commands, list):
+        statuses = {
+            str(item.get("result", item.get("status", ""))).lower()
+            for item in commands
+            if isinstance(item, dict)
+        }
+        if statuses & {"fail", "failed"}:
+            return "failed"
+        if statuses & {"pass", "passed"}:
+            return "passed"
     pattern = re.compile(
         r"validation run|validated|pytest|unittest|ruff|bash -n|git diff --check", re.I
     )
@@ -69,36 +114,38 @@ def validation_status(run_dir: Path, metrics: dict[str, Any]) -> str:
     return "not_run"
 
 
+def changed_file_count(run_dir: Path, data: dict[str, Any]) -> int | None:
+    """Read changed-file counts from canonical files or result metadata."""
+    count = nonblank_count(run_dir / "changed_files.txt")
+    if count is not None:
+        return count
+    for key in ("new_changed_files", "fix_forward_changed_files", "changed_files"):
+        value = data.get(key)
+        if isinstance(value, list):
+            return len(value)
+    for key in ("changed_file_count", "files_changed"):
+        value = data.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
+
+
 def read_run(run_dir: Path) -> RunSummary:
-    """Read one result/metrics pair, retaining malformed-artifact status."""
-    result_path = run_dir / "result.json"
-    try:
-        data = json.loads(result_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        data = {}
-        status = "malformed_json"
-    else:
-        status = "malformed_json" if not isinstance(data, dict) else "unknown"
-    if not isinstance(data, dict):
-        data = {}
+    """Read canonical compact artifacts, retaining incomplete status."""
+    data, result_valid = read_json_object(run_dir / "result.json")
+    validation, validation_valid = read_json_object(run_dir / "validation.json")
     metrics: dict[str, Any] = {}
     metrics_path = run_dir / "metrics.json"
     if metrics_path.is_file():
-        try:
-            parsed_metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            status = "malformed_json"
-        else:
-            if isinstance(parsed_metrics, dict):
-                metrics = parsed_metrics
-            else:
-                status = "malformed_json"
-    worker_status = str(data.get("worker_status", "unknown"))
-    if status != "malformed_json":
-        if worker_status not in {"0", "success", "passed"}:
-            status = "failed" if worker_status != "unknown" else "unknown"
-        else:
-            status = "changed" if nonblank_count(run_dir / "changed_files.txt") else "clean"
+        metrics, _ = read_json_object(metrics_path)
+    canonical_complete = all((run_dir / name).is_file() for name in REQUIRED_ARTIFACTS)
+    legacy_complete = all((run_dir / name).is_file() for name in LEGACY_ARTIFACTS)
+    artifact_complete = result_valid and (
+        (canonical_complete and validation_valid) or legacy_complete
+    )
+    status = normalized_result_status(data) if result_valid else "malformed_json"
+    if not artifact_complete:
+        status = "incomplete_artifact" if result_valid else "malformed_json"
     return RunSummary(
         run_id=str(metrics.get("run_id") or data.get("run_id") or run_dir.name),
         provider=str(metrics.get("provider") or data.get("provider") or "unknown"),
@@ -107,8 +154,9 @@ def read_run(run_dir: Path) -> RunSummary:
             metrics.get("task_class") or data.get("task_class") or data.get("mode") or "unknown"
         ),
         status=status,
-        validation=validation_status(run_dir, metrics),
-        changed_files=nonblank_count(run_dir / "changed_files.txt"),
+        validation=validation_status(run_dir, metrics, validation),
+        changed_files=changed_file_count(run_dir, data),
+        artifact_complete=artifact_complete,
         path=run_dir,
     )
 
@@ -122,7 +170,7 @@ def collect_runs(root: Path, limit: int) -> list[RunSummary]:
         for path in sorted(root.iterdir(), reverse=True)
         if path.is_dir()
         and path.name not in {"active", "notes"}
-        and (path / "result.json").is_file()
+        and any((path / name).is_file() for name in (*REQUIRED_ARTIFACTS, *LEGACY_ARTIFACTS))
     ]
     return [read_run(path) for path in candidates[:limit]]
 
@@ -179,8 +227,10 @@ def print_reliability(runs: list[RunSummary]) -> None:
     """Print conservative route counts from metrics-backed compact runs."""
     route_stats: dict[str, Counter[str]] = defaultdict(Counter)
     for run in runs:
+        if not run.artifact_complete:
+            continue
         route_stats[f"{run.provider}/{run.model}"]["total"] += 1
-        if run.validation in {"passed", "evidence_present"} and run.status != "failed":
+        if run.validation in {"passed", "evidence_present"} and run.status == "complete":
             route_stats[f"{run.provider}/{run.model}"]["passed"] += 1
     print(f"Route reliability from {len(runs)} recent runs:")
     for route, counts in sorted(route_stats.items()):

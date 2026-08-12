@@ -54,14 +54,23 @@ def write_complete_run(run_root: Path, name: str = "run-001") -> Path:
                 "provider": "test-provider",
                 "model": "test-model",
                 "task_class": "read_only_review",
-                "worker_status": 0,
+                "status": "complete",
+                "changed_file_count": 1,
             }
         ),
         encoding="utf-8",
     )
-    (run_dir / "status.txt").write_text("validated\n", encoding="utf-8")
+    (run_dir / "RESULT.md").write_text("Validation: pytest passed.\n", encoding="utf-8")
     (run_dir / "diffstat.txt").write_text("1 file changed\n", encoding="utf-8")
-    (run_dir / "changed_files.txt").write_text("scripts/example.py\n", encoding="utf-8")
+    (run_dir / "validation.json").write_text(
+        json.dumps(
+            {
+                "status": "passed_exact_committed_head",
+                "commands": [{"command": "pytest", "result": "pass"}],
+            }
+        ),
+        encoding="utf-8",
+    )
     return run_dir
 
 
@@ -71,6 +80,8 @@ def test_review_agent_run_reads_complete_bundle_from_linked_worktree(
     """The helper resolves artifacts through the common Git directory."""
     _, linked, run_root = linked_repo
     run_dir = write_complete_run(run_root)
+    (run_dir / "worker.stdout.log").mkdir()
+    (run_dir / "worker.stderr.log").mkdir()
     result = subprocess.run(
         ["bash", str(REVIEW_SCRIPT), "--run-dir", str(run_dir)],
         cwd=linked,
@@ -83,7 +94,11 @@ def test_review_agent_run_reads_complete_bundle_from_linked_worktree(
     assert "result=reviewed" in result.stdout
     notes = list((run_root / "notes" / "inbox").glob("*.md"))
     assert len(notes) == 1
-    assert "test-provider" in notes[0].read_text(encoding="utf-8")
+    note_text = notes[0].read_text(encoding="utf-8")
+    assert "test-provider" in note_text
+    assert "schema: agent_run_self_review.v1" in note_text
+    assert "stderr_size_bytes: not-read" in note_text
+    assert str(run_root) not in note_text
 
 
 def test_review_agent_run_latest_selects_complete_bundle(
@@ -102,6 +117,31 @@ def test_review_agent_run_latest_selects_complete_bundle(
 
     assert result.returncode == 0, result.stderr
     assert "20260812T010000Z-complete" in result.stdout
+
+
+def test_review_agent_run_accepts_legacy_compact_bundle(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """Existing status/changed-files bundles remain reviewable during migration."""
+    _, linked, run_root = linked_repo
+    run_dir = run_root / "legacy-run"
+    run_dir.mkdir()
+    (run_dir / "result.json").write_text(
+        '{"provider": "legacy", "worker_status": 0}\n', encoding="utf-8"
+    )
+    (run_dir / "status.txt").write_text("pytest validation passed\n", encoding="utf-8")
+    (run_dir / "diffstat.txt").write_text("1 file changed\n", encoding="utf-8")
+    (run_dir / "changed_files.txt").write_text("scripts/example.py\n", encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(REVIEW_SCRIPT), "--run-dir", str(run_dir)],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "result=reviewed" in result.stdout
 
 
 def test_review_agent_run_reports_missing_compact_artifacts(
@@ -124,6 +164,29 @@ def test_review_agent_run_reports_missing_compact_artifacts(
     assert "incomplete-artifact" in result.stdout
     note = next((run_root / "notes" / "inbox").glob("*.md"))
     assert "missing_required_artifacts" in note.read_text(encoding="utf-8")
+    assert str(run_root) not in note.read_text(encoding="utf-8")
+
+
+def test_review_agent_run_latest_does_not_hide_new_incomplete_bundle(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """--latest reports a newer incomplete bundle instead of selecting an older one."""
+    _, linked, run_root = linked_repo
+    write_complete_run(run_root, "20260812T010000Z-complete")
+    incomplete = run_root / "20260812T020000Z-incomplete"
+    incomplete.mkdir()
+    (incomplete / "result.json").write_text('{"status": "complete"}\n', encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(REVIEW_SCRIPT), "--latest"],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "incomplete-artifact" in result.stdout
+    assert "20260812T020000Z-incomplete" in result.stdout
 
 
 def test_summarize_agent_runs_notes_only_uses_common_git_dir(
@@ -149,3 +212,22 @@ def test_summarize_agent_runs_notes_only_uses_common_git_dir(
     assert "Workflow notes: 1" in result.stdout
     assert "observation_class=tooling" in result.stdout
     assert "Delegated runs:" not in result.stdout
+
+
+def test_summarize_agent_runs_reads_canonical_result_and_validation(
+    linked_repo: tuple[Path, Path, Path],
+) -> None:
+    """The summary uses result.status, validation.json, and result metadata."""
+    _, linked, run_root = linked_repo
+    write_complete_run(run_root)
+    result = subprocess.run(
+        [sys.executable, str(SUMMARY_SCRIPT)],
+        cwd=linked,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "run-001\tcomplete\tpassed\ttest-provider" in result.stdout
+    assert result.stdout.rstrip().endswith("\t1")

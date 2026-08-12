@@ -2530,3 +2530,125 @@ def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path
     config = load_expert_training_config(config_path)
     assert config.evaluation.step_schedule
     assert config.evaluation.frequency_episodes == 0
+
+
+# Issue #6484: the issue_791 baseline_promotion short-budget pair was migrated to
+# inherit shared settings from a single base config. The constants below pin
+# that contract and the frozen pre-change resolved-config baseline.
+_ISSUE_6484_BASELINE_PROMOTION_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_BASELINE_PROMOTION_BASE_NAME = "expert_ppo_issue_791_baseline_promotion_base.yaml"
+_ISSUE_6484_BASELINE_PROMOTION_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_baseline_promotion_resolved.json"
+)
+_ISSUE_6484_BASELINE_PROMOTION_VARIANTS = [
+    "expert_ppo_issue_791_baseline_promotion_128k.yaml",
+    "expert_ppo_issue_791_baseline_promotion_256k.yaml",
+]
+
+
+def _issue_6484_baseline_promotion_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change resolved-config baseline."""
+    assert _ISSUE_6484_BASELINE_PROMOTION_BASELINE_PATH.exists(), (
+        "Pre-change baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_BASELINE_PROMOTION_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_6484_baseline_promotion_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for ``config_path``."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_BASELINE_PROMOTION_VARIANTS)
+def test_issue_6484_baseline_promotion_resolves_to_prechange_values(variant: str) -> None:
+    """Each migrated baseline_promotion variant matches its pre-refactor mapping.
+
+    The base_config deep-merge must reconstruct the exact pre-change resolved
+    mapping for every migrated variant.
+    """
+    path = (_ISSUE_6484_BASELINE_PROMOTION_DIR / variant).resolve()
+    baseline = _issue_6484_baseline_promotion_baseline()
+
+    actual_fingerprint = _issue_6484_baseline_promotion_fingerprint(path)
+    assert actual_fingerprint == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_BASELINE_PROMOTION_VARIANTS)
+def test_issue_6484_baseline_promotion_loads_through_loader(variant: str) -> None:
+    """Both migrated variants load through load_expert_training_config."""
+    path = (_ISSUE_6484_BASELINE_PROMOTION_DIR / variant).resolve()
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.total_timesteps > 0
+    assert config.evaluation.step_schedule
+
+
+def test_issue_6484_baseline_promotion_base_inheritance_and_no_launch_identity() -> None:
+    """Every variant inherits its shared base and the base stays lean."""
+    for variant in _ISSUE_6484_BASELINE_PROMOTION_VARIANTS:
+        variant_path = (_ISSUE_6484_BASELINE_PROMOTION_DIR / variant).resolve()
+        variant_yaml = yaml.safe_load(variant_path.read_text(encoding="utf-8"))
+        assert variant_yaml["base_config"] == _ISSUE_6484_BASELINE_PROMOTION_BASE_NAME
+
+        base_path = (
+            _ISSUE_6484_BASELINE_PROMOTION_DIR / _ISSUE_6484_BASELINE_PROMOTION_BASE_NAME
+        ).resolve()
+        base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+        # A base must not self-inherit and carries no launch identity.
+        assert "base_config" not in base_yaml
+        assert "policy_id" not in base_yaml
+        assert "job_type" not in base_yaml.get("tracking", {}).get("wandb", {})
+        assert "tags" not in base_yaml.get("tracking", {}).get("wandb", {})
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_baseline_promotion_variants_keep_distinct_overrides() -> None:
+    """The two inherited variants retain different budgets and evaluation cadence."""
+    short = load_expert_training_config(
+        (
+            _ISSUE_6484_BASELINE_PROMOTION_DIR / "expert_ppo_issue_791_baseline_promotion_128k.yaml"
+        ).resolve()
+    )
+    long = load_expert_training_config(
+        (
+            _ISSUE_6484_BASELINE_PROMOTION_DIR / "expert_ppo_issue_791_baseline_promotion_256k.yaml"
+        ).resolve()
+    )
+    short_mapping = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_BASELINE_PROMOTION_DIR / "expert_ppo_issue_791_baseline_promotion_128k.yaml"
+        ).resolve()
+    )
+    long_mapping = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_BASELINE_PROMOTION_DIR / "expert_ppo_issue_791_baseline_promotion_256k.yaml"
+        ).resolve()
+    )
+
+    assert short.total_timesteps == 131072
+    assert long.total_timesteps == 262144
+    assert short.evaluation.step_schedule == ((None, 65536),)
+    assert long.evaluation.step_schedule == ((None, 32768),)
+    assert short.policy_id != long.policy_id
+    assert (
+        short_mapping["tracking"]["wandb"]["job_type"]
+        != long_mapping["tracking"]["wandb"]["job_type"]
+    )
+    assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]

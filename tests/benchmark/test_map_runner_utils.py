@@ -145,6 +145,29 @@ def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> N
     assert _initial_robot_velocity(SimpleNamespace(robot_velocity_xy="invalid")) is None
     assert _initial_ped_velocities(SimpleNamespace(ped_vel=None), 2) is None
     assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids="ab"), 2) is None
+    polar = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, 0.5), velocity=(0.4,)))],
+    )
+    np.testing.assert_allclose(
+        _initial_robot_velocity(polar),
+        np.array([0.4 * np.cos(0.5), 0.4 * np.sin(0.5)]),
+    )
+    invalid_pose = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, "bad"), velocity=(0.4,)))],
+    )
+    assert _initial_robot_velocity(invalid_pose) is None
+    invalid_polar = SimpleNamespace(
+        robots=[SimpleNamespace(state=SimpleNamespace(pose=(0.0, 0.5), velocity="bad"))],
+    )
+    assert _initial_robot_velocity(invalid_polar) is None
+
+    class NonIterable:
+        def __iter__(self):
+            raise TypeError("not iterable")
+
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=NonIterable()), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=["one"]), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids=[None, "two"]), 2) is None
     assert _finite_positive_float(0.4) == pytest.approx(0.4)
     assert _finite_positive_float(0.0) is None
     assert _finite_positive_float("invalid") is None

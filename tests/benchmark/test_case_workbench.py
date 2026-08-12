@@ -168,6 +168,11 @@ def test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter(tmp_p
     cells = pq.read_table(result.table_paths["cells"]).to_pylist()
     assert cells[0]["representative_status"] == "medoid"
     assert cells[0]["boundary_status"] in {"not_observed", "mixed_outcomes"}
+    legacy_features = pq.read_table(result.table_paths["features"]).to_pylist()
+    legacy_names = [
+        row["feature_name"] for row in legacy_features if row["episode_id"] == "doorway--114"
+    ]
+    assert len(legacy_names) == len(set(legacy_names))
     proposal = analyze_cases(
         config_path="configs/analysis/case_workbench.v1.yaml",
         result_store=result.output_dir,
@@ -176,6 +181,24 @@ def test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter(tmp_p
     )
     assert proposal["candidate_count"] == 2
     assert proposal["eligible_count"] == 1
+
+
+def test_v2_read_adapter_rechecks_coverage_when_state_table_is_missing(tmp_path: Path) -> None:
+    """A stale complete receipt cannot make a store with missing states eligible."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    result = export_campaign_result_store_v2(source, tmp_path / "store", overwrite=True)
+    (result.output_dir / "steps.parquet").unlink()
+
+    proposal = analyze_cases(
+        config_path="configs/analysis/case_workbench.v1.yaml",
+        result_store=result.output_dir,
+        output=tmp_path / "package-missing-steps",
+        check_determinism=True,
+    )
+    assert proposal["eligible_count"] == 0
+    assert proposal["excluded"][0]["reasons"] == ["trace_coverage:analysis_trace_fields_incomplete"]
 
 
 def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> None:

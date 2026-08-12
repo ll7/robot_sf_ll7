@@ -185,8 +185,11 @@ def build_analysis_trace(  # noqa: PLR0913
         "events": [],
     }
     normalized_steps: list[dict[str, Any]] = [initial_step]
-    for raw in steps:
+    for normalized_index, raw in enumerate(steps, start=1):
         item = json.loads(canonical_json(raw))
+        # The legacy trace starts its first post-action frame at step zero.
+        # The analysis envelope reserves step zero for the explicit t=0 frame.
+        item["step"] = normalized_index
         robot = item.get("robot") if isinstance(item.get("robot"), dict) else {}
         robot["actor_id"] = "robot"
         robot["radius_m"] = float(robot_radius_m)

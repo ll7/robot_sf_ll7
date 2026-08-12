@@ -325,7 +325,25 @@ def _build_campaign_v2_rows(
         provenance = (
             record.get("provenance") if isinstance(record.get("provenance"), Mapping) else {}
         )
+        provenance = dict(provenance)
+        trace = (
+            record.get("algorithm_metadata", {}).get("analysis_trace")
+            if isinstance(record.get("algorithm_metadata"), Mapping)
+            else None
+        )
+        if isinstance(trace, Mapping):
+            for key in (
+                "map_digest",
+                "scenario_digest",
+                "config_hash",
+                "git_hash",
+                "planner_commit",
+            ):
+                if provenance.get(key) in (None, "") and trace.get(key) not in (None, ""):
+                    provenance[key] = trace.get(key)
         explicit_artifact_sha = _string_or_none(provenance.get("artifact_sha256"))
+        if explicit_artifact_sha is None and isinstance(trace, Mapping):
+            explicit_artifact_sha = _string_or_none(trace.get("artifact_sha256"))
         row_status = str(record.get("row_status") or record.get("status") or "native")
         if row_status not in {
             "native",
@@ -355,11 +373,6 @@ def _build_campaign_v2_rows(
                 "provenance_json": _json_or_none(provenance),
                 "execution_status": str(record.get("status") or "unknown"),
             }
-        )
-        trace = (
-            record.get("algorithm_metadata", {}).get("analysis_trace")
-            if isinstance(record.get("algorithm_metadata"), Mapping)
-            else None
         )
         trace_steps = trace.get("steps") if isinstance(trace, Mapping) else None
         if isinstance(trace_steps, list) and coverage.get("status") == "complete":
@@ -428,7 +441,9 @@ def _campaign_step_rows(
         "applied_linear_m_s": _float_or_none(applied.get("linear_m_s")),
         "applied_turn_rate_rad_s": _float_or_none(applied.get("turn_rate_rad_s")),
         "coordinate_frame": "world",
-        "units_json": _json_or_none({"position": "m", "velocity": "m/s", "time": "s"}),
+        "units_json": _json_or_none(
+            {"position": "m", "velocity": "m/s", "heading": "rad", "time": "s"}
+        ),
     }
     actor_rows: list[dict[str, Any]] = []
     actor_rows.append(_campaign_actor_row(episode_id, step, "robot", "robot", robot))
@@ -506,7 +521,6 @@ def _campaign_feature_rows(
             ("detour_ratio", "ratio"),
             ("clipping_steps", "count"),
             ("fallback_steps", "count"),
-            ("event_time", "s"),
             ("outcome_score", "indicator"),
         ):
             rows.append(
@@ -1025,6 +1039,8 @@ def _analysis_trace(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
     metadata = record.get("algorithm_metadata")
     trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
     coverage = record.get("trace_coverage")
+    if not isinstance(coverage, Mapping):
+        coverage = trace_coverage(dict(record))
     if not isinstance(trace, Mapping) or not isinstance(trace.get("steps"), list):
         return None
     if isinstance(coverage, Mapping) and coverage.get("status") != "complete":

@@ -3006,6 +3006,14 @@ def _finalize_trace_metadata(  # noqa: PLR0913
         )
         telemetry = telemetry_from_scenario(scenario)
         if telemetry.analysis_enabled:
+            upstream_reference = algo_meta.get("upstream_reference")
+            planner_commit = (
+                upstream_reference.get("commit")
+                if isinstance(upstream_reference, Mapping)
+                else None
+            )
+            if not planner_commit:
+                planner_commit = algo_meta.get("planner_commit") or algo_meta.get("commit")
             analysis_trace = build_analysis_trace(
                 steps=simulation_step_trace,
                 initial_robot_position=initial_robot_pos,
@@ -3017,7 +3025,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 pedestrian_radius_m=float(getattr(config.sim_config, "ped_radius", 0.4) or 0.4),
                 scenario=scenario,
                 planner=str(algo_meta.get("algorithm") or algo_meta.get("algo") or "unknown"),
-                planner_commit=_git_hash_fallback(),
+                planner_commit=str(planner_commit) if planner_commit else _git_hash_fallback(),
                 config_hash=_config_hash(scenario),
                 git_hash=_git_hash_fallback(),
                 termination_reason=termination_reason,

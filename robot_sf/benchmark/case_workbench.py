@@ -223,7 +223,7 @@ def _load_records(path: Path) -> list[dict[str, Any]]:
     return _load_v2_records(path, episodes_path)
 
 
-def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:
+def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:  # noqa: C901
     """Rehydrate v2 episode, step, actor, event, and feature tables."""
 
     episode_rows = _read_parquet_rows(episodes_path)
@@ -303,7 +303,7 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:
                     "events": [],
                 }
             )
-        coverage = _decode_json(row.get("trace_coverage_json")) or {"status": "unavailable"}
+        stored_coverage = _decode_json(row.get("trace_coverage_json")) or {"status": "unavailable"}
         provenance = _decode_json(row.get("provenance_json")) or {}
         first_step = by_episode_steps.get(episode_id, [None])[0]
         units = _decode_json(first_step.get("units_json")) if isinstance(first_step, dict) else None
@@ -312,8 +312,10 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:
             "scenario_id": row.get("scenario_id"),
             "planner": row.get("planner"),
             "map_digest": provenance.get("map_digest"),
+            "scenario_digest": provenance.get("scenario_digest"),
             "config_hash": row.get("config_hash") or provenance.get("config_hash"),
             "git_hash": provenance.get("git_hash"),
+            "planner_commit": provenance.get("planner_commit"),
             "coordinate_frame": (
                 first_step.get("coordinate_frame") if isinstance(first_step, dict) else None
             ),
@@ -321,25 +323,25 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]:
             "steps": trace_steps,
             "events": by_episode_events.get(episode_id, []),
         }
-        result.append(
-            {
-                "episode_id": episode_id,
-                "scenario_id": row.get("scenario_id"),
-                "seed": row.get("seed"),
-                "algo": row.get("planner"),
-                "status": row.get("execution_status"),
-                "row_status": row.get("row_status"),
-                "outcome": _decode_json(row.get("outcome_json")) or {},
-                "provenance": provenance,
-                "config_hash": row.get("config_hash") or provenance.get("config_hash"),
-                "git_hash": provenance.get("git_hash"),
-                "metrics": by_episode_features.get(episode_id, {}),
-                "trace_coverage": coverage,
-                "algorithm_metadata": {
-                    "analysis_trace": analysis_trace,
-                },
-            }
-        )
+        reconstructed = {
+            "episode_id": episode_id,
+            "scenario_id": row.get("scenario_id"),
+            "seed": row.get("seed"),
+            "algo": row.get("planner"),
+            "status": row.get("execution_status"),
+            "row_status": row.get("row_status"),
+            "outcome": _decode_json(row.get("outcome_json")) or {},
+            "provenance": provenance,
+            "config_hash": row.get("config_hash") or provenance.get("config_hash"),
+            "git_hash": provenance.get("git_hash"),
+            "metrics": by_episode_features.get(episode_id, {}),
+            "algorithm_metadata": {"analysis_trace": analysis_trace},
+        }
+        computed_coverage = trace_coverage(reconstructed)
+        if stored_coverage.get("status") != "complete":
+            computed_coverage = dict(stored_coverage)
+        reconstructed["trace_coverage"] = computed_coverage
+        result.append(reconstructed)
     return result
 
 

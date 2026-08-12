@@ -5020,3 +5020,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

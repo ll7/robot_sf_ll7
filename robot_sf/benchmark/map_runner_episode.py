@@ -21,6 +21,10 @@ from robot_sf.benchmark.algorithm_metadata import (
     resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.ammv_feasibility import evaluate_artifact_command_feasibility
+from robot_sf.benchmark.analysis_trace import (
+    build_analysis_trace,
+    telemetry_from_scenario,
+)
 from robot_sf.benchmark.cbf_safety_filter_runtime import (
     CBFSafetyFilterRuntimeConfig,
     apply_runtime_cbf_safety_filter,
@@ -1703,6 +1707,11 @@ class _EpisodeStepLoopResult:
     map_def: Any
     goal_vec: np.ndarray
     initial_robot_pos: np.ndarray
+    initial_robot_heading: float
+    initial_ped_positions: np.ndarray
+    initial_robot_velocity: np.ndarray | None
+    initial_ped_velocities: np.ndarray | None
+    trace_actor_ids: list[str]
     initial_goal_distance: float
     reached_goal_step: int | None
     termination_reason: str
@@ -1775,6 +1784,11 @@ class _StepLoopState:
     map_def: Any = None
     goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_pos: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
+    initial_robot_heading: float = 0.0
+    initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
+    initial_robot_velocity: np.ndarray | None = None
+    initial_ped_velocities: np.ndarray | None = None
+    trace_actor_ids: list[str] = field(default_factory=list)
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -1929,17 +1943,138 @@ def _init_step_loop_state(
     map_def = getattr(env.simulator, "map_def", None)
     goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     initial_robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+    initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
+    initial_robot_velocity = _initial_robot_velocity(env.simulator)
+    initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
+    trace_actor_ids = _initial_pedestrian_actor_ids(env.simulator, len(initial_ped_positions))
     initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
     state = _StepLoopState(obs=obs)
     state.hybrid_command_sources = [] if hybrid_source_field is not None else None
     state.previous_trace_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
-    state.previous_trace_heading = _observation_heading(obs)
+    state.previous_trace_heading = _reset_robot_heading(env.simulator, obs)
+    state.initial_robot_heading = state.previous_trace_heading
     state.previous_collision_robot_pos = np.array(initial_robot_pos, dtype=float, copy=True)
     state.map_def = map_def
     state.goal_vec = goal_vec
     state.initial_robot_pos = initial_robot_pos
+    state.initial_ped_positions = initial_ped_positions
+    state.initial_robot_velocity = initial_robot_velocity
+    state.initial_ped_velocities = initial_ped_velocities
+    state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
     return state
+
+
+def _reset_robot_heading(simulator: Any, obs: Any) -> float:
+    """Read a reset heading from simulator state before observation fallback.
+
+    Returns:
+        The finite reset heading in radians, or ``0.0`` when no heading is
+        available from the simulator or observation.
+    """
+
+    for name in ("robot_heading", "robot_theta", "heading"):
+        value = getattr(simulator, name, None)
+        try:
+            numeric = float(np.asarray(value).reshape(-1)[0]) if value is not None else None
+        except (TypeError, ValueError, IndexError):
+            numeric = None
+        if numeric is not None and np.isfinite(numeric):
+            return numeric
+    return _observation_heading(obs)
+
+
+def _initial_robot_velocity(simulator: Any) -> np.ndarray | None:
+    """Read the reset robot velocity without assuming a zero initial state.
+
+    Returns:
+        The finite reset velocity, or ``None`` when the simulator does not expose it.
+    """
+
+    direct = getattr(simulator, "robot_velocity_xy", None)
+    if direct is not None:
+        try:
+            value = np.asarray(direct, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            value = np.asarray([], dtype=float)
+        if value.size >= 2 and np.isfinite(value[:2]).all():
+            return value[:2].copy()
+    robots = getattr(simulator, "robots", None)
+    if isinstance(robots, (list, tuple)) and robots:
+        state = getattr(robots[0], "state", None)
+        for name in ("velocity_xy", "robot_velocity_xy"):
+            value = getattr(state, name, None)
+            if value is not None:
+                try:
+                    array = np.asarray(value, dtype=float).reshape(-1)
+                except (TypeError, ValueError):
+                    continue
+                if array.size >= 2 and np.isfinite(array[:2]).all():
+                    return array[:2].copy()
+    return None
+
+
+def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
+    """Read reset pedestrian velocities, preserving unavailable state explicitly.
+
+    Returns:
+        A finite ``(count, 2)`` array, or ``None`` when reset velocities are unavailable.
+    """
+
+    value = getattr(simulator, "ped_vel", None)
+    if value is None:
+        return None
+    try:
+        array = np.asarray(value, dtype=float).reshape(-1, 2)
+    except (TypeError, ValueError):
+        return None
+    if array.shape[0] < count or not np.isfinite(array[:count]).all():
+        return None
+    return array[:count].copy()
+
+
+def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str]:
+    """Return stable simulator-slot IDs for the reset pedestrian population.
+
+    The benchmark simulator stores pedestrian state in fixed rows.  When an
+    explicit identity registry is exposed, preserve it; otherwise the row
+    index is promoted to a namespaced simulator-slot identity.  The latter is
+    deliberately distinct from the legacy frame ``id`` field so positional
+    v1 traces cannot be mistaken for stable identities by the analysis gate.
+
+    Returns:
+        Stable, unique identifiers aligned with ``simulator.ped_pos``.
+    """
+    if count <= 0:
+        return []
+    owners = (simulator, getattr(simulator, "pysf_state", None))
+    for owner in owners:
+        if owner is None:
+            continue
+        for name in ("pedestrian_ids", "ped_ids", "ped_actor_ids"):
+            raw = getattr(owner, name, None)
+            if raw is None:
+                continue
+            try:
+                values = list(raw)
+            except TypeError:
+                continue
+            if len(values) != count:
+                continue
+            identifiers = [str(value).strip() for value in values]
+            if all(identifiers) and len(set(identifiers)) == len(identifiers):
+                return identifiers
+    return [f"simulator-slot-{index}" for index in range(count)]
+
+
+def _finite_positive_float(value: Any) -> float | None:
+    """Return a finite positive geometry value without substituting a default."""
+
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if np.isfinite(result) and result > 0.0 else None
 
 
 def _make_collision_event_context(
@@ -2295,6 +2430,7 @@ def _step_build_simulation_trace(
             slc.single_pedestrian_vru_metadata,
             sim.robot_pos,
             robot_velocity,
+            state.trace_actor_ids,
         ),
         visible=sim.step_visible,
         track_confidence=sim.step_confidence,
@@ -2565,6 +2701,11 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         map_def=state.map_def,
         goal_vec=state.goal_vec,
         initial_robot_pos=state.initial_robot_pos,
+        initial_robot_heading=state.initial_robot_heading,
+        initial_ped_positions=state.initial_ped_positions,
+        initial_robot_velocity=state.initial_robot_velocity,
+        initial_ped_velocities=state.initial_ped_velocities,
+        trace_actor_ids=list(state.trace_actor_ids),
         initial_goal_distance=state.initial_goal_distance,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
@@ -2977,6 +3118,15 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     ped_forces_arr: np.ndarray,
     robot_pos_arr: np.ndarray,
     robot_config: Any,
+    initial_robot_pos: np.ndarray,
+    initial_robot_heading: float,
+    initial_ped_positions: np.ndarray,
+    initial_robot_velocity: np.ndarray | None,
+    initial_ped_velocities: np.ndarray | None,
+    trace_actor_ids: list[str] | None,
+    horizon_val: int,
+    termination_reason: str,
+    safety_events: list[dict[str, Any]],
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -3007,6 +3157,56 @@ def _finalize_trace_metadata(  # noqa: PLR0913
             robot_radius=float(getattr(robot_config, "radius", 1.0)),
             ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
         )
+        telemetry = telemetry_from_scenario(scenario)
+        if telemetry.analysis_enabled:
+            robot_radius = _finite_positive_float(getattr(robot_config, "radius", None))
+            pedestrian_radius = _finite_positive_float(
+                getattr(config.sim_config, "ped_radius", None)
+            )
+            if robot_radius is None or pedestrian_radius is None:
+                algo_meta["analysis_trace_unavailable"] = {
+                    "status": "unavailable",
+                    "reason": "actor_radius_unavailable",
+                }
+                algo_meta["telemetry"] = telemetry.to_mapping()
+                return
+            upstream_reference = algo_meta.get("upstream_reference")
+            planner_commit = (
+                upstream_reference.get("commit")
+                if isinstance(upstream_reference, Mapping)
+                else None
+            )
+            if not planner_commit:
+                planner_commit = algo_meta.get("planner_commit")
+            analysis_trace = build_analysis_trace(
+                steps=simulation_step_trace,
+                initial_robot_position=initial_robot_pos,
+                initial_robot_heading=initial_robot_heading,
+                initial_pedestrians=initial_ped_positions,
+                initial_robot_velocity=initial_robot_velocity,
+                initial_pedestrian_velocities=initial_ped_velocities,
+                initial_pedestrian_ids=trace_actor_ids,
+                initial_pedestrian_id_source="simulator_slot",
+                dt=float(config.sim_config.time_per_step_in_secs),
+                horizon=int(horizon_val),
+                robot_radius_m=robot_radius,
+                pedestrian_radius_m=pedestrian_radius,
+                scenario=scenario,
+                planner=str(algo_meta.get("algorithm") or algo_meta.get("algo") or "unknown"),
+                planner_commit=str(planner_commit) if planner_commit else None,
+                config_hash=_config_hash(
+                    {
+                        key: value
+                        for key, value in scenario.items()
+                        if key not in {"seed", "repeats"}
+                    }
+                ),
+                git_hash=_git_hash_fallback(),
+                termination_reason=termination_reason,
+                safety_events=safety_events,
+            )
+            algo_meta["analysis_trace"] = analysis_trace
+            algo_meta["telemetry"] = telemetry.to_mapping()
 
 
 def _finalize_safety_summaries(  # noqa: PLR0913
@@ -3199,6 +3399,18 @@ def _build_episode_record_dict(  # noqa: PLR0913
     Returns:
         dict[str, Any]: The episode record before provenance attachment.
     """
+    analysis_trace = algo_meta.get("analysis_trace")
+    analysis_trace = analysis_trace if isinstance(analysis_trace, Mapping) else {}
+    provenance = {
+        "artifact_uri": scenario_params.get("artifact_uri"),
+        "artifact_sha256": analysis_trace.get("artifact_sha256"),
+        "map_digest": analysis_trace.get("map_digest"),
+        "scenario_digest": analysis_trace.get("scenario_digest"),
+        "config_hash": analysis_trace.get("config_hash") or _config_hash(scenario_params),
+        "git_hash": analysis_trace.get("git_hash") or _git_hash_fallback(),
+        "planner_commit": analysis_trace.get("planner_commit"),
+        "telemetry_profile": algo_meta.get("telemetry"),
+    }
     return {
         "version": "v1",
         "episode_id": _compute_map_episode_id(scenario_params, seed),
@@ -3221,6 +3433,7 @@ def _build_episode_record_dict(  # noqa: PLR0913
         "observation_level": active_observation_level,
         "config_hash": _config_hash(scenario_params),
         "git_hash": _git_hash_fallback(),
+        "provenance": provenance,
         "timestamps": {"start": ts_start, "end": ts_end},
         "status": status,
         "steps": steps_taken,
@@ -3274,6 +3487,15 @@ def _finalize_metadata_outputs(
         ped_forces_arr=post_loop.ped_forces_arr,
         robot_pos_arr=robot_pos_arr,
         robot_config=robot_config,
+        initial_robot_pos=loop_result.initial_robot_pos,
+        initial_robot_heading=loop_result.initial_robot_heading,
+        initial_ped_positions=loop_result.initial_ped_positions,
+        initial_robot_velocity=loop_result.initial_robot_velocity,
+        initial_ped_velocities=loop_result.initial_ped_velocities,
+        trace_actor_ids=loop_result.trace_actor_ids,
+        horizon_val=ctx.horizon_val,
+        termination_reason=loop_result.termination_reason,
+        safety_events=loop_result.collision_events,
     )
     tp_summary, sw_summary, cbf_summary = _finalize_safety_summaries(
         algo_meta,
@@ -3979,6 +4201,12 @@ def run_map_episode(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
     )
     scenario = ctx.scenario
+    telemetry_profile = telemetry_from_scenario(scenario)
+    # The profile is a recording choice only.  It enables the legacy step trace
+    # capture path but never changes policy inputs, actions, or simulator state.
+    record_simulation_step_trace = bool(
+        record_simulation_step_trace or telemetry_profile.analysis_enabled
+    )
     ped_impact_radius_m = ctx.ped_impact_radius_m
     ped_impact_window_steps = ctx.ped_impact_window_steps
     benchmark_track = ctx.benchmark_track

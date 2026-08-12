@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -274,7 +275,7 @@ def test_single_raw_seed_uses_one_spatial_panel(tmp_path: Path) -> None:
 
 
 def test_assumed_radius_overlap_does_not_fabricate_collision_event(tmp_path: Path) -> None:
-    """Diagnostic default-radius overlap must not override a successful source outcome."""
+    """Missing historical radii remain unavailable and cannot fabricate a collision."""
     episodes_jsonl = tmp_path / "episodes.jsonl"
     episodes_jsonl.write_text(
         json.dumps(_episode_row(7, "success", [6.8, 6.9, 6.8])) + "\n",
@@ -287,7 +288,7 @@ def test_assumed_radius_overlap_does_not_fabricate_collision_event(tmp_path: Pat
         seeds=[7],
     ) as bundle_dirs:
         cases = trace_viewer.load_episode_bundles(bundle_dirs)
-        assert min(cases[0].surface_clearance_m) < 0.0
+        assert all(math.isnan(value) for value in cases[0].surface_clearance_m)
         recording = _FakeRecording()
         audit, _focal, _contrast = trace_viewer.log_cases(
             recording,

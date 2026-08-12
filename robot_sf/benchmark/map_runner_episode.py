@@ -1703,6 +1703,7 @@ class _EpisodeStepLoopResult:
     map_def: Any
     goal_vec: np.ndarray
     initial_robot_pos: np.ndarray
+    initial_goal_position: np.ndarray
     initial_goal_distance: float
     reached_goal_step: int | None
     termination_reason: str
@@ -1775,6 +1776,7 @@ class _StepLoopState:
     map_def: Any = None
     goal_vec: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_robot_pos: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
+    initial_goal_position: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=float))
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -1853,6 +1855,7 @@ class _StepSimResult:
     selected_action_payload: dict[str, Any]
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
+    goal_position: np.ndarray
 
 
 def _prepare_episode_env(  # noqa: C901
@@ -1937,6 +1940,7 @@ def _init_step_loop_state(
     state.map_def = map_def
     state.goal_vec = goal_vec
     state.initial_robot_pos = initial_robot_pos
+    state.initial_goal_position = np.array(goal_vec, dtype=float, copy=True)
     state.initial_goal_distance = initial_goal_distance
     return state
 
@@ -2293,6 +2297,10 @@ def _step_build_simulation_trace(
         {
             "step": int(step_idx),
             "time_s": float((step_idx + 1) * dt_seconds),
+            "goal_position": [
+                float(sim.goal_position[0]),
+                float(sim.goal_position[1]),
+            ],
             "robot": {
                 "position": [float(sim.robot_pos[0]), float(sim.robot_pos[1])],
                 "heading": float(sim.heading),
@@ -2553,6 +2561,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         map_def=state.map_def,
         goal_vec=state.goal_vec,
         initial_robot_pos=state.initial_robot_pos,
+        initial_goal_position=state.initial_goal_position,
         initial_goal_distance=state.initial_goal_distance,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
@@ -2700,8 +2709,10 @@ def _execute_step_loop(
             selected_action_payload=sel_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
+            goal_position=np.asarray(env.simulator.goal_pos[0], dtype=float),
         )
         _step_build_simulation_trace(state, slc, step_idx=step_idx, sim=sim)
+        state.goal_vec = np.array(sim.goal_position, dtype=float, copy=True)
         _step_build_actuation_trace(state, step_idx=step_idx, sim=sim)
         _step_build_planner_decision_entry(state, slc, step_idx=step_idx, sim=sim)
         if _step_collision_and_termination(state, slc, step_idx=step_idx, sim=sim):
@@ -2956,6 +2967,12 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     ped_forces_arr: np.ndarray,
     robot_pos_arr: np.ndarray,
     robot_config: Any,
+    goal_position: np.ndarray | None = None,
+    initial_robot_position: np.ndarray | None = None,
+    initial_goal_position: np.ndarray | None = None,
+    reached_goal_step: int | None = None,
+    termination_reason: str | None = None,
+    collision_step: int | None = None,
 ) -> None:
     """Attach planner-decision and simulation-step traces to algorithm metadata."""
     if record_planner_decision_trace:
@@ -2970,12 +2987,33 @@ def _finalize_trace_metadata(  # noqa: PLR0913
         if topology_episode is not None:
             algo_meta["topology_guided_episode"] = topology_episode
     if record_simulation_step_trace:
-        algo_meta["simulation_step_trace"] = {
+        robot_radius = float(getattr(robot_config, "radius", 1.0))
+        ped_radius = float(getattr(config.sim_config, "ped_radius", 0.4))
+        envelope: dict[str, Any] = {
             "schema_version": "simulation-step-trace.v1",
             "dt": float(config.sim_config.time_per_step_in_secs),
             "initial_goal_distance_m": initial_goal_distance,
+            "robot_radius_m": robot_radius,
+            "ped_radius_m": ped_radius,
             "steps": simulation_step_trace,
         }
+        if goal_position is not None and len(goal_position) >= 2:
+            envelope["goal_position"] = [float(goal_position[0]), float(goal_position[1])]
+        if initial_robot_position is not None and len(initial_robot_position) >= 2:
+            envelope["initial_robot_position"] = [
+                float(initial_robot_position[0]),
+                float(initial_robot_position[1]),
+            ]
+        if initial_goal_position is not None and len(initial_goal_position) >= 2:
+            envelope["initial_goal_position"] = [
+                float(initial_goal_position[0]),
+                float(initial_goal_position[1]),
+            ]
+        envelope["reached_goal_step"] = reached_goal_step
+        if termination_reason is not None:
+            envelope["termination_reason"] = str(termination_reason)
+        envelope["collision_step"] = collision_step
+        algo_meta["simulation_step_trace"] = envelope
         attach_pedestrian_control_trace(
             cast("dict[str, Any]", algo_meta),
             scenario=scenario,
@@ -2983,8 +3021,8 @@ def _finalize_trace_metadata(  # noqa: PLR0913
             ped_forces=ped_forces_arr if record_forces else None,
             dt=float(config.sim_config.time_per_step_in_secs),
             robot_positions=robot_pos_arr,
-            robot_radius=float(getattr(robot_config, "radius", 1.0)),
-            ped_radius=float(getattr(config.sim_config, "ped_radius", 0.4)),
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
         )
 
 
@@ -3239,6 +3277,22 @@ def _finalize_metadata_outputs(
     config = ctx.config
     robot_pos_arr = post_loop.robot_pos_arr
     robot_config = getattr(config, "robot_config", None) if robot_pos_arr.size else None
+    first_collision_step: int | None = None
+    if loop_result.collision_events:
+        dt_val = float(config.sim_config.time_per_step_in_secs)
+        collision_steps = []
+        if dt_val > 0.0:
+            for evt in loop_result.collision_events:
+                if isinstance(evt, dict):
+                    collision_time = evt.get("collision_time")
+                    if (
+                        isinstance(collision_time, int | float)
+                        and math.isfinite(collision_time)
+                        and collision_time >= dt_val
+                    ):
+                        collision_steps.append(max(0, round(collision_time / dt_val) - 1))
+        if collision_steps:
+            first_collision_step = min(collision_steps)
     _finalize_trace_metadata(
         algo_meta,
         config=config,
@@ -3253,6 +3307,12 @@ def _finalize_metadata_outputs(
         ped_forces_arr=post_loop.ped_forces_arr,
         robot_pos_arr=robot_pos_arr,
         robot_config=robot_config,
+        goal_position=loop_result.goal_vec,
+        initial_robot_position=loop_result.initial_robot_pos,
+        initial_goal_position=loop_result.initial_goal_position,
+        reached_goal_step=loop_result.reached_goal_step,
+        termination_reason=loop_result.termination_reason,
+        collision_step=first_collision_step,
     )
     tp_summary, sw_summary, cbf_summary = _finalize_safety_summaries(
         algo_meta,

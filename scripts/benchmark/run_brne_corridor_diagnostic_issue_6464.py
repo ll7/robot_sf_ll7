@@ -30,6 +30,7 @@ from typing import Any
 import yaml
 
 from robot_sf.baselines.brne import BRNE_PINNED_SHA
+from robot_sf.benchmark.brne_trace_diagnostic import build_trace_table
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -638,6 +639,81 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _build_trace_tables(
+    records: list[dict[str, Any]],
+    *,
+    planner_key: str,
+    config: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build trace tables with exact eligible pair coverage.
+
+    Returns:
+        List of trace table dicts, one for every declared eligible pair.
+
+    Raises:
+        ValueError: If any declared row is missing, duplicated, unavailable, or malformed.
+    """
+    expected = {
+        (str(scenario_id), int(seed))
+        for scenario_id in config["scenario_ids"]
+        for seed in config["seeds"]
+    }
+    observed: list[tuple[str, int]] = []
+    for record in records:
+        try:
+            pair = (str(record["scenario_id"]), int(record["seed"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("trace table row has an invalid scenario/seed pair") from exc
+        observed.append(pair)
+    duplicates = sorted(pair for pair in set(observed) if observed.count(pair) > 1)
+    observed_set = set(observed)
+    if len(observed) != len(expected) or duplicates or observed_set != expected:
+        raise ValueError(
+            "trace table pair coverage is not exact: "
+            f"missing={sorted(expected - observed_set)}, "
+            f"unexpected={sorted(observed_set - expected)}, duplicates={duplicates}"
+        )
+    tables: list[dict[str, Any]] = []
+    for record in records:
+        classified = classify_record(record, config, planner_key=planner_key)
+        if not classified["execution_ok"]:
+            raise ValueError(
+                f"{planner_key} trace row {record.get('episode_id')} is not execution-admissible: "
+                f"{classified['status']}"
+            )
+        if not classified["crowd_within_budget"]:
+            raise ValueError(
+                f"{planner_key} trace row {record.get('episode_id')} exceeds the crowd cap"
+            )
+        tables.append(
+            build_trace_table(
+                record,
+                planner_key=planner_key,
+                expected_effective_num_samples=(
+                    int(config["expected_effective_num_samples"]) if planner_key == "brne" else None
+                ),
+            )
+        )
+    return tables
+
+
+def _write_trace_tables(
+    tables: list[dict[str, Any]],
+    output_dir: Path,
+) -> Path:
+    """Write trace tables as compact JSONL to the output directory.
+
+    Returns:
+        Path to the written trace tables file.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    trace_path = output_dir / "trace_tables.jsonl"
+    with trace_path.open("w", encoding="utf-8") as f:
+        for table in tables:
+            f.write(json.dumps(table, sort_keys=True) + "\n")
+    return trace_path
+
+
 def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     """Write machine-readable and human-readable diagnostic reports."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -657,17 +733,32 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
         "",
         "## Arm accounting",
         "",
-        "| planner | status | observed | exact pairs | native | eligible | goal reached | non-degenerate | corridor violations |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| planner | status | observed | exact pairs | trace tables | native | eligible | unavailable | goal reached | non-degenerate | corridor violations |",
+        "| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for arm in report["arms"]:
+        trace_table_status = arm.get("trace_table_status", "unavailable")
+        trace_table_count = arm.get("trace_table_count")
+        trace_table_cell = (
+            f"{trace_table_status} ({trace_table_count}/{report['expected_pairs']})"
+            if trace_table_count is not None
+            else trace_table_status
+        )
         lines.append(
             f"| {arm['planner']} | {arm['status']} | {arm['observed_rows']} | "
-            f"{'yes' if arm['pair_coverage_exact'] else 'no'} | {arm['native_rows']} | "
-            f"{arm['diagnostic_eligible_rows']} | "
+            f"{'yes' if arm['pair_coverage_exact'] else 'no'} | {trace_table_cell} | "
+            f"{arm['native_rows']} | {arm['diagnostic_eligible_rows']} | "
+            f"{arm['unavailable_rows']} | "
             f"{arm['goal_reached_rows']} | {arm['nondegenerate_rows']} | "
             f"{arm['corridor_violation_rows']} |"
         )
+    trace_errors = [
+        f"- `{arm['planner']}`: {arm['trace_table_error']}"
+        for arm in report["arms"]
+        if arm.get("trace_table_error")
+    ]
+    if trace_errors:
+        lines.extend(["", "Trace-table exclusions:", "", *trace_errors])
     lines.extend(
         [
             "",
@@ -687,10 +778,13 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
     """Execute all predeclared arms and write the diagnostic report."""
     selected_scenarios = select_scenarios(config)
     arms: list[dict[str, Any]] = []
+    trace_table_paths: list[dict[str, Any]] = []
     for planner in config["planners"]:
         key = str(planner["key"])
         arm_dir = output_dir / key
         episodes_path = arm_dir / "episodes.jsonl"
+        execution_summary: dict[str, Any] | None = None
+        execution_error: str | None = None
         try:
             execution_summary = run_map_batch(
                 selected_scenarios,
@@ -709,30 +803,41 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
                 resume=False,
             )
             records = _read_jsonl(episodes_path)
-            arms.append(
-                summarize_records(
-                    planner_key=key,
-                    records=records,
-                    config=config,
-                    execution_summary=execution_summary,
-                )
-            )
         except Exception as exc:  # noqa: BLE001 - a failed arm must be reported, not promoted.
-            arms.append(
-                summarize_records(
-                    planner_key=key,
-                    records=_read_jsonl(episodes_path),
-                    config=config,
-                    execution_summary=None,
-                    error=str(exc),
-                )
+            execution_error = str(exc)
+        records = _read_jsonl(episodes_path)
+        arm = summarize_records(
+            planner_key=key,
+            records=records,
+            config=config,
+            execution_summary=execution_summary,
+            error=execution_error,
+        )
+        try:
+            trace_tables = _build_trace_tables(records, planner_key=key, config=config)
+        except (ValueError, KeyError) as exc:
+            arm["trace_table_status"] = "unavailable"
+            arm["trace_table_error"] = str(exc)
+        else:
+            trace_path = _write_trace_tables(trace_tables, arm_dir)
+            arm["trace_table_status"] = "available"
+            arm["trace_table_count"] = len(trace_tables)
+            trace_table_paths.append(
+                {
+                    "planner": key,
+                    "trace_tables_path": str(trace_path),
+                    "trace_table_count": len(trace_tables),
+                }
             )
+        arms.append(arm)
     expected_pairs = len(config["scenario_ids"]) * len(config["seeds"])
     complete = all(
         arm["status"] == "available"
         and arm["pair_coverage_exact"]
         and arm["observed_rows"] == expected_pairs
         and arm["unavailable_rows"] == 0
+        and arm.get("trace_table_status") == "available"
+        and arm.get("trace_table_count") == expected_pairs
         for arm in arms
     )
     report: dict[str, Any] = {
@@ -745,6 +850,7 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
             arm["pair_coverage_exact"] and arm["observed_rows"] == expected_pairs for arm in arms
         ),
         "arms": arms,
+        "trace_tables": trace_table_paths,
         "claim_boundary": config["claim_boundary"],
     }
     json_path, markdown_path = _write_report(report, output_dir)

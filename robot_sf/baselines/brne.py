@@ -644,6 +644,15 @@ class BRNEPlanner:
                 "The pinned upstream grid helper may return fewer samples than the requested "
                 "num_samples; all trajectory and weight tensors use that effective count."
             ),
+            "aggregation_layout": {
+                "method": "weighted_first_command",
+                "ensemble_layout": "plan_step_first",
+                "description": (
+                    "BRNE uses a plan-step-first control ensemble layout "
+                    "(plan_steps, samples, 2) and aggregates via weighted sum "
+                    "over the sample axis to produce the first-step command."
+                ),
+            },
             "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
         }
 

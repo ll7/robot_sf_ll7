@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.forecast_batch import validate_forecast_batch
+from robot_sf.benchmark.forecast.forecast_batch import validate_forecast_batch
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.forecast_conformal_pilot import (
+from robot_sf.benchmark.forecast.forecast_conformal_pilot import (
     build_forecast_conformal_pilot_report,
     write_forecast_conformal_pilot_report,
 )

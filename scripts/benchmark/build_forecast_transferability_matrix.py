@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.forecast_transferability_stress_matrix import (
+from robot_sf.benchmark.forecast.forecast_transferability_stress_matrix import (
     build_forecast_transferability_stress_matrix,
     write_forecast_transferability_stress_matrix,
 )

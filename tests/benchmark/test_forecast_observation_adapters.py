@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.forecast_observation_adapters import (
+from robot_sf.benchmark.forecast.forecast_observation_adapters import (
     ForecastObservationAdapter,
     OracleFullStateForecastAdapter,
     TrackedAgentsForecastAdapter,

@@ -1,7 +1,7 @@
 """Map a ForecastBatch.v1 artifact into a per-step scalar risk signal.
 
 This adapter is the bounded bridge between a forecast artifact (see
-``robot_sf.benchmark.forecast_batch``) and a downstream risk gate or planner
+``robot_sf.benchmark.forecast.forecast_batch``) and a downstream risk gate or planner
 proxy.  It is deliberately small, pure, and deterministic: given a forecast
 batch and the robot position at the same step, it returns a single non-negative
 scalar risk value plus the metadata a fail-closed consumer needs.
@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.forecast_batch import ForecastBatch
+    from robot_sf.benchmark.forecast.forecast_batch import ForecastBatch
 
 FORECAST_RISK_ADAPTER_SCHEMA_VERSION = "forecast_risk_signal.v1"
 

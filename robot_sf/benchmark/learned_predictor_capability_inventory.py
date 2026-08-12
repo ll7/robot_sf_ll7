@@ -113,14 +113,14 @@ LEARNED_PREDICTOR_V1_HOOKS: tuple[CapabilityHook, ...] = (
         name="forecast_batch_contract",
         category="contract",
         requirement="importable",
-        target="robot_sf.benchmark.forecast_batch:ForecastBatch",
+        target="robot_sf.benchmark.forecast.forecast_batch:ForecastBatch",
         description="ForecastBatch.v1 output interchange contract for forecast artifacts.",
     ),
     CapabilityHook(
         name="forecast_batch_schema_version",
         category="contract",
         requirement="importable",
-        target="robot_sf.benchmark.forecast_batch:FORECAST_BATCH_SCHEMA_VERSION",
+        target="robot_sf.benchmark.forecast.forecast_batch:FORECAST_BATCH_SCHEMA_VERSION",
         description="Pinned ForecastBatch schema-version constant for provenance validation.",
     ),
     CapabilityHook(
@@ -128,7 +128,7 @@ LEARNED_PREDICTOR_V1_HOOKS: tuple[CapabilityHook, ...] = (
         category="dataset",
         requirement="importable",
         target=(
-            "robot_sf.benchmark.forecast_dataset_recorder:"
+            "robot_sf.benchmark.forecast.forecast_dataset_recorder:"
             "record_forecast_dataset_from_trace_exports"
         ),
         description="Durable forecast dataset recorder (train from manifest, not ad-hoc output/).",

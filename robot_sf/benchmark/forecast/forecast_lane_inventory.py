@@ -20,8 +20,8 @@ a shared machine. It composes the canonical owner modules under
 
 Run it as a preflight before forecast-lane work::
 
-    python -m robot_sf.benchmark.forecast_lane_inventory
-    python -m robot_sf.benchmark.forecast_lane_inventory --json
+    python -m robot_sf.benchmark.forecast.forecast_lane_inventory
+    python -m robot_sf.benchmark.forecast.forecast_lane_inventory --json
 
 Exit code ``0`` means every **required** lane capability is present and
 importable. A non-zero exit means at least one required capability is missing or
@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 # Repo root, so the schema-file probe works regardless of the caller's CWD.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
     ForecastCapabilitySpec(
         capability_id="forecast_batch_contract",
         sublane="contract",
-        module="robot_sf.benchmark.forecast_batch",
+        module="robot_sf.benchmark.forecast.forecast_batch",
         symbols=(
             "FORECAST_BATCH_SCHEMA_VERSION",
             "ForecastBatch",
@@ -163,7 +163,7 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
             "validate_forecast_batch",
         ),
         required=True,
-        owner="robot_sf/benchmark/forecast_batch.py",
+        owner="robot_sf/benchmark/forecast/forecast_batch.py",
         note="ForecastBatch.v1 typed contract and provenance dataclasses.",
     ),
     ForecastCapabilitySpec(
@@ -179,14 +179,14 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
     ForecastCapabilitySpec(
         capability_id="forecast_metrics",
         sublane="metrics",
-        module="robot_sf.benchmark.forecast_metrics",
+        module="robot_sf.benchmark.forecast.forecast_metrics",
         symbols=(
             "ForecastMetricRow",
             "evaluate_forecast_batch",
             "format_forecast_metrics_markdown",
         ),
         required=True,
-        owner="robot_sf/benchmark/forecast_metrics.py",
+        owner="robot_sf/benchmark/forecast/forecast_metrics.py",
         note="Predictor-agnostic forecast metric evaluation surface.",
     ),
     ForecastCapabilitySpec(
@@ -205,17 +205,17 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
     ForecastCapabilitySpec(
         capability_id="baseline_comparison",
         sublane="baselines",
-        module="robot_sf.benchmark.forecast_baseline_comparison",
+        module="robot_sf.benchmark.forecast.forecast_baseline_comparison",
         symbols=("compare_forecast_baselines", "ForecastBaselineComparison"),
         required=True,
         files=("scripts/benchmark/run_forecast_baseline_comparison.py",),
-        owner="robot_sf/benchmark/forecast_baseline_comparison.py",
+        owner="robot_sf/benchmark/forecast/forecast_baseline_comparison.py",
         note="Baseline comparison/leaderboard core required before learned models.",
     ),
     ForecastCapabilitySpec(
         capability_id="observation_adapters",
         sublane="observation",
-        module="robot_sf.benchmark.forecast_observation_adapters",
+        module="robot_sf.benchmark.forecast.forecast_observation_adapters",
         symbols=(
             "ForecastObservationAdapter",
             "OracleFullStateForecastAdapter",
@@ -223,58 +223,58 @@ _FORECAST_CAPABILITIES: tuple[ForecastCapabilitySpec, ...] = (
             "build_constant_velocity_forecast_batch",
         ),
         required=True,
-        owner="robot_sf/benchmark/forecast_observation_adapters.py",
+        owner="robot_sf/benchmark/forecast/forecast_observation_adapters.py",
         note="Observation-tier adapters separating oracle from tracked inputs.",
     ),
     ForecastCapabilitySpec(
         capability_id="dataset_recorder",
         sublane="dataset",
-        module="robot_sf.benchmark.forecast_dataset_recorder",
+        module="robot_sf.benchmark.forecast.forecast_dataset_recorder",
         symbols=(
             "record_forecast_dataset_from_trace_exports",
             "validate_forecast_dataset_manifest",
         ),
         required=True,
-        owner="robot_sf/benchmark/forecast_dataset_recorder.py",
+        owner="robot_sf/benchmark/forecast/forecast_dataset_recorder.py",
         note="Forecast dataset recorder and split-manifest helpers.",
     ),
     ForecastCapabilitySpec(
         capability_id="calibration_report",
         sublane="calibration",
-        module="robot_sf.benchmark.forecast_calibration_report",
+        module="robot_sf.benchmark.forecast.forecast_calibration_report",
         symbols=(
             "build_forecast_calibration_report",
             "format_forecast_calibration_markdown",
         ),
         required=True,
-        owner="robot_sf/benchmark/forecast_calibration_report.py",
+        owner="robot_sf/benchmark/forecast/forecast_calibration_report.py",
         note="Calibration/reliability summaries for forecast metric artifacts.",
     ),
     ForecastCapabilitySpec(
         capability_id="conformal_pilot",
         sublane="calibration",
-        module="robot_sf.benchmark.forecast_conformal_pilot",
+        module="robot_sf.benchmark.forecast.forecast_conformal_pilot",
         symbols=("build_forecast_conformal_pilot_report",),
         required=False,
-        owner="robot_sf/benchmark/forecast_conformal_pilot.py",
+        owner="robot_sf/benchmark/forecast/forecast_conformal_pilot.py",
         note="Smoke-only conformal/reachable-set tube diagnostics (pilot).",
     ),
     ForecastCapabilitySpec(
         capability_id="risk_adapter",
         sublane="risk",
-        module="robot_sf.benchmark.forecast_risk_adapter",
+        module="robot_sf.benchmark.forecast.forecast_risk_adapter",
         symbols=("ForecastRiskSignal", "compute_forecast_risk"),
         required=False,
-        owner="robot_sf/benchmark/forecast_risk_adapter.py",
+        owner="robot_sf/benchmark/forecast/forecast_risk_adapter.py",
         note="Forecast-to-risk signal adapter (gated; not default behavior).",
     ),
     ForecastCapabilitySpec(
         capability_id="transferability_matrix",
         sublane="transfer",
-        module="robot_sf.benchmark.forecast_transferability_stress_matrix",
+        module="robot_sf.benchmark.forecast.forecast_transferability_stress_matrix",
         symbols=("build_forecast_transferability_stress_matrix",),
         required=False,
-        owner="robot_sf/benchmark/forecast_transferability_stress_matrix.py",
+        owner="robot_sf/benchmark/forecast/forecast_transferability_stress_matrix.py",
         note="Transferability stress matrix (required before paper-facing claims).",
     ),
     ForecastCapabilitySpec(
@@ -304,7 +304,7 @@ _FORECAST_LANE_STATUS_ROWS: tuple[ForecastLaneStatusSpec, ...] = (
     ForecastLaneStatusSpec(
         requirement_id="forecast_batch_v1",
         requirement="ForecastBatch.v1 artifact contract",
-        current_artifacts=("#2836", "#2849", "robot_sf/benchmark/forecast_batch.py"),
+        current_artifacts=("#2836", "#2849", "robot_sf/benchmark/forecast/forecast_batch.py"),
         status="done",
         remaining_blocker="None for the schema/provenance contract.",
         next_action="Keep downstream forecast artifacts on ForecastBatch.v1.",
@@ -312,7 +312,11 @@ _FORECAST_LANE_STATUS_ROWS: tuple[ForecastLaneStatusSpec, ...] = (
     ForecastLaneStatusSpec(
         requirement_id="observation_adapters",
         requirement="Observation-level forecast adapters",
-        current_artifacts=("#2838", "#2860", "robot_sf/benchmark/forecast_observation_adapters.py"),
+        current_artifacts=(
+            "#2838",
+            "#2860",
+            "robot_sf/benchmark/forecast/forecast_observation_adapters.py",
+        ),
         status="done",
         remaining_blocker="None for oracle/full-state/tracked observation separation.",
         next_action="Extend only when a new deployable observation tier lands.",
@@ -400,7 +404,7 @@ _FORECAST_LANE_CLOSURE_CRITERIA: tuple[ForecastLaneClosureCriterion, ...] = (
         evidence=(
             "#2836",
             "#2849",
-            "robot_sf/benchmark/forecast_batch.py",
+            "robot_sf/benchmark/forecast/forecast_batch.py",
             "robot_sf/benchmark/schemas/forecast_batch_schema.py",
         ),
         pr_evidence=("#2849", "#2934", "#3738", "#4545"),

@@ -6,7 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.forecast_batch import validate_forecast_batch
+from robot_sf.benchmark.forecast.forecast_batch import validate_forecast_batch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts/benchmark/run_forecast_baseline_comparison.py"

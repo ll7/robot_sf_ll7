@@ -19,13 +19,13 @@ import sys
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_batch import (
     ActorForecast,
     CoordinateFrame,
     ForecastBatch,
     ForecastBatchProvenance,
 )
-from robot_sf.benchmark.forecast_risk_adapter import (
+from robot_sf.benchmark.forecast.forecast_risk_adapter import (
     FORECAST_RISK_ADAPTER_SCHEMA_VERSION,
     compute_forecast_risk,
 )

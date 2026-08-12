@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.forecast_risk_adapter import compute_forecast_risk
+from robot_sf.benchmark.forecast.forecast_risk_adapter import compute_forecast_risk
 from robot_sf.benchmark.metrics import snqi
 from robot_sf.benchmark.pedestrian_forecast import (
     NeighborContext,
@@ -161,7 +161,7 @@ def _build_forecast_batch(
     Returns:
         A validated ForecastBatch carrying a deterministic forecast for the actor.
     """
-    from robot_sf.benchmark.forecast_batch import (
+    from robot_sf.benchmark.forecast.forecast_batch import (
         ActorForecast,
         CoordinateFrame,
         ForecastBatch,

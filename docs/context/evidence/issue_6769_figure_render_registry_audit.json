@@ -16,7 +16,7 @@
     "non_deterministic_contract": 10,
     "unsafe_command": 4
   },
-  "generated_at": "2026-08-11T17:41:14+00:00",
+  "generated_at": "2026-08-12T21:37:07+00:00",
   "ineligible_count": 24,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
@@ -26,6 +26,6 @@
     "build_command_txt": 2,
     "readme_reproduction": 31
   },
-  "source_commit": "954e58fbe8e817e5abdc2a3fa1f755f1dc2cb2dd",
+  "source_commit": "f306d3f9c54195095eee1f6837d7b1853001b4a6",
   "total_entries": 33
 }

@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.forecast_batch import (
+from robot_sf.benchmark.forecast.forecast_batch import (
     ActorForecast,
     CoordinateFrame,
     ForecastBatch,
     ForecastBatchProvenance,
 )
-from robot_sf.benchmark.forecast_conformal_pilot import (
+from robot_sf.benchmark.forecast.forecast_conformal_pilot import (
     FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION,
     build_forecast_conformal_pilot_report,
     format_forecast_conformal_pilot_markdown,

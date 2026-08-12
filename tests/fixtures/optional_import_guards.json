@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 117,
+  "total_guards": 118,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -102,8 +102,8 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 82,
-      "has_as_count": 22,
+      "count_ceiling": 81,
+      "has_as_count": 21,
       "pragma_no_cover_count": 24,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
@@ -117,8 +117,7 @@
         "robot_sf/baselines/sac.py:14",
         "robot_sf/baselines/sicnav.py:422",
         "robot_sf/baselines/sicnav.py:300",
-        "robot_sf/benchmark/case_workbench.py:107",
-        "robot_sf/benchmark/case_workbench.py:128",
+        "robot_sf/benchmark/case_workbench.py:1037",
         "robot_sf/benchmark/cli.py:225",
         "robot_sf/benchmark/collision_causal_report.py:55",
         "robot_sf/benchmark/distributions.py:131",
@@ -200,8 +199,8 @@
       "note": "Blessed broad catch: native-lib / filesystem load may raise OSError. campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it exists to catch and report arm-dependency import failures with a remediation message, so try_import (which discards the exception) is the wrong tool there.",
       "samples": [
         "robot_sf/benchmark/campaign_runtime_preflight.py:106",
-        "robot_sf/benchmark/cli.py:3315",
-        "robot_sf/benchmark/cli.py:3349",
+        "robot_sf/benchmark/cli.py:3356",
+        "robot_sf/benchmark/cli.py:3390",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
         "robot_sf/benchmark/orca_preflight.py:90"
       ]
@@ -216,6 +215,17 @@
         "robot_sf/benchmark/camera_ready/resource_lifecycle.py:275"
       ]
     },
+    "ImportError+ParquetDependencyError": {
+      "count_ceiling": 2,
+      "has_as_count": 2,
+      "pragma_no_cover_count": 0,
+      "blessed": true,
+      "note": "Blessed broad catch. Add a justification note in scripts/dev/generate_optional_import_snapshot.py when blessing.",
+      "samples": [
+        "robot_sf/benchmark/case_workbench.py:300",
+        "robot_sf/benchmark/case_workbench.py:327"
+      ]
+    },
     "ImportError+RuntimeError": {
       "count_ceiling": 7,
       "has_as_count": 0,
@@ -226,7 +236,7 @@
         "robot_sf/baselines/dr_mpc.py:187",
         "robot_sf/baselines/sicnav.py:346",
         "robot_sf/baselines/sicnav.py:532",
-        "robot_sf/benchmark/cli.py:3518",
+        "robot_sf/benchmark/cli.py:3560",
         "robot_sf/telemetry/tensorboard_adapter.py:20",
         "robot_sf/telemetry/tensorboard_adapter.py:26",
         "robot_sf/training/multi_extractor_analysis.py:22"

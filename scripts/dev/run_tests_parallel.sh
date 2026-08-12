@@ -60,6 +60,9 @@ if [[ "$#" -gt 0 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# PR_READY_PR_BODY_FILE is an outer readiness-contract input. Do not leak it
+# into pytest subprocesses, which intentionally exercise body-unset paths.
+unset PR_READY_PR_BODY_FILE
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 

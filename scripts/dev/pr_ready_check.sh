@@ -415,19 +415,14 @@ trap cleanup_pr_ready_coverage EXIT
 printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
 
 printf 'Running core readiness lane.\n' >&2
-# PR_READY_PR_BODY_FILE is an outer readiness-contract input. Do not leak it into
-# nested preflight tests, which intentionally exercise body-unset paths.
-env -u PR_READY_PR_BODY_FILE ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core \
-  "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
+ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
 if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   printf 'Running optional-extra lane for predictive/optional changed files.\n' >&2
   optional_pytest_addopts="${PYTEST_ADDOPTS:-}"
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then
     optional_pytest_addopts="${optional_pytest_addopts:+$optional_pytest_addopts }--cov-append"
   fi
-  PYTEST_ADDOPTS="$optional_pytest_addopts" env -u PR_READY_PR_BODY_FILE \
-    ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional \
-    "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
+  PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
 else
   if [[ "$pr_ready_final" == "1" ]]; then
     printf 'No changed files require the optional-extra lane.\n' >&2

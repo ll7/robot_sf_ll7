@@ -27,6 +27,7 @@ This is a preflight/readiness contract, NOT benchmark evidence: it verifies that
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -86,6 +87,9 @@ class TestSafetyWrapperFactorialConfigShape:
         """The derived config loads without error and parses arm_isolation: subprocess."""
         cfg = _load_campaign_config()
         assert cfg.name == "issue_4830_safety_wrapper_factorial_v1"
+        assert cfg.retained_metric_contract_path is not None
+        assert cfg.retained_metric_contract_path.name == "paired_effect_metric_contract_v1.yaml"
+        assert cfg.retained_metric_contract_path.is_file()
         # The #4826 isolation gate and submit wrapper pin subprocess isolation.
         assert cfg.arm_isolation == "subprocess"
         # Paired seeds preserved verbatim from the design contract.
@@ -296,6 +300,50 @@ class TestSafetyWrapperWorkerExecutionPath:
         captured = _run_worker_and_capture_run_batch_kwargs(tmp_path, safety_wrapper=None)
         assert captured["safety_wrapper"] is None
 
+    def test_retained_metric_contract_reaches_worker_run_batch(self, tmp_path):
+        """The camera-ready retained-row contract survives the isolated worker handoff."""
+        cfg = _load_campaign_config()
+        captured = _run_worker_and_capture_run_batch_kwargs(
+            tmp_path,
+            safety_wrapper=None,
+            retained_metric_contract_path=cfg.retained_metric_contract_path,
+        )
+        assert captured["retained_metric_contract_path"] == cfg.retained_metric_contract_path
+
+    def test_retained_metric_contract_survives_worker_parameter_reconstruction(self, tmp_path):
+        """The serialized worker boundary reconstructs the retained contract as a Path."""
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        cfg = _load_campaign_config()
+        base = _minimal_arm_params(tmp_path, scoped_path=tmp_path / "scoped.json")
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "retained_metric_contract_path": cfg.retained_metric_contract_path,
+            }
+        )
+        serialized = _serialize_subprocess_arm_params(params)
+        captured: dict[str, object] = {}
+
+        def fake_run_single(rebuilt_params):
+            captured["retained_metric_contract_path"] = rebuilt_params.retained_metric_contract_path
+            return {"status": "ok"}
+
+        with (
+            patch("loguru.logger"),
+            patch.object(
+                resource_lifecycle,
+                "_run_single_arm_subprocess",
+                side_effect=fake_run_single,
+            ),
+            patch("sys.stdin", StringIO(serialized)),
+            patch("sys.stdout", StringIO()),
+        ):
+            assert resource_lifecycle._main_subprocess_worker() == 0
+
+        assert captured["retained_metric_contract_path"] == cfg.retained_metric_contract_path
+        assert isinstance(captured["retained_metric_contract_path"], Path)
+
 
 class TestSafetyWrapperRunBatchForwarding:
     """run_batch forwards safety_wrapper to run_map_batch (the map-based runtime path)."""
@@ -384,7 +432,10 @@ def _planner_without_safety_wrapper(planner):
 
 
 def _run_worker_and_capture_run_batch_kwargs(
-    tmp_path: Path, *, safety_wrapper: dict[str, object] | None
+    tmp_path: Path,
+    *,
+    safety_wrapper: dict[str, object] | None,
+    retained_metric_contract_path: Path | None = None,
 ) -> dict[str, object]:
     """Run _run_single_arm_subprocess with run_batch mocked; return the captured kwargs.
 
@@ -399,7 +450,13 @@ def _run_worker_and_capture_run_batch_kwargs(
     scoped_path.write_text("[]", encoding="utf-8")
 
     base = _minimal_arm_params(tmp_path, scoped_path=scoped_path)
-    params = _SubprocessArmParams(**{**base.__dict__, "safety_wrapper": safety_wrapper})
+    params = _SubprocessArmParams(
+        **{
+            **base.__dict__,
+            "safety_wrapper": safety_wrapper,
+            "retained_metric_contract_path": retained_metric_contract_path,
+        }
+    )
 
     captured: dict[str, object] = {}
 

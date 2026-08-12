@@ -142,6 +142,8 @@ knowledge, not every transient iteration detail.
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 * Issue #6875 camera-ready report crosswalk producer:
   [issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md)
+* Issue #6970 paired-effect retained-row metric contract:
+  [issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md)
 * Issue #6934 BRNE action-weight scaling and source-aligned aggregation:
   [issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md)
 * Issue #6615 ORCA adapter-validation harness and diagnostic projection trace:

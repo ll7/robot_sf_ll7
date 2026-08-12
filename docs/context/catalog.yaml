@@ -60,6 +60,18 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/sketches/campaign_atlas.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/sketches/interactive_dossier.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/sketches/publication_comparison.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json
   status: evidence
   freshness: evidence

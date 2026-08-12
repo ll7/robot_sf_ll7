@@ -48,10 +48,10 @@ def _git_hash() -> str:
     return result.stdout.strip()
 
 
-def _record_size_bytes(record: dict[str, Any]) -> int:
-    """Return deterministic gzip size for the serialized episode record."""
+def _compressed_size_bytes(value: Any) -> int:
+    """Return deterministic gzip size for a canonical JSON-compatible value."""
 
-    payload = canonical_json(record).encode("utf-8")
+    payload = canonical_json(value).encode("utf-8")
     return len(gzip.compress(payload, mtime=0))
 
 
@@ -103,7 +103,12 @@ def _run_arm(*, trace_enabled: bool, samples: int, warmups: int) -> dict[str, An
         timings.append(
             {
                 "elapsed_sec": time.perf_counter() - started,
-                "compressed_bytes": _record_size_bytes(record),
+                "trace_compressed_bytes": (
+                    _compressed_size_bytes(record["algorithm_metadata"]["analysis_trace"])
+                    if trace_enabled
+                    else 0
+                ),
+                "record_compressed_bytes": _compressed_size_bytes(record),
             }
         )
         records.append(record)
@@ -114,8 +119,11 @@ def _run_arm(*, trace_enabled: bool, samples: int, warmups: int) -> dict[str, An
         "samples": timings,
         "elapsed_sec_median": statistics.median(sample["elapsed_sec"] for sample in timings),
         "elapsed_sec_max": max(sample["elapsed_sec"] for sample in timings),
-        "compressed_bytes_median": statistics.median(
-            sample["compressed_bytes"] for sample in timings
+        "trace_compressed_bytes_median": statistics.median(
+            sample["trace_compressed_bytes"] for sample in timings
+        ),
+        "record_compressed_bytes_median": statistics.median(
+            sample["record_compressed_bytes"] for sample in timings
         ),
         "control_sequence_digests": (
             [_digest(_control_sequence(record)) for record in records] if trace_enabled else []
@@ -198,8 +206,9 @@ def measure(*, samples: int, warmups: int) -> dict[str, Any]:
         "derived": {
             "median_overhead_fraction": overhead_ratio,
             "median_overhead_percent": overhead_ratio * 100.0,
-            "median_compressed_bytes_delta": (
-                on["compressed_bytes_median"] - off["compressed_bytes_median"]
+            "median_trace_compressed_bytes": on["trace_compressed_bytes_median"],
+            "median_record_compressed_bytes_delta": (
+                on["record_compressed_bytes_median"] - off["record_compressed_bytes_median"]
             ),
             "target_percent": 10.0,
             "target_met": overhead_ratio <= 0.10,

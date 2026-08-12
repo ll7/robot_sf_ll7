@@ -275,6 +275,8 @@ def load_remaining_route_length_from_npz(
 
     The function fails closed when the array is absent, contains non-finite
     values, has wrong alignment with action steps, or is structurally malformed.
+    The caller must provide a trusted local trajectory artifact because ragged
+    per-episode arrays and provenance mappings use NumPy object-array encoding.
 
     Args:
         npz_path: Path to the trajectory dataset NPZ.

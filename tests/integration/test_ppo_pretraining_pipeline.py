@@ -142,7 +142,7 @@ def test_default_bc_pretraining_config_loads_auto_device():
 
 
 def test_issue_6951_configs_parse_named_objective() -> None:
-    """The matched issue #6951 configs expose validated objective metadata."""
+    """Matched #6951 configs expose metadata and prevent silent arm/seed drift."""
     from scripts.training.pretrain_from_expert import load_bc_config
 
     repo_root = Path(__file__).resolve().parents[2]

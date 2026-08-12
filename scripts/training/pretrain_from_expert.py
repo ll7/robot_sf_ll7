@@ -276,6 +276,26 @@ def _parse_progress_weighted_objective(
     return ProgressWeightedObjectiveConfig.from_mapping(raw_dict)
 
 
+def _validate_progress_objective_seed(
+    objective_config: ProgressWeightedObjectiveConfig,
+    random_seeds: tuple[int, ...],
+) -> int:
+    """Require the objective seed to match the primary pre-training run seed."""
+    from robot_sf.training.progress_weighted_bc import ProgressWeightedBcError
+
+    if not random_seeds:
+        raise ProgressWeightedBcError(
+            "progress-weighted objective requires a primary pre-training random seed"
+        )
+    primary_seed = int(random_seeds[0])
+    if objective_config.random_seed != primary_seed:
+        raise ProgressWeightedBcError(
+            "progress-weighted objective random_seed must match the primary pre-training "
+            f"random seed: objective={objective_config.random_seed}, primary={primary_seed}"
+        )
+    return objective_config.random_seed
+
+
 def _load_route_length_and_compute_weights(
     dataset_path: Path,
     objective_config: ProgressWeightedObjectiveConfig,
@@ -318,6 +338,11 @@ def run_bc_pretraining(
     logger.info("Loading dataset from {}", dataset_path)
     dataset = _load_trajectory_dataset(dataset_path)
     objective_config = _parse_progress_weighted_objective(config.progress_weighted_objective)
+    objective_seed = (
+        _validate_progress_objective_seed(objective_config, config.random_seeds)
+        if objective_config is not None
+        else None
+    )
     objective_manifest: dict[str, object] | None = None
     objective_weights: list[np.ndarray] | None = None
     if objective_config is not None and objective_config.arm == "B":
@@ -383,7 +408,7 @@ def run_bc_pretraining(
                 config=objective_config,
                 weights=weights,
                 batch_size=config.batch_size,
-                rng=np.random.default_rng(int(config.random_seeds[0])),
+                rng=np.random.default_rng(objective_seed),
                 device=config.device,
                 learning_rate=config.learning_rate,
             )

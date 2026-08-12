@@ -24,6 +24,7 @@ from scripts.training.pretrain_from_expert import (
     _load_route_length_and_compute_weights,
     _load_trajectory_dataset,
     _require_imitation_bc,
+    _validate_progress_objective_seed,
     _warn_imitation_dependency_mode,
 )
 
@@ -221,3 +222,15 @@ def test_progress_weighted_loader_rejects_dataset_digest_mismatch(tmp_path: Path
 
     with pytest.raises(ProgressWeightedBcError, match="dataset digest does not match"):
         _load_route_length_and_compute_weights(dataset_path, config)
+
+
+def test_progress_objective_seed_must_match_primary_run_seed() -> None:
+    """Divergent objective and run seeds must fail closed to preserve manifest reproducibility."""
+    config = ProgressWeightedObjectiveConfig.arm_b(
+        progress_lambda=0.5,
+        progress_normalization_scale=1.0,
+        random_seed=112,
+    )
+
+    with pytest.raises(ProgressWeightedBcError, match="must match the primary"):
+        _validate_progress_objective_seed(config, (111, 112, 113))

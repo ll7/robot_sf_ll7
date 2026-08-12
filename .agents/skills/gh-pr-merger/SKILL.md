@@ -30,7 +30,8 @@ same preflight is enforced **queue-side** by the `Merge Queue Gate` required
 status check (`.github/workflows/merge-queue-gate.yml`, backed by
 `scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
 external/parallel auto-merge dispatcher that routes through it cannot bypass
-`merge-ready`, the exact-head `gate-verdict: accepted` trailer, unresolved
+`merge-ready`, the exact-head `gate-verdict: accepted` trailer, the exact final
+PR metadata digest, unresolved
 threads, or an explicitly requested reviewer. Comment or review verdict trailers count only when
 GitHub reports the author as a repository owner, member, or collaborator; an untrusted contributor
 cannot self-approve a new head under a retained label. The queue gate also fails closed
@@ -78,23 +79,27 @@ Before each merge operation, verify:
    skip and report.
 2. PR is not a draft. If draft, skip and report.
 3. PR targets `main` (or the explicitly allowed base branch).
-4. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
+4. Read the live PR title/body through the REST-backed metadata path, compute the exact metadata
+   digest, and verify a trusted `pr-metadata: reconciled @ <digest>` trailer matches it. If the
+   trailer is missing or stale, skip and report; the merger verifies metadata but never invents or
+   mutates the final narrative.
+5. CI checks are passing (use `uv run python scripts/dev/check_pr_ci_status.py <number>`).
    In non-TTY agent sessions, prefer bounded polling over `gh pr checks --watch`:
    `uv run python scripts/dev/check_pr_ci_status.py <number> --poll-attempts 20 --poll-interval 30`.
    Exit code `2` means checks were still queued or in progress after the polling budget; inspect the
    listed check URLs or run `gh run view <run-id> --json status,conclusion,jobs` for job state.
-5. No merge conflicts exist (`gh pr view <number> --json mergeable`).
-6. **Merge-staleness check**: run `python scripts/dev/check_pr_merge_staleness.py <number>`.
+6. No merge conflicts exist (`gh pr view <number> --json mergeable`).
+7. **Merge-staleness check**: run `python scripts/dev/check_pr_merge_staleness.py <number>`.
    Exit code `1` means main has moved since the PR's CI ran; skip and report the
    PR as stale — the author must update the branch and re-run CI before merge.
    Exit code `2` means the check could not determine staleness (API error, no
    workflow-run metadata); log a warning and continue with remaining preflight
    checks.  See issue #5389 for context.
-7. The PR has no unresolved actionable review threads or outstanding explicitly requested external
+8. The PR has no unresolved actionable review threads or outstanding explicitly requested external
    reviewers. A distinct-account approval may be waived only under `goal-pr-review`'s documented
    single-account internal-review waiver.
-8. Branch protection rules on `main` allow merges from the current actor.
-9. The current head SHA exactly matches the SHA named in the `merge-ready` review evidence. A
+9. Branch protection rules on `main` allow merges from the current actor.
+10. The current head SHA exactly matches the SHA named in the `merge-ready` review evidence. A
    single-account waiver never waives exact-head evidence; any head change requires re-review.
 
 If any preflight check fails, report the specific failure and do not merge.

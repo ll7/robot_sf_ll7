@@ -6,7 +6,7 @@
   "decision": "diagnostic_only_retention",
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Trace-backed diagnosis of the bounded native BRNE corridor run only; no benchmark ranking, safety, realism, matched-compute, planner-benefit, or paper claim.",
-  "execution_head": "ed9bd4dcc01d3af8d498cbba74f4bc5f62bea227",
+  "execution_head": "cb8382f23775ce2745a29dd2974b4e11d348f53d",
   "source_worktree_dirty_at_capture": false,
   "scenario": {
     "name": "classic_head_on_corridor_low",
@@ -16,7 +16,7 @@
     "geometry": "constant_width_corridor_only",
     "corridor_band": "direct_configured_y_band"
   },
-  "command": "NUMBA_NUM_THREADS=4 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0625Z",
+  "command": "NUMBA_NUM_THREADS=4 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0448Z",
   "environment": {
     "NUMBA_NUM_THREADS": "4",
     "loguru_level": "WARNING",
@@ -135,11 +135,11 @@
     "internal_ensemble_weighting_is_the_root_cause": "unresolved: the run proves weighted_first_command/plan_step_first metadata but does not expose per-member headings or weights"
   },
   "artifacts": {
-    "local_report_dir": "output/benchmarks/issue_6923_brne_trace_20260812T0625Z",
-    "report_json_sha256": "37237bcd523c61bd2b21c0bceb13d59da623c41db01838b25510408525dd50ac",
+    "local_report_dir": "output/benchmarks/issue_6923_brne_trace_20260812T0448Z",
+    "report_json_sha256": "2d3955bf172dfd09b2fc925db42ad3627f23cf0d8b8a5a6ae913bc5ec07038f4",
     "report_markdown_sha256": "35021e6ddb0545c21e1e91dfe02c75520199c387ec76c4464c7ee5f2468c6191",
     "trace_tables_sha256": {
-      "brne": "51319bf96a41af1d17dc52778b97b131a8a8e6cc3704cf3ff374020c620ad426",
+      "brne": "f5e6c2405c1d0241c4d95c747e6108544bb09e5b010e70bee7d53af6275ae8b8",
       "orca": "9d50be795f72992174d6a13febc4b88a07dba815472bb810eefe9fa5741e1118",
       "social_force": "069b2828574b4dec0c28fd5d91f81cd3510bf3e04ee597caae4f0eb0675c4a94"
     },

@@ -109,14 +109,14 @@ Status: **diagnostic-only retention; no adapter revision, negative-result closur
 ranking, or paper claim**.
 
 The exact current-head run was executed from implementation head
-`ed9bd4dcc01d3af8d498cbba74f4bc5f62bea227` with the frozen config, seeds,
+`cb8382f23775ce2745a29dd2974b4e11d348f53d` with the frozen config, seeds,
 fallback policy, and pinned upstream source:
 
 ```bash
 NUMBA_NUM_THREADS=4 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 \
 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
   --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml \
-  --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0625Z
+  --output-dir output/benchmarks/issue_6923_brne_trace_20260812T0448Z
 ```
 
 The run returned `diagnostic_complete`: all three arms have exact `3/3`

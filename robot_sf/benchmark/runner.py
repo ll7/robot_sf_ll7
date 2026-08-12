@@ -80,6 +80,11 @@ from robot_sf.benchmark.manifest import load_manifest, save_manifest
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
+from robot_sf.benchmark.paired_effect_metric_contract import (
+    enforce_paired_effect_metric_rows,
+    load_json_rows,
+    load_paired_effect_metric_contract,
+)
 from robot_sf.benchmark.scenario_generator import generate_scenario
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 from robot_sf.benchmark.termination_reason import (
@@ -2885,6 +2890,25 @@ def _finalize_batch(
     }
 
 
+def _enforce_retained_metric_contract_output(
+    out_path: Path,
+    contract: Mapping[str, Any] | None,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """Fail closed unless every retained row satisfies the paired metric contract.
+
+    Returns:
+        Summary enriched with a successful validation report.
+    """
+    if contract is None:
+        return summary
+    rows = load_json_rows(out_path) if out_path.exists() else []
+    validation = enforce_paired_effect_metric_rows(rows, contract)
+    enriched = dict(summary)
+    enriched["retained_metric_contract"] = validation
+    return enriched
+
+
 def run_batch(  # noqa: PLR0913
     scenarios_or_path: list[dict[str, Any]] | str | Path,
     out_path: str | Path,
@@ -2927,6 +2951,10 @@ def run_batch(  # noqa: PLR0913
     # ``run_map_batch`` for map-based scenarios so the campaign can opt an arm into the
     # runtime wrapper step logic. ``None`` keeps the wrapper off (the runtime default).
     safety_wrapper: dict[str, Any] | None = None,
+    # Optional versioned retained-row contract for paired safety-wrapper outcomes (issue #6970).
+    # When set, the contract is loaded before setup and every written/resumed row is validated
+    # after execution; legacy callers without the reference retain their existing behavior.
+    retained_metric_contract_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -2937,6 +2965,11 @@ def run_batch(  # noqa: PLR0913
         Summary dictionary with episode counts, failures, and execution metadata.
     """
     circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
+    retained_metric_contract = (
+        load_paired_effect_metric_contract(retained_metric_contract_path)
+        if retained_metric_contract_path is not None
+        else None
+    )
 
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(
@@ -2961,7 +2994,7 @@ def run_batch(  # noqa: PLR0913
 
     # Map-based scenario detection: delegate to map runner
     if scenarios and any("map_file" in sc or "simulation_config" in sc for sc in scenarios):
-        return run_map_batch(
+        summary = run_map_batch(
             scenarios_or_path,
             out_path,
             schema_path,
@@ -2992,6 +3025,11 @@ def run_batch(  # noqa: PLR0913
             workers=workers,
             resume=resume,
             safety_wrapper=safety_wrapper,
+        )
+        return _enforce_retained_metric_contract_output(
+            out_path,
+            retained_metric_contract,
+            summary,
         )
 
     # Expand jobs
@@ -3068,4 +3106,8 @@ def run_batch(  # noqa: PLR0913
         summary["benchmark_track"] = benchmark_track
     if track_schema_version is not None:
         summary["track_schema_version"] = track_schema_version
-    return summary
+    return _enforce_retained_metric_contract_output(
+        out_path,
+        retained_metric_contract,
+        summary,
+    )

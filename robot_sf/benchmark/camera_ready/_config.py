@@ -44,6 +44,9 @@ from robot_sf.benchmark.latency_stress import (
     load_latency_stress_profile,
     validate_latency_stress_profile,
 )
+from robot_sf.benchmark.paired_effect_metric_contract import (
+    load_paired_effect_metric_contract,
+)
 from robot_sf.benchmark.synthetic_actuation import (
     SYNTHETIC_ACTUATION_CLAIM_SCOPE,
     SyntheticActuationProfile,
@@ -809,6 +812,15 @@ def _resolved_seed_inventory(scenarios: list[dict[str, Any]]) -> list[int]:
 
 def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR0912, PLR0915
     """Validate campaign-level invariants after config parsing."""
+    if (
+        cfg.retained_metric_contract_path is not None
+        and not cfg.retained_metric_contract_path.is_file()
+    ):
+        raise FileNotFoundError(
+            f"Retained paired-effect metric contract not found: {cfg.retained_metric_contract_path}"
+        )
+    if cfg.retained_metric_contract_path is not None:
+        load_paired_effect_metric_contract(cfg.retained_metric_contract_path)
     if cfg.scenario_horizons_path is not None and not cfg.scenario_horizons_path.is_file():
         raise FileNotFoundError(
             f"Scenario horizon schedule not found: {cfg.scenario_horizons_path}"
@@ -1124,12 +1136,20 @@ def _resolve_campaign_paths(
     payload: dict[str, Any],
     *,
     base_dir: Path,
-) -> tuple[Path | None, Path | None, Path | None, Path | None, Path | None]:
+) -> tuple[
+    Path | None,
+    Path | None,
+    Path | None,
+    Path | None,
+    Path | None,
+    Path | None,
+]:
     """Resolve optional campaign-level sidecar paths relative to the config directory.
 
     Returns:
         Tuple of ``(snqi_weights, snqi_baseline, scenario_horizons,
-        route_clearance_certifications, comparability_mapping)`` paths.
+        route_clearance_certifications, comparability_mapping,
+        retained_metric_contract)`` paths.
     """
     from robot_sf.benchmark.camera_ready._run_state import (  # noqa: PLC0415 - cycle break
         _resolve_path,
@@ -1149,6 +1169,10 @@ def _resolve_campaign_paths(
         payload.get("comparability_mapping"),
         base_dir=base_dir,
     )
+    retained_metric_contract_path = _resolve_path(
+        payload.get("retained_metric_contract"),
+        base_dir=base_dir,
+    )
     if comparability_mapping_path is None:
         default_mapping_path = (
             get_repository_root() / "configs/benchmarks/alyassi_comparability_map_v1.yaml"
@@ -1161,6 +1185,7 @@ def _resolve_campaign_paths(
         scenario_horizons,
         route_clearance_certifications_path,
         comparability_mapping_path,
+        retained_metric_contract_path,
     )
 
 
@@ -1386,6 +1411,7 @@ class _ParsedCampaignConfig:
     scenario_horizons_path: Path | None
     route_clearance_certifications_path: Path | None
     comparability_mapping_path: Path | None
+    retained_metric_contract_path: Path | None
     amv_raw: dict[str, Any]
     snqi_contract_raw: dict[str, Any]
     required_dimensions: dict[str, tuple[str, ...]]
@@ -1562,6 +1588,7 @@ def _assemble_campaign_config(
         latency_stress_profile=load_latency_stress_profile(payload.get("latency_stress_profile")),
         comparability_mapping_path=parsed.comparability_mapping_path,
         route_clearance_certifications_path=parsed.route_clearance_certifications_path,
+        retained_metric_contract_path=parsed.retained_metric_contract_path,
         snqi_contract=_build_snqi_contract_config(parsed.snqi_contract_raw),
         observation_noise=_resolve_campaign_observation_noise(payload, base_dir=config_path.parent),
         tuning_effort_enforcement=(
@@ -1602,6 +1629,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         scenario_horizons_path,
         route_clearance_certifications_path,
         comparability_mapping_path,
+        retained_metric_contract_path,
     ) = _resolve_campaign_paths(payload, base_dir=base_dir)
     amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
     snqi_contract_raw = (
@@ -1633,6 +1661,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         scenario_horizons_path=scenario_horizons_path,
         route_clearance_certifications_path=route_clearance_certifications_path,
         comparability_mapping_path=comparability_mapping_path,
+        retained_metric_contract_path=retained_metric_contract_path,
         amv_raw=amv_raw,
         snqi_contract_raw=snqi_contract_raw,
         required_dimensions=required_dimensions,

@@ -419,6 +419,11 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
             if cfg.comparability_mapping_path is not None
             else None
         ),
+        "retained_metric_contract_path": (
+            _repo_relative(cfg.retained_metric_contract_path)
+            if cfg.retained_metric_contract_path is not None
+            else None
+        ),
         "snqi_contract": {
             "enabled": bool(cfg.snqi_contract.enabled),
             "enforcement": cfg.snqi_contract.enforcement,
@@ -1137,6 +1142,11 @@ def _build_manifest_contract_block(
         ),
         "snqi_baseline_path": (
             _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
+        ),
+        "retained_metric_contract_path": (
+            _repo_relative(cfg.retained_metric_contract_path)
+            if cfg.retained_metric_contract_path is not None
+            else None
         ),
         "snqi_contract_enabled": bool(cfg.snqi_contract.enabled),
         "snqi_contract_enforcement": cfg.snqi_contract.enforcement,

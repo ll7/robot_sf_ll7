@@ -74,6 +74,8 @@ class _SubprocessArmParams:
     # effective mapping here; the worker forwards it verbatim to ``run_batch``.
     # ``None`` keeps the wrapper off (the runtime default).
     safety_wrapper: dict[str, Any] | None = None
+    # Versioned retained-row contract forwarded to the worker for post-run validation (issue #6970).
+    retained_metric_contract_path: Path | None = None
 
 
 # Path-typed fields on _SubprocessArmParams. dataclasses.asdict() returns these as
@@ -89,6 +91,7 @@ _SUBPROCESS_ARM_PATH_FIELDS: tuple[str, ...] = (
     "summary_path",
     "algo_config_path",
     "scoped_scenarios_path",
+    "retained_metric_contract_path",
 )
 
 
@@ -264,6 +267,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             workers=params.workers,
             resume=params.resume,
             safety_wrapper=params.safety_wrapper,
+            retained_metric_contract_path=params.retained_metric_contract_path,
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":

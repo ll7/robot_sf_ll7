@@ -36,6 +36,11 @@ Issue #6875 camera-ready campaign producer for the diagnostic-only
 fail-closed serialized execution-monitor handling, and final-summary propagation:
 [issue_6875_report_crosswalk_producer.md](issue_6875_report_crosswalk_producer.md).
 
+Issue #6970 paired-effect retained-row contract: versioned #4598 outcome fields,
+config/preflight provenance, fail-closed producer validation, and a config-exposure audit for the
+#13775 non-identifiability boundary; no campaign or result claim:
+[issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md).
+
 Issue #6561 pedestrian desired-speed protocol: current protocol-only six-scenario,
 four-planner, three-regime design with exact 2,160-cell manifest, activation/transient
 gate, #6102 ordering gate, and turnaround ledger; no registered rows or production claim:

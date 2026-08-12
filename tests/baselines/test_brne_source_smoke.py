@@ -182,6 +182,12 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
     8-agent case) is measured by scripts/tools/probe_brne_source_harness.py and
     recorded in the contract-mapping note, not asserted here.
     """
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        pytest.skip(
+            "wall-clock BRNE budget guard runs in the isolated source-smoke lane; "
+            "xdist scheduler contention is not runtime evidence"
+        )
+
     import time
 
     import numpy as np
@@ -213,24 +219,12 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
     brne.brne_nav(
         xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
     )
-    wall_t0 = time.perf_counter()
-    cpu_t0 = time.process_time()
+    t0 = time.perf_counter()
     w = brne.brne_nav(
         xtraj, ytraj, num_agents, plan_steps, num_samples, 4.0, 1.0, 80.0, 0.1, -0.65, 0.65
     )
-    elapsed_wall_ms = (time.perf_counter() - wall_t0) * 1000.0
-    elapsed_cpu_ms = (time.process_time() - cpu_t0) * 1000.0
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     assert w is not None
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        # xdist workers can be descheduled for hundreds of milliseconds while other
-        # repository tests compile native extensions. Process CPU time preserves the
-        # source-core compute guard without counting that scheduler contention.
-        assert elapsed_cpu_ms < 100.0, (
-            f"4-agent BRNE solve consumed {elapsed_cpu_ms:.1f} ms CPU (expected < 100 ms)"
-        )
-    else:
-        # The isolated smoke keeps the wall-clock guard used by the real-time control
-        # contract. The canonical source harness records the same wall-clock metric.
-        assert elapsed_wall_ms < 100.0, (
-            f"4-agent BRNE solve took {elapsed_wall_ms:.1f} ms (expected < 100 ms)"
-        )
+    # The isolated smoke keeps the wall-clock guard used by the real-time control
+    # contract. The canonical source harness records the same wall-clock metric.
+    assert elapsed_ms < 100.0, f"4-agent BRNE solve took {elapsed_ms:.1f} ms (expected < 100 ms)"

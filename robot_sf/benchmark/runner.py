@@ -64,7 +64,6 @@ from robot_sf.benchmark.analysis_trace import (
     build_analysis_trace,
     normalize_telemetry_profile,
     telemetry_from_scenario,
-    trace_artifact_sha256,
     trace_coverage,
 )
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
@@ -2334,13 +2333,18 @@ def run_episode(  # noqa: PLR0913
                     if key not in {"seed", "repeats"}
                 }
             ),
-            git_hash=_git_hash_fallback(),
+            # The episode record already resolved the repository commit. Reuse
+            # that value instead of launching a second git subprocess for the
+            # opt-in trace path.
+            git_hash=record.get("git_hash"),
             termination_reason=termination_reason,
             safety_events=[],
         )
         record["algorithm_metadata"]["analysis_trace"] = trace
         record["algorithm_metadata"]["telemetry"] = telemetry_profile.to_mapping()
-        record.setdefault("provenance", {})["artifact_sha256"] = trace_artifact_sha256(trace)
+        # ``build_analysis_trace`` has already computed the canonical digest;
+        # copying it avoids a second full serialization of every trace.
+        record.setdefault("provenance", {})["artifact_sha256"] = trace["artifact_sha256"]
         coverage = trace_coverage(record)
         record["algorithm_metadata"]["analysis_trace_coverage"] = coverage
         if coverage.get("status") != "complete":

@@ -145,6 +145,44 @@ def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) 
     assert record["algorithm_metadata"]["analysis_trace_unavailable"]["status"] == "unavailable"
 
 
+def test_run_episode_analysis_trace_reuses_episode_commit_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The opt-in trace reuses the episode commit and canonical trace digest."""
+
+    scenario = {
+        "id": "smoke-trace-commit-reuse",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    git_calls: list[None] = []
+    monkeypatch.setattr(
+        runner_mod,
+        "_git_hash_fallback",
+        lambda: git_calls.append(None) or "a" * 40,
+    )
+
+    record = run_episode(
+        scenario,
+        seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+    )
+    trace = record["algorithm_metadata"]["analysis_trace"]
+
+    assert git_calls == [None]
+    assert trace["git_hash"] == record["git_hash"] == "a" * 40
+    assert record["provenance"]["artifact_sha256"] == trace["artifact_sha256"]
+
+
 def test_runner_goal_alias_executes_like_simple_policy(tmp_path: Path):
     """The ``goal`` alias resolves to the built-in simple goal-seeking policy.
 

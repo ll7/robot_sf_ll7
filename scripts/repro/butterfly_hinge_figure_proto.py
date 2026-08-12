@@ -111,7 +111,7 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 )
 from robot_sf.benchmark import figure_qa
 from robot_sf.benchmark import trace_scene_figure as tsf
-from robot_sf.benchmark.collision_definition_inventory import DEFAULT_PED_RADIUS
+from robot_sf.benchmark.collision.collision_definition_inventory import DEFAULT_PED_RADIUS
 from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.critical_intervals import (
     extract_critical_intervals,

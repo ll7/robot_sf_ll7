@@ -51,7 +51,7 @@ from robot_sf.benchmark.canonical_table_export import (
 )
 from robot_sf.benchmark.canonical_table_export import load_rows_json as _load_canonical_rows_json
 from robot_sf.benchmark.case_workbench import admit_package, analyze_cases
-from robot_sf.benchmark.collision_scenario_similarity import (
+from robot_sf.benchmark.collision.collision_scenario_similarity import (
     build_collision_scenario_similarity_report,
     write_collision_scenario_similarity_report,
 )

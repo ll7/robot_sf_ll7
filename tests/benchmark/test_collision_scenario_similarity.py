@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.cli import cli_main
-from robot_sf.benchmark.collision_scenario_similarity import (
+from robot_sf.benchmark.collision.collision_scenario_similarity import (
     SCHEMA_VERSION,
     build_collision_scenario_similarity_report,
     describe_collision_scenarios,

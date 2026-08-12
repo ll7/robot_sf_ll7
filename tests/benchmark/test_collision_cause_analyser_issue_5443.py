@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 from jsonschema import ValidationError as JsonSchemaValidationError
 
-from robot_sf.benchmark.collision_cause_analyser import (
+from robot_sf.benchmark.collision.collision_cause_analyser import (
     ABSTAIN_CONFIDENCE,
     HIGH_CONFIDENCE,
     analyse_cause,
@@ -32,7 +32,7 @@ from robot_sf.benchmark.collision_cause_analyser import (
     analyser_config,
     scenario_collides,
 )
-from robot_sf.benchmark.collision_cause_attribution import (
+from robot_sf.benchmark.collision.collision_cause_attribution import (
     CAUSE_INTERACTING_AMBIGUOUS,
     CAUSE_NONE,
     DEFAULT_HIGH_CONFIDENCE_THRESHOLD,
@@ -90,7 +90,7 @@ def test_causal_attribution_fixtures_carry_no_ground_truth_label() -> None:
 @pytest.mark.parametrize("fixture", build_collision_cause_fixtures(), ids=lambda f: f.fixture_id)
 def test_causal_attribution_fixture_replay_is_deterministic(fixture: CollisionCauseFixture) -> None:
     """Every fixture's last-avoidable replay is deterministic (criterion: replay determinism)."""
-    from robot_sf.benchmark.collision_cause_analyser import run_replay
+    from robot_sf.benchmark.collision.collision_cause_analyser import run_replay
 
     report, _ = run_replay(fixture)
     assert report.determinism.deterministic is True
@@ -253,7 +253,7 @@ def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
     assert fixture.replay_config is not None
     assert fixture.replay_config.t_danger == 0
 
-    from robot_sf.benchmark.collision_cause_analyser import run_replay
+    from robot_sf.benchmark.collision.collision_cause_analyser import run_replay
 
     replay, _ = run_replay(fixture)
     assert replay.verdict == VERDICT_AVOIDABLE
@@ -316,7 +316,7 @@ def test_causal_attribution_answer_key_permutation_does_not_change_predictions()
 def test_causal_attribution_negative_control_replay_verdicts() -> None:
     """Negative controls replay as unavoidable without being promoted to causes."""
     unavoidable_replay_ids = {"negative_control_jitter_01", "negative_control_guard_flap_01"}
-    from robot_sf.benchmark.collision_cause_analyser import run_replay
+    from robot_sf.benchmark.collision.collision_cause_analyser import run_replay
 
     for fixture in build_collision_cause_fixtures():
         if fixture.fixture_id not in unavoidable_replay_ids:

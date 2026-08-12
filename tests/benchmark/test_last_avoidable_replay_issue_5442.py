@@ -234,7 +234,7 @@ def test_runner_smoke(tmp_path) -> None:
 
 def test_runner_smoke_joins_causal_report(tmp_path) -> None:
     """With --join-causal-report the CLI also emits a valid collision_causal_report.v1."""
-    from robot_sf.benchmark.collision_causal_report import (
+    from robot_sf.benchmark.collision.collision_causal_report import (
         COLLISION_CAUSAL_REPORT_SCHEMA_VERSION,
         validate_collision_causal_report,
     )

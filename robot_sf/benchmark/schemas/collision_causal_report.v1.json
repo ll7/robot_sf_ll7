@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "collision_causal_report.v1.json",
   "title": "Collision Causal Report (v1)",
-  "description": "Model-scoped, fail-closed contract that reconstructs a single collision, records the implemented causal dataflow, marks unsupported evidence as unavailable rather than inferred, and separates observed facts, proximate mechanism, and intervention-supported causal contribution. It never assigns legal or moral fault (normative_fault is always not_assessed). Enum vocabularies for mechanism_label and confidence.level are the single source of truth in robot_sf/benchmark/failure_mechanism_taxonomy.py; cross-field fail-closed rules live in robot_sf/benchmark/collision_causal_report.py.",
+  "description": "Model-scoped, fail-closed contract that reconstructs a single collision, records the implemented causal dataflow, marks unsupported evidence as unavailable rather than inferred, and separates observed facts, proximate mechanism, and intervention-supported causal contribution. It never assigns legal or moral fault (normative_fault is always not_assessed). Enum vocabularies for mechanism_label and confidence.level are the single source of truth in robot_sf/benchmark/failure_mechanism_taxonomy.py; cross-field fail-closed rules live in robot_sf/benchmark/collision/collision_causal_report.py.",
   "type": "object",
   "additionalProperties": false,
   "required": [

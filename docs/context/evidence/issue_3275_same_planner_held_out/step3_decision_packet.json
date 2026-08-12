@@ -1,0 +1,637 @@
+{
+  "authoritative_decision_function": {
+    "independent_outcome_evaluation": {
+      "decision": {
+        "claim_boundary": "issue #3275/#2921 decision from independent planner-execution rows only; not benchmark, paper, or planner-performance evidence",
+        "evidence_tier": "diagnostic_only",
+        "follows": "independent_planner_execution_outcomes",
+        "reason": "independent_outcomes_unavailable_or_fail_closed",
+        "status": "inconclusive",
+        "vocabulary": [
+          "continue",
+          "stop",
+          "inconclusive"
+        ]
+      },
+      "independent_outcomes_available": false,
+      "status": "not_available"
+    },
+    "issue_2921_stop_rule": {
+      "claim_boundary": "no continue/stop decision without independent planner-execution outcomes",
+      "evidence_tier": "analysis_only",
+      "reason": "independent_outcomes_unavailable_or_fail_closed:no_independent_outcome_payload",
+      "status": "inconclusive",
+      "vocabulary": [
+        "continue",
+        "stop",
+        "inconclusive"
+      ]
+    },
+    "runner_command": "uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py --contract configs/adversarial/issue_3275_same_planner_contract.json --expected-candidate-manifest-hashes docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json --evaluation-outcomes docs/context/evidence/issue_3275_same_planner_held_out/independent_outcomes.json",
+    "runner_exit_code": 0,
+    "runner_state": "blocked",
+    "runner_state_note": "blocked only because independent_outcomes.json is intentionally absent (no native outcomes fabricated); the binding-matched run without the outcomes path is state=active (see frozen_input_verification.candidate_pool_reproduction_evidence)"
+  },
+  "candidate_manifest_lineage": {
+    "candidates": [
+      {
+        "candidate_manifest_id": "pool_39",
+        "candidate_manifest_sha256": "1b53c8b7a27f5f3630aac96be33d82675370f0b84cfaa7a2e343ee75554e7a80",
+        "candidate_pool_index": 39,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100195,
+          8100196,
+          8100197,
+          8100198,
+          8100199
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "e291a1b8e2a28dea8b2fdce813e74f1626d6e5022d9a38ef4d9176ed4d45f268",
+        "scenario_seed": 658,
+        "selection_arm": "proposal",
+        "selection_rank": 1,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_44",
+        "candidate_manifest_sha256": "398dd81e1711b55bde9556680c8a04f2a649fd0cc79fb656631ac395398153f2",
+        "candidate_pool_index": 44,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100220,
+          8100221,
+          8100222,
+          8100223,
+          8100224
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "836d42db9d0964489b90125a461ce05b7f12c61e5efb5a9266326990b90d7300",
+        "scenario_seed": 940,
+        "selection_arm": "proposal",
+        "selection_rank": 2,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_57",
+        "candidate_manifest_sha256": "6a100b1b1df841246c28daf791de799116739ec0e0cc93b220b0bfd64e911849",
+        "candidate_pool_index": 57,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100285,
+          8100286,
+          8100287,
+          8100288,
+          8100289
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "50c63c7795702cd1a5fa2825b98fbe8f2fbdd085867cb8e8d1f8c66ac9a7ec35",
+        "scenario_seed": 224,
+        "selection_arm": "proposal",
+        "selection_rank": 3,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_16",
+        "candidate_manifest_sha256": "4865f35adf736ef1cc2990aea01d841e8d536bc5b0ad3435632f9eb24845f350",
+        "candidate_pool_index": 16,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100080,
+          8100081,
+          8100082,
+          8100083,
+          8100084
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "c919eb64f959fb22aee960ec39159b479f79a1a64a8c33810fb1a063e010f2d2",
+        "scenario_seed": 471,
+        "selection_arm": "proposal",
+        "selection_rank": 4,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_5",
+        "candidate_manifest_sha256": "0ea974bc05a5e42605ed017909ab00675b9e43273cc033d8b39350f2471f5391",
+        "candidate_pool_index": 5,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100025,
+          8100026,
+          8100027,
+          8100028,
+          8100029
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "ab66cacdac364b8d28c7a9f575d4557dfa9f4bde1005799cdcc3c9f5c455deef",
+        "scenario_seed": 975,
+        "selection_arm": "proposal",
+        "selection_rank": 5,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_56",
+        "candidate_manifest_sha256": "2f8bb7cb0cae8f430c5a9a646e651493e7b62ac900564fdf5bcc97a11e25e4c9",
+        "candidate_pool_index": 56,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100280,
+          8100281,
+          8100282,
+          8100283,
+          8100284
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "ce6227d51b8ab90a33b85303709ba2ea89e97f996859a13cf1a1975805ab134a",
+        "scenario_seed": 209,
+        "selection_arm": "proposal",
+        "selection_rank": 6,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_34",
+        "candidate_manifest_sha256": "b57472f11962edf77fea84d1626c617afcc8d2bcfdf8f259a700edc46d4ebc19",
+        "candidate_pool_index": 34,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100170,
+          8100171,
+          8100172,
+          8100173,
+          8100174
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "dc0a275107e3452af1855ceaaca28ed32831255bfc6895fd26b067b53dded5dd",
+        "scenario_seed": 548,
+        "selection_arm": "proposal",
+        "selection_rank": 7,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_20",
+        "candidate_manifest_sha256": "54e43976e05e1b64232d47002814d2a871b7a48a6fa802d89eae2835fe18bddb",
+        "candidate_pool_index": 20,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100100,
+          8100101,
+          8100102,
+          8100103,
+          8100104
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "833f226fad7ba8e7147799dcf9dc40ca42f6164e559dd045a5929bea0da2d8bc",
+        "scenario_seed": 335,
+        "selection_arm": "proposal",
+        "selection_rank": 8,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_45",
+        "candidate_manifest_sha256": "1c7e9bec134e523856062eb8f4d7370c0465cbf9a82d5f1e77a3889b2fdb2472",
+        "candidate_pool_index": 45,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100225,
+          8100226,
+          8100227,
+          8100228,
+          8100229
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "19d554461fcdfb4b667fd0feb9947c02e880b37143f2c23c308c846bab5f06ee",
+        "scenario_seed": 385,
+        "selection_arm": "proposal",
+        "selection_rank": 9,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_1",
+        "candidate_manifest_sha256": "e6b16e69e4746a1e124bb87a976fe310aa4693329bc7e72a2dda4481d4167967",
+        "candidate_pool_index": 1,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100005,
+          8100006,
+          8100007,
+          8100008,
+          8100009
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "8c4e04dbb7864006fb994336f952b9314b2a03ddd675dc0dd729de5c3e987ae7",
+        "scenario_seed": 818,
+        "selection_arm": "proposal",
+        "selection_rank": 10,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_2",
+        "candidate_manifest_sha256": "f628bdd9a3dd1a6b5ebe413cd4ec7c1ea56cdec0d9bc9aa67fbcbb1906519429",
+        "candidate_pool_index": 2,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100010,
+          8100011,
+          8100012,
+          8100013,
+          8100014
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "b057135b1f300fbe1917926e66fa061a9ebaf2415a4edae44ca4005f99bee78d",
+        "scenario_seed": 448,
+        "selection_arm": "proposal",
+        "selection_rank": 11,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_48",
+        "candidate_manifest_sha256": "dad402344a4e9b30568f671a67f0ebf0c373ddba1c0311ccb812ff95af4a0a93",
+        "candidate_pool_index": 48,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100240,
+          8100241,
+          8100242,
+          8100243,
+          8100244
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "19104648390432d5ffc678af0cf91030f963784df5c38a6408e994084f86e32e",
+        "scenario_seed": 925,
+        "selection_arm": "proposal",
+        "selection_rank": 12,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_12",
+        "candidate_manifest_sha256": "d02b3688f1ff261c17ee896ecd0fb2e18c619fef75430cd49df4a17092ad075d",
+        "candidate_pool_index": 12,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100060,
+          8100061,
+          8100062,
+          8100063,
+          8100064
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "0b1a8d4b4021ad6da39ba6031aeac8f0a6694c355343db8fa8a93cabfb13a46b",
+        "scenario_seed": 641,
+        "selection_arm": "random",
+        "selection_rank": 1,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_28",
+        "candidate_manifest_sha256": "96272cf39cf59d69219bd8ebaa4dc13082c90a9848f346f9b40ab6c98c8f2a30",
+        "candidate_pool_index": 28,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100140,
+          8100141,
+          8100142,
+          8100143,
+          8100144
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "5d46dd739d2a560df63d004c6a53d23db0e57341181469e45b4f3154d87b9622",
+        "scenario_seed": 294,
+        "selection_arm": "random",
+        "selection_rank": 2,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_30",
+        "candidate_manifest_sha256": "ba81f2bb0cbe9d5a27d4809988a5ca54fad83b3a1564cb01691d0de62559164e",
+        "candidate_pool_index": 30,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100150,
+          8100151,
+          8100152,
+          8100153,
+          8100154
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "a3cd277fe23f1606ac6f52e51255fee9503ddd771c6a58f7ca3df86f6a0a75f2",
+        "scenario_seed": 982,
+        "selection_arm": "random",
+        "selection_rank": 3,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_6",
+        "candidate_manifest_sha256": "05fe4c4ca3cfa98c7beae12853cda94f052a9d968ac6eeb5ebb059d73d1d0385",
+        "candidate_pool_index": 6,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100030,
+          8100031,
+          8100032,
+          8100033,
+          8100034
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "09c972da6384cda9f158f99de5684d3019f57b4db0970e63c9fb93f4bf3e479a",
+        "scenario_seed": 373,
+        "selection_arm": "random",
+        "selection_rank": 4,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_26",
+        "candidate_manifest_sha256": "c61be5a0255698a8285117468895de74291304f42e12e97ee4fd8e6e48b35e1d",
+        "candidate_pool_index": 26,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100130,
+          8100131,
+          8100132,
+          8100133,
+          8100134
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "fb5a627825f6d60f54421dd3bb19cadcaf6db0e57eab4c09fc57f461299f571e",
+        "scenario_seed": 270,
+        "selection_arm": "random",
+        "selection_rank": 5,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_47",
+        "candidate_manifest_sha256": "da5384b5c9e6e6b09d643fd9dabbc4695c9addbdb3b04054bced64b118a6b702",
+        "candidate_pool_index": 47,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100235,
+          8100236,
+          8100237,
+          8100238,
+          8100239
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "de5374d864eee1ec03f611057ac411657d6f0cceb1313d6092ba64b44d98a281",
+        "scenario_seed": 720,
+        "selection_arm": "random",
+        "selection_rank": 6,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_21",
+        "candidate_manifest_sha256": "d1aaca1b401a9a8b8d68ef9e88ed7251ca22028977de5b0ff514755ea3bb58ac",
+        "candidate_pool_index": 21,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100105,
+          8100106,
+          8100107,
+          8100108,
+          8100109
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "58cf962658f48963bd31fbb65f5c672bc69995d949980148a3cb09aaab1a9406",
+        "scenario_seed": 626,
+        "selection_arm": "random",
+        "selection_rank": 7,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_49",
+        "candidate_manifest_sha256": "00f4d0767aeaa4deb64f949b7327bc6a3df54899bc3aeb7a1805eb05d0d83df1",
+        "candidate_pool_index": 49,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100245,
+          8100246,
+          8100247,
+          8100248,
+          8100249
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "1c28f4d1d83e058e3f3884f4635bc0f57fd1198baba93da5fcbf53d1c2a7f13b",
+        "scenario_seed": 438,
+        "selection_arm": "random",
+        "selection_rank": 8,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_24",
+        "candidate_manifest_sha256": "b075abee56e2e54e007b5edaf95d68bc687c5af0cd4186677f546f968b0884c8",
+        "candidate_pool_index": 24,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100120,
+          8100121,
+          8100122,
+          8100123,
+          8100124
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "5d41373dc7291507da68e3d41e44bf28d6009a8e2e9157a443ea41db00f1b0a9",
+        "scenario_seed": 294,
+        "selection_arm": "random",
+        "selection_rank": 9,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_14",
+        "candidate_manifest_sha256": "ae9c8abec9792c6ab7e67281b84940f97cf981f0cdbc06e2dfc180808cce6ae0",
+        "candidate_pool_index": 14,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100070,
+          8100071,
+          8100072,
+          8100073,
+          8100074
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "a56b681f68f760a8ac7415db960472c49eced3bfd56208c973582b2a857fb91a",
+        "scenario_seed": 612,
+        "selection_arm": "random",
+        "selection_rank": 10,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_58",
+        "candidate_manifest_sha256": "4dae94d75f09c9be2f87a2a5cdc4586c664b0397a11cc06fed6d51091052a12d",
+        "candidate_pool_index": 58,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100290,
+          8100291,
+          8100292,
+          8100293,
+          8100294
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "a4c4102637888b147d92d2aa23de617fa7c0e44ba01e318cfe6304e3dcdc700d",
+        "scenario_seed": 727,
+        "selection_arm": "random",
+        "selection_rank": 11,
+        "target_planner_id": "social_force"
+      },
+      {
+        "candidate_manifest_id": "pool_29",
+        "candidate_manifest_sha256": "6b64a1ba631e90856187f60f5e42f971ddd7eb2397fa8348ff3814c0555e3886",
+        "candidate_pool_index": 29,
+        "candidate_pool_seed": 42,
+        "execution_seeds": [
+          8100145,
+          8100146,
+          8100147,
+          8100148,
+          8100149
+        ],
+        "native_outcome_reason": "no producer harness emits adversarial_independent_outcomes.v2 rows from native social_force execution in this repository; execution orchestrator location is outside the lease immutable allowed_paths",
+        "native_outcome_status": "not_produced",
+        "record_sha256": "957aa840d4247613123c03e5ec92363478a0045786329f0c3e86682ba666269f",
+        "scenario_seed": 614,
+        "selection_arm": "random",
+        "selection_rank": 12,
+        "target_planner_id": "social_force"
+      }
+    ],
+    "count": 24,
+    "description": "Frozen candidate-to-manifest lineage for all 24 selected candidates from the step-2 v2 binding. Native outcome fields are intentionally absent (not_produced); no outcome value was fabricated, inspected, or substituted.",
+    "proposal_arm_count": 12,
+    "random_arm_count": 12
+  },
+  "claim_boundary": "inconclusive only. This is not benchmark evidence, calibrated failure probability, cross-planner transfer, planner-performance evidence, or paper/dissertation evidence. Archive-nearness remains diagnostic only and was not substituted for the outcome endpoint.",
+  "decision": "inconclusive",
+  "decision_predicates": {
+    "alpha_two_sided": 0.05,
+    "binding_k_per_arm": 12,
+    "confirmation_threshold": "3_of_5",
+    "independent_outcomes_available": false,
+    "min_detectable_yield_difference_at_binding_k": 0.416667,
+    "minimally_important_absolute_yield_improvement": 0.2,
+    "null_rejected": null,
+    "powered": false,
+    "proposal_failure_yield": null,
+    "random_failure_yield": null
+  },
+  "decision_reasons": [
+    "fail_closed_independent_outcomes_unavailable: no producer harness exists in the repository for adversarial_independent_outcomes.v2; the runner only consumes the packet. Producing native rows requires an execution orchestrator whose committed location is outside the lease allowed_paths (robot_sf and scripts/adversarial are forbidden). compute_submit was not authorized for this lease. Per the frozen outcome contract fail_closed_conditions and decision_rule, unavailable native outcomes yield inconclusive.",
+    "underpowered_for_minimally_important_effect: at the frozen budget of 12 candidates per arm the two-sided Fisher-exact boundary minimum detectable yield difference is 0.416667, above the 0.20 minimally important absolute yield improvement, so powered=false and the decision is inconclusive regardless of any native outcome sign or count."
+  ],
+  "decision_vocabulary": [
+    "continue",
+    "stop",
+    "inconclusive"
+  ],
+  "evidence_boundary": "Public-safe: only repository-relative paths, content-addressed SHA-256 digests, frozen decision predicates, and the runner decision function output are recorded. No host names, credentials, scheduler internals, or sensitive artifact locations.",
+  "exclusions_verified": {
+    "archived_target_planner": "goal",
+    "count": 5,
+    "entry_ids": [
+      "issue5305_classic_cross_trap_medium_34f8c43d3260",
+      "issue5305_classic_cross_trap_medium_7910406dad49",
+      "issue5305_classic_cross_trap_medium_e7cebb2b0b06",
+      "issue5305_classic_cross_trap_medium_fbbd96687d61",
+      "issue5305_classic_cross_trap_medium_fe24f0ff86a1"
+    ],
+    "rule": "the five classic_cross_trap_medium / goal archive records are excluded from fit, candidate selection, threshold setting, and result interpretation",
+    "scenario_family": "classic_cross_trap_medium"
+  },
+  "frozen_input_verification": {
+    "candidate_pool_reproduces_frozen_arms": true,
+    "candidate_pool_reproduction_evidence": {
+      "arm_overlap_ids": [],
+      "arm_overlap_policy": "disjoint_by_candidate",
+      "external_binding_available": true,
+      "external_binding_reason": "ok",
+      "proposal_ids_head": [
+        "pool_39",
+        "pool_44",
+        "pool_57"
+      ],
+      "random_ids_head": [
+        "pool_12",
+        "pool_28",
+        "pool_30"
+      ],
+      "runner_state": "active"
+    },
+    "check_contract_ok": true,
+    "contract_path": "configs/adversarial/issue_3275_same_planner_contract.json",
+    "contract_sha256_expected": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
+    "contract_sha256_matches": true,
+    "contract_sha256_observed": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
+    "frozen_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "frozen_execution_commit_is_ancestor_of_head": true,
+    "head_commit": "92f69aa5bfb8a45aaf4d3dbd3029be4af7684992",
+    "pre_correction_archive_sha256_expected": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+    "pre_correction_archive_sha256_observed": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+    "recertification_artifact_sha256_expected": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
+    "recertification_artifact_sha256_observed": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
+    "search_space_sha256_expected": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+    "search_space_sha256_observed": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+    "verify_preflight_pass": true
+  },
+  "issue": 6105,
+  "lineage": {
+    "archive_registration_pr": 5905,
+    "certified_archive_issue": 5305,
+    "code_head_commit": "92f69aa5bfb8a45aaf4d3dbd3029be4af7684992",
+    "contract_issue": 6103,
+    "environment": {
+      "evidence_directory": "docs/context/evidence/issue_3275_same_planner_held_out",
+      "platform": "linux x86_64",
+      "python": "3.13.14"
+    },
+    "frozen_contract_path": "configs/adversarial/issue_3275_same_planner_contract.json",
+    "frozen_contract_sha256": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8",
+    "frozen_target_planner_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "preflight_issue": 6104,
+    "step3_run_plan_path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
+    "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+    "target_planner_id": "social_force",
+    "v2_binding_path": "docs/context/evidence/issue_3275_same_planner_held_out/candidate_manifest_bindings.v2.json",
+    "v2_binding_sha256": "99dd5eda8d2b5d2540ee9a9ea9d08ebfe4e1a9caa10fd77dbfdde74e8c63c1d9"
+  },
+  "native_outcome_production_status": {
+    "compute_submit_authorized": false,
+    "executed_native_rows": 0,
+    "fail_closed_rule": "frozen outcome_contract.fail_closed_conditions + decision_rule: unavailable/mismatched/fallback/degraded/lineage-incomplete native outcomes => inconclusive",
+    "orchestrator_location_blocked": "lease immutable allowed_paths = [docs/context/evidence/issue_3275_same_planner_held_out, docs/context/INDEX.md, scripts/validation/evidence_registry_baseline.json]; no code location is allowed, and robot_sf + scripts/adversarial are forbidden.",
+    "planned_executions_note": "24 selected candidates x (1 deterministic replay + 5 independent confirmation seeds) = 144 native social_force executions predeclared by the step-3 run plan",
+    "planned_executions_total": 144,
+    "producer_harness_finding": "grep over robot_sf/ and scripts/ shows adversarial_independent_outcomes.v2 is referenced only by the consumer module (robot_sf/adversarial/independent_outcomes.py), the preflight module (robot_sf/adversarial/held_out_preflight.py), and the runner (scripts/adversarial/run_proposal_vs_random_issue_2921.py). No code emits v2 outcome rows from native planner execution.",
+    "producer_harness_in_repo": false,
+    "status": "not_produced"
+  },
+  "parent_issue": 3275,
+  "plain_language_summary": "Step 3 of the #3275 same-planner held-out campaign. The frozen decision is INCONCLUSIVE. Native social_force outcome rows could not be produced because no code in this repository emits the adversarial_independent_outcomes.v2 packet from native planner execution (the step-3 runner only consumes such a packet), and the lease immutable contract permits no committed location for an execution orchestrator. Under the frozen fail-closed rule, unavailable native outcomes yield inconclusive. This is independently guaranteed by the frozen predeclared underpowering: at 12 candidates per arm the Fisher-exact boundary minimum detectable yield difference is ~0.417, above the 0.20 minimally important effect, so the design can never support continue or stop on this budget.",
+  "residual_risks": [
+    "Native social_force outcomes were not produced; the frozen fail-closed rule (not the executed-outcome path) drives the inconclusive decision.",
+    "Producing native outcome rows requires an execution harness that is outside this lease's immutable allowed_paths; until such a harness exists and is run, the executed-row acceptance criteria of issue #6105 remain unmet.",
+    "Even with a future executed-outcome packet, the frozen k=12 budget is underpowered for the 0.20 minimally important effect, so the decision would remain inconclusive unless the budget is changed through a new contract (out of scope here)."
+  ],
+  "schema_version": "issue_3275_step3_decision.v1",
+  "step": "3_of_3",
+  "thesis_issue": 2921
+}

@@ -84,3 +84,6 @@ a persistent hard stop, obstacle-only freeze, counter reset, and config validati
 - Safety-event ledger (ablation emit target): #3482.
 - Trace-level predicates (deadlock/oscillation/occlusion signals): #3483.
 - MOTP speed-cap contract (a related wrapper component): #3480.
+- Metric-capable paired-campaign preregistration (proposal only, no submission):
+  [issue_6971_safety_wrapper_paired_preregistration.md](issue_6971_safety_wrapper_paired_preregistration.md)
+  and [`issue_6971_safety_wrapper_paired_preregistration.yaml`](../../configs/benchmarks/issue_6971_safety_wrapper_paired_preregistration.yaml).

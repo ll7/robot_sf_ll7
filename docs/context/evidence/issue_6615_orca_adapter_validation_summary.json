@@ -1,0 +1,46 @@
+{
+  "schema_version": "issue-6615-orca-adapter-validation-summary.v1",
+  "issue": 6615,
+  "status": "diagnostic_complete",
+  "evidence_tier": "smoke_diagnostic",
+  "implementation": {
+    "commit": "b93d48b37377342582cb589c82af0ddf12bd0f1c",
+    "source_paths": [
+      "robot_sf/planner/socnav_base.py",
+      "robot_sf/planner/socnav_orca.py",
+      "scripts/benchmark/run_orca_adapter_validation_issue_6615.py",
+      "tests/test_socnav_planner_adapter.py"
+    ],
+    "config_flag": "SocNavPlannerConfig.orca_adapter_trace_enabled",
+    "default_enabled": false,
+    "trace_schema_version": "orca_adapter_trace.v1"
+  },
+  "validation": {
+    "focused_tests": "uv run pytest -q tests/test_socnav_planner_adapter.py",
+    "focused_test_result": "69 passed",
+    "smoke_command": "LOGURU_LEVEL=WARNING NUMBA_NUM_THREADS=1 uv run python scripts/benchmark/run_orca_adapter_validation_issue_6615.py --output-dir <ignored-worktree-diagnostic-output-dir>",
+    "execution_mode": "native",
+    "fallback_used": false,
+    "smoke_case_count": 4,
+    "trace_record_count": 4,
+    "report_artifact": {
+      "local_report_dir": "ignored_worktree_diagnostic_artifact_issue_6615_orca_adapter_validation_20260812T054900Z",
+      "json_sha256": "4936b3d229700a84d09256edf452b26d554c5ab3bb3f64ba42b6e2551ceb9a36",
+      "markdown_sha256": "3376cb07ab15dc9c1c928926eceb4977b2bfc63468d6bb87ec9222545d18ae9e"
+    }
+  },
+  "divergence_summary": {
+    "angle_error_rad_mean": 1.113113085776054,
+    "angle_error_rad_p50": 0.6554298882011889,
+    "angle_error_rad_p95": 2.778782260104487,
+    "speed_delta_mps_mean": -0.06871670965769452,
+    "speed_delta_mps_p50": -0.03743341931538907,
+    "speed_delta_mps_p95": 0.0
+  },
+  "claim_boundary": {
+    "benchmark_evidence": false,
+    "planner_quality_claim": false,
+    "native_orca_equivalence_claim": false,
+    "dissertation_hedge_update": false
+  }
+}

@@ -46,6 +46,10 @@ def _record(
         {
             "robot": {"position": position},
             "pedestrians": pedestrians,
+            "planner": {
+                "selected_action": {"v": 0.0, "omega": 0.0},
+                "applied_environment_action": {"v": 0.0, "omega": 0.0},
+            },
         }
         for position in positions
     ]
@@ -113,6 +117,19 @@ def _native_mechanism_trace() -> dict[str, Any]:
             "heading_reference": "declared_heading",
         },
         "selected_pedestrians": [],
+        "pedestrian_selection": {
+            "observed_count": 0,
+            "within_upstream_activation_radius_count": 0,
+            "passed_to_brne_count": 0,
+            "upstream_activation_radius_m": 3.5,
+            "activation_gate_applied": False,
+            "selection_mode": "nearest_up_to_maximum_agents",
+        },
+        "nominal_command": {
+            "v_m_s": 0.4,
+            "omega_rad_s": 0.0,
+            "construction_mode": "straight_constant",
+        },
         "adapter_input_frame": "world",
         "pre_clamp_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
         "selected_action": {"v_m_s": 0.0, "omega_rad_s": 0.0},
@@ -292,6 +309,10 @@ def test_brne_requires_native_dependency_status() -> None:
     assert mechanism_row["aggregation"]["modes"] == ["plan_step_first"]
     assert mechanism_row["aggregation"]["candidate_distribution"]["status"] == "available"
     assert mechanism_row["pre_clamp_action"]["available"] is True
+    assert mechanism_row["selected_post_clamp_command"]["available"] is True
+    assert mechanism_row["nominal_command"]["construction_modes"] == ["straight_constant"]
+    assert mechanism_row["pedestrian_selection"]["first"]["passed_to_brne_count"] == 0
+    assert mechanism_row["applied_environment_command"]["available"] is True
     assert mechanism_row["action_clipping"]["clipped_steps"] == 0
 
     wrong_sample_count = classify_record(
@@ -473,6 +494,53 @@ def test_native_mechanism_trace_requires_pre_clamp_action() -> None:
     )
     assert classified["mechanism_trace_valid"] is False
     assert "pre-clamp action" in classified["mechanism_trace_status"]
+
+
+def test_native_mechanism_trace_requires_controller_parity_fields() -> None:
+    """Native rows fail closed when nominal or pedestrian-selection telemetry is absent."""
+    config = _config()
+    trace = _native_mechanism_trace()
+    trace["steps"][0].pop("nominal_command")
+    metadata = {
+        "planner_runtime": {
+            "planner_metadata": {
+                "status": "ok",
+                "runtime_status": "ok",
+                "failure_count": 0,
+                "source_commit": BRNE_PINNED_SHA,
+                "source_pin": BRNE_PINNED_SHA,
+                "source_integrity": "clean_pinned_worktree",
+                "effective_num_samples": 42,
+                "mechanism_trace": trace,
+            }
+        }
+    }
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "nominal command" in classified["mechanism_trace_status"]
+
+    trace = _native_mechanism_trace()
+    trace["steps"][0].pop("pedestrian_selection")
+    metadata["planner_runtime"]["planner_metadata"]["mechanism_trace"] = trace
+    classified = classify_record(
+        _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]]),
+        config,
+        planner_key="brne",
+    )
+    assert classified["mechanism_trace_valid"] is False
+    assert "pedestrian selection" in classified["mechanism_trace_status"]
+
+    metadata["planner_runtime"]["planner_metadata"]["mechanism_trace"] = _native_mechanism_trace()
+    record = _record(metadata=metadata, positions=[[0.0, 4.0], [0.0, 5.0], [0.0, 6.0]])
+    for simulation_step in record["algorithm_metadata"]["simulation_step_trace"]["steps"]:
+        simulation_step["planner"].pop("applied_environment_action")
+    classified = classify_record(record, config, planner_key="brne")
+    assert classified["mechanism_trace_valid"] is False
+    assert "applied environment action" in classified["mechanism_trace_status"]
 
 
 def test_native_mechanism_trace_requires_candidate_distribution() -> None:

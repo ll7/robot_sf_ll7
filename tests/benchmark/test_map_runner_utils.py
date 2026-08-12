@@ -3250,6 +3250,9 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
     assert first_frame["robot"]["velocity"] == [0.0, 0.0]
     assert first_frame["pedestrians"] == []
     assert first_frame["planner"]["selected_action"]["linear_velocity"] == pytest.approx(0.0)
+    assert first_frame["planner"]["applied_environment_action"]["linear_velocity"] == pytest.approx(
+        0.0
+    )
     assert first_frame["planner"]["amv"]["requested_linear_m_s"] == pytest.approx(3.0)
     assert first_frame["planner"]["amv"]["yaw_rate_saturated"] is False
     assert float(record["metrics"]["command_clip_fraction"]) > 0.0

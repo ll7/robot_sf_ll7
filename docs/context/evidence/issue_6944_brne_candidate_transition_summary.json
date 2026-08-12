@@ -1,26 +1,33 @@
 {
   "schema_version": "issue-6944-brne-candidate-transition-summary.v1",
   "issue": 6944,
-  "status": "mechanism_narrowed_diagnostic_only",
+  "status": "controller_parity_mismatch_observed_diagnostic_only",
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Trace-level native BRNE candidate-transition mechanism only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
   "implementation": {
-    "base_commit": "321081341811067c8f4c8a771f0d357f31918c31",
-    "integration_base_commit": "a31686e51f624638255d22968b89cda0257c2e4c",
-    "implementation_commit": "ad4653825b97b94acd760e5b9eb313b9f63c6d57",
+    "base_commit": "a25045b4ae02802c7ff58747924c898fbc841d0f",
+    "integration_base_commit": "a25045b4ae02802c7ff58747924c898fbc841d0f",
+    "implementation_commit": "8f9438632e794f084db72bb016a14b539bbca648",
     "changed_files": [
       "robot_sf/baselines/brne.py",
+      "robot_sf/benchmark/map_runner_episode.py",
       "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py",
       "tests/baselines/test_brne_planner.py",
-      "tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py"
+      "tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
+      "tests/benchmark/test_map_runner_utils.py"
     ],
     "telemetry_contract": {
       "candidate_distribution_schema": "brne-candidate-distribution.v1",
       "records_finite_bounded_candidate_control_and_weight_statistics": true,
       "records_first_to_second_planner_observation_transition": true,
       "records_within_plan_horizon_transition": true,
+      "records_nominal_command_and_construction_mode": true,
+      "records_upstream_activation_radius_and_passed_agent_counts": true,
+      "records_selected_post_clamp_command": true,
+      "records_applied_environment_action_after_conversion": true,
       "retains_raw_candidate_or_weight_tensors": false,
       "native_success_requires_candidate_distribution": true,
+      "native_success_requires_applied_environment_action": true,
       "unavailable_fields_fail_closed": true
     }
   },
@@ -33,14 +40,16 @@
   },
   "tests": {
     "focused_command": "uv run pytest -q tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
-    "focused_result": "57 passed",
+    "focused_result": "61 passed",
+    "map_runner_action_trace_command": "uv run pytest -q tests/benchmark/test_map_runner_utils.py -k run_map_episode_records_synthetic_actuation_metrics",
+    "map_runner_action_trace_result": "1 passed",
     "source_smoke_command": "NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py",
     "source_smoke_result": "6 passed",
     "staged_source_available": true,
     "staged_source_path": "third_party/external_repos/brne",
     "staged_source_commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
     "without_staged_source": "source-backed tests fail closed with skips; skipped rows are not native evidence",
-    "ruff_command": "uv run ruff check robot_sf/baselines/brne.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
+    "ruff_command": "uv run ruff check robot_sf/baselines/brne.py robot_sf/benchmark/map_runner_episode.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py tests/benchmark/test_map_runner_utils.py",
     "ruff_result": "all checks passed",
     "diff_check_result": "passed"
   },
@@ -56,8 +65,8 @@
     "dt": 0.1,
     "numba_threads": 1,
     "fallback": "disabled",
-    "command": "NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6944_candidate_trace_20260812T0755Z",
-    "run_repo_commit": "ad4653825b97b94acd760e5b9eb313b9f63c6d57",
+    "command": "NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6944_controller_parity_20260812T101747Z",
+    "run_repo_commit": "8f9438632e794f084db72bb016a14b539bbca648",
     "status": "diagnostic_complete",
     "exact_pair_coverage": true,
     "fallback_or_degraded_rows": 0,
@@ -92,6 +101,15 @@
       "first_to_second_candidate_mean_delta_v_mps": -0.3600000020332287,
       "first_to_second_weighted_mean_delta_v_mps": -0.3600000020332287,
       "first_to_second_weighted_mean_delta_omega_radps": 0.0,
+      "nominal_command_construction_mode": "straight_constant",
+      "nominal_command_first_to_last_v_mps": "0.4000000000000001 -> 0.03999999796677138",
+      "nominal_command_first_to_last_omega_radps": "0.0 -> 0.0",
+      "pedestrian_selection_first_last_observed_within_passed": "2/0/2 -> 2/0/2",
+      "upstream_activation_radius_m": 3.5,
+      "activation_gate_applied": false,
+      "applied_environment_action_source": "algorithm_metadata.simulation_step_trace.steps[].planner.applied_environment_action",
+      "applied_environment_action_first_to_last_linear": "0.4000000000000001 -> -3.469446951953614e-17",
+      "applied_environment_action_first_to_last_angular": "0.0 -> 0.0",
       "per_seed": {
         "111": {
           "initial_final_distance_m": [
@@ -127,7 +145,7 @@
           }
         }
       },
-      "mechanism_interpretation": "Across all three native rows, the first-to-second planner-observation candidate velocity distribution and weighted command shift from about 0.40 to 0.04 m/s while the mean-normalized robot weights remain uniform (mean 1.0, standard deviation 0.0). This falsifies weighting/normalization as the explanation in this frozen slice, but does not distinguish upstream candidate generation, planner state, or control-horizon effects."
+      "mechanism_interpretation": "Across all three native rows, the first-to-second planner-observation candidate velocity distribution and weighted command shift from about 0.40 to 0.04 m/s while the mean-normalized robot weights remain uniform (mean 1.0, standard deviation 0.0). The expanded trace also confirms a controller-parity mismatch: the adapter uses a straight-constant nominal command and passes 2 observed pedestrians even though 0 are within the pinned upstream <3.5 m activation radius. The actual environment action is separately recorded after command conversion. This narrows weighting/normalization and confirms a candidate-generation or activation-gate lead, but does not establish which parity intervention changes progress."
     },
     "comparators": {
       "orca_goal_reached": "3/3",
@@ -136,12 +154,12 @@
     }
   },
   "artifact": {
-    "local_report_dir": "output/benchmarks/issue_6944_candidate_trace_20260812T0755Z",
-    "report_json_sha256": "722cb24f13135955e6e954c0cb1d1f84f6ab84a2c1e206d271d1b776eac417aa",
-    "report_markdown_sha256": "412313a4be213b77144b299a07488ccc664288ec49ec7844f74f6b90d24dc80d",
+    "local_report_dir": "output/benchmarks/issue_6944_controller_parity_20260812T101747Z",
+    "report_json_sha256": "4438f5df1e6d3fe8eeffa85fa433c24388b4f862accc4a8b77c5adec5e8f3e0a",
+    "report_markdown_sha256": "8abc23a4e0449168c481d10aae2501ebc586f9b8eba9b336cc21fad0349ffbb8",
     "raw_artifacts": "ignored_worktree_local",
     "tracked_summary_is_not_raw_episode_archive": true
   },
-  "decision": "The bounded trace narrows the residual signal: the candidate control distribution itself changes at the first planner-observation transition, while mean-normalized weights remain uniform and no safety clipping occurs. Retain the result as diagnostic-only; do not change source pins, action limits, fallback policy, ranking, benchmark scope, safety, realism, or paper claims.",
-  "next_empirical_action": "If further work is authorized, isolate one upstream candidate-generation, planner-state, or control-horizon intervention at a time on the same frozen matrix. Otherwise close as unresolved beyond the weighting/normalization null result."
+  "decision": "The bounded trace narrows the residual signal and confirms a controller-parity lead: the candidate control distribution changes at the first planner-observation transition, weights remain uniform, the adapter uses a straight-constant nominal command, and it passes nearest agents without the pinned upstream <3.5 m gate. Actual environment actions are now separated from planner commands. Retain the result as diagnostic-only; do not change source pins, action limits, fallback policy, ranking, benchmark scope, safety, realism, or paper claims.",
+  "next_empirical_action": "If further work is authorized, isolate one upstream-controller-parity, planner-state, or control-horizon intervention at a time on the same frozen matrix. The parity mismatch is a confirmed diagnostic lead, not evidence for a fix or benchmark promotion; no separate implementation issue is created in this slice."
 }

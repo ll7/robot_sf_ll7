@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from robot_sf.benchmark.latency_stress import LatencyStressProfile
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
+    from robot_sf.benchmark.tuning_run_provenance import TuningRunSpec
 
 DEFAULT_SEED_SETS_PATH = Path("configs/benchmarks/seed_sets_v1.yaml")
 _AMV_DIMENSIONS = ("use_case", "context", "speed_regime", "maneuver_type")
@@ -228,6 +229,9 @@ class CampaignConfig:
     # blocks in the manifest but do not fail; "error" = fail closed when any enabled arm lacks a
     # declared tuning block.
     tuning_effort_enforcement: str = "off"
+    # Prospective machine-captured launch metadata. ``None`` preserves the legacy config shape;
+    # preflight still emits a minimal debug record automatically for enabled arms.
+    tuning_run_provenance: TuningRunSpec | None = None
     # Runtime checkpoint provenance remains audit-only by default for backwards compatibility.
     # ``error`` also makes implicit learned checkpoints (such as SA-CADRL's registry default)
     # fail closed during preflight and disables planner fallback for campaign execution.

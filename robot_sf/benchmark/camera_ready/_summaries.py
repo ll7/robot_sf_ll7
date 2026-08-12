@@ -76,7 +76,11 @@ def _build_matrix_summary_rows(
         Deterministically ordered matrix rows for CSV/JSON artifacts.
     """
     matrix_path = _repo_relative(cfg.scenario_matrix_path)
-    config_hash = _config_hash(_jsonable_repo_relative(asdict(cfg)))
+    config_payload = asdict(cfg)
+    if cfg.tuning_run_provenance is None:
+        # Preserve hashes for legacy configs that predate the optional prospective block.
+        config_payload.pop("tuning_run_provenance", None)
+    config_hash = _config_hash(_jsonable_repo_relative(config_payload))
     noise_spec = normalize_observation_noise_spec(cfg.observation_noise)
     repeats = len(resolved_seeds)
     horizon_mode = "scenario_horizons" if cfg.scenario_horizons_path is not None else "fixed"

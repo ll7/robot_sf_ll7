@@ -50,6 +50,10 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_actuation_profile_claim_boundary,
     validate_synthetic_actuation_profile,
 )
+from robot_sf.benchmark.tuning_run_provenance import (
+    parse_tuning_run_spec,
+    validate_tuning_run_spec,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -902,6 +906,17 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
                 "tuning_effort_enforcement='error' requires an author-declared 'tuning' block "
                 f"for every enabled arm; missing declared tuning block for: {names}"
             )
+        validate_tuning_run_spec(
+            cfg.tuning_run_provenance,
+            strict=True,
+            parameter_sources={
+                planner.key: (
+                    planner.tuning.parameters_touched if planner.tuning is not None else None
+                )
+                for planner in cfg.planners
+                if planner.enabled
+            },
+        )
     if cfg.checkpoint_provenance_enforcement not in _CHECKPOINT_PROVENANCE_ENFORCEMENT:
         known = ", ".join(_CHECKPOINT_PROVENANCE_ENFORCEMENT)
         raise ValueError(
@@ -1379,6 +1394,7 @@ class _ParsedCampaignConfig:
     radius_sweep: RadiusSweepConfig | None
     synthetic_actuation_raw: dict[str, Any] | None
     kinematics_matrix: tuple[str, ...]
+    tuning_run_provenance: Any
 
 
 def _build_amv_profile_config(
@@ -1551,6 +1567,7 @@ def _assemble_campaign_config(
         tuning_effort_enforcement=(
             str(payload.get("tuning_effort_enforcement", "off")).strip().lower() or "off"
         ),
+        tuning_run_provenance=parsed.tuning_run_provenance,
         checkpoint_provenance_enforcement=(
             str(payload.get("checkpoint_provenance_enforcement", "off")).strip().lower() or "off"
         ),
@@ -1602,6 +1619,10 @@ def load_campaign_config(path: Path) -> CampaignConfig:
     kinematics_matrix = _normalize_kinematics_matrix(
         payload.get("kinematics_matrix", ["differential_drive"])
     )
+    tuning_run_raw = payload.get("tuning_run_provenance")
+    if tuning_run_raw is None and "tuning_run" in payload:
+        tuning_run_raw = payload.get("tuning_run")
+    tuning_run_provenance = parse_tuning_run_spec(tuning_run_raw)
     parsed = _ParsedCampaignConfig(
         name=name,
         scenario_matrix_path=scenario_matrix_path,
@@ -1620,6 +1641,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         radius_sweep=radius_sweep,
         synthetic_actuation_raw=synthetic_actuation_raw,
         kinematics_matrix=kinematics_matrix,
+        tuning_run_provenance=tuning_run_provenance,
     )
     cfg = _assemble_campaign_config(
         parsed,

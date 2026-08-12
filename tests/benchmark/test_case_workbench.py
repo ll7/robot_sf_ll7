@@ -155,6 +155,18 @@ def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_pat
     assert all(
         case["comparison_pair_ids"] == ["doorway--113", "doorway--114"] for case in seed_cases
     )
+    relation_roles = {
+        "safety_boundary",
+        "metric_disagreement",
+        "cross_cell_inversion",
+        "representative_control",
+    }
+    assert not any(case["primary_role"] in relation_roles for case in proposal["portfolio"])
+    unavailable = {item["role"]: item["reason"] for item in proposal["unavailable_roles"]}
+    assert relation_roles <= unavailable.keys()
+    assert all(
+        unavailable[role] == "required_relation_metric_unavailable" for role in relation_roles
+    )
     assert any(item["case_id"] == "doorway--115" for item in proposal["excluded"])
     assert (output / "admission_overlay.json").is_file()
     assert (output / "viewer_blueprint.json").is_file()
@@ -319,7 +331,10 @@ def test_package_viewer_and_svg_preview_contracts(tmp_path: Path) -> None:
     """The package adapter satisfies the viewer schema and SVG uses valid metadata."""
 
     source = tmp_path / "episodes.jsonl"
-    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    source.write_text(
+        "\n".join(json.dumps(row) for row in (_record(113), _record(114))) + "\n",
+        encoding="utf-8",
+    )
     package = tmp_path / "package"
     proposal = analyze_cases(
         config_path="configs/analysis/case_workbench.v1.yaml",
@@ -328,7 +343,7 @@ def test_package_viewer_and_svg_preview_contracts(tmp_path: Path) -> None:
     )
     case_id = proposal["portfolio"][0]["case_id"]
     with prepared_package_dirs(package, case_id=case_id) as bundle_dirs:
-        assert len(load_episode_bundles(bundle_dirs)) == 1
+        assert len(load_episode_bundles(bundle_dirs)) == 2
     svg = tmp_path / "figure.svg"
     render_publication_figure(package, case_id=case_id, output=svg, output_format="svg")
     assert svg.is_file()

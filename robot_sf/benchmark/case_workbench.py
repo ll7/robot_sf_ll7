@@ -82,7 +82,10 @@ def analyze_cases(
     input_path = Path(result_store)
     output_path = Path(output)
     records = _load_records(input_path)
-    candidates = [_candidate(record) for record in records]
+    interestingness_weights = config.get("interestingness", {}).get("weights", {})
+    candidates = [
+        _candidate(record, interestingness_weights=interestingness_weights) for record in records
+    ]
     proposal = _build_proposal(candidates, config=config)
     if check_determinism:
         repeat = _build_proposal(candidates, config=config)
@@ -531,7 +534,11 @@ def _row_from_v2_store(row: Mapping[str, Any], store: Path) -> dict[str, Any]:
     }
 
 
-def _candidate(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR0912
+def _candidate(  # noqa: C901, PLR0912
+    record: Mapping[str, Any],
+    *,
+    interestingness_weights: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Normalize one episode into an eligibility and metric candidate."""
 
     raw_record = dict(record)
@@ -602,7 +609,7 @@ def _candidate(record: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR0
         "metrics": _episode_metrics(record),
         "eligible": not blockers,
         "exclusion_reasons": blockers,
-        "interestingness_score": _interestingness(record),
+        "interestingness_score": _interestingness(record, weights=interestingness_weights),
         "raw": dict(record),
     }
 
@@ -641,23 +648,31 @@ def _episode_metrics(record: Mapping[str, Any]) -> dict[str, float | None]:
     }
 
 
-def _interestingness(record: Mapping[str, Any]) -> float:
+def _interestingness(
+    record: Mapping[str, Any], *, weights: Mapping[str, Any] | None = None
+) -> float:
     """Use a transparent scalar only for broad exploratory triage."""
+
+    configured = weights if isinstance(weights, Mapping) else {}
+
+    def weight(name: str, default: float) -> float:
+        """Read a finite configured weight without letting config break triage."""
+
+        value = configured.get(name, default)
+        return float(value) if _finite_number(value) else default
 
     metrics = _episode_metrics(record)
     clearance = metrics.get("surface_clearance_min")
     score = 0.0
     if clearance is not None:
-        score += max(0.0, 2.0 - float(clearance))
+        score += weight("surface_clearance_min", 1.0) * max(0.0, 2.0 - float(clearance))
     outcome = record.get("outcome") if isinstance(record.get("outcome"), Mapping) else {}
     success, collision = canonical_outcome_flags(outcome)
-    if collision:
-        score += 1.0
-    if success:
-        score += 0.25
+    outcome_salience = 1.0 if collision else (0.25 if success else 0.0)
+    score += weight("outcome_salience", 1.0) * outcome_salience
     effort = metrics.get("control_effort")
     if effort is not None:
-        score += min(1.0, abs(float(effort)) / 10.0)
+        score += weight("control_effort", 0.25) * min(1.0, abs(float(effort)) / 10.0)
     return round(score, 9)
 
 
@@ -682,25 +697,25 @@ def _build_proposal(
             continue
         pareto = _pareto_front(options)
         if role in {"seed_sensitivity", "planner_upset"}:
-            # Exact pair coverage may deliberately retain a dominated member: a
-            # success/collision or planner contrast is itself the role signal.
             pair = _comparison_pair(role, options)
-            if pair is not None:
-                pair_ids = [str(item["episode_id"]) for item in pair]
-                for chosen in pair:
-                    if chosen["episode_id"] in selected_ids:
-                        continue
-                    selected_ids.add(chosen["episode_id"])
-                    selected.append(
-                        _selection_record(
-                            role,
-                            chosen,
-                            options,
-                            pareto,
-                            comparison_pair_ids=pair_ids,
-                        )
-                    )
+            if pair is None:
+                unavailable_roles.append({"role": role, "reason": "no_compatible_pair"})
                 continue
+            pair_ids = [str(item["episode_id"]) for item in pair]
+            for chosen in pair:
+                if chosen["episode_id"] in selected_ids:
+                    continue
+                selected_ids.add(chosen["episode_id"])
+                selected.append(
+                    _selection_record(
+                        role,
+                        chosen,
+                        options,
+                        pareto,
+                        comparison_pair_ids=pair_ids,
+                    )
+                )
+            continue
         chosen = sorted(pareto, key=lambda item: (-_role_score(role, item), item["episode_id"]))[0]
         if chosen["episode_id"] in selected_ids:
             continue
@@ -741,13 +756,25 @@ def _runner_up_ledger(
     """Return stable runner-up explanations for every configured role."""
 
     selected_by_role: dict[str, set[str]] = defaultdict(set)
+    selected_case_by_role: dict[str, Mapping[str, Any]] = {}
     for item in selected:
-        selected_by_role[str(item.get("primary_role"))].add(str(item.get("case_id")))
+        role = str(item.get("primary_role"))
+        selected_by_role[role].add(str(item.get("case_id")))
+        selected_case_by_role.setdefault(
+            role,
+            {
+                "episode_id": item.get("case_id"),
+                "interestingness_score": item.get("selection_reason", {}).get(
+                    "interestingness_score"
+                ),
+            },
+        )
     ledger: dict[str, list[dict[str, Any]]] = {}
     for role, options in role_candidates.items():
         chosen_ids = selected_by_role.get(role, set())
+        chosen = selected_case_by_role.get(role, {})
         ledger[role] = [
-            _runner_up(item, {})
+            _runner_up(item, chosen)
             for item in sorted(
                 options, key=lambda item: (-_role_score(role, item), item["episode_id"])
             )
@@ -778,24 +805,48 @@ def _role_candidates(role: str, candidates: Iterable[dict[str, Any]]) -> list[di
         ]
     if role == "safety_boundary":
         return [
-            item for item in candidates if item["metrics"].get("surface_clearance_min") is not None
+            item
+            for item in candidates
+            if _relation_metric(item, "boundary_context", "safety_boundary")
         ]
     if role == "metric_disagreement":
         return [
             item
             for item in candidates
-            if item["metrics"].get("surface_clearance_min") is not None
-            and item["metrics"].get("progress") is not None
+            if _relation_metric(item, "metric_disagreement", "metric_disagreement_score")
         ]
     if role == "cross_cell_inversion":
         return [
             item
             for item in candidates
-            if item["outcome"]["success"] or item["outcome"]["collision"]
+            if _relation_metric(item, "cross_cell_inversion", "cross_cell_inversion_score")
         ]
     if role == "representative_control":
-        return [item for item in candidates if item["metrics"].get("control_effort") is not None]
+        return [
+            item
+            for item in candidates
+            if _relation_metric(item, "representative_control", "cell_representative_status")
+        ]
     return []
+
+
+def _relation_metric(candidate: Mapping[str, Any], *keys: str) -> bool:
+    """Return true only for an explicit relation/context receipt."""
+
+    raw = candidate.get("raw")
+    metrics = raw.get("metrics") if isinstance(raw, Mapping) else None
+    if not isinstance(metrics, Mapping):
+        metrics = {}
+    for key in keys:
+        value = metrics.get(key)
+        if isinstance(value, bool):
+            if value:
+                return True
+        elif _finite_number(value) and float(value) > 0.0:
+            return True
+        elif isinstance(value, str) and value in {"available", "observed", "medoid", "boundary"}:
+            return True
+    return False
 
 
 def _comparison_pair(role: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
@@ -969,9 +1020,17 @@ def _selection_record(
 def _runner_up(candidate: Mapping[str, Any], chosen: Mapping[str, Any]) -> dict[str, Any]:
     """Return a compact runner-up explanation."""
 
+    candidate_score = candidate.get("interestingness_score")
+    chosen_score = chosen.get("interestingness_score")
+    score_delta = None
+    if _finite_number(candidate_score) and _finite_number(chosen_score):
+        score_delta = round(float(chosen_score) - float(candidate_score), 9)
     return {
         "case_id": candidate.get("episode_id"),
-        "score": candidate.get("interestingness_score"),
+        "score": candidate_score,
+        "selected_case_id": chosen.get("episode_id") or None,
+        "selected_score": chosen_score,
+        "score_delta": score_delta,
         "reason_not_selected": "lower role-local score or stable tie-break",
     }
 
@@ -981,6 +1040,13 @@ def _role_unavailable_reason(role: str, candidates: list[dict[str, Any]]) -> str
 
     if not candidates:
         return "no_candidates"
+    if role in {
+        "safety_boundary",
+        "metric_disagreement",
+        "cross_cell_inversion",
+        "representative_control",
+    }:
+        return "required_relation_metric_unavailable"
     if any(not item["eligible"] for item in candidates):
         return "all_candidates_failed_eligibility"
     return "role_predicate_not_satisfied"
@@ -1238,6 +1304,16 @@ def _first_number(mapping: Mapping[str, Any], *keys: str) -> float | None:
         ):
             return float(value)
     return None
+
+
+def _finite_number(value: Any) -> bool:
+    """Return whether a value is a finite, non-boolean real number."""
+
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
 
 
 def _int(value: Any) -> int | None:

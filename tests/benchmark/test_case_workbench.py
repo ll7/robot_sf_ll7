@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.analysis_trace import (
+    _deduplicate_trace_event_ids,
     build_analysis_trace,
     canonical_json,
     trace_artifact_sha256,
@@ -75,9 +76,9 @@ def _trace(seed: int, *, collision: bool = False) -> dict:
             "map_file": "maps/svg_maps/classic_doorway.svg",
         },
         planner="ppo",
-        planner_commit="commit",
+        planner_commit="abcdef1",
         config_hash="config-doorway",
-        git_hash="commit",
+        git_hash="abcdef2",
         termination_reason="collision" if collision else "max_steps",
         safety_events=[{"event_type": "collision", "time_s": 0.1}] if collision else [],
     )
@@ -106,6 +107,39 @@ def _record(seed: int, *, collision: bool = False) -> dict:
         },
         "algorithm_metadata": {"analysis_trace": trace},
     }
+
+
+def _trusted_source_gate(tmp_path: Path, source: Path) -> tuple[Path, Path]:
+    """Create an explicit test registry/receipt pair for source-gate tests."""
+
+    source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+    registry = tmp_path / "source-registry.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "schema_version": "case-source-integrity-registry.v1",
+                "approved_sources": [
+                    {"approval_id": "fixture-approval", "source_sha256": source_sha}
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    receipt = tmp_path / "source-gate.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "case-source-integrity-gate.v1",
+                "status": "passed",
+                "approval_id": "fixture-approval",
+                "source_sha256": source_sha,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return registry, receipt
 
 
 def test_analysis_trace_has_explicit_initial_state_and_coverage() -> None:
@@ -151,6 +185,82 @@ def test_trace_coverage_rejects_nonmonotonic_time_and_radius_reuse() -> None:
     assert "radii" in coverage["reasons"]
 
 
+def test_trace_coverage_allows_sparse_actor_appearance_with_stable_ids() -> None:
+    """Sparse actor rows remain valid when the surviving identity is stable."""
+
+    trace = _trace(113)
+    trace["steps"][-1]["pedestrians"] = []
+    trace["artifact_sha256"] = trace_artifact_sha256(trace)
+    record = {
+        "scenario_id": trace["scenario_id"],
+        "algo": trace["planner"],
+        "algorithm_metadata": {"analysis_trace": trace},
+    }
+    assert trace_coverage(record)["status"] == "complete"
+
+
+@pytest.mark.parametrize("section", ["requested", "applied"])
+def test_trace_coverage_rejects_partial_control_sections(section: str) -> None:
+    """A single requested/applied control section is not exact telemetry."""
+
+    trace = _trace(113)
+    for step in trace["steps"][1:]:
+        controls = step["controls"]
+        controls[section] = None
+    trace["artifact_sha256"] = trace_artifact_sha256(trace)
+    coverage = trace_coverage(
+        {
+            "scenario_id": trace["scenario_id"],
+            "algo": trace["planner"],
+            "algorithm_metadata": {"analysis_trace": trace},
+        }
+    )
+    assert coverage["status"] == "unavailable"
+    assert "controls" in coverage["reasons"]
+
+
+def test_trace_coverage_rejects_trace_identity_mismatch() -> None:
+    """A complete envelope from another planner/scenario cannot be rebound by a row."""
+
+    record = _record(113)
+    trace = record["algorithm_metadata"]["analysis_trace"]
+    trace["planner"] = "goal"
+    trace["artifact_sha256"] = trace_artifact_sha256(trace)
+    record["provenance"]["artifact_sha256"] = trace["artifact_sha256"]
+    assert "trace_identity" in trace_coverage(record)["reasons"]
+
+
+def test_forged_source_gate_receipt_stays_blocked(tmp_path: Path) -> None:
+    """A matching local receipt is insufficient without a registry approval entry."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    receipt = tmp_path / "forged-receipt.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "case-source-integrity-gate.v1",
+                "status": "passed",
+                "approval_id": "not-in-registry",
+                "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    proposal = analyze_cases(
+        config_path="configs/analysis/case_workbench.v1.yaml",
+        result_store=source,
+        output=tmp_path / "package",
+        source_gate_receipt=receipt,
+    )
+    assert proposal["schema_version"] == "case-workbench.v1"
+    gate = json.loads((tmp_path / "package" / "manifest.json").read_text(encoding="utf-8"))[
+        "source_integrity_gate"
+    ]
+    assert gate["status"] != "passed"
+
+
 def test_positional_actor_slots_are_not_promoted_as_stable_ids() -> None:
     """Legacy index-only actor labels remain unavailable for evidence use."""
 
@@ -178,9 +288,9 @@ def test_positional_actor_slots_are_not_promoted_as_stable_ids() -> None:
         pedestrian_radius_m=0.25,
         scenario={"id": "classic_doorway_medium", "map_digest": "map"},
         planner="ppo",
-        planner_commit="planner",
+        planner_commit="abcdef3",
         config_hash="config",
-        git_hash="git",
+        git_hash="abcdef4",
         termination_reason="success",
         safety_events=[],
     )
@@ -216,15 +326,28 @@ def test_runtime_collision_event_is_canonicalized_at_trace_boundary() -> None:
         pedestrian_radius_m=0.25,
         scenario={"id": "classic_doorway_medium", "map_file": "maps/svg_maps/classic_doorway.svg"},
         planner="ppo",
-        planner_commit="commit",
+        planner_commit="abcdef1",
         config_hash="config",
-        git_hash="commit",
+        git_hash="abcdef2",
         termination_reason="collision",
         safety_events=[{"collision_time": 0.0, "collision_partner_id": 0}],
     )
     assert trace["events"][0]["event_type"] == "collision"
     assert trace["events"][0]["time_s"] == 0.0
     assert trace["events"][0]["partner_id"] == "pedestrian-0"
+
+
+def test_trace_event_ids_are_unique_across_ledgers() -> None:
+    """Duplicate source IDs become typed unavailable events instead of ambiguous joins."""
+
+    trace = _trace(113)
+    trace["events"] = [{"event_id": "same", "event_type": "near_miss", "time_s": 0.0}]
+    trace["steps"][1]["events"] = [{"event_id": "same", "event_type": "near_miss", "time_s": 0.1}]
+    _deduplicate_trace_event_ids(trace)
+    trace["artifact_sha256"] = trace_artifact_sha256(trace)
+    ids = [trace["events"][0]["event_id"], trace["steps"][1]["events"][0]["event_id"]]
+    assert len(ids) == len(set(ids))
+    assert trace["steps"][1]["events"][0]["reason"] == "duplicate_event_id"
 
 
 def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_path: Path) -> None:
@@ -310,6 +433,7 @@ def test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter(tmp_p
 
     source = tmp_path / "episodes.jsonl"
     complete = _record(113)
+    complete["provenance"].pop("artifact_sha256")
     legacy = _record(114)
     legacy["algorithm_metadata"] = {"simulation_step_trace": {"steps": []}}
     legacy["provenance"] = {"artifact_uri": "legacy.jsonl"}
@@ -373,6 +497,7 @@ def test_v2_read_adapter_rechecks_coverage_when_state_table_is_missing(tmp_path:
 def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> None:
     """Author decisions alter admission status without erasing machine rationale."""
 
+    replacement_trace = _trace(115)
     proposal = {
         "schema_version": "case-workbench.v1",
         "portfolio": [
@@ -382,6 +507,7 @@ def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> 
                 "author_status": "proposed",
             }
         ],
+        "artifact_inventory": {"author-1": replacement_trace["artifact_sha256"]},
     }
     overlay = {
         "schema_version": "case-admission-overlay.v1",
@@ -394,7 +520,6 @@ def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> 
     assert admitted["machine_portfolio"][0]["author_status"] == "proposed"
     assert admitted["author_admission"]["status"] == "admitted"
 
-    replacement_trace = _trace(115)
     replacement_overlay = {
         "schema_version": "case-admission-overlay.v1",
         "proposal_sha256": overlay["proposal_sha256"],
@@ -455,6 +580,10 @@ def test_campaign_result_store_v2_pair_receipt_derives_only_compatible_deltas(
     right = _record(113, collision=True)
     right["episode_id"] = "doorway--113--goal"
     right["algo"] = "goal"
+    right_trace = right["algorithm_metadata"]["analysis_trace"]
+    right_trace["planner"] = "goal"
+    right_trace["artifact_sha256"] = trace_artifact_sha256(right_trace)
+    right["provenance"]["artifact_sha256"] = right_trace["artifact_sha256"]
     source.write_text(
         "\n".join(json.dumps(row, sort_keys=True) for row in (left, right)) + "\n",
         encoding="utf-8",
@@ -501,7 +630,32 @@ def test_package_viewer_and_svg_preview_contracts(tmp_path: Path) -> None:
     assert svg.is_file()
 
 
-def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path) -> None:
+def test_package_viewer_handles_opaque_simulator_actor_ids(tmp_path: Path) -> None:
+    """Legacy hinge projections receive numeric aliases without losing actor_id."""
+
+    rows = [_record(113), _record(114)]
+    for row in rows:
+        trace = row["algorithm_metadata"]["analysis_trace"]
+        for step in trace["steps"]:
+            for actor in step.get("pedestrians", []):
+                actor["actor_id"] = "pedestrian-simulator-slot-0"
+                actor["id"] = "simulator-slot-0"
+        trace["actor_id_source"] = "simulator_slot"
+        trace["artifact_sha256"] = trace_artifact_sha256(trace)
+        row["provenance"]["artifact_sha256"] = trace["artifact_sha256"]
+    source = tmp_path / "opaque.jsonl"
+    source.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    package = tmp_path / "package"
+    proposal = analyze_cases(
+        config_path="configs/analysis/case_workbench.v1.yaml",
+        result_store=source,
+        output=package,
+    )
+    with prepared_package_dirs(package, case_id=proposal["portfolio"][0]["case_id"]) as dirs:
+        assert len(load_episode_bundles(dirs)) == 2
+
+
+def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path, monkeypatch) -> None:
     """A passed source receipt enables only a diagnostic preview with a bound digest."""
 
     source = tmp_path / "episodes.jsonl"
@@ -509,18 +663,8 @@ def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path) -
         "\n".join(json.dumps(row) for row in (_record(113), _record(114))) + "\n",
         encoding="utf-8",
     )
-    receipt = tmp_path / "source-gate.json"
-    receipt.write_text(
-        json.dumps(
-            {
-                "schema_version": "case-source-integrity-gate.v1",
-                "status": "passed",
-                "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    registry, receipt = _trusted_source_gate(tmp_path, source)
+    monkeypatch.setattr("robot_sf.benchmark.case_workbench.TRUSTED_SOURCE_GATE_REGISTRY", registry)
     package = tmp_path / "package"
     analyze_cases(
         config_path="configs/analysis/case_workbench.v1.yaml",
@@ -532,6 +676,8 @@ def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path) -
         "source_integrity_gate"
     ]
     assert gate["status"] == "passed"
+    assert "receipt_path" not in gate
+    assert "supplied_source_sha256" not in gate
     sidecar = json.loads(
         (package / "publication" / "figure.preview.pdf.json").read_text(encoding="utf-8")
     )
@@ -563,7 +709,7 @@ def test_source_gate_receipt_failure_modes_fail_closed(tmp_path: Path) -> None:
                     "source_sha256": digest,
                 }
             ),
-            "source_gate_status:pending",
+            "source_gate_status_not_passed",
         ),
         (
             "digest",
@@ -583,6 +729,8 @@ def test_source_gate_receipt_failure_modes_fail_closed(tmp_path: Path) -> None:
         result = _load_source_gate_receipt(source, receipt)
         assert result["status"] == "blocked_pending_exact_source_restore"
         assert result["reason"] == reason
+        assert "receipt_path" not in result
+        assert "supplied_source_sha256" not in result
 
 
 def test_load_workbench_config_rejects_unsafe_contract_shapes(tmp_path: Path) -> None:
@@ -705,7 +853,9 @@ def test_package_viewer_rejects_tampered_checksum(tmp_path: Path) -> None:
             pass
 
 
-def test_admit_package_refreshes_receipts_and_unlocks_publication(tmp_path: Path) -> None:
+def test_admit_package_refreshes_receipts_and_unlocks_publication(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Only a passed source gate plus author decision unlocks final rendering."""
 
     source = tmp_path / "episodes.jsonl"
@@ -713,18 +863,8 @@ def test_admit_package_refreshes_receipts_and_unlocks_publication(tmp_path: Path
         "\n".join(json.dumps(row) for row in (_record(113), _record(114))) + "\n",
         encoding="utf-8",
     )
-    receipt = tmp_path / "source-gate.json"
-    receipt.write_text(
-        json.dumps(
-            {
-                "schema_version": "case-source-integrity-gate.v1",
-                "status": "passed",
-                "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    registry, receipt = _trusted_source_gate(tmp_path, source)
+    monkeypatch.setattr("robot_sf.benchmark.case_workbench.TRUSTED_SOURCE_GATE_REGISTRY", registry)
     package = tmp_path / "package"
     proposal = analyze_cases(
         config_path="configs/analysis/case_workbench.v1.yaml",
@@ -771,6 +911,8 @@ def test_trace_metric_formulas_keep_units_and_timing_explicit() -> None:
                 "pedestrians": [{"id": 0, "position": [1.5, 0.0], "velocity": [-1.0, 0.0]}],
                 "planner": {
                     "amv": {
+                        "requested_linear_m_s": 1.0,
+                        "requested_angular_rad_s": 0.1,
                         "applied_linear_m_s": 1.0,
                         "applied_angular_rad_s": 0.1,
                     }
@@ -787,6 +929,8 @@ def test_trace_metric_formulas_keep_units_and_timing_explicit() -> None:
                 "pedestrians": [{"id": 0, "position": [1.4, 0.0], "velocity": [-0.5, 0.0]}],
                 "planner": {
                     "amv": {
+                        "requested_linear_m_s": 0.5,
+                        "requested_angular_rad_s": 0.2,
                         "applied_linear_m_s": 0.5,
                         "applied_angular_rad_s": 0.2,
                     }
@@ -803,11 +947,15 @@ def test_trace_metric_formulas_keep_units_and_timing_explicit() -> None:
         horizon=2,
         robot_radius_m=0.25,
         pedestrian_radius_m=0.25,
-        scenario={"id": "classic_doorway_medium", "seed": 113},
+        scenario={
+            "id": "classic_doorway_medium",
+            "seed": 113,
+            "map_file": "maps/svg_maps/classic_doorway.svg",
+        },
         planner="ppo",
-        planner_commit="commit",
+        planner_commit="abcdef1",
         config_hash="config",
-        git_hash="commit",
+        git_hash="abcdef2",
         termination_reason="near_miss",
         safety_events=[{"event_type": "near_miss", "time_s": 0.2}],
     )

@@ -32,6 +32,12 @@ robot_sf_bench analyze-cases \
   --source-gate-receipt <source-integrity-gate.json>
 ```
 
+The receipt is accepted only when its approval ID and source digest occur in the
+repository-controlled `configs/analysis/source_gate_registry.v1.json`. That
+registry is intentionally empty in the tooling PR; restoring and approving the
+RobotSF #6792/#6814 package is a separate evidence gate and must populate it in
+the evidence work, not in this code merge.
+
 `analysis_trace: all` is opt-in and additive to the legacy trace booleans. It
 records an explicit `t=0` state and, when the simulator supplies the required
 identity/geometry/control fields, stable actor IDs/radii, world-frame units,
@@ -39,6 +45,12 @@ controls, typed events, and provenance. Missing or positional-only identities
 remain typed `unavailable` and cannot enter an evidence portfolio. The capture
 path is data-only and must not alter actions or outcomes. Raw traces remain
 outside Git; packages retain manifests and checksums.
+
+The profile does not invent planner implementation commits, actor registries,
+or missing control dimensions. Lightweight/non-map episodes and planners that
+do not expose those receipts therefore carry an explicit unavailable coverage
+record until their adapter supplies the fields; they are never silently treated
+as analysis-ready.
 
 The dedicated `configs/benchmarks/analysis_ready_full_campaign.yaml` overlay
 is the only canonical opt-in. Camera-ready, smoke, and historical configs remain

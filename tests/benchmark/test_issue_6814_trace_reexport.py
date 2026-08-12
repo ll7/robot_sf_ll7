@@ -331,14 +331,13 @@ def _make_synthetic_packet_inputs(
         },
     )
     (package / "README.md").write_text("synthetic\n", encoding="utf-8")
+    names = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and path.name not in {"SHA256SUMS", "package_complete.json"}
+    )
     sums = "".join(
-        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n"
-        for name in (
-            "README.md",
-            "package_manifest.json",
-            "source_pointer.json",
-            "mapping_receipt.json",
-        )
+        f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
     ).encode()
     (package / "SHA256SUMS").write_bytes(sums)
     package_sha = _sha256_bytes(sums)
@@ -417,7 +416,11 @@ def _write_result_provenance_sidecar(root: Path, identity: TraceIdentity) -> Pat
 def _refresh_synthetic_package_sums(package: Path) -> str:
     """Refresh the synthetic package's listed-artifact digest and completion pin."""
 
-    names = ("README.md", "package_manifest.json", "source_pointer.json", "mapping_receipt.json")
+    names = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*")
+        if path.is_file() and path.name not in {"SHA256SUMS", "package_complete.json"}
+    )
     sums = "".join(
         f"{_sha256_bytes((package / name).read_bytes())}  {name}\n" for name in names
     ).encode()
@@ -578,6 +581,20 @@ def test_source_loader_rejects_missing_package_sums(tmp_path: Path) -> None:
     package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
     (package / "SHA256SUMS").unlink()
     with pytest.raises(RealReexportBindingError, match="SHA256SUMS is unavailable"):
+        load_verified_real_reexport_row_source(
+            package_root=package,
+            external_arm_root=roots[identities[0].arm],
+            expected_identity=identities[0],
+            expected_package_sha256=package_sha,
+        )
+
+
+def test_source_loader_rejects_unlisted_package_artifact(tmp_path: Path) -> None:
+    """Reject an artifact added outside the approved package checksum ledger."""
+
+    package, roots, identities, package_sha = _make_synthetic_packet_inputs(tmp_path)
+    (package / "UNLISTED.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(RealReexportBindingError, match="unlisted artifacts"):
         load_verified_real_reexport_row_source(
             package_root=package,
             external_arm_root=roots[identities[0].arm],

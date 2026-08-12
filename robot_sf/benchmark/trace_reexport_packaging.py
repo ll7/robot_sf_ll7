@@ -2490,6 +2490,22 @@ def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
         raise RealReexportBindingError(
             f"issue #6412 SHA256SUMS omits required package artifacts: {missing}"
         )
+    actual_paths = {
+        path.relative_to(package_root).as_posix()
+        for path in package_root.rglob("*")
+        if path.is_file() and path.name != "SHA256SUMS"
+    }
+    allowed_paths = listed_paths | {"package_complete.json"}
+    unexpected_paths = sorted(actual_paths - allowed_paths)
+    missing_paths = sorted(listed_paths - actual_paths)
+    if unexpected_paths:
+        raise RealReexportBindingError(
+            f"issue #6412 package contains unlisted artifacts: {unexpected_paths}"
+        )
+    if missing_paths:
+        raise RealReexportBindingError(
+            f"issue #6412 SHA256SUMS lists missing artifacts: {missing_paths}"
+        )
 
     manifest = _issue_6814_read_package_json(package_root, "package_manifest.json")
     if (

@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6944_brne_candidate_transition_summary.json",
-  "artifact_sha256": "d048a587e3eb7db793d6e20d4197705c659d17d7aa221e7be622375216818079",
+  "artifact_sha256": "38318cea403fb564854c49940da3d5df559029317e79fe5f089b974a3eee06f8",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

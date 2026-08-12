@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6792 Chapter 7 release-cell evidence package.** Added the digest-verified
+  `build_ch7_evidence_package.py` workflow, `ch7-evidence-package.v1` manifest, three design
+  wireframes, a complete release-cell audit atlas, reduced publication atlas, deterministic
+  Matplotlib PDF/SVG preview, sidecars, figure QA, mapping ledger, and typed unavailable records
+  for the unsupported #6814 trajectory dossiers. The package remains blocked pending domain
+  approval and does not include raw traces or the release archive.
+
 * **Issue #6814 compact provenance projection.** The strict trace-packet builder can now emit a
   frame-free, schema-validated `issue_6814_compact_packet.v1` projection with retrieval keys and
   checksums for the full receipts. It preserves the unsupported comparison disposition and typed

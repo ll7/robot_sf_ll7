@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-evidence-package.v1.json",
+  "title": "Chapter 7 evidence package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "status",
+    "admission_status",
+    "source_integrity_gate",
+    "source",
+    "inputs",
+    "counts",
+    "atlas",
+    "roles",
+    "claim_boundary",
+    "raw_traces_included",
+    "release_archive_included",
+    "deterministic_serialization"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-evidence-package.v1"},
+    "issue": {"const": 6792},
+    "status": {"enum": ["blocked_pending_domain_approval", "admitted"]},
+    "admission_status": {"enum": ["not_admitted", "admitted"]},
+    "source_integrity_gate": {"enum": ["blocked_pending_domain_approval", "passed"]},
+    "source": {"$ref": "#/$defs/digests"},
+    "inputs": {"type": "object", "required": ["portfolio_config", "source_package_member_count"]},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "admitted", "excluded"],
+      "properties": {
+        "requested": {"const": 90},
+        "admitted": {"const": 88},
+        "excluded": {"const": 2}
+      }
+    },
+    "atlas": {"type": "object", "required": ["audit_cells", "publication_cells", "planner_arms"]},
+    "roles": {"type": "object", "minProperties": 4},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "raw_traces_included": {"const": false},
+    "release_archive_included": {"const": false},
+    "deterministic_serialization": {"const": "strict-json-sort-keys-utf8-newline.v1"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approved_package_sha256sums", "release_archive_sha256", "issue6814_compact_packet_sha256"],
+      "properties": {
+        "approved_package_sha256sums": {"$ref": "#/$defs/sha256"},
+        "release_archive_sha256": {"$ref": "#/$defs/sha256"},
+        "issue6814_compact_packet_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

@@ -200,6 +200,41 @@ def test_generated_ledger_matches_versioned_json_schema() -> None:
     jsonschema.validate(ledger, schema)
 
 
+@pytest.mark.parametrize(
+    ("run_class", "invalid_counts_toward_tuning"),
+    [
+        (TUNING_RUN_CLASS_DEBUG, True),
+        (TUNING_RUN_CLASS_TUNING, False),
+        (TUNING_RUN_CLASS_EVIDENCE, True),
+    ],
+)
+def test_versioned_schemas_reject_run_class_counting_mismatches(
+    run_class: str, invalid_counts_toward_tuning: bool
+) -> None:
+    """Both public schemas enforce the fixed run-class counting policy."""
+    schema_root = Path(__file__).parents[2] / "robot_sf/benchmark/schemas"
+    record = TuningRunRecord(
+        run_id=f"{run_class}-1",
+        run_class=run_class,
+        planner_id="planner-a",
+    )
+    invalid_record = record.to_mapping()
+    invalid_record["counts_toward_tuning"] = invalid_counts_toward_tuning
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            invalid_record,
+            json.loads((schema_root / "tuning_run_record.v1.json").read_text(encoding="utf-8")),
+        )
+
+    invalid_ledger = aggregate_tuning_records([record])
+    invalid_ledger["records"][0]["counts_toward_tuning"] = invalid_counts_toward_tuning
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            invalid_ledger,
+            json.loads((schema_root / "tuning_ledger.v1.json").read_text(encoding="utf-8")),
+        )
+
+
 def _write_campaign(tmp_path: Path, *, strict: bool = True, with_provenance: bool = True) -> Path:
     """Write a compact camera-ready config exercising automatic ledger emission."""
     scenario_rel = Path("configs/scenarios/single/francis2023_blind_corner.yaml")

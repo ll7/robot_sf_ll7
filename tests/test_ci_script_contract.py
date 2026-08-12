@@ -2251,6 +2251,8 @@ def test_bootstrap_worktree_help_long() -> None:
     assert "uv venv .venv" in result.stdout  # must document the explicit venv-create step
     assert "uv sync --all-extras" in result.stdout  # must document the sync step
     assert "source .venv/bin/activate" in result.stdout
+    assert "UV_NO_SYNC=1" in result.stdout
+    assert "env -u UV_NO_SYNC" in result.stdout
 
 
 def test_bootstrap_worktree_help_short() -> None:
@@ -2333,9 +2335,11 @@ def test_bootstrap_worktree_forwards_repeatable_extras_to_uv_sync(tmp_path: Path
                 '  mkdir -p "$2/bin"',
                 '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$2/bin/python"',
                 '  chmod 0755 "$2/bin/python"',
+                '  printf "# fake activation\\n" > "$2/bin/activate"',
                 "  exit 0",
                 "fi",
                 'if [[ "$1" == "sync" ]]; then',
+                '  if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "UV_NO_SYNC was not cleared" >&2; exit 98; fi',
                 '  printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
                 "  exit 0",
                 "fi",
@@ -2420,6 +2424,7 @@ def test_bootstrap_worktree_targets_an_explicit_linked_worktree(tmp_path: Path) 
                 '  mkdir -p "$2/bin"',
                 '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$2/bin/python"',
                 '  chmod 0755 "$2/bin/python"',
+                '  printf "# fake activation\\n" > "$2/bin/activate"',
                 "  exit 0",
                 "fi",
                 'if [[ "$1" == "sync" ]]; then',
@@ -2520,6 +2525,8 @@ def test_bootstrap_worktree_creates_venv_before_sync() -> None:
     assert body.find(venv_create) < body.find(sync_cmd), (
         "In the code body, 'uv venv .venv' must appear before 'uv sync --all-extras'"
     )
+    assert 'env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$local_venv" uv sync' in body
+    assert 'activate_marker="# robot_sf bootstrap: preserve selected extras for uv run"' in body
 
 
 def test_bootstrap_worktree_fails_closed_on_missing_python(tmp_path: Path) -> None:
@@ -2634,9 +2641,11 @@ def test_bootstrap_worktree_succeeds_when_python_present(tmp_path: Path) -> None
                 "  # Create a working python stub so the -x check passes.",
                 '  printf "#!/usr/bin/env bash\\nexit 0\\n" > "$venv_dir/bin/python"',
                 '  chmod 0755 "$venv_dir/bin/python"',
+                '  printf "# fake activation\\n" > "$venv_dir/bin/activate"',
                 "  exit 0",
                 "fi",
                 'if [[ "$1" == "sync" ]]; then',
+                '  if [[ -n "${UV_NO_SYNC:-}" ]]; then echo "UV_NO_SYNC was not cleared" >&2; exit 98; fi',
                 '  echo "Resolved 302 packages in 1ms"',
                 '  echo "Checked 256 packages in 12ms"',
                 "  exit 0",
@@ -2692,6 +2701,37 @@ def test_bootstrap_worktree_succeeds_when_python_present(tmp_path: Path) -> None
     )
     assert ".venv/bin/python is ready" in result.stdout
     assert "source .venv/bin/activate" in result.stdout
+    activation = repo / ".venv" / "bin" / "activate"
+    activation_text = activation.read_text(encoding="utf-8")
+    assert activation_text.count("export UV_NO_SYNC=1") == 1
+
+    second_result = subprocess.run(
+        [str(script_dir / "bootstrap_worktree.sh"), "--no-symlink-machine"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert second_result.returncode == 0, second_result.stderr
+    assert activation.read_text(encoding="utf-8").count("export UV_NO_SYNC=1") == 1
+
+    clean_env = {key: value for key, value in os.environ.items() if key != "UV_NO_SYNC"}
+    activation_result = subprocess.run(
+        ["bash", "-c", 'source "$1"; printf "%s\\n" "$UV_NO_SYNC"', "activate", str(activation)],
+        cwd=repo,
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert activation_result.returncode == 0, activation_result.stderr
+    assert activation_result.stdout.strip() == "1"
 
 
 def test_bootstrap_worktree_help_does_not_invoke_uv(tmp_path: Path) -> None:

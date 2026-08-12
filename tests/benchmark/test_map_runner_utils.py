@@ -5781,6 +5781,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
+            self.action_log: list[list[float]] = []
 
         def reset(self, seed: int | None = None):
             """Return the same observation for both profile variants."""
@@ -5808,7 +5809,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
 
         def step(self, action):
             """Terminate with a deterministic successful outcome."""
-            _ = action
+            self.action_log.append(np.asarray(action, dtype=float).tolist())
             obs, _ = self.reset()
             return obs, 0.0, True, False, {"meta": {"is_route_complete": True}}
 
@@ -5838,10 +5839,16 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         "robot_sf.benchmark.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
-    monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
-        lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
-    )
+    created_envs: list[_DummyEnv] = []
+
+    def _make_env(config, seed, debug):
+        """Create and retain deterministic environments for action comparison."""
+        _ = config, seed, debug
+        env = _DummyEnv(_minimal_map_def())
+        created_envs.append(env)
+        return env
+
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.make_robot_env", _make_env)
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
     )
@@ -5878,6 +5885,9 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     on = json.loads(on_path.read_text(encoding="utf-8").splitlines()[0])
     assert off["outcome"] == on["outcome"]
     assert off["metrics"] == on["metrics"]
+    assert len(created_envs) == 2
+    np.testing.assert_allclose(created_envs[0].action_log, created_envs[1].action_log)
+    assert created_envs[0].action_log
     assert "simulation_step_trace" not in off["algorithm_metadata"]
     assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0

@@ -287,6 +287,60 @@ def test_check_detects_drift(tmp_path, monkeypatch):
         importlib.reload(reg)
 
 
+def test_check_ignores_hash_drift_for_ineligible_entry(tmp_path):
+    """Excluded commands do not block drift checks when an unused input file changes."""
+    import importlib
+
+    original_registry = reg.REGISTRY_PATH
+    original_audit = reg.AUDIT_PATH
+    reg.REGISTRY_PATH = tmp_path / "figure_render_registry.v1.yaml"
+    reg.AUDIT_PATH = tmp_path / "audit.json"
+    try:
+        registry, audit = reg.build_registry()
+        reg.write_outputs(registry, audit)
+        target = next(
+            entry
+            for entry in registry["entries"]
+            if not entry["recurrence_eligible"] and entry["inputs"]
+        )
+        data = yaml.safe_load(reg.REGISTRY_PATH.read_text())
+        mutated = next(entry for entry in data["entries"] if entry["id"] == target["id"])
+        mutated["inputs"][0]["sha256"] = "deadbeef" * 8
+        reg.REGISTRY_PATH.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        assert reg.check_drift() == 0
+    finally:
+        reg.REGISTRY_PATH = original_registry
+        reg.AUDIT_PATH = original_audit
+        importlib.reload(reg)
+
+
+def test_check_keeps_hash_drift_for_eligible_entry_fail_closed(tmp_path):
+    """Executable recurrence inputs retain exact SHA drift enforcement."""
+    import importlib
+
+    original_registry = reg.REGISTRY_PATH
+    original_audit = reg.AUDIT_PATH
+    reg.REGISTRY_PATH = tmp_path / "figure_render_registry.v1.yaml"
+    reg.AUDIT_PATH = tmp_path / "audit.json"
+    try:
+        registry, audit = reg.build_registry()
+        reg.write_outputs(registry, audit)
+        target = next(
+            entry
+            for entry in registry["entries"]
+            if entry["recurrence_eligible"] and entry["inputs"]
+        )
+        data = yaml.safe_load(reg.REGISTRY_PATH.read_text())
+        mutated = next(entry for entry in data["entries"] if entry["id"] == target["id"])
+        mutated["inputs"][0]["sha256"] = "deadbeef" * 8
+        reg.REGISTRY_PATH.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+        assert reg.check_drift() == 1
+    finally:
+        reg.REGISTRY_PATH = original_registry
+        reg.AUDIT_PATH = original_audit
+        importlib.reload(reg)
+
+
 # ---------------------------------------------------------------------------
 # CLI surface: --write idempotency and --check against committed files.
 # ---------------------------------------------------------------------------

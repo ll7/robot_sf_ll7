@@ -31,6 +31,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
     require_algorithm_allowed,
 )
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency_stress import (
@@ -126,6 +127,7 @@ from robot_sf.benchmark.map_runner_observations import (
 from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
+from robot_sf.benchmark.map_runner_policies import brne as _brne_builder
 from robot_sf.benchmark.map_runner_policies import diffusion_policy as _diffusion_policy_builder
 from robot_sf.benchmark.map_runner_policies import distributional_rl as _distributional_rl_builder
 from robot_sf.benchmark.map_runner_policies import gap_reference as _gap_reference_builder
@@ -1043,6 +1045,7 @@ def _ppo_action_to_unicycle(
 # existing if/elif chain.
 _POLICY_BUILDERS: dict[str, _policy_builder_registry.PolicyBuilder] = {
     **dict.fromkeys(_goal_policy_builder.GOAL_ALGO_KEYS, _goal_policy_builder.build),
+    **dict.fromkeys(_brne_builder.BRNE_KEYS, _brne_builder.build),
     **dict.fromkeys(
         _adapter_policy_builders.RISK_SURFACE_DWA_KEYS,
         _adapter_policy_builders.build_risk_surface_dwa,
@@ -2702,6 +2705,7 @@ class _BatchContext:
     cbf_safety_filter: dict[str, Any] | None
     record_planner_decision_trace: bool
     record_simulation_step_trace: bool
+    telemetry: dict[str, Any] | None
     multiprocessing_context: BaseContext | None
     workers: int
     resume: bool
@@ -2775,6 +2779,7 @@ def _init_batch_context(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None,
     record_planner_decision_trace: bool,
     record_simulation_step_trace: bool,
+    telemetry: dict[str, Any] | None,
     multiprocessing_context: BaseContext | None,
     workers: int,
     resume: bool,
@@ -2815,6 +2820,7 @@ def _init_batch_context(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        telemetry=telemetry,
         multiprocessing_context=multiprocessing_context,
         workers=workers,
         resume=resume,
@@ -2858,6 +2864,15 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
             Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
         )
         ctx.scenarios = list(ctx.scenarios_or_path)
+
+    if ctx.telemetry is not None:
+        profile = normalize_telemetry_profile(ctx.telemetry)
+        for scenario in ctx.scenarios:
+            metadata = scenario.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+                scenario["metadata"] = metadata
+            metadata["telemetry"] = profile.to_mapping()
 
     errors = validate_scenario_list([dict(s) for s in ctx.scenarios])
     if errors:
@@ -3426,6 +3441,7 @@ def run_map_batch(  # noqa: PLR0913
     cbf_safety_filter: dict[str, object] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    telemetry: dict[str, object] | None = None,
     multiprocessing_context: BaseContext | None = None,
     workers: int = 1,
     resume: bool = True,
@@ -3463,6 +3479,7 @@ def run_map_batch(  # noqa: PLR0913
         cbf_safety_filter = batch_config.cbf_safety_filter
         record_planner_decision_trace = batch_config.record_planner_decision_trace
         record_simulation_step_trace = batch_config.record_simulation_step_trace
+        telemetry = batch_config.telemetry
         multiprocessing_context = batch_config.multiprocessing_context
         workers = batch_config.workers
         resume = batch_config.resume
@@ -3492,6 +3509,7 @@ def run_map_batch(  # noqa: PLR0913
         cbf_safety_filter=cbf_safety_filter,
         record_planner_decision_trace=record_planner_decision_trace,
         record_simulation_step_trace=record_simulation_step_trace,
+        telemetry=telemetry,
         multiprocessing_context=multiprocessing_context,
         workers=workers, resume=resume,
         circuit_breaker_threshold=circuit_breaker_threshold,

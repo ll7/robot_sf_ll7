@@ -74,6 +74,16 @@ REAL_REEXPORT_CONFIG_EVIDENCE_SCHEMA = "issue_6411_config_evidence.v1"
 ISSUE_6412_PACKAGE_SHA256SUMS_SHA256 = (
     "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 )
+# The approved #6412 package predates the #6814 re-export overlay and uses the
+# resolver's original mapping schema.  The overlay's synthetic fixtures use
+# the namespaced #6412 schema.  Both are accepted only after the immutable
+# package digest, row identity, and source-artifact checks below pass.
+ISSUE_6412_MAPPING_RECEIPT_SCHEMAS = frozenset(
+    {
+        "issue_6412_trace_reexport_mapping_receipt.v1",
+        "issue_5756_trace_mapping_receipt.v1",
+    }
+)
 ISSUE_6814_EXECUTION_COMMIT = EXECUTION_COMMIT
 
 REAL_REEXPORT_SEEDS = tuple(range(111, 141))
@@ -2353,6 +2363,55 @@ def _issue_6814_read_package_json(package_root: Path, name: str) -> dict[str, An
     return _read_json_object(path)
 
 
+def _issue_6814_read_run_summary(path: Path) -> dict[str, Any]:
+    """Read a run summary, including the approved legacy command-block form.
+
+    The approved #6412 arm summaries contain an unindented shell-command
+    continuation after ``command: |``.  It is deterministic source metadata,
+    but not accepted by a strict YAML parser.  Repair only that known shape;
+    all other YAML errors remain unavailable rather than being guessed.
+    """
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RealReexportBindingError("issue #6814 run summary is unavailable") from exc
+    try:
+        payload = yaml.safe_load(raw)
+    except yaml.YAMLError:
+        lines = raw.splitlines()
+        repaired: list[str] = []
+        in_command = False
+        saw_command = False
+        saw_command_end = False
+        for line in lines:
+            if not in_command and line.strip() == "command: |":
+                in_command = True
+                saw_command = True
+                repaired.append(line)
+                continue
+            if in_command and re.match(r"^(exit_code|completed_at(?:_utc)?):\s*", line):
+                in_command = False
+                saw_command_end = True
+                repaired.append(line)
+                continue
+            if in_command:
+                # Normalize every legacy command line to one block indent;
+                # the source file indents only its first command line.
+                repaired.append(f"    {line.lstrip()}" if line else "    ")
+            else:
+                repaired.append(line)
+        if not (saw_command and saw_command_end):
+            raise RealReexportBindingError("issue #6814 run summary is not valid YAML")
+        try:
+            payload = yaml.safe_load("\n".join(repaired) + "\n")
+        except yaml.YAMLError as exc:
+            raise RealReexportBindingError("issue #6814 run summary is not valid YAML") from exc
+    if not isinstance(payload, Mapping):
+        raise RealReexportBindingError("issue #6814 run summary must be an object")
+    return dict(payload)
+
+
 def _parse_issue_6814_sha256sums(text: str) -> list[tuple[int, str, str]]:
     """Parse non-comment SHA256SUMS entries with their source line numbers."""
 
@@ -2450,7 +2509,7 @@ def _issue_6814_verify_package(  # noqa: C901, PLR0912, PLR0915
 
     source_pointer = _issue_6814_read_package_json(package_root, "source_pointer.json")
     mapping = _issue_6814_read_package_json(package_root, "mapping_receipt.json")
-    if mapping.get("schema_version") != "issue_6412_trace_reexport_mapping_receipt.v1":
+    if mapping.get("schema_version") not in ISSUE_6412_MAPPING_RECEIPT_SCHEMAS:
         raise RealReexportBindingError("issue #6412 mapping receipt schema mismatch")
     rows = mapping.get("rows")
     if mapping.get("n_rows") != 90 or not isinstance(rows, list) or len(rows) != 90:
@@ -2777,19 +2836,20 @@ def load_verified_real_reexport_row_source(  # noqa: C901, PLR0912, PLR0915
     manifest_planner = _issue_6814_row_value(
         manifest, ("planner_id",), ("planner",), ("planners", "0", "key")
     )
-    if manifest.get("job_id", manifest.get("slurm_job_id")) != source_provenance["job_id"]:
+    # The approved #6412 campaign manifests predate the #6814 overlay and do
+    # not always repeat the job identifier.  The immutable package mapping
+    # and source-pointer records already bind that identifier; reject an
+    # explicit contradiction, but do not turn an absent historical field into
+    # a false mismatch.
+    manifest_job = manifest.get("job_id", manifest.get("slurm_job_id"))
+    if manifest_job is not None and manifest_job != source_provenance["job_id"]:
         raise RealReexportBindingError("issue #6814 external manifest job mismatch")
     if manifest_planner is not None and manifest_planner != expected["planner_id"]:
         raise RealReexportBindingError("issue #6814 external manifest planner mismatch")
     manifest_scenario = manifest.get("scenario_id")
     if manifest_scenario is not None and manifest_scenario != expected["scenario_id"]:
         raise RealReexportBindingError("issue #6814 external manifest scenario mismatch")
-    try:
-        run_summary_raw = yaml.safe_load(run_summary_path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
-        raise RealReexportBindingError("issue #6814 run summary is not valid YAML") from exc
-    if not isinstance(run_summary_raw, Mapping):
-        raise RealReexportBindingError("issue #6814 run summary must be an object")
+    run_summary_raw = _issue_6814_read_run_summary(run_summary_path)
     preflight = _read_json_object(preflight_path)
     route_geometry_artifact = _issue_6814_optional_external_json(
         root,

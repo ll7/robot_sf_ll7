@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import write_json, write_text
 from robot_sf.research.ch8_statistics import evaluate_statistic
 
 SCHEMA_VERSION = "issue_4445.ch8_statistics_reproducibility.v1"
@@ -90,10 +91,10 @@ def build_packet(manifest_path: Path, output_dir: Path) -> dict[str, Any]:
     report_path = output_dir / "report.md"
     readme_path = output_dir / "README.md"
     checksums_path = output_dir / "SHA256SUMS"
-    summary_path.write_text(json.dumps(packet, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(summary_path, packet)
     report_text = _render_markdown(packet)
-    report_path.write_text(report_text, encoding="utf-8")
-    readme_path.write_text(report_text, encoding="utf-8")
+    write_text(report_path, report_text, issue_ref="robot_sf#4445")
+    write_text(readme_path, report_text, issue_ref="robot_sf#4445")
 
     checksum_files = [
         summary_path,
@@ -191,7 +192,7 @@ def _sha256(path: Path) -> str:
 
 def _write_checksums(path: Path, files: list[Path]) -> None:
     lines = [f"{_sha256(file_path)}  {_public_path(file_path)}" for file_path in files]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(path, "# AI-GENERATED NEEDS-REVIEW\n" + "\n".join(lines) + "\n")
 
 
 def _public_path(path: Path) -> str:

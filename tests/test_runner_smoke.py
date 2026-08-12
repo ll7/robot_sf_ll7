@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark import runner as runner_mod
+from robot_sf.benchmark.analysis_trace import trace_coverage
 from robot_sf.benchmark.runner import run_batch, run_episode, validate_and_write
 from robot_sf.benchmark.schema_validator import load_schema, validate_episode
 
@@ -101,6 +102,85 @@ def test_runner_single_episode_tmp(tmp_path: Path):
         line = f.readline().strip()
     reloaded = json.loads(line)
     assert reloaded["episode_id"] == record["episode_id"]
+
+
+def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) -> None:
+    """The opt-in non-map trace carries reset state, telemetry, and its artifact hash."""
+
+    scenario = {
+        "id": "smoke-telemetry",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    output = tmp_path / "telemetry.jsonl"
+    summary = run_batch(
+        [scenario],
+        out_path=output,
+        schema_path=SCHEMA_PATH,
+        base_seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        append=False,
+        workers=1,
+        resume=False,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+    )
+
+    assert summary["written"] == 1
+    record = json.loads(output.read_text(encoding="utf-8").splitlines()[0])
+    trace = record["algorithm_metadata"]["analysis_trace"]
+    assert trace["steps"][0]["time_s"] == 0.0
+    assert record["algorithm_metadata"]["telemetry"]["analysis_trace"] == "all"
+    assert record["provenance"]["artifact_sha256"] == trace["artifact_sha256"]
+    coverage = trace_coverage(record)
+    assert coverage["status"] == "unavailable"
+    assert "stable_actor_ids" in coverage["reasons"] or "controls" in coverage["reasons"]
+    assert record["algorithm_metadata"]["analysis_trace_unavailable"]["status"] == "unavailable"
+
+
+def test_run_episode_analysis_trace_reuses_episode_commit_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The opt-in trace reuses the episode commit and canonical trace digest."""
+
+    scenario = {
+        "id": "smoke-trace-commit-reuse",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    git_calls: list[None] = []
+    monkeypatch.setattr(
+        runner_mod,
+        "_git_hash_fallback",
+        lambda: git_calls.append(None) or "a" * 40,
+    )
+
+    record = run_episode(
+        scenario,
+        seed=123,
+        horizon=5,
+        dt=0.1,
+        record_forces=False,
+        telemetry={"analysis_trace": "all", "planner_debug_trace": "none"},
+    )
+    trace = record["algorithm_metadata"]["analysis_trace"]
+
+    assert git_calls == [None]
+    assert trace["git_hash"] == record["git_hash"] == "a" * 40
+    assert record["provenance"]["artifact_sha256"] == trace["artifact_sha256"]
 
 
 def test_runner_goal_alias_executes_like_simple_policy(tmp_path: Path):

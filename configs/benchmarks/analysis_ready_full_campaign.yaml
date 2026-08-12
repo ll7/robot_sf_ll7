@@ -1,0 +1,5 @@
+# Analysis-ready overlay for a canonical full benchmark invocation.
+# Apply this mapping through `robot_sf_bench run --telemetry-config ...`.
+telemetry:
+  analysis_trace: all
+  planner_debug_trace: none

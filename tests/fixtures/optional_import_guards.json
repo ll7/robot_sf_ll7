@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 115,
+  "total_guards": 118,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -17,7 +17,7 @@
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
         "robot_sf/benchmark/latency_stress.py:826",
-        "robot_sf/planner/socnav_base.py:723"
+        "robot_sf/planner/socnav_base.py:726"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -47,7 +47,7 @@
       "blessed": true,
       "note": "Blessed broad catch: registry/compiled-backend boundary.",
       "samples": [
-        "robot_sf/gym_env/snqi_proxy.py:139"
+        "robot_sf/gym_env/snqi_proxy.py:150"
       ]
     },
     "AttributeError+ImportError+ModuleNotFoundError+OSError+RuntimeError+SyntaxError+TypeError+ValueError": {
@@ -57,7 +57,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav_base.py:588"
+        "robot_sf/planner/socnav_base.py:591"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -67,7 +67,7 @@
       "blessed": true,
       "note": "Blessed broad catch: optional registry boundary.",
       "samples": [
-        "robot_sf/benchmark/cli.py:236"
+        "robot_sf/benchmark/cli.py:237"
       ]
     },
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": {
@@ -102,8 +102,8 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 80,
-      "has_as_count": 20,
+      "count_ceiling": 81,
+      "has_as_count": 21,
       "pragma_no_cover_count": 24,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
@@ -117,7 +117,8 @@
         "robot_sf/baselines/sac.py:14",
         "robot_sf/baselines/sicnav.py:422",
         "robot_sf/baselines/sicnav.py:300",
-        "robot_sf/benchmark/cli.py:224",
+        "robot_sf/benchmark/case_workbench.py:1037",
+        "robot_sf/benchmark/cli.py:225",
         "robot_sf/benchmark/collision_causal_report.py:55",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
@@ -125,8 +126,8 @@
         "robot_sf/benchmark/episode_replay_figure.py:57",
         "robot_sf/benchmark/episode_replay_figure.py:852",
         "robot_sf/benchmark/episode_replay_figure.py:890",
-        "robot_sf/benchmark/figure_qa.py:648",
-        "robot_sf/benchmark/figure_qa.py:717",
+        "robot_sf/benchmark/figure_qa.py:651",
+        "robot_sf/benchmark/figure_qa.py:720",
         "robot_sf/benchmark/figures/export.py:155",
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/encode.py:86",
@@ -162,10 +163,10 @@
         "robot_sf/common/seed.py:50",
         "robot_sf/common/seed.py:80",
         "robot_sf/feature_extractors/mamba_extractor.py:102",
-        "robot_sf/gym_env/crowd_sim_env.py:352",
-        "robot_sf/gym_env/env_config.py:302",
+        "robot_sf/gym_env/crowd_sim_env.py:354",
+        "robot_sf/gym_env/env_config.py:289",
         "robot_sf/gym_env/environment_factory.py:56",
-        "robot_sf/gym_env/environment_factory.py:174",
+        "robot_sf/gym_env/environment_factory.py:187",
         "robot_sf/maps/osm_zones_editor.py:72",
         "robot_sf/models/registry.py:21",
         "robot_sf/nav/occupancy_grid.py:109",
@@ -198,8 +199,8 @@
       "note": "Blessed broad catch: native-lib / filesystem load may raise OSError. campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it exists to catch and report arm-dependency import failures with a remediation message, so try_import (which discards the exception) is the wrong tool there.",
       "samples": [
         "robot_sf/benchmark/campaign_runtime_preflight.py:106",
-        "robot_sf/benchmark/cli.py:3246",
-        "robot_sf/benchmark/cli.py:3280",
+        "robot_sf/benchmark/cli.py:3356",
+        "robot_sf/benchmark/cli.py:3390",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
         "robot_sf/benchmark/orca_preflight.py:90"
       ]
@@ -214,6 +215,17 @@
         "robot_sf/benchmark/camera_ready/resource_lifecycle.py:275"
       ]
     },
+    "ImportError+ParquetDependencyError": {
+      "count_ceiling": 2,
+      "has_as_count": 2,
+      "pragma_no_cover_count": 0,
+      "blessed": true,
+      "note": "Blessed optional analytics boundary: the typed Parquet dependency error is reported as an explicit package gap alongside ImportError.",
+      "samples": [
+        "robot_sf/benchmark/case_workbench.py:300",
+        "robot_sf/benchmark/case_workbench.py:327"
+      ]
+    },
     "ImportError+RuntimeError": {
       "count_ceiling": 7,
       "has_as_count": 0,
@@ -224,7 +236,7 @@
         "robot_sf/baselines/dr_mpc.py:187",
         "robot_sf/baselines/sicnav.py:346",
         "robot_sf/baselines/sicnav.py:532",
-        "robot_sf/benchmark/cli.py:3448",
+        "robot_sf/benchmark/cli.py:3560",
         "robot_sf/telemetry/tensorboard_adapter.py:20",
         "robot_sf/telemetry/tensorboard_adapter.py:26",
         "robot_sf/training/multi_extractor_analysis.py:22"
@@ -249,7 +261,7 @@
       "blessed": true,
       "note": "Pure optional-import (ModuleNotFoundError spelling). Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
-        "robot_sf/benchmark/parquet_export.py:20",
+        "robot_sf/benchmark/parquet_export.py:24",
         "robot_sf/common/hardware.py:129",
         "robot_sf/planner/learned_gmm_predictor.py:97",
         "robot_sf/planner/learned_short_horizon_predictor.py:427",

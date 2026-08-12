@@ -1,0 +1,770 @@
+# Cross-Context Validity / Revalidation Matrix v1
+#
+# Issue: #6872
+# Schema: cross_context_validity_matrix.v1
+# Purpose: Distinguish protocol portability from transfer of empirical
+#   conclusions across four context axes. Fails closed: unsupported cells
+#   default to requires_revalidation or not_evidenced.
+#
+# This is a synthesis/contract artifact, not a new benchmark campaign or
+# data collection. Evidence statuses reflect what this repository can
+# currently substantiate from existing configs, contracts, and local
+# evidence bundles.
+
+schema_version: cross_context_validity_matrix.v1
+issue: 6872
+status: draft
+created: "2026-08-11"
+
+claim_boundary: >
+  This matrix documents which parts of the AMV benchmark protocol are
+  portable (reusable measurement definitions) and which empirical
+  conclusions (rankings, metric values, planner comparisons) require
+  revalidation when context changes. It is a research-maintenance
+  contract and diagnostic/planning artifact. It is not benchmark
+  evidence, not paper evidence, not sim-to-real evidence, and not
+  physical-platform validation.
+
+related_issues:
+  - issue: 3207
+    role: simulator_fidelity_sensitivity_evidence
+    link: https://github.com/ll7/robot_sf_ll7/issues/3207
+  - issue: 6472
+    role: social_compliance_protocol
+    link: https://github.com/ll7/robot_sf_ll7/issues/6472
+  - issue: 6473
+    role: observation_track_architecture
+    link: https://github.com/ll7/robot_sf_ll7/issues/6473
+
+# --- Axis definitions ---
+# Each axis has a key, display name, and the concrete values this
+# repository currently evidences or references.
+
+axes:
+  site_topology:
+    display_name: Site / Topology
+    description: >
+      Physical environment geometry and scenario topology. Determines
+      spatial interaction patterns, visibility, and constriction
+      dynamics.
+    values:
+      - key: classic_corridor
+        display_name: Classic corridor / hallway
+        provenance:
+          scenario_archetypes:
+            - classic_head_on_corridor
+            - francis2023_narrow_hallway
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+          maps: maps/svg_maps/ (corridor-type SVG maps)
+      - key: intersection
+        display_name: Intersection / crossing
+        provenance:
+          scenario_archetypes:
+            - classic_t_intersection
+            - classic_urban_crossing
+            - francis2023_intersection_no_gesture
+            - francis2023_intersection_proceed
+            - francis2023_intersection_wait
+            - francis2023_circular_crossing
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+            - configs/scenarios/francis2023.yaml
+      - key: bottleneck
+        display_name: Bottleneck / constriction
+        provenance:
+          scenario_archetypes:
+            - classic_bottleneck
+            - classic_realworld_bottleneck
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+      - key: doorway
+        display_name: Doorway / portal
+        provenance:
+          scenario_archetypes:
+            - classic_doorway
+            - francis2023_narrow_doorway
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+            - configs/scenarios/francis2023.yaml
+      - key: open_plaza
+        display_name: Open plaza / dense crowd
+        provenance:
+          scenario_archetypes:
+            - francis2023_crowd_navigation
+            - francis2023_robot_crowding
+          configs:
+            - configs/scenarios/francis2023.yaml
+      - key: blind_corner
+        display_name: Blind corner
+        provenance:
+          scenario_archetypes:
+            - francis2023_blind_corner
+          configs:
+            - configs/scenarios/francis2023.yaml
+      - key: elevator
+        display_name: Elevator entry / exit
+        provenance:
+          scenario_archetypes:
+            - francis2023_entering_elevator
+            - francis2023_exiting_elevator
+          configs:
+            - configs/scenarios/francis2023.yaml
+      - key: following
+        display_name: Following / leading / accompanying
+        provenance:
+          scenario_archetypes:
+            - francis2023_following_human
+            - francis2023_leading_human
+            - francis2023_accompanying_peer
+          configs:
+            - configs/scenarios/francis2023.yaml
+      - key: station_platform
+        display_name: Station platform
+        provenance:
+          scenario_archetypes:
+            - classic_station_platform
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+      - key: merging
+        display_name: Merging traffic
+        provenance:
+          scenario_archetypes:
+            - classic_merging
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+      - key: overtaking
+        display_name: Overtaking
+        provenance:
+          scenario_archetypes:
+            - classic_overtaking
+            - francis2023_pedestrian_overtaking
+            - francis2023_robot_overtaking
+          configs:
+            - configs/scenarios/classic_interactions.yaml
+            - configs/scenarios/francis2023.yaml
+
+  social_cultural:
+    display_name: Social / Cultural Assumptions
+    description: >
+      Pedestrian behavior model and social-force parameterization.
+      Determines how synthetic pedestrians interact with each other and
+      with the robot.
+    values:
+      - key: social_force_default
+        display_name: Default social force model
+        provenance:
+          default_model: true
+          configs:
+            - configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml
+          issues: [3207]
+      - key: social_force_heterogeneous_speeds
+        display_name: Heterogeneous pedestrian speed archetypes
+        provenance:
+          configs:
+            - configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml
+          axes_tested:
+            - social_force_speed_archetypes
+          issues: [3207]
+      - key: hsfm_zanlungo
+        display_name: HSFM Zanlungo collision prediction
+        provenance:
+          configs:
+            - configs/research/zanlungo_collision_prediction_issue_4973.yaml
+          issues: [4973]
+          note: experimental, not baseline benchmark evidence
+      - key: hsfm_ttc_predictive
+        display_name: HSFM TTC predictive forces
+        provenance:
+          configs:
+            - configs/research/hsfm_ttc_predictive_forces_issue_3481.yaml
+          issues: [3481]
+          note: opt-in prototype, not baseline benchmark evidence
+
+  robot_embodiment:
+    display_name: Robot Embodiment
+    description: >
+      Robot kinematics, command space, and physical platform properties.
+      Determines motion constraints and actuation semantics.
+    values:
+      - key: differential_drive
+        display_name: Differential drive (unicycle)
+        provenance:
+          kinematics: differential_drive
+          command_space: unicycle_vw
+          default: true
+          configs:
+            - configs/benchmarks/paper_experiment_matrix_v1.yaml
+          benchmark_profile: baseline-safe
+      - key: holonomic
+        display_name: Holonomic / omnidirectional
+        provenance:
+          kinematics: holonomic
+          command_space: holonomic_vxy
+          default: false
+          configs:
+            - configs/benchmarks/camera_ready_all_planners_holonomic.yaml
+            - configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml
+          note: cross-kinematics compatibility testing, not default benchmark
+      - key: bicycle_drive
+        display_name: Bicycle drive
+        provenance:
+          kinematics: bicycle_drive
+          command_space: unicycle_vw
+          default: false
+          configs:
+            - configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml
+          note: cross-kinematics compatibility testing only
+
+  observation_perception:
+    display_name: Observation / Perception Mode
+    description: >
+      What the planner observes about the environment. Determines
+      perception assumptions, sensor models, and information availability.
+    values:
+      - key: oracle_full_state
+        display_name: Oracle full state
+        provenance:
+          observation_level: oracle_full_state
+          perception_assumption: privileged_sim_state
+          default: true
+          source: robot_sf/benchmark/observation_levels.py
+      - key: tracked_agents_no_noise
+        display_name: Perfect tracked agents (no noise)
+        provenance:
+          observation_level: tracked_agents_no_noise
+          perception_assumption: perfect_tracking_without_noise
+          source: robot_sf/benchmark/observation_levels.py
+      - key: tracked_agents_with_noise
+        display_name: Tracked agents with synthetic noise
+        provenance:
+          observation_level: tracked_agents_with_noise
+          perception_assumption: tracked_agents_with_synthetic_noise
+          source: robot_sf/benchmark/observation_levels.py
+          note: synthetic noise robustness, not real sensor calibration
+      - key: lidar_2d
+        display_name: 2D lidar projection
+        provenance:
+          observation_level: lidar_2d
+          perception_assumption: range_sensor_projection
+          source: robot_sf/benchmark/observation_levels.py
+      - key: occluded_partial_state
+        display_name: Occluded partial state
+        provenance:
+          observation_level: occluded_partial_state
+          perception_assumption: partial_state_with_occlusion
+          source: robot_sf/benchmark/observation_levels.py
+          note: occlusion metadata, not sim-to-real validity
+
+# --- Protocol portability matrix ---
+# Distinguishes protocol_portability (can the measurement protocol be
+# reused?) from result_portability (do empirical conclusions transfer?).
+#
+# evidence_status values:
+#   covered - actively evidenced in this repository with local configs or bundles
+#   partially_covered - some evidence exists but incomplete coverage
+#   requires_revalidation - no direct evidence; must revalidate before claiming
+#   not_evidenced - no evidence exists and no local artifact supports the cell
+#   unavailable - cell is blocked by missing external data or dependency
+#
+# protocol_portability values:
+#   portable - measurement protocol is reusable as-is in this context
+#   requires_adaptation - protocol definition must be adapted for this context
+#   not_portable - protocol definition does not apply in this context
+#   unknown - portability has not been assessed
+
+protocol_portability_matrix:
+  description: >
+    Per-axis-pair assessment of whether the AMV measurement protocol
+    transfers (protocol_portability) and whether empirical conclusions
+    transfer (result_portability). Every cell has an evidence_status that
+    fails closed: missing evidence defaults to requires_revalidation.
+
+  cells:
+    # --- Site/Topology axis pairs ---
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/benchmarks/paper_experiment_matrix_v1.yaml
+          - configs/scenarios/classic_interactions.yaml
+        note: baseline configuration; protocol applies, but conclusions are internal only
+      revalidation_action: >
+        No revalidation needed for protocol; revalidate if planner ranking
+        claims are extended beyond current evidence scope.
+
+    - axes:
+        site_topology: intersection
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/benchmarks/paper_experiment_matrix_v1.yaml
+          - configs/scenarios/classic_interactions_francis2023.yaml
+        note: included in benchmark scenario suite
+      revalidation_action: >
+        Protocol applies; revalidate if intersection-specific ranking
+        claims are made.
+
+    - axes:
+        site_topology: bottleneck
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/classic_interactions.yaml
+          - benchmarks/ammv_benchmark_v0.yaml
+        note: bottleneck is an AMMV scenario class
+      revalidation_action: >
+        Protocol applies; revalidate for bottleneck-specific ranking or
+        safety claims.
+
+    - axes:
+        site_topology: doorway
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/classic_interactions.yaml
+          - configs/scenarios/francis2023.yaml
+      revalidation_action: >
+        Protocol applies; revalidate for doorway-specific claims.
+
+    - axes:
+        site_topology: open_plaza
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: partially_covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/francis2023.yaml
+        note: crowd_navigation and robot_crowding scenarios exist but are not in primary eval set
+      revalidation_action: >
+        Revalidate protocol applicability for dense crowd scenarios
+        before making open_plaza ranking claims.
+
+    - axes:
+        site_topology: blind_corner
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/francis2023.yaml
+      revalidation_action: >
+        Protocol applies; revalidate for blind-corner-specific claims.
+
+    - axes:
+        site_topology: elevator
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: partially_covered
+      protocol_portability: requires_adaptation
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/francis2023.yaml
+        note: elevator scenarios exist but protocol may need adaptation for constrained-space dynamics
+      revalidation_action: >
+        Assess whether AMV metrics (SNQI, collision) are meaningful for
+        elevator entry/exit before using as benchmark evidence.
+
+    - axes:
+        site_topology: following
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: partially_covered
+      protocol_portability: requires_adaptation
+      result_portability: not_portable
+      provenance:
+        source_type: benchmark_config
+        references:
+          - configs/scenarios/francis2023.yaml
+        note: following/leading/accompanying scenarios exist but AMV protocol assumes non-following interactions
+      revalidation_action: >
+        Revalidate whether AMV metric layers apply for following/leading
+        scenarios; protocol adaptation may be needed for social compliance
+        in dyadic interactions.
+
+    - axes:
+        site_topology: station_platform
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: unknown
+      result_portability: not_portable
+      provenance:
+        source_type: not_applicable
+        references:
+          - configs/scenarios/classic_interactions.yaml
+        note: >
+          No direct evidence for station_platform topology; scenario archetypes
+          exist in config but no benchmark protocol run has been executed.
+      revalidation_action: >
+        Assess whether AMV metrics (SNQI, collision, timeout) are meaningful
+        for station-platform dynamics before any benchmark claim. Determine if
+        protocol requires adaptation for platform-edge interaction semantics.
+
+    - axes:
+        site_topology: merging
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: unknown
+      result_portability: not_portable
+      provenance:
+        source_type: not_applicable
+        references:
+          - configs/scenarios/classic_interactions.yaml
+        note: >
+          No direct evidence for merging topology; scenario archetypes exist in
+          config but no benchmark protocol run has been executed.
+      revalidation_action: >
+        Validate whether merging-traffic dynamics require protocol adaptation
+        (e.g., lane-discipline metrics, merge-yield safety measures) before any
+        benchmark claim. Run a targeted smoke with merging scenarios to assess
+        metric validity.
+
+    - axes:
+        site_topology: overtaking
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: unknown
+      result_portability: not_portable
+      provenance:
+        source_type: not_applicable
+        references:
+          - configs/scenarios/classic_interactions.yaml
+        note: >
+          No direct evidence for overtaking topology; scenario archetypes exist
+          in config but no benchmark protocol run has been executed.
+      revalidation_action: >
+        Determine whether overtaking interaction semantics (pass-side, speed
+        differential, clearance margins) require protocol adaptation before any
+        benchmark claim. Assess SNQI applicability for overtaking-specific
+        social-compliance measurements.
+
+    # --- Social/Cultural axis pairs ---
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_heterogeneous_speeds
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: partially_covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: fidelity_sensitivity_study
+        references:
+          - configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml
+        note: tested as fidelity axis in #3207, not as standalone benchmark configuration
+      revalidation_action: >
+        Revalidate planner rankings under heterogeneous speed archetypes
+        before citing as benchmark evidence.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: hsfm_zanlungo
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: research_config
+        references:
+          - configs/research/zanlungo_collision_prediction_issue_4973.yaml
+        note: experimental force model, no benchmark evidence
+      revalidation_action: >
+        Run full benchmark protocol with Zanlungo model before any claim.
+        Protocol definition applies but empirical results are unknown.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: hsfm_ttc_predictive
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: research_config
+        references:
+          - configs/research/hsfm_ttc_predictive_forces_issue_3481.yaml
+        note: opt-in prototype, no benchmark evidence
+      revalidation_action: >
+        Run full benchmark protocol with TTC predictive model before any
+        claim.
+
+    # --- Robot Embodiment axis pairs ---
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: holonomic
+        observation_perception: oracle_full_state
+      evidence_status: partially_covered
+      protocol_portability: requires_adaptation
+      result_portability: not_portable
+      provenance:
+        source_type: compatibility_test
+        references:
+          - configs/benchmarks/camera_ready_all_planners_holonomic.yaml
+          - configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml
+        note: cross-kinematics compatibility testing only; not default benchmark config
+      revalidation_action: >
+        Revalidate planner rankings and SNQI under holonomic kinematics
+        before any cross-kinematics comparison claim.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: bicycle_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: requires_adaptation
+      result_portability: not_portable
+      provenance:
+        source_type: compatibility_test
+        references:
+          - configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml
+        note: bicycle_drive listed in cross-kinematics matrix but not primary benchmark evidence
+      revalidation_action: >
+        Run full benchmark protocol with bicycle drive before any claim.
+        Protocol metric definitions apply but kinematics may change
+        interaction dynamics.
+
+    # --- Observation/Perception axis pairs ---
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: tracked_agents_no_noise
+      evidence_status: partially_covered
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: observation_level_contract
+        references:
+          - robot_sf/benchmark/observation_levels.py
+        note: observation level defined and wired, but not primary benchmark evidence path
+      revalidation_action: >
+        Revalidate planner rankings under tracked-agents observation
+        before citing as benchmark evidence.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: tracked_agents_with_noise
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: observation_level_contract
+        references:
+          - robot_sf/benchmark/observation_levels.py
+          - configs/benchmarks/observation_noise_goal_smoke.yaml
+        note: synthetic noise profiles exist but no full benchmark evidence
+      revalidation_action: >
+        Revalidate under noisy tracked-agent observations before any
+        robustness claim.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: lidar_2d
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: observation_level_contract
+        references:
+          - robot_sf/benchmark/observation_levels.py
+        note: lidar observation level defined but no full benchmark run
+      revalidation_action: >
+        Run full benchmark protocol with lidar observation level before
+        any perception-dependent claim.
+
+    - axes:
+        site_topology: classic_corridor
+        social_cultural: social_force_default
+        robot_embodiment: differential_drive
+        observation_perception: occluded_partial_state
+      evidence_status: not_evidenced
+      protocol_portability: requires_adaptation
+      result_portability: not_portable
+      provenance:
+        source_type: observation_level_contract
+        references:
+          - robot_sf/benchmark/observation_levels.py
+        note: occlusion level defined but requires scenario visibility support
+      revalidation_action: >
+        Revalidate both protocol applicability (occlusion-aware metrics)
+        and empirical results under occluded observations.
+
+    # --- Cross-site cross-social pairs (diagnostic) ---
+    - axes:
+        site_topology: intersection
+        social_cultural: social_force_heterogeneous_speeds
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: not_applicable
+        references:
+          - https://github.com/ll7/robot_sf_ll7/issues/6872
+        note: cross-axis combination not yet tested
+      revalidation_action: >
+        Revalidate if cross-site cross-social interaction claims are needed.
+
+    - axes:
+        site_topology: bottleneck
+        social_cultural: social_force_heterogeneous_speeds
+        robot_embodiment: differential_drive
+        observation_perception: oracle_full_state
+      evidence_status: not_evidenced
+      protocol_portability: portable
+      result_portability: not_portable
+      provenance:
+        source_type: not_applicable
+        references:
+          - https://github.com/ll7/robot_sf_ll7/issues/6872
+        note: cross-axis combination not yet tested
+      revalidation_action: >
+        Revalidate if bottleneck-specific speed-heterogeneity claims needed.
+
+# --- Canonical current configurations inventory ---
+# Lists the active, evidenced configurations in this repository without
+# implying unsupported coverage claims.
+
+canonical_configurations:
+  description: >
+    Active benchmark configurations with current provenance. Naming a
+    configuration here does not imply it covers all matrix cells or that
+    its results transfer across contexts.
+  configs:
+  - key: paper_experiment_matrix_v1
+    display_name: Paper experiment matrix v1 (camera-ready baseline)
+    config_path: configs/benchmarks/paper_experiment_matrix_v1.yaml
+    scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+    seed_policy: eval (seed_sets_v1.yaml)
+    kinematics: [differential_drive]
+    observation_level: oracle_full_state
+    social_model: social_force_default
+    planners: [goal, social_force, orca, ppo, prediction_planner, fast_pysf_planner]
+    benchmark_profile: baseline-safe
+    evidence_status: covered
+    coverage_notes: >
+      Primary benchmark configuration. Covers classic_interactions and
+      francis2023 scenario classes with differential drive kinematics and
+      oracle observation. Does not cover holonomic, lidar, noisy, or
+      heterogeneous social force contexts.
+
+  - key: paper_experiment_matrix_7planners_v1
+    display_name: Paper experiment matrix 7 planners v1
+    config_path: configs/benchmarks/paper_experiment_matrix_7planners_v1.yaml
+    scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+    seed_policy: eval
+    kinematics: [differential_drive]
+    observation_level: oracle_full_state
+    social_model: social_force_default
+    benchmark_profile: baseline-safe
+    evidence_status: covered
+    coverage_notes: >
+      Extended planner panel variant. Same context coverage as
+      paper_experiment_matrix_v1 with additional planner comparison.
+
+  - key: cross_kinematics_v1
+    display_name: Cross-kinematics compatibility matrix
+    config_path: configs/benchmarks/paper_cross_kinematics_v1_compatibility.yaml
+    kinematics: [differential_drive, bicycle_drive, holonomic]
+    observation_level: oracle_full_state
+    social_model: social_force_default
+    evidence_status: partially_covered
+    coverage_notes: >
+      Kinematics compatibility testing. Does not constitute full
+      benchmark evidence for non-differential-drive configurations.
+
+  - key: camera_ready_holonomic
+    display_name: Camera-ready holonomic planners
+    config_path: configs/benchmarks/camera_ready_all_planners_holonomic.yaml
+    kinematics: [holonomic]
+    observation_level: oracle_full_state
+    social_model: social_force_default
+    evidence_status: partially_covered
+    coverage_notes: >
+      Holonomic variant for compatibility testing only.
+
+  - key: fidelity_sensitivity_full_fixed_scope
+    display_name: Issue #3207 fidelity sensitivity full fixed scope
+    config_path: configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml
+    issue: 3207
+    axes_tested: [integration_timestep, social_force_speed_archetypes, observation_noise, clearance_radius]
+    planners: [goal, social_force, orca]
+    evidence_status: partially_covered
+    coverage_notes: >
+      Internal fidelity-sensitivity study. Not benchmark evidence. Not
+      paper evidence. Provides diagnostic input for validity boundary
+      assessment only.
+
+# --- No-overclaim boundary ---
+no_overclaim_boundary:
+  description: >
+    Explicit boundary statements that must accompany any public
+    reference to this matrix or its cells.
+
+  statements:
+    - "This matrix is a research-maintenance contract, not benchmark evidence."
+    - "Protocol portability does not imply result portability."
+    - "covered cells indicate the protocol definition applies in this
+       context; they do not indicate that empirical conclusions transfer."
+    - "All result_portability values are not_portable unless specific
+       cross-context evidence exists, which this matrix does not assert."
+    - "not_evidenced and requires_revalidation cells fail closed: no
+       claim may be made without fresh evidence."
+    - "This matrix does not establish simulator realism, sim-to-real
+       transfer, or physical-platform validity."
+    - "Fallback or degraded execution is not success evidence."
+    - "Named canonical configurations describe what exists in this
+       repository; they do not imply completeness or coverage of all
+       matrix cells."

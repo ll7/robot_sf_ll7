@@ -148,6 +148,41 @@ def test_rejects_incomparable_planner_roster(tmp_path: Path) -> None:
         raise AssertionError("incomparable roster must fail closed")
 
 
+def test_cli_rejection_is_prominent_and_actionable(tmp_path: Path, capsys) -> None:
+    """A rejected ranking input explains why it is blocked and how to repair it."""
+    incomplete = _write_ranking(
+        tmp_path,
+        "incomplete.csv",
+        f"structural_class,rank,roster_signature\nconstraint_first_hybrid,1,{ROSTER_SIGNATURE}\n",
+    )
+    output_dir = tmp_path / "out"
+
+    exit_code = builder.main(
+        [
+            "--packet",
+            str(PACKET),
+            "--reference-ranking",
+            str(incomplete),
+            "--candidate-ranking",
+            str(incomplete),
+            "--output-dir",
+            str(output_dir),
+            "--generated-at",
+            "2026-07-24T00:00:00+00:00",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "WARNING: ISSUE #5592 ARTIFACT REJECTED - NOT ELIGIBLE FOR EVIDENCE" in captured.err
+    assert "exactly the four structural classes" in captured.err
+    assert "RECOMMENDED FIX - REQUIRED BEFORE RERUN:" in captured.err
+    assert "do not hand-edit a rank" in captured.err
+    assert "Exit code remains non-zero by design" in captured.err
+    assert not output_dir.exists()
+
+
 def test_artifact_set_is_complete_and_checksummed(tmp_path: Path) -> None:
     """The durable evidence contract includes the consolidated integration report."""
     out = tmp_path / "out"

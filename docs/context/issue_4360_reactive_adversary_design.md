@@ -33,6 +33,9 @@ default and changes nothing about existing pedestrian models.
     adversary.
   - `BoundedResidualAdversary` — the stateful controller that holds the
     macro-action proposal and enforces every hard bound each physics step.
+  - `ResidualAdversaryBehaviorSummary` — resettable,
+    `residual_adversary_behavior.v1` diagnostic accounting for applied residual
+    norms, targeted rows, proposal adjustments, and finite/bound-safe status.
   - Pure, individually-testable bound helpers: `clamp_magnitude`,
     `rate_limit_jerk`, `bound_speed`, `bound_heading_change`,
     `bound_route_deviation`, `project_residual_displacement_walkable`,
@@ -85,19 +88,35 @@ proposal still produces a smooth, bounded residual.
 
 ## Reproducible runtime smoke
 
-Run the bounded, real-simulator smoke with:
+The one canonical CPU command for deterministic residual-adversary smoke uses the
+existing unit-test path with the deterministic `ScriptedPullResidualAdversaryPolicy`:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  uv run pytest tests/sim/test_residual_adversary_wiring.py \
-  -k active_adversary_perturbs_but_keeps_peds_finite -q
+  uv run pytest tests/adversarial/test_residual_adversary.py \
+  tests/sim/test_residual_adversary_wiring.py \
+  -q
 ```
 
-The test constructs the repository's `MapDefinition`, enables
-`SimulationSettings.residual_adversary`, and advances the real
-`init_simulators` path for 20 fixed-timestep steps. It proves only runtime
-wiring and finite-state behavior for the deterministic scripted policy; it is
-smoke evidence, not a benchmark, safety, or stress-strength result. The YAML
+This exercises the full bound pipeline (speed, acceleration, jerk, heading,
+route, walkable-space, inter-agent separation), macro-action cadence, opt-in
+gating, perturb-not-replace base-law preservation, and simulator wiring. The
+`ScriptedPullResidualAdversaryPolicy` is deterministic; combined with the
+fixed-timestep `BoundedResidualAdversary`, every step residual is identical
+across repeated runs with the same config and inputs. The test loads
+`configs/adversarial/issue_4360_residual_adversary.yaml`, binds its template
+`seed: null` to the fixed smoke seed `42`, and advances `20` steps at `dt=0.1 s`.
+The seed field on `ResidualAdversaryConfig` is reserved for future randomized
+policies (CMA-ES, MCTS, PPO); the bundled scripted policy does not consume it.
+
+**Output / claim-status**: These tests prove capability-only smoke evidence —
+runtime wiring, finite-state behavior, bound enforcement, and the
+`residual_adversary_behavior.v1` diagnostic summary for the deterministic scripted
+policy. The summary reports `steps`, `macro_actions`, `targeted_row_fraction`,
+applied residual norm mean/max/integral, `nonzero_fraction`,
+`proposal_adjustment_fraction`, and `finite`/`bound_safe` status. It is reset with
+the controller and does not enter episode records or benchmark metrics. This is
+**not** benchmark, safety, stress-strength, or paper-facing evidence. The YAML
 example is a documented parameter template: copy its `residual_adversary`
 mapping beneath a scenario's `simulation_config` key. The scenario loader
 validates that nested mapping before passing it to the runtime config.
@@ -105,7 +124,9 @@ validates that nested mapping before passing it to the runtime config.
 ## Claim boundary (what this slice does NOT do)
 
 This is a capability-only slice. It makes **no** benchmark, planner-ranking,
-safety, or paper-facing claim. It defines **no** new stress-case metric. It
+safety, or paper-facing claim. Its behavior summary is diagnostic controller
+accounting, not a stress-case metric or benchmark episode field. It defines
+**no** new stress-case metric. It
 implements **no** CMA-ES/MCTS search-baseline adversary and **no** PPO/learned
 adversary. It runs **no** matched-compute comparison against the open-loop
 scenario-optimization pipeline. Naming discipline: "reactive adversarial stress

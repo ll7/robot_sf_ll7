@@ -186,7 +186,9 @@ mark_python_timeout_ready() {
 
 wait_for_python_timeout() {
   local wait_status
-  local transient_wait_retries=0
+  local transient_wait_deadline_seconds=""
+  local transient_wait_retry_budget_seconds=2
+  local transient_wait_backoff_seconds="0.01"
   while true; do
     python_timeout_wait_trap_statuses=""
     wait "${python_timeout_pid}" 2>/dev/null
@@ -194,9 +196,12 @@ wait_for_python_timeout() {
     if [[ "${wait_status}" == "-1" && -n "${python_timeout_ready}" \
       && -z "${python_timeout_signal}" ]]; then
       # Bash 3.2/5.x can expose -1 once when USR1 interrupted a reap just as
-      # the backend exited; retry while preserving the backend's real status.
-      transient_wait_retries=$((transient_wait_retries + 1))
-      if (( transient_wait_retries <= 100 )); then
+      # the backend exited; retry with a tiny backoff and an elapsed-time cap.
+      if [[ -z "${transient_wait_deadline_seconds}" ]]; then
+        transient_wait_deadline_seconds=$((SECONDS + transient_wait_retry_budget_seconds))
+      fi
+      if (( SECONDS < transient_wait_deadline_seconds )); then
+        sleep "${transient_wait_backoff_seconds}"
         continue
       fi
     fi

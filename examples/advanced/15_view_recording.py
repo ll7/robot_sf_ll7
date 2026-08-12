@@ -72,7 +72,7 @@ def test_simulation(map_definition: MapDefinition):
     env.reset()
 
     step_budget = _step_budget(1000)
-    logger.info("Simulating the random policy (steps=%s).", step_budget)
+    logger.info("Simulating the random policy (steps={}).", step_budget)
     for _ in range(step_budget):
         action = env.action_space.sample()
         env.step(action)

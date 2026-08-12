@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.adversarial_package_b_preflight import (
+from robot_sf.benchmark.adversarial.adversarial_package_b_preflight import (
     dump_preflight_payload,
     preflight_package_b_manifest,
 )

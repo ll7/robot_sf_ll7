@@ -1,0 +1,105 @@
+# Versioned retained-row contract for the paired safety-wrapper report (#4598).
+#
+# This is an instrumentation gate, not benchmark evidence.  The campaign producer must write
+# finite values at the exact metric_values.<name> paths below.  Similar legacy fields are not
+# aliases: when a source definition is unavailable, the runner fails closed.
+schema_version: paired_effect_metric_contract.v1
+issue: 6970
+report_builder_issue: 4598
+retained_row_path: metric_values
+
+claim_boundary: >
+  Retained-row instrumentation contract only. A passing row check establishes that the declared
+  paired outcomes were retained without alias substitution; it does not establish a safety gain,
+  benchmark result, paper claim, or dissertation claim.
+
+fields:
+  - name: exact_collision_probability
+    path: metric_values.exact_collision_probability
+    unit: probability [0, 1]
+    definition: >
+      Episode-level Bernoulli indicator equal to 1 when the canonical exact-collision event
+      predicate is present for the episode and 0 otherwise; it is not a collision count.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}
+
+  - name: near_miss_probability
+    path: metric_values.near_miss_probability
+    unit: probability [0, 1]
+    definition: >
+      Episode-level Bernoulli indicator equal to 1 when the declared canonical near-miss event
+      predicate is present for the episode and 0 otherwise; it is not a near-miss count.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}
+
+  - name: min_predicted_separation_m
+    path: metric_values.min_predicted_separation_m
+    unit: meters
+    definition: >
+      Minimum finite predicted robot-human surface separation over the retained episode trace,
+      emitted by the declared prediction/safety-context producer; clearing_distance_min and
+      other geometric or realized-distance fields are not substitutes.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: raw
+    value_type: finite_scalar
+
+  - name: completion_probability
+    path: metric_values.completion_probability
+    unit: probability [0, 1]
+    definition: >
+      Episode-level Bernoulli indicator equal to 1 when the canonical route-completion predicate
+      is satisfied and 0 otherwise; collision and timeout semantics remain those of the runner.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}
+
+  - name: progress_at_timeout
+    path: metric_values.progress_at_timeout
+    unit: normalized progress [0, 1]
+    definition: >
+      Fraction of the declared start-to-goal distance completed at the declared horizon when the
+      episode terminates by timeout; a timeout-specific source is required and success or
+      time-to-goal values are not substitutes.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}
+
+  - name: false_positive_stop_rate
+    path: metric_values.false_positive_stop_rate
+    unit: rate [0, 1]
+    definition: >
+      Rate of wrapper hard-stop/yield interventions classified as false positives by the declared
+      paired wrapper-off counterfactual contract; the wrapper-on forward-window diagnostic proxy
+      is not this rate and cannot populate this field.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}
+
+  - name: stop_yield_latency_s
+    path: metric_values.stop_yield_latency_s
+    unit: seconds
+    definition: >
+      Elapsed seconds from a declared wrapper hard-stop/yield intervention to the next declared
+      valid forward-progress command, measured on the retained episode trace; missing intervention
+      and missing recovery observations are contract failures rather than zero values.
+    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    representation: raw
+    value_type: finite_scalar
+
+  - name: wrapper_intervention_rate
+    path: metric_values.wrapper_intervention_rate
+    unit: rate [0, 1]
+    definition: >
+      Fraction of eligible wrapper steps whose command was changed by the wrapper, with the
+      wrapper-off arm retaining an explicit zero under the same eligible-step denominator.
+    emitting_component: robot_sf.benchmark.safety_wrapper_runtime.summarize_safety_wrapper_trace
+    representation: normalized
+    value_type: finite_scalar
+    bounds: {lower: 0.0, upper: 1.0}

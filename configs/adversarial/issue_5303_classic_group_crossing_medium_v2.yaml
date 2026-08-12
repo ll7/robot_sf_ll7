@@ -1,0 +1,43 @@
+# Frozen single-scenario template for the issue #5303 powered (six-seed) promotion study
+# (contract schema v2).
+#
+# This is the same one-scenario projection of
+# configs/scenarios/archetypes/classic_group_crossing.yaml as the historical diagnostic
+# template (configs/adversarial/issue_5303_classic_group_crossing_medium.yaml): the generic
+# adversarial bundle writer materializes the first template scenario, so pointing it at the
+# three-row archetype file would silently run the ``low`` row instead of the frozen held-out
+# ``medium`` family member. The scenario family, map, simulation config, and seed list are
+# unchanged.
+#
+# What is new is the merged PR #6586 pedestrian binding: the template exposes a
+# ``single_pedestrians`` entry whose id matches the search-space ``pedestrian.id``
+# declaration. The bundle writer binds the frozen timing dimensions ``spawn_time_s`` and
+# ``pedestrian_delay_s`` to this entry (start delay and waypoint wait rule), so they change
+# the effective runtime scenario and its canonical hash instead of remaining candidate
+# metadata. The side-effect-free preflight rejects any space/template pair that does not
+# expose this binding (``blocked_no_pedestrian``).
+scenarios:
+  - name: classic_group_crossing_medium
+    map_id: classic_group_crossing
+    simulation_config:
+      max_episode_steps: 500
+      ped_density: 0.08
+      groups: 0.5
+    robot_config: {}
+    metadata:
+      archetype: group_crossing
+      density: medium
+      flow: bi
+      groups: 0.5
+      issue_5303_source:
+        family_config: configs/scenarios/archetypes/classic_group_crossing.yaml
+        scenario_name: classic_group_crossing_medium
+    single_pedestrians:
+      # Loader-valid placeholder bound by identity; the adversarial bundle writer replaces the
+      # start/goal/trajectory/speed/delay fields with each sampled candidate's values.
+      - id: issue_5303_powered_promotion_candidate
+        start: [2.0, 3.0]
+        goal: null
+        trajectory: [[2.0, 3.0], [8.0, 3.0]]
+        speed_m_s: 1.0
+    seeds: [171, 172, 173]

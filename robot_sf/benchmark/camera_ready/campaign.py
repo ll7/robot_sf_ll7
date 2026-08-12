@@ -44,6 +44,9 @@ from robot_sf.benchmark.camera_ready._artifacts import (
     _write_table_artifacts,
 )
 from robot_sf.benchmark.camera_ready._config import _sanitize_name, _scenario_with_kinematics
+from robot_sf.benchmark.camera_ready._crosswalk_producer import (
+    write_crosswalk_sidecar,
+)
 from robot_sf.benchmark.camera_ready._reporting import (
     _build_breakdown_rows,
     _build_scenario_amv_lookup,
@@ -514,6 +517,11 @@ def _execute_campaign_planner_batch(
     dependencies = context.dependencies
     status = "ok"
     warnings: list[str] = []
+    retained_metric_contract_kwargs = (
+        {"retained_metric_contract_path": cfg.retained_metric_contract_path}
+        if cfg.retained_metric_contract_path is not None
+        else {}
+    )
     try:
         summary = dependencies.run_batch(
             run.scoped_scenarios,
@@ -524,6 +532,7 @@ def _execute_campaign_planner_batch(
             record_forces=cfg.record_forces,
             record_planner_decision_trace=cfg.record_planner_decision_trace,
             record_simulation_step_trace=cfg.record_simulation_step_trace,
+            telemetry=cfg.telemetry,
             snqi_weights=context.snqi_weights,
             snqi_baseline=context.snqi_baseline,
             algo=planner.algo,
@@ -549,6 +558,7 @@ def _execute_campaign_planner_batch(
             workers=run.effective_workers,
             resume=cfg.resume,
             safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
+            **retained_metric_contract_kwargs,
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":
@@ -612,14 +622,16 @@ def _prepare_campaign_planner_variant_run(
             planner.benchmark_profile,
             effective_workers,
         )
-    scoped_scenarios = [
-        _scenario_with_kinematics(
-            sc,
+    scoped_scenarios = []
+    for scenario in context.scenarios:
+        scoped = _scenario_with_kinematics(
+            scenario,
             kinematics=kinematics,
             holonomic_command_mode=cfg.holonomic_command_mode,
         )
-        for sc in context.scenarios
-    ]
+        if cfg.telemetry is not None:
+            scoped["telemetry"] = dict(cfg.telemetry)
+        scoped_scenarios.append(scoped)
     return _CampaignPlannerVariantRun(
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,
@@ -965,6 +977,7 @@ def _build_subprocess_arm_params(
         resume=cfg.resume,
         scoped_scenarios_path=scoped_scenarios_path,
         safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
+        retained_metric_contract_path=cfg.retained_metric_contract_path,
     )
     # The Path-typed fields on _SubprocessArmParams must be str-converted before
     # json.dumps or the handoff crashes (issue #4957); _serialize_subprocess_arm_params
@@ -3439,6 +3452,17 @@ def _finalize_campaign_outputs(  # noqa: PLR0913
         kinematics_matrix,
         invoked_command,
     )
+
+    crosswalk_sidecar_path = write_crosswalk_sidecar(
+        paths.reports_dir,
+        campaign_id=paths.campaign_id,
+        run_entries=run_entries,
+        repo_root=get_repository_root(),
+    )
+    if "artifacts" in campaign_summary:
+        campaign_summary["artifacts"]["report_crosswalk_json"] = _repo_relative(
+            crosswalk_sidecar_path
+        )
 
     return _export_and_write_final_artifacts(
         cfg,

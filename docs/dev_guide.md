@@ -138,11 +138,23 @@ A cheap fresh-worktree check is:
 Use this order for a fresh worktree:
 
 ```bash
-MAIN_REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-ln -s "$MAIN_REPO_ROOT/local.machine.md" .
-uv sync --all-extras
+scripts/dev/bootstrap_worktree.sh
 source .venv/bin/activate
+python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
+
+`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
+`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
+commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
+intentionally resync the local environment, unset the guard for that command:
+
+```bash
+env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
+```
+
+The optional-dependency preflight uses import-spec probes without importing project code. A
+`missing_optional` result is setup evidence and should not be confused with a changed-code
+collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
 
 Notes:
 
@@ -381,7 +393,7 @@ PR's CI ran against a main that moved before the merge landed.
 prevents merging a PR whose CI ran against a stale main:
 
 - **Script**: `scripts/dev/check_pr_merge_staleness.py <pr-number>`.
-- **Integration**: the `gh-pr-merger` skill runs this check as preflight step 6 before any merge.
+- **Integration**: the `gh-pr-merger` skill runs this check as preflight step 7 before any merge.
 - **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
   code 1 and the merger skips the PR with a staleness report. The precise path reads the completed
   workflow run's recorded `pull_requests[].base.sha`; when that provenance is unavailable, the
@@ -413,7 +425,22 @@ because:
 staleness check can be replaced by the queue's built-in re-validation, which is strictly stronger.
 The gate-side rule remains useful as a safety net for non-GitHub CI providers.
 
-**Rollback path.** Remove step 6 from `.agents/skills/gh-pr-merger/SKILL.md` and
+### Pre-publication state refresh (issue #6916)
+
+The local readiness stamp proves a branch and HEAD were validated, but it cannot tell whether the
+claimed issue was closed by a concurrent PR or whether a remote branch tip changed while readiness
+was running. Use `scripts/dev/check_prepublication_state.py` around expensive publication work:
+
+1. `capture` the issue, base, remote branch, and local HEAD SHAs before readiness.
+2. Run `check` immediately before opening or updating the PR.
+3. Treat `superseded` and `blocked` as fail-closed stops. Treat `refresh-required` as stale
+   evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
+   rerun readiness and capture a new baseline.
+
+The gate records the exact before/after SHAs and any merged PR that explicitly closes the issue.
+Its integration path uses ordinary Git merges and never resets or deletes local worktrees.
+
+**Rollback path.** Remove step 7 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.
 
@@ -446,10 +473,13 @@ before the queue auto-merges a PR:
   queue-time invocation independently validates the synthetic merge group.
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
-  `gate-verdict: accepted @ <head_sha>` trailer (reuses
+  `gate-verdict: accepted @ <head_sha>` trailer, and a current
+  `pr-metadata: reconciled @ <digest>` trailer binding the exact final PR title/body pair
+  (the gate reuses
   `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
-  member, or collaborator; verdict-like text from an untrusted contributor is ignored. The gate
-  also requires no unresolved actionable review threads and no outstanding explicitly requested
+  member, or collaborator; verdict-like text from an untrusted contributor is ignored. The metadata
+  digest is computed from the live title/body through the REST-backed snapshot and stale or missing
+  metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested
   reviewers. The current source-head CI rollup
   must also remain green; superseded check runs are discarded with the same helper used by the
   guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
@@ -462,9 +492,9 @@ before the queue auto-merges a PR:
   queue (the queue base SHA equals current `main`).
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
-  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
-  resolution plus requested-reviewer status, so every merge decision is inspectable and
-  reproducible.
+  SHA, label set, metadata digest and metadata-verdict status, gate-verdict status, staleness
+  verdict, CI conclusion, and reviewer-thread resolution plus requested-reviewer status, so every
+  merge decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 
@@ -484,10 +514,36 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
-**Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
+**Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
 non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
 merge-queue gate records the staleness verdict for audit purposes but does not block on it.
+
+### Final PR title/body reconciliation for squash merges
+
+Squash merging makes the PR title and body the durable human-facing summary of the delivered
+change. After any revision or fix push, the review loop rebuilds the final body from the current
+diff, validation, claims, and follow-ups, then reconciles it with the final title through the
+REST-only helper:
+
+```bash
+source .venv/bin/activate
+
+uv run python scripts/dev/gh_pr_body_rest.py <number> --reconcile \
+  --title "<final title>" --repo ll7/robot_sf_ll7 --body-file <final-body.md>
+```
+
+The command reads the live pair first, returns an explicit no-op when unchanged, and otherwise
+patches title and body together before verifying both. Helper writers serialize per-PR through a
+host-local advisory lock held from the read through a final post-update read; if an external writer
+changes the pair during that window, reconciliation fails closed with a conflict. The title changes
+only when scope, intent, type, or issue linkage changed; the body is always regenerated against the
+final state. The resulting exact SHA-256 metadata digest is recorded in trusted review evidence as
+`pr-metadata: reconciled @ <digest>`, alongside the exact-head `gate-verdict` trailer. A missing
+or stale trailer blocks both `gh-pr-merger` and native merge-queue admission. Metadata-only
+reconciliation does not rerun source CI, but it invalidates prior final-state review evidence until
+the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
+new final-state handoffs use reconciliation.
 
 ### Reusable dev scripts
 
@@ -572,6 +628,13 @@ so the command works from a worktree that has not run `uv sync`. The `--help` ou
 Use `--max-wall-seconds` to give long-running monitors a clean local stop path before patching or
 pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
 remote GitHub checks were cancelled or failed.
+If the parent workflow is already `completed/success` and every recorded job step ends with a
+successful `Complete job` step while GitHub still reports a pending check/job lifecycle (either a
+job that remains `in_progress` or a stale check-run over a `completed/success` job), the JSON payload
+marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` and includes the
+parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
+code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
+from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
@@ -929,7 +992,7 @@ PR=$(gh api repos/$OWNER/$REPO/pulls --method GET \
   -f state=open -f head="$OWNER:$BRANCH" \
   --jq '.[0].number')
 uv run python scripts/dev/gh_pr_body_rest.py "$PR" --repo "$OWNER/$REPO" \
-  --body-file /path/to/updated-pr-body.md
+  --reconcile --title "<final title>" --body-file /path/to/updated-pr-body.md
 ```
 
 ```bash

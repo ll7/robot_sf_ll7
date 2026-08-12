@@ -137,13 +137,18 @@ repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected 
 8. Implement inside accepted scope.
 9. Run validation gate and rerun on failures only when fixable.
 10. Commit with conventional message; if long-running benchmark evidence appears, classify artifacts.
-11. Sync with latest `origin/main`, rerun readiness, and check artifact durability.
+11. Sync with latest `origin/main`, rerun readiness, and check artifact durability. Before spending
+    readiness/CI time, capture a baseline with `check_prepublication_state.py`; immediately before
+    opening the PR, run its `check` command and record the exact decision/SHAs. Stop on
+    `superseded` or `blocked`; on `refresh-required`, use `sync --integrate` only from a clean
+    worktree, then rerun readiness and recapture the baseline.
 12. Re-check open PRs for the same linked issue, head scope, or title before opening a new PR.
 13. Open a ready PR using `gh-pr-opener`; use draft only when explicitly requested or when the
     PR body names a concrete reason review should be blocked.
-14. After the PR exists and the issue is visibly covered by the PR, release the transient claim with
-    `uv run python scripts/dev/issue_claim.py release <issue-number>`. Do not release the claim
-    earlier unless the run is abandoning the issue and records the handoff.
+14. Keep the transient claim while the PR is open. Release it only after terminal delivery, with an
+    explicit reason such as `uv run python scripts/dev/issue_claim.py release <issue-number> --reason
+    merged` (or `closed`/`abandoned`). Do not release the claim earlier unless the run is abandoning
+    the issue and records the handoff with `--reason abandoned`.
 15. For deferred important work, create follow-up issues and link them before final handoff.
 
 ## Branch and State Safety

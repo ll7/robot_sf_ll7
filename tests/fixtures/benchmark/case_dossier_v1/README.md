@@ -22,3 +22,11 @@ uv run python scripts/analysis/render_case_dossier.py \
   --input tests/fixtures/benchmark/case_dossier_v1/matched_seed118/input.json \
   --out-dir /tmp/case-dossier-matched
 ```
+
+After a portfolio or provenance-contract change, refresh the tracked compact packages with the
+canonical test builder and then run its no-simulation integrity check:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py --write
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py
+```

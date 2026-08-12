@@ -27,6 +27,7 @@ Read these first when working in this workflow:
 - [docs/ai/agent_workflow_entrypoints.md](agent_workflow_entrypoints.md)
 - [docs/context/README.md](../context/README.md)
 - [docs/context/issue_713_batch_first_issue_workflow.md](../context/issue_713_batch_first_issue_workflow.md)
+- [docs/context/issue_audit_contract.md](../context/issue_audit_contract.md)
 - [docs/context/issue_728_coding_agents_compatibility.md](../context/issue_728_coding_agents_compatibility.md)
 - [docs/context/pr_first_pass_review_audit_2026-05-14.md](../context/pr_first_pass_review_audit_2026-05-14.md)
 - [docs/project_prioritization.md](../project_prioritization.md)
@@ -331,8 +332,22 @@ scripts/dev/run_tests_parallel.sh
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 # Optional confirmation; pr_ready_check.sh writes this stamp after all gates pass.
 uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main
+# Capture before expensive readiness, then check immediately before publication.
+uv run python scripts/dev/check_prepublication_state.py capture \
+  --repo ll7/robot_sf_ll7 --issue <number> --branch <head-branch> \
+  --snapshot-path output/validation/prepublication/<head-branch>.json
+uv run python scripts/dev/check_prepublication_state.py check \
+  --snapshot-path output/validation/prepublication/<head-branch>.json
 uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project-number 5
 ```
+
+`check_prepublication_state.py` is the remote-state companion to local readiness stamps. It
+refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD SHAs, and checks
+that the claimed issue remains open and has not gained a merged closing PR. A `ready` result is
+the only publication-permitting result; `superseded` and `blocked` stop the route, while
+`refresh-required` requires `sync --integrate` (or an explicit manual merge), a fresh readiness
+run, and a new snapshot. The integration path uses ordinary Git merges and never resets or
+deletes the worktree.
 
 ## What This Note Does Not Replace
 

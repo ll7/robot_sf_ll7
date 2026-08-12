@@ -66,6 +66,13 @@ _DEFAULT_CORRIDOR_Y_MAX = 0.65
 _DEFAULT_STEP_BUDGET_S = 0.1
 
 
+def _wrapped_angle_delta(first: float | None, second: float | None) -> float | None:
+    """Return the signed shortest angular difference, or ``None`` when unavailable."""
+    if first is None or second is None:
+        return None
+    return float(np.arctan2(np.sin(first - second), np.cos(first - second)))
+
+
 @dataclass
 class BRNEPlannerConfig:
     """Configuration for the BRNE baseline wrapper."""
@@ -187,6 +194,7 @@ class BRNEPlanner:
         self._failure_reasons: list[str] = []
         self._last_failure_reason: str | None = None
         self._last_step_status = "not_started"
+        self._last_mechanism_step: dict[str, Any] | None = None
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -268,6 +276,7 @@ class BRNEPlanner:
         self._failure_reasons = []
         self._last_failure_reason = None
         self._last_step_status = "not_started"
+        self._last_mechanism_step = None
 
     def _record_failure(self, reason: str) -> None:
         """Record a fail-closed step without hiding it behind zero motion."""
@@ -278,11 +287,28 @@ class BRNEPlanner:
         self._last_step_status = "failed"
         if normalized_reason not in self._failure_reasons:
             self._failure_reasons.append(normalized_reason)
+        if self._last_mechanism_step is not None:
+            self._last_mechanism_step.update(
+                {
+                    "runtime_status": "failed",
+                    "failure_reason": normalized_reason,
+                    "failure_count": self._failure_count,
+                    "final_action": {"v": 0.0, "omega": 0.0},
+                }
+            )
 
     def _record_success(self) -> None:
         """Record one finite control step."""
         self._step_count += 1
         self._last_step_status = "ok"
+        if self._last_mechanism_step is not None:
+            self._last_mechanism_step.update(
+                {
+                    "runtime_status": "ok",
+                    "failure_reason": None,
+                    "failure_count": self._failure_count,
+                }
+            )
 
     def _zero_action(self, reason: str) -> dict[str, float]:
         """Return the bounded stop action and retain its failure reason."""
@@ -298,6 +324,12 @@ class BRNEPlanner:
         if is_observation_mapping(obs):
             obs = observation_from_mapping(obs)
 
+        self._last_mechanism_step = {
+            "schema_version": "brne-mechanism-step.v1",
+            "step": self._step_count,
+            "runtime_status": "in_progress",
+        }
+
         try:
             return self._solve(obs)
         except FileNotFoundError:
@@ -309,6 +341,85 @@ class BRNEPlanner:
                 _LOGGER.warning("BRNE solve failed, returning zero motion: %s", exc)
                 return {"v": 0.0, "omega": 0.0}
             raise RuntimeError(f"BRNE solve failed: {exc}") from exc
+
+    def _record_mechanism_input(  # noqa: PLR0913
+        self,
+        *,
+        obs: Observation,
+        r_pos: np.ndarray,
+        r_vel: np.ndarray,
+        r_goal: np.ndarray,
+        robot_pose: np.ndarray,
+        robot_heading: float | None,
+        velocity_heading: float | None,
+        goal_bearing: float | None,
+        selected: list[tuple[float, int]],
+    ) -> None:
+        """Record compact input/frame telemetry for the current BRNE solve."""
+        selected_agents = []
+        for distance, agent_idx in selected:
+            agent = obs.agents[agent_idx]
+            position = np.asarray(agent["position"], dtype=np.float64)
+            velocity = np.asarray(agent.get("velocity", [0.0, 0.0]), dtype=np.float64)
+            selected_agents.append(
+                {
+                    "source_index": int(agent_idx),
+                    "distance_m": float(distance),
+                    "position_world_m": [float(position[0]), float(position[1])],
+                    "velocity_world_m_s": [float(velocity[0]), float(velocity[1])],
+                }
+            )
+        self._last_mechanism_step = {
+            **(self._last_mechanism_step or {}),
+            "input": {
+                "robot_position_world_m": [float(r_pos[0]), float(r_pos[1])],
+                "robot_velocity_world_m_s": [float(r_vel[0]), float(r_vel[1])],
+                "robot_goal_world_m": [float(r_goal[0]), float(r_goal[1])],
+                "robot_pose_world": [
+                    float(robot_pose[0]),
+                    float(robot_pose[1]),
+                    float(robot_pose[2]),
+                ],
+                "declared_heading_rad": robot_heading,
+                "velocity_derived_heading_rad": velocity_heading,
+                "goal_bearing_rad": goal_bearing,
+                "declared_heading_goal_delta_rad": _wrapped_angle_delta(
+                    robot_heading, goal_bearing
+                ),
+                "velocity_heading_goal_delta_rad": _wrapped_angle_delta(
+                    velocity_heading, goal_bearing
+                ),
+                "selected_agents": selected_agents,
+                "selected_agent_count": len(selected_agents),
+                "world_frame": (
+                    "Robot SF world coordinates; pedestrian velocities are restored from "
+                    "the ego-frame observation before this call."
+                ),
+            },
+            "aggregation": {
+                "control_ensemble_layout": "plan_step_sample_command",
+                "weighted_sum": "sum(control_ensemble[:, sample, :] * weights[sample])",
+                "weight_axis": "sample",
+                "selected_plan_step": 0,
+            },
+        }
+
+    def _record_mechanism_shapes(
+        self, *, xtraj: np.ndarray, ytraj: np.ndarray, ulist: np.ndarray
+    ) -> None:
+        """Record tensor shapes and effective samples for the current BRNE solve."""
+        if self._last_mechanism_step is None:
+            return
+        self._last_mechanism_step.update(
+            {
+                "trajectory_shapes": {
+                    "xtraj": [int(value) for value in xtraj.shape],
+                    "ytraj": [int(value) for value in ytraj.shape],
+                    "control_ensemble": [int(value) for value in ulist.shape],
+                },
+                "effective_num_samples": int(ulist.shape[1]),
+            }
+        )
 
     def _solve(self, obs: Observation) -> dict[str, float]:
         """Run the BRNE solver for one observation.
@@ -332,6 +443,14 @@ class BRNEPlanner:
             robot_heading = None
         if robot_heading is not None and not np.isfinite(robot_heading):
             robot_heading = None
+        velocity_heading = (
+            float(np.arctan2(r_vel[1], r_vel[0])) if np.linalg.norm(r_vel) > 1.0e-6 else None
+        )
+        goal_bearing = (
+            float(np.arctan2(r_goal[1] - r_pos[1], r_goal[0] - r_pos[0]))
+            if np.linalg.norm(r_goal - r_pos) > 1.0e-6
+            else None
+        )
         robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal, r_heading=robot_heading)
         selected = self._select_agents(obs.agents, r_pos)
         num_peds = len(selected)
@@ -339,6 +458,18 @@ class BRNEPlanner:
         num_samples = cfg.num_samples
         plan_steps = cfg.plan_steps
         dt = cfg.dt
+
+        self._record_mechanism_input(
+            obs=obs,
+            r_pos=r_pos,
+            r_vel=r_vel,
+            r_goal=r_goal,
+            robot_pose=robot_pose,
+            robot_heading=robot_heading,
+            velocity_heading=velocity_heading,
+            goal_bearing=goal_bearing,
+            selected=selected,
+        )
 
         xtraj, ytraj, ulist = self._build_trajectories(
             brne,
@@ -356,6 +487,7 @@ class BRNEPlanner:
         )
         effective_num_samples = int(ulist.shape[1])
         self._last_effective_num_samples = effective_num_samples
+        self._record_mechanism_shapes(xtraj=xtraj, ytraj=ytraj, ulist=ulist)
 
         if not self._jit_warmup_done:
             self._brne_solve(
@@ -394,6 +526,9 @@ class BRNEPlanner:
             return self._zero_action("step_budget_exceeded")
 
         robot_weights = weights[0]
+        self._last_mechanism_step["aggregation"]["weights_shape"] = [
+            int(value) for value in weights.shape
+        ]
         if ulist.ndim != 3 or robot_weights.ndim != 1:
             _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
             return self._zero_action("invalid_control_ensemble_shape")
@@ -412,7 +547,9 @@ class BRNEPlanner:
             _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
             return self._zero_action("nonfinite_control_command")
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
+        self._last_mechanism_step["raw_action"] = dict(action)
         self._clamp_action(action)
+        self._last_mechanism_step["final_action"] = dict(action)
         self._record_success()
         return action
 
@@ -624,7 +761,7 @@ class BRNEPlanner:
         runtime_status = (
             "failed" if self._failure_count > 0 else "ok" if self._step_count > 0 else "not_started"
         )
-        return {
+        metadata = {
             "algorithm": "brne",
             "config": cfg,
             "config_hash": config_hash,
@@ -646,6 +783,9 @@ class BRNEPlanner:
             ),
             "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
         }
+        if self._last_mechanism_step is not None:
+            metadata["last_decision"] = self._last_mechanism_step
+        return metadata
 
 
 def build_brne_config(data: dict[str, Any] | None) -> BRNEPlannerConfig:

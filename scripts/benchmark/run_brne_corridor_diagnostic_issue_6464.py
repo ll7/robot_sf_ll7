@@ -68,6 +68,8 @@ EXPECTED_PLANNER_FIELDS = {
     "social_force": {"action_space": "unicycle", "allow_fallback": False},
 }
 ZERO_MOTION_EPSILON_M = 1.0e-6
+MECHANISM_INTERACTION_DISTANCE_M = 5.0
+MECHANISM_ACTION_EPSILON = 1.0e-9
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
@@ -352,6 +354,351 @@ def _trace_summary(
         max_pedestrians = max(max_pedestrians, len(pedestrians))
         positions.append((x, y))
     return positions, max_pedestrians
+
+
+def _simulation_trace_steps(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the canonical simulation trace steps, or an empty list."""
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("simulation_step_trace") if isinstance(metadata, dict) else None
+    steps = trace.get("steps") if isinstance(trace, dict) else None
+    return [step for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+
+
+def _planner_decision_steps(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return planner decision trace steps, preserving only mapping entries."""
+    metadata = record.get("algorithm_metadata")
+    trace = metadata.get("planner_decision_trace") if isinstance(metadata, dict) else None
+    steps = trace.get("steps") if isinstance(trace, dict) else None
+    return [step for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
+
+
+def _optional_finite_float(value: Any) -> float | None:
+    """Return one finite float or ``None`` for unavailable trace values."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _trace_robot_pedestrian_stats(steps: list[dict[str, Any]]) -> dict[str, Any]:  # noqa: C901
+    """Derive conservative interaction and action signals from generic trace steps."""
+    min_distance: float | None = None
+    interaction_frames = 0
+    action_pairs: list[tuple[float, float]] = []
+    pedestrian_velocity_values = 0
+    for step in steps:
+        robot = step.get("robot")
+        robot_position = robot.get("position") if isinstance(robot, dict) else None
+        pedestrians = step.get("pedestrians")
+        if (
+            not isinstance(robot_position, list)
+            or len(robot_position) < 2
+            or not isinstance(pedestrians, list)
+        ):
+            continue
+        robot_xy = [_optional_finite_float(value) for value in robot_position[:2]]
+        if any(value is None for value in robot_xy):
+            continue
+        frame_min: float | None = None
+        for pedestrian in pedestrians:
+            if not isinstance(pedestrian, dict):
+                continue
+            position = pedestrian.get("position")
+            if isinstance(position, list) and len(position) >= 2:
+                ped_xy = [_optional_finite_float(value) for value in position[:2]]
+                if all(value is not None for value in ped_xy):
+                    distance = math.dist(robot_xy, ped_xy)  # type: ignore[arg-type]
+                    frame_min = distance if frame_min is None else min(frame_min, distance)
+            velocity = pedestrian.get("velocity")
+            if (
+                isinstance(velocity, list)
+                and len(velocity) >= 2
+                and all(_optional_finite_float(value) is not None for value in velocity[:2])
+            ):
+                pedestrian_velocity_values += 1
+        if frame_min is not None:
+            min_distance = frame_min if min_distance is None else min(min_distance, frame_min)
+            if frame_min <= MECHANISM_INTERACTION_DISTANCE_M:
+                interaction_frames += 1
+        planner = step.get("planner")
+        selected_action = planner.get("selected_action") if isinstance(planner, dict) else None
+        if isinstance(selected_action, dict):
+            linear = _optional_finite_float(selected_action.get("linear_velocity"))
+            angular = _optional_finite_float(selected_action.get("angular_velocity"))
+            if linear is not None and angular is not None:
+                action_pairs.append((linear, angular))
+    action_changes = sum(
+        math.dist(previous, current) > MECHANISM_ACTION_EPSILON
+        for previous, current in pairwise(action_pairs)
+    )
+    zero_actions = sum(
+        abs(linear) <= MECHANISM_ACTION_EPSILON and abs(angular) <= MECHANISM_ACTION_EPSILON
+        for linear, angular in action_pairs
+    )
+    return {
+        "min_robot_pedestrian_center_distance_m": min_distance,
+        "interaction_distance_threshold_m": MECHANISM_INTERACTION_DISTANCE_M,
+        "interaction_exposure_fraction_leq_threshold": (
+            interaction_frames / len(steps) if steps else None
+        ),
+        "pedestrian_world_velocity_values": pedestrian_velocity_values,
+        "action_samples": len(action_pairs),
+        "action_change_count": action_changes,
+        "zero_action_fraction": zero_actions / len(action_pairs) if action_pairs else None,
+    }
+
+
+def _mechanism_trace_steps(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract BRNE-specific per-step telemetry from the planner decision trace."""
+    extracted: list[dict[str, Any]] = []
+    for entry in _planner_decision_steps(record):
+        mechanism = entry.get("brne_mechanism")
+        if not isinstance(mechanism, dict):
+            continue
+        extracted.append(
+            {
+                "step": entry.get("step"),
+                "distance_to_goal_m": entry.get("distance_to_goal_m"),
+                "route_progress_from_start_m": entry.get("route_progress_from_start_m"),
+                "mechanism": mechanism,
+            }
+        )
+    return extracted
+
+
+def _unique_values(values: list[Any]) -> list[Any]:
+    """Return JSON-safe unique values while preserving first-observed order."""
+    unique: list[Any] = []
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+    return unique
+
+
+def build_mechanism_row(  # noqa: C901
+    record: dict[str, Any], config: dict[str, Any], *, planner_key: str
+) -> dict[str, Any]:
+    """Build one conservative mechanism row from generic and BRNE-specific traces."""
+    classified = classify_record(record, config, planner_key=planner_key)
+    simulation_steps = _simulation_trace_steps(record)
+    mechanism_steps = _mechanism_trace_steps(record)
+    trace_metadata = record.get("algorithm_metadata", {}).get("simulation_step_trace", {})
+    initial_goal_distance = (
+        _optional_finite_float(trace_metadata.get("initial_goal_distance_m"))
+        if isinstance(trace_metadata, dict)
+        else None
+    )
+    generic = _trace_robot_pedestrian_stats(simulation_steps)
+    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+    terminal_trace_step = simulation_steps[-1].get("step") if simulation_steps else None
+    row: dict[str, Any] = {
+        "planner": planner_key,
+        "scenario_id": record.get("scenario_id"),
+        "seed": record.get("seed"),
+        "evidence_status": classified["status"],
+        "mechanism_fields_status": "not_applicable" if planner_key != "brne" else "unavailable",
+        "trace_steps": len(simulation_steps),
+        "mechanism_trace_steps": len(mechanism_steps),
+        "initial_goal_distance_m": initial_goal_distance,
+        "termination_reason": record.get("termination_reason"),
+        "terminal_trace_step": terminal_trace_step,
+        "goal_step": terminal_trace_step if bool(classified["goal_reached"]) else None,
+        "collision_step": terminal_trace_step
+        if record.get("termination_reason") == "collision"
+        else None,
+        "goal_reached": bool(classified["goal_reached"]),
+        "collision_count": metrics.get("collisions"),
+        "minimum_clearance_m": _optional_finite_float(metrics.get("min_clearance")),
+        **generic,
+        "errors": [],
+    }
+    if not simulation_steps:
+        row["errors"].append("simulation_trace_missing")
+    if planner_key != "brne":
+        return row
+
+    if classified["status"] != "available_native":
+        row["errors"].append("native_row_unavailable")
+        return row
+    if len(mechanism_steps) != len(simulation_steps):
+        row["errors"].append("mechanism_trace_step_count_mismatch")
+    step_ids = [step.get("step") for step in mechanism_steps]
+    if len(step_ids) != len(set(step_ids)):
+        row["errors"].append("duplicate_mechanism_steps")
+    if not mechanism_steps:
+        row["errors"].append("mechanism_trace_missing")
+        return row
+
+    first = mechanism_steps[0]
+    last = mechanism_steps[-1]
+    first_mechanism = first["mechanism"]
+    last_mechanism = last["mechanism"]
+    first_input = first_mechanism.get("input")
+    last_input = last_mechanism.get("input")
+    if not isinstance(first_input, dict) or not isinstance(last_input, dict):
+        row["errors"].append("mechanism_input_missing")
+        return row
+    required_input_fields = (
+        "declared_heading_rad",
+        "velocity_derived_heading_rad",
+        "goal_bearing_rad",
+        "selected_agents",
+    )
+    for field in required_input_fields:
+        if field not in first_input:
+            row["errors"].append(f"mechanism_input_field_missing:{field}")
+    runtime_statuses = [step["mechanism"].get("runtime_status") for step in mechanism_steps]
+    raw_actions = [
+        step["mechanism"].get("raw_action")
+        for step in mechanism_steps
+        if isinstance(step["mechanism"].get("raw_action"), dict)
+    ]
+    final_actions = [
+        step["mechanism"].get("final_action")
+        for step in mechanism_steps
+        if isinstance(step["mechanism"].get("final_action"), dict)
+    ]
+
+    def _action_values(actions: list[dict[str, Any]], field: str) -> list[float]:
+        """Return finite values for one action field."""
+        return [
+            value
+            for action in actions
+            if (value := _optional_finite_float(action.get(field))) is not None
+        ]
+
+    raw_linear = _action_values(raw_actions, "v")
+    final_linear = _action_values(final_actions, "v")
+    raw_angular = _action_values(raw_actions, "omega")
+    final_angular = _action_values(final_actions, "omega")
+    clipped_steps = sum(
+        raw.get("v") != final.get("v") or raw.get("omega") != final.get("omega")
+        for raw, final in zip(raw_actions, final_actions, strict=False)
+    )
+    phase_progress: dict[str, float | None] = {}
+    if initial_goal_distance is not None:
+        for phase, fraction in (("early", 1 / 3), ("middle", 2 / 3), ("final", 1.0)):
+            phase_index = min(int((len(mechanism_steps) - 1) * fraction), len(mechanism_steps) - 1)
+            phase_distance = _optional_finite_float(
+                mechanism_steps[phase_index].get("distance_to_goal_m")
+            )
+            phase_progress[phase] = (
+                initial_goal_distance - phase_distance if phase_distance is not None else None
+            )
+    failure_reasons = _unique_values(
+        [
+            step["mechanism"].get("failure_reason")
+            for step in mechanism_steps
+            if step["mechanism"].get("failure_reason")
+        ]
+    )
+    if any(status != "ok" for status in runtime_statuses):
+        row["errors"].append("mechanism_runtime_failure")
+    row.update(
+        {
+            "mechanism_fields_status": "available" if not row["errors"] else "unavailable",
+            "declared_heading_initial_rad": first_input.get("declared_heading_rad"),
+            "velocity_derived_heading_initial_rad": first_input.get("velocity_derived_heading_rad"),
+            "goal_bearing_initial_rad": first_input.get("goal_bearing_rad"),
+            "declared_heading_goal_delta_initial_rad": first_input.get(
+                "declared_heading_goal_delta_rad"
+            ),
+            "velocity_heading_goal_delta_initial_rad": first_input.get(
+                "velocity_heading_goal_delta_rad"
+            ),
+            "declared_heading_final_rad": last_input.get("declared_heading_rad"),
+            "goal_bearing_final_rad": last_input.get("goal_bearing_rad"),
+            "declared_heading_goal_delta_final_rad": last_input.get(
+                "declared_heading_goal_delta_rad"
+            ),
+            "velocity_heading_goal_delta_final_rad": last_input.get(
+                "velocity_heading_goal_delta_rad"
+            ),
+            "selected_agents_initial": first_input.get("selected_agents"),
+            "selected_agents_final": last_input.get("selected_agents"),
+            "effective_num_samples": _unique_values(
+                [step["mechanism"].get("effective_num_samples") for step in mechanism_steps]
+            ),
+            "control_ensemble_layouts": _unique_values(
+                [
+                    step["mechanism"].get("aggregation", {}).get("control_ensemble_layout")
+                    for step in mechanism_steps
+                    if isinstance(step["mechanism"].get("aggregation"), dict)
+                ]
+            ),
+            "trajectory_shapes_initial": first_mechanism.get("trajectory_shapes"),
+            "aggregation_initial": first_mechanism.get("aggregation"),
+            "raw_action_initial": first_mechanism.get("raw_action"),
+            "raw_action_final": last_mechanism.get("raw_action"),
+            "final_action_initial": first_mechanism.get("final_action"),
+            "final_action_final": last_mechanism.get("final_action"),
+            "raw_linear_velocity_range_m_s": [min(raw_linear), max(raw_linear)]
+            if raw_linear
+            else None,
+            "final_linear_velocity_range_m_s": [min(final_linear), max(final_linear)]
+            if final_linear
+            else None,
+            "raw_angular_velocity_abs_max_rad_s": max(
+                (abs(value) for value in raw_angular), default=None
+            ),
+            "final_angular_velocity_abs_max_rad_s": max(
+                (abs(value) for value in final_angular), default=None
+            ),
+            "clipped_action_steps": clipped_steps,
+            "progress_by_phase_m": phase_progress,
+            "runtime_statuses": _unique_values(runtime_statuses),
+            "runtime_failure_reasons": failure_reasons,
+            "goal_distance_final_m": _optional_finite_float(last.get("distance_to_goal_m")),
+            "progress_m": (
+                initial_goal_distance - _optional_finite_float(last.get("distance_to_goal_m"))
+                if initial_goal_distance is not None
+                and _optional_finite_float(last.get("distance_to_goal_m")) is not None
+                else None
+            ),
+        }
+    )
+    return row
+
+
+def build_mechanism_table(
+    records_by_planner: dict[str, list[dict[str, Any]]], config: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the exact paired mechanism table and fail closed on BRNE telemetry gaps."""
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    expected_pairs = {
+        (scenario_id, seed) for scenario_id in config["scenario_ids"] for seed in config["seeds"]
+    }
+    for planner_key in EXPECTED_PLANNERS:
+        records = records_by_planner.get(planner_key, [])
+        observed_pairs = {(record.get("scenario_id"), record.get("seed")) for record in records}
+        if observed_pairs != expected_pairs:
+            errors.append(f"{planner_key}:exact_pair_coverage_missing")
+        for record in records:
+            row = build_mechanism_row(record, config, planner_key=planner_key)
+            rows.append(row)
+            if planner_key == "brne" and row["evidence_status"] == "available_native":
+                errors.extend(f"{planner_key}/{row['seed']}:{error}" for error in row["errors"])
+    return {
+        "schema_version": "brne-mechanism-trace-report.v1",
+        "status": "complete" if not errors else "unavailable",
+        "claim_boundary": (
+            "Trace-backed mechanism diagnostics only; no planner ranking, benchmark, safety, "
+            "realism, matched-compute, or paper claim."
+        ),
+        "interaction_distance_threshold_m": MECHANISM_INTERACTION_DISTANCE_M,
+        "required_brne_fields": [
+            "heading/frame alignment",
+            "action aggregation layout",
+            "effective sample count",
+            "runtime status/failure reason",
+            "phase/final progress",
+            "selected pedestrian world-frame inputs",
+        ],
+        "errors": errors,
+        "rows": rows,
+    }
 
 
 def _runtime_source_fields(runtime_planner_meta: Any) -> tuple[Any, Any, Any]:
@@ -675,6 +1022,36 @@ def _write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]
             "A later benchmark-arm proposal requires a separately approved preregistration and a broader evidence contract.",
         ]
     )
+    mechanism = report.get("mechanism_trace")
+    if isinstance(mechanism, dict):
+        lines.extend(
+            [
+                "",
+                "## Trace-backed mechanism table",
+                "",
+                f"- Status: **{mechanism.get('status', 'unknown')}**",
+                "- Comparator BRNE-specific fields are `not_applicable`; missing native BRNE fields fail closed.",
+                "",
+                "| planner | seed | evidence | mechanism | trace steps | goal progress (m) | min center distance (m) | interaction fraction | action changes | termination |",
+                "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for row in mechanism.get("rows", []):
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"| {row.get('planner', 'unknown')} | {row.get('seed', 'unknown')} | "
+                f"{row.get('evidence_status', 'unknown')} | {row.get('mechanism_fields_status', 'unknown')} | "
+                f"{row.get('trace_steps', 'unknown')} | {row.get('progress_m', 'not_applicable')} | "
+                f"{row.get('min_robot_pedestrian_center_distance_m', 'not_applicable')} | "
+                f"{row.get('interaction_exposure_fraction_leq_threshold', 'not_applicable')} | "
+                f"{row.get('action_change_count', 'not_applicable')} | "
+                f"{row.get('termination_reason', 'unknown')} |"
+            )
+        if mechanism.get("errors"):
+            lines.extend(
+                ["", "Mechanism-table errors: " + ", ".join(map(str, mechanism["errors"]))]
+            )
     markdown_path = output_dir / "diagnostic_report.md"
     markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return json_path, markdown_path
@@ -684,10 +1061,12 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
     """Execute all predeclared arms and write the diagnostic report."""
     selected_scenarios = select_scenarios(config)
     arms: list[dict[str, Any]] = []
+    records_by_planner: dict[str, list[dict[str, Any]]] = {}
     for planner in config["planners"]:
         key = str(planner["key"])
         arm_dir = output_dir / key
         episodes_path = arm_dir / "episodes.jsonl"
+        records_by_planner[key] = []
         try:
             execution_summary = run_map_batch(
                 selected_scenarios,
@@ -702,10 +1081,12 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
                 benchmark_profile="experimental",
                 socnav_missing_prereq_policy="fail-fast",
                 record_simulation_step_trace=True,
+                record_planner_decision_trace=True,
                 workers=1,
                 resume=False,
             )
             records = _read_jsonl(episodes_path)
+            records_by_planner[key] = records
             arms.append(
                 summarize_records(
                     planner_key=key,
@@ -715,10 +1096,11 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
                 )
             )
         except Exception as exc:  # noqa: BLE001 - a failed arm must be reported, not promoted.
+            records_by_planner[key] = _read_jsonl(episodes_path)
             arms.append(
                 summarize_records(
                     planner_key=key,
-                    records=_read_jsonl(episodes_path),
+                    records=records_by_planner[key],
                     config=config,
                     execution_summary=None,
                     error=str(exc),
@@ -743,6 +1125,15 @@ def run_campaign(config: dict[str, Any], *, output_dir: Path) -> dict[str, Any]:
         ),
         "arms": arms,
         "claim_boundary": config["claim_boundary"],
+    }
+    mechanism_table = build_mechanism_table(records_by_planner, config)
+    mechanism_path = output_dir / "mechanism_table.json"
+    mechanism_path.write_text(
+        json.dumps(mechanism_table, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    report["mechanism_trace"] = {
+        **mechanism_table,
+        "table_path": str(mechanism_path),
     }
     json_path, markdown_path = _write_report(report, output_dir)
     report["report_paths"] = {"json": str(json_path), "markdown": str(markdown_path)}

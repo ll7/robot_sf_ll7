@@ -36,7 +36,12 @@ class _MapRunnerBRNEAdapter:
         Returns:
             dict[str, Any]: Runtime planner metadata.
         """
-        return {"planner_metadata": self._planner.get_metadata()}
+        planner_metadata = self._planner.get_metadata()
+        runtime = {"planner_metadata": planner_metadata}
+        last_decision = planner_metadata.get("last_decision")
+        if isinstance(last_decision, dict):
+            runtime["last_decision"] = {"brne_mechanism": last_decision}
+        return runtime
 
     def plan(self, obs: dict[str, Any]) -> tuple[float, float]:
         """Run BRNE and return the native unicycle command.

@@ -2391,6 +2391,9 @@ def _step_build_planner_decision_entry(
     }
     _step_planner_decision_topology_keys(step_decision, psd)
     _step_planner_decision_dwa_keys(step_decision, psd)
+    brne_mechanism = psd.get("brne_mechanism")
+    if isinstance(brne_mechanism, dict):
+        step_decision["brne_mechanism"] = deepcopy(brne_mechanism)
     state.planner_decision_trace.append(cast("PlannerDecisionTraceEntry", step_decision))
 
 

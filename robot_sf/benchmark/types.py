@@ -204,6 +204,7 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
     dynamic_window: PlannerDynamicWindow
     target_goal: PlannerTargetGoal
     global_route_probe_activated: bool
+    brne_mechanism: dict[str, Any]
 
 
 class PlannerDecisionTrace(TypedDict, total=False):

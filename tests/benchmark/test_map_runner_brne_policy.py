@@ -34,6 +34,7 @@ class _FakeBRNEPlanner:
             "source_commit": BRNE_PINNED_SHA,
             "source_pin": BRNE_PINNED_SHA,
             "source_integrity": "clean_pinned_worktree",
+            "last_decision": {"schema_version": "brne-mechanism-step.v1"},
         }
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -94,6 +95,9 @@ def test_brne_policy_builds_native_diagnostic_adapter(
     assert planner.last_observation["robot"]["goal"] == [5.0, 0.0]
     assert callable(policy._planner_stats)
     assert policy._planner_stats()["planner_metadata"]["status"] == "ok"
+    assert policy._planner_stats()["last_decision"] == {
+        "brne_mechanism": {"schema_version": "brne-mechanism-step.v1"}
+    }
 
     policy._planner_reset(seed=113)
     assert planner.reset_calls == [113]

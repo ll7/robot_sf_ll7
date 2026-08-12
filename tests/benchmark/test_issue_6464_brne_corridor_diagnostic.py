@@ -12,6 +12,8 @@ from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
+    build_mechanism_row,
+    build_mechanism_table,
     classify_record,
     summarize_records,
     validate_campaign_config,
@@ -297,3 +299,110 @@ def test_fallback_and_over_cap_rows_are_unavailable() -> None:
     over_cap = classify_record(_record(pedestrians=crowd), config, planner_key="social_force")
     assert over_cap["crowd_within_budget"] is False
     assert over_cap["status"] == "unavailable"
+
+
+def test_mechanism_table_requires_native_brne_trace_and_keeps_comparators_as_na() -> None:
+    """Mechanism telemetry is fail-closed for BRNE and asymmetric by design for comparators."""
+    config = _config()
+    record = _record(
+        metadata={
+            "planner_metadata": {"status": "ok"},
+            "brne_diagnostic": {
+                "status": "native_core_via_adapter",
+                "execution_semantics": "native_upstream_core_through_robot_sf_adapter",
+            },
+            "planner_kinematics": {
+                "execution_mode": "adapter",
+                "adapter_active": True,
+                "adapter_name": "BRNEPlanner",
+                "supports_native_commands": True,
+                "supports_adapter_commands": True,
+                "planner_command_space": "unicycle_vw",
+            },
+            "planner_runtime": {
+                "planner_metadata": {
+                    "status": "ok",
+                    "runtime_status": "ok",
+                    "failure_count": 0,
+                    "source_commit": BRNE_PINNED_SHA,
+                    "source_pin": BRNE_PINNED_SHA,
+                    "source_integrity": "clean_pinned_worktree",
+                    "effective_num_samples": 42,
+                }
+            },
+            "planner_decision_trace": {
+                "steps": [
+                    {
+                        "step": 0,
+                        "distance_to_goal_m": 1.8,
+                        "route_progress_from_start_m": 0.2,
+                        "brne_mechanism": {
+                            "runtime_status": "ok",
+                            "failure_reason": None,
+                            "effective_num_samples": 42,
+                            "input": {
+                                "declared_heading_rad": 0.0,
+                                "velocity_derived_heading_rad": 0.0,
+                                "goal_bearing_rad": 0.2,
+                                "selected_agents": [],
+                            },
+                            "aggregation": {"control_ensemble_layout": "plan_step_sample_command"},
+                            "trajectory_shapes": {"xtraj": [2, 2]},
+                            "raw_action": {"v": 1.0, "omega": 0.1},
+                            "final_action": {"v": 1.0, "omega": 0.1},
+                        },
+                    },
+                    {
+                        "step": 1,
+                        "distance_to_goal_m": 1.5,
+                        "route_progress_from_start_m": 0.5,
+                        "brne_mechanism": {
+                            "runtime_status": "ok",
+                            "failure_reason": None,
+                            "effective_num_samples": 42,
+                            "input": {
+                                "declared_heading_rad": 0.1,
+                                "velocity_derived_heading_rad": 0.1,
+                                "goal_bearing_rad": 0.2,
+                                "selected_agents": [],
+                            },
+                            "aggregation": {"control_ensemble_layout": "plan_step_sample_command"},
+                            "trajectory_shapes": {"xtraj": [2, 2]},
+                            "raw_action": {"v": 1.0, "omega": 0.1},
+                            "final_action": {"v": 1.0, "omega": 0.1},
+                        },
+                    },
+                ]
+            },
+        }
+    )
+    record["algorithm_metadata"]["simulation_step_trace"]["initial_goal_distance_m"] = 2.0
+    for step in record["algorithm_metadata"]["simulation_step_trace"]["steps"]:
+        step["planner"] = {"selected_action": {"linear_velocity": 1.0, "angular_velocity": 0.1}}
+
+    brne_row = build_mechanism_row(record, config, planner_key="brne")
+    assert brne_row["evidence_status"] == "available_native"
+    assert brne_row["mechanism_fields_status"] == "available"
+    assert brne_row["progress_m"] == pytest.approx(0.5)
+    assert brne_row["progress_by_phase_m"] == {
+        "early": pytest.approx(0.2),
+        "middle": pytest.approx(0.2),
+        "final": pytest.approx(0.5),
+    }
+    assert brne_row["control_ensemble_layouts"] == ["plan_step_sample_command"]
+
+    comparator_row = build_mechanism_row(record, config, planner_key="social_force")
+    assert comparator_row["mechanism_fields_status"] == "not_applicable"
+
+    missing_trace = dict(record)
+    missing_trace["algorithm_metadata"] = dict(record["algorithm_metadata"])
+    missing_trace["algorithm_metadata"].pop("planner_decision_trace")
+    missing_row = build_mechanism_row(missing_trace, config, planner_key="brne")
+    assert missing_row["mechanism_fields_status"] == "unavailable"
+    assert "mechanism_trace_missing" in missing_row["errors"]
+
+    table = build_mechanism_table(
+        {"brne": [record], "orca": [record], "social_force": [record]}, config
+    )
+    assert table["status"] == "unavailable"
+    assert table["errors"]

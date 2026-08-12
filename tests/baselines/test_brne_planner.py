@@ -194,6 +194,7 @@ def test_brne_solve_fails_closed_on_nonfinite_weights(monkeypatch: pytest.Monkey
     metadata = planner.get_metadata()
     assert metadata["runtime_status"] == "failed"
     assert metadata["failure_reasons"] == ["nonfinite_weights"]
+    assert metadata["last_decision"]["failure_reason"] == "nonfinite_weights"
 
 
 def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,6 +220,50 @@ def test_brne_solve_uses_normalized_weighted_sum(monkeypatch: pytest.MonkeyPatch
 
     action = planner.step(_make_observation(num_agents=1))
     assert action == pytest.approx({"v": 0.7, "omega": 0.25})
+
+
+def test_brne_mechanism_metadata_records_frame_and_aggregation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A BRNE step exposes compact frame, tensor, and action-aggregation telemetry."""
+    planner = BRNEPlanner({"num_samples": 4, "plan_steps": 2})
+    monkeypatch.setattr(planner, "_ensure_brne_loaded", _fake_brne_module)
+    monkeypatch.setattr(planner, "_ensure_cov", _fake_covariance)
+    monkeypatch.setattr(
+        planner,
+        "_build_trajectories",
+        lambda *_args: (
+            np.zeros((2, 2)),
+            np.zeros((2, 2)),
+            np.zeros((2, 2, 2)),
+        ),
+    )
+    monkeypatch.setattr(planner, "_brne_solve", lambda *_args: np.array([[0.25, 0.75]]))
+    planner._jit_warmup_done = True
+
+    observation = _make_observation(num_agents=2)
+    observation["robot"]["heading"] = math.pi / 2.0
+    planner.step(observation)
+
+    decision = planner.get_metadata()["last_decision"]
+    assert decision["schema_version"] == "brne-mechanism-step.v1"
+    assert decision["runtime_status"] == "ok"
+    assert decision["input"]["declared_heading_rad"] == pytest.approx(math.pi / 2.0)
+    assert decision["input"]["velocity_derived_heading_rad"] == pytest.approx(0.0)
+    assert decision["input"]["goal_bearing_rad"] == pytest.approx(0.0)
+    assert decision["input"]["selected_agent_count"] == 1
+    assert decision["input"]["selected_agents"][0]["velocity_world_m_s"] == pytest.approx(
+        [-0.4, 0.0]
+    )
+    assert decision["trajectory_shapes"] == {
+        "xtraj": [2, 2],
+        "ytraj": [2, 2],
+        "control_ensemble": [2, 2, 2],
+    }
+    assert decision["aggregation"]["control_ensemble_layout"] == "plan_step_sample_command"
+    assert decision["aggregation"]["weights_shape"] == [1, 2]
+    assert decision["raw_action"] == pytest.approx({"v": 0.0, "omega": 0.0})
+    assert decision["final_action"] == pytest.approx({"v": 0.0, "omega": 0.0})
 
 
 def test_brne_declared_heading_takes_precedence_over_velocity() -> None:

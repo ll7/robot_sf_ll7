@@ -194,6 +194,7 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
     initial_robot_velocity: Any = None,
     initial_pedestrian_velocities: Any = None,
     initial_pedestrian_ids: list[Any] | None = None,
+    initial_pedestrian_id_source: str | None = None,
     coordinate_frame: str = "world",
     units: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -359,9 +360,13 @@ def build_analysis_trace(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "pedestrian_radius_m": float(pedestrian_radius_m),
         },
         "actor_id_source": (
-            "explicit"
-            if initial_pedestrian_ids is not None
-            else ("simulator" if resolved_initial_ids is not None else "positional_index")
+            initial_pedestrian_id_source
+            if initial_pedestrian_id_source is not None
+            else (
+                "explicit"
+                if initial_pedestrian_ids is not None
+                else ("simulator" if resolved_initial_ids is not None else "positional_index")
+            )
         ),
         "planner": str(planner),
         "planner_commit": planner_commit,
@@ -483,7 +488,11 @@ def trace_coverage(record: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR
     if actor_sets and any(actor_set != actor_sets[0] for actor_set in actor_sets[1:]):
         actor_ids = False
     controls = controls and control_observed
-    actor_ids = actor_ids and trace.get("actor_id_source") in {"explicit", "simulator"}
+    actor_ids = actor_ids and trace.get("actor_id_source") in {
+        "explicit",
+        "simulator",
+        "simulator_slot",
+    }
     coordinate_frame = trace.get("coordinate_frame") == "world"
     expected_units = {"position": "m", "velocity": "m/s", "heading": "rad", "time": "s"}
     units = trace.get("units") == expected_units

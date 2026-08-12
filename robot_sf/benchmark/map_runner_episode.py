@@ -1711,6 +1711,7 @@ class _EpisodeStepLoopResult:
     initial_ped_positions: np.ndarray
     initial_robot_velocity: np.ndarray | None
     initial_ped_velocities: np.ndarray | None
+    trace_actor_ids: list[str]
     initial_goal_distance: float
     reached_goal_step: int | None
     termination_reason: str
@@ -1787,6 +1788,7 @@ class _StepLoopState:
     initial_ped_positions: np.ndarray = field(default_factory=lambda: np.empty((0, 2), dtype=float))
     initial_robot_velocity: np.ndarray | None = None
     initial_ped_velocities: np.ndarray | None = None
+    trace_actor_ids: list[str] = field(default_factory=list)
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
 
@@ -1943,6 +1945,7 @@ def _init_step_loop_state(
     initial_ped_positions = np.array(env.simulator.ped_pos, dtype=float, copy=True).reshape(-1, 2)
     initial_robot_velocity = _initial_robot_velocity(env.simulator)
     initial_ped_velocities = _initial_ped_velocities(env.simulator, len(initial_ped_positions))
+    trace_actor_ids = _initial_pedestrian_actor_ids(env.simulator, len(initial_ped_positions))
     initial_goal_distance = float(np.linalg.norm(initial_robot_pos - goal_vec))
     state = _StepLoopState(obs=obs)
     state.hybrid_command_sources = [] if hybrid_source_field is not None else None
@@ -1956,6 +1959,7 @@ def _init_step_loop_state(
     state.initial_ped_positions = initial_ped_positions
     state.initial_robot_velocity = initial_robot_velocity
     state.initial_ped_velocities = initial_ped_velocities
+    state.trace_actor_ids = trace_actor_ids
     state.initial_goal_distance = initial_goal_distance
     return state
 
@@ -2026,6 +2030,40 @@ def _initial_ped_velocities(simulator: Any, count: int) -> np.ndarray | None:
     if array.shape[0] < count or not np.isfinite(array[:count]).all():
         return None
     return array[:count].copy()
+
+
+def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str]:
+    """Return stable simulator-slot IDs for the reset pedestrian population.
+
+    The benchmark simulator stores pedestrian state in fixed rows.  When an
+    explicit identity registry is exposed, preserve it; otherwise the row
+    index is promoted to a namespaced simulator-slot identity.  The latter is
+    deliberately distinct from the legacy frame ``id`` field so positional
+    v1 traces cannot be mistaken for stable identities by the analysis gate.
+
+    Returns:
+        Stable, unique identifiers aligned with ``simulator.ped_pos``.
+    """
+    if count <= 0:
+        return []
+    owners = (simulator, getattr(simulator, "pysf_state", None))
+    for owner in owners:
+        if owner is None:
+            continue
+        for name in ("pedestrian_ids", "ped_ids", "ped_actor_ids"):
+            raw = getattr(owner, name, None)
+            if raw is None:
+                continue
+            try:
+                values = list(raw)
+            except TypeError:
+                continue
+            if len(values) != count:
+                continue
+            identifiers = [str(value).strip() for value in values]
+            if all(identifiers) and len(set(identifiers)) == len(identifiers):
+                return identifiers
+    return [f"simulator-slot-{index}" for index in range(count)]
 
 
 def _finite_positive_float(value: Any) -> float | None:
@@ -2380,6 +2418,7 @@ def _step_build_simulation_trace(
             slc.single_pedestrian_vru_metadata,
             sim.robot_pos,
             robot_velocity,
+            state.trace_actor_ids,
         ),
         visible=sim.step_visible,
         track_confidence=sim.step_confidence,
@@ -2654,6 +2693,7 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         initial_ped_positions=state.initial_ped_positions,
         initial_robot_velocity=state.initial_robot_velocity,
         initial_ped_velocities=state.initial_ped_velocities,
+        trace_actor_ids=list(state.trace_actor_ids),
         initial_goal_distance=state.initial_goal_distance,
         reached_goal_step=state.reached_goal_step,
         termination_reason=state.termination_reason,
@@ -3062,6 +3102,7 @@ def _finalize_trace_metadata(  # noqa: PLR0913
     initial_ped_positions: np.ndarray,
     initial_robot_velocity: np.ndarray | None,
     initial_ped_velocities: np.ndarray | None,
+    trace_actor_ids: list[str] | None,
     horizon_val: int,
     termination_reason: str,
     safety_events: list[dict[str, Any]],
@@ -3123,6 +3164,8 @@ def _finalize_trace_metadata(  # noqa: PLR0913
                 initial_pedestrians=initial_ped_positions,
                 initial_robot_velocity=initial_robot_velocity,
                 initial_pedestrian_velocities=initial_ped_velocities,
+                initial_pedestrian_ids=trace_actor_ids,
+                initial_pedestrian_id_source="simulator_slot",
                 dt=float(config.sim_config.time_per_step_in_secs),
                 horizon=int(horizon_val),
                 robot_radius_m=robot_radius,
@@ -3428,6 +3471,7 @@ def _finalize_metadata_outputs(
         initial_ped_positions=loop_result.initial_ped_positions,
         initial_robot_velocity=loop_result.initial_robot_velocity,
         initial_ped_velocities=loop_result.initial_ped_velocities,
+        trace_actor_ids=loop_result.trace_actor_ids,
         horizon_val=ctx.horizon_val,
         termination_reason=loop_result.termination_reason,
         safety_events=loop_result.collision_events,

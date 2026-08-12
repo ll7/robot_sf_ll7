@@ -6,15 +6,11 @@ import csv
 import hashlib
 import json
 import tarfile
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.analysis import build_ch7_evidence_package as builder
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 ARMS = (
     "goal",
@@ -395,6 +391,35 @@ def test_build_is_deterministic_and_retains_unavailable_trace_boundaries(
     assert len((output / "SHA256SUMS").read_text().splitlines()) >= 10
 
 
+def test_package_schema_rejects_contradictory_admission_states(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    """Schema consumers must not accept a blocked/admitted state contradiction."""
+
+    output = tmp_path / "package"
+    manifest = builder.build_ch7_evidence_package(
+        source_package=fixture_inputs["source"],
+        release_archive=fixture_inputs["archive"],
+        issue6814_compact=fixture_inputs["compact"],
+        output=output,
+        portfolio_config=fixture_inputs["portfolio"],
+    )
+    schema = json.loads(
+        (
+            Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-package.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    for field, value in (
+        ("status", "admitted"),
+        ("admission_status", "admitted"),
+        ("source_integrity_gate", "passed"),
+    ):
+        mutated = dict(manifest)
+        mutated[field] = value
+        errors = list(builder.Draft202012Validator(schema).iter_errors(mutated))
+        assert errors, field
+
+
 def test_terminal_signature_fixture_preserves_timeout_and_collision_counts(
     fixture_inputs: dict[str, Path], tmp_path: Path
 ) -> None:
@@ -450,6 +475,22 @@ def test_compact_schema_and_checksum_path_are_fail_closed(
             source_package=fixture_inputs["source"],
             release_archive=fixture_inputs["archive"],
             issue6814_compact=compact,
+            output=tmp_path / "package",
+            portfolio_config=fixture_inputs["portfolio"],
+        )
+
+
+def test_compact_directory_rejects_unlisted_artifact(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    """Reject compact input siblings outside its two-file digest boundary."""
+
+    (fixture_inputs["compact"] / "UNLISTED.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(builder.Ch7EvidencePackageError, match="unlisted or missing"):
+        builder.build_ch7_evidence_package(
+            source_package=fixture_inputs["source"],
+            release_archive=fixture_inputs["archive"],
+            issue6814_compact=fixture_inputs["compact"],
             output=tmp_path / "package",
             portfolio_config=fixture_inputs["portfolio"],
         )

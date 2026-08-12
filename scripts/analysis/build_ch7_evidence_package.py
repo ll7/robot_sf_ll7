@@ -861,6 +861,13 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
         output, (source_package, release_archive, issue6814_compact, portfolio_config)
     )
     source = verify_source_package(source_package, EXPECTED_SOURCE_SHA256SUMS)
+    compact_members = {
+        path.relative_to(issue6814_compact).as_posix()
+        for path in issue6814_compact.rglob("*")
+        if path.is_file()
+    }
+    if compact_members != {"compact_packet.json", "SHA256SUMS"}:
+        raise Ch7EvidencePackageError("#6814 compact input contains unlisted or missing artifacts")
     compact_entries = _parse_sha256sums(issue6814_compact / "SHA256SUMS")
     if len(compact_entries) != 1 or compact_entries[0][1] != "compact_packet.json":
         raise Ch7EvidencePackageError(

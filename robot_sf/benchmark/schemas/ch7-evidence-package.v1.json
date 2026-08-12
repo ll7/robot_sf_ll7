@@ -45,6 +45,26 @@
     "release_archive_included": {"const": false},
     "deterministic_serialization": {"const": "strict-json-sort-keys-utf8-newline.v1"}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "blocked_pending_domain_approval"}}},
+      "then": {
+        "properties": {
+          "admission_status": {"const": "not_admitted"},
+          "source_integrity_gate": {"const": "blocked_pending_domain_approval"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "admitted"}}},
+      "then": {
+        "properties": {
+          "admission_status": {"const": "admitted"},
+          "source_integrity_gate": {"const": "passed"}
+        }
+      }
+    }
+  ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "digests": {

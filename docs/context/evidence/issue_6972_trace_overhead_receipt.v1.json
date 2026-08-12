@@ -29,8 +29,8 @@
     "off": [
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 2.117420208,
-        "jsonl_gzip_bytes": 4077,
+        "elapsed_s": 2.285904125,
+        "jsonl_gzip_bytes": 4076,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -43,8 +43,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.0547335,
-        "jsonl_gzip_bytes": 4073,
+        "elapsed_s": 0.055346916,
+        "jsonl_gzip_bytes": 4076,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -57,8 +57,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.053054333,
-        "jsonl_gzip_bytes": 4077,
+        "elapsed_s": 0.053543,
+        "jsonl_gzip_bytes": 4076,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -71,8 +71,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.053398083,
-        "jsonl_gzip_bytes": 4072,
+        "elapsed_s": 0.05524425,
+        "jsonl_gzip_bytes": 4078,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -85,8 +85,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 0,
-        "elapsed_s": 0.052997625,
-        "jsonl_gzip_bytes": 4074,
+        "elapsed_s": 0.053170791,
+        "jsonl_gzip_bytes": 4075,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -101,8 +101,8 @@
     "on": [
       {
         "analysis_trace_gzip_bytes": 1076,
-        "elapsed_s": 0.064696583,
-        "jsonl_gzip_bytes": 5230,
+        "elapsed_s": 0.066781667,
+        "jsonl_gzip_bytes": 5231,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -115,8 +115,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 1076,
-        "elapsed_s": 0.065428,
-        "jsonl_gzip_bytes": 5228,
+        "elapsed_s": 0.065726209,
+        "jsonl_gzip_bytes": 5227,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -129,8 +129,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 1076,
-        "elapsed_s": 0.063668584,
-        "jsonl_gzip_bytes": 5229,
+        "elapsed_s": 0.065852917,
+        "jsonl_gzip_bytes": 5230,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -143,8 +143,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 1076,
-        "elapsed_s": 0.064426208,
-        "jsonl_gzip_bytes": 5229,
+        "elapsed_s": 0.066386709,
+        "jsonl_gzip_bytes": 5230,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -157,8 +157,8 @@
       },
       {
         "analysis_trace_gzip_bytes": 1076,
-        "elapsed_s": 0.066143292,
-        "jsonl_gzip_bytes": 5228,
+        "elapsed_s": 0.064643,
+        "jsonl_gzip_bytes": 5229,
         "metrics_sha256": "22240ebe2e680b502575b7c2d25d3f349bf80f34cc5fc8c1f1ff4b7bb9170afe",
         "outcome": {
           "collision_event": false,
@@ -171,8 +171,9 @@
       }
     ]
   },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_6972_trace_overhead_receipt.v1",
-  "source_commit": "14f2b12c0d2f53e00b6e732d9169ea5e9ad0e398",
+  "source_commit": "68417c567c672e37bced9cc01953d680829ba073",
   "status": "diagnostic_software_fixture",
   "summary": {
     "action_sequence_comparison": {
@@ -183,22 +184,22 @@
     "policy_decision": "keep analysis_trace: all opt-in; median overhead is compared with the 10% threshold",
     "stable_projection_equal": true,
     "warm_max_runtime_s": {
-      "off": 0.0547335,
-      "on": 0.066143292
+      "off": 0.055346916,
+      "on": 0.066386709
     },
     "warm_median_analysis_trace_gzip_bytes": 1076.0,
     "warm_median_jsonl_gzip_bytes": {
-      "off": 4073.5,
-      "on": 5228.5
+      "off": 4076.0,
+      "on": 5229.5
     },
-    "warm_median_overhead_fraction": 0.2198333572814355,
+    "warm_median_overhead_fraction": 0.2095087062132739,
     "warm_median_runtime_s": {
-      "off": 0.053226208,
-      "on": 0.064927104
+      "off": 0.054393625,
+      "on": 0.065789563
     },
     "warm_p90_runtime_s": {
-      "off": 0.0547335,
-      "on": 0.066143292
+      "off": 0.055346916,
+      "on": 0.066386709
     }
   }
 }

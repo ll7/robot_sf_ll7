@@ -170,11 +170,13 @@ phase progress but `0/3` goal-reaching:
 [issue_6938_brne_progress_mechanism.md](issue_6938_brne_progress_mechanism.md),
 [evidence/issue_6938_brne_progress_mechanism_summary.json](evidence/issue_6938_brne_progress_mechanism_summary.json).
 
-Issue #6944 BRNE candidate transition: bounded native candidate/weight summaries
-show the candidate distribution itself shifts from `0.400` to `0.040` m/s
-while mean-normalized weights remain uniform; weighting/normalization is
-narrowed as a null explanation, but upstream candidate generation, planner
-state, and control-horizon causes remain unresolved and diagnostic-only:
+Issue #6944 BRNE candidate transition: bounded native candidate/weight and
+controller-parity summaries show the candidate distribution itself shifts from
+`0.400` to `0.040` m/s while mean-normalized weights remain uniform; the
+adapter also uses a straight-constant nominal command and passes `2/0/2`
+observed/within-upstream-radius/passed pedestrians. Weighting/normalization is
+narrowed as a null explanation, while the parity lead and remaining planner
+state/control-horizon causes remain diagnostic-only:
 [issue_6944_brne_candidate_transition.md](issue_6944_brne_candidate_transition.md),
 [evidence/issue_6944_brne_candidate_transition_summary.json](evidence/issue_6944_brne_candidate_transition_summary.json).
 

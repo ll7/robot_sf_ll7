@@ -1865,6 +1865,7 @@ class _StepSimResult:
     step_visibility_status: str
     step_visibility_reason: str | None
     selected_action_payload: dict[str, Any]
+    applied_environment_action_payload: dict[str, Any]
     actuation_step: Any
     planner_step_decision: dict[str, Any] | None
 
@@ -2282,11 +2283,12 @@ def _step_convert_and_execute(
     policy_command: Any,
     step_is_native: bool,
     env: Any,
-) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, float, bool, bool, dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Convert command to env action, execute step, and update state.obs.
 
     Returns:
-        Tuple of (obs, reward, terminated, truncated, info, selected_action_payload).
+        Tuple of (obs, reward, terminated, truncated, info, selected_action_payload,
+        applied_environment_action_payload).
     """
     selected_action_payload = _command_action_payload(policy_command)
     state.ammv_command_actions.append(selected_action_payload)
@@ -2301,6 +2303,7 @@ def _step_convert_and_execute(
             config=slc.config,
             command=policy_command,
         )
+    applied_environment_action_payload = _command_action_payload(action)
     if slc.active_harness is not None and action_conversion_start is not None:
         slc.active_harness.add_time(
             "action_conversion", (time.perf_counter() - action_conversion_start) * 1000.0
@@ -2309,7 +2312,15 @@ def _step_convert_and_execute(
         slc.active_harness.end_cycle()
     obs, reward, terminated, truncated, info = env.step(action)
     state.obs = obs
-    return obs, reward, terminated, truncated, info, selected_action_payload
+    return (
+        obs,
+        reward,
+        terminated,
+        truncated,
+        info,
+        selected_action_payload,
+        applied_environment_action_payload,
+    )
 
 
 def _step_snapshot_and_record(
@@ -2393,6 +2404,7 @@ def _step_build_simulation_trace(
     planner_payload: dict[str, Any] = {
         "event": "step",
         "selected_action": sim.selected_action_payload,
+        "applied_environment_action": sim.applied_environment_action_payload,
     }
     if sim.actuation_step is not None:
         planner_payload["amv"] = {
@@ -2810,7 +2822,15 @@ def _execute_step_loop(
             env=env,
             step_idx=step_idx,
         )
-        obs, reward, terminated, truncated, info, sel_payload = _step_convert_and_execute(
+        (
+            obs,
+            reward,
+            terminated,
+            truncated,
+            info,
+            sel_payload,
+            applied_environment_action_payload,
+        ) = _step_convert_and_execute(
             state,
             slc,
             policy_command=policy_command,
@@ -2839,6 +2859,7 @@ def _execute_step_loop(
             step_visibility_status=s_stat,
             step_visibility_reason=s_reason,
             selected_action_payload=sel_payload,
+            applied_environment_action_payload=applied_environment_action_payload,
             actuation_step=actuation_step,
             planner_step_decision=planner_step_decision,
         )

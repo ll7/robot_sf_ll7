@@ -1,0 +1,120 @@
+{
+  "campaign_bundle_git_head": "a31686e51f624638255d22968b89cda0257c2e4c",
+  "campaign_issue": "robot_sf_ll7#5149",
+  "campaign_runs_jsonl": "runs.jsonl",
+  "claim_boundary": "replay visualization of the measured multi-seed campaign (smoke-tier face-validity evidence); adds no quantitative claims beyond the campaign bundle",
+  "determinism_note": "Trajectories re-simulated with the pinned harness and seeds; GIF encoding embeds no timestamps. Byte-stable re-runs require --generated-at plus the same platform/environment.",
+  "generated_at_utc": "2026-08-12T11:39:16Z",
+  "generation_command": "uv run python scripts/validation/render_issue_5149_emergent_phenomena_videos.py",
+  "git_head": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f",
+  "harness_modules": [
+    "robot_sf/research/emergent_phenomena.py"
+  ],
+  "issue": "robot_sf_ll7#6960",
+  "packages": {
+    "matplotlib": "3.11.1",
+    "numpy": "2.4.6",
+    "pysocialforce": "2.0.0"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime": {
+    "machine": "arm64",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python_version": "3.13.1"
+  },
+  "schema": "issue_5149_emergent_phenomena_videos_manifest.v1",
+  "videos": [
+    {
+      "calibration": "released_default",
+      "file": "bidirectional_corridor__released_default__seed5155__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "single",
+      "n_frames": 201,
+      "phenomenon": "lane_formation",
+      "phenomenon_verdict": "absent_or_negligible",
+      "primary_order_parameter": "lane_segregation_index",
+      "primary_order_parameter_value": 0.06613881982494177,
+      "scenario": "bidirectional_corridor",
+      "seed": 5155,
+      "seed_selection": "median primary order parameter among majority-verdict seeds (lower seed on ties)",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    },
+    {
+      "calibration": "literature_typical",
+      "file": "bidirectional_corridor__literature_typical__seed5157__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "single",
+      "n_frames": 201,
+      "phenomenon": "lane_formation",
+      "phenomenon_verdict": "absent_or_negligible",
+      "primary_order_parameter": "lane_segregation_index",
+      "primary_order_parameter_value": 0.05759453053426156,
+      "scenario": "bidirectional_corridor",
+      "seed": 5157,
+      "seed_selection": "median primary order parameter among majority-verdict seeds (lower seed on ties)",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    },
+    {
+      "calibrations": {
+        "literature_typical": 5157,
+        "released_default": 5155
+      },
+      "file": "bidirectional_corridor__grid__released_default_seed5155__literature_typical_seed5157__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "grid",
+      "n_frames": 201,
+      "phenomenon": "lane_formation",
+      "scenario": "bidirectional_corridor",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    },
+    {
+      "calibration": "released_default",
+      "file": "narrow_doorway__released_default__seed5156__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "single",
+      "n_frames": 251,
+      "phenomenon": "doorway_oscillation",
+      "phenomenon_verdict": "clearly_present",
+      "primary_order_parameter": "oscillation_flips",
+      "primary_order_parameter_value": 3.0,
+      "scenario": "narrow_doorway",
+      "seed": 5156,
+      "seed_selection": "median primary order parameter among majority-verdict seeds (lower seed on ties)",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    },
+    {
+      "calibration": "literature_typical",
+      "file": "narrow_doorway__literature_typical__seed5153__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "single",
+      "n_frames": 251,
+      "phenomenon": "doorway_oscillation",
+      "phenomenon_verdict": "absent_or_negligible",
+      "primary_order_parameter": "oscillation_flips",
+      "primary_order_parameter_value": 1.0,
+      "scenario": "narrow_doorway",
+      "seed": 5153,
+      "seed_selection": "median primary order parameter among majority-verdict seeds (lower seed on ties)",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    },
+    {
+      "calibrations": {
+        "literature_typical": 5153,
+        "released_default": 5156
+      },
+      "file": "narrow_doorway__grid__released_default_seed5156__literature_typical_seed5153__git30e2366036.gif",
+      "fps": 10,
+      "frame_stride": 2,
+      "kind": "grid",
+      "n_frames": 251,
+      "phenomenon": "doorway_oscillation",
+      "scenario": "narrow_doorway",
+      "source_commit": "30e2366036b5bb4f9c0260a82edf8cf3ae35964f"
+    }
+  ]
+}

@@ -166,9 +166,9 @@
     {
       "col_offset": 4,
       "context": "_probe_capability",
-      "fingerprint": "b5dcc0004133d42e",
+      "fingerprint": "146ea919441269ab",
       "handler": "Exception",
-      "lineno": 621,
+      "lineno": 625,
       "path": "robot_sf/benchmark/forecast/forecast_lane_inventory.py",
       "source": "except Exception as exc:  # noqa: BLE001 - report any import failure as a blocker"
     },

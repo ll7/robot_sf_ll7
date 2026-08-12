@@ -328,7 +328,7 @@ def _load_route_length_and_compute_weights(
         dataset_path,
         array_key=objective_config.remaining_route_length_key,
         trusted_root=trusted_root,
-        expected_dataset_digest=objective_config.dataset_digest or None,
+        expected_dataset_digest=objective_config.dataset_digest,
     )
     configured_digest = objective_config.dataset_digest
     actual_digest = str(result["dataset_digest"])

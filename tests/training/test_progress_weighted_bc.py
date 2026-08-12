@@ -12,6 +12,7 @@ not benchmark evidence.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -48,6 +49,11 @@ _ROUTE_LENGTH_PROVENANCE = {
     "units": "m",
     "source": "recorded_route_remaining_length",
 }
+
+
+def _dataset_digest(path: Path) -> str:
+    """Return the expected SHA-256 digest for a synthetic NPZ artifact."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 @pytest.fixture()
@@ -231,7 +237,11 @@ class TestMalformedData:
         path = tmp_path / "data.npz"
         np.savez(path, actions=np.zeros((2, 5, 2)))
         with pytest.raises(ProgressWeightedBcError, match="missing required array"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_non_finite_values_fail_closed(self, tmp_path: Path) -> None:
         """NaN or Inf in remaining route length must fail closed."""
@@ -239,14 +249,22 @@ class TestMalformedData:
         rl = np.array([[10.0, np.nan, 8.0, 6.0]])
         np.savez(path, remaining_route_length=rl, actions=np.zeros((1, 3, 2)))
         with pytest.raises(ProgressWeightedBcError, match="non-finite"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_scalar_array_fails_closed(self, tmp_path: Path) -> None:
         """Scalar remaining_route_length must fail closed."""
         path = tmp_path / "data.npz"
         np.savez(path, remaining_route_length=np.array(10.0))
         with pytest.raises(ProgressWeightedBcError, match="scalar"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_missing_actions_fails_closed(self, tmp_path: Path) -> None:
         """Arm-B route progress without action alignment must fail closed."""
@@ -257,14 +275,22 @@ class TestMalformedData:
             remaining_route_length_metadata=_ROUTE_LENGTH_PROVENANCE,
         )
         with pytest.raises(ProgressWeightedBcError, match="requires an actions array"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_high_rank_array_fails_closed(self, tmp_path: Path) -> None:
         """Route-progress arrays above episode-by-step rank must fail closed."""
         path = tmp_path / "data.npz"
         np.savez(path, remaining_route_length=np.zeros((1, 2, 3)))
         with pytest.raises(ProgressWeightedBcError, match="unexpected ndim=3"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_alignment_mismatch_fails_closed(self, tmp_path: Path) -> None:
         """remaining_route_length steps != actions+1 must fail closed."""
@@ -274,7 +300,11 @@ class TestMalformedData:
         actions = np.zeros((1, 3, 2))
         np.savez(path, remaining_route_length=rl, actions=actions)
         with pytest.raises(ProgressWeightedBcError, match="expected 4"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_zero_steps_episode_fails_closed(self, tmp_path: Path) -> None:
         """An episode with zero remaining-route-length steps must fail closed."""
@@ -282,7 +312,11 @@ class TestMalformedData:
         rl = np.empty((1, 0), dtype=np.float64)
         np.savez(path, remaining_route_length=rl, actions=np.zeros((1, 0, 2)))
         with pytest.raises(ProgressWeightedBcError, match="zero steps"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_missing_provenance_fails_closed_after_alignment(self, tmp_path: Path) -> None:
         """Aligned route lengths without declared provenance are not admissible."""
@@ -293,7 +327,11 @@ class TestMalformedData:
             actions=np.zeros((1, 2, 2)),
         )
         with pytest.raises(ProgressWeightedBcError, match="provenance"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_proxy_provenance_fails_closed(self, tmp_path: Path) -> None:
         """Goal/displacement provenance cannot masquerade as route progress."""
@@ -308,7 +346,11 @@ class TestMalformedData:
             },
         )
         with pytest.raises(ProgressWeightedBcError, match="source"):
-            load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+            load_remaining_route_length_from_npz(
+                path,
+                trusted_root=tmp_path,
+                expected_dataset_digest=_dataset_digest(path),
+            )
 
     def test_dataset_path_must_stay_under_trusted_root(self, tmp_path: Path) -> None:
         """Reject an NPZ outside the curated artifact root before object-array loading."""
@@ -564,7 +606,11 @@ class TestRectangularAlignment:
             actions=actions,
             remaining_route_length_metadata=_ROUTE_LENGTH_PROVENANCE,
         )
-        result = load_remaining_route_length_from_npz(path, trusted_root=tmp_path)
+        result = load_remaining_route_length_from_npz(
+            path,
+            trusted_root=tmp_path,
+            expected_dataset_digest=_dataset_digest(path),
+        )
         assert len(result["remaining_route_length"]) == 2
         assert result["remaining_route_length"][0].shape == (5,)
         assert result["remaining_route_length"][1].shape == (5,)

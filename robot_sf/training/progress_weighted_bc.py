@@ -971,18 +971,22 @@ def validate_trajectory_npz_integrity(
             f"trajectory dataset path escapes the trusted trajectory artifact directory: {path}"
         ) from exc
 
+    if not expected_dataset_digest:
+        raise ProgressWeightedBcError(
+            "configured trajectory dataset digest is required before NPZ load"
+        )
+
     actual_digest = _sha256_file(resolved_path)
-    if expected_dataset_digest:
-        expected = str(expected_dataset_digest)
-        if len(expected) != 64 or any(char not in "0123456789abcdefABCDEF" for char in expected):
-            raise ProgressWeightedBcError(
-                "expected trajectory dataset digest must be a 64-character SHA-256 hex digest"
-            )
-        if expected.lower() != actual_digest.lower():
-            raise ProgressWeightedBcError(
-                "trajectory dataset digest does not match the configured digest before NPZ load: "
-                f"configured={expected}, actual={actual_digest}"
-            )
+    expected = str(expected_dataset_digest)
+    if len(expected) != 64 or any(char not in "0123456789abcdefABCDEF" for char in expected):
+        raise ProgressWeightedBcError(
+            "expected trajectory dataset digest must be a 64-character SHA-256 hex digest"
+        )
+    if expected.lower() != actual_digest.lower():
+        raise ProgressWeightedBcError(
+            "trajectory dataset digest does not match the configured digest before NPZ load: "
+            f"configured={expected}, actual={actual_digest}"
+        )
     return actual_digest
 
 

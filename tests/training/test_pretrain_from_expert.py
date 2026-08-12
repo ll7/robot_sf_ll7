@@ -249,6 +249,27 @@ def test_trajectory_loader_checks_digest_before_np_load(
         )
 
 
+def test_trajectory_loader_requires_digest_before_np_load(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An absent configured digest must stop loading before object arrays are opened."""
+    dataset_path = tmp_path / "trajectory.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    def fail_if_loaded(*args: object, **kwargs: object) -> None:
+        raise AssertionError("numpy.load must not run without a configured digest")
+
+    monkeypatch.setattr(np, "load", fail_if_loaded)
+    with pytest.raises(ProgressWeightedBcError, match="digest is required"):
+        _load_trajectory_dataset(dataset_path, trusted_root=tmp_path)
+
+
 def test_progress_objective_seed_must_match_primary_run_seed() -> None:
     """Divergent objective and run seeds must fail closed to preserve manifest reproducibility."""
     config = ProgressWeightedObjectiveConfig.arm_b(

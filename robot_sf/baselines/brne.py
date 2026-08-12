@@ -9,7 +9,8 @@ Bounded integration scope (issue #5318):
 
 - Corridor-class scenarios only (``corridor_y_min/max`` bounds).
 - Native unicycle ``(v, omega)`` output — no projection required.
-- Fail-closed budget enforcement: zero motion on budget overrun.
+- Fail-closed budget enforcement: zero motion on budget overrun, with
+  runtime failure provenance so diagnostic rows are excluded.
 - GPL-3.0 upstream: local-only staging, never vendored.
 
 Upstream: ``MurpheyLab/brne`` @ ``633a5cd`` (IJRR 2024, GPL-3.0).
@@ -22,6 +23,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import subprocess
 import sys
 import threading
 import time
@@ -45,6 +47,8 @@ _LOGGER = logging.getLogger(__name__)
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _BRNE_IMPORT_LOCK = threading.RLock()
 _BRNE_MODULE_NAME = "brne_upstream_planner"
+BRNE_PINNED_SHA = "633a5cdcb39ab27f18b596cb8cb1968644f82391"
+BRNE_CORE_REL = "brne_nav/brne_py/brne_py/brne.py"
 
 # Upstream defaults (matching brne_nav/brne_py/brne_py/brne_nav.py).
 _DEFAULT_NUM_SAMPLES = 196
@@ -95,13 +99,7 @@ def _load_brne_module(stage_path: Path) -> ModuleType:
     Returns:
         The imported upstream BRNE core module.
     """
-    core_rel = "brne_nav/brne_py/brne_py/brne.py"
-    core_file = stage_path / core_rel
-    if not core_file.is_file():
-        raise FileNotFoundError(
-            f"BRNE core algorithm not found at staged path: {core_file}. "
-            "Run `uv run python scripts/tools/manage_external_repos.py stage brne`."
-        )
+    core_file = _validate_stage_provenance(stage_path)
     with _BRNE_IMPORT_LOCK:
         existing = sys.modules.get(_BRNE_MODULE_NAME)
         if existing is not None:
@@ -113,6 +111,57 @@ def _load_brne_module(stage_path: Path) -> ModuleType:
         sys.modules[_BRNE_MODULE_NAME] = module
         spec.loader.exec_module(module)  # type: ignore[union-attr]
         return module
+
+
+def _validate_stage_provenance(stage_path: Path) -> Path:
+    """Validate the staged clone and return its pinned BRNE core path.
+
+    The external source is local-only, so the loader must verify both the git
+    commit and the checked-out core file before importing it. A matching
+    ``HEAD`` with a locally modified core is not an acceptable provenance
+    boundary for diagnostic evidence.
+
+    Raises:
+        FileNotFoundError: If the staged clone or core file is unavailable.
+        RuntimeError: If the clone is not the pinned, clean source checkout.
+
+    Returns:
+        Path: The validated upstream BRNE core module.
+    """
+    core_file = stage_path / BRNE_CORE_REL
+    if not core_file.is_file():
+        raise FileNotFoundError(
+            f"BRNE core algorithm not found at staged path: {core_file}. "
+            "Run `uv run python scripts/tools/manage_external_repos.py stage brne`."
+        )
+    if not (stage_path / ".git").exists():
+        raise RuntimeError(f"BRNE staged path is not a git clone: {stage_path}")
+
+    def _git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(stage_path), *args],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    commit_result = _git("rev-parse", "--verify", "HEAD^{commit}")
+    staged_commit = commit_result.stdout.strip() if commit_result.returncode == 0 else ""
+    if staged_commit != BRNE_PINNED_SHA:
+        raise RuntimeError(
+            "BRNE staged source commit mismatch: "
+            f"expected {BRNE_PINNED_SHA}, got {staged_commit or 'unavailable'}"
+        )
+    tracked_result = _git("ls-tree", "-r", "--name-only", "HEAD", "--", BRNE_CORE_REL)
+    if tracked_result.returncode != 0 or tracked_result.stdout.strip() != BRNE_CORE_REL:
+        raise RuntimeError(f"BRNE pinned commit does not track {BRNE_CORE_REL}")
+    for diff_args in (
+        ("diff", "--quiet", "--", BRNE_CORE_REL),
+        ("diff", "--cached", "--quiet", "--", BRNE_CORE_REL),
+    ):
+        if _git(*diff_args).returncode != 0:
+            raise RuntimeError(f"BRNE staged core is locally modified: {core_file}")
+    return core_file
 
 
 class BRNEPlanner:
@@ -131,6 +180,13 @@ class BRNEPlanner:
         self._brne: ModuleType | None = None
         self._lmat: np.ndarray | None = None
         self._jit_warmup_done = False
+        self._upstream_rng_seeded = False
+        self._last_effective_num_samples: int | None = None
+        self._step_count = 0
+        self._failure_count = 0
+        self._failure_reasons: list[str] = []
+        self._last_failure_reason: str | None = None
+        self._last_step_status = "not_started"
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
         """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
@@ -161,10 +217,14 @@ class BRNEPlanner:
         Returns:
             The cached BRNE core module.
         """
-        if self._brne is not None:
-            return self._brne
-        stage = self._resolve_stage_path()
-        self._brne = _load_brne_module(stage)
+        if self._brne is None:
+            stage = self._resolve_stage_path()
+            self._brne = _load_brne_module(stage)
+        if not self._upstream_rng_seeded and self._seed is not None:
+            upstream_rng = getattr(self._brne, "rng", None)
+            if upstream_rng is not None:
+                self._brne.rng = np.random.default_rng(self._seed)
+            self._upstream_rng_seeded = True
         return self._brne
 
     def _ensure_cov(self, brne: ModuleType) -> np.ndarray:
@@ -189,11 +249,45 @@ class BRNEPlanner:
             self._seed = seed
         self._lmat = None
         self._jit_warmup_done = False
+        self._upstream_rng_seeded = False
+        self._last_effective_num_samples = None
+        self._reset_runtime_diagnostics()
 
     def configure(self, config: dict[str, Any] | BRNEPlannerConfig) -> None:
         """Update the BRNE wrapper configuration."""
         self.config = self._parse_config(config)
         self._lmat = None
+        self._upstream_rng_seeded = False
+        self._last_effective_num_samples = None
+        self._reset_runtime_diagnostics()
+
+    def _reset_runtime_diagnostics(self) -> None:
+        """Clear per-episode runtime diagnostics."""
+        self._step_count = 0
+        self._failure_count = 0
+        self._failure_reasons = []
+        self._last_failure_reason = None
+        self._last_step_status = "not_started"
+
+    def _record_failure(self, reason: str) -> None:
+        """Record a fail-closed step without hiding it behind zero motion."""
+        normalized_reason = str(reason).strip() or "unknown_failure"
+        self._step_count += 1
+        self._failure_count += 1
+        self._last_failure_reason = normalized_reason
+        self._last_step_status = "failed"
+        if normalized_reason not in self._failure_reasons:
+            self._failure_reasons.append(normalized_reason)
+
+    def _record_success(self) -> None:
+        """Record one finite control step."""
+        self._step_count += 1
+        self._last_step_status = "ok"
+
+    def _zero_action(self, reason: str) -> dict[str, float]:
+        """Return the bounded stop action and retain its failure reason."""
+        self._record_failure(reason)
+        return {"v": 0.0, "omega": 0.0}
 
     def step(self, obs: Observation | dict[str, Any]) -> dict[str, float]:
         """Compute a BRNE action for the current observation.
@@ -207,8 +301,10 @@ class BRNEPlanner:
         try:
             return self._solve(obs)
         except FileNotFoundError:
+            self._record_failure("missing_dependency")
             raise
         except Exception as exc:  # broad catch: solver fallback boundary
+            self._record_failure("solver_exception")
             if self.config.fallback_on_error:
                 _LOGGER.warning("BRNE solve failed, returning zero motion: %s", exc)
                 return {"v": 0.0, "omega": 0.0}
@@ -229,7 +325,14 @@ class BRNEPlanner:
         r_pos = np.asarray(robot["position"], dtype=np.float64)
         r_vel = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=np.float64)
         r_goal = np.asarray(robot.get("goal", [r_pos[0] + 1.0, r_pos[1]]), dtype=np.float64)
-        robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal)
+        heading_value = robot.get("heading")
+        try:
+            robot_heading = float(heading_value) if heading_value is not None else None
+        except (TypeError, ValueError):
+            robot_heading = None
+        if robot_heading is not None and not np.isfinite(robot_heading):
+            robot_heading = None
+        robot_pose = self._infer_robot_pose(r_pos, r_vel, r_goal, r_heading=robot_heading)
         selected = self._select_agents(obs.agents, r_pos)
         num_peds = len(selected)
         num_agents = num_peds + 1
@@ -251,20 +354,36 @@ class BRNEPlanner:
             plan_steps,
             dt,
         )
+        effective_num_samples = int(ulist.shape[1])
+        self._last_effective_num_samples = effective_num_samples
 
         if not self._jit_warmup_done:
-            self._brne_solve(brne, xtraj, ytraj, num_agents, plan_steps, num_samples)
+            self._brne_solve(
+                brne,
+                xtraj,
+                ytraj,
+                num_agents,
+                plan_steps,
+                effective_num_samples,
+            )
             self._jit_warmup_done = True
 
         t0 = time.perf_counter()
-        weights = self._brne_solve(brne, xtraj, ytraj, num_agents, plan_steps, num_samples)
+        weights = self._brne_solve(
+            brne,
+            xtraj,
+            ytraj,
+            num_agents,
+            plan_steps,
+            effective_num_samples,
+        )
         elapsed_s = time.perf_counter() - t0
 
         if weights is None or not np.all(np.isfinite(weights)):
             _LOGGER.debug(
                 "BRNE returned out-of-bounds or non-finite weights; returning zero motion"
             )
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("nonfinite_weights")
 
         if elapsed_s > cfg.step_budget_s:
             _LOGGER.debug(
@@ -272,15 +391,29 @@ class BRNEPlanner:
                 elapsed_s * 1000.0,
                 cfg.step_budget_s * 1000.0,
             )
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("step_budget_exceeded")
 
         robot_weights = weights[0]
-        cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        if ulist.ndim != 3 or robot_weights.ndim != 1:
+            _LOGGER.debug("BRNE returned an invalid control ensemble shape; returning zero motion")
+            return self._zero_action("invalid_control_ensemble_shape")
+        if ulist.shape[1] == robot_weights.size:
+            cmd = np.sum(ulist * robot_weights[np.newaxis, :, np.newaxis], axis=1)
+        elif ulist.shape[0] == robot_weights.size:
+            # Preserve compatibility with isolated adapters that expose samples first;
+            # the pinned upstream helper uses the plan-step-first layout above.
+            cmd = np.sum(ulist * robot_weights[:, np.newaxis, np.newaxis], axis=0)
+        else:
+            _LOGGER.debug(
+                "BRNE weights and control ensemble shapes disagree; returning zero motion"
+            )
+            return self._zero_action("sample_weight_shape_mismatch")
         if not np.all(np.isfinite(cmd)):
             _LOGGER.debug("BRNE produced a non-finite control command; returning zero motion")
-            return {"v": 0.0, "omega": 0.0}
+            return self._zero_action("nonfinite_control_command")
         action = {"v": float(cmd[0, 0]), "omega": float(cmd[0, 1])}
         self._clamp_action(action)
+        self._record_success()
         return action
 
     def _brne_solve(
@@ -317,19 +450,56 @@ class BRNEPlanner:
         r_pos: np.ndarray,
         r_vel: np.ndarray,
         r_goal: np.ndarray,
+        *,
+        r_heading: float | None = None,
     ) -> np.ndarray:
-        """Return the robot ``[x, y, theta]`` pose, taking heading from velocity or goal bearing.
+        """Return the robot ``[x, y, theta]`` pose.
+
+        A declared observation heading takes precedence. Velocity/goal bearing
+        remains a compatibility fallback for callers using the older baseline
+        mapping that did not carry heading explicitly.
 
         Returns:
             The ``[x, y, theta]`` robot pose.
         """
-        if np.linalg.norm(r_vel) > 1e-6:
+        if r_heading is not None and np.isfinite(r_heading):
+            theta = float(r_heading)
+        elif np.linalg.norm(r_vel) > 1e-6:
             theta = float(np.arctan2(r_vel[1], r_vel[0]))
         elif np.linalg.norm(r_goal - r_pos) > 1e-6:
             theta = float(np.arctan2(r_goal[1] - r_pos[1], r_goal[0] - r_pos[0]))
         else:
             theta = 0.0
         return np.array([r_pos[0], r_pos[1], theta])
+
+    @staticmethod
+    def _normalize_control_ensemble(ulist: Any, *, plan_steps: int) -> np.ndarray:
+        """Normalize upstream control ensembles to ``(plan_steps, samples, 2)``.
+
+        The pinned upstream helper returns plan-step-first arrays, while older
+        isolated adapters used samples-first arrays. Accept both only when the
+        plan-step axis is explicit and reject all malformed layouts.
+
+        Returns:
+            np.ndarray: Plan-step-first finite control ensemble.
+
+        Raises:
+            ValueError: If the ensemble shape or values are invalid.
+        """
+        array = np.asarray(ulist, dtype=float)
+        if array.ndim != 3 or array.shape[2] != 2:
+            raise ValueError("invalid_control_ensemble_shape")
+        if array.shape[0] == plan_steps:
+            normalized = array
+        elif array.shape[1] == plan_steps:
+            normalized = np.transpose(array, (1, 0, 2))
+        else:
+            raise ValueError("invalid_control_ensemble_plan_axis")
+        if normalized.shape[0] != plan_steps or normalized.shape[1] < 1:
+            raise ValueError("invalid_control_ensemble_sample_axis")
+        if not np.all(np.isfinite(normalized)):
+            raise ValueError("nonfinite_control_ensemble")
+        return normalized
 
     def _select_agents(
         self,
@@ -378,31 +548,36 @@ class BRNEPlanner:
             else 0.0
         )
         nominal_cmds = np.full((plan_steps, 2), [speed, 0.0])
-        ulist = brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples)
+        ulist = self._normalize_control_ensemble(
+            brne.get_ulist_essemble(nominal_cmds, 0.6, 1.0, num_samples),
+            plan_steps=plan_steps,
+        )
+        effective_num_samples = int(ulist.shape[1])
         traj = brne.traj_sim_essemble(
-            np.tile(robot_pose, reps=(num_samples, 1)).T,
+            np.tile(robot_pose, reps=(effective_num_samples, 1)).T,
             ulist,
             dt,
         )
         rx = traj[:, 0, :].T
         ry = traj[:, 1, :].T
-        xtraj = np.zeros((num_agents * num_samples, plan_steps))
-        ytraj = np.zeros((num_agents * num_samples, plan_steps))
-        xtraj[:num_samples] = rx
-        ytraj[:num_samples] = ry
+        xtraj = np.zeros((num_agents * effective_num_samples, plan_steps))
+        ytraj = np.zeros((num_agents * effective_num_samples, plan_steps))
+        xtraj[:effective_num_samples] = rx
+        ytraj[:effective_num_samples] = ry
         for ped_local_idx, (_, agent_idx) in enumerate(selected):
             agent = agents[agent_idx]
             a_pos = np.asarray(agent["position"], dtype=np.float64)
             a_vel = np.asarray(agent.get("velocity", [0.0, 0.0]), dtype=np.float64)
             speed_factor = float(np.linalg.norm(a_vel))
-            xp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)
-            yp = brne.mvn_sample_normal(num_samples, plan_steps, lmat)
+            xp = brne.mvn_sample_normal(effective_num_samples, plan_steps, lmat)
+            yp = brne.mvn_sample_normal(effective_num_samples, plan_steps, lmat)
             xmean = a_pos[0] + np.arange(plan_steps) * dt * a_vel[0]
             ymean = a_pos[1] + np.arange(plan_steps) * dt * a_vel[1]
             scale = speed_factor + cfg.ped_sample_scale
-            row_start = (ped_local_idx + 1) * num_samples
-            xtraj[row_start : row_start + num_samples] = xp * scale + xmean
-            ytraj[row_start : row_start + num_samples] = yp * scale + ymean
+            row_start = (ped_local_idx + 1) * effective_num_samples
+            row_end = row_start + effective_num_samples
+            xtraj[row_start:row_end] = xp * scale + xmean
+            ytraj[row_start:row_end] = yp * scale + ymean
         return xtraj, ytraj, ulist
 
     def _clamp_action(self, action: dict[str, float]) -> None:
@@ -417,6 +592,8 @@ class BRNEPlanner:
         """Release BRNE wrapper resources."""
         self._brne = None
         self._lmat = None
+        self._upstream_rng_seeded = False
+        self._last_effective_num_samples = None
 
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the BRNE planner."""
@@ -424,13 +601,49 @@ class BRNEPlanner:
 
         config_hash = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:16]
         stage = self._resolve_stage_path()
-        core_rel = "brne_nav/brne_py/brne_py/brne.py"
-        status = "ok" if (stage / core_rel).is_file() else "missing_dependency"
+        source_commit: str | None = None
+        source_integrity = "missing"
+        try:
+            _validate_stage_provenance(stage)
+        except FileNotFoundError:
+            status = "missing_dependency"
+        except RuntimeError:
+            status = "invalid_provenance"
+            source_integrity = "invalid"
+            commit_result = subprocess.run(
+                ["git", "-C", str(stage), "rev-parse", "--verify", "HEAD^{commit}"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            source_commit = commit_result.stdout.strip() or None
+        else:
+            status = "ok"
+            source_commit = BRNE_PINNED_SHA
+            source_integrity = "clean_pinned_worktree"
+        runtime_status = (
+            "failed" if self._failure_count > 0 else "ok" if self._step_count > 0 else "not_started"
+        )
         return {
             "algorithm": "brne",
             "config": cfg,
             "config_hash": config_hash,
+            "seed": self._seed,
             "status": status,
+            "source_commit": source_commit,
+            "source_integrity": source_integrity,
+            "source_pin": BRNE_PINNED_SHA,
+            "effective_num_samples": self._last_effective_num_samples,
+            "runtime_status": runtime_status,
+            "step_count": self._step_count,
+            "failure_count": self._failure_count,
+            "failure_reasons": list(self._failure_reasons),
+            "last_failure_reason": self._last_failure_reason,
+            "last_step_status": self._last_step_status,
+            "sample_count_note": (
+                "The pinned upstream grid helper may return fewer samples than the requested "
+                "num_samples; all trajectory and weight tensors use that effective count."
+            ),
             "license": "GPL-3.0 (local-only staging; not vendored/redistributed)",
         }
 

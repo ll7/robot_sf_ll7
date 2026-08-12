@@ -4,9 +4,11 @@
 upstream pure-numpy/numba core runs end-to-end against the staged source on the
 redistributable dependency path and is under the 100 ms control budget for crowds
 below the upstream default agent cap; it reaches ~1.0–1.2× budget at the default
-8-agent cap. This note records the contract mapping and go/no-go data only —
-**no robot_sf planner registration, no benchmark arm, no campaign, no vendoring**
-(external source stays external). BRNE is planner candidate #4. The
+8-agent cap. This note records the source contract mapping and go/no-go data
+only — no benchmark arm or campaign is authorized here, and no source is
+vendored (external source stays external). The later issue #6464 note records
+the bounded map-runner adapter diagnostic; neither note promotes BRNE to a
+benchmark-ready or paper-facing planner. BRNE is planner candidate #4. The
 control-budget test (`test_brne_solve_completes_within_control_budget_for_small_crowd`)
 sets Numba's runtime pool to one thread and uses a median-of-5 statistic to
 classify environment noise vs algorithm regressions (issue #6924).
@@ -51,6 +53,13 @@ Artifacts (git-ignored, regenerated each run):
 
 Focused test (skips cleanly without the staged clone, so CI does not regress):
 `tests/baselines/test_brne_source_smoke.py`.
+
+The focused control-budget assertion is intentionally wall-clock based and runs
+only in the isolated source-smoke lane. When the test is collected by
+pytest-xdist, it reports a visible skip because scheduler contention from
+unrelated repository workers is not BRNE runtime evidence. The source harness
+command above remains the canonical wall-clock measurement path; this test
+distinction is tracked by friction follow-up #6924.
 
 ## Per-step runtime vs neighbor count (the control-budget question)
 

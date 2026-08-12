@@ -5,13 +5,15 @@ Exercises the REAL upstream BRNE core algorithm
 skips cleanly when the staged checkout or the numpy/numba/scipy stack is absent
 (CI default), so it does not regress environments without the external clone.
 
-This is source-side smoke only: no robot_sf planner is registered, no benchmark
-claim is made, and no BRNE source is vendored (GPL-3.0, local-only reference).
+This remains source-side smoke only: it does not exercise the Robot SF
+map-runner adapter or a benchmark arm, no benchmark claim is made, and no BRNE
+source is vendored (GPL-3.0, local-only reference).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -195,6 +197,12 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
       after checking the median against the 100 ms budget.  Environment noise
       never silently turns a consistently over-budget median into a pass.
     """
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        pytest.skip(
+            "wall-clock BRNE budget guard runs in the isolated source-smoke lane; "
+            "xdist scheduler contention is not runtime evidence"
+        )
+
     import statistics
     import time
 
@@ -283,7 +291,6 @@ def test_brne_solve_completes_within_control_budget_for_small_crowd(upstream_brn
         f"4-agent BRNE solve median {median_ms:.1f} ms (expected < 100 ms). "
         f"Per-run times: {[f'{t:.1f}' for t in solve_times_ms]} ms."
     )
-
     # -- Environment-noise classification (issue #6924).  If the median remains
     # within budget but one solve is unusually slow, skip explicitly rather than
     # report a clean pass from a host whose timing is not reproducible.

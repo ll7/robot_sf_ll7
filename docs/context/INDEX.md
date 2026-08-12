@@ -137,6 +137,13 @@ campaign evidence remains blocked on a SLURM-capable worker):
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
 
+Issue #6464 BRNE corridor diagnostic: exact native preflight on three frozen
+seeds, non-degenerate execution and goal-reaching counts, fail-closed fallback
+handling, and the bounded `0/3` goal-reaching finding that requires a
+hypothesis-driven follow-up before any benchmark or ranking proposal:
+[issue_6464_brne_corridor_diagnostic.md](issue_6464_brne_corridor_diagnostic.md),
+[evidence/issue_6464_brne_corridor_diagnostic_summary.json](evidence/issue_6464_brne_corridor_diagnostic_summary.json).
+
 Issue #5263 exact-repeat campaign definitions (140 hash-matched targets and fail-closed two-host matrix):
 [README.md](evidence/issue_5263_exact_repeat/README.md).
 

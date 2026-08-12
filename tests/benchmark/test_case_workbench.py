@@ -27,12 +27,16 @@ from robot_sf.benchmark.case_publication_figure import (
 from robot_sf.benchmark.case_workbench import (
     _candidate,
     _load_source_gate_receipt,
+    _pair_matches_role,
+    _relation_metric,
+    _source_gate_is_trusted,
     admit_package,
     analyze_cases,
     apply_admission_overlay,
     load_workbench_config,
 )
 from robot_sf.benchmark.parquet_export import (
+    ParquetDependencyError,
     derive_episode_metrics,
     export_campaign_result_store_v2,
     is_comparison_compatible,
@@ -261,6 +265,93 @@ def test_forged_source_gate_receipt_stays_blocked(tmp_path: Path) -> None:
     assert gate["status"] != "passed"
 
 
+def test_source_gate_registry_fail_closed_and_never_echoes_receipt_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Malformed approval registries cannot unlock or leak source-gate metadata."""
+
+    source = tmp_path / "episodes.jsonl"
+    source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    registry = tmp_path / "registry.json"
+    monkeypatch.setattr("robot_sf.benchmark.case_workbench.TRUSTED_SOURCE_GATE_REGISTRY", registry)
+
+    registry.write_text("{", encoding="utf-8")
+    assert _load_source_gate_receipt(source, None)["reason"] == "source_gate_registry_unavailable"
+
+    registry.write_text(json.dumps({"schema_version": "wrong"}), encoding="utf-8")
+    assert _load_source_gate_receipt(source, None)["reason"] == "source_gate_registry_invalid"
+
+    registry.write_text(
+        json.dumps(
+            {
+                "schema_version": "case-source-integrity-registry.v1",
+                "approved_sources": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    blocked = _load_source_gate_receipt(source, None)
+    assert blocked["reason"] == "source_gate_registry_invalid"
+    assert "receipt_path" not in blocked
+
+    registry.write_text(
+        json.dumps(
+            {
+                "schema_version": "case-source-integrity-registry.v1",
+                "approved_sources": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert _load_source_gate_receipt(source, None)["reason"] == "source_gate_receipt_missing"
+    assert _source_gate_is_trusted({"status": "passed"}) is False
+
+    registry.unlink()
+    assert _source_gate_is_trusted({"status": "passed"}) is False
+
+
+def test_analyze_cases_rejects_output_inside_directory_result_store(tmp_path: Path) -> None:
+    """A package cannot overwrite or nest inside its source result store."""
+
+    source = tmp_path / "store"
+    source.mkdir()
+    (source / "episodes.jsonl").write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must not be the result-store directory"):
+        analyze_cases(
+            config_path="configs/analysis/case_workbench.v1.yaml",
+            result_store=source,
+            output=source / "child",
+        )
+
+
+def test_relationship_helpers_use_explicit_context_and_role_dimensions() -> None:
+    """Relation roles and pair predicates remain explicit and dimension-local."""
+
+    candidate = {
+        "raw": {"metrics": {"safety_boundary": True, "metric_disagreement": 0.5}},
+        "cell_context": {"cross_cell_inversion": {"status": "observed"}},
+    }
+    assert _relation_metric(candidate, "safety_boundary") is True
+    assert _relation_metric(candidate, "metric_disagreement") is True
+    assert _relation_metric(candidate, "cross_cell_inversion") is True
+    left = {"seed": 1, "planner": "ppo"}
+    right = {"seed": 2, "planner": "ppo"}
+    assert _pair_matches_role("seed_sensitivity", left, right, "seed") is True
+    assert (
+        _pair_matches_role("seed_sensitivity", left, {"seed": None, "planner": "ppo"}, "seed")
+        is False
+    )
+    assert (
+        _pair_matches_role(
+            "planner_upset",
+            {"seed": 1, "planner": "ppo"},
+            {"seed": 1, "planner": "goal"},
+            "planner",
+        )
+        is True
+    )
+
+
 def test_positional_actor_slots_are_not_promoted_as_stable_ids() -> None:
     """Legacy index-only actor labels remain unavailable for evidence use."""
 
@@ -399,8 +490,9 @@ def test_case_workbench_is_deterministic_and_excludes_missing_provenance(tmp_pat
     assert (output / "campaign-result-store.v2").is_dir()
 
 
+@pytest.mark.parametrize("exception_type", [ImportError, ParquetDependencyError])
 def test_case_workbench_keeps_proposal_when_v2_store_is_unavailable(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, exception_type: type[Exception]
 ) -> None:
     """A lean environment still receives a proposal with an explicit store gap."""
 
@@ -408,7 +500,7 @@ def test_case_workbench_keeps_proposal_when_v2_store_is_unavailable(
     source.write_text(json.dumps(_record(113)) + "\n", encoding="utf-8")
 
     def unavailable_store(*_args, **_kwargs):
-        raise ImportError("pyarrow is unavailable")
+        raise exception_type("pyarrow is unavailable")
 
     monkeypatch.setattr(
         "robot_sf.benchmark.case_workbench.export_campaign_result_store_v2", unavailable_store

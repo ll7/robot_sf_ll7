@@ -153,21 +153,18 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_receipt_unreadable",
-            "receipt_path": str(path),
             "registry_sha256": registry_digest,
         }
     if not isinstance(payload, Mapping):
         return {
             **blocked,
             "reason": "source_gate_receipt_invalid",
-            "receipt_path": str(path),
             "registry_sha256": registry_digest,
         }
     if payload.get("schema_version") != SOURCE_GATE_SCHEMA_VERSION:
         return {
             **blocked,
             "reason": "source_gate_schema_mismatch",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
         }
@@ -176,8 +173,7 @@ def _load_source_gate_receipt(  # noqa: C901
     if status != "passed":
         return {
             **blocked,
-            "reason": f"source_gate_status:{status or 'missing'}",
-            "receipt_path": str(path),
+            "reason": "source_gate_status_not_passed",
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
         }
@@ -185,9 +181,7 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_digest_mismatch",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
-            "supplied_source_sha256": supplied_sha or None,
         }
     matching_entry = next(
         (
@@ -203,16 +197,13 @@ def _load_source_gate_receipt(  # noqa: C901
         return {
             **blocked,
             "reason": "source_gate_source_not_approved",
-            "receipt_path": str(path),
             "receipt_sha256": _sha256_file(path),
             "registry_sha256": registry_digest,
-            "supplied_source_sha256": supplied_sha,
         }
     return {
         "schema_version": SOURCE_GATE_SCHEMA_VERSION,
         "status": "passed",
         "source_sha256": expected_source_sha,
-        "receipt_path": str(path),
         "receipt_sha256": _sha256_file(path),
         "registry_sha256": registry_digest,
         "approval_id": str(matching_entry["approval_id"]),
@@ -264,16 +255,6 @@ def _source_gate_is_trusted(gate: Mapping[str, Any]) -> bool:
     )
 
 
-def _portable_source_gate(gate: Mapping[str, Any]) -> dict[str, Any]:
-    """Remove invocation-specific paths from the package-bound gate receipt."""
-
-    portable = dict(gate)
-    receipt_path = portable.get("receipt_path")
-    if receipt_path:
-        portable["receipt_path"] = Path(str(receipt_path)).name
-    return portable
-
-
 def analyze_cases(  # noqa: C901
     *,
     config_path: str | Path,
@@ -293,7 +274,7 @@ def analyze_cases(  # noqa: C901
         if resolved_output == resolved_input or resolved_input in resolved_output.parents:
             raise ValueError("output package must not be the result-store directory or its child")
     records = _load_records(input_path)
-    source_gate = _portable_source_gate(_load_source_gate_receipt(input_path, source_gate_receipt))
+    source_gate = _load_source_gate_receipt(input_path, source_gate_receipt)
     interestingness_weights = config.get("interestingness", {}).get("weights", {})
     candidates = [
         _candidate(record, interestingness_weights=interestingness_weights) for record in records

@@ -2073,6 +2073,8 @@ def _initial_pedestrian_actor_ids(simulator: Any, count: int) -> list[str] | Non
             raw = getattr(owner, name, None)
             if raw is None:
                 continue
+            if isinstance(raw, (str, bytes)):
+                return None
             try:
                 values = list(raw)
             except TypeError:

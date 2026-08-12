@@ -433,6 +433,7 @@ def test_campaign_result_store_v2_emits_all_tables_and_unavailable_adapter(tmp_p
 
     source = tmp_path / "episodes.jsonl"
     complete = _record(113)
+    complete["provenance"].pop("artifact_sha256")
     legacy = _record(114)
     legacy["algorithm_metadata"] = {"simulation_step_trace": {"steps": []}}
     legacy["provenance"] = {"artifact_uri": "legacy.jsonl"}
@@ -675,6 +676,8 @@ def test_source_gate_receipt_controls_preview_and_binds_digest(tmp_path: Path, m
         "source_integrity_gate"
     ]
     assert gate["status"] == "passed"
+    assert "receipt_path" not in gate
+    assert "supplied_source_sha256" not in gate
     sidecar = json.loads(
         (package / "publication" / "figure.preview.pdf.json").read_text(encoding="utf-8")
     )
@@ -706,7 +709,7 @@ def test_source_gate_receipt_failure_modes_fail_closed(tmp_path: Path) -> None:
                     "source_sha256": digest,
                 }
             ),
-            "source_gate_status:pending",
+            "source_gate_status_not_passed",
         ),
         (
             "digest",
@@ -726,6 +729,8 @@ def test_source_gate_receipt_failure_modes_fail_closed(tmp_path: Path) -> None:
         result = _load_source_gate_receipt(source, receipt)
         assert result["status"] == "blocked_pending_exact_source_restore"
         assert result["reason"] == reason
+        assert "receipt_path" not in result
+        assert "supplied_source_sha256" not in result
 
 
 def test_load_workbench_config_rejects_unsafe_contract_shapes(tmp_path: Path) -> None:

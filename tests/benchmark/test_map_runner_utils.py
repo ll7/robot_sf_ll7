@@ -144,6 +144,7 @@ def test_analysis_trace_preserves_reset_kinematics_and_simulator_slot_ids() -> N
     assert _reset_robot_heading(fallback, {"robot_heading": [0.5]}) == pytest.approx(0.5)
     assert _initial_robot_velocity(SimpleNamespace(robot_velocity_xy="invalid")) is None
     assert _initial_ped_velocities(SimpleNamespace(ped_vel=None), 2) is None
+    assert _initial_pedestrian_actor_ids(SimpleNamespace(pedestrian_ids="ab"), 2) is None
     assert _finite_positive_float(0.4) == pytest.approx(0.4)
     assert _finite_positive_float(0.0) is None
     assert _finite_positive_float("invalid") is None

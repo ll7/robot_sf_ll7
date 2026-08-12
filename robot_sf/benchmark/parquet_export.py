@@ -374,6 +374,8 @@ def _build_campaign_v2_rows(
         explicit_artifact_sha = _string_or_none(provenance.get("artifact_sha256"))
         if explicit_artifact_sha is None and isinstance(trace, Mapping):
             explicit_artifact_sha = _string_or_none(trace.get("artifact_sha256"))
+        if provenance.get("artifact_sha256") in (None, "") and explicit_artifact_sha:
+            provenance["artifact_sha256"] = explicit_artifact_sha
         row_status = str(record.get("row_status") or record.get("status") or "native")
         episodes.append(
             {
@@ -428,6 +430,7 @@ def _build_campaign_v2_rows(
         trace_mapping = trace if isinstance(trace, Mapping) else {}
         record_for_cell = dict(record)
         record_for_cell["trace_coverage"] = coverage
+        record_for_cell["provenance"] = provenance
         by_cell.setdefault(
             (
                 planner,

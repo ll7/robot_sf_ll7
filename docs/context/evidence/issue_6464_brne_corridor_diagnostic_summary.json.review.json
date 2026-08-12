@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json",
-  "artifact_sha256": "799aa2ad973091447c3f99940f4bd3efb9834e12b46a446ff2983728e059dbac",
+  "artifact_sha256": "a09e238e6599050e00b88aea886a7df63d85975c731f34153de7446822115203",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

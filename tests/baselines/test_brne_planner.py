@@ -450,6 +450,84 @@ def test_brne_covariance_and_runtime_state_caches_are_reset(
     assert planner._brne is None
 
 
+def test_brne_build_trajectories_uses_effective_control_sample_count() -> None:
+    """Trajectory tensors follow the upstream control ensemble's effective count."""
+    planner = BRNEPlanner({"num_samples": 49, "plan_steps": 4})
+    plan_steps = 4
+    effective_samples = 3
+
+    def _get_ulist(*_args: object) -> np.ndarray:
+        return np.zeros((plan_steps, effective_samples, 2))
+
+    def _traj_sim(st0: np.ndarray, ulist: np.ndarray, _dt: float) -> np.ndarray:
+        assert st0.shape == (3, effective_samples)
+        assert ulist.shape == (plan_steps, effective_samples, 2)
+        return np.zeros((plan_steps, 3, effective_samples))
+
+    def _sample_normal(num_samples: int, steps: int, _lmat: np.ndarray) -> np.ndarray:
+        return np.zeros((num_samples, steps))
+
+    module = SimpleNamespace(
+        get_ulist_essemble=_get_ulist,
+        traj_sim_essemble=_traj_sim,
+        mvn_sample_normal=_sample_normal,
+    )
+    xtraj, ytraj, ulist = planner._build_trajectories(
+        module,
+        np.eye(1),
+        np.array([0.0, 0.0, 0.0]),
+        np.array([0.0, 0.0]),
+        np.array([0.4, 0.0]),
+        np.array([2.0, 0.0]),
+        [{"position": [1.0, 0.5], "velocity": [0.0, 0.0]}],
+        [(1.1, 0)],
+        2,
+        49,
+        plan_steps,
+        0.1,
+    )
+
+    assert xtraj.shape == (2 * effective_samples, plan_steps)
+    assert ytraj.shape == (2 * effective_samples, plan_steps)
+    assert ulist.shape == (plan_steps, effective_samples, 2)
+
+
+def test_brne_metadata_marks_invalid_and_valid_source_provenance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Metadata exposes both invalid and accepted source-integrity states."""
+    core = tmp_path / brne_module.BRNE_CORE_REL
+    core.parent.mkdir(parents=True)
+    core.write_text("# fixture\n", encoding="utf-8")
+
+    def _invalid(_path: Path) -> Path:
+        raise RuntimeError("fixture provenance mismatch")
+
+    monkeypatch.setattr(brne_module, "_validate_stage_provenance", _invalid)
+    monkeypatch.setattr(
+        brne_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: brne_module.subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout="deadbeef\n", stderr=""
+        ),
+    )
+    planner = BRNEPlanner({"stage_path": str(tmp_path)})
+    invalid = planner.get_metadata()
+    assert invalid["status"] == "invalid_provenance"
+    assert invalid["source_commit"] == "deadbeef"
+    assert invalid["source_integrity"] == "invalid"
+
+    monkeypatch.setattr(
+        brne_module,
+        "_validate_stage_provenance",
+        lambda path: path / brne_module.BRNE_CORE_REL,
+    )
+    valid = planner.get_metadata()
+    assert valid["status"] == "ok"
+    assert valid["source_commit"] == brne_module.BRNE_PINNED_SHA
+    assert valid["source_integrity"] == "clean_pinned_worktree"
+
+
 def test_brne_module_loader_rejects_missing_import_spec(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

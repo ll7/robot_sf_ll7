@@ -5,7 +5,8 @@
   "evidence_tier": "smoke_diagnostic",
   "claim_boundary": "Trace-level native BRNE progress mechanism only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
   "implementation": {
-    "base_commit": "b9232a265682309e4c804336987c2216674ca824",
+    "base_commit": "195bd2a399bec8243214976e39bf3ce82e1fe083",
+    "diagnostic_run_base_commit": "b9232a265682309e4c804336987c2216674ca824",
     "implementation_commit": "0d704bd88",
     "changed_files": [
       "robot_sf/baselines/brne.py",
@@ -24,13 +25,18 @@
     "repository": "https://github.com/MurpheyLab/brne",
     "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
     "license": "GPL-3.0 (local-only staging; not vendored or redistributed)",
-    "staging": "clean pinned worktree; raw source remains ignored and local"
+    "staging": "clean pinned worktree at third_party/external_repos/brne; raw source remains ignored and local",
+    "required_for_native_evidence": true
   },
   "tests": {
     "focused_command": "uv run pytest -q tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
     "focused_result": "56 passed",
     "source_smoke_command": "NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py",
     "source_smoke_result": "6 passed",
+    "staged_source_available": true,
+    "staged_source_path": "third_party/external_repos/brne",
+    "staged_source_commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "without_staged_source": "source-backed tests fail closed with skips; skipped rows are not native evidence",
     "ruff_command": "uv run ruff check robot_sf/baselines/brne.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
     "ruff_result": "all checks passed"
   },

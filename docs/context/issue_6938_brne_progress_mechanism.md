@@ -18,7 +18,9 @@ evidence.
 - Upstream source: `MurpheyLab/brne` at
   `633a5cdcb39ab27f18b596cb8cb1968644f82391`, GPL-3.0, staged locally and not
   vendored or redistributed.
-- Current Robot SF base: `b9232a265682309e4c804336987c2216674ca824`.
+- Diagnostic-run base: `b9232a265682309e4c804336987c2216674ca824` (historical
+  report provenance; the run predates the later ORCA merge).
+- Integration base for the refreshed PR: `195bd2a399bec8243214976e39bf3ce82e1fe083`.
 - Telemetry implementation: `0d704bd88`.
 
 Reproduce with:
@@ -30,8 +32,12 @@ uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py \
   --output-dir output/benchmarks/issue_6938_brne_progress_<timestamp>
 ```
 
-Focused planner/diagnostic tests passed (`56 passed`), and the native source
-smoke passed (`6 passed`). The exact run completed with `3/3` pair coverage,
+The validation worktree staged `third_party/external_repos/brne` cleanly at
+`633a5cdcb39ab27f18b596cb8cb1968644f82391`; with that source available,
+focused planner/diagnostic tests passed (`56 passed`) and the native source
+smoke passed (`6 passed`). A checkout without the staged source correctly
+skips source-backed cases; those skips are fail-closed and are not native
+evidence. The exact run completed with `3/3` pair coverage,
 `3/3` native and eligible BRNE rows, no fallback/degraded rows, and no corridor
 violations. The tracked compact handoff is
 [`issue_6938_brne_progress_mechanism_summary.json`](evidence/issue_6938_brne_progress_mechanism_summary.json).

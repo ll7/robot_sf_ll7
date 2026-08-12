@@ -21,8 +21,8 @@
     "configs/research/forecast_risk_coupling_issue_2916.yaml"
   ],
   "required_code": [
-    "robot_sf/benchmark/forecast_metrics.py",
-    "robot_sf/benchmark/forecast_batch.py",
+    "robot_sf/benchmark/forecast/forecast_metrics.py",
+    "robot_sf/benchmark/forecast/forecast_batch.py",
     "robot_sf/benchmark/pedestrian_forecast.py",
     "robot_sf/benchmark/runner.py",
     "scripts/benchmark/run_observation_noise_envelope.py",
@@ -39,8 +39,8 @@
       "present_inputs": [
         "configs/research/forecast_baseline_comparison_issue_2915.yaml",
         "configs/research/forecast_risk_coupling_issue_2916.yaml",
-        "robot_sf/benchmark/forecast_batch.py",
-        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/forecast/forecast_batch.py",
+        "robot_sf/benchmark/forecast/forecast_metrics.py",
         "robot_sf/benchmark/pedestrian_forecast.py",
         "robot_sf/benchmark/runner.py",
         "scripts/benchmark/run_observation_noise_envelope.py",
@@ -59,8 +59,8 @@
       "present_inputs": [
         "configs/research/forecast_baseline_comparison_issue_2915.yaml",
         "configs/research/forecast_risk_coupling_issue_2916.yaml",
-        "robot_sf/benchmark/forecast_batch.py",
-        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/forecast/forecast_batch.py",
+        "robot_sf/benchmark/forecast/forecast_metrics.py",
         "robot_sf/benchmark/pedestrian_forecast.py",
         "robot_sf/benchmark/runner.py",
         "scripts/benchmark/run_observation_noise_envelope.py",
@@ -79,8 +79,8 @@
       "present_inputs": [
         "configs/research/forecast_baseline_comparison_issue_2915.yaml",
         "configs/research/forecast_risk_coupling_issue_2916.yaml",
-        "robot_sf/benchmark/forecast_batch.py",
-        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/forecast/forecast_batch.py",
+        "robot_sf/benchmark/forecast/forecast_metrics.py",
         "robot_sf/benchmark/pedestrian_forecast.py",
         "robot_sf/benchmark/runner.py",
         "scripts/benchmark/run_observation_noise_envelope.py",
@@ -99,8 +99,8 @@
       "present_inputs": [
         "configs/research/forecast_baseline_comparison_issue_2915.yaml",
         "configs/research/forecast_risk_coupling_issue_2916.yaml",
-        "robot_sf/benchmark/forecast_batch.py",
-        "robot_sf/benchmark/forecast_metrics.py",
+        "robot_sf/benchmark/forecast/forecast_batch.py",
+        "robot_sf/benchmark/forecast/forecast_metrics.py",
         "robot_sf/benchmark/pedestrian_forecast.py",
         "robot_sf/benchmark/runner.py",
         "scripts/benchmark/run_observation_noise_envelope.py",

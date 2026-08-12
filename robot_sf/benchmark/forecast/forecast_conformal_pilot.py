@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from robot_sf.benchmark.forecast_batch import FORECAST_BATCH_SCHEMA_VERSION, ForecastBatch
+from robot_sf.benchmark.forecast.forecast_batch import FORECAST_BATCH_SCHEMA_VERSION, ForecastBatch
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.forecast_metrics import GroundTruthPositions
+    from robot_sf.benchmark.forecast.forecast_metrics import GroundTruthPositions
 
 FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION = "ForecastConformalPilot.v1"
 

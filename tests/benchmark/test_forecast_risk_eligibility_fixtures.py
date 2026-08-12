@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.forecast_calibration_report import (
+from robot_sf.benchmark.forecast.forecast_calibration_report import (
     build_forecast_calibration_report,
 )
 from scripts.validation import validate_forecast_risk_calibration_filter as filter_validator

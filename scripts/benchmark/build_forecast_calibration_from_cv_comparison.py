@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.forecast_calibration_report import (
+from robot_sf.benchmark.forecast.forecast_calibration_report import (
     build_forecast_calibration_report,
     write_forecast_calibration_report,
 )

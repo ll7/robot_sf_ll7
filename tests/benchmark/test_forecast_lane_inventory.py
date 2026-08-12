@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark import forecast_lane_inventory as fli
+from robot_sf.benchmark.forecast import forecast_lane_inventory as fli
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -50,7 +50,7 @@ def test_missing_file_is_reported_as_blocker(tmp_path):
     spec = fli.ForecastCapabilitySpec(
         capability_id="probe_missing_file",
         sublane="contract",
-        module="robot_sf.benchmark.forecast_batch",
+        module="robot_sf.benchmark.forecast.forecast_batch",
         symbols=("ForecastBatch",),
         required=True,
         files=("does/not/exist.json",),
@@ -85,7 +85,7 @@ def test_missing_symbol_is_reported_as_blocker():
     spec = fli.ForecastCapabilitySpec(
         capability_id="probe_missing_symbol",
         sublane="contract",
-        module="robot_sf.benchmark.forecast_batch",
+        module="robot_sf.benchmark.forecast.forecast_batch",
         symbols=("ForecastBatch", "ThisSymbolDoesNotExist"),
         required=True,
         owner="n/a",

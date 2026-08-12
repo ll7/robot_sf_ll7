@@ -144,7 +144,7 @@ its training distribution. Serves as a fallback/monitoring trigger.
 - **`robot_sf/planner/safety_shield.py`**: carries `calibration_status` metadata.
 - **`robot_sf/representation/uncertainty_source_generalization.py`**: generalizes uncertainty
   sources across learned components.
-- **`robot_sf/benchmark/forecast_conformal_pilot.py`**: conformal prediction pilot for
+- **`robot_sf/benchmark/forecast/forecast_conformal_pilot.py`**: conformal prediction pilot for
   forecast quality.
 - **`scripts/benchmark/run_issue_4232_uncertainty_envelope_alpha_sweep.py`**: alpha sweep
   for uncertainty envelope parameters.

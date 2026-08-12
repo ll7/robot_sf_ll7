@@ -149,7 +149,7 @@ NEXT_PROGRESSION = ProgressionSpec(
         Path("configs/benchmarks/predictive_scenario_family_oracle_arm_issue_3215.yaml"),
         Path("configs/scenarios/sets/predictive_hardcase_portfolio_v1.yaml"),
         Path("scripts/benchmark/run_forecast_risk_coupling_gate.py"),
-        Path("robot_sf/benchmark/forecast_risk_adapter.py"),
+        Path("robot_sf/benchmark/forecast/forecast_risk_adapter.py"),
     ),
     expected_output_path=Path("output/tmp/predictive_planner/campaigns/scenario_family_oracle_arm"),
     forecast_arms=("none", "constant_velocity", "interaction_aware", "oracle_future"),

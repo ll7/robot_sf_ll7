@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.forecast_baseline_comparison import (
+from robot_sf.benchmark.forecast.forecast_baseline_comparison import (
     FORECAST_BASELINE_COMPARISON_SCHEMA,
     compare_forecast_baselines,
 )

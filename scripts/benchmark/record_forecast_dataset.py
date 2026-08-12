@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.forecast_dataset_recorder import (
+from robot_sf.benchmark.forecast.forecast_dataset_recorder import (
     DEFAULT_FORECAST_DATASET_ID,
     record_forecast_dataset_from_trace_exports,
 )

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.forecast_transferability_stress_matrix import (
+from robot_sf.benchmark.forecast.forecast_transferability_stress_matrix import (
     FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION,
     build_forecast_transferability_stress_matrix,
     format_forecast_transferability_stress_markdown,

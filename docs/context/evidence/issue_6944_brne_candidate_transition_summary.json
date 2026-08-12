@@ -1,0 +1,146 @@
+{
+  "schema_version": "issue-6944-brne-candidate-transition-summary.v1",
+  "issue": 6944,
+  "status": "mechanism_narrowed_diagnostic_only",
+  "evidence_tier": "smoke_diagnostic",
+  "claim_boundary": "Trace-level native BRNE candidate-transition mechanism only; no benchmark ranking, safety, realism, matched-compute, objective, or paper claim.",
+  "implementation": {
+    "base_commit": "321081341811067c8f4c8a771f0d357f31918c31",
+    "implementation_commit": "ad4653825b97b94acd760e5b9eb313b9f63c6d57",
+    "changed_files": [
+      "robot_sf/baselines/brne.py",
+      "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py",
+      "tests/baselines/test_brne_planner.py",
+      "tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py"
+    ],
+    "telemetry_contract": {
+      "candidate_distribution_schema": "brne-candidate-distribution.v1",
+      "records_finite_bounded_candidate_control_and_weight_statistics": true,
+      "records_first_to_second_planner_observation_transition": true,
+      "records_within_plan_horizon_transition": true,
+      "retains_raw_candidate_or_weight_tensors": false,
+      "native_success_requires_candidate_distribution": true,
+      "unavailable_fields_fail_closed": true
+    }
+  },
+  "source_contract": {
+    "repository": "https://github.com/MurpheyLab/brne",
+    "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "license": "GPL-3.0 (local-only staging; not vendored or redistributed)",
+    "staging": "clean pinned worktree at third_party/external_repos/brne; raw source remains ignored and local",
+    "required_for_native_evidence": true
+  },
+  "tests": {
+    "focused_command": "uv run pytest -q tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
+    "focused_result": "57 passed",
+    "source_smoke_command": "NUMBA_NUM_THREADS=1 uv run pytest -q tests/baselines/test_brne_source_smoke.py",
+    "source_smoke_result": "6 passed",
+    "staged_source_available": true,
+    "staged_source_path": "third_party/external_repos/brne",
+    "staged_source_commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+    "without_staged_source": "source-backed tests fail closed with skips; skipped rows are not native evidence",
+    "ruff_command": "uv run ruff check robot_sf/baselines/brne.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
+    "ruff_result": "all checks passed",
+    "diff_check_result": "passed"
+  },
+  "diagnostic": {
+    "config": "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",
+    "scenario": "classic_head_on_corridor_low",
+    "seeds": [
+      111,
+      112,
+      113
+    ],
+    "horizon": 500,
+    "dt": 0.1,
+    "numba_threads": 1,
+    "fallback": "disabled",
+    "command": "NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6944_candidate_trace_20260812T0755Z",
+    "run_repo_commit": "ad4653825b97b94acd760e5b9eb313b9f63c6d57",
+    "status": "diagnostic_complete",
+    "exact_pair_coverage": true,
+    "fallback_or_degraded_rows": 0,
+    "brne": {
+      "exact_runs": "3/3",
+      "native_runs": "3/3",
+      "mechanism_trace_valid": "3/3",
+      "runtime_eligible": "3/3",
+      "runtime_failures": "0/3",
+      "goal_reached": "0/3",
+      "non_degenerate": "3/3",
+      "corridor_violations": 0,
+      "terminal_reasons": [
+        "terminated",
+        "terminated",
+        "terminated"
+      ],
+      "aggregation_mode": "plan_step_first",
+      "aggregation_formula": "mean_plan_step_first_over_samples",
+      "control_ensemble_shape": [
+        25,
+        42,
+        2
+      ],
+      "requested_effective_samples": "49/42",
+      "pre_clamp_equals_selected": true,
+      "clipped_steps_total": 0,
+      "first_to_second_candidate_mean_v_mps": "0.4000000000000001 -> 0.039999997966771374",
+      "first_to_second_weighted_mean_v_mps": "0.4000000000000001 -> 0.039999997966771374",
+      "first_to_second_weight_mean": "1.0 -> 1.0",
+      "first_to_second_weight_std": "0.0 -> 0.0",
+      "first_to_second_candidate_mean_delta_v_mps": -0.3600000020332287,
+      "first_to_second_weighted_mean_delta_v_mps": -0.3600000020332287,
+      "first_to_second_weighted_mean_delta_omega_radps": 0.0,
+      "per_seed": {
+        "111": {
+          "initial_final_distance_m": [
+            4.298295473748187,
+            2.3299921977773663
+          ],
+          "signed_progress_by_phase_m": {
+            "early": 0.6565675169222343,
+            "middle": 0.6600823467202939,
+            "late": 0.6516534123282924
+          }
+        },
+        "112": {
+          "initial_final_distance_m": [
+            4.5907635279556205,
+            2.618915176019047
+          ],
+          "signed_progress_by_phase_m": {
+            "early": 0.6571217246994938,
+            "middle": 0.6610831452981611,
+            "late": 0.6536434819389183
+          }
+        },
+        "113": {
+          "initial_final_distance_m": [
+            5.129734771671514,
+            3.141161147631006
+          ],
+          "signed_progress_by_phase_m": {
+            "early": 0.6607347433474118,
+            "middle": 0.6662771571611166,
+            "late": 0.66156172353198
+          }
+        }
+      },
+      "mechanism_interpretation": "Across all three native rows, the first-to-second planner-observation candidate velocity distribution and weighted command shift from about 0.40 to 0.04 m/s while the mean-normalized robot weights remain uniform (mean 1.0, standard deviation 0.0). This falsifies weighting/normalization as the explanation in this frozen slice, but does not distinguish upstream candidate generation, planner state, or control-horizon effects."
+    },
+    "comparators": {
+      "orca_goal_reached": "3/3",
+      "social_force_goal_reached": "2/3",
+      "use": "context_only; comparator rows do not provide the BRNE candidate mechanism fields"
+    }
+  },
+  "artifact": {
+    "local_report_dir": "output/benchmarks/issue_6944_candidate_trace_20260812T0755Z",
+    "report_json_sha256": "722cb24f13135955e6e954c0cb1d1f84f6ab84a2c1e206d271d1b776eac417aa",
+    "report_markdown_sha256": "412313a4be213b77144b299a07488ccc664288ec49ec7844f74f6b90d24dc80d",
+    "raw_artifacts": "ignored_worktree_local",
+    "tracked_summary_is_not_raw_episode_archive": true
+  },
+  "decision": "The bounded trace narrows the residual signal: the candidate control distribution itself changes at the first planner-observation transition, while mean-normalized weights remain uniform and no safety clipping occurs. Retain the result as diagnostic-only; do not change source pins, action limits, fallback policy, ranking, benchmark scope, safety, realism, or paper claims.",
+  "next_empirical_action": "If further work is authorized, isolate one upstream candidate-generation, planner-state, or control-horizon intervention at a time on the same frozen matrix. Otherwise close as unresolved beyond the weighting/normalization null result."
+}

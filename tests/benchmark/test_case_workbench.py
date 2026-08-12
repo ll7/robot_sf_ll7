@@ -272,6 +272,7 @@ def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> 
     assert admitted["machine_portfolio"][0]["author_status"] == "proposed"
     assert admitted["author_admission"]["status"] == "admitted"
 
+    replacement_trace = _trace(115)
     replacement_overlay = {
         "schema_version": "case-admission-overlay.v1",
         "proposal_sha256": overlay["proposal_sha256"],
@@ -283,7 +284,11 @@ def test_admission_overlay_is_digest_bound_and_preserves_machine_portfolio() -> 
                 "rationale": "manual review selected a better trace",
                 "replacement": {
                     "case_id": "author-1",
-                    "provenance": {"artifact_sha256": "author-sha"},
+                    "scenario_id": "classic_doorway_medium",
+                    "planner": "ppo",
+                    "seed": 115,
+                    "provenance": {"artifact_sha256": replacement_trace["artifact_sha256"]},
+                    "trace": replacement_trace,
                 },
             }
         ],

@@ -170,6 +170,9 @@ def apply_admission_overlay(  # noqa: C901
     expected_digest = _sha256_json(proposal)
     if overlay.get("proposal_sha256") != expected_digest:
         raise ValueError("admission overlay proposal_sha256 does not match the proposal")
+    overlay_status = str(overlay.get("status") or "proposed").lower()
+    if overlay_status not in {"proposed", "admitted", "overridden", "rejected"}:
+        raise ValueError(f"unsupported admission overlay status: {overlay_status}")
     decisions = overlay.get("decisions", [])
     if not isinstance(decisions, list):
         raise ValueError("admission overlay decisions must be a list")
@@ -204,12 +207,7 @@ def apply_admission_overlay(  # noqa: C901
             replacement = decision.get("replacement")
             if not isinstance(replacement, Mapping) or not replacement.get("case_id"):
                 raise ValueError(f"replacement case is required for {case_id}")
-            replacement_case = dict(replacement)
-            replacement_provenance = replacement_case.get("provenance")
-            if not isinstance(replacement_provenance, Mapping) or not replacement_provenance.get(
-                "artifact_sha256"
-            ):
-                raise ValueError(f"replacement case provenance is required for {case_id}")
+            replacement_case = _validate_replacement_case(replacement, case_id=case_id)
             replacement_case["author_status"] = "replacement"
             replacement_case["machine_recommendation"] = case_id
             replacement_case["author_rationale"] = rationale
@@ -242,11 +240,59 @@ def apply_admission_overlay(  # noqa: C901
     result["portfolio"] = final_portfolio
     result["author_admission"] = {
         "schema_version": ADMISSION_SCHEMA_VERSION,
-        "status": str(overlay.get("status") or "proposed"),
+        "status": overlay_status,
         "overlay_sha256": _sha256_json(overlay),
         "decisions": admission_records,
     }
     return result
+
+
+def _validate_replacement_case(  # noqa: C901
+    replacement: Mapping[str, Any], *, case_id: str
+) -> dict[str, Any]:
+    """Require an author replacement to carry a complete, self-hashed trace."""
+
+    replacement_case = dict(replacement)
+    replacement_id = str(replacement_case.get("case_id") or "").strip()
+    scenario_id = str(replacement_case.get("scenario_id") or "").strip()
+    planner = str(replacement_case.get("planner") or "").strip()
+    if not replacement_id or not scenario_id or not planner:
+        raise ValueError(f"replacement case identity is incomplete for {case_id}")
+    if replacement_case.get("seed") is None:
+        raise ValueError(f"replacement case seed is required for {case_id}")
+    provenance = replacement_case.get("provenance")
+    if not isinstance(provenance, Mapping):
+        raise ValueError(f"replacement case provenance is required for {case_id}")
+    artifact_sha = str(provenance.get("artifact_sha256") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha):
+        raise ValueError(f"replacement case requires a full SHA-256 artifact hash for {case_id}")
+    trace = replacement_case.get("trace")
+    if not isinstance(trace, Mapping):
+        metadata = replacement_case.get("algorithm_metadata")
+        trace = metadata.get("analysis_trace") if isinstance(metadata, Mapping) else None
+    if not isinstance(trace, Mapping):
+        raise ValueError(f"replacement case analysis trace is required for {case_id}")
+    trace = json.loads(canonical_json(trace))
+    embedded_sha = trace.get("artifact_sha256")
+    if embedded_sha != artifact_sha or trace_artifact_sha256(trace) != artifact_sha:
+        raise ValueError(f"replacement case artifact hash is not bound to its trace for {case_id}")
+    coverage_record = {
+        "provenance": dict(provenance),
+        "algorithm_metadata": {"analysis_trace": trace},
+    }
+    coverage = trace_coverage(coverage_record)
+    if coverage.get("status") != "complete":
+        raise ValueError(f"replacement case trace coverage is unavailable for {case_id}")
+    supplied_coverage = replacement_case.get("coverage")
+    if isinstance(supplied_coverage, Mapping) and supplied_coverage.get("status") == "complete":
+        if supplied_coverage.get("schema_version") != coverage.get("schema_version"):
+            raise ValueError(f"replacement case coverage receipt conflicts for {case_id}")
+    replacement_case["scenario_id"] = scenario_id
+    replacement_case["planner"] = planner
+    replacement_case["trace"] = trace
+    replacement_case["coverage"] = coverage
+    replacement_case["provenance"] = dict(provenance)
+    return replacement_case
 
 
 def _load_records(path: Path) -> list[dict[str, Any]]:  # noqa: C901
@@ -440,17 +486,42 @@ def _load_v2_records(store: Path, episodes_path: Path) -> list[dict[str, Any]]: 
     return result
 
 
-def _v2_integrity_errors(store: Path) -> list[str]:
+def _v2_integrity_errors(store: Path) -> list[str]:  # noqa: C901, PLR0912
     """Validate the v2 checksum receipt before trusting reconstructed rows."""
+
+    manifest_path = store / "manifest.json"
+    if not manifest_path.is_file():
+        return ["manifest_missing"]
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ["manifest_unreadable"]
+    if not isinstance(manifest, Mapping):
+        return ["manifest_invalid"]
+    if manifest.get("schema_version") != "campaign-result-store.v2":
+        return ["manifest_schema_mismatch"]
+    tables = manifest.get("tables")
+    expected_tables = {"episodes", "steps", "actors", "events", "features", "cells", "comparisons"}
+    if not isinstance(tables, Mapping) or set(tables) != expected_tables:
+        return ["manifest_table_contract_invalid"]
+    manifest_errors: list[str] = []
+    for table_name in sorted(expected_tables):
+        table = tables.get(table_name)
+        expected_file = f"{table_name}.parquet"
+        if not isinstance(table, Mapping) or table.get("file") != expected_file:
+            manifest_errors.append(f"manifest_table_file_invalid:{table_name}")
+        elif not (store / expected_file).is_file():
+            manifest_errors.append(f"manifest_table_missing:{table_name}")
 
     checksum_path = store / "SHA256SUMS"
     if not checksum_path.is_file():
-        return ["checksum_receipt_missing"]
-    errors: list[str] = []
+        return [*manifest_errors, "checksum_receipt_missing"]
+    errors: list[str] = list(manifest_errors)
+    seen_files: set[str] = set()
     try:
         lines = checksum_path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return ["checksum_receipt_unreadable"]
+        return [*errors, "checksum_receipt_unreadable"]
     for line in lines:
         if not line.strip():
             continue
@@ -459,12 +530,16 @@ def _v2_integrity_errors(store: Path) -> list[str]:
         except ValueError:
             errors.append("checksum_receipt_malformed")
             continue
+        seen_files.add(relative)
         path = store / relative
         if not path.is_file():
             errors.append(f"checksum_missing:{relative}")
             continue
         if _sha256_file(path) != expected:
             errors.append(f"checksum_mismatch:{relative}")
+    expected_files = {f"{name}.parquet" for name in expected_tables} | {"manifest.json"}
+    for relative in sorted(expected_files - seen_files):
+        errors.append(f"checksum_entry_missing:{relative}")
     return errors
 
 

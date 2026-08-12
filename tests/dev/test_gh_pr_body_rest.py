@@ -127,7 +127,10 @@ def test_reconcile_pr_metadata_patches_title_and_body_atomically(tmp_path: Path)
         patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
         patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
     ):
-        mock_get.return_value = _proc(stdout=json.dumps({"title": "old title", "body": "old body"}))
+        mock_get.side_effect = [
+            _proc(stdout=json.dumps({"title": "old title", "body": "old body"})),
+            _proc(stdout=json.dumps(response)),
+        ]
         mock_patch.return_value = _proc(stdout=json.dumps(response))
         result = reconcile_pr_metadata(
             5220,
@@ -150,6 +153,31 @@ def test_reconcile_pr_metadata_patches_title_and_body_atomically(tmp_path: Path)
         "repos/ll7/robot_sf_ll7/pulls/5220",
         {"title": desired_title, "body": "final body"},
     )
+    assert mock_get.call_count == 2
+
+
+def test_reconcile_pr_metadata_fails_closed_when_remote_changes_after_patch(
+    tmp_path: Path,
+) -> None:
+    """A concurrent external writer must not be reported as a successful reconciliation."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("final body", encoding="utf-8")
+    response = {"title": "final title", "body": "final body", "html_url": "https://example/pr/5220"}
+    drifted = {"title": "newer title", "body": "newer body", "html_url": response["html_url"]}
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.side_effect = [
+            _proc(stdout=json.dumps({"title": "old title", "body": "old body"})),
+            _proc(stdout=json.dumps(drifted)),
+        ]
+        mock_patch.return_value = _proc(stdout=json.dumps(response))
+        result = reconcile_pr_metadata(5220, "final title", body_file)
+
+    assert result["status"] == "conflict"
+    assert "changed during reconciliation" in result["error"]
+    assert result["observed_metadata_digest"] == metadata_digest("newer title", "newer body")
 
 
 def test_reconcile_pr_metadata_is_an_explicit_noop_when_current_state_matches(

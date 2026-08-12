@@ -527,14 +527,18 @@ diff, validation, claims, and follow-ups, then reconciles it with the final titl
 REST-only helper:
 
 ```bash
+source .venv/bin/activate
+
 uv run python scripts/dev/gh_pr_body_rest.py <number> --reconcile \
   --title "<final title>" --repo ll7/robot_sf_ll7 --body-file <final-body.md>
 ```
 
 The command reads the live pair first, returns an explicit no-op when unchanged, and otherwise
-patches title and body together before verifying both. The title changes only when scope, intent,
-type, or issue linkage changed; the body is always regenerated against the final state. The
-resulting exact SHA-256 metadata digest is recorded in trusted review evidence as
+patches title and body together before verifying both. Helper writers serialize per-PR through a
+host-local advisory lock held from the read through a final post-update read; if an external writer
+changes the pair during that window, reconciliation fails closed with a conflict. The title changes
+only when scope, intent, type, or issue linkage changed; the body is always regenerated against the
+final state. The resulting exact SHA-256 metadata digest is recorded in trusted review evidence as
 `pr-metadata: reconciled @ <digest>`, alongside the exact-head `gate-verdict` trailer. A missing
 or stale trailer blocks both `gh-pr-merger` and native merge-queue admission. Metadata-only
 reconciliation does not rerun source CI, but it invalidates prior final-state review evidence until

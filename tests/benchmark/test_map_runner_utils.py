@@ -5781,7 +5781,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         def __init__(self, map_def: MapDefinition, action_log: list[list[float]]) -> None:
             self.simulator = _DummySim(map_def)
             self.action_space = None
-            self.action_log = action_log
+            self.action_log: list[list[float]] = action_log
 
         def reset(self, seed: int | None = None):
             """Return the same observation for both profile variants."""
@@ -5841,18 +5841,18 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     )
     action_sequences = [[], []]
     env_call_index = {"value": 0}
+    created_envs: list[_DummyEnv] = []
 
     def _make_env(config, seed, debug):
         """Return one environment per profile and retain its applied actions."""
         _ = config, seed, debug
         index = env_call_index["value"]
         env_call_index["value"] += 1
-        return _DummyEnv(_minimal_map_def(), action_sequences[index])
+        env = _DummyEnv(_minimal_map_def(), action_sequences[index])
+        created_envs.append(env)
+        return env
 
-    monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
-        _make_env,
-    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.make_robot_env", _make_env)
     monkeypatch.setattr(
         "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
     )
@@ -5889,6 +5889,9 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     on = json.loads(on_path.read_text(encoding="utf-8").splitlines()[0])
     assert off["outcome"] == on["outcome"]
     assert off["metrics"] == on["metrics"]
+    assert len(created_envs) == 2
+    np.testing.assert_allclose(created_envs[0].action_log, created_envs[1].action_log)
+    assert created_envs[0].action_log
     assert "simulation_step_trace" not in off["algorithm_metadata"]
     assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0

@@ -99,28 +99,45 @@ def _audit_configs(root: Path) -> dict[str, Any]:
         elif resolved_reference is None:
             status = "invalid_reference"
         else:
-            status = "covered"
-        entries.append(
-            {
-                "config": _repo_path(config_path, root),
-                "status": status,
-                "reasons": reasons,
-                "retained_metric_contract": (
-                    _repo_path(resolved_reference, root)
-                    if resolved_reference is not None
-                    else raw_reference
-                ),
-            }
-        )
+            try:
+                load_paired_effect_metric_contract(resolved_reference)
+            except (OSError, PairedEffectMetricContractError, TypeError, ValueError) as exc:
+                status = "invalid_contract"
+                error = str(exc)
+            else:
+                status = "covered"
+                error = None
+        entry = {
+            "config": _repo_path(config_path, root),
+            "status": status,
+            "reasons": reasons,
+            "retained_metric_contract": (
+                _repo_path(resolved_reference, root)
+                if resolved_reference is not None
+                else raw_reference
+            ),
+        }
+        if status == "invalid_contract":
+            entry["error"] = error
+        entries.append(entry)
     counts = {
         "covered": sum(entry.get("status") == "covered" for entry in entries),
         "missing_reference": sum(entry.get("status") == "missing_reference" for entry in entries),
         "invalid_reference": sum(entry.get("status") == "invalid_reference" for entry in entries),
+        "invalid_contract": sum(entry.get("status") == "invalid_contract" for entry in entries),
         "invalid_yaml": sum(entry.get("status") == "invalid_yaml" for entry in entries),
     }
     return {
         "status": "ok"
-        if not any(counts[key] for key in ("missing_reference", "invalid_reference"))
+        if not any(
+            counts[key]
+            for key in (
+                "missing_reference",
+                "invalid_reference",
+                "invalid_contract",
+                "invalid_yaml",
+            )
+        )
         else "findings",
         "config_count": len(entries),
         "counts": counts,
@@ -137,6 +154,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--rows", type=Path, help="Optional JSON list or JSONL retained rows")
     parser.add_argument("--audit-configs", action="store_true")
+    parser.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="Include complete per-row validation reports when --rows is supplied",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     return parser
 
@@ -161,7 +183,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.rows is not None:
             rows = load_json_rows(args.rows)
-            rows_report = validate_paired_effect_metric_rows(rows, contract)
+            rows_report = validate_paired_effect_metric_rows(
+                rows,
+                contract,
+                include_row_reports=args.diagnostic,
+            )
             result["rows"] = {
                 "path": _repo_path(args.rows, root),
                 **rows_report,
@@ -170,6 +196,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result["status"] = "blocked"
         if args.audit_configs:
             result["exposure"] = _audit_configs(root)
+            if result["exposure"]["status"] != "ok" and result["status"] == "ok":
+                result["status"] = result["exposure"]["status"]
     except (OSError, PairedEffectMetricContractError, TypeError, ValueError, yaml.YAMLError) as exc:
         result["status"] = "invalid"
         result["error"] = str(exc)
@@ -180,7 +208,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 2 if result["status"] == "blocked" else 0
+    return 2 if result["status"] in {"blocked", "findings"} else 0
 
 
 if __name__ == "__main__":

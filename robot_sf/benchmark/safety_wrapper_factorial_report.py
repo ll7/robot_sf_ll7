@@ -219,11 +219,7 @@ def _extract_metrics(row: Mapping[str, Any]) -> dict[str, float]:
         return {}
     metrics: dict[str, float] = {}
     for metric in SAFETY_WRAPPER_FACTORIAL_METRICS:
-        value = (
-            row.get(metric)
-            if metric == "wrapper_intervention_rate" and metric not in metric_values
-            else metric_values.get(metric)
-        )
+        value = metric_values.get(metric)
         if isinstance(value, bool):
             continue
         try:

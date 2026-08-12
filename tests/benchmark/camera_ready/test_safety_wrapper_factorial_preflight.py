@@ -27,6 +27,7 @@ This is a preflight/readiness contract, NOT benchmark evidence: it verifies that
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -308,6 +309,39 @@ class TestSafetyWrapperWorkerExecutionPath:
             retained_metric_contract_path=cfg.retained_metric_contract_path,
         )
         assert captured["retained_metric_contract_path"] == cfg.retained_metric_contract_path
+
+    def test_retained_metric_contract_survives_worker_parameter_reconstruction(self, tmp_path):
+        """The serialized worker boundary reconstructs the retained contract as a Path."""
+        from robot_sf.benchmark.camera_ready import resource_lifecycle
+
+        cfg = _load_campaign_config()
+        base = _minimal_arm_params(tmp_path, scoped_path=tmp_path / "scoped.json")
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "retained_metric_contract_path": cfg.retained_metric_contract_path,
+            }
+        )
+        serialized = _serialize_subprocess_arm_params(params)
+        captured: dict[str, object] = {}
+
+        def fake_run_single(rebuilt_params):
+            captured["retained_metric_contract_path"] = rebuilt_params.retained_metric_contract_path
+            return {"status": "ok"}
+
+        with (
+            patch.object(
+                resource_lifecycle,
+                "_run_single_arm_subprocess",
+                side_effect=fake_run_single,
+            ),
+            patch("sys.stdin", StringIO(serialized)),
+            patch("sys.stdout", StringIO()),
+        ):
+            assert resource_lifecycle._main_subprocess_worker() == 0
+
+        assert captured["retained_metric_contract_path"] == cfg.retained_metric_contract_path
+        assert isinstance(captured["retained_metric_contract_path"], Path)
 
 
 class TestSafetyWrapperRunBatchForwarding:

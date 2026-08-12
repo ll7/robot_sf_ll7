@@ -22,7 +22,8 @@ diagnostics are not aliases for the declared outcomes.
 The existing #4830 factorial campaign config and the #3501 research design reference the
 contract. The exposure audit command also lists other configs that declare `metric_values` or the
 #4598 report builder but do not yet reference this paired contract; those follow-ups are not
-silently changed by #6970.
+silently changed by #6970. Because those explicit follow-ups are findings, the audit exits with
+status 2; malformed or unreadable referenced contracts are separate `invalid_contract` findings.
 
 ## Validation
 
@@ -32,6 +33,7 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run pytest \
   tests/benchmark/camera_ready/test_safety_wrapper_factorial_preflight.py
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/check_paired_effect_metric_contract.py \
   --contract configs/benchmarks/paired_effect_metric_contract_v1.yaml --audit-configs --json
+# Add --diagnostic when complete per-row reports are needed instead of bounded invalid-row samples.
 ```
 
 The contract check is instrumentation evidence only. A passing check establishes retained-field

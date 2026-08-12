@@ -30,6 +30,7 @@ REQUIRED_METRIC_NAMES: tuple[str, ...] = (
     "wrapper_intervention_rate",
 )
 REQUIRED_RETAINED_ROW_PATH = "metric_values"
+MAX_INVALID_ROW_SAMPLES = 10
 _REQUIRED_FIELD_KEYS = {
     "name",
     "path",
@@ -263,6 +264,8 @@ def validate_paired_effect_metric_record(
 def validate_paired_effect_metric_rows(
     rows: Sequence[Mapping[str, Any]],
     contract: Mapping[str, Any],
+    *,
+    include_row_reports: bool = False,
 ) -> dict[str, Any]:
     """Validate all retained episode rows and return a JSON-safe gate report.
 
@@ -271,18 +274,23 @@ def validate_paired_effect_metric_rows(
     """
 
     validated = validate_paired_effect_metric_contract(contract)
-    row_reports = [
-        validate_paired_effect_metric_record(row, validated, row_index=index)
-        for index, row in enumerate(rows)
-    ]
     missing_counts: Counter[str] = Counter()
     invalid_counts: Counter[str] = Counter()
-    for report in row_reports:
+    row_reports: list[dict[str, Any]] = []
+    invalid_row_samples: list[dict[str, Any]] = []
+    valid_row_count = 0
+    for index, row in enumerate(rows):
+        report = validate_paired_effect_metric_record(row, validated, row_index=index)
         missing_counts.update(report["missing_fields"])
         invalid_counts.update(item["field"] for item in report["invalid_fields"])
-    valid_row_count = sum(report["status"] == "ok" for report in row_reports)
+        if report["status"] == "ok":
+            valid_row_count += 1
+        elif len(invalid_row_samples) < MAX_INVALID_ROW_SAMPLES:
+            invalid_row_samples.append(report)
+        if include_row_reports:
+            row_reports.append(report)
     complete = bool(rows) and valid_row_count == len(rows)
-    return {
+    result: dict[str, Any] = {
         "schema_version": "paired_effect_metric_validation.v1",
         "contract_schema_version": CONTRACT_SCHEMA_VERSION,
         "status": "ok" if complete else "blocked",
@@ -292,13 +300,16 @@ def validate_paired_effect_metric_rows(
         "required_metric_names": list(REQUIRED_METRIC_NAMES),
         "missing_field_counts": dict(sorted(missing_counts.items())),
         "invalid_field_counts": dict(sorted(invalid_counts.items())),
-        "row_reports": row_reports,
+        "invalid_row_samples": invalid_row_samples,
         "claim_boundary": (
             "Instrumentation contract gate only. A passing retained-row check does not make a "
             "campaign result benchmark or paper evidence; it only establishes that the declared "
             "paired metrics were retained without alias substitution."
         ),
     }
+    if include_row_reports:
+        result["row_reports"] = row_reports
+    return result
 
 
 def load_json_rows(path: str | Path) -> list[dict[str, Any]]:
@@ -334,6 +345,8 @@ def load_json_rows(path: str | Path) -> list[dict[str, Any]]:
 def enforce_paired_effect_metric_rows(
     rows: Sequence[Mapping[str, Any]],
     contract: Mapping[str, Any],
+    *,
+    include_row_reports: bool = False,
 ) -> dict[str, Any]:
     """Raise on a retained-row mismatch and return the successful gate report.
 
@@ -341,7 +354,11 @@ def enforce_paired_effect_metric_rows(
         Successful aggregate validation report.
     """
 
-    report = validate_paired_effect_metric_rows(rows, contract)
+    report = validate_paired_effect_metric_rows(
+        rows,
+        contract,
+        include_row_reports=include_row_reports,
+    )
     if not report["complete"]:
         raise PairedEffectMetricContractError(
             f"paired-effect retained-row contract failed: {json.dumps(report, sort_keys=True)}"

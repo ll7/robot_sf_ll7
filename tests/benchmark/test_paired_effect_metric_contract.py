@@ -86,6 +86,20 @@ def test_issue_13775_shape_is_blocked_without_alias_substitution() -> None:
     assert set(report["missing_field_counts"]) == set(REQUIRED_METRIC_NAMES)
 
 
+def test_row_validation_uses_bounded_diagnostics_by_default() -> None:
+    """Runner-facing reports stay compact while diagnostics retain every row report."""
+
+    rows = [{"metrics": {"clearing_distance_min": float(index)}} for index in range(12)]
+
+    compact = validate_paired_effect_metric_rows(rows, _contract())
+    assert "row_reports" not in compact
+    assert len(compact["invalid_row_samples"]) == 10
+    assert [report["row_index"] for report in compact["invalid_row_samples"]] == list(range(10))
+
+    diagnostic = validate_paired_effect_metric_rows(rows, _contract(), include_row_reports=True)
+    assert len(diagnostic["row_reports"]) == len(rows)
+
+
 @pytest.mark.parametrize(
     "field_name, value, reason",
     [
@@ -138,6 +152,33 @@ def test_runner_fails_closed_on_metrics_only_map_output(tmp_path: Path) -> None:
                 dt=0.1,
                 retained_metric_contract_path=CONTRACT_PATH,
             )
+
+
+def test_runner_contract_error_uses_compact_validation_details(tmp_path: Path) -> None:
+    """A failed runner gate does not serialize the full per-row diagnostic collection."""
+    out_path = tmp_path / "episodes.jsonl"
+
+    def fake_run_map_batch(*args: object, **_kwargs: object) -> dict[str, object]:
+        Path(args[1]).write_text(
+            json.dumps({"metrics": {"clearing_distance_min": 0.42}}) + "\n",
+            encoding="utf-8",
+        )
+        return {"status": "ok", "total_jobs": 1, "written": 1, "failures": []}
+
+    with patch.object(runner, "run_map_batch", side_effect=fake_run_map_batch):
+        with pytest.raises(
+            PairedEffectMetricContractError,
+            match="retained-row contract failed",
+        ) as exc:
+            runner.run_batch(
+                [_map_scenario()],
+                out_path=out_path,
+                schema_path=SCHEMA_PATH,
+                horizon=1,
+                dt=0.1,
+                retained_metric_contract_path=CONTRACT_PATH,
+            )
+    assert "row_reports" not in str(exc.value)
 
 
 def test_runner_accepts_complete_retained_metric_row(tmp_path: Path) -> None:
@@ -200,7 +241,32 @@ def test_contract_audit_cli_reports_exposure_without_running_campaign() -> None:
         capture_output=True,
         text=True,
     )
-    assert completed.returncode == 0, completed.stderr
+    assert completed.returncode == 2, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["status"] == "ok"
+    assert payload["status"] == "findings"
     assert payload["exposure"]["config_count"] >= 2
+    assert payload["exposure"]["counts"]["covered"] == 2
+    assert payload["exposure"]["counts"]["missing_reference"] == 3
+
+
+def test_contract_audit_marks_malformed_referenced_contract(tmp_path: Path) -> None:
+    """A readable but schema-invalid reference is not reported as covered."""
+    from scripts.benchmark.check_paired_effect_metric_contract import _audit_configs
+
+    config_dir = tmp_path / "configs" / "research"
+    config_dir.mkdir(parents=True)
+    (config_dir / "invalid_reference.yaml").write_text(
+        "report_contract:\n  paired_report_builder_issue: 4598\n"
+        "retained_metric_contract: invalid_contract.yaml\n",
+        encoding="utf-8",
+    )
+    (config_dir / "invalid_contract.yaml").write_text(
+        "schema_version: paired_effect_metric_contract.v1\n",
+        encoding="utf-8",
+    )
+
+    audit = _audit_configs(tmp_path)
+
+    assert audit["status"] == "findings"
+    assert audit["counts"]["invalid_contract"] == 1
+    assert audit["configs"][0]["status"] == "invalid_contract"

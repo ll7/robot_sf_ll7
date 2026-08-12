@@ -17,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.safety_wrapper_runtime import runtime_config_from_mapping
+from robot_sf.benchmark.safety.safety_wrapper_runtime import runtime_config_from_mapping
 
 SCHEMA_VERSION = "robot_sf.issue_3501_safety_wrapper_factorial_preregistration.v1"
 EXPECTED_WRAPPER_ARMS = ("wrapper_off", "wrapper_on")

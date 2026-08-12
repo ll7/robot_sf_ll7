@@ -39,7 +39,7 @@ from robot_sf.benchmark.camera_ready.resource_lifecycle import (
     _serialize_subprocess_arm_params,
     _SubprocessArmParams,
 )
-from robot_sf.benchmark.safety_wrapper_runtime import (
+from robot_sf.benchmark.safety.safety_wrapper_runtime import (
     WRAPPER_OFF_ARM,
     WRAPPER_ON_ARM,
     SafetyWrapperRuntimeConfig,

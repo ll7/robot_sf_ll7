@@ -20,7 +20,7 @@ This slice closes that gap:
   (`fallback`, `degraded`, `failed`, `ineligible`).
 - `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` — a read-only readiness surface
   that reuses the canonical CBF runtime validator
-  (`robot_sf.benchmark.cbf_safety_filter_runtime.runtime_config_from_mapping`) as the
+  (`robot_sf.benchmark.safety.cbf_safety_filter_runtime.runtime_config_from_mapping`) as the
   single source of truth for arm semantics, cross-checks each arm's adapter config against
   its runtime variant, confirms the scenario manifest exists, and enforces the fallback
   exclusion.
@@ -70,6 +70,6 @@ produced or promoted by this slice.
 ## Related
 
 - Packet: `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`
-- Runtime arm contract: `robot_sf/benchmark/cbf_safety_filter_runtime.py`
+- Runtime arm contract: `robot_sf/benchmark/safety/cbf_safety_filter_runtime.py`
 - Prior slices: DPCBF arm (PR #4168), passthrough gate hardening (PR #4231)
 - Parent: issue #3948; first CBF slice PR #4139

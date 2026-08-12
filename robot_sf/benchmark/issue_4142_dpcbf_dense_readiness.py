@@ -16,7 +16,7 @@ the fallback exclusion stays in force. This module is that missing validation su
 
 It is deliberately *read-only*: it loads the packet and the configs it references,
 re-uses the canonical CBF runtime validator
-(:func:`robot_sf.benchmark.cbf_safety_filter_runtime.runtime_config_from_mapping`) as the
+(:func:`robot_sf.benchmark.safety.cbf_safety_filter_runtime.runtime_config_from_mapping`) as the
 single source of truth for arm semantics -- per the AGENTS.md canonical-owner rule -- and
 derives a fail-closed status. It runs no episodes, launches no campaign, submits no
 Slurm/GPU job, and makes no safety-performance or collision-reduction claim.
@@ -47,7 +47,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.cbf_safety_filter_runtime import (
+from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
     CBF_COLLISION_CONE_ARM,
     CBF_DYNAMIC_PARABOLIC_V1_ARM,
     CBF_OFF_ARM,

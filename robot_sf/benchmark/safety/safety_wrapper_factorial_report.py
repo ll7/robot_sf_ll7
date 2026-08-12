@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.paired_effect_metric_contract import REQUIRED_METRIC_NAMES
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
     PAIRING_KEY_FIELDS,
     SAFETY_WRAPPER_MODE_FIELD,
     WRAPPER_OFF_ARM,

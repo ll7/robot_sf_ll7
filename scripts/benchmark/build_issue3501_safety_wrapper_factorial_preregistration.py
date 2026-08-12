@@ -7,7 +7,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from robot_sf.benchmark.safety_wrapper_factorial_preregistration import (
+from robot_sf.benchmark.safety.safety_wrapper_factorial_preregistration import (
     build_preregistration_plan,
     load_factorial_preregistration_config,
     write_preregistration_plan,

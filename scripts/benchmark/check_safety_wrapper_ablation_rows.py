@@ -12,7 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
     check_factorial_ablation_rows,
     load_safety_wrapper_ablation_rows,
 )

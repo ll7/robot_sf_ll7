@@ -99,7 +99,7 @@ fields:
     definition: >
       Fraction of eligible wrapper steps whose command was changed by the wrapper, with the
       wrapper-off arm retaining an explicit zero under the same eligible-step denominator.
-    emitting_component: robot_sf.benchmark.safety_wrapper_runtime.summarize_safety_wrapper_trace
+    emitting_component: robot_sf.benchmark.safety.safety_wrapper_runtime.summarize_safety_wrapper_trace
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}

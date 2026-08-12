@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
     SAFETY_WRAPPER_CONFIG_FIELD,
     SAFETY_WRAPPER_MODE_DISABLED,
     SAFETY_WRAPPER_MODE_ENABLED,
@@ -17,7 +17,7 @@ from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
     WRAPPER_OFF_ARM,
     WRAPPER_ON_ARM,
 )
-from robot_sf.benchmark.safety_wrapper_factorial_report import (
+from robot_sf.benchmark.safety.safety_wrapper_factorial_report import (
     SAFETY_WRAPPER_FACTORIAL_METRICS,
     build_safety_wrapper_factorial_report,
     write_safety_wrapper_factorial_report,

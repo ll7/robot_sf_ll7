@@ -23,7 +23,7 @@ What this module proves
   ``_record_decision``) under test is the production code path.
 * ``test_command_source_changes_counted_when_wired`` feeds that captured per-step
   source sequence into
-  :func:`~robot_sf.benchmark.safety_predicates.oscillatory_control_predicate` and shows a
+  :func:`~robot_sf.benchmark.safety.safety_predicates.oscillatory_control_predicate` and shows a
   **nonzero** ``command_source_changes`` — the mechanism *does* produce a countable
   handoff when the telemetry is actually populated.
 * ``test_absent_command_sources_remain_backward_compatible`` preserves the predicate's
@@ -49,7 +49,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.safety_predicates import oscillatory_control_predicate
+from robot_sf.benchmark.safety.safety_predicates import oscillatory_control_predicate
 from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioAdapter,
     HybridPortfolioConfig,

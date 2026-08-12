@@ -11,7 +11,7 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from robot_sf.benchmark.safety_wrapper_ablation_manifest import (
+from robot_sf.benchmark.safety.safety_wrapper_ablation_manifest import (
     ManifestOptions,
     build_safety_wrapper_ablation_manifest,
     load_safety_wrapper_ablation_config,

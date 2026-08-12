@@ -342,7 +342,7 @@ def _parse_safety_wrapper(raw: Any, *, planner_key: str) -> dict[str, Any] | Non
     """Parse an optional ``safety_wrapper`` block (issue #3501 / #4830).
 
     The block is a raw mapping consumed downstream by
-    ``robot_sf.benchmark.safety_wrapper_runtime.runtime_config_from_mapping``. Returning ``None`` for
+    ``robot_sf.benchmark.safety.safety_wrapper_runtime.runtime_config_from_mapping``. Returning ``None`` for
     an unset block keeps the wrapper off (the runtime default). When a block is provided it is
     validated against the runtime contract here so a misconfigured arm fails closed at config load
     time instead of mid-campaign.
@@ -360,7 +360,7 @@ def _parse_safety_wrapper(raw: Any, *, planner_key: str) -> dict[str, Any] | Non
     # Validate against the runtime contract (arm_key / enabled / predeclared thresholds) so
     # the factorial off/on pairing fails closed at config load if a threshold drifts. The local
     # import avoids any module-load ordering dependency on ``safety_wrapper_runtime``.
-    from robot_sf.benchmark.safety_wrapper_runtime import (  # noqa: PLC0415
+    from robot_sf.benchmark.safety.safety_wrapper_runtime import (  # noqa: PLC0415
         runtime_config_from_mapping,
     )
 

@@ -35,7 +35,7 @@ entries:
       - claim: "The mechanism yields a nonzero count when the telemetry is wired."
         evidence: >-
           Feeding the captured per-step source sequence into
-          robot_sf/benchmark/safety_predicates.py::oscillatory_control_predicate
+          robot_sf/benchmark/safety/safety_predicates.py::oscillatory_control_predicate
           (via the optional `command_sources` argument) reports
           command_source_changes == 3.
       - claim: "The episode runner never supplies command_sources, forcing 0."

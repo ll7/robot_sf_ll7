@@ -109,9 +109,15 @@ def _load_trajectory_dataset(
     *,
     trusted_root: Path,
     expected_dataset_digest: str | None = None,
-    require_expected_dataset_digest: bool = False,
+    require_dataset_digest: bool = True,
 ) -> dict[str, Any]:
-    """Load NPZ trajectory dataset."""
+    """Load an NPZ trajectory dataset after trusted-path and digest validation.
+
+    The default remains strict for provenance-sensitive callers. Legacy standard
+    BC and the uniform Arm-A control may explicitly opt into observed-digest
+    compatibility until a configured digest is available; Arm B must keep the
+    strict default so route-progress data is never admitted unpinned.
+    """
     if not dataset_path.is_file():
         raise FileNotFoundError(f"Dataset not found or not a file: {dataset_path}")
 
@@ -121,7 +127,7 @@ def _load_trajectory_dataset(
         dataset_path,
         trusted_root=trusted_root,
         expected_dataset_digest=expected_dataset_digest,
-        require_expected_digest=require_expected_dataset_digest,
+        require_expected_digest=require_dataset_digest,
     )
     with np.load(str(dataset_path), allow_pickle=True) as data:
         metadata_raw = data.get("metadata")
@@ -365,9 +371,7 @@ def run_bc_pretraining(
         dataset_path,
         trusted_root=trajectory_root,
         expected_dataset_digest=(objective_config.dataset_digest if objective_config else None),
-        require_expected_dataset_digest=(
-            objective_config is not None and objective_config.arm == "B"
-        ),
+        require_dataset_digest=objective_config is not None and objective_config.arm == "B",
     )
     objective_manifest: dict[str, object] | None = None
     objective_weights: list[np.ndarray] | None = None

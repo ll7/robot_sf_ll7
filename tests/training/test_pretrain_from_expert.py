@@ -270,7 +270,7 @@ def test_trajectory_loader_requires_digest_before_np_load(
         _load_trajectory_dataset(
             dataset_path,
             trusted_root=tmp_path,
-            require_expected_dataset_digest=True,
+            require_dataset_digest=True,
         )
 
 
@@ -282,11 +282,35 @@ def test_standard_trajectory_loader_preserves_no_digest_compatibility(tmp_path: 
     observations = np.zeros((1, 2, 1), dtype=np.float32)
     np.savez(dataset_path, positions=positions, actions=actions, observations=observations)
 
-    dataset = _load_trajectory_dataset(dataset_path, trusted_root=tmp_path)
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=tmp_path,
+        require_dataset_digest=False,
+    )
 
     np.testing.assert_array_equal(dataset["positions"], positions)
     np.testing.assert_array_equal(dataset["actions"], actions)
     np.testing.assert_array_equal(dataset["observations"], observations)
+
+
+def test_trajectory_loader_allows_explicit_legacy_unpinned_mode(tmp_path: Path) -> None:
+    """The existing standard BC path may load a trusted dataset without a config digest."""
+    dataset_path = tmp_path / "standard_bc.npz"
+    np.savez(
+        dataset_path,
+        positions=np.zeros((1, 2, 2), dtype=np.float32),
+        actions=np.zeros((1, 1, 1), dtype=np.float32),
+        observations=np.zeros((1, 2, 1), dtype=np.float32),
+    )
+
+    dataset = _load_trajectory_dataset(
+        dataset_path,
+        trusted_root=tmp_path,
+        require_dataset_digest=False,
+    )
+
+    assert dataset["episode_count"] == 1
+    assert dataset["actions"].shape == (1, 1, 1)
 
 
 def test_progress_objective_seed_must_match_primary_run_seed() -> None:

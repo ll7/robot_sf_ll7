@@ -6,6 +6,12 @@ package remains blocked until the author approves the exact digest; no trajector
 is promoted:
 [issue_6792_ch7_admission_execution_packet.md](issue_6792_ch7_admission_execution_packet.md).
 
+Issue #6969 lane-formation reference and Stage A diagnostic: the lane metric separates known
+mixed/separated controls, while 8 frozen space-filling parameter profiles plus released and
+literature anchors produced no robust clear-hit regime across three seeds; no default or tuning
+claim follows:
+[issue_6969_lane_formation_reference/README.md](evidence/issue_6969_lane_formation_reference/README.md).
+
 Issue #6972 analysis-trace overhead repair: reuses the episode commit hash and
 trace builder digest on the opt-in path, with action-sequence regression proof
 and a pinned local before/after receipt (5.890% post-change overhead; diagnostic

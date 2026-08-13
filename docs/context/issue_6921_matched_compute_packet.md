@@ -1,144 +1,149 @@
-# Issue #6921 — Matched-budget reactive versus open-loop comparison packet
+# Issue #6921 — Matched-budget reactive versus open-loop preflight
 
-Status: diagnostic-only comparison packet.
-Evidence grade: not benchmark evidence. No paper, metric, or safety claim.
+Status: diagnostic-only preflight; execution remains held.
+Evidence grade: launch-packet and local capability evidence, not benchmark evidence.
 
 ## Plain-language summary
 
-This slice freezes a versioned, machine-checkable comparison packet that
-names the two arms for a future reactive-versus-open-loop comparison under
-identical compute budgets.  The nominal Social Force / open-loop arm
-evaluates candidate residual proposals through a one-shot bounded controller.
-The reactive residual-search arm evaluates candidates through the full
-bounded controller with iterative jerk rate-limiting, geometry projection,
-and separation enforcement carried across macro-action steps.
+This revision turns the original declarative packet into a preflight contract
+for two real repository seams:
 
-The packet is a specification, not an execution path.  It freezes scenario
-identity, seeds, timestep, physics steps, macro-action cadence, candidate
-evaluations, total budget, bounds, objective proxy, provenance, and
-fail-closed exclusions.  No campaign is run, no SLURM job is submitted, and
-no benchmark or paper-facing claim is made.
+- the open-loop arm uses `run_adversarial_search` with its production candidate
+  evaluator, the nominal `social_force` policy, and the explicit
+  `minimize_episode_min_robot_distance` episode-record objective;
+- the reactive arm uses `FiniteGridSearchPolicy` and
+  `BoundedResidualAdversary`.
 
-## What ships (the contract)
+Both arms emit the shared `matched_compute_trace.v1` accounting schema. The
+trace also records `evidence_status` and `simulator_steps_source`, so the
+local canary's synthetic episode records and one-step controller snapshot
+cannot be mistaken for observed production simulator evidence. It fails
+closed on missing, fallback, degraded, unavailable, or non-finite accounting.
+Accepted, rejected, and invalid candidate counts are a disjoint partition of
+`candidate_evaluations`; failed open-loop evaluations are rejected and cannot
+also be counted as accepted.
+The probe validates the returned `SearchRunResult` counters against this
+partition and fails closed on an inconsistent legacy valid-count field.
 
-- `configs/adversarial/issue_6921_matched_compute_packet.yaml`:
-  - `matched_compute_packet.v1` schema with frozen arms, scenario, budget,
-    seeds, bounds, provenance, exclusions, and domain-approval gate.
-  - Two named arms: `social_force_open_loop` and `residual_search_reactive`.
-  - Matched budget derived from simulation geometry: 10 macro-actions per
-    episode, 9 candidates per macro-action per arm, 90 per-arm episode total,
-    180 all-arms episode total.
-  - Scenario identity grounded in the checked-in `crossing_ttc_template`
-    (seed 123), not invented IDs.
-  - Explicit `seed` fields on both arms' `residual_search` and
-    `residual_adversary`, matching the packet-level seed values (42).
-  - `target_ped_idx: [0]` documented as a deliberate single-target
-    matched-cost choice, diverging from the upstream `-1` all-target example.
-- `tests/adversarial/test_matched_compute_packet.py`:
-  - Config loading and required-field validation.
-  - Budget arithmetic consistency tests (macro-actions, per-macro-action,
-    per-arm episode, all-arms episode).
-  - Arms max-candidates match budget and arm budgets are equal.
-  - Seed field presence and value-matching tests.
-  - Provenance and template/search-space path resolution tests.
-  - Scenario template identity and seed validation.
-  - target_ped_idx single-target assertion and upstream divergence check.
-  - Bounds identity check (residual bounds not relaxed).
-  - Exclusion completeness check (forbidden exclusions present).
-  - Domain-approval gate assertion.
-  - Config round-trip tests for ResidualSearchConfig and ResidualAdversaryConfig.
-- `docs/context/issue_6921_matched_compute_packet.md`:
-  - This note.
+The packet still runs no comparison campaign, submits no SLURM job, and makes
+no benchmark, stress-strength, safety, planner-ranking, superiority, or
+paper-facing claim. Domain-aware approval remains required before execution.
 
-## Design decisions
+## What ships
 
-### Packet as frozen specification
+- `configs/adversarial/issue_6921_matched_compute_packet.yaml`
+  - `matched_compute_packet.v2`, explicitly revised from v1;
+  - frozen crossing/time-to-collision (TTC) template identity and seeds;
+  - packet-scoped `issue_6921_crossing_ttc_space.yaml`, preserving the
+    approved crossing/TTC bounds while freezing every candidate's scenario
+    seed to the template seed `123`;
+  - `minimize_predicted_robot_distance` as the validated reactive objective;
+  - a separately named `minimize_episode_min_robot_distance` open-loop
+    projection, with no claim that the two projections are equivalent;
+  - native runner bindings for both arms;
+  - 9 candidate evaluations per reactive macro-action, 90 per arm per episode;
+  - shared trace fields for arm, seeds, execution mode, simulator steps and
+    step source, evidence status, macro-actions, candidate evaluations,
+    validity counts, and status;
+  - explicit execution, fallback, degraded, and claim exclusions.
+- `robot_sf/adversarial/matched_compute.py`
+  - shared trace/accounting dataclasses;
+  - native reactive and open-loop seam adapters;
+  - fail-closed accounting validation for the preflight canary.
+- `tests/adversarial/test_matched_compute_packet.py`
+  - packet schema, runner-binding, budget, provenance, seed, bounds, and gate
+    checks.
+- `tests/adversarial/test_matched_compute_runtime.py`
+  - deterministic adapter probes using injected evaluators plus the actual
+    `run_adversarial_search` seam with a synthetic evaluator;
+  - native seam identity and shared accounting-schema checks;
+  - malformed and non-native accounting rejection tests.
 
-The packet is a versioned YAML file, not a runnable script.  This keeps the
-comparison definition stable while deferring execution to a future slice that
-requires domain-approval.  The schema version (`matched_compute_packet.v1`)
-allows future packets to extend or revise the comparison without breaking
-backward compatibility.
+## Frozen contract
 
-### Budget derived from simulation geometry
+The scenario remains `crossing_ttc_template` from
+`configs/scenarios/templates/crossing_ttc.yaml`, seed `123`, with search seed
+and residual-adversary seed `42`. The residual bounds remain identical across
+arms, and `target_ped_idx: [0]` remains the deliberate single-target choice.
+The packet-scoped search space is derived from
+`configs/adversarial/crossing_ttc_space.yaml`; its only semantic difference is
+that `scenario_seed` is frozen to `123`, so the native open-loop runner cannot
+silently sample seeds outside the packet.
 
-Budget fields are explicitly named and derived from `total_sim_steps` (50)
-divided by `physics_steps_per_macro_action` (5) = 10 macro-actions per
-episode.  Each arm evaluates 9 candidates per macro-action boundary
-(`grid_points_per_dim ** 2` = 3 ** 2 for the 2-D residual action space).
-Per-arm episode total is 10 * 9 = 90.  All-arms episode total is 90 * 2 = 180.
-No field named `total_candidate_evaluations` with ambiguous scope exists.
+The reactive arm evaluates the 3×3 residual grid at each of 10 macro-action
+boundaries: 9 candidates per boundary and 90 candidate evaluations per
+episode. The open-loop arm binds its existing scenario-search budget to 90
+candidate evaluations per episode. The reactive one-step predicted-distance
+proxy and the open-loop completed-episode minimum-distance objective are
+different projections. These are declared budget fields, not observed
+execution results; the shared trace records actual simulator work separately
+so a later approval decision can reject an incomparable mapping.
 
-### Scenario identity grounded in checked-in template
+## Native runner bindings
 
-Scenario identity is `crossing_ttc_template` defined by the checked-in
-template at `configs/scenarios/templates/crossing_ttc.yaml` with template
-seed 123.  No invented `crossing_ttc_low` / `crossing_ttc_medium` IDs are
-used.  No generated manifest is claimed.
+The open-loop binding is:
 
-### Identical bounds and objective
-
-Hard residual bounds (acceleration, jerk, speed, heading, route deviation,
-separation) are frozen and identical across arms.  The objective proxy
-(`maximize_residual_magnitude`) is the same diagnostic proxy used by the
-residual-search slice (#6911).  No bound or objective is relaxed between arms.
-
-### Explicit seed fields in both arms
-
-Both arms carry explicit `seed: 42` in `residual_search` and
-`residual_adversary` sections, matching the packet-level `search_seed` and
-`residual_adversary_seed` values.  This makes the seed contract machine-checkable.
-
-### target_ped_idx: [0] as deliberate choice
-
-Both arms set `target_ped_idx: [0]`, a deliberate single-target matched-cost
-choice.  This diverges from the upstream `issue_4360_residual_adversary.yaml`
-which uses `-1` (all-target).  The single-target setting ensures both arms
-perturb exactly one pedestrian, making the comparison cost matched per
-targeted agent.
-
-### Provenance chain
-
-The packet references the scenario template, the residual-search config
-(#6911), the residual-adversary config (#4360), the search space, and the
-dispatchable inventory without introducing new runtime modules.  All provenance
-paths are tested to resolve on disk.
-
-## Canonical validation command
-
-```bash
-uv run pytest tests/adversarial/test_matched_compute_packet.py -v
+```text
+robot_sf.adversarial.search.run_adversarial_search
+robot_sf.adversarial.search.production_candidate_evaluator
+policy: social_force
+objective: minimize_episode_min_robot_distance
+budget: 90, horizon: 50, dt: 0.1
 ```
 
-This runs the focused contract tests that prove the packet is well-formed,
-the budget arithmetic is consistent, provenance paths resolve, both arms'
-max-candidates match the budget, arm budgets are equal, seeds match, bounds
-are not relaxed, and the domain-approval gate is present.  It does not execute
-any campaign or simulation.
+The reactive binding is:
 
-## Claim boundary (what this slice does NOT do)
+```text
+robot_sf.ped_npc.residual_search.FiniteGridSearchPolicy
+robot_sf.ped_npc.residual_adversary.BoundedResidualAdversary
+```
 
-This is a diagnostic-only specification slice.  It makes **no** benchmark,
-planner-ranking, safety, or paper-facing claim.  It runs **no** campaign,
-**no** SLURM job, and **no** simulation.  It adds **no** new stress-case
-metric.  It does **not** implement the comparison runner, the reactive
-policy, or the open-loop evaluation path.  It does **not** enable or
-authorize any future execution; that requires explicit domain-approval.
+The preflight does not substitute the former one-shot residual-controller
+stand-in for the open-loop scenario search. The adapters report `native` for
+code-path identity only; the current injected open-loop canary is
+`diagnostic_only_preflight` with `synthetic_episode_fixture` step provenance,
+and the reactive snapshot canary is `diagnostic_only_preflight` with
+`controller_snapshot` provenance. Neither can populate observed simulator
+physics steps. A `production_observed` trace is reserved for a later canary
+that runs the actual evaluator/simulator and records its provenance. The
+current probe never emits `production_observed`: omitting the optional
+runner/evaluator hooks proves only callable selection, not per-candidate
+native/no-fallback provenance or complete episode provenance.
 
-## Domain-approval gate
+## Canonical local validation
 
-Any future campaign execution, benchmark run, or stronger claim from this
-packet requires maintainer domain-aware approval.  The packet is frozen as
-a diagnostic-only specification; no execution path is enabled by this config
-alone.  The gate is asserted in the contract tests and documented in the
-YAML config.
+```bash
+uv run pytest tests/adversarial/test_matched_compute_packet.py \
+  tests/adversarial/test_matched_compute_runtime.py \
+  tests/adversarial/test_matched_compute_objective.py -v
+```
 
-## Deferred slices
+The open-loop unit coverage uses deterministic injected evaluators, and one
+canary invokes the actual `run_adversarial_search` runner with a synthetic
+per-candidate evaluator. The synthetic episode-step totals remain in metadata
+only; the canonical simulator-step field is unavailable and the trace is
+explicitly diagnostic-only. The reactive test uses a one-step controller
+snapshot and likewise does not observe a simulator tick. These tests do not
+launch benchmark batches or campaigns. A future production execution canary
+must be run only after the domain-approval gate is granted; its output must be
+promoted and provenance-checked before any stronger claim.
 
-- Comparison runner implementation (executes both arms and produces a report).
-- Reactive residual-search policy integration (the actual reactive arm).
-- Open-loop candidate evaluation path (the actual open-loop arm).
-- Campaign execution with domain-approval gate.
-- Stress-case validity/strength metrics (requires Domain-Aware Approval).
-- CMA-ES or MCTS search-baseline adversary (sequenced before PPO).
-- PPO / learned adversary (only after the search baseline is measured).
+## Claim boundary and deferred work
+
+This slice establishes only that the packet names real seams and that local
+accounting validation is available. Preflight candidate counts and fixture or
+controller counters are not observed simulator evidence. The distinct
+objective projections are intentionally not treated as equivalent. It does
+not establish stress strength, realism, safety, planner ranking, superiority,
+benchmark performance, or a paper-facing result. Fallback/degraded execution
+is never success evidence.
+
+Deferred until explicit approval and an independent evidence review:
+
+- comparison execution on the frozen scenario and seeds;
+- a no-fallback production-path canary with observed candidate and simulator-
+  step accounting for both arms;
+- observed budget-parity decision from native traces;
+- stress-case validity/strength metrics;
+- CMA-ES/MCTS expansion and any learned/PPO adversary;
+- benchmark or paper-facing synthesis.

@@ -1,0 +1,253 @@
+# Issue #6969 Stage B preregistration: held-out lane-regime confirmation and fidelity cost.
+#
+# Plain-language summary: Stage A found no robust lane-forming candidate. This packet freezes
+# exactly how a candidate would be selected, what held-out rows and fidelity outcomes would be
+# collected, and when the work must stop. It does not run Stage B, submit compute, or change the
+# released configuration.
+schema_version: issue_6969_lane_formation_stage_b_preregistration.v1
+issue: 6969
+companion_issues: [6962, 7029, 7031]
+status: preregistration
+evidence_tier: proposal
+benchmark_evidence: false
+paper_facing: false
+
+claim_boundary: >-
+  Preregistration and local contract evidence only. This packet does not run Stage B, establish a
+  lane-forming regime, recommend a parameter change, establish simulator fidelity, or admit a
+  benchmark, paper, dissertation, causal, or real-world claim. Any future result is diagnostic and
+  limited to the declared model, parameter envelope, scenario surfaces, and held-out seeds.
+
+execution_boundary:
+  stage_b_execution_in_this_pr: false
+  compute_submit_authorized: false
+  slurm_submission_in_this_pr: false
+  gpu_submission_in_this_pr: false
+  released_default_change: false
+  new_evidence_generation: false
+  paper_or_dissertation_claim_in_this_pr: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+domain_approval:
+  required: true
+  status: pending
+  required_decisions:
+    - Confirm the fixed Stage A candidate-selection rule and the observed no-candidate stop.
+    - Confirm the held-out seed schedule and paired released-default comparator.
+    - Confirm the fidelity-cost estimands and whether the declared surfaces are sufficient.
+    - Confirm native execution, resource budget, and artifact/provenance requirements before launch.
+    - Confirm that all outcomes remain diagnostic and do not alter released defaults.
+
+source_contracts:
+  stage_a_summary: docs/context/evidence/issue_6969_lane_formation_reference/summary.json
+  stage_a_parameter_screen: robot_sf/research/lane_formation_parameter_screen.py
+  stage_a_reference_contract: robot_sf/research/lane_formation_reference.py
+  stage_a_runner: scripts/validation/run_issue_6969_parameter_screen.py
+  stage_a_tests: tests/research/test_lane_formation_parameter_screen.py
+  result_packet_contract: >-
+    result_interpretation_packet.v1 (downstream #7029 contract; not present or admitted on this
+    branch, so this packet declares only the fields a future packet must contain).
+
+source_sha256:
+  stage_a_summary: ee35513b0c04eea0e438ce2c163bd78be5cb2a48881a2f20b6788226cfaf1151
+  stage_a_parameter_screen: 0d7bac6cdf35c5a4d3c17f8f865426fd794dc036048f6a8cada7df8f8d253482
+  stage_a_reference_contract: 28d81a4f820aceef8e0b8f388ad81ce06c260adb8ac9d838ccad2ae556f01e5c
+  stage_a_runner: 52d7aee8833c56bb30b869edbd89d2b29b65927398d3e5f0af6818f0e8093768
+
+stage_a_snapshot:
+  implementation_commits:
+    reference: e298120d5ffd9782046c8401c8163877a1e245bc
+    parameter_screen: 8273fc384210a453b09e86d898141f7ae5d358c0
+  native_rows: 30
+  execution_status: 30/30 native:computed
+  profiles:
+    method: latin_hypercube_plus_fixed_anchors
+    space_filling_count: 8
+    profile_seed: 6969
+    profile_ids: [lhs_01, lhs_02, lhs_03, lhs_04, lhs_05, lhs_06, lhs_07, lhs_08]
+    fixed_anchors: [anchor_released_default, anchor_literature_typical]
+    seeds: [5149, 5150, 5151]
+    clear_threshold:
+      metric: lane_segregation_index
+      threshold: 0.5
+  observed_decision:
+    robust_candidate_count: 0
+    robust_candidate_rule: all three declared Stage A seeds meet the clear threshold
+    near_candidate:
+      profile_id: lhs_05
+      clear_hits: 1
+      clear_total: 3
+      eligible_for_stage_b: false
+    classification: diagnostic_only_no_candidate
+
+candidate_selection:
+  selection_is_frozen_before_held_out_execution: true
+  eligible_design_role: space_filling_stage_a
+  excluded_design_roles: [fixed_released_default_anchor, fixed_literature_typical_anchor]
+  required_execution_mode: native
+  required_execution_status: computed
+  required_clear_hit_count: 3
+  required_clear_seed_count: 3
+  required_threshold_metric: lane_segregation_index
+  required_threshold: 0.5
+  no_response_dependent_ranking: true
+  selection_order: profile_id_lexicographic_after_eligibility
+  maximum_candidate_count: 2
+  no_candidate_action: blocked_no_stage_b_compute
+  current_selection: []
+  forbidden_substitutions:
+    - Do not select a profile from held-out outcomes.
+    - Do not promote a one-of-three Stage A hit.
+    - Do not add a profile or expand the parameter envelope after inspecting outcomes.
+    - Do not replace the released-default comparator with the literature anchor.
+
+held_out_plan:
+  scenario_id: bidirectional_corridor
+  protocol_source: robot_sf.research.lane_formation_reference.ReferenceProtocol
+  seeds: [5152, 5153, 5154, 5155, 5156, 5157, 5158, 5159, 5160, 5161]
+  seed_count: 10
+  seed_schedule_source: issue_6969_stage_b_fixed_schedule_v1
+  disjoint_from_stage_a_seeds: true
+  no_seed_substitution: true
+  same_protocol_as_stage_a: true
+  paired_comparator: anchor_released_default
+  planned_cells: candidate_count_times_10_held_out_seeds_plus_10_released_default_rows
+  execution_mode: native_only
+  missingness_policy: >-
+    Missing, non-finite, unavailable, fallback, degraded, or non-native rows remain visible and
+    invalidate the corresponding candidate comparison; never impute, drop, or replace a row after
+    seeing its outcome.
+  persistence_rule:
+    steady_state_window: the declared post-warmup observation window from the Stage A protocol
+    per_seed_clear_condition: lane_segregation_index >= 0.5 for the complete steady_state_window
+    confirmation_rule: at least 8 of 10 held-out seeds satisfy per_seed_clear_condition
+    report_all_seed_values: true
+
+fidelity_cost_surfaces:
+  comparison: candidate_minus_anchor_released_default
+  pairing_key: [surface_id, candidate_profile_id, seed]
+  report_effect_and_uncertainty: true
+  outcomes:
+    - surface_id: lane_formation
+      metric: lane_segregation_index
+      unit: [0, 1]
+      role: primary
+      direction: larger_is_more_lane_segregation
+      source_contract: robot_sf.research.lane_formation_reference
+    - surface_id: exit_arching
+      metric: exit_density_ratio
+      unit: dimensionless_ratio
+      role: fidelity_cost
+      direction: positive_delta_is_arching_cost
+      scenario_source: robot_sf.research.emergent_phenomena.default_scenario_set
+    - surface_id: doorway_oscillation
+      metric: oscillation_flips
+      unit: flips_per_observation_window
+      role: fidelity_cost
+      direction: positive_delta_is_oscillation_cost
+      scenario_source: robot_sf.research.emergent_phenomena.default_scenario_set
+    - surface_id: throughput
+      metric: completed_agents_per_second
+      unit: agents_per_second
+      role: fidelity_cost
+      direction: negative_delta_is_throughput_cost
+      scenario_source: robot_sf.research.emergent_phenomena.default_scenario_set
+    - surface_id: collision_overlap
+      metric: collision_and_overlap_rate
+      unit: proportion_of_valid_rows
+      role: fidelity_cost
+      direction: positive_delta_is_collision_overlap_cost
+      scenario_source: native_runner_metric_contract_to_be_named_before_launch
+    - surface_id: planner_facing_interaction
+      metric: [completion_rate, progress_at_timeout, collision_rate]
+      unit: declared_per_metric
+      role: downstream_diagnostic
+      direction: report_signed_deltas_without_a_universal_planner_claim
+      scenario_source: named_planner_facing_suite_required_before_launch
+  decision_policy: report_tradeoffs; do not pre-authorize a recalibration or default change
+  incomplete_surface_action: inconclusive_and_block_publication
+
+inference_contract:
+  resampling_unit:
+    method: paired seed-block bootstrap over the fixed ten held-out seeds
+    rationale: >-
+      The estimand is uncertainty over the declared held-out seed schedule for a fixed diagnostic
+      scenario/surface suite. Candidate and released-default rows remain paired within each seed;
+      this does not generalize to an unspecified scenario or deployment population.
+    bootstrap_confidence: 0.95
+    resampling_order: seed blocks containing every declared surface and comparator row
+  inference_population:
+    type: fixed_suite
+    rationale: >-
+      The corridor and explicitly named fidelity surfaces are a fixed diagnostic suite. The packet
+      reports bounded seed uncertainty and does not estimate a population of real pedestrians,
+      maps, planners, or deployments.
+  estimand:
+    type: paired_delta
+    description: >-
+      For each candidate and surface, compute candidate-minus-released-default paired deltas within
+      each held-out seed, then report the fixed-suite mean and a seed-block bootstrap interval.
+  decision_rule:
+    rule: >-
+      Confirm a candidate only when the held-out persistence rule passes with complete native rows;
+      report every fidelity delta and uncertainty interval; classify the packet inconclusive if any
+      required surface or provenance field is incomplete.
+    threshold: >-
+      Lane confirmation requires at least 8 of 10 held-out seeds with a complete-window
+      lane_segregation_index >= 0.5. Fidelity surfaces have no automatic recalibration threshold;
+      domain review must interpret the signed tradeoff before any separate decision.
+  primary_metrics:
+    metrics: [lane_segregation_index]
+    ordered_by_importance: true
+  multiplicity_handling:
+    strategy: separate primary lane confirmation from descriptive fidelity-cost surfaces
+    rationale: >-
+      Fidelity surfaces answer distinct tradeoff questions and cannot be used to manufacture a
+      lane-confirmation result. They are all reported, with no selective omission or pooled claim.
+    adjustment_method: none_single_contrast
+
+result_packet_skeleton:
+  schema_version: result_interpretation_packet.v1
+  status: planned_not_generated
+  upstream_contract_status: pending_issue_7029_review_and_merge
+  required_fields:
+    - research_question_and_hypothesis
+    - evidence_tier_and_admission_state
+    - source_artifact_ids_paths_digests_generation_commit_command
+    - analysis_population_inclusion_exclusion_and_attrition
+    - native_adapter_fallback_degraded_unavailable_rejected_accounting
+    - primary_estimand_analysis_unit_pairing_key_comparator_and_contrast_direction
+    - metric_units_support_denominators_missingness_and_uncertainty
+    - fidelity_surface_effects_and_sensitivity_results
+    - figure_ids_visual_contracts_and_sample_size_display
+    - structured_caption_assertions_with_observed_inferred_unavailable_status
+    - claim_boundary_forbidden_claims_and_exact_decision_vocabulary
+    - independent_review_identity_status_digest_and_findings
+  forbidden_until_reviewed:
+    - dissertation_admission
+    - paper_facing_claim
+    - released_default_recommendation
+    - universal_social_force_model_claim
+
+stop_rules:
+  - Stop before compute if the Stage A source digest or implementation contract drifts.
+  - Stop with no candidate if the frozen eligibility rule returns an empty set.
+  - Stop and classify incomplete if any required row is non-native, missing, non-finite, fallback, or degraded.
+  - Stop if a seed, surface, comparator, or parameter is substituted after outcomes are inspected.
+  - Stop before interpretation if the result packet cannot bind every number, figure, caption, and claim to exact artifacts.
+  - Never change released defaults in this issue.
+
+validation:
+  commands:
+    - uv run python scripts/validation/check_issue_6969_stage_b_preregistration.py --json
+    - uv run python scripts/validation/check_preregistration_inference_contract.py --json configs/benchmarks/issue_6969_lane_formation_stage_b_preregistration.yaml
+    - uv run pytest -q tests/validation/test_issue_6969_stage_b_preregistration.py
+  no_compute_command_in_this_packet: true
+
+readiness_decision:
+  status: blocked_pending_domain_review_candidate_and_compute_authorization
+  stage_b_execution_allowed: false
+  compute_submit_authorized: false
+  released_default_change: false
+  publication_or_admission_allowed: false

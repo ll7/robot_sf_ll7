@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +43,7 @@ BLOCKING_LABELS = frozenset(
     }
 )
 BLOCKED_NEXT_ACTION = "await_blocker_owner_or_approval"
+_ACTIONS_RUN_JOB_URL_RE = re.compile(r"/actions/runs/(?P<run_id>[0-9]+)/job(?:/|$)")
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -175,6 +177,52 @@ def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def _rest_check_run_workflow_identity(
+    run: dict[str, Any],
+    *,
+    repo: str,
+    cache: dict[str, tuple[str, str]],
+) -> tuple[str, str]:
+    """Return workflow id/name for a REST check run, enriching ambiguous rerun metadata.
+
+    The commit check-runs endpoint often omits workflow identity even though its job URL embeds
+    the Actions run id. Fetch that run metadata only for duplicate check names in the REST
+    fallback, so rerun cancellation can be superseded without conflating distinct workflows that
+    happen to share a check name.
+    """
+    workflow_id = str(run.get("workflow_id", "") or "")
+    workflow = run.get("workflow")
+    if isinstance(workflow, dict):
+        workflow_name = str(workflow.get("name", "") or "")
+    else:
+        workflow_name = str(workflow or "")
+    if not workflow_name:
+        check_suite = run.get("check_suite")
+        suite_workflow = check_suite.get("workflow") if isinstance(check_suite, dict) else None
+        if isinstance(suite_workflow, dict):
+            workflow_name = str(suite_workflow.get("name", "") or "")
+        elif suite_workflow:
+            workflow_name = str(suite_workflow)
+    if workflow_id or workflow_name:
+        return workflow_id, workflow_name
+
+    details_url = str(run.get("details_url", "") or "")
+    match = _ACTIONS_RUN_JOB_URL_RE.search(details_url)
+    if match is None:
+        return "", ""
+    run_id = match.group("run_id")
+    if run_id not in cache:
+        payload = _rest_api_get(f"actions/runs/{run_id}", repo=repo)
+        if isinstance(payload, dict):
+            cache[run_id] = (
+                str(payload.get("workflow_id", "") or ""),
+                str(payload.get("name", "") or ""),
+            )
+        else:
+            cache[run_id] = ("", "")
+    return cache[run_id]
 
 
 def _fetch_current_main_sha(*, repo: str) -> str:
@@ -351,23 +399,37 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     ]
     checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs", repo=repo)
     check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
-    rollup = [
-        {
-            "__typename": "CheckRun",
-            "name": str(run.get("name", "") or ""),
-            "status": str(run.get("status", "") or ""),
-            "conclusion": run.get("conclusion") or "",
-            "detailsUrl": str(run.get("details_url", "") or ""),
-            "startedAt": str(run.get("started_at", "") or ""),
-            "workflowName": str(
-                (run.get("workflow") if isinstance(run, dict) else "")
-                or ((run.get("check_suite") or {}).get("workflow") if isinstance(run, dict) else "")
-                or ""
-            ),
-        }
-        for run in check_runs
-        if isinstance(run, dict)
-    ]
+    check_name_counts: dict[str, int] = {}
+    for run in check_runs:
+        if isinstance(run, dict):
+            name = str(run.get("name", "") or "")
+            check_name_counts[name] = check_name_counts.get(name, 0) + 1
+    workflow_cache: dict[str, tuple[str, str]] = {}
+    rollup: list[dict[str, Any]] = []
+    for run in check_runs:
+        if not isinstance(run, dict):
+            continue
+        name = str(run.get("name", "") or "")
+        workflow_id = ""
+        workflow_name = ""
+        if check_name_counts.get(name, 0) > 1:
+            workflow_id, workflow_name = _rest_check_run_workflow_identity(
+                run,
+                repo=repo,
+                cache=workflow_cache,
+            )
+        rollup.append(
+            {
+                "__typename": "CheckRun",
+                "name": name,
+                "status": str(run.get("status", "") or ""),
+                "conclusion": run.get("conclusion") or "",
+                "detailsUrl": str(run.get("details_url", "") or ""),
+                "startedAt": str(run.get("started_at", "") or ""),
+                "workflowId": workflow_id,
+                "workflowName": workflow_name,
+            }
+        )
     pr_dict = {
         "number": pull.get("number", number),
         "title": str(pull.get("title", "") or ""),

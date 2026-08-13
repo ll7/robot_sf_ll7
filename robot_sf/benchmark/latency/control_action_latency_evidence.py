@@ -53,13 +53,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.control_action_latency_preflight import (
+from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.latency.control_action_latency_preflight import (
     AXIS_KEY,
     DECISION_READY,
     REQUIRED_LATENCY_STEPS,
     check_control_action_latency_axis,
 )
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.distance_convention import DistanceConvention
 from robot_sf.evidence.writers import review_marker, review_marker_comment, review_marker_json

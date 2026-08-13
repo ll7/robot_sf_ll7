@@ -33,7 +33,7 @@ from robot_sf.benchmark.interaction_exposure import (
     compute_interaction_exposure_fields,
     not_derivable_interaction_exposure,
 )
-from robot_sf.benchmark.latency_stress import (
+from robot_sf.benchmark.latency.latency_stress import (
     LatencyMeasurementHarness,
     LatencyStressProfile,
     not_available_latency_metrics,

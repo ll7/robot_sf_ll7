@@ -6,6 +6,11 @@ package remains blocked until the author approves the exact digest; no trajector
 is promoted:
 [issue_6792_ch7_admission_execution_packet.md](issue_6792_ch7_admission_execution_packet.md).
 
+Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
+#6792 package portfolio references to the tracked source config, preserving package bytes and the
+release-cell-only claim boundary:
+[issue_7047_ch7_portfolio_companion_binding.md](issue_7047_ch7_portfolio_companion_binding.md).
+
 Issue #6969 lane-formation reference and Stage A diagnostic: the lane metric separates known
 mixed/separated controls, while 8 frozen space-filling parameter profiles plus released and
 literature anchors produced no robust clear-hit regime across three seeds; no default or tuning

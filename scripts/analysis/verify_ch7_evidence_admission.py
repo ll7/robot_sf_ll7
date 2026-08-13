@@ -393,6 +393,15 @@ def _verify_registry(registry_path: Path, receipt: Mapping[str, Any]) -> dict[st
     return {"registry_sha256": registry_sha, "approval_entry": entry}
 
 
+def _require_canonical_source_registry(registry_path: Path) -> Path:
+    resolved_registry = registry_path.resolve()
+    if resolved_registry != DEFAULT_REGISTRY.resolve():
+        raise Ch7EvidenceAdmissionError(
+            "source registry must be the repository-controlled canonical registry"
+        )
+    return resolved_registry
+
+
 def verify_admission(
     *,
     package_dir: Path,
@@ -408,7 +417,7 @@ def verify_admission(
     admission = _read_object(receipt.resolve(), "admission receipt")
     _validate_schema(admission, schema.resolve(), label="admission schema")
     package = _verify_package(package_dir, admission)
-    registry = _verify_registry(source_registry, admission)
+    registry = _verify_registry(_require_canonical_source_registry(source_registry), admission)
     expected_source = admission["source"]
     source_sha = _sha256_file(source_package.resolve() / "SHA256SUMS")
     source_complete_sha = _verify_source_package(
@@ -463,10 +472,6 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     args = _build_parser().parse_args(argv)
     try:
-        if args.source_registry.resolve() != DEFAULT_REGISTRY.resolve():
-            raise Ch7EvidenceAdmissionError(
-                "source registry must be the repository-controlled canonical registry"
-            )
         result = verify_admission(
             package_dir=args.package_dir,
             source_registry=args.source_registry,

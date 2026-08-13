@@ -29,4 +29,4 @@ excluded_metrics:
 admission:
   status: not_admitted
   receipt_required: true
-  receipt_schema: ch7-evidence-admission.v1
+  receipt_schema: ch7-evidence-admission.v2

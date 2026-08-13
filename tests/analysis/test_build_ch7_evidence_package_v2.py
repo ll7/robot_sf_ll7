@@ -14,6 +14,7 @@ from scripts.analysis import build_ch7_evidence_package_v2 as builder
 SOURCE_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
 )
+CONFIG_PATH = Path(__file__).parents[2] / "configs/analysis/ch7_evidence_package.v2.yaml"
 
 
 def _read_atlas(output: Path) -> dict[str, object]:
@@ -25,6 +26,7 @@ def test_v2_projection_is_deterministic_and_contains_both_inversions(tmp_path: P
     manifest = builder.build_ch7_evidence_package_v2(
         source_package=SOURCE_PACKAGE,
         output=output,
+        config_path=CONFIG_PATH,
         check_determinism=True,
     )
     atlas = _read_atlas(output)
@@ -77,6 +79,7 @@ def test_v2_publishes_terminal_mapping_and_keeps_receipt_external(tmp_path: Path
     manifest = builder.build_ch7_evidence_package_v2(
         source_package=SOURCE_PACKAGE,
         output=output,
+        config_path=CONFIG_PATH,
     )
     atlas = _read_atlas(output)
     mapping = manifest["terminal_label_normalization"]
@@ -89,6 +92,10 @@ def test_v2_publishes_terminal_mapping_and_keeps_receipt_external(tmp_path: Path
         "receipt_schema": "ch7-evidence-admission.v2",
         "reason": "v2 domain approval and the external admission receipt remain pending",
     }
+    source_verification = json.loads(
+        (output / "review/source_verification.json").read_text(encoding="utf-8")
+    )
+    assert source_verification["admission_receipt"]["schema"] == "ch7-evidence-admission.v2"
     assert not (output / "admission/receipt.json").exists()
 
 

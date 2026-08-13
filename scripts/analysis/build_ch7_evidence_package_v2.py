@@ -663,7 +663,7 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                 "admission_receipt": {
                     "required": True,
                     "status": "not_created",
-                    "schema": "ch7-evidence-admission.v1",
+                    "schema": "ch7-evidence-admission.v2",
                     "reason": "v2 domain approval is outside this builder",
                 },
             },

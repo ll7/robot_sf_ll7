@@ -1,5 +1,8 @@
 """Tests for the issue #7032 mechanism-boundary atlas contract."""
 
+# evidence-writer-exempt: this module writes only tmp_path fixtures for malformed atlas inputs
+# and symlink-escape probes; checked-in #7032 evidence artifacts are emitted separately.
+
 from __future__ import annotations
 
 import json

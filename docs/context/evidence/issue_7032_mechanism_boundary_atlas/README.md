@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#7032) - NEEDS-REVIEW -->
 # Issue #7032 Mechanism-Boundary Atlas
 
 Plain-language summary: this atlas records what six negative-result case families can and cannot

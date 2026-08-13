@@ -186,6 +186,11 @@ Before deleting old worktrees, run `git worktree list --porcelain` from the main
 each candidate with `git -C <path> status --short --branch`. If the worktree may contain generated
 evidence or local experiment outputs, also inspect relevant ignored paths, for example
 `[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+For a compact first pass, run
+`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
+The retirement projection is a read-only review aid: it can classify rows as `preserve`, `review`,
+or `removable`, but it never deletes worktrees and does not replace human approval before any later
+`git worktree remove` command.
 
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
@@ -694,12 +699,16 @@ For remote cleanup and branch-drift triage, use the read-only hygiene snapshot b
 `git worktree` output or stale-worktree cleanup:
 
 ```bash
-uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json
+uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json
 ```
 
 The payload reports total and included worktree counts, dirty worktrees, missing upstreams,
-ahead/behind drift, detached heads, and truncation status. Use `--filter <branch-or-path-substring>`
-or `--worktree-limit <n>` when remote hosts have many linked worktrees.
+ahead/behind drift, detached heads, truncation status, and optional preservation-aware retirement
+reasons. The retirement projection fails closed to `preserve` or `review` for dirty tracked or
+untracked content, unpushed commits, detached or missing-upstream rows, active or unavailable claim
+state, unavailable merge state, and ignored `output/` content that looks durable or needs handoff.
+Use `--filter <branch-or-path-substring>` or `--worktree-limit <n>` when remote hosts have many
+linked worktrees.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 

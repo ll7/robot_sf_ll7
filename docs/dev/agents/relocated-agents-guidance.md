@@ -148,10 +148,14 @@ view shows potentially durable files, redirect the full ignored-output listing t
 artifact and paste only the relevant path excerpts.
 For token-sensitive autonomous cleanup or repositories with many linked worktrees, start with the
 compact hygiene helper instead of printing the full worktree inventory in the parent thread:
-`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json`. Add `--filter
-<branch-or-path-substring>` for a single branch cleanup, and read raw `git worktree list
---porcelain` only when the compact payload is insufficient or reports a stale administrative entry
-that needs manual inspection.
+`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
+The retirement projection is read-only and never authorizes deletion by itself: `removable` means
+the local snapshot found no preservation signal, while `preserve` and `review` are fail-closed
+states for dirty content, ahead commits, detached or missing-upstream rows, active or unavailable
+claims, unavailable merge state, or ignored `output/` artifacts that look durable or need handoff.
+Add `--filter <branch-or-path-substring>` for a single branch cleanup, and read raw
+`git worktree list --porcelain` only when the compact payload is insufficient or reports a stale
+administrative entry that needs manual inspection.
 
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an

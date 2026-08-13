@@ -21,6 +21,7 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 BLOCKED_EXTERNAL_INPUT_LABEL = "state:blocked-external-input"
 EXTERNAL_RESOURCE_LABEL = "resource:external-data"
+COMPUTE_ROUTING_LABEL = "routing:needs-compute"
 EXTERNAL_BLOCKER_LABELS = {
     BLOCKED_EXTERNAL_INPUT_LABEL,
     "blocked",
@@ -114,6 +115,11 @@ def _issue_classification(
         return "assigned", "assigned; skip auto-claim"
     if _is_blocked_external_issue(labels):
         return "blocked_external", "external input required; omit from default agent queue"
+    if COMPUTE_ROUTING_LABEL in labels:
+        return (
+            "needs_compute",
+            "compute or private execution authorization required; skip implementation dispatch",
+        )
     if any(label in UNCLAIMABLE_LABELS for label in labels):
         return "blocked_label", "label suggests skip in autonomous claim mode"
     if claim.get("ok") is False:

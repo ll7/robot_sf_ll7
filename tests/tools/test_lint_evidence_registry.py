@@ -72,6 +72,158 @@ def _write_entry(
     return path
 
 
+def _write_ch7_companion_fixture(
+    repo: Path,
+    *,
+    linter,
+    commit_target: bool = True,
+    mutate_binding=None,
+) -> Path:
+    target = repo / linter.CH7_PORTFOLIO_TARGET_PATH
+    package = repo / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
+    overlay = package / "publication" / "materialization_overlay.json"
+    manifest = package / "manifest.json"
+    target.parent.mkdir(parents=True)
+    overlay.parent.mkdir(parents=True)
+    target.write_bytes((ROOT / linter.CH7_PORTFOLIO_TARGET_PATH).read_bytes())
+    manifest.write_text(
+        json.dumps(
+            {
+                "inputs": {
+                    "portfolio_config": {
+                        "name": "ch7_worked_example_portfolio.v1.yaml",
+                        "sha256": linter.CH7_PORTFOLIO_TARGET_SHA256,
+                    }
+                },
+                "schema_version": "ch7-evidence-package.v1",
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    overlay.write_text(
+        json.dumps(
+            {
+                "source_portfolio": {
+                    "path": "ch7_worked_example_portfolio.v1.yaml",
+                    "sha256": linter.CH7_PORTFOLIO_TARGET_SHA256,
+                }
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    _git(repo, "add", str(package.relative_to(repo)))
+    if commit_target:
+        _git(repo, "add", linter.CH7_PORTFOLIO_TARGET_PATH)
+    _git(repo, "commit", "-qm", "ch7 fixture")
+
+    binding = {
+        "bindings": [
+            {
+                "document_digest_pointer": "/inputs/portfolio_config/sha256",
+                "document_json_pointer": "/inputs/portfolio_config/sha256",
+                "document_json_value": linter.CH7_PORTFOLIO_TARGET_SHA256,
+                "document_path": manifest.relative_to(repo).as_posix(),
+                "document_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                "finding_code": "hash_without_artifact_path",
+                "finding_message": "sha256 lacks an adjacent artifact path",
+            },
+            {
+                "document_digest_pointer": "/source_portfolio/sha256",
+                "document_json_pointer": "/source_portfolio/path",
+                "document_json_value": "ch7_worked_example_portfolio.v1.yaml",
+                "document_path": overlay.relative_to(repo).as_posix(),
+                "document_sha256": hashlib.sha256(overlay.read_bytes()).hexdigest(),
+                "finding_code": "uncommitted_artifact_missing_location",
+                "finding_message": "ch7_worked_example_portfolio.v1.yaml is not tracked and "
+                "lacks an explicit location marker",
+            },
+        ],
+        "claim_boundary": "test binding",
+        "issue": 7047,
+        "schema_version": "evidence_registry_companion_binding.v1",
+        "target_path": linter.CH7_PORTFOLIO_TARGET_PATH,
+        "target_sha256": linter.CH7_PORTFOLIO_TARGET_SHA256,
+    }
+    if mutate_binding is not None:
+        mutate_binding(binding)
+    binding_path = repo / linter.CH7_PORTFOLIO_COMPANION_BINDING
+    binding_path.parent.mkdir(parents=True, exist_ok=True)
+    binding_path.write_text(json.dumps(binding, sort_keys=True), encoding="utf-8")
+    return package
+
+
+def test_ch7_portfolio_companion_binding_resolves_exact_findings(tmp_path: Path) -> None:
+    """The #7047 companion resolves only the two exact package provenance findings."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    package = _write_ch7_companion_fixture(repo, linter=linter)
+
+    report = linter.lint_evidence_registry(repo, package)
+
+    assert report["issues"] == []
+
+
+def test_ch7_portfolio_companion_binding_target_digest_mismatch_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """A stale target digest must not suppress package findings."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    package = _write_ch7_companion_fixture(repo, linter=linter)
+    (repo / linter.CH7_PORTFOLIO_TARGET_PATH).write_text("changed: true\n", encoding="utf-8")
+
+    with pytest.raises(linter.CompanionBindingError, match="target_path digest mismatch"):
+        linter.lint_evidence_registry(repo, package)
+
+
+def test_ch7_portfolio_companion_binding_untracked_target_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """The binding is valid only when it points at a tracked repository source file."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    package = _write_ch7_companion_fixture(repo, linter=linter, commit_target=False)
+
+    with pytest.raises(linter.CompanionBindingError, match="target_path is not tracked"):
+        linter.lint_evidence_registry(repo, package)
+
+
+def test_ch7_portfolio_companion_binding_pointer_mismatch_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """The binding must prove the exact package JSON pointer it claims."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    package = _write_ch7_companion_fixture(
+        repo,
+        linter=linter,
+        mutate_binding=lambda binding: binding["bindings"][0].__setitem__(
+            "document_json_pointer", "/inputs/portfolio_config/missing"
+        ),
+    )
+
+    with pytest.raises(linter.CompanionBindingError, match="JSON pointer does not resolve"):
+        linter.lint_evidence_registry(repo, package)
+
+
+def test_ch7_portfolio_companion_binding_duplicate_ambiguity_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """Duplicate entries cannot stand in for two distinct #7047 findings."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+
+    def duplicate_first(binding):
+        binding["bindings"][1] = dict(binding["bindings"][0])
+
+    package = _write_ch7_companion_fixture(repo, linter=linter, mutate_binding=duplicate_first)
+
+    with pytest.raises(linter.CompanionBindingError, match="duplicate binding"):
+        linter.lint_evidence_registry(repo, package)
+
+
 def test_valid_registry_entry_has_no_findings(tmp_path: Path) -> None:
     """A campaign with committed config and matching artifact hash passes."""
     linter = _load_linter()

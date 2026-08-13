@@ -46,7 +46,7 @@ def _write_review_sidecars(root: Path) -> None:
             Path(f"{artifact}.review.json"),
             {
                 "schema_version": "evidence-review-marker.v1",
-                "artifact_path": f"docs/context/evidence/fixture/{relative}",
+                "artifact_path": f"docs/context/evidence/{root.name}/{relative}",
                 "artifact_sha256": _sha256(artifact),
                 "review_marker": "AI-GENERATED NEEDS-REVIEW",
                 "preserved_exact_bytes": True,
@@ -56,7 +56,7 @@ def _write_review_sidecars(root: Path) -> None:
         root / "SHA256SUMS.review.json",
         {
             "schema_version": "evidence-review-marker.v1",
-            "artifact_path": "docs/context/evidence/fixture/SHA256SUMS",
+            "artifact_path": f"docs/context/evidence/{root.name}/SHA256SUMS",
             "artifact_sha256": _sha256(root / "SHA256SUMS"),
             "review_marker": "AI-GENERATED NEEDS-REVIEW",
             "preserved_exact_bytes": True,
@@ -265,6 +265,39 @@ def test_unbound_review_sidecar_fails_closed(tmp_path: Path) -> None:
         },
     )
     with pytest.raises(admission.Ch7EvidenceAdmissionError, match="unbound review sidecars"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_missing_review_sidecar_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    (args["package"] / "manifest.json.review.json").unlink()
+    with pytest.raises(
+        admission.Ch7EvidenceAdmissionError, match="missing required review sidecars"
+    ):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_review_sidecar_artifact_path_must_be_exact(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    sidecar = args["package"] / "manifest.json.review.json"
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    payload["artifact_path"] = "docs/context/evidence/package/wrong/manifest.json"
+    _write_json(sidecar, payload)
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="wrong artifact"):
         admission.verify_admission(
             package_dir=args["package"],
             source_registry=args["registry"],

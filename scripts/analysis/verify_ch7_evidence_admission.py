@@ -107,6 +107,11 @@ def _verify_review_sidecars(
 ) -> None:
     expected_sidecars = {f"{relative}.review.json" for relative in listed}
     expected_sidecars.add("SHA256SUMS.review.json")
+    missing_sidecars = sorted(expected_sidecars - sidecars)
+    if missing_sidecars:
+        raise Ch7EvidenceAdmissionError(
+            f"{label} is missing required review sidecars: {missing_sidecars}"
+        )
     unexpected_sidecars = sorted(sidecars - expected_sidecars)
     if unexpected_sidecars:
         raise Ch7EvidenceAdmissionError(
@@ -121,7 +126,8 @@ def _verify_review_sidecars(
                 f"{label} review sidecar has an unsupported schema: {sidecar}"
             )
         artifact_path = marker.get("artifact_path")
-        if not isinstance(artifact_path, str) or not artifact_path.endswith(base_relative):
+        expected_artifact_path = f"docs/context/evidence/{root.name}/{base_relative}"
+        if artifact_path != expected_artifact_path:
             raise Ch7EvidenceAdmissionError(
                 f"{label} review sidecar points at the wrong artifact: {sidecar}"
             )
@@ -147,7 +153,9 @@ def _reject_symlinks(root: Path, *, label: str) -> None:
         raise Ch7EvidenceAdmissionError(f"{label} contains symlinks: {links}")
 
 
-def _verify_members(root: Path, *, label: str) -> tuple[str, list[str]]:
+def _verify_members(
+    root: Path, *, label: str, require_review_sidecars: bool = True
+) -> tuple[str, list[str]]:
     root = root.resolve()
     sums_path = root / "SHA256SUMS"
     if not root.is_dir() or not sums_path.is_file():
@@ -168,7 +176,12 @@ def _verify_members(root: Path, *, label: str) -> tuple[str, list[str]]:
         raise Ch7EvidenceAdmissionError(f"{label} SHA256SUMS lists missing files: {missing}")
     if extra:
         raise Ch7EvidenceAdmissionError(f"{label} contains unlisted files: {extra}")
-    _verify_review_sidecars(root, sidecars, listed, sums_path, label=label)
+    if require_review_sidecars:
+        _verify_review_sidecars(root, sidecars, listed, sums_path, label=label)
+    elif sidecars:
+        raise Ch7EvidenceAdmissionError(
+            f"{label} contains unbound review sidecars: {sorted(sidecars)}"
+        )
     for expected, relative in entries:
         member = root / relative
         if _sha256_file(member) != expected:
@@ -218,7 +231,9 @@ def _verify_source_package(source_package: Path, expected_complete_sha256: str) 
 
 
 def _verify_compact_directory(compact_dir: Path) -> tuple[str, str]:
-    sums_sha, listed = _verify_members(compact_dir, label="compact packet")
+    sums_sha, listed = _verify_members(
+        compact_dir, label="compact packet", require_review_sidecars=False
+    )
     if listed != ["compact_packet.json"]:
         raise Ch7EvidenceAdmissionError(
             "compact packet must contain exactly compact_packet.json in SHA256SUMS"

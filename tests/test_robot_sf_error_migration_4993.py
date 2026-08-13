@@ -127,7 +127,7 @@ class TestBenchmarkIndividualFileExceptions:
         _assert_triple_catch(CampaignCheckpointPreflightError, RuntimeError)
 
     def test_latency_evidence_error(self) -> None:
-        from robot_sf.benchmark.control_action_latency_evidence import LatencyEvidenceError
+        from robot_sf.benchmark.latency.control_action_latency_evidence import LatencyEvidenceError
 
         _assert_triple_catch(LatencyEvidenceError, RuntimeError)
 

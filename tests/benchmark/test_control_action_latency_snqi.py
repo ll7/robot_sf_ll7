@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from robot_sf.benchmark.control_action_latency_preflight import AXIS_KEY
-from robot_sf.benchmark.control_action_latency_snqi import (
+from robot_sf.benchmark.latency.control_action_latency_preflight import AXIS_KEY
+from robot_sf.benchmark.latency.control_action_latency_snqi import (
     ANALYSIS_SCHEMA_VERSION,
     BASELINE_SHA256,
     EXPECTED_SCENARIO_IDS,
@@ -54,7 +54,7 @@ DURABLE_INPUT_PROVENANCE = EVIDENCE_DIR / "snqi_latency_inputs.csv.provenance.js
 REGISTERED_REFERENCE = EVIDENCE_DIR / "snqi_analysis.json"
 REISSUED_UNCERTAINTY = EVIDENCE_DIR / "snqi_uncertainty_reissued.json"
 REISSUED_UNCERTAINTY_REVIEW = EVIDENCE_DIR / "snqi_uncertainty_reissued.json.review.json"
-ANALYZER_SOURCE = REPO_ROOT / "robot_sf/benchmark/control_action_latency_snqi.py"
+ANALYZER_SOURCE = REPO_ROOT / "robot_sf/benchmark/latency/control_action_latency_snqi.py"
 ANALYZER_CLI = REPO_ROOT / "scripts/benchmark/analyze_control_action_latency_snqi.py"
 WEIGHTS_PATH = REPO_ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
 BASELINE_PATH = REPO_ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
@@ -659,7 +659,7 @@ def _reissue_from_synthetic_packet(tmp_path: Path) -> tuple[dict, dict]:
     reissue = build_uncertainty_reissue(
         packet,
         generator_source_sha256="deadbeef" + "0" * 56,
-        generator_source_rel_path="robot_sf/benchmark/control_action_latency_snqi.py",
+        generator_source_rel_path="robot_sf/benchmark/latency/control_action_latency_snqi.py",
         input_sha256="feedface" + "0" * 56,
         input_provenance_anchor=provenance,
         reissue_date="2026-07-17",

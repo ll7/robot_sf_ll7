@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.latency_stress import (
+from robot_sf.benchmark.latency.latency_stress import (
     LatencyMeasurementHarness,
     LatencyStressProfile,
     classify_feasibility,

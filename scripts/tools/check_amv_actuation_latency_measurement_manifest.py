@@ -17,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.actuation_latency_measurement_manifest import (
+from robot_sf.benchmark.latency.actuation_latency_measurement_manifest import (
     CONTRACT_STATUS_READY,
     AmvActuationLatencyManifestError,
     check_amv_actuation_latency_measurement_manifest,

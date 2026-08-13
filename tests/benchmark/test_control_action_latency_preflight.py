@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.control_action_latency_preflight import (
+from robot_sf.benchmark.latency.control_action_latency_preflight import (
     AXIS_KEY,
     DECISION_BLOCKED,
     DECISION_READY,

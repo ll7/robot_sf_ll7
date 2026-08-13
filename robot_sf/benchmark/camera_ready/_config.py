@@ -40,7 +40,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     TuningSpec,
 )
 from robot_sf.benchmark.camera_ready._util import _repo_relative
-from robot_sf.benchmark.latency_stress import (
+from robot_sf.benchmark.latency.latency_stress import (
     load_latency_stress_profile,
     validate_latency_stress_profile,
 )

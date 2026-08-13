@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.actuation_latency_measurement_manifest import (
+from robot_sf.benchmark.latency.actuation_latency_measurement_manifest import (
     AMV_ACTUATION_LATENCY_MEASUREMENT_MANIFEST_SCHEMA_VERSION,
     CONTRACT_STATUS_BLOCKED,
     CONTRACT_STATUS_READY,

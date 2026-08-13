@@ -5,7 +5,7 @@
 # measurement campaign would be collected (sensor channels, sampling rate, time
 # synchronization, provenance, and the synthetic-vs-measured separation) so it
 # can be checked with `check_amv_actuation_latency_measurement_manifest` from
-# `robot_sf.benchmark.actuation_latency_measurement_manifest`.
+# `robot_sf.benchmark.latency.actuation_latency_measurement_manifest`.
 #
 # It contains NO measured values and makes NO calibrated-actuation claim.
 # `measurement_status: blocked-external-input` is intentional: real

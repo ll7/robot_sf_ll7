@@ -693,6 +693,34 @@ roots that are present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.
+
+### Stale issue-claim reconciliation (issue #7025)
+
+Claims are cross-machine leases, not disposable branches. Inspect the bounded, read-only claim
+audit before considering cleanup:
+
+```bash
+uv run python scripts/dev/issue_claim.py reconcile --limit 100
+```
+
+The report joins each `agent-claims/issue-<number>` ref with the live issue state and explicit PR
+references. It marks a claim releasable only when the issue is closed, or when only terminal
+covering PRs remain, and no open covering PR is observed. Missing or contradictory issue state,
+active coverage, malformed responses, and capped PR inventories remain preserved with a reason;
+`ok: false` is an intentional fail-closed result, not permission to delete anything.
+
+An explicit cleanup pass requires a terminal reason and re-reads the claim SHA, issue state, and
+coverage immediately before using Git's compare-and-delete lease:
+
+```bash
+uv run python scripts/dev/issue_claim.py reconcile \
+  --release-stale --reason closed --limit 100
+```
+
+Do not run the cleanup form as a substitute for reviewing the report, and never delete historical
+claim refs by branch age or by name alone. An SHA race, state change, active PR, or incomplete
+snapshot retains the claim.
+
 Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
 whether a larger `--worktree-limit` is worth the parent-thread context cost.
 For remote cleanup and branch-drift triage, use the read-only hygiene snapshot before broad

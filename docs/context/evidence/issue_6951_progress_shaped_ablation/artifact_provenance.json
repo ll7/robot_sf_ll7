@@ -1,0 +1,49 @@
+{
+  "schema_version": "artifact_provenance_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "commit_sha": "c010542780629d71b478f32d7a40b0471953ec8b",
+  "artifact_root": "output",
+  "location": "worktree-local ignored output/; no durable retrieval pointer",
+  "tracked_compact_evidence": [
+    "docs/context/evidence/issue_6951_progress_shaped_ablation/README.md",
+    "docs/context/evidence/issue_6951_progress_shaped_ablation/summary.json",
+    "docs/context/evidence/issue_6951_progress_shaped_ablation/artifact_provenance.json"
+  ],
+  "artifacts": [
+    {
+      "path": "output/benchmarks/expert_trajectories/issue_1428_orca_residual_bc_progress_v1_smoke.npz",
+      "classification": "ignored-cache",
+      "role": "three-episode input dataset",
+      "sha256": "aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/issue_6951_compute/evaluation_results.json",
+      "classification": "ignored-cache",
+      "role": "raw diagnostic result table",
+      "sha256": "4c9067a23753f2cf395102e6e8668b0b4bc844ec8595f2271fd3307ce23a7a6c",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/issue_6951_compute/training_runs.json",
+      "classification": "ignored-cache",
+      "role": "paired training run index",
+      "sha256": "0599277d0389d2299a8de60d127fe65c1988de7cec76e02a92ed52856c3766aa",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/benchmarks/expert_policies/issue_6951_arm_{a,b}_progress_weighted_bc_policy_seed_{111,112,113}.zip",
+      "classification": "ignored-cache",
+      "role": "six local diagnostic checkpoints",
+      "sha256_recorded": true,
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/issue_6951_compute/{collection,training,evaluation}.log",
+      "classification": "non-evidence-local-only",
+      "role": "execution logs",
+      "durable_retrieval_pointer": null
+    }
+  ],
+  "policy": "Do not cite or depend on output artifacts as durable evidence until a retrieval pointer and metadata are recorded."
+}

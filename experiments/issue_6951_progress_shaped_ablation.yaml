@@ -18,57 +18,55 @@ config:
   - configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml
   - configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml
 command: |
-  # No execution authorized. This is a no-launch experiment record.
-  # Seeds 111/112/113 are preregistered only.
-  #
-  # When execution is authorized, run:
-  #   uv run python scripts/training/pretrain_from_expert.py \
-  #     --config configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml
-  #   uv run python scripts/training/pretrain_from_expert.py \
-  #     --config configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml
-  #
-  # Validation only (no training):
-  #   uv run python -m pytest tests/training/test_progress_weighted_bc.py -v
+  # Bounded compute authorization was granted on 2026-08-13.
+  # Collection used the issue-1428 smoke command shape with seeds 111/112/113;
+  # six in-memory configs pinned the resulting dataset digest and ran Arm A/B.
+  # Evaluation used deterministic rollouts for every train-seed/eval-seed pair
+  # on planner_sanity_simple. See the tracked diagnostic summary:
+  # docs/context/evidence/issue_6951_progress_shaped_ablation/README.md
 inputs:
   - path: configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml
   - path: configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml
   - path: robot_sf/training/progress_weighted_bc.py
 outputs:
-  - path: output/reports/imitation/runs/issue_6951_arm_a_progress_weighted_bc_no_launch.json
+  - path: docs/context/evidence/issue_6951_progress_shaped_ablation/README.md
+    durable_reference: tracked-compact-evidence
+    evidence_role: diagnostic-only synthesis
+  - path: docs/context/evidence/issue_6951_progress_shaped_ablation/summary.json
+    durable_reference: tracked-compact-evidence
+    evidence_role: machine-readable diagnostic synthesis
+  - path: output/issue_6951_compute/evaluation_results.json
     durable_reference: null
-    evidence_role: no-launch placeholder
-  - path: output/reports/imitation/runs/issue_6951_arm_b_progress_weighted_bc_no_launch.json
-    durable_reference: null
-    evidence_role: no-launch placeholder
+    evidence_role: worktree-local raw diagnostic table
 expected_artifacts:
   - name: arm_a_policy_checkpoint
-    path: model/issue_6951_arm_a_progress_weighted_bc_policy.zip
+    path: output/benchmarks/expert_policies/issue_6951_arm_a_progress_weighted_bc_policy_seed_111.zip
     durable_reference_required: false
-    note: no-launch; placeholder only
+    note: worktree-local diagnostic checkpoint; not durable evidence
   - name: arm_b_policy_checkpoint
-    path: model/issue_6951_arm_b_progress_weighted_bc_policy.zip
+    path: output/benchmarks/expert_policies/issue_6951_arm_b_progress_weighted_bc_policy_seed_111.zip
     durable_reference_required: false
-    note: no-launch; placeholder only
+    note: worktree-local diagnostic checkpoint; not durable evidence
   - name: arm_a_manifest
-    path: output/reports/imitation/runs/issue_6951_arm_a_progress_weighted_bc_no_launch.json
+    path: output/benchmarks/ppo_imitation/runs/issue_6951_arm_a_progress_weighted_bc_seed_111.json
     durable_reference_required: false
   - name: arm_b_manifest
-    path: output/reports/imitation/runs/issue_6951_arm_b_progress_weighted_bc_no_launch.json
+    path: output/benchmarks/ppo_imitation/runs/issue_6951_arm_b_progress_weighted_bc_seed_111.json
     durable_reference_required: false
 execution_boundary:
   submit_slurm_from_this_issue: false
-  no_launch_experiment: true
+  no_launch_experiment: false
+  bounded_local_compute_authorized: true
   preregistered_seeds: [111, 112, 113]
   preregistered_scenario: planner_sanity_simple
-evidence_grade: proposal
+evidence_grade: observed
 paper_relevance: exploratory
-status: no_launch
+status: completed
 notes: >
-  This is a no-launch experiment record for issue #6951. No SLURM, training,
-  or benchmark evidence execution is authorized. Seeds 111/112/113 and
-  planner_sanity_simple are preregistered only. Issue #1475 is parked and
-  not affected by this experiment. Arm A uses the same objective/loss code
-  path with uniform transition weights (equivalent to ordinary mean
-  expert-action NLL). Arm B derives signed progress only from reduction
-  in explicitly recorded remaining route length, normalized by declared
-  scale, with strictly positive clipped weights.
+  The authorized smoke diagnostic ran natively on CPU with three expert episodes
+  and deterministic evaluation across the three train seeds and three evaluation
+  seeds. Both arms had 0/9 successes and 9/9 collision terminations. Arm B's
+  mean route-length reduction was 0.235 m higher than Arm A, but this does not
+  satisfy the promotion condition. The tracked result is diagnostic-only; raw
+  output remains worktree-local, issue #1475 stays parked, and no released
+  default or paper-facing claim changes.

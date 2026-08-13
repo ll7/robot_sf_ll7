@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.nav.navigation import RouteNavigator
 from scripts.training import collect_expert_trajectories as collector
 
 
@@ -17,6 +18,15 @@ class _FakeEnv:
 
     def __init__(self) -> None:
         self.state = SimpleNamespace(max_sim_steps=3, nav=SimpleNamespace(pos=(0.0, 0.0)))
+        self.simulator = SimpleNamespace(
+            robot_navs=[
+                RouteNavigator(
+                    waypoints=[(3.0, 4.0), (10.0, 11.0)],
+                    proximity_threshold=0.1,
+                    pos=(0.0, 0.0),
+                )
+            ]
+        )
         self._step = 0
 
     def reset(self):
@@ -26,6 +36,7 @@ class _FakeEnv:
     def step(self, action):
         self._step += 1
         self.state.nav.pos = (float(self._step), float(self._step + 1))
+        self.simulator.robot_navs[0].update_position(self.state.nav.pos)
         reward = float(self._step)
         terminated = self._step == 3
         truncated = False
@@ -41,6 +52,7 @@ def test_record_episode_exports_reward_terminal_and_return_to_go_fields() -> Non
     assert record["truncated"] == [False, False, False]
     assert record["return_to_go"] == [6.0, 5.0, 3.0]
     assert len(record["actions"]) == len(record["observations"]) == 3
+    assert len(record["remaining_route_length"]) == len(record["actions"]) + 1
 
 
 def test_write_dataset_persists_decision_transformer_arrays(tmp_path) -> None:

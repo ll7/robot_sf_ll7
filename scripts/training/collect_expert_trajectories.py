@@ -13,6 +13,8 @@ import shlex
 import subprocess
 import sys
 from datetime import UTC, datetime
+from itertools import pairwise
+from math import dist
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -169,6 +171,40 @@ def _episode_id(dataset_id: str, scenario_label: str, episode_index: int) -> str
     return f"{dataset_id}:{scenario_label}:episode_{episode_index:06d}"
 
 
+def _remaining_route_length(env: Any) -> float:
+    """Measure the active robot route polyline remaining from the current pose.
+
+    The measurement intentionally uses the route owned by ``RouteNavigator`` rather than
+    goal distance, displacement, reward, or any episode outcome proxy.  A missing route is
+    an invalid provenance state for the progress-weighted BC dataset and therefore fails
+    closed instead of silently emitting a substitute signal.
+    """
+    simulator = getattr(env, "simulator", None)
+    navigators = getattr(simulator, "robot_navs", None)
+    if not navigators:
+        raise RuntimeError("Cannot record route progress: environment has no robot navigator")
+
+    navigator = navigators[0]
+    waypoints = list(getattr(navigator, "waypoints", ()))
+    if not waypoints:
+        raise RuntimeError("Cannot record route progress: active robot route is empty")
+    if bool(getattr(navigator, "reached_destination", False)):
+        return 0.0
+
+    waypoint_id = int(getattr(navigator, "waypoint_id", -1))
+    if waypoint_id < 0 or waypoint_id >= len(waypoints):
+        raise RuntimeError(
+            "Cannot record route progress: navigator waypoint index is outside its route"
+        )
+
+    position = tuple(float(value) for value in navigator.pos)
+    route_points = (position, *waypoints[waypoint_id:])
+    remaining = float(sum(dist(start, end) for start, end in pairwise(route_points)))
+    if not np.isfinite(remaining) or remaining < 0.0:
+        raise RuntimeError("Cannot record route progress: measured route length is invalid")
+    return remaining
+
+
 def _record_episode(
     env: Any,
     *,
@@ -194,6 +230,7 @@ def _record_episode(
     positions: list[Any] = []
     actions: list[Any] = []
     observations: list[Any] = []
+    remaining_route_length: list[float] = [_remaining_route_length(env)]
     rewards: list[float] = []
     terminated_flags: list[bool] = []
     truncated_flags: list[bool] = []
@@ -212,6 +249,7 @@ def _record_episode(
         positions.append(tuple(env.state.nav.pos))
         actions.append(np.asarray(action, dtype=float))
         observations.append(next_obs)
+        remaining_route_length.append(_remaining_route_length(env))
         rewards.append(float(reward))
         terminated_flags.append(bool(terminated))
         truncated_flags.append(bool(truncated))
@@ -223,6 +261,7 @@ def _record_episode(
         "positions": positions,
         "actions": actions,
         "observations": observations,
+        "remaining_route_length": remaining_route_length,
         "rewards": rewards,
         "terminated": terminated_flags,
         "truncated": truncated_flags,
@@ -258,6 +297,7 @@ def _record_dataset(
         "positions": [],
         "actions": [],
         "observations": [],
+        "remaining_route_length": [],
         "rewards": [],
         "terminated": [],
         "truncated": [],
@@ -293,6 +333,9 @@ def _record_dataset(
         dataset["positions"].append(np.asarray(episode_record["positions"], dtype=object))
         dataset["actions"].append(np.asarray(episode_record["actions"], dtype=object))
         dataset["observations"].append(np.asarray(episode_record["observations"], dtype=object))
+        dataset["remaining_route_length"].append(
+            np.asarray(episode_record["remaining_route_length"], dtype=float)
+        )
         dataset["rewards"].append(np.asarray(episode_record["rewards"], dtype=float))
         dataset["terminated"].append(np.asarray(episode_record["terminated"], dtype=bool))
         dataset["truncated"].append(np.asarray(episode_record["truncated"], dtype=bool))
@@ -495,6 +538,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         "scenario_coverage": coverage,
         "dataset_schema": "trajectory_dataset.v2.decision_transformer_preflight",
         "trajectory_fields": sorted(arrays.keys()),
+        "route_progress_provenance": {
+            "schema_version": "remaining_route_length.v1",
+            "alignment": "one_value_per_observation",
+            "derived_signal": "remaining_before_minus_after",
+            "semantics": "remaining_route_length_meters",
+            "units": "m",
+            "source": "recorded_route_remaining_length",
+            "measurement": "active_robot_route_navigator_polyline",
+        },
         "splits": split_metadata,
         "reward_convention": DECISION_TRANSFORMER_REWARD_CONVENTION,
         "return_convention": DECISION_TRANSFORMER_RETURN_CONVENTION,

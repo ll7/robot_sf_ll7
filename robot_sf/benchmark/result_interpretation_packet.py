@@ -989,6 +989,15 @@ def _validate_artifact_catalog_binding(figure: FigureLink, errors: list[str]) ->
             )
         if output.sha256 != figure.sha256:
             errors.append(f"figure {figure.figure_id!r}: sha256 does not match the catalog output")
+        tracked_figure_digest = _git_file_sha256(catalog_ref.commit, figure.path)
+        if tracked_figure_digest is None:
+            errors.append(
+                f"figure {figure.figure_id!r}: catalog commit does not contain the figure bytes"
+            )
+        elif tracked_figure_digest != figure.sha256:
+            errors.append(
+                f"figure {figure.figure_id!r}: catalog commit figure bytes do not match the digest"
+            )
     if entry.caption_file is None:
         errors.append(f"figure {figure.figure_id!r}: catalog entry has no caption_file")
     elif figure.caption_file is None:
@@ -1003,6 +1012,15 @@ def _validate_artifact_catalog_binding(figure: FigureLink, errors: list[str]) ->
         if entry.caption_file.sha256 != figure.caption_file.sha256:
             errors.append(
                 f"figure {figure.figure_id!r}: caption_file sha256 does not match the catalog"
+            )
+        tracked_caption_digest = _git_file_sha256(catalog_ref.commit, figure.caption_file.path)
+        if tracked_caption_digest is None:
+            errors.append(
+                f"figure {figure.figure_id!r}: catalog commit does not contain the caption bytes"
+            )
+        elif tracked_caption_digest != figure.caption_file.sha256:
+            errors.append(
+                f"figure {figure.figure_id!r}: catalog commit caption bytes do not match the digest"
             )
     if not _COMMIT_RE.match(entry.generation_commit) or not _git_commit_exists(
         entry.generation_commit

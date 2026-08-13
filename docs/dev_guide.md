@@ -827,6 +827,47 @@ The watcher never writes `state:ready`; human review remains required before a
 blocked issue becomes dispatchable. The path/external/in-repository tiers need
 separately reviewed adapters and are not inferred from issue prose.
 
+Issue #7074 adds opt-in `blocked-triage-v1` adapter mappings. The mapping is
+the executable contract; prose in `unblock_condition` and `watcher` remains
+descriptive only. All adapters require `version: 1`, reject unknown fields,
+and produce `fired`, `not-fired`, `unevaluatable`, or `error` with proof
+provenance. A malformed mapping is `unevaluatable`, and an adapter/API failure
+is `error`, so `--apply` will not route either case.
+
+Supported mappings are deliberately small and bounded:
+
+```yaml
+adapter:
+  version: 1
+  kind: path_presence
+  name: path_exists
+  path: configs/benchmark/risk_layer_ablation.yaml
+  path_type: file
+```
+
+```yaml
+adapter:
+  version: 1
+  kind: external_probe
+  name: github_graphql_quota
+  minimum_remaining: 100
+```
+
+```yaml
+adapter:
+  version: 1
+  kind: repo_predicate
+  name: text_present
+  path: robot_sf/adversarial
+  text: adversarial_independent_outcomes
+```
+
+Path checks stay below the repository root. Repository predicates may only
+scan `configs/`, `docs/`, `robot_sf/`, `scripts/`, or `tests/`, and are limited
+to 256 files and 8 MiB. The external probe is a fixed GitHub CLI quota lookup;
+arbitrary shell commands, URLs, credentials, issue prose, and `state:ready`
+writes are not supported.
+
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`

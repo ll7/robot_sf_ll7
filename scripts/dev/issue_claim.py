@@ -25,7 +25,10 @@ ISSUE_COVERAGE_REFERENCE = re.compile(
     r"(?i)\b(?P<verb>refs?|references?|close(?:s|d)?|fix(?:es|ed)?|"
     r"resolve(?:s|d)?|implement(?:s|ed)?)\s*:?[ \t]*`?#(?P<issue>\d+)\b`?"
 )
+CLAIM_REF_RE = re.compile(r"^refs/heads/agent-claims/issue-(?P<issue>[1-9][0-9]*)$")
 TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned"})
+RECONCILIATION_LIMIT = 100
+PR_SNAPSHOT_LIMIT = 500
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,45 @@ def build_open_pr_command(*, repo: str) -> list[str]:
     ]
 
 
+def build_claim_snapshot_command(*, remote: str) -> list[str]:
+    """Build the bounded read-only query for all issue-claim refs."""
+    return [
+        "git",
+        "ls-remote",
+        "--heads",
+        remote,
+        f"refs/heads/{CLAIM_PREFIX}/issue-*",
+    ]
+
+
+def build_issue_state_command(issue_number: int, *, repo: str) -> list[str]:
+    """Build the read-only REST query for one issue's lifecycle state."""
+    return [
+        "gh",
+        "api",
+        f"repos/{repo}/issues/{issue_number}",
+        "--jq",
+        "{number: .number, state: .state, title: .title, url: .html_url}",
+    ]
+
+
+def build_all_pr_command(*, repo: str) -> list[str]:
+    """Build the bounded PR snapshot used by claim reconciliation."""
+    return [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        repo,
+        "--state",
+        "all",
+        "--limit",
+        str(PR_SNAPSHOT_LIMIT),
+        "--json",
+        "number,body,title,state",
+    ]
+
+
 def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
     """Validate one open-PR row before using it for claim-release safety."""
     if not isinstance(row, dict):
@@ -146,30 +188,449 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
         return {
             "ok": False,
             "covering_prs": [],
+            "truncated": False,
             "error": (result.stderr or result.stdout).strip(),
         }
     raw_payload = result.stdout.strip()
     if not raw_payload:
-        return {"ok": False, "covering_prs": [], "error": "open PR response is empty"}
+        return {
+            "ok": False,
+            "covering_prs": [],
+            "truncated": False,
+            "error": "open PR response is empty",
+        }
     try:
         payload = json.loads(raw_payload)
     except json.JSONDecodeError as exc:
-        return {"ok": False, "covering_prs": [], "error": str(exc)}
+        return {"ok": False, "covering_prs": [], "truncated": False, "error": str(exc)}
     if not isinstance(payload, list):
-        return {"ok": False, "covering_prs": [], "error": "open PR response is not a list"}
+        return {
+            "ok": False,
+            "covering_prs": [],
+            "truncated": False,
+            "error": "open PR response is not a list",
+        }
     target = int(issue_number)
     covering: set[int] = set()
     for index, row in enumerate(payload):
         validated = _validate_open_pr_row(row, index=index)
         if not validated["ok"]:
-            return {"ok": False, "covering_prs": [], "error": validated["error"]}
+            return {
+                "ok": False,
+                "covering_prs": [],
+                "truncated": False,
+                "error": validated["error"],
+            }
         number = validated["number"]
         text = f"{validated['body']} {validated['title']}"
         if any(
             int(match.group("issue")) == target for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
         ):
             covering.add(number)
-    return {"ok": True, "covering_prs": sorted(covering), "error": None}
+    return {
+        "ok": True,
+        "covering_prs": sorted(covering),
+        "truncated": len(payload) >= PR_SNAPSHOT_LIMIT,
+        "error": None,
+    }
+
+
+def _parse_claim_snapshot(
+    result: CommandResult, *, issue_number: int | None, limit: int
+) -> dict[str, Any]:
+    """Parse a bounded claim-ref listing without treating malformed refs as absent."""
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "claims": [],
+            "truncated": False,
+            "error": (result.stderr or result.stdout).strip() or "claim ref snapshot failed",
+        }
+
+    claims: list[dict[str, Any]] = []
+    malformed: list[str] = []
+    prefix = f"refs/heads/{CLAIM_PREFIX}/issue-"
+    for raw_line in result.stdout.splitlines():
+        parts = raw_line.split()
+        if not parts:
+            continue
+        if len(parts) < 2 or not parts[1].startswith(prefix):
+            malformed.append(raw_line)
+            continue
+        match = CLAIM_REF_RE.fullmatch(parts[1])
+        if match is None:
+            malformed.append(parts[1])
+            continue
+        candidate_issue = int(match.group("issue"))
+        if issue_number is not None and candidate_issue != issue_number:
+            continue
+        claims.append(
+            {
+                "issue": candidate_issue,
+                "claim_ref": parts[1].removeprefix("refs/heads/"),
+                "sha": parts[0],
+            }
+        )
+
+    claims.sort(key=lambda row: (row["issue"], row["claim_ref"]))
+    truncated = len(claims) > limit
+    if truncated:
+        claims = claims[:limit]
+    if malformed:
+        return {
+            "ok": False,
+            "claims": claims,
+            "truncated": truncated,
+            "error": f"malformed claim ref row(s): {', '.join(malformed[:3])}",
+        }
+    return {
+        "ok": True,
+        "claims": claims,
+        "truncated": truncated,
+        "error": None,
+    }
+
+
+def _issue_state_from_result(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
+    """Parse one issue state and reject missing or contradictory lifecycle fields."""
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "state": None,
+            "title": "",
+            "url": "",
+            "error": (result.stderr or result.stdout).strip() or "issue state lookup failed",
+        }
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {"ok": False, "state": None, "title": "", "url": "", "error": str(exc)}
+    if not isinstance(payload, dict):
+        return {
+            "ok": False,
+            "state": None,
+            "title": "",
+            "url": "",
+            "error": "issue state response is not an object",
+        }
+    if payload.get("number") != issue_number:
+        return {
+            "ok": False,
+            "state": None,
+            "title": "",
+            "url": "",
+            "error": "issue state response number does not match claim",
+        }
+    state = payload.get("state")
+    title = payload.get("title")
+    url = payload.get("url")
+    if not isinstance(state, str) or state.upper() not in {"OPEN", "CLOSED"}:
+        return {
+            "ok": False,
+            "state": None,
+            "title": title if isinstance(title, str) else "",
+            "url": url if isinstance(url, str) else "",
+            "error": "issue state is missing or unknown",
+        }
+    if not isinstance(title, str) or not isinstance(url, str):
+        return {
+            "ok": False,
+            "state": None,
+            "title": "",
+            "url": "",
+            "error": "issue state response is missing title or URL",
+        }
+    return {"ok": True, "state": state.upper(), "title": title, "url": url, "error": None}
+
+
+def _validate_pr_snapshot_row(row: Any, *, index: int) -> dict[str, Any]:
+    """Validate a PR row before using it as claim-coverage evidence."""
+    if not isinstance(row, dict):
+        return {"ok": False, "error": f"PR row {index} is not an object"}
+    number = row.get("number")
+    body = row.get("body")
+    title = row.get("title")
+    state = row.get("state")
+    if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
+        return {"ok": False, "error": f"PR row {index} has an invalid number"}
+    if not isinstance(body, str) or not isinstance(title, str):
+        return {"ok": False, "error": f"PR row {index} has an invalid body or title"}
+    if not isinstance(state, str) or state.upper() not in {"OPEN", "CLOSED", "MERGED"}:
+        return {"ok": False, "error": f"PR row {index} has an invalid state"}
+    return {"ok": True, "number": number, "body": body, "title": title, "state": state.upper()}
+
+
+def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
+    """Return open and terminal PRs that explicitly reference an issue."""
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "open_prs": [],
+            "terminal_prs": [],
+            "truncated": False,
+            "error": (result.stderr or result.stdout).strip() or "PR snapshot failed",
+        }
+    raw_payload = result.stdout.strip()
+    if not raw_payload:
+        return {
+            "ok": False,
+            "open_prs": [],
+            "terminal_prs": [],
+            "truncated": False,
+            "error": "PR snapshot is empty",
+        }
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError as exc:
+        return {
+            "ok": False,
+            "open_prs": [],
+            "terminal_prs": [],
+            "truncated": False,
+            "error": str(exc),
+        }
+    if not isinstance(payload, list):
+        return {
+            "ok": False,
+            "open_prs": [],
+            "terminal_prs": [],
+            "truncated": False,
+            "error": "PR snapshot is not a list",
+        }
+
+    open_prs: list[int] = []
+    terminal_prs: list[int] = []
+    for index, row in enumerate(payload):
+        validated = _validate_pr_snapshot_row(row, index=index)
+        if not validated["ok"]:
+            return {
+                "ok": False,
+                "open_prs": [],
+                "terminal_prs": [],
+                "truncated": False,
+                "error": validated["error"],
+            }
+        text = f"{validated['body']} {validated['title']}"
+        if not any(
+            int(match.group("issue")) == issue_number
+            for match in ISSUE_COVERAGE_REFERENCE.finditer(text)
+        ):
+            continue
+        if validated["state"] == "OPEN":
+            open_prs.append(validated["number"])
+        else:
+            terminal_prs.append(validated["number"])
+    return {
+        "ok": True,
+        "open_prs": sorted(set(open_prs)),
+        "terminal_prs": sorted(set(terminal_prs)),
+        "truncated": len(payload) >= PR_SNAPSHOT_LIMIT,
+        "error": None,
+    }
+
+
+def _classify_reconciliation_row(
+    claim: dict[str, Any], *, issue: dict[str, Any], prs: dict[str, Any]
+) -> dict[str, Any]:
+    """Classify one claim conservatively for a report or an explicit cleanup pass."""
+    row = {
+        **claim,
+        "issue_state": issue.get("state"),
+        "issue_title": issue.get("title", ""),
+        "issue_url": issue.get("url", ""),
+        "covering_prs": [],
+        "terminal_covering_prs": [],
+        "safe_to_release": False,
+        "classification": "state_unknown",
+        "reason": "issue state unavailable or contradictory; retain the claim",
+    }
+    if not issue.get("ok"):
+        row["reason"] = f"{issue.get('error', 'issue state unavailable')}; retain the claim"
+        return row
+    if not prs.get("open_ok", prs.get("ok", False)) or prs.get("open_truncated"):
+        row["classification"] = "coverage_unknown"
+        row["reason"] = "covering-PR snapshot unavailable or truncated; retain the claim"
+        return row
+
+    open_prs = list(prs.get("open_prs", []))
+    terminal_prs = list(prs.get("terminal_prs", []))
+    row["covering_prs"] = open_prs
+    row["terminal_covering_prs"] = terminal_prs
+    if open_prs:
+        row["classification"] = "active_open_pr"
+        row["reason"] = "an open covering PR exists; retain the claim"
+    elif issue["state"] == "CLOSED":
+        row["classification"] = "stale_closed_issue"
+        row["safe_to_release"] = True
+        row["reason"] = "issue is closed and no open covering PR exists"
+    elif not prs.get("terminal_ok", prs.get("ok", False)) or prs.get("terminal_truncated"):
+        row["classification"] = "coverage_unknown"
+        row["reason"] = "terminal covering-PR snapshot unavailable or truncated; retain the claim"
+    elif terminal_prs:
+        row["classification"] = "stale_terminal_coverage"
+        row["safe_to_release"] = True
+        row["reason"] = "only terminal covering PRs remain and no open covering PR exists"
+    else:
+        row["classification"] = "active_issue_no_open_pr"
+        row["reason"] = "issue remains open without terminal coverage; retain the claim"
+    return row
+
+
+def _release_reconciled_claim(
+    row: dict[str, Any], *, remote: str, repo: str, reason: str
+) -> dict[str, Any]:
+    """Re-read state and coverage, then compare-and-delete one stale claim."""
+    issue_number = row["issue"]
+    status = status_issue(issue_number, remote=remote)
+    if not status.get("ok") or not status.get("claimed"):
+        return {
+            "ok": False,
+            "issue": issue_number,
+            "error": "claim state changed or became unavailable; retain the claim",
+        }
+    if status.get("sha") != row.get("sha"):
+        return {
+            "ok": False,
+            "issue": issue_number,
+            "error": "claim SHA changed during reconciliation; retain the claim",
+        }
+
+    issue = _issue_state_from_result(
+        _run(build_issue_state_command(issue_number, repo=repo)), issue_number=issue_number
+    )
+    open_prs = _open_prs_covering_issue(
+        _run(build_open_pr_command(repo=repo)), issue_number=issue_number
+    )
+    terminal_prs = _all_prs_covering_issue(
+        _run(build_all_pr_command(repo=repo)), issue_number=issue_number
+    )
+    prs = {
+        "open_ok": open_prs.get("ok", False),
+        "open_truncated": open_prs.get("truncated", False),
+        "open_prs": open_prs.get("covering_prs", []),
+        "terminal_ok": terminal_prs.get("ok", False),
+        "terminal_truncated": terminal_prs.get("truncated", False),
+        "terminal_prs": terminal_prs.get("terminal_prs", []),
+    }
+    fresh = _classify_reconciliation_row(row, issue=issue, prs=prs)
+    if not fresh["safe_to_release"]:
+        return {
+            "ok": False,
+            "issue": issue_number,
+            "error": fresh["reason"],
+        }
+
+    result = _run(build_release_command(issue_number, remote=remote, expected_sha=status["sha"]))
+    return {
+        "ok": result.returncode == 0,
+        "issue": issue_number,
+        "claim_ref": row["claim_ref"],
+        "expected_sha": status["sha"],
+        "reason": reason,
+        "command": list(result.command),
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+        "error": None if result.returncode == 0 else "compare-and-delete failed; inspect the ref",
+    }
+
+
+def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed branches.
+    *,
+    remote: str,
+    repo: str,
+    issue_number: int | None = None,
+    limit: int = RECONCILIATION_LIMIT,
+    release_stale: bool = False,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Report stale claim candidates and optionally release only revalidated rows."""
+    if limit <= 0:
+        return {
+            "schema": "issue_claim_reconciliation.v1",
+            "action": "reconcile",
+            "ok": False,
+            "read_only": not release_stale,
+            "claims": [],
+            "candidate_count": 0,
+            "errors": ["limit must be positive"],
+        }
+    if release_stale and reason not in TERMINAL_RELEASE_REASONS:
+        return {
+            "schema": "issue_claim_reconciliation.v1",
+            "action": "reconcile",
+            "ok": False,
+            "read_only": False,
+            "claims": [],
+            "candidate_count": 0,
+            "errors": ["--release-stale requires an explicit terminal --reason"],
+        }
+
+    snapshot = _parse_claim_snapshot(
+        _run(build_claim_snapshot_command(remote=remote)),
+        issue_number=issue_number,
+        limit=limit,
+    )
+    errors = [snapshot["error"]] if snapshot.get("error") else []
+    if snapshot.get("truncated"):
+        errors.append("claim ref snapshot truncated; retain claims outside the bounded report")
+    claims = snapshot.get("claims", [])
+    rows: list[dict[str, Any]] = []
+    if snapshot.get("ok") and claims:
+        open_pr_snapshot = _run(build_open_pr_command(repo=repo))
+        all_pr_snapshot = _run(build_all_pr_command(repo=repo))
+
+        for claim in claims:
+            issue_result = _run(build_issue_state_command(claim["issue"], repo=repo))
+            issue = _issue_state_from_result(issue_result, issue_number=claim["issue"])
+            open_prs = _open_prs_covering_issue(open_pr_snapshot, issue_number=claim["issue"])
+            terminal_prs = _all_prs_covering_issue(all_pr_snapshot, issue_number=claim["issue"])
+            prs = {
+                "open_ok": open_prs.get("ok", False),
+                "open_truncated": open_prs.get("truncated", False),
+                "open_prs": open_prs.get("covering_prs", []),
+                "terminal_ok": terminal_prs.get("ok", False),
+                "terminal_truncated": terminal_prs.get("truncated", False),
+                "terminal_prs": terminal_prs.get("terminal_prs", []),
+            }
+            row = _classify_reconciliation_row(claim, issue=issue, prs=prs)
+            rows.append(row)
+            if not issue.get("ok"):
+                errors.append(f"issue {claim['issue']}: {issue.get('error', 'state unavailable')}")
+            if row["classification"] == "coverage_unknown":
+                errors.append(f"issue {claim['issue']}: {row['reason']}")
+    elif not snapshot.get("ok"):
+        rows = [
+            {
+                **claim,
+                "classification": "claim_snapshot_unknown",
+                "safe_to_release": False,
+                "reason": "claim snapshot unavailable or malformed; retain the claim",
+            }
+            for claim in claims
+        ]
+
+    releases: list[dict[str, Any]] = []
+    if release_stale and not errors:
+        for row in rows:
+            if row.get("safe_to_release"):
+                releases.append(
+                    _release_reconciled_claim(row, remote=remote, repo=repo, reason=reason or "")
+                )
+
+    return {
+        "schema": "issue_claim_reconciliation.v1",
+        "action": "reconcile",
+        "ok": not errors and all(release.get("ok", False) for release in releases),
+        "read_only": not release_stale,
+        "remote": remote,
+        "repo": repo,
+        "limit": limit,
+        "truncated": bool(snapshot.get("truncated")),
+        "claims": rows,
+        "candidate_count": sum(1 for row in rows if row.get("safe_to_release")),
+        "releases": releases,
+        "errors": errors,
+    }
 
 
 def _status_from_ls_remote(
@@ -423,8 +884,8 @@ def release_issue(
 def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("acquire", "status", "release"))
-    parser.add_argument("issue", type=validate_issue_number)
+    parser.add_argument("action", choices=("acquire", "status", "release", "reconcile"))
+    parser.add_argument("issue", type=validate_issue_number, nargs="?")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repository as OWNER/REPO.")
     parser.add_argument("--remote", default=DEFAULT_REMOTE, help="Git remote to use for the claim.")
     parser.add_argument(
@@ -437,6 +898,17 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=sorted(TERMINAL_RELEASE_REASONS),
         help="Terminal lifecycle reason required when releasing a claimed ref.",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=RECONCILIATION_LIMIT,
+        help="Maximum claim refs to inspect during reconciliation.",
+    )
+    parser.add_argument(
+        "--release-stale",
+        action="store_true",
+        help="Revalidate and compare-and-delete stale candidates; never delete blindly.",
+    )
     return parser
 
 
@@ -448,7 +920,18 @@ def _dump_json(payload: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
-    if args.action == "status":
+    if args.action == "reconcile":
+        payload = reconcile_claims(
+            remote=args.remote,
+            repo=args.repo,
+            issue_number=args.issue,
+            limit=args.limit,
+            release_stale=args.release_stale,
+            reason=args.reason,
+        )
+    elif args.issue is None:
+        _build_parser().error(f"{args.action} requires an issue number")
+    elif args.action == "status":
         payload = status_issue(args.issue, remote=args.remote)
     elif args.action == "acquire":
         payload = acquire_issue(

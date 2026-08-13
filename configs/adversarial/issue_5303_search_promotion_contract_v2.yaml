@@ -122,7 +122,9 @@ input_provenance:
       sha256: 075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8
     - id: objective_registry
       path: robot_sf/adversarial/objectives.py
-      sha256: 7c5bbdb5d19c548fcf492306efc6c89d712b28047866cb51787cdeab1a05125c
+      # Refreshed after the additive issue-4360 open-loop objective; the frozen
+      # #5303 objective definition and diagnostic binding remain unchanged.
+      sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8
     - id: execution_runner
       path: scripts/tools/compare_adversarial_samplers.py
       sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828
@@ -158,7 +160,8 @@ input_provenance:
       sha256: 1f88149400e81284d37615814fe2e9b03a768cce7214e02ba7a210e1bb53b8db
     - id: historical_contract
       path: configs/adversarial/issue_5303_search_promotion_contract.yaml
-      sha256: 9b47d4e4e863f2accbbf348baaa60456eb73ba8b2ab39a8f4b4f746bbe8ab400
+      # Tracks the v1 manifest refresh for the same additive objective change.
+      sha256: 771d67c2d3eb446f8cb8e6cf83c27c2151648ed97ec521fc6b5296878f3339ab
     - id: historical_search_space
       path: configs/adversarial/issue_5303_search_promotion_space.yaml
       sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106

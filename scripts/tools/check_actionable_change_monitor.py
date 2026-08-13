@@ -21,7 +21,7 @@ DEFAULT_ISSUE = 6819
 DEFAULT_LIMIT = 500
 PAGE_SIZE = 100
 STALE_DRAFT_HOURS = 72
-SCHEMA_VERSION = "robot_sf.actionable_change_monitor.v1"
+SCHEMA_VERSION = "robot_sf.actionable_change_monitor.v2"
 FINGERPRINT_RE = re.compile(r"<!--\s*actionable-change-monitor:fingerprint:([0-9a-f]{64})\s*-->")
 RESEARCH_LABELS = frozenset(
     {
@@ -276,16 +276,6 @@ def _surface_findings(issue: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
-    if _has_watch_label(labels) or any(term in body for term in WATCH_TERMS):
-        watched_labels = ", ".join(labels) or "keyword-only"
-        findings.append(
-            _finding(
-                finding_id=f"issue:{issue['number']}:watched-surface",
-                kind="watched_research_surface",
-                target=issue,
-                detail=f"labels/terms={watched_labels}; updated={issue.get('updated_at', 'unknown')}",
-            )
-        )
     return findings
 
 
@@ -304,17 +294,6 @@ def build_findings(
     for pr in pull_requests:
         if not _is_research_surface(pr):
             continue
-        findings.append(
-            _finding(
-                finding_id=f"pr:{pr['number']}:research-activity",
-                kind="research_pr_activity",
-                target=pr,
-                detail=(
-                    f"updated={pr.get('updated_at', 'unknown')}; head={pr.get('head', {}).get('sha', 'unknown')}; "
-                    f"draft={bool(pr.get('draft'))}; labels={', '.join(_labels(pr)) or 'none'}"
-                ),
-            )
-        )
         if pr.get("draft") and _parse_timestamp(pr.get("updated_at")) < stale_before:
             findings.append(
                 _finding(
@@ -338,6 +317,56 @@ def build_findings(
         if number != target_issue and _is_research_surface(issue):
             findings.extend(_surface_findings(issue))
     return sorted(findings, key=lambda row: (row["kind"], row["number"], row["id"]))
+
+
+def build_inventory(
+    pull_requests: list[dict[str, Any]],
+    issues: list[dict[str, Any]],
+    *,
+    target_issue: int = DEFAULT_ISSUE,
+) -> list[dict[str, Any]]:
+    """Build stable watch inventory without presenting it as an actionable finding."""
+    inventory: list[dict[str, Any]] = []
+    for pr in pull_requests:
+        if _is_research_surface(pr):
+            inventory.append(
+                _finding(
+                    finding_id=f"pr:{pr['number']}:research-activity",
+                    kind="research_pr_activity",
+                    target=pr,
+                    detail=(
+                        f"updated={pr.get('updated_at', 'unknown')}; head={pr.get('head', {}).get('sha', 'unknown')}; "
+                        f"draft={bool(pr.get('draft'))}; labels={', '.join(_labels(pr)) or 'none'}"
+                    ),
+                )
+            )
+
+    for issue in issues:
+        number = int(issue["number"])
+        if number == target_issue or not _is_research_surface(issue):
+            continue
+        labels = _labels(issue)
+        body = str(issue.get("body") or "").casefold()
+        if _has_watch_label(labels) or any(term in body for term in WATCH_TERMS):
+            watched_labels = ", ".join(labels) or "keyword-only"
+            inventory.append(
+                _finding(
+                    finding_id=f"issue:{number}:watched-surface",
+                    kind="watched_research_surface",
+                    target=issue,
+                    detail=f"labels/terms={watched_labels}; updated={issue.get('updated_at', 'unknown')}",
+                )
+            )
+    return sorted(inventory, key=lambda row: (row["kind"], row["number"], row["id"]))
+
+
+def summarize_inventory(inventory: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return deterministic counts for stable inventory rows."""
+    by_kind: dict[str, int] = {}
+    for row in inventory:
+        kind = str(row.get("kind", "unknown"))
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+    return {"total": len(inventory), "by_kind": dict(sorted(by_kind.items()))}
 
 
 def _parse_timestamp(value: Any) -> datetime:
@@ -381,6 +410,24 @@ def compute_fingerprint(findings: list[dict[str, Any]]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+def compute_report_fingerprint(findings: list[dict[str, Any]], inventory: dict[str, Any]) -> str:
+    """Return a stable fingerprint for actionable findings plus compact inventory counts."""
+    payload = {
+        "findings": sorted(
+            findings,
+            key=lambda row: (
+                str(row.get("kind", "")),
+                int(row.get("number", 0)),
+                str(row.get("id", "")),
+                _canonical_json(row),
+            ),
+        ),
+        "inventory": inventory,
+    }
+    canonical = _canonical_json(payload).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
 def extract_previous_fingerprint(body: str) -> str | None:
     """Read the monitor fingerprint marker from the dedicated issue body."""
     match = FINGERPRINT_RE.search(body)
@@ -392,8 +439,10 @@ def render_issue_body(
     *,
     fingerprint: str,
     scanned_at: datetime,
+    inventory: dict[str, Any] | None = None,
 ) -> str:
     """Render the latest alert report and preserve the monitor's safety contract."""
+    inventory = inventory or {"total": 0, "by_kind": {}}
     lines = [
         "# RobotSF actionable-change monitor",
         "",
@@ -403,13 +452,19 @@ def render_issue_body(
         "",
         f"Scanned at: `{scanned_at.astimezone(UTC).isoformat()}`",
         f"Finding count: `{len(findings)}`",
+        f"Stable inventory count: `{inventory.get('total', 0)}`",
         "",
         f"<!-- actionable-change-monitor:fingerprint:{fingerprint} -->",
         "",
     ]
     if not findings:
         lines.extend(
-            ["## No actionable changes", "", "The monitored snapshot is unchanged and clear.", ""]
+            [
+                "## No actionable changes",
+                "",
+                "No actionable contradictions or failures were found; stable watch inventory is summarized below.",
+                "",
+            ]
         )
     else:
         lines.extend(["## Findings", "", "| Kind | Target | Detail |", "| --- | --- | --- |"])
@@ -422,6 +477,20 @@ def render_issue_body(
             lines.append(
                 f"| `{_compact(finding['kind'])}` | {target} {_compact(finding['title'])} | {_compact(finding['detail'])} |"
             )
+        lines.append("")
+    inventory_by_kind = inventory.get("by_kind", {})
+    if inventory_by_kind:
+        lines.extend(
+            [
+                "## Stable watch inventory",
+                "",
+                "Stable watched surfaces are summarized here and are not emitted as one actionable row per issue.",
+                "",
+                "| Kind | Count |",
+                "| --- | ---: |",
+            ]
+        )
+        lines.extend(f"| `{kind}` | {count} |" for kind, count in inventory_by_kind.items())
         lines.append("")
     lines.extend(
         [
@@ -839,11 +908,14 @@ def run_monitor(
         target_issue=issue_number,
         statuses_by_pr=statuses,
     )
-    fingerprint = compute_fingerprint(findings)
+    inventory = summarize_inventory(
+        build_inventory(pull_requests, issues, target_issue=issue_number)
+    )
+    fingerprint = compute_report_fingerprint(findings, inventory)
     target = _read_target_issue(repo, issue_number)
     target_body = target.get("body")
     previous = extract_previous_fingerprint(str(target_body or ""))
-    if not findings:
+    if not findings and not inventory["total"]:
         return {
             "schema_version": SCHEMA_VERSION,
             "repo": repo,
@@ -853,13 +925,20 @@ def run_monitor(
             "changed": False,
             "write_performed": False,
             "finding_count": 0,
+            "inventory_count": 0,
+            "inventory_by_kind": {},
         }
     changed = previous != fingerprint
     if changed and not dry_run:
         _update_target_issue(
             repo,
             issue_number,
-            render_issue_body(findings, fingerprint=fingerprint, scanned_at=scanned_at),
+            render_issue_body(
+                findings,
+                fingerprint=fingerprint,
+                scanned_at=scanned_at,
+                inventory=inventory,
+            ),
             expected_previous=previous,
             expected_body=target_body,
         )
@@ -872,6 +951,8 @@ def run_monitor(
         "changed": changed,
         "write_performed": changed and not dry_run,
         "finding_count": len(findings),
+        "inventory_count": inventory["total"],
+        "inventory_by_kind": inventory["by_kind"],
     }
 
 

@@ -125,6 +125,15 @@ Rules:
 - When a Project #5 write is blocked by GraphQL exhaustion, finish the REST issue/body/label work,
   report the exact pending project mutation, and resume the project write after reset.
 
+### Actionable-change monitor output
+
+The actionable-change monitor uses schema `robot_sf.actionable_change_monitor.v2`. Its
+`finding_count` and fingerprint cover actionable contradictions, failed checks, missing evidence
+propagation, and related owner-facing findings. Stable `research_pr_activity` and
+`watched_research_surface` rows are reported as bounded `inventory_count` and `inventory_by_kind`
+summary fields instead of one alert row per watched surface. A consumer that needs the former v1
+row-level inventory must use the monitor's source snapshot or an explicitly versioned adapter.
+
 ## Multi-Agent Coordination
 
 Avoid running several agents that independently poll GitHub with the same token. For broad issue or

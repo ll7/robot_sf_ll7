@@ -65,11 +65,13 @@ def test_build_findings_covers_research_pr_checks_and_stale_drafts() -> None:
 
     kinds = {finding["kind"] for finding in findings}
     assert kinds == {
-        "research_pr_activity",
         "stale_research_draft",
         "check_pending",
         "check_failed",
     }
+
+    inventory = monitor.build_inventory([pull_request], [], target_issue=6819)
+    assert {finding["kind"] for finding in inventory} == {"research_pr_activity"}
 
 
 def test_duplicate_check_run_names_have_unique_ids_and_stable_fingerprint() -> None:
@@ -101,10 +103,11 @@ def test_build_findings_covers_legacy_commit_statuses() -> None:
     )
 
     assert {finding["kind"] for finding in findings} == {
-        "research_pr_activity",
         "check_pending",
         "check_failed",
     }
+    inventory = monitor.build_inventory([_pull_request(3)], [])
+    assert {finding["kind"] for finding in inventory} == {"research_pr_activity"}
 
 
 def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None:
@@ -150,7 +153,7 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
 def test_prefix_only_watch_labels_are_selected_as_research_surfaces(label: str) -> None:
     issue = _issue(14, body="ordinary maintenance", labels=_labels(label))
 
-    findings = monitor.build_findings([], [issue], {}, now=NOW)
+    findings = monitor.build_inventory([], [issue])
 
     assert {finding["kind"] for finding in findings} == {"watched_research_surface"}
 
@@ -170,7 +173,9 @@ def test_successful_checks_and_propagated_evidence_are_not_findings() -> None:
         statuses_by_pr={2: [{"context": "legacy-ci", "state": "success"}]},
     )
 
-    assert {finding["kind"] for finding in findings} == {
+    assert findings == []
+    inventory = monitor.build_inventory([pull_request], [issue])
+    assert {finding["kind"] for finding in inventory} == {
         "research_pr_activity",
         "watched_research_surface",
     }
@@ -179,14 +184,30 @@ def test_successful_checks_and_propagated_evidence_are_not_findings() -> None:
 def test_target_issue_is_excluded_and_fingerprint_is_order_independent() -> None:
     target = _issue(6819, title="Actionable-change monitor", body="benchmark alert")
     other = _issue(13)
-    findings = monitor.build_findings([], [target, other], {}, now=NOW, target_issue=6819)
-    assert {finding["number"] for finding in findings} == {13}
+    inventory = monitor.build_inventory([], [target, other], target_issue=6819)
+    assert {finding["number"] for finding in inventory} == {13}
 
-    reversed_findings = list(reversed(findings))
-    assert monitor.compute_fingerprint(findings) == monitor.compute_fingerprint(reversed_findings)
-    assert monitor.compute_fingerprint(findings) != monitor.compute_fingerprint(
-        [{**findings[0], "detail": "changed"}]
+    reversed_inventory = list(reversed(inventory))
+    assert monitor.compute_fingerprint(inventory) == monitor.compute_fingerprint(reversed_inventory)
+    assert monitor.compute_fingerprint(inventory) != monitor.compute_fingerprint(
+        [{**inventory[0], "detail": "changed"}]
     )
+
+
+def test_report_fingerprint_uses_compact_inventory_counts() -> None:
+    findings = [{"id": "issue:10:blocked", "kind": "blocked", "number": 10}]
+    inventory = {
+        "total": 103,
+        "by_kind": {"research_pr_activity": 5, "watched_research_surface": 98},
+    }
+
+    assert monitor.compute_report_fingerprint(
+        findings, inventory
+    ) == monitor.compute_report_fingerprint(list(reversed(findings)), dict(inventory))
+    changed = {"total": 104, "by_kind": {"research_pr_activity": 5, "watched_research_surface": 99}}
+    assert monitor.compute_report_fingerprint(
+        findings, inventory
+    ) != monitor.compute_report_fingerprint(findings, changed)
 
 
 def test_render_and_extract_fingerprint_marker() -> None:
@@ -206,6 +227,23 @@ def test_render_and_extract_fingerprint_marker() -> None:
     assert monitor.extract_previous_fingerprint(body) == fingerprint
     assert "A \\| title" in body
     assert "a \\| detail" in body
+
+
+def test_render_issue_body_summarizes_inventory_without_rows() -> None:
+    body = monitor.render_issue_body(
+        [],
+        fingerprint="a" * 64,
+        scanned_at=NOW,
+        inventory={
+            "total": 103,
+            "by_kind": {"research_pr_activity": 5, "watched_research_surface": 98},
+        },
+    )
+
+    assert "Finding count: `0`" in body
+    assert "Stable inventory count: `103`" in body
+    assert "| `watched_research_surface` | 98 |" in body
+    assert "issue:10:watched-surface" not in body
 
 
 def test_workflow_declares_read_permissions_for_both_check_state_apis() -> None:
@@ -492,6 +530,28 @@ def test_run_monitor_writes_only_when_fingerprint_changes(monkeypatch) -> None:
     assert second["changed"] is False
     assert second["write_performed"] is False
     assert len(writes) == 1
+
+
+def test_run_monitor_reports_v2_actionable_and_inventory_counts(monkeypatch) -> None:
+    pull_request = _pull_request(21)
+    snapshot = ([pull_request], [], {21: []}, {})
+    writes: list[tuple[object, ...]] = []
+    target = {"number": 6819, "state": "open", "body": ""}
+
+    monkeypatch.setattr(monitor, "_fetch_snapshot", lambda repo, limit: snapshot)
+    monkeypatch.setattr(monitor, "_read_target_issue", lambda repo, issue: target)
+    monkeypatch.setattr(
+        monitor,
+        "_update_target_issue",
+        lambda *args, **kwargs: writes.append(args),
+    )
+
+    result = monitor.run_monitor(repo="ll7/robot_sf_ll7", issue_number=6819, now=NOW)
+
+    assert result["schema_version"] == "robot_sf.actionable_change_monitor.v2"
+    assert result["finding_count"] == 0
+    assert result["inventory_count"] == 1
+    assert result["inventory_by_kind"] == {"research_pr_activity": 1}
 
 
 def test_run_monitor_refuses_stale_target_before_patching(monkeypatch) -> None:

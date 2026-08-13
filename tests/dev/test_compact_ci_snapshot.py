@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from scripts.dev import compact_ci_snapshot as snapshot
+
+
+def test_module_entrypoint_is_discoverable_from_repo_root() -> None:
+    """The documented package invocation must work without caller PYTHONPATH setup."""
+    repo_root = Path(__file__).parents[2]
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.dev.compact_ci_snapshot", "--help"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
+    skill_text = (repo_root / ".agents/skills/goal-autopilot/SKILL.md").read_text(encoding="utf-8")
+    assert "uv run python -m scripts.dev.compact_ci_snapshot" in skill_text
 
 
 def test_build_check_summary_exposes_bounded_job_name_sets() -> None:

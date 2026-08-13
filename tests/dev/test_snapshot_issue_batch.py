@@ -170,6 +170,40 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     claim.assert_called_once_with([2667, 2668], remote="origin")
 
 
+def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:
+    """Compute-gated issues must not look claimable, even when marked ready."""
+    issue_list = [
+        {
+            "number": 7009,
+            "title": "friction: exclude compute-routed issues from claimable snapshots",
+            "state": "OPEN",
+            "url": "https://github.test/issues/7009",
+            "labels": [
+                {"name": "routing:needs-compute"},
+                {"name": "state:ready"},
+            ],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {7009: _claim_status(7009)}
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=1,
+            )
+
+    issue = payload["issues"][0]
+    assert issue["classification"] == "needs_compute"
+    assert issue["reason"] == (
+        "compute or private execution authorization required; skip implementation dispatch"
+    )
+
+
 def test_snapshot_issues_fail_closed_for_closed_issue_state() -> None:
     """Explicit issue snapshots must not classify closed issues as claimable."""
     rest_issue = {

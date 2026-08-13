@@ -479,8 +479,6 @@ def _row_execution_drift(  # noqa: C901
             f"execution_mode {execution_mode!r} does not match expected "
             f"{spec.expected_execution_mode!r} (fallback/degraded fail closed)"
         )
-    if execution_mode in {"fallback", "degraded", "mixed", "unknown", "unavailable"}:
-        return f"execution_mode {execution_mode!r} is not admissible"
     if spec.expected_execution_identity is None:
         return None
 

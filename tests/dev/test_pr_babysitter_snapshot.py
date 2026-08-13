@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.pr_babysitter_snapshot import (
     _sanitize_payload_for_output,
     build_babysitter_snapshot,
@@ -12,6 +14,16 @@ from scripts.dev.pr_babysitter_snapshot import (
     load_retry_state,
     save_retry_state,
 )
+
+
+@pytest.fixture(autouse=True)
+def _mock_current_main_sha():
+    """Keep babysitter fixtures on a known authoritative main commit."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._fetch_current_main_sha",
+        return_value=("main-sha", ""),
+    ):
+        yield
 
 
 def _base_pr(**overrides):  # type: ignore[no-untyped-def]
@@ -39,6 +51,22 @@ def test_successful_mergeable_pr_routes_to_review_for_merge_ready() -> None:
 
     assert recommendation["action"] == "review_for_merge_ready"
     assert recommendation["mutation_guardrails"]["auto_merge"] is False
+
+
+def test_unavailable_base_stops_babysitter_before_merge_review() -> None:
+    """An unverifiable base must not become a merge-readiness recommendation."""
+    pr = _base_pr(
+        preflight={
+            "status": "blocked",
+            "reasons": ["base_freshness_unavailable"],
+            "base_freshness": {"status": "unavailable"},
+        }
+    )
+
+    recommendation = classify_pr_action(pr, retry_state={"prs": {}})
+
+    assert recommendation["action"] == "stop_user_help_required"
+    assert "base_freshness_unavailable" in recommendation["reasons"]
 
 
 def test_unresolved_review_thread_routes_to_comment_processing() -> None:
@@ -143,7 +171,7 @@ def test_sanitized_output_preserves_retry_budget_shape_without_raw_details() -> 
     payload = {
         "schema": "pr_babysitter_snapshot.v1",
         "repo": "ll7/robot_sf_ll7",
-        "source_schema": "pr_queue_snapshot.v1",
+        "source_schema": "pr_queue_snapshot.v2",
         "route_evidence_only": True,
         "prs": [
             {
@@ -218,6 +246,8 @@ def test_superseded_cancelled_run_recommends_wait_ci_not_diagnose() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc111",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {
@@ -277,6 +307,8 @@ def test_build_snapshot_wraps_compact_pr_queue_and_records_retry(tmp_path) -> No
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "def456",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "failure"}],
         "reviews": [],

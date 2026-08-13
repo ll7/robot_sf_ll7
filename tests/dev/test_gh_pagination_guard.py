@@ -22,6 +22,17 @@ from scripts.dev._gh_pagination import (
 )
 from scripts.dev.snapshot_pr_queue import snapshot_active_prs
 
+
+@pytest.fixture(autouse=True)
+def _mock_current_main_sha():
+    """Keep active-queue fixtures on a known authoritative main commit."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._fetch_current_main_sha",
+        return_value=("main-sha", ""),
+    ):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Shared helper
 # ---------------------------------------------------------------------------
@@ -99,6 +110,8 @@ def _pr_payloads(count: int) -> list[dict]:
             "labels": [],
             "headRefName": "feature",
             "headRefOid": f"abc{index:03d}",
+            "baseRefName": "main",
+            "baseRefOid": "main-sha",
             "mergeable": "MERGEABLE",
             "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
             "reviews": [],

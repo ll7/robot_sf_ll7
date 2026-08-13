@@ -30,7 +30,8 @@ COMMENT_BODY_LIMIT = 180
 REVIEW_THREAD_LIMIT = 12
 REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
-SCHEMA_VERSION = "pr_queue_snapshot.v1"
+BASE_FRESHNESS_STATUSES = ("fresh", "stale", "unavailable")
+SCHEMA_VERSION = "pr_queue_snapshot.v2"
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -139,6 +140,80 @@ def _repo_owner_name(repo: str) -> tuple[str, str]:
     return owner, name
 
 
+def _fetch_current_main_sha(repo: str) -> tuple[str, str]:
+    """Fetch the authoritative current ``main`` SHA without mutating state.
+
+    The returned reason is a bounded machine-readable code.  Avoid returning GitHub's raw error
+    text in queue snapshots because it is noisy and may contain incidental request details.
+    """
+    owner, name = _repo_owner_name(repo)
+    if not owner or not name:
+        return "", "repo_owner_missing"
+    result = _gh(["api", f"repos/{owner}/{name}/commits/main"], timeout=45)
+    if result.returncode != 0:
+        return "", "current_main_api_failed"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return "", "current_main_invalid_json"
+    sha = payload.get("sha") if isinstance(payload, dict) else None
+    if not isinstance(sha, str) or not sha:
+        return "", "current_main_sha_missing"
+    return sha, ""
+
+
+def _current_main_snapshot(current_main_sha: str, current_main_reason: str) -> dict[str, Any]:
+    """Return bounded current-main provenance for a queue snapshot."""
+    if current_main_sha:
+        return {"status": "available", "sha": current_main_sha}
+    return {
+        "status": "unavailable",
+        "sha": "",
+        "reason": current_main_reason or "current_main_sha_unavailable",
+    }
+
+
+def _base_freshness(
+    pr: dict[str, Any],
+    *,
+    current_main_sha: str,
+    current_main_reason: str,
+) -> dict[str, Any]:
+    """Compare a PR's base commit with the authoritative current ``main`` commit."""
+    base_ref = str(pr.get("baseRefName", "") or pr.get("base_ref", ""))
+    base_sha = str(pr.get("baseRefOid", "") or pr.get("base_sha", ""))
+    base_metadata_error = str(pr.get("base_metadata_error", "") or "")
+    result: dict[str, Any] = {
+        "status": "unavailable",
+        "base_ref": base_ref,
+        "base_sha": base_sha,
+        "current_main_sha": current_main_sha,
+    }
+    if base_metadata_error and not base_ref and not base_sha:
+        result["reason"] = base_metadata_error
+        return result
+    if not base_ref:
+        result["reason"] = "missing_pr_base_ref"
+        return result
+    if not base_sha:
+        result["reason"] = "missing_pr_base_sha"
+        return result
+    if not current_main_sha:
+        result["reason"] = current_main_reason or "current_main_sha_unavailable"
+        return result
+    if base_ref != "main":
+        result["status"] = "stale"
+        result["reason"] = "base_ref_not_main"
+        return result
+    if base_sha != current_main_sha:
+        result["status"] = "stale"
+        result["reason"] = "base_sha_mismatch"
+        return result
+    result["status"] = "fresh"
+    result["reason"] = "ok"
+    return result
+
+
 def _is_graphql_quota_error(message: str) -> bool:
     """Return whether a gh error message indicates GraphQL API rate-limit/quota exhaustion."""
     text = (message or "").lower()
@@ -166,7 +241,14 @@ def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:
         return None
 
 
-def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
+def _fetch_pr_rest(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    current_main_sha: str,
+    current_main_reason: str,
+) -> dict[str, Any]:
     """Build a compact PR snapshot from REST endpoints when GraphQL quota is exhausted.
 
     Maps REST pull/reviews/comments/check-runs payloads into the gh-JSON shape consumed by
@@ -184,6 +266,7 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
         }
     head = pull.get("head") or {}
     head_sha = str(head.get("sha", "") or "")
+    base = pull.get("base") or {}
     reviews_raw = _rest_api_get(f"pulls/{number}/reviews", repo=repo)
     reviews = [
         {
@@ -232,19 +315,67 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
         "url": str(pull.get("html_url", "") or ""),
         "headRefName": str(head.get("ref", "") or ""),
         "headRefOid": head_sha,
+        "baseRefName": str(base.get("ref", "") or ""),
+        "baseRefOid": str(base.get("sha", "") or ""),
         "mergeable": str(pull.get("mergeable_state", "unknown") or "unknown").upper(),
         "statusCheckRollup": rollup,
         "reviews": reviews,
         "comments": comments,
     }
     payload = _pr_payload_from_dict(
-        pr_dict, default_number=number, expected_head_sha=expected_head_sha
+        pr_dict,
+        default_number=number,
+        expected_head_sha=expected_head_sha,
+        current_main_sha=current_main_sha,
+        current_main_reason=current_main_reason,
     )
     payload["data_source"] = "rest_fallback_graphql_quota"
     payload["review_threads"] = "unknown_graphql_quota"
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
     return payload
+
+
+def _fetch_pr_base_metadata(number: int, *, repo: str) -> tuple[str, str, str]:
+    """Fetch PR base ref/SHA through the gh-compatible REST endpoint."""
+    pull = _rest_api_get(f"pulls/{number}", repo=repo)
+    if not isinstance(pull, dict):
+        return "", "", "pr_base_api_failed"
+    base = pull.get("base")
+    if not isinstance(base, dict):
+        return "", "", "missing_pr_base_metadata"
+    base_ref = str(base.get("ref", "") or "")
+    base_sha = str(base.get("sha", "") or "")
+    if not base_ref:
+        return "", base_sha, "missing_pr_base_ref"
+    if not base_sha:
+        return base_ref, "", "missing_pr_base_sha"
+    return base_ref, base_sha, ""
+
+
+def _ensure_pr_base_metadata(pr: dict[str, Any], *, number: int, repo: str) -> dict[str, Any]:
+    """Fill unsupported/missing gh base fields from the stable REST pull endpoint."""
+    base_ref = str(pr.get("baseRefName", "") or pr.get("base_ref", ""))
+    base_sha = str(pr.get("baseRefOid", "") or pr.get("base_sha", ""))
+    if base_ref and base_sha:
+        return pr
+    fetched_ref, fetched_sha, reason = _fetch_pr_base_metadata(number, repo=repo)
+    enriched = dict(pr)
+    if fetched_ref:
+        enriched["baseRefName"] = fetched_ref
+    if fetched_sha:
+        enriched["baseRefOid"] = fetched_sha
+    if reason:
+        enriched["base_metadata_error"] = reason
+    return enriched
+
+
+def _pr_number_for_rest(pr: dict[str, Any]) -> int:
+    """Return a safe integer PR number for compatibility lookups."""
+    try:
+        return int(pr.get("number", -1) or -1)
+    except (TypeError, ValueError):
+        return -1
 
 
 def _dict_or_empty(value: Any) -> dict[str, Any]:
@@ -431,6 +562,40 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _base_preflight(base_freshness: dict[str, Any]) -> tuple[str, str]:
+    """Map base-freshness evidence to a preflight status and optional reason."""
+    status = str(base_freshness.get("status", "unavailable"))
+    if status == "stale":
+        return "stale", "base_freshness_stale"
+    if status not in BASE_FRESHNESS_STATUSES or status == "unavailable":
+        return "blocked", "base_freshness_unavailable"
+    return "healthy", ""
+
+
+def _head_preflight(
+    *,
+    expected_head_sha: str,
+    head_sha: str,
+    preflight_status: str,
+) -> tuple[str, bool | None, list[str]]:
+    """Apply the optional expected-head guard to an existing preflight status."""
+    if not expected_head_sha:
+        return preflight_status, None, []
+    if not head_sha:
+        return (
+            "blocked" if preflight_status != "blocked" else preflight_status,
+            None,
+            ["missing_head_sha"],
+        )
+    if head_sha != expected_head_sha:
+        return (
+            "stale" if preflight_status != "blocked" else preflight_status,
+            False,
+            ["head_sha_mismatch"],
+        )
+    return preflight_status, True, []
+
+
 def _preflight(
     *,
     checks_overall: str,
@@ -438,6 +603,7 @@ def _preflight(
     head_sha: str,
     is_draft: bool,
     mergeable: str,
+    base_freshness: dict[str, Any],
 ) -> dict[str, Any]:
     """Return compact lane preflight status and reasons."""
     reasons: list[str] = []
@@ -445,16 +611,16 @@ def _preflight(
         reasons.append("pr_is_draft")
     head_sha_matches = None
     preflight_status = "healthy"
-    if expected_head_sha:
-        if not head_sha:
-            preflight_status = "blocked"
-            reasons.append("missing_head_sha")
-        elif head_sha != expected_head_sha:
-            preflight_status = "stale"
-            reasons.append("head_sha_mismatch")
-            head_sha_matches = False
-        else:
-            head_sha_matches = True
+    base_preflight_status, base_reason = _base_preflight(base_freshness)
+    if base_reason:
+        preflight_status = base_preflight_status
+        reasons.append(base_reason)
+    preflight_status, head_sha_matches, head_reasons = _head_preflight(
+        expected_head_sha=expected_head_sha,
+        head_sha=head_sha,
+        preflight_status=preflight_status,
+    )
+    reasons.extend(head_reasons)
     if checks_overall == "failure":
         preflight_status = "blocked"
         reasons.append("ci_checks_failed")
@@ -471,6 +637,7 @@ def _preflight(
         "head_sha_matches_expected": head_sha_matches,
         "checks_overall": checks_overall,
         "mergeable": mergeable,
+        "base_freshness": base_freshness,
         "route_evidence_only": True,
     }
 
@@ -481,8 +648,12 @@ def _next_action(
     """Return a compact next-action hint for the parent orchestrator."""
     status = str(preflight.get("status", "unknown"))
     if status == "stale":
+        if "base_freshness_stale" in preflight.get("reasons", []):
+            return "refresh_stale_base"
         return "invalidate_stale_lane"
     if status == "blocked":
+        if "base_freshness_unavailable" in preflight.get("reasons", []):
+            return "verify_base_freshness"
         return "inspect_blocking_preflight"
     if checks.get("overall") == "failure":
         return "inspect_failing_checks"
@@ -497,9 +668,9 @@ def _next_action(
 
 def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     """Return a compact attention category for queue triage."""
-    if next_action == "invalidate_stale_lane":
+    if next_action in {"invalidate_stale_lane", "refresh_stale_base"}:
         return "stale_attention"
-    if next_action == "inspect_blocking_preflight":
+    if next_action in {"inspect_blocking_preflight", "verify_base_freshness"}:
         return "preflight_attention"
     if is_draft:
         return "draft_ready_or_review"
@@ -613,6 +784,8 @@ def _pr_payload_from_dict(
     *,
     default_number: int,
     expected_head_sha: str,
+    current_main_sha: str = "",
+    current_main_reason: str = "",
 ) -> dict[str, Any]:
     """Build a compact PR snapshot from already-loaded fields."""
     is_draft = bool(pr.get("isDraft"))
@@ -620,12 +793,18 @@ def _pr_payload_from_dict(
     checks = _checks(pr)
     head_sha = str(pr.get("headRefOid", "") or pr.get("head_sha", ""))
     mergeable = str(pr.get("mergeable", "unknown"))
+    base_freshness = _base_freshness(
+        pr,
+        current_main_sha=current_main_sha,
+        current_main_reason=current_main_reason,
+    )
     preflight = _preflight(
         checks_overall=str(checks.get("overall", "")),
         expected_head_sha=expected_head_sha,
         head_sha=head_sha,
         is_draft=is_draft,
         mergeable=mergeable,
+        base_freshness=base_freshness,
     )
     reviews = _reviews(pr)
     gate_verdicts = _extract_gate_verdicts(pr)
@@ -643,6 +822,10 @@ def _pr_payload_from_dict(
         "labels": labels,
         "head_branch": pr.get("headRefName", ""),
         "head_sha": head_sha,
+        "base_ref": base_freshness["base_ref"],
+        "base_sha": base_freshness["base_sha"],
+        "main_sha": base_freshness["current_main_sha"],
+        "base_freshness": base_freshness,
         "mergeable": mergeable,
         "checks": checks,
         "reviews": reviews,
@@ -681,8 +864,19 @@ def _route_health_overview(prs: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str, Any]:
+def fetch_pr(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str = "",
+    current_main_sha: str | None = None,
+    current_main_reason: str | None = None,
+) -> dict[str, Any]:
     """Fetch one PR and return a compact queue snapshot."""
+    if current_main_sha is None:
+        current_main_sha, current_main_reason = _fetch_current_main_sha(repo)
+    elif current_main_reason is None:
+        current_main_reason = "" if current_main_sha else "current_main_sha_unavailable"
     result = _gh(
         [
             "pr",
@@ -691,13 +885,19 @@ def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str
             "--repo",
             repo,
             "--json",
-            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,baseRefName,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
-            return _fetch_pr_rest(number, repo=repo, expected_head_sha=expected_head_sha)
+            return _fetch_pr_rest(
+                number,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                current_main_sha=current_main_sha,
+                current_main_reason=current_main_reason or "current_main_sha_unavailable",
+            )
         return {
             "number": number,
             "status": "error",
@@ -707,7 +907,14 @@ def fetch_pr(number: int, *, repo: str, expected_head_sha: str = "") -> dict[str
         pr = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {"number": number, "status": "error", "error": f"invalid gh JSON: {exc}"}
-    return _pr_payload_from_dict(pr, default_number=number, expected_head_sha=expected_head_sha)
+    pr = _ensure_pr_base_metadata(pr, number=number, repo=repo)
+    return _pr_payload_from_dict(
+        pr,
+        default_number=number,
+        expected_head_sha=expected_head_sha,
+        current_main_sha=current_main_sha,
+        current_main_reason=current_main_reason or "current_main_sha_unavailable",
+    )
 
 
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
@@ -723,7 +930,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "--limit",
             str(limit),
             "--json",
-            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,baseRefName,mergeable,statusCheckRollup,reviews,comments",
         ]
     )
 
@@ -775,8 +982,19 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             ],
         }
 
+    current_main_sha, current_main_reason = _fetch_current_main_sha(repo)
     prs = [
-        _pr_payload_from_dict(pr, default_number=-1, expected_head_sha="")
+        _pr_payload_from_dict(
+            _ensure_pr_base_metadata(
+                pr,
+                number=_pr_number_for_rest(pr),
+                repo=repo,
+            ),
+            default_number=-1,
+            expected_head_sha="",
+            current_main_sha=current_main_sha,
+            current_main_reason=current_main_reason,
+        )
         for pr in listed
         if isinstance(pr, dict)
     ]
@@ -792,6 +1010,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             if truncated
             else ""
         ),
+        "current_main": _current_main_snapshot(current_main_sha, current_main_reason),
         "route_health_overview": _route_health_overview(prs),
         "prs": prs,
     }
@@ -805,7 +1024,17 @@ def snapshot_prs(
     include_review_threads: bool = False,
 ) -> dict[str, Any]:
     """Return a compact PR queue snapshot."""
-    prs = [fetch_pr(number, repo=repo, expected_head_sha=expected_head_sha) for number in numbers]
+    current_main_sha, current_main_reason = _fetch_current_main_sha(repo)
+    prs = [
+        fetch_pr(
+            number,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            current_main_sha=current_main_sha,
+            current_main_reason=current_main_reason,
+        )
+        for number in numbers
+    ]
     if include_review_threads:
         for pr in prs:
             if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
@@ -816,6 +1045,7 @@ def snapshot_prs(
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,
+        "current_main": _current_main_snapshot(current_main_sha, current_main_reason),
         "route_health_overview": _route_health_overview(prs),
         "prs": prs,
     }

@@ -16,6 +16,7 @@ from typing import Any
 from scripts.dev.snapshot_pr_queue import DEFAULT_REPO, snapshot_prs
 
 SCHEMA_VERSION = "pr_babysitter_snapshot.v1"
+SOURCE_QUEUE_SCHEMA = "pr_queue_snapshot.v2"
 DEFAULT_RETRY_BUDGET = 1
 PR_STATES = {"OPEN": "OPEN", "MERGED": "MERGED", "CLOSED": "CLOSED"}
 MERGEABLE_STATES = {
@@ -187,6 +188,10 @@ def classify_pr_action(
     state = _string_or_default(pr.get("state")).upper()
     preflight = pr.get("preflight", {}) if isinstance(pr.get("preflight"), dict) else {}
     preflight_status = _string_or_default(preflight.get("status"))
+    base_freshness = (
+        preflight.get("base_freshness") if isinstance(preflight.get("base_freshness"), dict) else {}
+    )
+    base_freshness_status = _string_or_default(base_freshness.get("status"))
     checks_overall = _string_or_default(checks.get("overall"), "pending")
     mergeable = _string_or_default(pr.get("mergeable"))
 
@@ -196,9 +201,14 @@ def classify_pr_action(
     elif preflight_status == "stale":
         action = "stop_stale_head"
         reasons.extend(str(reason) for reason in preflight.get("reasons", []) or ["stale"])
-    elif preflight_status == "blocked" and mergeable == "CONFLICTING":
+    elif preflight_status == "blocked" and (
+        mergeable == "CONFLICTING" or base_freshness_status == "unavailable"
+    ):
         action = "stop_user_help_required"
-        reasons.append("merge_conflict")
+        if base_freshness_status == "unavailable":
+            reasons.append("base_freshness_unavailable")
+        else:
+            reasons.append("merge_conflict")
     elif checks_overall == "failure":
         action = "diagnose_ci_failure"
         reasons.append("ci_failure")
@@ -360,7 +370,7 @@ def _sanitize_payload_for_output(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": SCHEMA_VERSION,
         "repo": DEFAULT_REPO,
-        "source_schema": "pr_queue_snapshot.v1",
+        "source_schema": SOURCE_QUEUE_SCHEMA,
         "route_evidence_only": True,
         "prs": prs,
     }

@@ -1475,6 +1475,8 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
         "labels": [{"name": "merge-ready"}],
         "headRefName": "feature",
         "headRefOid": sha,
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {"name": "ci", "status": "completed", "conclusion": "success"},
@@ -1492,7 +1494,12 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     }
 
     # Extract snapshot payload using snapshot_pr_queue helper
-    pr_snapshot = _pr_payload_from_dict(pr_raw, default_number=6130, expected_head_sha="")
+    pr_snapshot = _pr_payload_from_dict(
+        pr_raw,
+        default_number=6130,
+        expected_head_sha="",
+        current_main_sha="main-sha",
+    )
 
     # Verify trailer was extracted to gate_verdicts while body_excerpt was truncated
     assert pr_snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
@@ -1512,3 +1519,19 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     queue_result = evaluate_queue([pr_snapshot], max_actions=3)
     assert queue_result["decisions"][0]["state"] == "ready_to_merge"
     assert queue_result["decisions"][0]["action"] == "mark_ready_candidate"
+
+
+def test_base_freshness_blocks_policy_ready_state() -> None:
+    """Stale or unavailable snapshot base evidence cannot become ready_to_merge."""
+    pr = _pr(
+        7024,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["base_freshness"] = {"status": "stale", "reason": "base_sha_mismatch"}
+    assert classify_pr_state(pr) == "stale_merge_base"
+
+    pr["base_freshness"] = {"status": "unavailable", "reason": "current_main_api_failed"}
+    assert classify_pr_state(pr) == "missing_merge_base"

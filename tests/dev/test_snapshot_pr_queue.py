@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
@@ -13,6 +15,16 @@ from scripts.dev.snapshot_pr_queue import (
     snapshot_prs,
     write_raw_review_comments_artifact,
 )
+
+
+@pytest.fixture(autouse=True)
+def _mock_current_main_sha():
+    """Keep legacy snapshot fixtures on a known authoritative main commit."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._fetch_current_main_sha",
+        return_value=("main-sha", ""),
+    ):
+        yield
 
 
 def test_snapshot_prs_emits_headline_state() -> None:
@@ -26,6 +38,8 @@ def test_snapshot_prs_emits_headline_state() -> None:
         "labels": [{"name": "merge-ready"}],
         "headRefName": "feature",
         "headRefOid": "abc123",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {"name": "ci", "status": "completed", "conclusion": "success"},
@@ -50,7 +64,7 @@ def test_snapshot_prs_emits_headline_state() -> None:
         payload = snapshot_prs([2679], repo="ll7/robot_sf_ll7", expected_head_sha="abc123")
 
     pr = payload["prs"][0]
-    assert payload["schema"] == "pr_queue_snapshot.v1"
+    assert payload["schema"] == "pr_queue_snapshot.v2"
     assert payload["route_health_overview"]["healthy"] == 1
     assert pr["number"] == 2679
     assert pr["head_sha"] == "abc123"
@@ -58,6 +72,14 @@ def test_snapshot_prs_emits_headline_state() -> None:
     assert pr["checks"]["names"] == ["ci", "lint"]
     assert pr["preflight"]["status"] == "healthy"
     assert pr["preflight"]["head_sha_matches_expected"] is True
+    assert pr["base_freshness"] == {
+        "status": "fresh",
+        "base_ref": "main",
+        "base_sha": "main-sha",
+        "current_main_sha": "main-sha",
+        "reason": "ok",
+    }
+    assert payload["current_main"] == {"status": "available", "sha": "main-sha"}
     assert pr["reviews"] == {"APPROVED": 1, "COMMENTED": 1}
     assert pr["review_snapshot"]["total"] == 2
     assert len(pr["comment_snapshot"]["latest"]) == 2
@@ -75,6 +97,8 @@ def test_snapshot_prs_pending_next_action() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "def456",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "UNKNOWN",
         "statusCheckRollup": [{"name": "ci", "status": "in_progress", "conclusion": ""}],
         "reviews": [],
@@ -103,6 +127,8 @@ def test_snapshot_prs_suppresses_superseded_cancelled_run() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc111",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {
@@ -145,6 +171,8 @@ def test_snapshot_prs_suppresses_superseded_cancelled_for_newer_success() -> Non
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc222",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {
@@ -187,6 +215,8 @@ def test_snapshot_prs_current_cancellation_stays_fail_closed() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc333",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {
@@ -220,6 +250,8 @@ def test_snapshot_prs_ignores_non_mapping_rollup_entries_before_deduplication() 
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc-malformed",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             None,
@@ -250,6 +282,8 @@ def test_snapshot_prs_keeps_independent_legacy_status_entries() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc444",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {
@@ -298,6 +332,8 @@ def test_snapshot_prs_details_url_none_falls_back_without_none_string() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "def457",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "UNKNOWN",
         "statusCheckRollup": [
             {
@@ -331,6 +367,8 @@ def test_snapshot_prs_stale_if_head_sha_mismatch() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "current",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
         "reviews": [],
@@ -347,6 +385,102 @@ def test_snapshot_prs_stale_if_head_sha_mismatch() -> None:
     assert payload["route_health_overview"]["stale"] == 1
 
 
+def test_snapshot_prs_stale_base_cannot_route_merge_ready() -> None:
+    """A known old base must route refresh even when CI and labels look merge-ready."""
+    pr_payload = {
+        "number": 7021,
+        "title": "stale base PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": "head-sha",
+        "baseRefName": "main",
+        "baseRefOid": "old-main-sha",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([7021], repo="ll7/robot_sf_ll7")
+
+    pr = payload["prs"][0]
+    assert pr["base_freshness"]["status"] == "stale"
+    assert pr["base_freshness"]["reason"] == "base_sha_mismatch"
+    assert pr["preflight"]["status"] == "stale"
+    assert "base_freshness_stale" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "refresh_stale_base"
+    assert pr["next_action"] != "merge_readiness_local_check"
+
+
+def test_snapshot_prs_missing_base_is_unavailable_and_blocked() -> None:
+    """Missing PR base evidence must not be treated as a current base."""
+    pr_payload = {
+        "number": 7022,
+        "title": "missing base PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": "head-sha",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([7022], repo="ll7/robot_sf_ll7")
+
+    pr = payload["prs"][0]
+    assert pr["base_freshness"]["status"] == "unavailable"
+    assert pr["base_freshness"]["reason"] == "missing_pr_base_metadata"
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["next_action"] == "verify_base_freshness"
+    assert pr["next_action"] != "merge_readiness_local_check"
+
+
+def test_snapshot_prs_unavailable_current_main_is_blocked() -> None:
+    """A current-main lookup failure remains explicit and fail-closed."""
+    pr_payload = {
+        "number": 7023,
+        "title": "unavailable current main PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": "head-sha",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._fetch_current_main_sha",
+            return_value=("", "current_main_api_failed"),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([7023], repo="ll7/robot_sf_ll7")
+
+    pr = payload["prs"][0]
+    assert payload["current_main"] == {
+        "status": "unavailable",
+        "sha": "",
+        "reason": "current_main_api_failed",
+    }
+    assert pr["base_freshness"]["status"] == "unavailable"
+    assert pr["base_freshness"]["reason"] == "current_main_api_failed"
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["next_action"] == "verify_base_freshness"
+
+
 def test_main_includes_compact_comment_review_evidence() -> None:
     """Comment and review bodies should be compacted to bounded excerpts."""
     long_body = "x" * (COMMENT_BODY_LIMIT + 50)
@@ -359,6 +493,8 @@ def test_main_includes_compact_comment_review_evidence() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "beef00",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
         "reviews": [
@@ -402,6 +538,8 @@ def test_snapshot_prs_can_include_bounded_review_threads() -> None:
         "labels": [{"name": "priority: high"}],
         "headRefName": "feature",
         "headRefOid": "abc999",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
         "reviews": [],
@@ -464,6 +602,8 @@ def test_snapshot_prs_handles_null_review_thread_graphql_fields() -> None:
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc995",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
         "reviews": [],
@@ -534,6 +674,8 @@ def test_main_output_writes_snapshot_without_changing_stdout(
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc998",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [],
         "reviews": [],
@@ -561,6 +703,8 @@ def test_main_output_write_failure_returns_controlled_error(capsys) -> None:  # 
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc999",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [],
         "reviews": [],
@@ -597,6 +741,8 @@ def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc444",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [],
         "reviews": [],
@@ -640,6 +786,8 @@ def test_main_raw_review_artifact_failure_sets_nonzero_exit(
         "labels": [],
         "headRefName": "feature",
         "headRefOid": "abc997",
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [],
         "reviews": [],
@@ -701,6 +849,8 @@ def test_main_active_mode_discovers_open_prs() -> None:
             "labels": [{"name": "merge-ready"}],
             "headRefName": "feature",
             "headRefOid": "cafe00",
+            "baseRefName": "main",
+            "baseRefOid": "main-sha",
             "mergeable": "MERGEABLE",
             "statusCheckRollup": [{"name": "ci", "status": "in_progress", "conclusion": ""}],
             "reviews": [],
@@ -715,6 +865,8 @@ def test_main_active_mode_discovers_open_prs() -> None:
             "labels": [],
             "headRefName": "feat2",
             "headRefOid": "cafe01",
+            "baseRefName": "main",
+            "baseRefOid": "main-sha",
             "mergeable": "UNKNOWN",
             "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "failure"}],
             "reviews": [{"state": "APPROVED"}],
@@ -760,6 +912,8 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
         "labels": [{"name": "merge-ready"}],
         "headRefName": "feature",
         "headRefOid": sha,
+        "baseRefName": "main",
+        "baseRefOid": "main-sha",
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [
             {"name": "ci", "status": "completed", "conclusion": "success"},
@@ -821,6 +975,7 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
         "labels": [{"name": "merge-ready"}],
         "html_url": "https://x/42",
         "head": {"ref": "fix", "sha": "abc"},
+        "base": {"ref": "main", "sha": "main-sha"},
         "mergeable_state": "clean",
     }
     reviews = [{"state": "APPROVED", "author_association": "OWNER", "body": "lgtm"}]
@@ -861,6 +1016,7 @@ def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
         "draft": False,
         "labels": [],
         "head": {"ref": "b", "sha": "resthead"},
+        "base": {"ref": "main", "sha": "main-sha"},
         "mergeable_state": "clean",
     }
     with patch(
@@ -878,6 +1034,41 @@ def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
     assert payload["preflight"]["status"] == "stale"
     assert "head_sha_mismatch" in payload["preflight"]["reasons"]
     assert payload["preflight"]["head_sha_matches_expected"] is False
+
+
+def test_fetch_pr_fills_base_from_rest_when_gh_field_is_unavailable() -> None:
+    """The stable REST pull endpoint supplies base provenance for older gh versions."""
+    pr_payload = {
+        "number": 7025,
+        "title": "REST base metadata",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "head-sha",
+        "baseRefName": "main",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    rest_pull = {"base": {"ref": "main", "sha": "main-sha"}}
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(rest_pull), stderr=""),
+        ],
+    ):
+        payload = fetch_pr(
+            7025,
+            repo="ll7/robot_sf_ll7",
+            current_main_sha="main-sha",
+            current_main_reason="",
+        )
+
+    assert payload["base_freshness"]["status"] == "fresh"
+    assert payload["base_sha"] == "main-sha"
 
 
 def test_fetch_pr_non_quota_error_still_returns_generic_error() -> None:

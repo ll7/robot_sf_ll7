@@ -377,6 +377,19 @@ def _merge_ready_state(
     return "ready_to_merge"
 
 
+def _snapshot_base_state(pr: dict[str, Any]) -> str | None:
+    """Return the fail-closed policy state carried by snapshot base evidence."""
+    base_freshness = pr.get("base_freshness")
+    if not isinstance(base_freshness, dict):
+        return None
+    status = str(base_freshness.get("status", ""))
+    if status == "stale":
+        return "stale_merge_base"
+    if status == "unavailable":
+        return "missing_merge_base"
+    return None
+
+
 def classify_pr_state(
     pr: dict[str, Any],
     *,
@@ -407,6 +420,9 @@ def classify_pr_state(
         return "pending_ci"
     if expected and head_sha and head_sha != expected:
         return "stale_worktree"
+    base_state = _snapshot_base_state(pr)
+    if base_state is not None:
+        return base_state
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state

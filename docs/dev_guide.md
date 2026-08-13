@@ -705,6 +705,8 @@ For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the e
 
 - Preflight lanes with `--expected-head-sha <sha>` before dispatch.
 - Reuse `preflight.status` (`healthy` | `stale` | `blocked`) and `next_action` to avoid stale or noisy routes.
+- Require `base_freshness.status == "fresh"` before treating a non-draft row as merge-ready; `stale`
+  and `unavailable` base evidence route to `refresh_stale_base` and `verify_base_freshness`.
 - Invalidate stale-lane routes (refresh snapshot) before reassigning or reviewing.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
@@ -716,6 +718,10 @@ uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 --json \
 
 The resulting JSON keeps review/comment/CI payloads compact; review noise is reduced to counts,
 latest author-attributed samples, and bounded body excerpts.
+The `pr_queue_snapshot.v2` rows also include bounded `base_freshness` evidence (`base_ref`,
+`base_sha`, and the read-only `current_main_sha` comparison), plus a top-level `current_main`
+provenance record. Missing or stale evidence is explicit and fail-closed; no local branch state is
+used as a substitute for the authoritative GitHub `main` commit.
 
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The

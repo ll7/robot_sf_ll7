@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,18 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md
   status: evidence
   freshness: evidence

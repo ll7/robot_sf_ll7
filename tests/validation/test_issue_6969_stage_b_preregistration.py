@@ -1,5 +1,7 @@
 """Contract tests for the issue #6969 Stage B preregistration."""
 
+# evidence-writer-exempt: tests write only temporary mutated summary fixtures under pytest tmp_path.
+
 from __future__ import annotations
 
 import copy

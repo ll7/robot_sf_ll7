@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/audit/campaign_atlas.csv",
+  "artifact_sha256": "18768f5cf1d9f360487e9203fa1c538de136aaff240070ae3684b5243c44bc10",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

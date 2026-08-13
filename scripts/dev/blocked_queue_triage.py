@@ -64,6 +64,16 @@ class TriageError(RuntimeError):
     """Raised when the source inventory or a write/readback is incomplete."""
 
 
+class MutationError(TriageError):
+    """Raised after a write failure while retaining operations already observed."""
+
+    def __init__(self, message: str, operations: list[dict[str, Any]]) -> None:
+        """Initialize the failure with the operations observed before it."""
+
+        super().__init__(message)
+        self.operations = operations
+
+
 def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run ``gh`` with bounded output capture."""
 
@@ -421,7 +431,7 @@ def _digest(row: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def render_comment(row: Mapping[str, Any], *, generated_at: str) -> str:
+def render_comment(row: Mapping[str, Any]) -> str:
     """Render the idempotent issue comment for one triage row."""
 
     issue = int(row["issue"])
@@ -434,7 +444,6 @@ def render_comment(row: Mapping[str, Any], *, generated_at: str) -> str:
                 f"<!-- {COMMENT_MARKER} issue={issue} digest={digest} -->",
                 "## Blocked queue triage",
                 "",
-                f"Generated at: `{generated_at}`  ",
                 f"Blocker class: `{row['blocker_class']}`  ",
                 f"Classification confidence: `{row['classification_confidence']}`  ",
                 f"Condition mode: `{row['condition_mode']}`",
@@ -471,7 +480,6 @@ def apply_comments(
     comments_by_issue: Mapping[int, list[Mapping[str, Any]]],
     *,
     repo: str,
-    generated_at: str,
     max_mutations: int,
     runner: Runner,
 ) -> list[dict[str, Any]]:
@@ -480,7 +488,7 @@ def apply_comments(
     operations: list[dict[str, Any]] = []
     for row in rows:
         issue = int(row["issue"])
-        body = render_comment(row, generated_at=generated_at)
+        body = render_comment(row)
         existing = _existing_comment(list(comments_by_issue.get(issue, [])), issue)
         existing_body = str(existing.get("body") or "") if existing else ""
         if existing_body == body:
@@ -490,32 +498,39 @@ def apply_comments(
             len([item for item in operations if item["action"] in {"created", "updated"}])
             >= max_mutations
         ):
-            raise TriageError(f"mutation budget exhausted at {max_mutations} writes")
-        if existing is None:
-            path = f"repos/{repo}/issues/{issue}/comments"
-            result = _api_json(
-                path,
-                runner=runner,
-                operation=f"create triage comment for issue #{issue}",
-                method="POST",
-                payload={"body": body},
-            )
-            action = "created"
-        else:
-            comment_id = existing.get("id")
-            if type(comment_id) is not int or comment_id < 1:
-                raise TriageError(f"existing triage comment for issue #{issue} has invalid id")
-            path = f"repos/{repo}/issues/comments/{comment_id}"
-            result = _api_json(
-                path,
-                runner=runner,
-                operation=f"update triage comment for issue #{issue}",
-                method="PATCH",
-                payload={"body": body},
-            )
-            action = "updated"
-        if not isinstance(result, dict) or result.get("body") != body:
-            raise TriageError(f"triage comment readback failed for issue #{issue}")
+            message = f"mutation budget exhausted at {max_mutations} writes"
+            operations.append({"issue": issue, "action": "failed", "error": message})
+            raise MutationError(message, operations)
+        try:
+            if existing is None:
+                path = f"repos/{repo}/issues/{issue}/comments"
+                result = _api_json(
+                    path,
+                    runner=runner,
+                    operation=f"create triage comment for issue #{issue}",
+                    method="POST",
+                    payload={"body": body},
+                )
+                action = "created"
+            else:
+                comment_id = existing.get("id")
+                if type(comment_id) is not int or comment_id < 1:
+                    raise TriageError(f"existing triage comment for issue #{issue} has invalid id")
+                path = f"repos/{repo}/issues/comments/{comment_id}"
+                result = _api_json(
+                    path,
+                    runner=runner,
+                    operation=f"update triage comment for issue #{issue}",
+                    method="PATCH",
+                    payload={"body": body},
+                )
+                action = "updated"
+            if not isinstance(result, dict) or result.get("body") != body:
+                raise TriageError(f"triage comment readback failed for issue #{issue}")
+        except (TriageError, TypeError, ValueError) as exc:
+            message = str(exc)
+            operations.append({"issue": issue, "action": "failed", "error": message})
+            raise MutationError(message, operations) from exc
         operations.append({"issue": issue, "action": action, "comment_id": result.get("id")})
     return operations
 
@@ -643,6 +658,16 @@ def _generated_at(value: str | None) -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def _emit_report(report: Mapping[str, Any], output: Path | None) -> None:
+    """Write one report to stdout and optionally to a regular output path."""
+
+    encoded = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(encoded, encoding="utf-8")
+    sys.stdout.write(encoded)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build the blocked-queue triage CLI parser."""
 
@@ -706,14 +731,27 @@ def main(argv: list[str] | None = None, *, runner: Runner | None = None) -> int:
             next_check_at=args.next_check_at,
         )
         if args.apply_comments:
-            operations = apply_comments(
-                report["issues"],
-                comments_by_issue,
-                repo=args.repo,
-                generated_at=generated_at,
-                max_mutations=args.max_mutations,
-                runner=gh_runner,
-            )
+            try:
+                operations = apply_comments(
+                    report["issues"],
+                    comments_by_issue,
+                    repo=args.repo,
+                    max_mutations=args.max_mutations,
+                    runner=gh_runner,
+                )
+            except MutationError as exc:
+                report["mutations"] = {
+                    "applied": False,
+                    "error": str(exc),
+                    "operations": exc.operations,
+                    "created": sum(item["action"] == "created" for item in exc.operations),
+                    "updated": sum(item["action"] == "updated" for item in exc.operations),
+                    "unchanged": sum(item["action"] == "unchanged" for item in exc.operations),
+                    "failed": sum(item["action"] == "failed" for item in exc.operations),
+                }
+                _emit_report(report, args.output)
+                print(f"blocked queue triage failed closed: {exc}", file=sys.stderr)
+                return 2
             report["mutations"] = {
                 "applied": True,
                 "operations": operations,
@@ -723,11 +761,7 @@ def main(argv: list[str] | None = None, *, runner: Runner | None = None) -> int:
             }
         else:
             report["mutations"] = {"applied": False, "operations": []}
-        encoded = json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(encoded, encoding="utf-8")
-        sys.stdout.write(encoded)
+        _emit_report(report, args.output)
         return 0
     except (OSError, TriageError, TypeError, ValueError) as exc:
         print(f"blocked queue triage failed closed: {exc}", file=sys.stderr)

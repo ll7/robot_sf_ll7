@@ -97,7 +97,7 @@ def test_generated_triage_comment_is_not_signal_or_progress() -> None:
         generated_at="2026-08-13T12:00:00Z",
         next_check_at="weekly",
     )["issues"][0]
-    comment = {"body": triage.render_comment(row, generated_at="2026-08-13T12:00:00Z")}
+    comment = {"body": triage.render_comment(row)}
 
     result = triage._classify(issue, [comment])
     timestamp, source = triage._last_progress(issue, [comment])
@@ -149,7 +149,7 @@ def test_render_comment_has_stable_marker_and_required_fields() -> None:
         generated_at="2026-08-13T12:00:00Z",
         next_check_at="next workflow run",
     )["issues"][0]
-    body = triage.render_comment(row, generated_at="2026-08-13T12:00:00Z")
+    body = triage.render_comment(row)
 
     assert "<!-- blocked-queue-triage.v1 issue=42 digest=" in body
     assert "Blocker class:" in body
@@ -206,7 +206,6 @@ def test_apply_comments_is_idempotent_and_verifies_writeback() -> None:
         report["issues"],
         {42: []},
         repo="owner/repo",
-        generated_at="2026-08-13T12:00:00Z",
         max_mutations=1,
         runner=runner,
     )
@@ -218,11 +217,43 @@ def test_apply_comments_is_idempotent_and_verifies_writeback() -> None:
         report["issues"],
         {42: [{"id": 9001, "created_at": "2026-08-13T12:00:00Z", "body": body}]},
         repo="owner/repo",
-        generated_at="2026-08-13T12:00:00Z",
         max_mutations=0,
         runner=runner,
     )
     assert unchanged == [{"issue": 42, "action": "unchanged"}]
+
+
+def test_apply_comments_retains_partial_operations_on_failure() -> None:
+    """A failed write must preserve the partial mutation ledger for retry/audit."""
+
+    rows = triage.build_report(
+        [_issue(number=42), _issue(number=43)],
+        {42: [], 43: []},
+        repo="owner/repo",
+        label="state:blocked",
+        generated_at="2026-08-13T12:00:00Z",
+        next_check_at="next workflow run",
+    )["issues"]
+    call_count = 0
+
+    def runner(args: list[str], input_text: str | None) -> CompletedProcess[str]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            payload = json.loads(input_text or "{}")
+            return CompletedProcess(args, 0, json.dumps({"id": 9001, **payload}), "")
+        return CompletedProcess(args, 1, "", "transient API error")
+
+    with pytest.raises(triage.MutationError) as error:
+        triage.apply_comments(
+            rows,
+            {42: [], 43: []},
+            repo="owner/repo",
+            max_mutations=2,
+            runner=runner,
+        )
+
+    assert [item["action"] for item in error.value.operations] == ["created", "failed"]
 
 
 def test_malformed_inventory_fails_closed() -> None:

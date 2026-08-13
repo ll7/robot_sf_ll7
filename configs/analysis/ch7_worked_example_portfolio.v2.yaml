@@ -1,0 +1,58 @@
+schema_version: ch7_case_portfolio.v3
+issue: 7087
+source:
+  package_sha256sums_sha256: 6807fdc9275133365812c8f51f51e057da6054f8dcaf77cb5fa8a32b08c4a87f
+selection:
+  cross_topology:
+    scenarios:
+      - classic_realworld_double_bottleneck_high
+      - francis2023_blind_corner
+    planners:
+      - ppo
+      - hybrid_rule_v3_fast_progress_static_escape
+      - hybrid_rule_v3_fast_progress_static_escape_continuous
+      - scenario_adaptive_hybrid_orca_v1
+      - scenario_adaptive_hybrid_orca_v2_collision_guard
+  cross_mechanism:
+    scenarios:
+      - francis2023_pedestrian_obstruction
+      - francis2023_join_group
+    planners:
+      - orca
+      - socnav_sampling
+  narrow_doorway_terminal:
+    scenarios:
+      - francis2023_narrow_doorway
+    planners:
+      - goal
+      - guarded_ppo
+      - hybrid_rule_v3_fast_progress_static_escape
+      - hybrid_rule_v3_fast_progress_static_escape_continuous
+      - orca
+      - ppo
+      - prediction_planner
+      - predictive_mppi
+      - risk_dwa
+      - sacadrl
+      - scenario_adaptive_hybrid_orca_v1
+      - scenario_adaptive_hybrid_orca_v2_collision_guard
+      - social_force
+      - socnav_sampling
+metrics:
+  included:
+    - success_fraction
+    - near_misses_mean
+    - time_to_goal_norm_mean
+    - path_efficiency_mean
+  excluded:
+    - collision_fraction
+    - ped_collision_fraction
+    - obstacle_collision_fraction
+    - total_collision_fraction
+    - collision_count_mean
+    - ped_collision_count_mean
+    - obstacle_collision_count_mean
+    - total_collision_count_mean
+    - snqi_mean
+    - collision_derived_composites
+  blocking_issue: 7042

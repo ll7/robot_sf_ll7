@@ -845,6 +845,9 @@ that parked queue, or `--blocked-external-report` to generate a compact human-ac
 monthly review dates. Use `--active-portfolio` for a compact non-mutating open-issue portfolio
 that classifies executable, human-decision, blocked-external, diagnostic-only, stale synthesis, and
 paper-critical rows with owner types and label-change recommendations.
+Issues carrying `routing:needs-compute` remain visible for audit but classify as `needs_compute` and
+are excluded from implementation dispatch until compute or private execution authorization is
+established.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

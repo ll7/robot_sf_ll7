@@ -428,6 +428,22 @@ def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
     assert "${{ inputs.sync-args }}" in sync_step["run"]
 
 
+def test_ci_setup_action_installs_rendered_page_qa_dependency() -> None:
+    """Keep the shared Linux setup aligned with the evidence builder's PDF QA contract."""
+    action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))
+    system_packages_step = next(
+        (
+            step
+            for step in action["runs"]["steps"]
+            if step.get("name") == "System packages for headless"
+        ),
+        None,
+    )
+
+    assert system_packages_step is not None, "System packages step not found"
+    assert "poppler-utils" in system_packages_step["run"]
+
+
 def test_security_advisory_skips_unneeded_linux_system_packages() -> None:
     """Keep the Ruff-only advisory independent of unrelated hosted apt repositories."""
     action = yaml.safe_load(CI_SETUP_ACTION.read_text(encoding="utf-8"))

@@ -36,6 +36,17 @@ GENERATED_STATUS_PATHS = (
     "__pycache__",
 )
 STATUS_LINE_LIMIT = 30
+ROUTE_TERMINAL_FAILURES = frozenset(
+    {
+        "timeout",
+        "exception",
+        "non_zero_exit",
+        "missing_artifact",
+        "route_not_started",
+        "scope_violation",
+        "unavailable",
+    }
+)
 TOKEN_EFFICIENCY_ACTIONS = (
     "refresh this snapshot or the active ledger before reopening full skill/docs context",
     "prefer compact issue/PR/CI helpers before broad gh, git worktree, or rg output",
@@ -102,6 +113,120 @@ def _parse_json_result(result: CommandResult) -> tuple[Any | None, str | None]:
         return json.loads(result.stdout), None
     except json.JSONDecodeError as exc:
         return None, f"json_parse_error: {exc}"
+
+
+def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
+    """Return compact failure evidence for one routed-worker attempt."""
+    if not isinstance(attempt, dict):
+        return {
+            "attempt_index": None,
+            "route": None,
+            "returncode": None,
+            "failure_class": None,
+            "terminal_state": None,
+            "run_dir": None,
+            "missing_artifacts": [],
+            "missing_artifacts_known": False,
+            "compact_artifacts_available": False,
+            "scope_check": None,
+            "malformed": True,
+        }
+
+    compact = attempt.get("compact_artifacts")
+    compact_artifacts_available = isinstance(compact, dict)
+    missing_artifacts: list[str] = []
+    if compact_artifacts_available:
+        for key, value in sorted(compact.items()):
+            if not isinstance(value, dict) or value.get("present") is not True:
+                missing_artifacts.append(str(key))
+    terminal_state = attempt.get("terminal_state")
+    return {
+        "attempt_index": attempt.get("attempt_index"),
+        "route": attempt.get("route"),
+        "returncode": attempt.get("returncode"),
+        "failure_class": attempt.get("failure_class"),
+        "terminal_state": terminal_state,
+        "terminal_state_known": terminal_state is not None,
+        "run_dir": attempt.get("run_dir"),
+        "missing_artifacts": missing_artifacts,
+        "missing_artifacts_known": compact_artifacts_available,
+        "compact_artifacts_available": compact_artifacts_available,
+        "scope_check": attempt.get("scope_check"),
+    }
+
+
+def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
+    """Load a compact route-failure handoff without reading raw worker logs."""
+    path = Path(manifest_path).resolve(strict=False)
+    base = {
+        "manifest_path": str(path),
+        "route_evidence_only": True,
+        "acceptance_state": "not_established",
+    }
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            **base,
+            "status": "unavailable",
+            "error": f"route manifest unavailable: {exc}",
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
+    if not isinstance(raw, dict):
+        return {
+            **base,
+            "status": "malformed",
+            "error": "route manifest must contain a JSON object",
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
+
+    attempts = raw.get("attempted_routes")
+    if not isinstance(attempts, list):
+        return {
+            **base,
+            "status": "malformed",
+            "schema": raw.get("schema"),
+            "error": "route manifest attempted_routes must be a JSON array",
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
+    attempt_rows = [_route_attempt_snapshot(attempt) for attempt in attempts]
+    chosen_run_dir = raw.get("chosen_run_dir")
+    chosen_terminal_state = raw.get("chosen_terminal_state")
+    chosen: dict[str, Any] | None = None
+    for row in attempt_rows:
+        if row.get("run_dir") == chosen_run_dir:
+            chosen = row
+            break
+    if chosen is None and attempt_rows:
+        chosen = attempt_rows[0]
+    if chosen_terminal_state is None and chosen is not None:
+        chosen_terminal_state = chosen.get("terminal_state")
+
+    failed_attempts = [
+        row for row in attempt_rows if row.get("terminal_state") in ROUTE_TERMINAL_FAILURES
+    ]
+    return {
+        **base,
+        "status": "ok",
+        "schema": raw.get("schema"),
+        "route_evidence_only": raw.get("route_evidence_only"),
+        "chosen_route": raw.get("chosen_route"),
+        "chosen_run_dir": chosen_run_dir,
+        "chosen_terminal_state": chosen_terminal_state,
+        "chosen_failure_class": chosen.get("failure_class") if chosen else None,
+        "chosen_returncode": chosen.get("returncode") if chosen else None,
+        "chosen_missing_artifacts": (
+            chosen.get("missing_artifacts")
+            if chosen and chosen.get("missing_artifacts_known")
+            else None
+        ),
+        "chosen_scope_check": chosen.get("scope_check")
+        if chosen
+        else raw.get("chosen_scope_check"),
+        "failed_attempts": failed_attempts,
+        "attempt_count": len(attempt_rows),
+        "next_action": "inspect_parent_diff_and_run_local_validation",
+    }
 
 
 def _git_text(command: list[str], *, name: str) -> tuple[str, dict[str, Any], str | None]:
@@ -269,6 +394,7 @@ def controller_checkpoint(
     issues: list[dict[str, Any]],
     prs: list[dict[str, Any]],
     errors: list[str],
+    route_failures: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Return a one-screen resume checkpoint for long Codex controller threads."""
     pr_next_actions = [
@@ -284,9 +410,17 @@ def controller_checkpoint(
         claim.get("issue") for claim in claims if claim.get("stale_against_origin_main")
     ]
     generated_paths = (git.get("compact_status") or {}).get("generated_paths_present", [])
+    route_failures = route_failures or []
+    route_failure_count = sum(
+        len(row.get("failed_attempts", [])) for row in route_failures if isinstance(row, dict)
+    )
     next_action = "continue_from_snapshot"
     if errors:
         next_action = "repair_snapshot_errors"
+    elif route_failure_count or any(
+        isinstance(row, dict) and row.get("status") != "ok" for row in route_failures
+    ):
+        next_action = "inspect_route_failure_handoff"
     elif stale_claims:
         next_action = "refresh_stale_claims"
     elif any((pr.get("checks") or {}).get("overall") == "failure" for pr in prs):
@@ -312,6 +446,8 @@ def controller_checkpoint(
         ],
         "issue_numbers": [issue.get("number") for issue in issues],
         "prs": pr_next_actions,
+        "route_failure_manifest_count": len(route_failures),
+        "route_failure_attempt_count": route_failure_count,
         "token_efficiency": {
             "parent_output_limit_lines": 200,
             "compact_first": True,
@@ -557,8 +693,20 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     sources.extend(pr_sources)
     errors.extend(pr_errors)
 
+    route_failures: list[dict[str, Any]] = []
+    for manifest_path in getattr(args, "route_manifest", []):
+        route_row = route_manifest_snapshot(manifest_path)
+        route_failures.append(route_row)
+        if route_row.get("error"):
+            errors.append(f"route manifest {manifest_path}: {route_row['error']}")
+
     checkpoint = controller_checkpoint(
-        git=git, claims=claims, issues=issues, prs=prs, errors=errors
+        git=git,
+        claims=claims,
+        issues=issues,
+        prs=prs,
+        errors=errors,
+        route_failures=route_failures,
     )
 
     return {
@@ -578,6 +726,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "issues_truncated_any": any(marker.get("truncated") for marker in issue_truncations),
         "issues_truncated": issue_truncations,
         "prs": prs,
+        "route_failures": route_failures,
         "controller_checkpoint": checkpoint,
         "errors": errors,
         "sources": sources,
@@ -604,6 +753,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="issue number whose agent-claim ref should be summarized",
+    )
+    parser.add_argument(
+        "--route-manifest",
+        action="append",
+        default=[],
+        help="route manifest path to summarize as compact failure evidence; may be repeated",
     )
     parser.add_argument("--remote", default="origin", help="git remote used for claim refs")
     parser.add_argument(

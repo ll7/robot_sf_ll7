@@ -83,6 +83,9 @@ Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, a
 Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing
 or inconsistent.
 The parent must inspect route evidence and run targeted local checks.
+The routed manifest records terminal_state, scope_check, compact_artifacts, missing_artifact,
+route_not_started, scope_violation, status.txt, and validation.txt. Parent acceptance remains
+separate from route evidence.
 Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
 no broad rg -n ., and no full file reads.
 The active ledger records loaded context with skill/doc summaries, snapshot paths,

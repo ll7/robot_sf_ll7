@@ -113,6 +113,13 @@ The current diagnostic-only handoff, exact reproduction command, and no-verdict 
 recorded here:
 [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md).
 
+Issue #6646 held-out diagnosis comparison infrastructure: pinned learned-method manifest,
+case-alignment gate, pending-fixture admission check, non-deterministic learned-source
+projection, and versioned fixture-level report. The implementation is test-covered but makes
+no scientific-result claim; the committed reference fixture remains blocked by its pending
+independent-review marker:
+[issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this

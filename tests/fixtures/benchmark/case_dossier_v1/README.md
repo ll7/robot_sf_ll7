@@ -30,3 +30,13 @@ canonical test builder and then run its no-simulation integrity check:
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py --write
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py
 ```
+
+Use the non-mutating drift gate in validation or continuous integration to regenerate both
+packages under a temporary directory and compare every JSON file with the committed tree:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py --check
+```
+
+The check reports the first differing path and the source-bound digests, then exits non-zero
+without changing tracked fixtures.

@@ -10,12 +10,58 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 SCHEMA_VERSION = "worktree_hygiene_snapshot.v1"
+RETIREMENT_SCHEMA_VERSION = "worktree_retirement_plan.v1"
+ISSUE_REFERENCE_RE = re.compile(r"(?i)(?:#|issue[-_ /:#]+)(?P<number>[1-9][0-9]*)\b")
+PROTECTED_BRANCHES = frozenset({"main", "master"})
+PULL_REQUEST_QUERY_LIMIT = 500
+ARTIFACT_QUERY_LIMIT = 50
+PULL_REQUEST_INVENTORY_TRUNCATED = (
+    "pull-request coverage inventory truncated at bounded query limit"
+)
+TRACKED_DURABLE_PATHS = (
+    "docs/context/evidence/**",
+    "docs/evidence/**",
+    "evidence/**",
+    "manifests/**",
+    "**/*manifest*",
+)
+CACHE_ROOTS = frozenset(
+    {
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+    }
+)
+DISPOSABLE_OUTPUT_PREFIXES = (
+    "output/coverage/",
+    "output/validation/pr_ready/",
+    "output/cache/",
+    "output/scratch/",
+    "output/tmp/",
+)
+DURABLE_ARTIFACT_TERMS = (
+    "artifact",
+    "checkpoint",
+    "evidence",
+    "manifest",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +103,62 @@ class HygieneSnapshot:
     issue_counts: dict[str, int]
     repo_status: RepoStatus | None
     worktrees: list[WorktreeHygiene]
+    errors: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class IgnoredArtifact:
+    """A bounded classification of one ignored root in a worktree."""
+
+    path: str
+    category: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class RetirementAssessment:
+    """Preservation-aware retirement decision for one worktree."""
+
+    path: str
+    branch: str
+    head_sha: str
+    decision: str  # "preserve", "review", or "removeable"
+    coverage: str
+    reasons: list[str] = field(default_factory=list)
+    issue_numbers: list[int] = field(default_factory=list)
+    active_claims: list[int] = field(default_factory=list)
+    ignored_artifacts: list[IgnoredArtifact] = field(default_factory=list)
+    tracked_durable_paths: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class RetirementEvidence:
+    """Evidence inputs used by one retirement assessment."""
+
+    pull_requests: list[dict[str, Any]] = field(default_factory=list)
+    pull_request_error: str | None = None
+    active_claims: Mapping[int, str] = field(default_factory=dict)
+    claims_error: str | None = None
+    ignored_artifacts: list[IgnoredArtifact] = field(default_factory=list)
+    ignored_artifact_error: str | None = None
+    tracked_durable_paths: list[str] = field(default_factory=list)
+    tracked_durable_error: str | None = None
+    coverage_override: tuple[str, list[str]] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetirementPlan:
+    """Read-only preservation-aware worktree retirement plan."""
+
+    schema: str
+    total_worktrees: int
+    included_worktrees: int
+    worktrees_truncated: bool
+    current_worktree: str | None
+    removeable: list[str]
+    preserve: list[str]
+    review: list[str]
+    worktrees: list[RetirementAssessment]
     errors: list[str]
 
 
@@ -250,6 +352,485 @@ def _build_row(row: dict[str, str], current_path: Path) -> WorktreeHygiene:
     )
 
 
+def _issue_numbers(text: str) -> list[int]:
+    """Extract explicit issue references used to associate a worktree claim."""
+    return sorted({int(match.group("number")) for match in ISSUE_REFERENCE_RE.finditer(text)})
+
+
+def _classify_ignored_path(path: str) -> IgnoredArtifact:
+    """Classify one ignored path without assuming that unknown output is disposable."""
+    normalized = path.strip().rstrip("/")
+    lower = normalized.casefold()
+    root = lower.split("/", 1)[0]
+    if root in CACHE_ROOTS:
+        return IgnoredArtifact(normalized, "cache", f"known local cache root: {root}")
+    if any(
+        lower == prefix.rstrip("/") or lower.startswith(prefix)
+        for prefix in DISPOSABLE_OUTPUT_PREFIXES
+    ):
+        return IgnoredArtifact(
+            normalized, "disposable_output", "documented validation or scratch output"
+        )
+    if any(term in lower.split("/")[-1] for term in DURABLE_ARTIFACT_TERMS):
+        return IgnoredArtifact(
+            normalized, "durable_required", "ignored artifact name may carry durable evidence"
+        )
+    if root == "output" or any(term in lower for term in DURABLE_ARTIFACT_TERMS):
+        return IgnoredArtifact(
+            normalized, "handoff_needed", "ignored output requires explicit human classification"
+        )
+    return IgnoredArtifact(
+        normalized, "handoff_needed", "ignored path is not in the disposable allowlist"
+    )
+
+
+def _ignored_artifacts(path: str) -> tuple[list[IgnoredArtifact], str | None]:
+    """Return bounded ignored-root classifications for one worktree."""
+    result = _run_command(
+        ["git", "status", "--short", "--ignored", "--untracked-files=no"],
+        cwd=path,
+    )
+    if result.returncode != 0:
+        return [], f"ignored-artifact status unavailable for {path}: {result.stderr.strip()}"
+    artifacts = [
+        _classify_ignored_path(line[3:])
+        for line in result.stdout.splitlines()
+        if line.startswith("!! ") and line[3:].strip()
+    ]
+    if len(artifacts) > ARTIFACT_QUERY_LIMIT:
+        return (
+            artifacts[:ARTIFACT_QUERY_LIMIT],
+            f"ignored-artifact inventory truncated at {ARTIFACT_QUERY_LIMIT} entries for {path}",
+        )
+    return artifacts, None
+
+
+def _tracked_durable_paths(path: str) -> tuple[list[str], str | None]:
+    """List changed tracked manifest/evidence paths without scanning committed history."""
+    result = _run_command(
+        ["git", "diff", "--name-only", "HEAD", "--", *TRACKED_DURABLE_PATHS], cwd=path
+    )
+    if result.returncode != 0:
+        return (
+            [],
+            f"tracked artifact classification unavailable for {path}: {result.stderr.strip()}",
+        )
+    paths = sorted({line.strip() for line in result.stdout.splitlines() if line.strip()})
+    if len(paths) > ARTIFACT_QUERY_LIMIT:
+        return (
+            paths[:ARTIFACT_QUERY_LIMIT],
+            f"tracked artifact inventory truncated at {ARTIFACT_QUERY_LIMIT} entries for {path}",
+        )
+    return paths, None
+
+
+def _load_pull_request_rows(repo_path: Path) -> tuple[list[dict[str, Any]], str | None]:
+    """Read bounded all-state PR metadata for branch coverage classification."""
+    result = _run_command(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--limit",
+            str(PULL_REQUEST_QUERY_LIMIT + 1),
+            "--json",
+            "number,state,mergedAt,headRefName,headRefOid,title,body",
+        ],
+        cwd=str(repo_path),
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return (
+            [],
+            f"pull-request coverage unavailable: {result.stderr.strip() or result.stdout.strip()}",
+        )
+    try:
+        payload = json.loads(result.stdout or "null")
+    except json.JSONDecodeError as exc:
+        return [], f"pull-request coverage returned invalid JSON: {exc}"
+    if not isinstance(payload, list):
+        return [], "pull-request coverage response is not a list"
+    if len(payload) > PULL_REQUEST_QUERY_LIMIT:
+        return [], PULL_REQUEST_INVENTORY_TRUNCATED
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            return [], f"pull-request coverage row {index} is not an object"
+        if type(row.get("number")) is not int or not isinstance(row.get("state"), str):
+            return [], f"pull-request coverage row {index} is malformed"
+        if not isinstance(row.get("headRefName"), str):
+            return [], f"pull-request coverage row {index} has no head branch"
+        if not isinstance(row.get("headRefOid"), str):
+            return [], f"pull-request coverage row {index} has no head commit"
+        rows.append(row)
+    return rows, None
+
+
+def _load_active_claims(repo_path: Path) -> tuple[dict[int, str], str | None]:
+    """Read remote issue-claim refs without changing them."""
+    result = _run_command(
+        ["git", "ls-remote", "--heads", "origin", "refs/heads/agent-claims/issue-*"],
+        cwd=str(repo_path),
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return (
+            {},
+            f"issue-claim state unavailable: {result.stderr.strip() or result.stdout.strip()}",
+        )
+    claims: dict[int, str] = {}
+    pattern = re.compile(r"^refs/heads/agent-claims/issue-([1-9][0-9]*)$")
+    for index, line in enumerate(result.stdout.splitlines()):
+        parts = line.split()
+        if len(parts) != 2:
+            return {}, f"issue-claim response row {index} is malformed"
+        match = pattern.fullmatch(parts[1])
+        if not match or not re.fullmatch(r"[0-9a-fA-F]{7,64}", parts[0]):
+            return {}, f"issue-claim response row {index} is malformed"
+        claims[int(match.group(1))] = parts[0]
+    return claims, None
+
+
+def _matching_pull_requests(branch: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return PR rows whose head branch exactly names the worktree branch."""
+    return [row for row in rows if row.get("headRefName") == branch]
+
+
+def _query_head_pull_requests(
+    repo_path: Path, branch: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Query bounded PR coverage for one branch when the global inventory is truncated."""
+    result = _run_command(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--state",
+            "all",
+            "--limit",
+            str(PULL_REQUEST_QUERY_LIMIT + 1),
+            "--json",
+            "number,state,mergedAt,headRefName,headRefOid,title,body",
+        ],
+        cwd=str(repo_path),
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return (
+            [],
+            f"pull-request coverage unavailable for branch {branch!r}: "
+            f"{result.stderr.strip() or result.stdout.strip()}",
+        )
+    try:
+        payload = json.loads(result.stdout or "null")
+    except json.JSONDecodeError as exc:
+        return [], f"pull-request coverage for branch {branch!r} returned invalid JSON: {exc}"
+    if not isinstance(payload, list):
+        return [], f"pull-request coverage for branch {branch!r} is not a list"
+    if len(payload) > PULL_REQUEST_QUERY_LIMIT:
+        return [], f"pull-request coverage for branch {branch!r} exceeded bounded query limit"
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            return [], f"pull-request coverage for branch {branch!r} row {index} is malformed"
+        if type(row.get("number")) is not int or not isinstance(row.get("state"), str):
+            return [], f"pull-request coverage for branch {branch!r} row {index} is malformed"
+        if row.get("headRefName") != branch or not isinstance(row.get("headRefOid"), str):
+            return [], f"pull-request coverage for branch {branch!r} row {index} has invalid head"
+        rows.append(row)
+    return rows, None
+
+
+def _pull_request_coverage(
+    row: WorktreeHygiene, pull_requests: list[dict[str, Any]]
+) -> tuple[str | None, list[str]]:
+    """Return exact-head PR coverage, leaving ancestry as a separate fallback."""
+    matches = _matching_pull_requests(row.branch, pull_requests)
+    exact_matches = [pr for pr in matches if pr.get("headRefOid") == row.head_sha]
+    if exact_matches:
+        states = {str(pr.get("state") or "").upper() for pr in exact_matches}
+        for state, coverage, reasons in (
+            ("OPEN", "open_pr", ["open_pr"]),
+            ("MERGED", "merged_pr", []),
+            ("CLOSED", "closed_pr", ["closed_pr_requires_review"]),
+        ):
+            if state in states:
+                return coverage, reasons
+        return "unavailable", ["unknown_pull_request_state"]
+    return None, ["branch_head_mismatch"] if matches else []
+
+
+def _coverage_for_row(
+    row: WorktreeHygiene,
+    *,
+    pull_requests: list[dict[str, Any]],
+    pull_request_error: str | None,
+) -> tuple[str, list[str]]:
+    """Determine whether a branch has authoritative merged/closed coverage."""
+    if pull_request_error:
+        return "unavailable", ["pull_request_state_unavailable"]
+    if not row.branch or not row.head_sha:
+        return "unavailable", ["branch_coverage_unavailable"]
+    pull_request_coverage, pull_request_reasons = _pull_request_coverage(row, pull_requests)
+    if pull_request_coverage:
+        return pull_request_coverage, pull_request_reasons
+
+    result = _run_command(
+        ["git", "merge-base", "--is-ancestor", row.head_sha, "origin/main"],
+        cwd=row.path,
+    )
+    if result.returncode == 0:
+        return "ancestor_of_origin_main", []
+    if result.returncode == 1:
+        return "unmerged", [*pull_request_reasons, "no_merged_coverage"]
+    return "unavailable", ["merge_coverage_unavailable"]
+
+
+def _base_retirement_reasons(row: WorktreeHygiene) -> tuple[list[str], list[str]]:
+    """Return preservation and review reasons derived from local Git state."""
+    hard: list[str] = []
+    review: list[str] = []
+    if row.is_current:
+        hard.append("current_worktree")
+    if row.branch.casefold() in PROTECTED_BRANCHES:
+        hard.append("protected_canonical_branch")
+    if row.is_detached:
+        hard.append("detached")
+    if row.dirty_entries < 0:
+        review.append("status_unavailable")
+    elif row.dirty_entries > 0:
+        hard.append("dirty")
+    if row.branch and row.upstream is None:
+        hard.append("missing_upstream")
+    if row.ahead is None and row.upstream is not None and not row.is_detached:
+        review.append("drift_unavailable")
+    elif row.ahead is not None and row.ahead > 0:
+        hard.append("ahead_commits")
+    if row.behind is not None and row.behind > 0:
+        review.append("behind_upstream")
+    return hard, review
+
+
+def _artifact_retirement_reasons(evidence: RetirementEvidence) -> tuple[list[str], list[str]]:
+    """Return preservation and review reasons derived from artifact evidence."""
+    hard: list[str] = []
+    review: list[str] = []
+    if evidence.ignored_artifact_error:
+        review.append("ignored_artifact_classification_unavailable")
+    if any(
+        item.category in {"durable_required", "handoff_needed"}
+        for item in evidence.ignored_artifacts
+    ):
+        hard.append("ignored_durable_or_unclassified_artifact")
+    if evidence.tracked_durable_error:
+        review.append("tracked_artifact_classification_unavailable")
+    if evidence.tracked_durable_paths:
+        hard.append("tracked_durable_evidence_or_manifest")
+    return hard, review
+
+
+def _claim_retirement_reasons(
+    issue_numbers: list[int], evidence: RetirementEvidence
+) -> tuple[list[str], list[str], list[int]]:
+    """Return claim-related reasons and the active issue numbers."""
+    active = sorted(set(issue_numbers).intersection(evidence.active_claims))
+    if evidence.claims_error:
+        return [], ["active_claim_state_unavailable"], active
+    if active:
+        return ["active_issue_claim"], [], active
+    if evidence.active_claims and not issue_numbers:
+        return [], ["claim_association_unavailable"], active
+    return [], [], active
+
+
+def _issue_numbers_for_row(row: WorktreeHygiene, pull_requests: list[dict[str, Any]]) -> list[int]:
+    """Collect issue references from a branch and its matching PRs."""
+    matching = _matching_pull_requests(row.branch, pull_requests)
+    numbers = set(_issue_numbers(row.branch))
+    numbers.update(
+        issue
+        for pr in matching
+        for issue in _issue_numbers(f"{pr.get('title', '')} {pr.get('body', '')}")
+    )
+    return sorted(numbers)
+
+
+def assess_retirement(
+    row: WorktreeHygiene,
+    evidence: RetirementEvidence | None = None,
+) -> RetirementAssessment:
+    """Classify a row conservatively as preserve, review, or removeable."""
+    evidence = evidence or RetirementEvidence()
+    issue_numbers = _issue_numbers_for_row(row, evidence.pull_requests)
+    hard_reasons, review_reasons = _base_retirement_reasons(row)
+    artifact_hard, artifact_review = _artifact_retirement_reasons(evidence)
+    claim_hard, claim_review, active_claim_numbers = _claim_retirement_reasons(
+        issue_numbers, evidence
+    )
+    hard_reasons.extend(artifact_hard)
+    hard_reasons.extend(claim_hard)
+    review_reasons.extend(artifact_review)
+    review_reasons.extend(claim_review)
+
+    coverage, coverage_reasons = evidence.coverage_override or _coverage_for_row(
+        row,
+        pull_requests=evidence.pull_requests,
+        pull_request_error=evidence.pull_request_error,
+    )
+    review_reasons.extend(coverage_reasons)
+    decision = "preserve" if hard_reasons else "review" if review_reasons else "removeable"
+    return RetirementAssessment(
+        path=row.path,
+        branch=row.branch,
+        head_sha=row.head_sha,
+        decision=decision,
+        coverage=coverage,
+        reasons=list(dict.fromkeys(hard_reasons + review_reasons)),
+        issue_numbers=issue_numbers,
+        active_claims=active_claim_numbers,
+        ignored_artifacts=evidence.ignored_artifacts,
+        tracked_durable_paths=evidence.tracked_durable_paths,
+    )
+
+
+def _retirement_pull_request_context(
+    repo_path: Path,
+    pull_requests: list[dict[str, Any]] | None,
+    pull_request_error: str | None,
+) -> tuple[list[dict[str, Any]], str | None, bool, list[str]]:
+    """Load global PR context and identify whether per-branch fallback is needed."""
+    queried = pull_requests is None and pull_request_error is None
+    if queried:
+        pull_requests, pull_request_error = _load_pull_request_rows(repo_path)
+    use_branch_fallback = queried and pull_request_error == PULL_REQUEST_INVENTORY_TRUNCATED
+    errors = [] if use_branch_fallback or not pull_request_error else [pull_request_error]
+    return pull_requests or [], pull_request_error, use_branch_fallback, errors
+
+
+def _pull_requests_for_row(
+    repo_path: Path,
+    row: WorktreeHygiene,
+    *,
+    pull_requests: list[dict[str, Any]],
+    pull_request_error: str | None,
+    use_branch_fallback: bool,
+    cache: dict[str, tuple[list[dict[str, Any]], str | None]],
+) -> tuple[list[dict[str, Any]], str | None, list[str]]:
+    """Return PR evidence for one row, using a cached head query after truncation."""
+    if not use_branch_fallback:
+        return pull_requests, pull_request_error, []
+    if row.branch not in cache:
+        cache[row.branch] = (
+            _query_head_pull_requests(repo_path, row.branch) if row.branch else ([], None)
+        )
+    row_pull_requests, row_error = cache[row.branch]
+    errors = [f"{row_error} (worktree {row.path})"] if row_error else []
+    return row_pull_requests, row_error, errors
+
+
+def _retirement_evidence_for_row(
+    row: WorktreeHygiene,
+    *,
+    pull_requests: list[dict[str, Any]],
+    pull_request_error: str | None,
+    active_claims: dict[int, str],
+    claims_error: str | None,
+) -> tuple[RetirementEvidence, list[str]]:
+    """Collect bounded local artifact evidence for one retirement row."""
+    ignored, ignored_error = _ignored_artifacts(row.path)
+    tracked, tracked_error = _tracked_durable_paths(row.path)
+    errors = [error for error in (ignored_error, tracked_error) if error]
+    return (
+        RetirementEvidence(
+            pull_requests=pull_requests,
+            pull_request_error=pull_request_error,
+            active_claims=active_claims,
+            claims_error=claims_error,
+            ignored_artifacts=ignored,
+            ignored_artifact_error=ignored_error,
+            tracked_durable_paths=tracked,
+            tracked_durable_error=tracked_error,
+        ),
+        errors,
+    )
+
+
+def build_retirement_plan(
+    *,
+    include_all_worktrees: bool = False,
+    worktree_limit: int = 40,
+    filters: list[str] | None = None,
+    snapshot: HygieneSnapshot | None = None,
+    pull_requests: list[dict[str, Any]] | None = None,
+    pull_request_error: str | None = None,
+    active_claims: dict[int, str] | None = None,
+    claims_error: str | None = None,
+) -> RetirementPlan:
+    """Build a read-only preservation-aware retirement projection."""
+    snapshot = snapshot or build_snapshot(
+        include_all_worktrees=include_all_worktrees,
+        worktree_limit=worktree_limit,
+        filters=filters,
+    )
+    errors = list(snapshot.errors)
+    if snapshot.worktrees_truncated:
+        errors.append(
+            "worktree inventory truncated; use --include-all-worktrees for complete planning"
+        )
+
+    repo_path = Path.cwd().resolve()
+    (
+        pull_requests,
+        pull_request_error,
+        use_branch_fallback,
+        pull_request_errors,
+    ) = _retirement_pull_request_context(repo_path, pull_requests, pull_request_error)
+    if active_claims is None and claims_error is None:
+        active_claims, claims_error = _load_active_claims(repo_path)
+    errors.extend(pull_request_errors)
+    if claims_error:
+        errors.append(claims_error)
+
+    assessments: list[RetirementAssessment] = []
+    branch_pull_request_cache: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
+    for row in snapshot.worktrees:
+        row_pull_requests, row_pull_request_error, row_pr_errors = _pull_requests_for_row(
+            repo_path,
+            row,
+            pull_requests=pull_requests,
+            pull_request_error=pull_request_error,
+            use_branch_fallback=use_branch_fallback,
+            cache=branch_pull_request_cache,
+        )
+        evidence, evidence_errors = _retirement_evidence_for_row(
+            row,
+            pull_requests=row_pull_requests,
+            pull_request_error=row_pull_request_error,
+            active_claims=active_claims or {},
+            claims_error=claims_error,
+        )
+        errors.extend(row_pr_errors)
+        errors.extend(evidence_errors)
+        assessments.append(assess_retirement(row, evidence))
+
+    return RetirementPlan(
+        schema=RETIREMENT_SCHEMA_VERSION,
+        total_worktrees=snapshot.total_worktrees,
+        included_worktrees=snapshot.included_worktrees,
+        worktrees_truncated=snapshot.worktrees_truncated,
+        current_worktree=snapshot.current_worktree,
+        removeable=[row.path for row in assessments if row.decision == "removeable"],
+        preserve=[row.path for row in assessments if row.decision == "preserve"],
+        review=[row.path for row in assessments if row.decision == "review"],
+        worktrees=assessments,
+        errors=errors,
+    )
+
+
 def build_snapshot(
     *,
     include_all_worktrees: bool = False,
@@ -334,6 +915,36 @@ def format_human(snapshot: HygieneSnapshot) -> str:
     return "\n".join(lines)
 
 
+def format_retirement_plan(plan: RetirementPlan) -> str:
+    """Format a preservation-aware retirement plan without offering deletion."""
+    lines = [
+        f"Worktree Retirement Plan (schema: {plan.schema})",
+        f"  Total worktrees: {plan.total_worktrees}",
+        f"  Included worktrees: {plan.included_worktrees}",
+        f"  Truncated: {plan.worktrees_truncated}",
+        f"  Removeable: {len(plan.removeable)}",
+        f"  Preserve: {len(plan.preserve)}",
+        f"  Review: {len(plan.review)}",
+    ]
+    for row in plan.worktrees:
+        lines.append(
+            f"  - [{row.decision.upper()}] {row.branch or 'detached'}: {row.path}"
+            f" coverage={row.coverage}"
+        )
+        if row.reasons:
+            lines.append(f"    reasons: {', '.join(row.reasons)}")
+        if row.ignored_artifacts:
+            categories = ", ".join(f"{item.path}={item.category}" for item in row.ignored_artifacts)
+            lines.append(f"    ignored: {categories}")
+        if row.tracked_durable_paths:
+            lines.append(f"    tracked durable paths: {', '.join(row.tracked_durable_paths)}")
+    if plan.errors:
+        lines.append("  Errors:")
+        lines.extend(f"    - {error}" for error in plan.errors)
+    lines.append("  No worktrees were removed; this command is read-only.")
+    return "\n".join(lines)
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
@@ -355,6 +966,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--repo-status", action="store_true", help="Include current checkout status."
     )
+    parser.add_argument(
+        "--retirement-plan",
+        action="store_true",
+        help="Emit a read-only preservation-aware retirement plan.",
+    )
     return parser.parse_args(argv)
 
 
@@ -362,6 +978,17 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _parse_args(argv)
     try:
+        if args.retirement_plan:
+            plan = build_retirement_plan(
+                include_all_worktrees=args.include_all_worktrees,
+                worktree_limit=args.worktree_limit,
+                filters=args.filters,
+            )
+            if args.json:
+                print(json.dumps(asdict(plan), indent=2, sort_keys=True))
+            else:
+                print(format_retirement_plan(plan))
+            return 0 if not plan.errors else 1
         snapshot = build_snapshot(
             include_all_worktrees=args.include_all_worktrees,
             worktree_limit=args.worktree_limit,

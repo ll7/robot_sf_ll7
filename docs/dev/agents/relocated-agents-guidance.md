@@ -153,6 +153,10 @@ compact hygiene helper instead of printing the full worktree inventory in the pa
 --porcelain` only when the compact payload is insufficient or reports a stale administrative entry
 that needs manual inspection.
 
+Use `--retirement-plan --include-all-worktrees --json` when a bounded report must decide whether a
+worktree is `preserve`, `review`, or `removeable`. Treat every unknown claim, PR, status, or ignored
+artifact classification as a blocker; the report is read-only and never grants deletion authority.
+
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
   explicit handoff.

@@ -701,6 +701,20 @@ The payload reports total and included worktree counts, dirty worktrees, missing
 ahead/behind drift, detached heads, and truncation status. Use `--filter <branch-or-path-substring>`
 or `--worktree-limit <n>` when remote hosts have many linked worktrees.
 
+For a read-only preservation-aware retirement projection, use the bounded report explicitly:
+
+```bash
+uv run python scripts/dev/worktree_hygiene_snapshot.py \
+  --retirement-plan --include-all-worktrees --json
+```
+
+The retirement projection classifies each row as `preserve`, `review`, or `removeable`. It joins
+bounded PR coverage and remote issue-claim state, reports dirty/ahead/detached/missing-upstream
+reasons, and classifies ignored roots as cache, documented disposable output, durable-required, or
+handoff-needed. Unknown PR, claim, status, or artifact evidence is a blocker. The command never
+removes worktrees; any later removal still requires human approval and the preservation procedure
+above.
+
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 
 - Preflight lanes with `--expected-head-sha <sha>` before dispatch.

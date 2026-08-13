@@ -116,6 +116,17 @@ GOAL_AUTOPILOT_SPARK_REQUIRED_PHRASES = (
     "github mutation",
     "shell-executable fallback",
 )
+ROUTED_FAILURE_REQUIRED_PHRASES = (
+    "terminal_state",
+    "scope_check",
+    "compact_artifacts",
+    "missing_artifact",
+    "route_not_started",
+    "scope_violation",
+    "status.txt",
+    "validation.txt",
+    "parent acceptance",
+)
 
 
 def _read_yaml(path: Path) -> Any:
@@ -346,6 +357,9 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
             errors.append(f"{rel}: missing worker-output limit requirement {phrase!r}")
 
     if metadata.get("name") == "goal-autopilot":
+        for phrase in ROUTED_FAILURE_REQUIRED_PHRASES:
+            if phrase not in lower:
+                errors.append(f"{rel}: missing routed-failure requirement {phrase!r}")
         for phrase in GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES:
             if phrase not in lower:
                 errors.append(f"{rel}: missing active-ledger requirement {phrase!r}")

@@ -77,7 +77,7 @@
       "blessed": true,
       "note": "Blessed broad catches: defensive visualization ingest and authorization-gated episode execution boundaries.",
       "samples": [
-        "robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py:1037",
+        "robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py:1037",
         "robot_sf/benchmark/visualization.py:468"
       ]
     },

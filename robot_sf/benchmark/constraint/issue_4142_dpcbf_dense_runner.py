@@ -4,7 +4,7 @@ Issue #4142 asks for a bounded dense dynamic-obstacle comparison of three predec
 Control Barrier Function (CBF) arms -- unfiltered (``cbf_off``), collision-cone CBF
 (``cbf_collision_cone_on``), and the Dynamic Parabolic CBF variant
 (``cbf_dynamic_parabolic_v1_on``). PR #4299 added the read-only *readiness* surface
-(:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_readiness`) that validates the predeclared
+(:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness`) that validates the predeclared
 packet ``configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`` but explicitly left
 one downstream gate open: *no packet-consuming runner is wired to schema*
 ``robot_sf.issue_4142_dpcbf_dense_comparison.v1``.
@@ -55,7 +55,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     PACKET_SCHEMA_VERSION,
     REQUIRED_ARMS,

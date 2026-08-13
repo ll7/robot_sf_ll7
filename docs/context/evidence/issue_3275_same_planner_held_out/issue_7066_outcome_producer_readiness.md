@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#7066, 2026-08-13) - NEEDS-REVIEW -->
+
 # Issue #7066 outcome producer readiness
 
 This note is the current execution-facing contract for producing the

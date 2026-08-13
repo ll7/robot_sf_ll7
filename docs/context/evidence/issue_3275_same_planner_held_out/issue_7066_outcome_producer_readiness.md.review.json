@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md",
+  "artifact_sha256": "6f6003a05b829bba192f3d9800b7fab6644908e532ebb52bda07eaf2be9161bd",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

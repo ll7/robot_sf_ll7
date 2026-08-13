@@ -30,6 +30,15 @@
     "both_arms_use_same_planner": true,
     "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
     "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "execution_commit_role": "historical_planner_reference_lineage",
+    "execution_identity": {
+      "execution_mode": "adapter",
+      "policy_semantics": "social_force_adapter",
+      "adapter_name": "SocialForcePlannerAdapter",
+      "upstream_command_space": "velocity_vector_xy",
+      "benchmark_command_space": "unicycle_vw",
+      "projection_policy": "heading_safe_velocity_to_unicycle_vw"
+    },
     "planner_config_source": "archive entry provenance.target_planner / provenance.config_sha256 (issue5305-certified-archive-13518)"
   },
   "fit": {
@@ -216,6 +225,9 @@
       "execution_command",
       "execution_config_lineage",
       "execution_mode",
+      "execution_identity",
+      "producer_commit",
+      "episode_record_sha256",
       "primary_failure",
       "termination_reason",
       "independent_failure_outcome",
@@ -236,7 +248,8 @@
       "arm membership or frozen per-arm candidate count differs from the predeclared manifest binding",
       "execution_seed differs from the predeclared manifest seed lineage",
       "candidate_manifest_id appears in both arms",
-      "execution_mode is fallback or degraded (or not native)",
+      "execution mode or canonical adapter identity differs from the declared social_force adapter",
+      "producer_commit or episode_record_sha256 is missing for adapter execution",
       "target_planner_id != social_force",
       "target_planner_config_sha256 mismatch",
       "scenario_family != classic_cross_trap_medium (evaluation family)",
@@ -247,7 +260,7 @@
   },
   "diagnostic_namespace": {
     "archive_nearness": "diagnostic_only_cannot_drive_verdict",
-    "rule": "Archive-nearness is the ranking signal only. It is recorded under an explicitly diagnostic namespace and can never drive the top-level comparison, the #2921 stop rule, or the continue/stop/inconclusive decision. Only independent native planner-execution outcomes admitted under the v2 row contract can drive a verdict."
+    "rule": "Archive-nearness is the ranking signal only. It is recorded under an explicitly diagnostic namespace and can never drive the top-level comparison, the #2921 stop rule, or the continue/stop/inconclusive decision. Only independent planner-execution outcomes admitted under the declared canonical execution identity and v2 row contract can drive a verdict."
   },
   "decision_rule": {
     "vocabulary": [

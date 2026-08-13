@@ -18,7 +18,7 @@ This slice closes that gap:
 - Tightened the packet with a structured `canonical_command` field and an explicit
   `summary_contract.excluded_row_statuses` fail-closed exclusion list
   (`fallback`, `degraded`, `failed`, `ineligible`).
-- `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` — a read-only readiness surface
+- `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py` — a read-only readiness surface
   that reuses the canonical CBF runtime validator
   (`robot_sf.benchmark.safety.cbf_safety_filter_runtime.runtime_config_from_mapping`) as the
   single source of truth for arm semantics, cross-checks each arm's adapter config against

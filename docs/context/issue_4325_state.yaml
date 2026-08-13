@@ -22,7 +22,7 @@ entries:
       fail_closed_evidence:
         symbol: DenseComparisonExecutionGatedError
         present_in_merged_main:
-          - robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py
+          - robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py
           - scripts/tools/run_issue_4142_dpcbf_dense_comparison.py
           - tests/benchmark/test_issue_4142_dpcbf_dense_runner.py
         note: >-

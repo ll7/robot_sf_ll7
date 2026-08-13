@@ -3,9 +3,9 @@
 The dense-comparison pipeline landed as three separate slices, each with its own module,
 schema constant, and focused test file:
 
-- PR #4299 -- readiness preflight (:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_readiness`),
-- PR #4318 -- packet-consuming run planner (:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_runner`),
-- PR #4345 -- plan-consuming summarizer (:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_summary`).
+- PR #4299 -- readiness preflight (:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness`),
+- PR #4318 -- packet-consuming run planner (:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner`),
+- PR #4345 -- plan-consuming summarizer (:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_summary`).
 
 Each slice's own test file exercises that module plus readiness, but no single test drives all
 three *top-level* entry points (``evaluate_readiness`` -> ``build_run_plan`` ->
@@ -34,23 +34,23 @@ import pathlib
 
 import pytest
 
-from robot_sf.benchmark import issue_4142_dpcbf_dense_readiness as readiness_mod
-from robot_sf.benchmark import issue_4142_dpcbf_dense_runner as runner_mod
-from robot_sf.benchmark import issue_4142_dpcbf_dense_summary as summary_mod
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint import issue_4142_dpcbf_dense_readiness as readiness_mod
+from robot_sf.benchmark.constraint import issue_4142_dpcbf_dense_runner as runner_mod
+from robot_sf.benchmark.constraint import issue_4142_dpcbf_dense_summary as summary_mod
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     PACKET_SCHEMA_VERSION,
     REQUIRED_ARMS,
     REQUIRED_EXCLUDED_ROW_STATUSES,
     evaluate_readiness,
 )
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
     PLAN_SCHEMA_VERSION,
     DenseComparisonExecutionGatedError,
     build_run_plan,
     execute_run_plan,
 )
-from robot_sf.benchmark.issue_4142_dpcbf_dense_summary import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_summary import (
     SUMMARY_SCHEMA_VERSION,
     summarize_dense_comparison,
 )

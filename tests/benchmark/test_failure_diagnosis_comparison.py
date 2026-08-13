@@ -29,7 +29,8 @@ from robot_sf.benchmark.failure_diagnosis_comparison import (
     validate_method_manifest,
 )
 
-_REFERENCE_FIXTURE_PATH = Path(
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REFERENCE_FIXTURE_PATH = _REPO_ROOT / (
     "docs/context/evidence/issue_6646_failure_diagnosis_reference_fixture.v1.json"
 )
 
@@ -335,6 +336,7 @@ class TestHappyPath:
     """Successful comparison with synthetic frozen outputs."""
 
     def test_comparison_report_has_correct_schema_version(self) -> None:
+        """The report uses the versioned comparison schema for stable consumers."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -344,6 +346,7 @@ class TestHappyPath:
         assert report["schema_version"] == COMPARISON_SCHEMA_VERSION
 
     def test_comparison_report_has_available_status(self) -> None:
+        """A fully admitted synthetic comparison reports an available status."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -354,6 +357,7 @@ class TestHappyPath:
         assert report["output_reason"] is None
 
     def test_comparison_report_carries_both_summaries(self) -> None:
+        """Available reports retain deterministic and learned metric summaries."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -366,6 +370,7 @@ class TestHappyPath:
         assert "metrics" in report["learned_summary"]
 
     def test_comparison_report_includes_method_manifest(self) -> None:
+        """Reports retain the pinned method manifest for provenance review."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -378,6 +383,7 @@ class TestHappyPath:
         assert manifest["non_deterministic_source"]
 
     def test_comparison_report_preserves_claim_boundary(self) -> None:
+        """Reports state the diagnostic-only boundary that prevents overclaiming."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -391,6 +397,7 @@ class TestHappyPath:
         assert "next_gate" in boundary
 
     def test_comparison_report_has_case_comparisons(self) -> None:
+        """Reports retain per-case views for denominator and exclusion auditing."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -401,6 +408,7 @@ class TestHappyPath:
         assert len(report["deterministic_case_comparisons"]) == 6
 
     def test_comparison_report_alignment_is_correct(self) -> None:
+        """Reports expose the exact aligned case count used by both methods."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -413,6 +421,7 @@ class TestHappyPath:
         assert len(alignment["aligned_case_ids"]) == 6
 
     def test_comparison_report_has_caveats(self) -> None:
+        """Reports retain caveats explaining unavailable execution and claim limits."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -423,6 +432,7 @@ class TestHappyPath:
         assert any("does not execute" in c for c in report["caveats"])
 
     def test_comparison_report_has_learned_source_projection(self) -> None:
+        """Reports document how learned provenance survives evaluator projection."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -449,11 +459,11 @@ class TestHappyPath:
     def test_deterministic_comparator_not_overwritten(self) -> None:
         """The deterministic records dict is not mutated during comparison."""
         det = _synthetic_deterministic_records()
-        original_keys = set(det.keys())
+        original = copy.deepcopy(det)
         compare_held_out_diagnoses(
             _reviewed_fixture(), det, _synthetic_learned_records(), _valid_manifest()
         )
-        assert set(det.keys()) == original_keys
+        assert det == original
 
     def test_no_model_execution(self) -> None:
         """The comparison harness does not import or call any model/API code."""
@@ -476,37 +486,44 @@ class TestManifestValidation:
     """Method manifest must carry all required provenance fields."""
 
     def test_valid_manifest_passes(self) -> None:
+        """Complete manifest provenance is accepted for a learned method."""
         manifest = validate_method_manifest(_valid_manifest())
         assert manifest.method_id == "test-learned-method-v1"
 
     def test_missing_field_rejects(self) -> None:
+        """Missing model revision rejects the manifest instead of synthesizing it."""
         incomplete = _valid_manifest()
         del incomplete["model_revision"]
         with pytest.raises(MethodManifestError, match="model_revision"):
             validate_method_manifest(incomplete)
 
     def test_empty_string_rejects(self) -> None:
+        """Empty provenance values fail closed before comparison."""
         manifest = _valid_manifest()
         manifest["prompt_digest"] = ""
         with pytest.raises(MethodManifestError, match="prompt_digest"):
             validate_method_manifest(manifest)
 
     def test_whitespace_only_rejects(self) -> None:
+        """Whitespace-only provenance values are treated as missing."""
         manifest = _valid_manifest()
         manifest["output_artifact_digest"] = "   "
         with pytest.raises(MethodManifestError, match="output_artifact_digest"):
             validate_method_manifest(manifest)
 
     def test_non_mapping_rejects(self) -> None:
+        """Non-mapping manifests are rejected as structurally invalid."""
         with pytest.raises(MethodManifestError, match="must be a mapping"):
             validate_method_manifest("not a mapping")
 
     def test_multiple_missing_fields_reported(self) -> None:
+        """The manifest error reports multiple missing provenance fields together."""
         manifest: dict[str, str] = {"method_id": "test"}
         with pytest.raises(MethodManifestError, match="model_identifier"):
             validate_method_manifest(manifest)
 
     def test_manifest_strips_whitespace(self) -> None:
+        """Valid manifest strings are normalized without changing their meaning."""
         manifest = _valid_manifest()
         manifest["method_id"] = "  my-method  "
         result = validate_method_manifest(manifest)
@@ -522,12 +539,14 @@ class TestCaseAlignment:
     """Case ids must match exactly between deterministic and learned sets."""
 
     def test_perfect_alignment_succeeds(self) -> None:
+        """Identical case sets pass the structural alignment gate."""
         det = _synthetic_deterministic_records()
         learn = _synthetic_learned_records()
         result = align_held_out_cases(det, learn)
         assert result["deterministic_count"] == result["learned_count"]
 
     def test_missing_case_in_learned_rejects(self) -> None:
+        """A missing learned case is rejected to prevent denominator drift."""
         det = _synthetic_deterministic_records()
         learn = dict(_synthetic_learned_records())
         del learn["collision_case"]
@@ -535,6 +554,7 @@ class TestCaseAlignment:
             align_held_out_cases(det, learn)
 
     def test_missing_case_in_deterministic_rejects(self) -> None:
+        """A learned-only case is rejected to preserve paired comparison identity."""
         det = _synthetic_deterministic_records()
         learn = _synthetic_learned_records()
         learn["extra_case"] = {"detected": False}
@@ -542,6 +562,7 @@ class TestCaseAlignment:
             align_held_out_cases(det, learn)
 
     def test_duplicate_case_in_deterministic_rejects(self) -> None:
+        """Duplicate deterministic ids fail before metrics can be computed."""
         learn = {"a": {"case_id": "a", "detected": True}, "b": {"case_id": "b", "detected": False}}
         det_with_dupe = [
             {"case_id": "a", "detected": True},
@@ -552,6 +573,7 @@ class TestCaseAlignment:
             align_held_out_cases(det_with_dupe, learn)
 
     def test_duplicate_case_in_learned_rejects(self) -> None:
+        """Duplicate learned ids fail before metrics can be computed."""
         det = {"a": {"case_id": "a", "detected": True}, "b": {"case_id": "b", "detected": False}}
         learn_with_dupe = [
             {"case_id": "a", "detected": True},
@@ -579,6 +601,7 @@ class TestProvenanceFailClosed:
     """Missing or invalid manifest fields produce unavailable reports or reject."""
 
     def test_missing_manifest_field_raises(self) -> None:
+        """Comparison rejects a missing held-out exclusion declaration."""
         incomplete = _valid_manifest()
         del incomplete["held_out_exclusion_declaration"]
         with pytest.raises(MethodManifestError):
@@ -590,6 +613,7 @@ class TestProvenanceFailClosed:
             )
 
     def test_empty_manifest_field_raises(self) -> None:
+        """Comparison rejects empty decoding provenance instead of guessing defaults."""
         manifest = _valid_manifest()
         manifest["decoding_settings"] = ""
         with pytest.raises(MethodManifestError):
@@ -610,12 +634,14 @@ class TestHeldOutExclusion:
     """The manifest must declare held-out exclusion."""
 
     def test_missing_held_out_declaration_rejects(self) -> None:
+        """A manifest without held-out exclusion provenance is rejected."""
         manifest = _valid_manifest()
         del manifest["held_out_exclusion_declaration"]
         with pytest.raises(MethodManifestError, match="held_out_exclusion_declaration"):
             validate_method_manifest(manifest)
 
     def test_present_held_out_declaration_accepted(self) -> None:
+        """A non-empty held-out exclusion declaration is retained and accepted."""
         manifest = validate_method_manifest(_valid_manifest())
         assert "held-out" in manifest.held_out_exclusion_declaration.lower()
 
@@ -629,6 +655,7 @@ class TestUnknownUnavailableExclusions:
     """Unknown/unavailable cases are excluded from metrics but retained in report."""
 
     def test_unavailable_case_excluded_from_detection(self) -> None:
+        """Unavailable rows stay visible but cannot enter detection denominators."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -639,6 +666,7 @@ class TestUnknownUnavailableExclusions:
         assert det_metrics["excluded_count"] >= 1
 
     def test_unavailable_case_retained_in_comparisons(self) -> None:
+        """Unavailable case ids remain in the report for auditability."""
         report = compare_held_out_diagnoses(
             _reviewed_fixture(),
             _synthetic_deterministic_records(),
@@ -658,32 +686,39 @@ class TestUnavailableReport:
     """Fail-closed unavailable report construction."""
 
     def test_unavailable_report_has_correct_status(self) -> None:
+        """The fail-closed builder records the unavailable reason explicitly."""
         report = build_unavailable_comparison_report("provenance validation failed")
         assert report["output_status"] == "unavailable"
         assert report["output_reason"] == "provenance validation failed"
 
     def test_unavailable_report_has_no_summaries(self) -> None:
+        """Unavailable reports do not expose partial metric summaries."""
         report = build_unavailable_comparison_report("case alignment mismatch")
         assert report["deterministic_summary"] is None
         assert report["learned_summary"] is None
+        assert report["learned_source_projection"] is None
 
     def test_unavailable_report_has_claim_boundary(self) -> None:
+        """Unavailable reports retain the no-scientific-result boundary."""
         report = build_unavailable_comparison_report("test reason")
         assert report["claim_boundary"]["no_scientific_result_claim"] is True
 
     def test_unavailable_report_with_valid_manifest_metadata(self) -> None:
+        """Valid manifest metadata is retained when comparison is unavailable."""
         report = build_unavailable_comparison_report(
             "case mismatch", method_manifest=_valid_manifest()
         )
         assert report["method_manifest"]["method_id"] == "test-learned-method-v1"
 
     def test_unavailable_report_with_invalid_manifest_metadata(self) -> None:
+        """Invalid optional manifest metadata is marked failed, not normalized."""
         report = build_unavailable_comparison_report(
             "provenance failed", method_manifest={"bad": "data"}
         )
         assert report["method_manifest"]["validation"] == "failed"
 
     def test_unavailable_report_without_manifest(self) -> None:
+        """Unavailable reports permit absent manifest metadata without inventing it."""
         report = build_unavailable_comparison_report("no manifest provided")
         assert report["method_manifest"] is None
 
@@ -697,6 +732,7 @@ class TestPayloadShapeInputs:
     """The harness accepts failure_diagnosis.v1 payloads as well as mappings."""
 
     def test_payload_shape_deterministic_records(self) -> None:
+        """Complete versioned payloads are accepted as comparison inputs."""
         det = _build_valid_payload_from_predicates()
         # Build a matching learned payload (same records, same order)
         learn = _build_valid_payload_from_predicates()
@@ -721,9 +757,9 @@ class TestFixtureReviewAdmission:
     """Fixtures with pending review markers are rejected before evaluation."""
 
     def test_pending_fixture_rejected(self) -> None:
-        """The production fixture carries a pending marker and must be rejected."""
-        fixture = _reference_fixture()
-        assert fixture["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+        """A case-insensitive pending marker with metadata blocks evaluation."""
+        fixture = _reviewed_fixture()
+        fixture["review_marker"] = "needs-review (2026-08)"
         with pytest.raises(FixtureReviewPendingError, match="pending review marker"):
             compare_held_out_diagnoses(
                 fixture,
@@ -762,6 +798,11 @@ class TestFixtureReviewAdmission:
         for marker in REVIEW_PENDING_MARKERS:
             with pytest.raises(FixtureReviewPendingError):
                 validate_fixture_review_admission({"review_marker": marker})
+
+    def test_pending_marker_normalization_is_fail_closed(self) -> None:
+        """Case and whitespace normalization rejects embedded pending markers."""
+        with pytest.raises(FixtureReviewPendingError):
+            validate_fixture_review_admission({"review_marker": "  Pending  review  "})
 
 
 # ---------------------------------------------------------------------------
@@ -961,12 +1002,14 @@ class TestModuleContract:
     """Module-level public API surface checks."""
 
     def test_all_exports_are_importable(self) -> None:
+        """Every declared public symbol is importable from the module."""
         from robot_sf.benchmark import failure_diagnosis_comparison as mod
 
         for name in mod.__all__:
             assert hasattr(mod, name), f"__all__ declares {name!r} but it is missing"
 
     def test_new_error_classes_exported(self) -> None:
+        """New admission errors and helpers remain part of the public contract."""
         from robot_sf.benchmark import failure_diagnosis_comparison as mod
 
         assert "FixtureReviewPendingError" in mod.__all__

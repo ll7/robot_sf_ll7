@@ -51,9 +51,10 @@ against the deterministic adapter constant.  This creates an asymmetry:
 ## Fixture review admission
 
 The comparison harness requires independently reviewed reference fixtures.  A fixture
-whose `review_marker` matches any entry in `REVIEW_PENDING_MARKERS` (e.g.
-`"AI-GENERATED NEEDS-REVIEW"`) is rejected before evaluation via
-`validate_fixture_review_admission()`.  This is a fail-closed admission gate.
+whose normalized, case-insensitive `review_marker` contains any entry in
+`REVIEW_PENDING_MARKERS` (e.g. `"AI-GENERATED NEEDS-REVIEW"`, including suffixed review
+metadata) is rejected before evaluation via `validate_fixture_review_admission()`.  This
+is a fail-closed admission gate.
 
 The current committed fixture carries `review_marker=AI-GENERATED NEEDS-REVIEW` and is
 therefore blocked.  Tests use a separate reviewed fixture helper that removes the
@@ -144,7 +145,7 @@ method_manifest ───┘
   "output_reason": null | "string",
   "alignment": { "aligned_case_ids": [...], "deterministic_count": N, "learned_count": N },
   "method_manifest": { ... },
-  "learned_source_projection": {
+  "learned_source_projection": null | {
     "description": "...",
     "preserved_fields": ["diagnosis_schema_version", "diagnosis_source"],
     "preserved_source_fields": ["diagnosis_source"]

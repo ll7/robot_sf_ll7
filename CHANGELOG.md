@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #6646 held-out diagnosis comparison infrastructure.** Added a pinned
+  learned-method manifest, exact case-alignment and fixture-review admission gates,
+  non-deterministic learned-source projection, and a versioned diagnostic comparison
+  report. The production fixture remains review-pending; no model output or scientific
+  result is claimed.
+
 * **Issue #6951 progress-shaped behavioral-cloning objective.** Added a named,
   config-first uniform control arm and a progress-weighted arm for expert-action
   negative log-likelihood. Arm B consumes only explicitly aligned,
@@ -3443,7 +3449,7 @@ If your project imports from `robot_sf.util` or `robot_sf.utils` , update your i
   package preserves the three reverified frozen candidates: Issue #5034
   control-action-latency metric evidence, Issue #5305 certified adversarial
   archive (17 entries), and Issue #5592 cross-matrix preregistration. Issue
-  #5416 remains excluded because its current acceptance checker is blocked. The
+  Issue #5416 remains excluded because its current acceptance checker is blocked. The
   package includes per-candidate reference manifests, SHA-256 checksums, the
   release checksum manifest, and the fail-closed preflight checklist. See
   `docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md`

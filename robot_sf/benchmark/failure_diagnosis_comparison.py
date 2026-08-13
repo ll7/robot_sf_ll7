@@ -327,11 +327,13 @@ def validate_fixture_review_admission(fixture: Mapping[str, Any]) -> None:
     if not isinstance(fixture, Mapping):
         raise FailureDiagnosisError("reference fixture must be a mapping")
     review_marker = fixture.get("review_marker")
-    if isinstance(review_marker, str) and review_marker.strip() in REVIEW_PENDING_MARKERS:
-        raise FixtureReviewPendingError(
-            f"reference fixture carries a pending review marker: {review_marker!r}; "
-            "independent review/adjudication is required before comparison"
-        )
+    if isinstance(review_marker, str):
+        normalized_marker = " ".join(review_marker.split()).upper()
+        if any(marker in normalized_marker for marker in REVIEW_PENDING_MARKERS):
+            raise FixtureReviewPendingError(
+                f"reference fixture carries a pending review marker: {review_marker!r}; "
+                "independent review/adjudication is required before comparison"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +642,7 @@ def compare_held_out_diagnoses(
 
     return {
         "schema_version": COMPARISON_SCHEMA_VERSION,
-        "output_status": "available",
+        "output_status": _OUTPUT_STATUSES[0],
         "output_reason": None,
         "alignment": alignment,
         "method_manifest": validated_manifest.to_dict(),
@@ -688,9 +690,9 @@ def build_unavailable_comparison_report(
 ) -> dict[str, Any]:
     """Build an unavailable comparison report when the learned method cannot be admitted.
 
-    This is the fail-closed path: when provenance validation, case alignment, or any
-    other admission gate fails, the harness emits an explicit ``"unavailable"`` status
-    with the reason.  The deterministic comparator is never run when admission fails.
+    Callers can use this fail-closed builder when provenance validation, case alignment,
+    or another admission gate fails.  It emits an explicit ``"unavailable"`` status with
+    the reason; the deterministic comparator is never run when admission fails.
 
     Args:
         reason: Human-readable reason the learned method was not admitted.
@@ -710,10 +712,11 @@ def build_unavailable_comparison_report(
 
     return {
         "schema_version": COMPARISON_SCHEMA_VERSION,
-        "output_status": "unavailable",
+        "output_status": _OUTPUT_STATUSES[1],
         "output_reason": reason,
         "alignment": None,
         "method_manifest": manifest_summary,
+        "learned_source_projection": None,
         "deterministic_summary": None,
         "learned_summary": None,
         "case_comparisons": [],

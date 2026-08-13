@@ -62,6 +62,17 @@ The label describes the package's normalized terminal category, not a claim that
 exceeded a wall-clock or step limit. Consumers that need the raw reason must use the source episode
 records; the frozen #6792 payload does not contain a raw-label breakdown.
 
+Packages built by the current builder carry this mapping inside the package itself, so a consumer
+can quote `terminal_counts` without reading this file. Both `manifest.json` and
+`publication/reduced_atlas.json` emit a `terminal_label_normalization` block with contract
+`ch7-terminal-label-normalization.v1`: the label precedence, the per-label source condition, the
+`normalized_timeout_reasons` list (which always contains `terminated`), and
+`raw_termination_reason_included: false`. The block is generated from the same constants the
+builder applies, so the published statement cannot drift from `_terminal_label()`. It is required
+by `ch7-reduced-publication-atlas.v2` and optional in `ch7-evidence-package.v1` only so that
+packages built before it — including the frozen #6792 payload, which is not rebuilt — still
+validate.
+
 For a future package version, retain the normalized `terminal_counts` field for compatibility and
 add an explicitly named per-cell raw-label breakdown (for example, `raw_termination_counts`) with
 its own schema and source-provenance contract. That v2 change requires a new package digest and

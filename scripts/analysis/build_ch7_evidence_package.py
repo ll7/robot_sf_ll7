@@ -34,6 +34,20 @@ PACKAGE_SCHEMA = "ch7-evidence-package.v1"
 REDUCED_PUBLICATION_ATLAS_SCHEMA = "ch7-reduced-publication-atlas.v2"
 COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
 PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
+TERMINAL_LABEL_CONTRACT = "ch7-terminal-label-normalization.v1"
+TERMINAL_TIMEOUT_REASONS: tuple[str, ...] = (
+    "horizon",
+    "max_steps",
+    "terminated",
+    "timeout",
+    "truncated",
+)
+TERMINAL_LABEL_PRECEDENCE: tuple[str, ...] = (
+    "route_complete",
+    "collision_event",
+    "timeout",
+    "unavailable",
+)
 EXPECTED_SOURCE_SHA256SUMS = "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
 EXPECTED_RELEASE_ARCHIVE_SHA256 = "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
 EXPECTED_COMPACT_PACKET_SHA256 = "44360d5da575233131ac8e93c25a0dd539d980a2c8a0146651017d686c45dadb"
@@ -306,9 +320,44 @@ def _terminal_label(record: Mapping[str, Any]) -> str:
     if _bool(outcome.get("collision_event")):
         return "collision_event"
     termination = str(record.get("termination_reason") or "").lower()
-    if termination in {"terminated", "timeout", "max_steps", "truncated", "horizon"}:
+    if termination in set(TERMINAL_TIMEOUT_REASONS):
         return "timeout"
     return "unavailable"
+
+
+def terminal_label_normalization() -> dict[str, Any]:
+    """Return the machine-readable terminal-label normalization contract.
+
+    The package reports normalized terminal categories, not raw ``termination_reason``
+    values.  Emitting this block inside the package lets a consumer quote
+    ``terminal_counts`` without reading the repository documentation, and keeps the
+    published statement bound to :func:`_terminal_label`.
+    """
+
+    return {
+        "contract": TERMINAL_LABEL_CONTRACT,
+        "applies_to": [
+            "publication/reduced_atlas.json:cells[].terminal_counts",
+            "publication/reduced_atlas.csv:terminal_counts",
+        ],
+        "precedence": list(TERMINAL_LABEL_PRECEDENCE),
+        "source_conditions": {
+            "route_complete": "outcome.route_complete is truthy",
+            "collision_event": "outcome.collision_event is truthy and the route is not complete",
+            "timeout": (
+                "termination_reason is in normalized_timeout_reasons, "
+                "after the route and collision checks"
+            ),
+            "unavailable": "no recognized route, collision, or termination condition is present",
+        },
+        "normalized_timeout_reasons": list(TERMINAL_TIMEOUT_REASONS),
+        "raw_termination_reason_included": False,
+        "note": (
+            "terminal_counts categories are normalized labels, not verbatim termination_reason "
+            "values: a timeout count can include episodes whose raw termination_reason is "
+            "'terminated'. Consumers that need raw reasons must read the source episode records."
+        ),
+    }
 
 
 def _episode_terminal_counts(
@@ -989,6 +1038,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
                 {
                     "schema_version": REDUCED_PUBLICATION_ATLAS_SCHEMA,
                     "metric_contract": "collision_count_mean_fields_are_per_episode_counts.v1",
+                    "terminal_label_normalization": terminal_label_normalization(),
                     "cells": selected,
                     "roles": ["feasibility_criticism", "cross_cell_inversion"],
                     "claim_boundary": "release-cell descriptive figure source only",
@@ -1183,6 +1233,7 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
                         "publication_cells": len(selected),
                         "planner_arms": len(arm_context),
                     },
+                    "terminal_label_normalization": terminal_label_normalization(),
                     "roles": overlay["roles"],
                     "claim_boundary": "Release-cell descriptive evidence package. No trace-level or causal claim is admitted.",
                     "raw_traces_included": False,

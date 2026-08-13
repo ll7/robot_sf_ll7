@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/agent_figure_interpretation_eval.v1.json",
+  "title": "Agent Figure Interpretation Evaluation Result (v1)",
+  "description": "Deterministic fixture replay result for evaluating agent interpretation of frozen figure packets. These are evaluation artifacts only, not benchmark evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "claim_boundary",
+    "case_count",
+    "critical_error_counts",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent_figure_interpretation_eval.v1"
+    },
+    "status": {
+      "const": "evaluation_artifacts_only"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "critical_error_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unavailable_to_zero",
+        "denominator_loss",
+        "wrong_pairing_resampling",
+        "fallback_degraded_promotion",
+        "causal_overclaim",
+        "unsupported_ranking",
+        "null_overclaim"
+      ],
+      "properties": {
+        "unavailable_to_zero": {"type": "integer", "minimum": 0},
+        "denominator_loss": {"type": "integer", "minimum": 0},
+        "wrong_pairing_resampling": {"type": "integer", "minimum": 0},
+        "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
+        "causal_overclaim": {"type": "integer", "minimum": 0},
+        "unsupported_ranking": {"type": "integer", "minimum": 0},
+        "null_overclaim": {"type": "integer", "minimum": 0}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "packet_id",
+          "artifact_kind",
+          "status",
+          "scores",
+          "critical_errors",
+          "aggregate_score",
+          "claim_boundary"
+        ],
+        "properties": {
+          "packet_id": {"type": "string", "minLength": 1},
+          "artifact_kind": {"const": "evaluation_artifact"},
+          "status": {"enum": ["clean", "failed"]},
+          "scores": {
+            "type": "array",
+            "minItems": 8,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["dimension", "score", "passed", "expected", "observed"],
+              "properties": {
+                "dimension": {"type": "string", "minLength": 1},
+                "score": {"type": "number", "minimum": 0, "maximum": 1},
+                "passed": {"type": "boolean"},
+                "expected": {},
+                "observed": {}
+              }
+            }
+          },
+          "critical_errors": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "unavailable_to_zero",
+              "denominator_loss",
+              "wrong_pairing_resampling",
+              "fallback_degraded_promotion",
+              "causal_overclaim",
+              "unsupported_ranking",
+              "null_overclaim"
+            ],
+            "properties": {
+              "unavailable_to_zero": {"type": "boolean"},
+              "denominator_loss": {"type": "boolean"},
+              "wrong_pairing_resampling": {"type": "boolean"},
+              "fallback_degraded_promotion": {"type": "boolean"},
+              "causal_overclaim": {"type": "boolean"},
+              "unsupported_ranking": {"type": "boolean"},
+              "null_overclaim": {"type": "boolean"}
+            }
+          },
+          "aggregate_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "claim_boundary": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

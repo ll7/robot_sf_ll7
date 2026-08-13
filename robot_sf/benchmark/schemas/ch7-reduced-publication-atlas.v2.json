@@ -7,6 +7,7 @@
   "required": [
     "schema_version",
     "metric_contract",
+    "terminal_label_normalization",
     "cells",
     "roles",
     "claim_boundary"
@@ -14,6 +15,7 @@
   "properties": {
     "schema_version": {"const": "ch7-reduced-publication-atlas.v2"},
     "metric_contract": {"const": "collision_count_mean_fields_are_per_episode_counts.v1"},
+    "terminal_label_normalization": {"$ref": "#/$defs/terminal_label_normalization"},
     "cells": {
       "type": "array",
       "minItems": 1,
@@ -26,6 +28,48 @@
     "claim_boundary": {"type": "string", "minLength": 1}
   },
   "$defs": {
+    "terminal_label_normalization": {
+      "$comment": "Terminal counts are normalized labels; the raw 'terminated' reason is reported as 'timeout' (issue #7068).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "applies_to",
+        "precedence",
+        "source_conditions",
+        "normalized_timeout_reasons",
+        "raw_termination_reason_included",
+        "note"
+      ],
+      "properties": {
+        "contract": {"const": "ch7-terminal-label-normalization.v1"},
+        "applies_to": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "precedence": {
+          "type": "array",
+          "items": {"enum": ["route_complete", "collision_event", "timeout", "unavailable"]},
+          "minItems": 4,
+          "uniqueItems": true
+        },
+        "source_conditions": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "minLength": 1},
+          "required": ["route_complete", "collision_event", "timeout", "unavailable"]
+        },
+        "normalized_timeout_reasons": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1},
+          "contains": {"const": "terminated"}
+        },
+        "raw_termination_reason_included": {"const": false},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
     "cell": {
       "type": "object",
       "additionalProperties": true,

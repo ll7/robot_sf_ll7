@@ -1,0 +1,77 @@
+{
+  "schema_version": "evidence_synthesis_summary.v1",
+  "evidence_status": "diagnostic-only",
+  "claim_boundary": {
+    "benchmark_claim": false,
+    "paper_facing_claim": false,
+    "released_default_changed": false,
+    "promotion_claim": false,
+    "fallback_or_degraded_rows_included": false,
+    "execution_mode": "native_local_cpu"
+  },
+  "sources": {
+    "issue": 6951,
+    "parent_issue": 1475,
+    "implementation_commit": "28b5e1939",
+    "base_commit": "ce91ad5bd",
+    "dataset_id": "issue_1428_orca_residual_bc_progress_v1_smoke",
+    "dataset_sha256": "aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09",
+    "scenario_id": "planner_sanity_simple",
+    "config_paths": [
+      "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml",
+      "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml"
+    ]
+  },
+  "protocol": {
+    "training_seeds": [111, 112, 113],
+    "evaluation_seeds": [111, 112, 113],
+    "episodes": 3,
+    "bc_epochs": 8,
+    "batch_size": 64,
+    "learning_rate": 0.0003,
+    "device": "cpu",
+    "arm_a": {
+      "objective_name": "mean_expert_action_nll",
+      "progress_lambda": 0.0,
+      "normalization_scale": 1.0,
+      "weight_bounds": [1.0, 1.0]
+    },
+    "arm_b": {
+      "objective_name": "progress_weighted_expert_action_nll",
+      "progress_lambda": 0.5,
+      "normalization_scale": 1.0,
+      "weight_bounds": [0.5, 2.0]
+    }
+  },
+  "results": {
+    "evaluation_cells_per_arm": 9,
+    "arm_a": {
+      "successes": 0,
+      "collisions": 9,
+      "mean_route_length_reduction_m": 3.253978399352902,
+      "mean_final_remaining_route_length_m": 12.994868634334006
+    },
+    "arm_b": {
+      "successes": 0,
+      "collisions": 9,
+      "mean_route_length_reduction_m": 3.48899020494102,
+      "mean_final_remaining_route_length_m": 12.759856828745889
+    },
+    "paired_arm_b_minus_arm_a_route_length_reduction_m": 0.23501180558811796,
+    "paired_difference_bootstrap_95_percent_interval_m": [
+      0.1912914,
+      0.28271899
+    ]
+  },
+  "verdict": {
+    "classification": "promotion_condition_not_met",
+    "mechanism_conclusion": "Progress weighting changed the diagnostic route-length reduction but did not produce a successful policy in this smoke protocol.",
+    "confidence": 0.99,
+    "condition_that_would_change_conclusion": "A properly sized, provenance-pinned paired campaign with nonzero route completion and no collision-dominated failure would be needed."
+  },
+  "limitations": [
+    "Three expert episodes and one smoke scenario are not nominal benchmark evidence.",
+    "The existing converter duplicated the last observation because collected observations lacked a terminal observation; both arms shared this limitation.",
+    "Raw dataset, checkpoints, and logs are worktree-local and are not durable retrieval artifacts."
+  ]
+}

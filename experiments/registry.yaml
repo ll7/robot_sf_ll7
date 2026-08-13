@@ -17,3 +17,4 @@ records:
   - issue_2135_seed_sufficiency_followup.yaml
   - issue_3193_closed_loop_forecast_falsification.yaml
   - issue_6095_s10_discriminability_calibration.yaml
+  - issue_6951_progress_shaped_ablation.yaml

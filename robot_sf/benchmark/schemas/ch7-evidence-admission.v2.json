@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-evidence-admission.v2.json",
+  "title": "Chapter 7 v2 evidence package admission receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "status",
+    "package",
+    "source",
+    "approval",
+    "scope",
+    "roles",
+    "retrieval"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-evidence-admission.v2"},
+    "issue": {"const": 7087},
+    "status": {"const": "admitted"},
+    "package": {"$ref": "#/$defs/package"},
+    "source": {"$ref": "#/$defs/source"},
+    "approval": {"$ref": "#/$defs/approval"},
+    "scope": {"$ref": "#/$defs/scope"},
+    "roles": {"$ref": "#/$defs/roles"},
+    "retrieval": {"$ref": "#/$defs/retrieval"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nonempty": {"type": "string", "minLength": 1},
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256sums_sha256", "manifest_sha256"],
+      "properties": {
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v1_package_sha256sums",
+        "v1_manifest_sha256",
+        "v1_audit_member_sha256",
+        "v1_reduced_atlas_member_sha256",
+        "portfolio_config_sha256",
+        "source_registry_sha256"
+      ],
+      "properties": {
+        "v1_package_sha256sums": {"$ref": "#/$defs/sha256"},
+        "v1_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "v1_audit_member_sha256": {"$ref": "#/$defs/sha256"},
+        "v1_reduced_atlas_member_sha256": {"$ref": "#/$defs/sha256"},
+        "portfolio_config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_registry_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_id", "approval_url", "decision"],
+      "properties": {
+        "approval_id": {"type": "string", "pattern": "^issue7087-comment-[0-9]+$"},
+        "approval_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/ll7/robot_sf_ll7/issues/7087#issuecomment-[0-9]+$"
+        },
+        "decision": {"const": "approve"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_boundary", "forbidden_claims"],
+      "properties": {
+        "claim_boundary": {"$ref": "#/$defs/nonempty"},
+        "forbidden_claims": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 5,
+          "items": {
+            "enum": [
+              "matched_comparison",
+              "causal_divergence",
+              "counterfactual_branching",
+              "trajectory_divergence",
+              "universal_planner_ranking",
+              "collision_metric_semantics"
+            ]
+          }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cross_topology_inversion", "cross_mechanism_inversion", "feasibility_criticism"],
+          "properties": {
+            "cross_topology_inversion": {"$ref": "#/$defs/available_role"},
+            "cross_mechanism_inversion": {"$ref": "#/$defs/available_role"},
+            "feasibility_criticism": {"$ref": "#/$defs/available_geometry_role"}
+          }
+        }
+      }
+    },
+    "available_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grain"],
+      "properties": {"grain": {"const": "release_cell"}}
+    },
+    "available_geometry_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grain"],
+      "properties": {"grain": {"const": "release_cell_geometry"}}
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_package_key", "audit_member_key", "source_registry_key"],
+      "properties": {
+        "source_package_key": {"$ref": "#/$defs/nonempty"},
+        "audit_member_key": {"$ref": "#/$defs/nonempty"},
+        "source_registry_key": {"$ref": "#/$defs/nonempty"}
+      }
+    }
+  }
+}

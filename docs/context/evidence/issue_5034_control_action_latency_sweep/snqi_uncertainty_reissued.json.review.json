@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_uncertainty_reissued.json",
-  "artifact_sha256": "302e0ac91734bc324e104cf14c5522693fe7c6d04b5d5b37e738c405763b47da",
+  "artifact_sha256": "45a0a7d6f88889430fecc22c24fef95910084fd8b6955b04b329e3c1b6e7dde3",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

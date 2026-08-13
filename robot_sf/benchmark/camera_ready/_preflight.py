@@ -52,7 +52,7 @@ from robot_sf.benchmark.campaign_runtime_preflight import (
     check_campaign_arm_policy_dependencies_preflight,
     check_campaign_scenario_maps_preflight,
 )
-from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.latency.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,

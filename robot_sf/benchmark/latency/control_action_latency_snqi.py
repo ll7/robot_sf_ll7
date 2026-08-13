@@ -51,11 +51,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.control_action_latency_preflight import (
+from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.latency.control_action_latency_preflight import (
     AXIS_KEY,
     REQUIRED_LATENCY_STEPS,
 )
-from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.snqi.compute import compute_snqi
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.writers import review_marker_comment, review_marker_json
@@ -299,7 +299,7 @@ def classify_input_row(row: Mapping[str, Any]) -> SnqiLatencyInput:
     """Classify one durable sufficient-input row as a ``result`` or ``exclusion``.
 
     Mirrors the exclusion policy of
-    :func:`robot_sf.benchmark.control_action_latency_evidence.classify_latency_row`
+    :func:`robot_sf.benchmark.latency.control_action_latency_evidence.classify_latency_row`
     so the SNQI analyzer cannot silently admit a fallback / degraded / non-native
     / malformed row.
     """
@@ -1453,7 +1453,7 @@ RECOVERY_EVIDENCE: tuple[str, ...] = (
     "PR #5904 registered docs/context/evidence/issue_5034_control_action_latency_sweep/"
     "snqi_analysis.json as a pure output artifact; the introducing commit added the "
     "JSON and CSV evidence plus documentation but no generator script.",
-    "No committed Python module other than robot_sf/benchmark/control_action_latency_snqi.py "
+    "No committed Python module other than robot_sf/benchmark/latency/control_action_latency_snqi.py "
     "(added by PR #5923) emits the pairwise_slope_uncertainty block under the "
     "control-action-latency-snqi-analysis.v1 schema.",
     "The registered pairwise slope_difference is internally inconsistent with its own "
@@ -1565,7 +1565,7 @@ def _build_reissue_provenance(
     return {
         "generator": {
             "kind": "committed_canonical_analyzer",
-            "module": "robot_sf.benchmark.control_action_latency_snqi",
+            "module": "robot_sf.benchmark.latency.control_action_latency_snqi",
             "source_rel_path": generator_source_rel_path,
             "source_sha256": generator_source_sha256,
             "build_function": "build_snqi_analysis",

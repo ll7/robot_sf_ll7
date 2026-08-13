@@ -9,7 +9,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     infer_execution_mode_from_counts,
 )
 from robot_sf.benchmark.fallback_policy import availability_payload
-from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.latency.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
 from robot_sf.benchmark.map_runner_provenance import map_result_provenance
 from robot_sf.benchmark.utils import attach_track_metadata

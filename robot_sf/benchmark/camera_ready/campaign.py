@@ -89,7 +89,7 @@ from robot_sf.benchmark.fallback_policy import (
     summarize_campaign_outcome,
     summarize_campaign_status_axes,
 )
-from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.latency.latency_stress import not_available_latency_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,

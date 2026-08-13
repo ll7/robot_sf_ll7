@@ -127,7 +127,7 @@ Recovery decision (recorded in `snqi_uncertainty_reissued.json`):
   Done #2). The original generator cannot be recovered (Definition of Done #1, second branch).
 - **Evidence of unrecoverability**: PR #5904 registered `snqi_analysis.json` as a pure output
   artifact with no generator script; no committed module other than
-  `robot_sf/benchmark/control_action_latency_snqi.py` (added by #5923) emits the
+  `robot_sf/benchmark/latency/control_action_latency_snqi.py` (added by #5923) emits the
   `pairwise_slope_uncertainty` block; the registered pairwise `slope_difference` is internally
   inconsistent with its own per-planner slopes; and the registered probabilities include
   half-integer counts (`0.68635`, `0.97105`) that a simple `(diff > 0).mean()` over 10,000

@@ -22,6 +22,18 @@ from robot_sf.ped_npc.residual_adversary import BoundedResidualAdversary, Residu
 from robot_sf.ped_npc.residual_search import FiniteGridSearchPolicy, ResidualSearchConfig
 
 MATCHED_COMPUTE_RUNTIME_SCHEMA_VERSION = "matched_compute_trace.v1"
+MATCHED_COMPUTE_EVIDENCE_STATUSES = (
+    "diagnostic_only_preflight",
+    "production_observed",
+    "unavailable",
+)
+MATCHED_COMPUTE_SIMULATOR_STEP_SOURCES = (
+    "observed_episode_record",
+    "observed_simulator",
+    "synthetic_episode_fixture",
+    "controller_snapshot",
+    "unavailable",
+)
 
 MATCHED_COMPUTE_RUNTIME_SCHEMA: dict[str, Any] = {
     "schema_version": MATCHED_COMPUTE_RUNTIME_SCHEMA_VERSION,
@@ -38,11 +50,13 @@ MATCHED_COMPUTE_RUNTIME_SCHEMA: dict[str, Any] = {
         "rejected",
         "invalid",
         "status",
+        "evidence_status",
         "adapter",
         "runtime_status",
         "native_path",
         "candidate_budget",
         "simulator_steps",
+        "simulator_steps_source",
         "fallback",
         "degraded",
         "unavailability_reason",
@@ -87,6 +101,8 @@ class MatchedComputeRuntimeTrace:
     adapter: str
     native_path: str
     candidate_budget: int
+    evidence_status: str = "diagnostic_only_preflight"
+    simulator_steps_source: str = "unavailable"
     fallback: bool = False
     degraded: bool = False
     unavailability_reason: str | None = None
@@ -108,6 +124,7 @@ class MatchedComputeRuntimeTrace:
             "candidate_budget": self.candidate_budget,
             "candidate_evaluations": self.candidate_evaluations,
             "degraded": self.degraded,
+            "evidence_status": self.evidence_status,
             "execution_mode": self.execution_mode,
             "fallback": self.fallback,
             "invalid": self.invalid,
@@ -121,6 +138,7 @@ class MatchedComputeRuntimeTrace:
             "search_seed": self.search_seed,
             "simulator_physics_steps": self.simulator_physics_steps,
             "simulator_steps": self.simulator_physics_steps,
+            "simulator_steps_source": self.simulator_steps_source,
             "status": self.status,
             "unavailability_reason": self.unavailability_reason,
         }
@@ -181,6 +199,56 @@ def _validate_trace_status(trace: MatchedComputeRuntimeTrace) -> None:
         raise ValueError("native matched-compute traces cannot be degraded")
     if trace.status == "unavailable" and not trace.unavailability_reason:
         raise ValueError("unavailable traces require an unavailability_reason")
+    _validate_trace_evidence(trace)
+
+
+def _validate_trace_evidence(trace: MatchedComputeRuntimeTrace) -> None:
+    """Validate evidence tier and simulator-step provenance."""
+    if trace.evidence_status not in MATCHED_COMPUTE_EVIDENCE_STATUSES:
+        raise ValueError("unsupported matched-compute evidence_status")
+    if trace.simulator_steps_source not in MATCHED_COMPUTE_SIMULATOR_STEP_SOURCES:
+        raise ValueError("unsupported matched-compute simulator_steps_source")
+    _validate_trace_evidence_status(trace)
+    _validate_trace_step_provenance(trace)
+
+
+def _validate_trace_evidence_status(trace: MatchedComputeRuntimeTrace) -> None:
+    """Validate consistency between runtime and evidence status."""
+    if trace.status == "native" and trace.evidence_status == "unavailable":
+        raise ValueError("native matched-compute traces cannot be unavailable evidence")
+    if trace.status == "unavailable" and trace.evidence_status != "unavailable":
+        raise ValueError("unavailable matched-compute traces require unavailable evidence_status")
+    if trace.evidence_status == "production_observed":
+        if trace.status != "native":
+            raise ValueError("production-observed traces require native status")
+        if trace.simulator_physics_steps is None:
+            raise ValueError("production-observed traces require simulator physics steps")
+        if trace.simulator_steps_source not in {
+            "observed_episode_record",
+            "observed_simulator",
+        }:
+            raise ValueError("production-observed traces require an observed step source")
+
+
+def _validate_trace_step_provenance(trace: MatchedComputeRuntimeTrace) -> None:
+    """Reject observed-step claims from synthetic or controller-only inputs."""
+    if trace.evidence_status == "diagnostic_only_preflight":
+        if trace.simulator_steps_source in {
+            "observed_episode_record",
+            "observed_simulator",
+        }:
+            raise ValueError("diagnostic-only preflight cannot claim observed simulator steps")
+        if (
+            trace.simulator_steps_source
+            in {
+                "synthetic_episode_fixture",
+                "controller_snapshot",
+            }
+            and trace.simulator_physics_steps is not None
+        ):
+            raise ValueError(
+                "synthetic/controller preflight cannot populate observed simulator physics steps"
+            )
 
 
 def probe_reactive_runtime(
@@ -232,17 +300,17 @@ def probe_reactive_runtime(
     if candidate_evaluations > candidate_budget:
         raise ValueError("reactive candidate evaluations exceed declared budget")
 
+    controller_steps = _require_nonnegative_int(adversary.step_index, "adversary.step_index")
+    macro_actions = _require_nonnegative_int(
+        adversary.macro_action_index, "adversary.macro_action_index"
+    )
     return MatchedComputeRuntimeTrace(
         arm="reactive",
         scenario_seed=_require_nonnegative_int(snapshot.scenario_seed, "snapshot.scenario_seed"),
         search_seed=_require_nonnegative_int(search_config.seed, "search_config.seed"),
         execution_mode="native",
-        simulator_physics_steps=_require_nonnegative_int(
-            adversary.step_index, "adversary.step_index"
-        ),
-        macro_actions=_require_nonnegative_int(
-            adversary.macro_action_index, "adversary.macro_action_index"
-        ),
+        simulator_physics_steps=None,
+        macro_actions=macro_actions,
         candidate_evaluations=candidate_evaluations,
         accepted=_require_nonnegative_int(record_payload.get("accepted"), "record.accepted"),
         rejected=_require_nonnegative_int(record_payload.get("rejected"), "record.rejected"),
@@ -254,7 +322,12 @@ def probe_reactive_runtime(
             "robot_sf.ped_npc.residual_adversary.BoundedResidualAdversary"
         ),
         candidate_budget=candidate_budget,
+        evidence_status="diagnostic_only_preflight",
+        simulator_steps_source="controller_snapshot",
         metadata={
+            "controller_steps": controller_steps,
+            "simulator_physics_steps_observed": False,
+            "preflight_reason": "one-step controller snapshot; no simulator tick was observed",
             "search_diagnostic_record": record_payload,
         },
     )
@@ -295,6 +368,19 @@ def probe_open_loop_runtime(
         raise ValueError("open-loop candidate evaluations exceed declared budget")
 
     simulator_steps, status, reason = _simulator_steps_from_manifest(result)
+    preflight_only = runner is not None or production_evaluator_factory is not None
+    if status == "unavailable":
+        evidence_status = "unavailable"
+        simulator_steps_source = "unavailable"
+        reported_simulator_steps = None
+    elif preflight_only:
+        evidence_status = "diagnostic_only_preflight"
+        simulator_steps_source = "synthetic_episode_fixture"
+        reported_simulator_steps = None
+    else:
+        evidence_status = "production_observed"
+        simulator_steps_source = "observed_episode_record"
+        reported_simulator_steps = simulator_steps
     invalid = _require_nonnegative_int(
         result.num_invalid_candidates, "result.num_invalid_candidates"
     )
@@ -307,7 +393,7 @@ def probe_open_loop_runtime(
         scenario_seed=_scenario_seed_from_config(config),
         search_seed=_require_nonnegative_int(config.seed, "config.seed"),
         execution_mode=status,
-        simulator_physics_steps=simulator_steps,
+        simulator_physics_steps=reported_simulator_steps,
         macro_actions=_require_nonnegative_int(macro_actions, "macro_actions"),
         candidate_evaluations=candidate_evaluations,
         accepted=accepted,
@@ -317,6 +403,8 @@ def probe_open_loop_runtime(
         adapter="adversarial_search_production_candidate",
         native_path="robot_sf.adversarial.search.run_adversarial_search",
         candidate_budget=candidate_budget,
+        evidence_status=evidence_status,
+        simulator_steps_source=simulator_steps_source,
         unavailability_reason=reason,
         metadata={
             "production_candidate_evaluator": (
@@ -328,6 +416,12 @@ def probe_open_loop_runtime(
             "num_failed_evaluations": rejected,
             "num_invalid_candidates": invalid,
             "num_valid_candidates": accepted,
+            "preflight_reason": (
+                "injected runner/evaluator; episode steps are synthetic fixtures"
+                if preflight_only
+                else None
+            ),
+            "preflight_simulator_physics_steps": simulator_steps if preflight_only else None,
         },
     )
 

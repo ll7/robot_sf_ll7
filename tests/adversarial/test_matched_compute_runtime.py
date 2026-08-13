@@ -164,6 +164,8 @@ def test_reactive_adapter_uses_native_policy_and_controller() -> None:
     assert trace.execution_mode == "native"
     assert trace.runtime_status == "native"
     assert trace.status == "native"
+    assert trace.evidence_status == "diagnostic_only_preflight"
+    assert trace.simulator_steps_source == "controller_snapshot"
     assert "FiniteGridSearchPolicy" in trace.native_path
     assert "BoundedResidualAdversary" in trace.native_path
     assert trace.candidate_budget == 4
@@ -171,11 +173,13 @@ def test_reactive_adapter_uses_native_policy_and_controller() -> None:
     assert trace.accepted >= 0
     assert trace.rejected >= 0
     assert trace.invalid >= 0
-    assert trace.simulator_steps == 1
-    assert trace.simulator_physics_steps == 1
+    assert trace.simulator_steps is None
+    assert trace.simulator_physics_steps is None
     assert trace.macro_actions == 1
     assert trace.fallback is False
     assert trace.degraded is False
+    assert trace.metadata["controller_steps"] == 1
+    assert trace.metadata["simulator_physics_steps_observed"] is False
     assert trace.metadata["search_diagnostic_record"]["total_evaluated"] == 4
 
 
@@ -193,6 +197,8 @@ def test_shared_trace_schema_is_stable_json() -> None:
     assert payload["schema_version"] == "matched_compute_trace.v1"
     assert payload["runtime_status"] == payload["status"]
     assert payload["simulator_steps"] == payload["simulator_physics_steps"]
+    assert payload["evidence_status"] == "diagnostic_only_preflight"
+    assert payload["simulator_steps_source"] == "controller_snapshot"
 
 
 @pytest.mark.parametrize("field", ["fallback", "degraded"])
@@ -268,6 +274,8 @@ def test_open_loop_adapter_uses_canonical_search_and_production_seams(
     assert trace.execution_mode == "native"
     assert trace.runtime_status == "native"
     assert trace.status == "native"
+    assert trace.evidence_status == "diagnostic_only_preflight"
+    assert trace.simulator_steps_source == "synthetic_episode_fixture"
     assert trace.native_path == "robot_sf.adversarial.search.run_adversarial_search"
     assert trace.metadata["production_candidate_evaluator"] == (
         "robot_sf.adversarial.search.production_candidate_evaluator"
@@ -278,10 +286,11 @@ def test_open_loop_adapter_uses_canonical_search_and_production_seams(
     assert trace.rejected == 0
     assert trace.invalid == 0
     assert trace.macro_actions == 10
-    assert trace.simulator_steps == 12
-    assert trace.simulator_physics_steps == 12
+    assert trace.simulator_steps is None
+    assert trace.simulator_physics_steps is None
     assert trace.fallback is False
     assert trace.degraded is False
+    assert trace.metadata["preflight_simulator_physics_steps"] == 12
 
 
 def test_open_loop_adapter_runs_actual_search_seam_without_batch_execution(
@@ -324,9 +333,12 @@ def test_open_loop_adapter_runs_actual_search_seam_without_batch_execution(
     assert trace.native_path == "robot_sf.adversarial.search.run_adversarial_search"
     assert trace.execution_mode == "native"
     assert trace.status == "native"
+    assert trace.evidence_status == "diagnostic_only_preflight"
+    assert trace.simulator_steps_source == "synthetic_episode_fixture"
     assert trace.candidate_evaluations == 2
     assert trace.candidate_budget == 2
-    assert trace.simulator_physics_steps == 10
+    assert trace.simulator_physics_steps is None
+    assert trace.metadata["preflight_simulator_physics_steps"] == 10
     assert trace.fallback is False
     assert trace.degraded is False
 
@@ -345,7 +357,9 @@ def test_open_loop_adapter_accepts_trace_step_lists(
         runner=lambda _config, **_kwargs: _search_result(tmp_path, steps=[{"i": 0}, {"i": 1}]),
     )
 
-    assert trace.simulator_steps == 2
+    assert trace.simulator_steps is None
+    assert trace.simulator_steps_source == "synthetic_episode_fixture"
+    assert trace.metadata["preflight_simulator_physics_steps"] == 2
 
 
 def test_open_loop_adapter_marks_missing_episode_record_unavailable(
@@ -363,6 +377,8 @@ def test_open_loop_adapter_marks_missing_episode_record_unavailable(
     )
 
     assert trace.runtime_status == "unavailable"
+    assert trace.evidence_status == "unavailable"
+    assert trace.simulator_steps_source == "unavailable"
     assert trace.simulator_steps is None
     assert "episode record path" in str(trace.unavailability_reason)
 
@@ -467,3 +483,74 @@ def test_reactive_adapter_fails_closed_on_missing_search_accounting(
                 scenario_seed=123,
             ),
         )
+
+
+@pytest.mark.parametrize("source", ["synthetic_episode_fixture", "controller_snapshot"])
+def test_preflight_trace_rejects_observed_simulator_step_count(source: str) -> None:
+    """Synthetic/controller preflight fields cannot be promoted to simulator evidence."""
+    with pytest.raises(ValueError, match="cannot populate observed simulator physics steps"):
+        MatchedComputeRuntimeTrace(
+            arm="open_loop",
+            scenario_seed=123,
+            search_seed=42,
+            execution_mode="native",
+            simulator_physics_steps=1,
+            macro_actions=1,
+            candidate_evaluations=1,
+            accepted=1,
+            rejected=0,
+            invalid=0,
+            status="native",
+            adapter="test",
+            native_path="test.native_path",
+            candidate_budget=1,
+            simulator_steps_source=source,
+        )
+
+
+def test_production_observed_trace_requires_observed_step_source() -> None:
+    """Production evidence must carry a concrete observed simulator-step source."""
+    with pytest.raises(ValueError, match="require an observed step source"):
+        MatchedComputeRuntimeTrace(
+            arm="open_loop",
+            scenario_seed=123,
+            search_seed=42,
+            execution_mode="native",
+            simulator_physics_steps=1,
+            macro_actions=1,
+            candidate_evaluations=1,
+            accepted=1,
+            rejected=0,
+            invalid=0,
+            status="native",
+            adapter="test",
+            native_path="test.native_path",
+            candidate_budget=1,
+            evidence_status="production_observed",
+            simulator_steps_source="controller_snapshot",
+        )
+
+
+def test_production_observed_trace_accepts_observed_episode_record() -> None:
+    """A future production canary may populate observed episode-step accounting."""
+    trace = MatchedComputeRuntimeTrace(
+        arm="open_loop",
+        scenario_seed=123,
+        search_seed=42,
+        execution_mode="native",
+        simulator_physics_steps=5,
+        macro_actions=1,
+        candidate_evaluations=1,
+        accepted=1,
+        rejected=0,
+        invalid=0,
+        status="native",
+        adapter="test",
+        native_path="test.native_path",
+        candidate_budget=1,
+        evidence_status="production_observed",
+        simulator_steps_source="observed_episode_record",
+    )
+
+    assert trace.to_dict()["evidence_status"] == "production_observed"
+    assert trace.to_dict()["simulator_steps_source"] == "observed_episode_record"

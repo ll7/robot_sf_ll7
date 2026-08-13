@@ -61,6 +61,7 @@ def test_packet_parent_issue(packet: dict) -> None:
 def test_packet_status(packet: dict) -> None:
     """Status must remain diagnostic-only preflight."""
     assert packet["status"] == "diagnostic_only_preflight"
+    assert packet["preflight_evidence_status"] == "diagnostic_only_preflight"
 
 
 def test_packet_has_arms(packet: dict) -> None:
@@ -75,6 +76,8 @@ def test_packet_has_shared_trace_schema(packet: dict) -> None:
     assert packet["packet"]["trace_schema"] == "matched_compute_trace.v1"
     for arm in packet["arms"].values():
         assert arm["runner_binding"]["trace_schema"] == "matched_compute_trace.v1"
+    assert "evidence_status" in packet["budget"]["shared_trace_fields"]
+    assert "simulator_steps_source" in packet["budget"]["shared_trace_fields"]
 
 
 def test_packet_binds_native_runner_seams(packet: dict) -> None:

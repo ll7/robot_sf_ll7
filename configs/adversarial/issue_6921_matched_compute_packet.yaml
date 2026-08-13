@@ -3,6 +3,7 @@ issue: 6921
 parent_issue: 4360
 previous_schema_version: matched_compute_packet.v1
 status: diagnostic_only_preflight
+preflight_evidence_status: diagnostic_only_preflight
 claim_boundary: >
   Diagnostic-only preflight packet for reactive residual-search versus the
   existing open-loop Social Force scenario search.  No benchmark, metric,
@@ -16,8 +17,8 @@ packet:
     Versioned, machine-checkable comparison packet binding the nominal Social
     Force open-loop scenario-search runner and the reactive residual-search
     controller to one trace/accounting schema. The packet records candidate
-    and simulator-step budget mapping without treating declarative parity as
-    observed evidence.
+    and simulator-step budget mapping without treating declarative parity or
+    synthetic/controller-preflight counters as observed production evidence.
   trace_schema: matched_compute_trace.v1
 arms:
   open_loop:
@@ -107,17 +108,23 @@ budget:
     - rejected
     - invalid
     - status
+    - evidence_status
+    - simulator_steps_source
   accounting_rule: >
-    The canary must report candidate evaluations and simulator physics steps
-    from the actual arm seam. Missing, fallback, degraded, unavailable, or
-    non-finite accounting is a failed preflight; declarative equality alone is
-    not an execution result.
+    The canary must report candidate evaluations from the actual arm seam and
+    must identify the source and evidence tier of every simulator-step field.
+    Synthetic episode fixtures and one-step controller snapshots are
+    diagnostic-only preflight inputs; their step counters must not populate
+    observed simulator physics fields. Missing, fallback, degraded,
+    unavailable, or non-finite accounting is a failed preflight; declarative
+    equality alone is not an execution result.
   description: >
     The reactive arm evaluates 9 residual proposals at each of 10 macro-action
     boundaries, for 90 candidate evaluations per episode. The open-loop arm
     binds its existing scenario-search budget to the same declared 90
-    candidate evaluations. The trace canary records actual simulator work
-    separately; it must not infer parity from these declarations.
+    candidate evaluations. The current local canaries record seam-level
+    candidate counts and diagnostic fixture/controller counters separately;
+    they must not infer production simulator parity from these declarations.
 seeds:
   frozen_scenario_seeds:
     - 123

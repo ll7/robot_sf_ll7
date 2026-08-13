@@ -1,0 +1,113 @@
+{
+  "schema_version": "issue_6102_robot_speed_tier_recovery.v1",
+  "issue": 6102,
+  "campaign_issue": 5578,
+  "job_id": "13828",
+  "classification": "durable-required",
+  "status": "local_recovery_verified_provenance_unresolved",
+  "evidence_status": "native_grid_synthesis_complete_provenance_unverified",
+  "benchmark_claim_eligible": false,
+  "paper_facing_eligible": false,
+  "decision_required": true,
+  "decision_question": "Should an independently recoverable artifact copy be restored or promoted, and after separate review may this synthesis feed the result-interpretation packet?",
+  "recommendation": "Do not rerun yet. Recover or restore the recorded result root first; retain the decision-required gate for artifact promotion and interpretation.",
+  "private_ops_receipt": {
+    "metrics_path": "ops/jobs/metrics/13828.json",
+    "ledger_campaign": "2026-07-issue5578-authorized-native-speed-tier",
+    "scheduler_state": "COMPLETED",
+    "exit_code": "0:0",
+    "elapsed": "04:35:46",
+    "recorded_remote_results": "/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/issue5578/native-speed-tier/job-13828",
+    "recorded_local_results": "/home/luttkule/git/robot_sf_ll7/output/issue5578-native-speed-tier/13828"
+  },
+  "source_availability": {
+    "local_recovery_root": "output/issue5578-native-speed-tier/13828",
+    "recorded_external_root_exists": false,
+    "independent_copy_available": false,
+    "public_artifact_uri": null,
+    "raw_output_gitignored": true,
+    "local_tree_file_count": 76,
+    "local_tree_bytes": 1851603308,
+    "recorded_checksum_entry_count": 74,
+    "local_rebased_checksum_verification": "pass",
+    "verification_scope": "The recorded checksum paths were rebased from the absent external root to the local recovery root; this proves local byte consistency with the recorded digests, not independent custody."
+  },
+  "execution_provenance": {
+    "authorization_issue": 6102,
+    "public_commit": "481164b08d861e4af9777fe35734f88bda2754e9",
+    "manifest_hash": "e32ce197149af62bf366f5ca95abbb42215b379fe7916d916ccdd544dce8666f",
+    "manifest_hash_algorithm": "sha256(json.dumps({schema_version,study_id,identities}, sort_keys=true, separators=(',', ':')))",
+    "command": "uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --authorized-full-run --authorization-issue 6102",
+    "config": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
+    "scenario_matrix": "configs/scenarios/classic_interactions.yaml",
+    "horizon_steps": 600,
+    "dt_seconds": 0.1,
+    "speed_caps_m_s": [2.0, 3.0, 4.0],
+    "planners": [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "ppo",
+      "orca",
+      "prediction_planner"
+    ],
+    "scenarios": 6,
+    "seeds": "111-140 inclusive",
+    "fallback_or_degraded_policy": "reject",
+    "started_at_utc": "2026-07-30T05:09:27.978647Z",
+    "finished_at_utc": "2026-07-30T09:42:36.396671Z"
+  },
+  "validated_counts": {
+    "expected_cell_count": 2160,
+    "native_cell_count": 2160,
+    "excluded_cell_count": 0,
+    "cell_summary_rows": 2160,
+    "raw_batches": 12,
+    "rows_per_batch": 180,
+    "synthesis_adapter_recheck": {
+      "all_native": true,
+      "grid_complete": true,
+      "evidence_status": "native_grid_synthesis_complete_provenance_unverified"
+    }
+  },
+  "descriptive_synthesis": {
+    "scope": "descriptive_only",
+    "nominal_ranking": [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "orca",
+      "ppo",
+      "prediction_planner"
+    ],
+    "tier_rankings_unchanged": true,
+    "rank_flips_vs_nominal": {
+      "cap_3_0": 0,
+      "cap_4_0": 0
+    },
+    "classification_counts": {
+      "no_material_shift": 10,
+      "inconclusive": 8,
+      "intervention_not_activated": 6
+    },
+    "non_activated_rows": "All six prediction-planner rows; they do not support a speed-effect interpretation for that planner."
+  },
+  "local_artifact_sha256": {
+    "campaign_run_report.json": "3df64d2c068bba57fa943ee04ac45263aef1fd782d439e73de308ddf23922535",
+    "cell_summaries.jsonl": "06e7258d94b60a7e4f7e2074ad9cff6205e82ceae09d65e8f9137569797f1cc7",
+    "synthesis.json": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+    "execution_provenance.json": "cab55d7df8a58e7f08c09ef89b58e04aaaca8369212d9abc3f81fdc7e229ba78",
+    "raw/campaign_manifest.json": "cb187ecb3985ad21fc9b7ef25070e99bd20076bbfd293313139c0d63b486068d",
+    "raw/campaign_descriptor.json": "45dc10605fa0eabe80a897c99c359adb3f51dcd01c035a3934d2b71c781ba1cb"
+  },
+  "tracked_projection": {
+    "path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/",
+    "contains_raw_rows": false,
+    "contains_compact_recovery_metadata": true,
+    "is_durable_raw_copy": false,
+    "is_benchmark_admission": false
+  },
+  "limitations": [
+    "The independent external result root recorded by the job is absent on this machine.",
+    "The local output tree is ignored scratch storage and cannot be the sole durable dependency.",
+    "The synthesis is pre-aggregated and explicitly provenance-unverified.",
+    "No inferential, dissertation, release, or paper-facing claim is admitted by this packet.",
+    "The six prediction-planner rows did not activate the speed intervention and remain unsuitable for a speed-effect conclusion."
+  ]
+}

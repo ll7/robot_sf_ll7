@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import yaml
 
 from robot_sf.benchmark.cli import cli_main
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from robot_sf.benchmark.scenario_schema import SCHEMA_FILE, validate_scenario_list
 
 
 def test_validate_scenario_list_success():
@@ -22,6 +19,19 @@ def test_validate_scenario_list_success():
     ]
     errs = validate_scenario_list(scenarios)
     assert errs == []
+
+
+def test_scenario_schema_uses_canonical_plural_directory():
+    """Keep the scenario schema under the versioned plural schema package."""
+    repository_root = Path(__file__).resolve().parents[1]
+    canonical_path = (
+        repository_root / "robot_sf" / "benchmark" / "schemas" / "scenarios.schema.json"
+    )
+    legacy_path = repository_root / "robot_sf" / "benchmark" / "schema" / "scenarios.schema.json"
+
+    assert SCHEMA_FILE == canonical_path
+    assert canonical_path.is_file()
+    assert not legacy_path.exists()
 
 
 def test_validate_scenario_list_errors():

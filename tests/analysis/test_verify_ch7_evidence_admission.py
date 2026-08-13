@@ -368,6 +368,21 @@ def test_symlinked_package_member_fails_closed(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO creation is unavailable")
+def test_special_package_entry_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    os.mkfifo(args["package"] / "unlisted.fifo")
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="special filesystem"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
 def test_manifest_schema_mutation_fails_closed(tmp_path: Path) -> None:
     args = _verify_args(tmp_path)
     manifest = json.loads((args["package"] / "manifest.json").read_text(encoding="utf-8"))

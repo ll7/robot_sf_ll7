@@ -153,6 +153,16 @@ def _reject_symlinks(root: Path, *, label: str) -> None:
         raise Ch7EvidenceAdmissionError(f"{label} contains symlinks: {links}")
 
 
+def _reject_special_entries(root: Path, *, label: str) -> None:
+    special = sorted(
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if not path.is_dir() and not path.is_file()
+    )
+    if special:
+        raise Ch7EvidenceAdmissionError(f"{label} contains special filesystem entries: {special}")
+
+
 def _verify_members(
     root: Path, *, label: str, require_review_sidecars: bool = True
 ) -> tuple[str, list[str]]:
@@ -161,6 +171,7 @@ def _verify_members(
     if not root.is_dir() or not sums_path.is_file():
         raise Ch7EvidenceAdmissionError(f"{label} must be a directory with SHA256SUMS")
     _reject_symlinks(root, label=label)
+    _reject_special_entries(root, label=label)
     entries = _parse_sums(sums_path)
     listed = {relative for _digest, relative in entries}
     actual = {
@@ -197,6 +208,7 @@ def _verify_source_package(source_package: Path, expected_complete_sha256: str) 
     if not root.is_dir() or not sums_path.is_file():
         raise Ch7EvidenceAdmissionError("source package must be a directory with SHA256SUMS")
     _reject_symlinks(root, label="source package")
+    _reject_special_entries(root, label="source package")
     entries = _parse_sums(sums_path)
     listed = {relative for _digest, relative in entries}
     actual = {

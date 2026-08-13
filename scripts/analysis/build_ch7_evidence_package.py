@@ -31,6 +31,7 @@ import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
 PACKAGE_SCHEMA = "ch7-evidence-package.v1"
+REDUCED_PUBLICATION_ATLAS_SCHEMA = "ch7-reduced-publication-atlas.v2"
 COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
 PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
 EXPECTED_SOURCE_SHA256SUMS = "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543"
@@ -506,10 +507,10 @@ def _cell_rows(payload: Path, arm_context: Mapping[str, Mapping[str, Any]]) -> l
                 "kinematics": arm_context[planner].get("kinematics"),
                 "episodes": int(row["episodes"]),
                 "success_fraction": float(row["success_mean"]),
-                "collision_fraction": float(row["collisions_mean"]),
-                "ped_collision_fraction": float(row["ped_collision_count_mean"]),
-                "obstacle_collision_fraction": float(row["obstacle_collision_count_mean"]),
-                "total_collision_fraction": float(row["total_collision_count_mean"]),
+                "collision_count_mean": float(row["collisions_mean"]),
+                "ped_collision_count_mean": float(row["ped_collision_count_mean"]),
+                "obstacle_collision_count_mean": float(row["obstacle_collision_count_mean"]),
+                "total_collision_count_mean": float(row["total_collision_count_mean"]),
                 "near_misses_mean": float(row["near_misses_mean"]),
                 "time_to_goal_norm_mean": float(row["time_to_goal_norm_mean"]),
                 "path_efficiency_mean": float(row["path_efficiency_mean"]),
@@ -986,11 +987,19 @@ def _build_once(  # noqa: C901, PLR0912, PLR0915
             _write_json(
                 staging / "publication/reduced_atlas.json",
                 {
-                    "schema_version": "ch7-reduced-publication-atlas.v1",
+                    "schema_version": REDUCED_PUBLICATION_ATLAS_SCHEMA,
+                    "metric_contract": "collision_count_mean_fields_are_per_episode_counts.v1",
                     "cells": selected,
                     "roles": ["feasibility_criticism", "cross_cell_inversion"],
                     "claim_boundary": "release-cell descriptive figure source only",
                 },
+            )
+            reduced_schema_path = (
+                Path(__file__).parents[2]
+                / "robot_sf/benchmark/schemas/ch7-reduced-publication-atlas.v2.json"
+            )
+            Draft202012Validator(_read_json(reduced_schema_path)).validate(
+                _read_json(staging / "publication/reduced_atlas.json")
             )
             overlay = {
                 "schema_version": "ch7-materialization-overlay.v1",

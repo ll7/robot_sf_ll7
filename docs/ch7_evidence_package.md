@@ -22,6 +22,12 @@ complete 90-requested/88-admitted/two-excluded mapping ledger, a 672-cell audit 
 Chapter 7 atlas, release-cell context keyed by arm/configuration identity, deterministic Matplotlib
 PDF/SVG output, sidecars, figure QA, and `SHA256SUMS`.
 
+The reduced publication atlas uses `ch7-reduced-publication-atlas.v2` with the metric contract
+`collision_count_mean_fields_are_per_episode_counts.v1`. Collision-related release-cell means are
+emitted as `collision_count_mean`, `ped_collision_count_mean`, `obstacle_collision_count_mean`, and
+`total_collision_count_mean`; they are count means from the source rows and may exceed 1. The builder
+does not rename or rescale those source values into `*_fraction` fields.
+
 Before reading release rows, the builder validates the complete `issue_6814_compact_packet.v1`
 schema, every compact checksum entry, the approved #6412 source digest, and the frozen portfolio
 selection contract. The source mapping and release archive must agree on release digest/tag, and

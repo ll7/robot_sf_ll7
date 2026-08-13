@@ -99,7 +99,7 @@ def _scenario_values(scenario: str, planner: str) -> tuple[float, float, float, 
         return 0.0, 1.0, 1.0, 0.0
     if scenario == "francis2023_blind_corner":
         if planner == "ppo":
-            return 22 / 30, 8 / 30, 0.0, 8 / 30
+            return 22 / 30, 1.2000, 0.0, 1.2000
         return 0.0, 1.0, 1.0, 0.0
     if planner in {"orca", "social_force"}:
         return 0.0, 0.0, 0.0, 0.0
@@ -446,6 +446,55 @@ def test_terminal_signature_fixture_preserves_timeout_and_collision_counts(
         "collision_event": 23,
         "timeout": 7,
     }
+
+
+def test_collision_count_means_are_not_emitted_as_fractions(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package(
+        source_package=fixture_inputs["source"],
+        release_archive=fixture_inputs["archive"],
+        issue6814_compact=fixture_inputs["compact"],
+        output=output,
+        portfolio_config=fixture_inputs["portfolio"],
+    )
+    payload = json.loads((output / "publication/reduced_atlas.json").read_text())
+    assert payload["schema_version"] == "ch7-reduced-publication-atlas.v2"
+    assert payload["metric_contract"] == "collision_count_mean_fields_are_per_episode_counts.v1"
+    rows = {(row["scenario_id"], row["planner_key"]): row for row in payload["cells"]}
+    ppo_blind_corner = rows[("francis2023_blind_corner", "ppo")]
+    assert ppo_blind_corner["collision_count_mean"] == pytest.approx(1.2)
+    assert ppo_blind_corner["total_collision_count_mean"] == pytest.approx(1.2)
+    assert not {
+        "collision_fraction",
+        "ped_collision_fraction",
+        "obstacle_collision_fraction",
+        "total_collision_fraction",
+    }.intersection(ppo_blind_corner)
+
+    csv_rows = list(
+        csv.DictReader((output / "publication/reduced_atlas.csv").open(encoding="utf-8"))
+    )
+    csv_ppo_blind_corner = next(
+        row
+        for row in csv_rows
+        if row["scenario_id"] == "francis2023_blind_corner" and row["planner_key"] == "ppo"
+    )
+    assert csv_ppo_blind_corner["collision_count_mean"] == "1.2"
+    assert "collision_fraction" not in csv_ppo_blind_corner
+
+    schema = json.loads(
+        (
+            Path(__file__).parents[2]
+            / "robot_sf/benchmark/schemas/ch7-reduced-publication-atlas.v2.json"
+        ).read_text(encoding="utf-8")
+    )
+    mutated = json.loads(json.dumps(payload))
+    bad_cell = mutated["cells"][0]
+    bad_cell["collision_fraction"] = bad_cell.pop("collision_count_mean")
+    errors = list(builder.Draft202012Validator(schema).iter_errors(mutated))
+    assert errors
 
 
 def test_source_digest_mismatch_stops_before_package_creation(

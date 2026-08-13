@@ -44,6 +44,32 @@ def test_classify_prefers_explicit_compute_label() -> None:
     assert result == ("compute", "high", ["label: resource:slurm"], ())
 
 
+def test_classify_explicit_upstream_reference_precedes_licence_text() -> None:
+    """A dependency reference must not be masked by incidental licence wording."""
+
+    result = triage._classify(
+        _issue(
+            body="## Blocked by\n- #123 requires licence approval first.",
+            labels=("state:blocked",),
+        ),
+        [],
+    )
+
+    assert result[0:2] == ("upstream_issue", "high")
+    assert result[3] == (123,)
+
+
+def test_classify_text_only_licence_signal_is_medium_confidence() -> None:
+    """Text-only permission signals remain reviewable rather than high confidence."""
+
+    result = triage._classify(
+        _issue(body="Waiting for licence approval.", labels=("state:blocked",)),
+        [],
+    )
+
+    assert result[0:2] == ("licence", "medium")
+
+
 def test_classify_preserves_upstream_references() -> None:
     """Explicit upstream references must remain machine-checkable."""
 
@@ -183,6 +209,18 @@ def test_fetch_blocked_issues_excludes_pull_requests_and_flattens_pages() -> Non
     assert calls[0][3] == ("repos/owner/repo/issues?state=open&labels=state%3Ablocked&per_page=100")
 
 
+def test_fetch_blocked_issues_rejects_invalid_issue_number() -> None:
+    """The inventory boundary must reject rows before comment fetching."""
+
+    def runner(args: list[str], _: str | None) -> CompletedProcess[str]:
+        return CompletedProcess(args, 0, json.dumps([[{"title": "missing number"}]]), "")
+
+    with pytest.raises(triage.TriageError, match="invalid number"):
+        triage._fetch_blocked_issues(
+            repo="owner/repo", label="state:blocked", limit=10, runner=runner
+        )
+
+
 def test_apply_comments_is_idempotent_and_verifies_writeback() -> None:
     """Repeated application must avoid duplicate comments and verify writes."""
 
@@ -215,7 +253,15 @@ def test_apply_comments_is_idempotent_and_verifies_writeback() -> None:
     body = json.loads(calls[0][1] or "{}")["body"]
     unchanged = triage.apply_comments(
         report["issues"],
-        {42: [{"id": 9001, "created_at": "2026-08-13T12:00:00Z", "body": body}]},
+        {
+            42: [
+                {
+                    "id": 9001,
+                    "created_at": "2026-08-13T12:00:00Z",
+                    "body": body + "\nGenerated at: `2026-08-13T12:00:00Z`",
+                }
+            ]
+        },
         repo="owner/repo",
         max_mutations=0,
         runner=runner,
@@ -283,3 +329,6 @@ def test_report_only_mode_is_explicit_and_mutually_exclusive() -> None:
 
     assert args.report_only is True
     assert args.apply_comments is False
+
+    with pytest.raises(SystemExit):
+        triage._build_parser().parse_args(["--report-only", "--apply-comments"])

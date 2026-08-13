@@ -25,11 +25,15 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlencode
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_LABEL = "state:blocked"
 SCHEMA = "blocked_queue_triage.v1"
 COMMENT_MARKER = "blocked-queue-triage.v1"
+MARKER_DIGEST_RE = re.compile(
+    rf"<!-- {re.escape(COMMENT_MARKER)} issue=[1-9]\d* digest=(?P<digest>[0-9a-f]{{64}}) -->"
+)
 COMMENTS_PAGE_SIZE = 100
 MAX_BODY_EXCERPT = 180
 MAX_EVIDENCE = 3
@@ -222,13 +226,10 @@ def _classify(  # noqa: C901
             evidence.append("text: compute or scheduler gate")
         return "compute", "high", evidence[:MAX_EVIDENCE], ()
 
-    if labels & {"resource:license", "resource:licence", "rights", "licence"} or any(
-        term in lowered for term in ("license", "licence", "licensing", "copyright", "rights")
-    ):
-        matched = sorted(labels & {"resource:license", "resource:licence", "rights", "licence"})
+    licence_labels = {"resource:license", "resource:licence", "rights", "licence"}
+    matched = sorted(labels & licence_labels)
+    if matched:
         evidence.extend(f"label: {label}" for label in matched)
-        if not matched:
-            evidence.append("text: license or rights gate")
         return "licence", "high", evidence[:MAX_EVIDENCE], ()
 
     if "decision-required" in labels or any(
@@ -255,6 +256,17 @@ def _classify(  # noqa: C901
     if references or any(term in lowered for term in ("depends on", "prerequisite", "source_pr")):
         evidence.append("text: dependency or prerequisite gate")
         return "dependency", "medium", evidence[:MAX_EVIDENCE], references
+
+    licence_terms = (
+        "license approval",
+        "licence approval",
+        "licensing gate",
+        "copyright clearance",
+        "rights clearance",
+    )
+    if any(term in lowered for term in licence_terms):
+        evidence.append("text: license or rights approval gate")
+        return "licence", "medium", evidence[:MAX_EVIDENCE], ()
 
     if labels & {"resource:external-data", "state:blocked-external-input"} or any(
         term in lowered
@@ -431,6 +443,13 @@ def _digest(row: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _marker_digest(body: str) -> str | None:
+    """Return the digest recorded in an existing triage comment marker."""
+
+    match = MARKER_DIGEST_RE.search(body)
+    return match.group("digest") if match else None
+
+
 def render_comment(row: Mapping[str, Any]) -> str:
     """Render the idempotent issue comment for one triage row."""
 
@@ -491,7 +510,7 @@ def apply_comments(
         body = render_comment(row)
         existing = _existing_comment(list(comments_by_issue.get(issue, [])), issue)
         existing_body = str(existing.get("body") or "") if existing else ""
-        if existing_body == body:
+        if existing_body and _marker_digest(existing_body) == _digest(row):
             operations.append({"issue": issue, "action": "unchanged"})
             continue
         if (
@@ -540,7 +559,8 @@ def _fetch_blocked_issues(
 ) -> list[dict[str, Any]]:
     """Fetch the complete open blocked issue inventory, excluding pull requests."""
 
-    path = f"repos/{repo}/issues?state=open&labels={label.replace(':', '%3A')}&per_page={COMMENTS_PAGE_SIZE}"
+    query = urlencode({"state": "open", "labels": label, "per_page": COMMENTS_PAGE_SIZE})
+    path = f"repos/{quote(repo, safe='/')}/issues?{query}"
     payload = _api_json(
         path,
         runner=runner,
@@ -550,6 +570,10 @@ def _fetch_blocked_issues(
     )
     rows = _flatten_pages(payload, operation="open blocked issue inventory")
     issues = [row for row in rows if "pull_request" not in row]
+    for row in issues:
+        number = row.get("number")
+        if type(number) is not int or number < 1:
+            raise TriageError("blocked issue inventory contains a row with an invalid number")
     if len(issues) > limit:
         raise TriageError(
             f"blocked issue inventory contains {len(issues)} rows, above limit {limit}; increase --limit"

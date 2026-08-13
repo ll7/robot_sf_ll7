@@ -1,0 +1,10 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md",
+  "artifact_sha256": "14a131eceb2f767e70609d573d32a942ba15e703378d2bb921cb7da82e768179",
+  "preserved_exact_bytes": true,
+  "review_marker": [
+    "AI-GENERATED",
+    "NEEDS-REVIEW"
+  ]
+}

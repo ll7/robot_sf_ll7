@@ -39,6 +39,7 @@
       }
     },
     "atlas": {"type": "object", "required": ["audit_cells", "publication_cells", "planner_arms"]},
+    "terminal_label_normalization": {"$ref": "#/$defs/terminal_label_normalization"},
     "roles": {"type": "object", "minProperties": 4},
     "claim_boundary": {"type": "string", "minLength": 1},
     "raw_traces_included": {"const": false},
@@ -66,6 +67,49 @@
     }
   ],
   "$defs": {
+    "terminal_label_normalization": {
+      "$comment": "Optional for compatibility with packages built before issue #7068; packages built by the current builder always emit it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "applies_to",
+        "precedence",
+        "source_conditions",
+        "normalized_timeout_reasons",
+        "raw_termination_reason_included",
+        "note"
+      ],
+      "properties": {
+        "contract": {"const": "ch7-terminal-label-normalization.v1"},
+        "applies_to": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "precedence": {
+          "type": "array",
+          "items": {"enum": ["route_complete", "collision_event", "timeout", "unavailable"]},
+          "minItems": 4,
+          "uniqueItems": true
+        },
+        "source_conditions": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "minLength": 1},
+          "required": ["route_complete", "collision_event", "timeout", "unavailable"]
+        },
+        "normalized_timeout_reasons": {
+          "$comment": "Must state that a raw 'terminated' reason is reported as the normalized 'timeout' label.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1},
+          "contains": {"const": "terminated"}
+        },
+        "raw_termination_reason_included": {"const": false},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "digests": {
       "type": "object",

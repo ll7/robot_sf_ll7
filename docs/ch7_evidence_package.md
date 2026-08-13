@@ -105,3 +105,32 @@ byte-identical; the receipt is the effective admission record and remains outsid
 package payload. The registry and receipt are an offline author-controlled trust anchor: the
 verifier checks their exact digests and canonical issue-comment URL, but does not claim to
 authenticate GitHub identity without a separate online review.
+
+## Additive issue #7087 v2 projection
+
+The v2 builder projects the immutable v1 audit into a new, blocked package
+contract. It retains the existing 14-cell narrow-doorway terminal panel and
+adds the requested 10-cell cross-topology and 4-cell cross-mechanism panels.
+The in-repository `socnav_sampling` adapter is not asserted to be upstream
+SocNavBench-equivalent.
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_package_v2.py \
+  --source-package docs/context/evidence/issue_6792_ch7_evidence_package_v1 \
+  --config configs/analysis/ch7_evidence_package.v2.yaml \
+  --output output/ch7_evidence_package_v2 \
+  --check-determinism
+```
+
+The v2 package emits only success fraction, near-miss mean, normalized
+time-to-goal mean, and path-efficiency mean. Collision counts, collision
+fractions, collision-derived composites, and SNQI (which is collision-derived
+for this boundary) are excluded until issue #7042 is resolved. The categorical
+`collision_event` terminal label remains allowed in the retained terminal
+panel and is not a collision-rate metric.
+
+Every v2 cell binds to the v1 package checksum, source-member checksum, and
+source-row checksum. The v2 manifest publishes the `terminated`-to-`timeout`
+terminal-label mapping and `SHA256SUMS` covers the generated payload. The v2
+package remains `not_admitted`; a maintainer-owned
+`ch7-evidence-admission.v2` receipt is required before paper-facing use.

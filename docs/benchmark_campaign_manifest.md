@@ -44,7 +44,8 @@ durable-artifact plan. The evaluator reports one explicit state:
   not decision-capable evidence;
 - `blocked_missing_producer`, `blocked_underpowered`,
   `blocked_analysis_contract`, `blocked_noncomparable_rows`, or
-  `blocked_artifact_plan` — a named prerequisite is not satisfied;
+  `blocked_artifact_plan`, or `blocked_missing_proof` — a named prerequisite
+  or executable proof surface is not satisfied;
 - `invalid_contract` — the answerability schema itself is malformed.
 
 The canonical runner includes the state in `summary.json` and `report.md`.
@@ -53,6 +54,25 @@ than `answerable`; the default packet path remains compatible with older
 manifests. Required fallback, degraded, unavailable, or missing producers are
 never answerable. Optional unavailable metrics remain explicit and are not
 imputed as zero.
+
+### Executable proof surfaces
+
+Decision-capable manifests should add all six `answerability.proof_surfaces`
+entries: `producer`, `preregistration`, `evidence_contract`, `analysis`,
+`artifact`, and `result_packet`. Each entry records `status` (`passed`,
+`unavailable`, `failed`, or `not_run`) and whether the surface is `required`.
+An unavailable surface must include `unavailable_reason`; required surfaces
+must be `passed` before admission. Optional unavailable surfaces remain visible
+warnings and do not become zero-valued evidence.
+
+The runner can execute typed checks from
+`validation.answerability_proof` when `--execute-validation` or
+`--require-answerable` is supplied. Supported checks invoke the public
+preregistration and artifact-catalog validators, the evidence-contract CLI,
+the merged result-packet loader when available, a manifest-row producer check,
+or an argv-style command. Commands are never passed through a shell. A
+missing generic result-packet validator is recorded as `unavailable`; it is
+not replaced by an issue-specific or heuristic checker.
 
 ## Research-Yield Snapshot
 

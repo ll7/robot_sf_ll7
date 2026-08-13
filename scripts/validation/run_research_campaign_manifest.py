@@ -20,6 +20,11 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.research_answerability import answerability_from_manifest
+from scripts.validation.research_answerability_preflight import (
+    AnswerabilityProofError,
+    apply_proof_results,
+    collect_answerability_proof,
+)
 
 REQUIRED_SECTIONS = (
     "campaign",
@@ -186,7 +191,12 @@ def _validate_durable_evidence(manifest: dict[str, Any]) -> None:
         raise ManifestError("durable_evidence.plan.required_before_claim must be true")
 
 
-def _validate_manifest(manifest: dict[str, Any], *, options: RunnerOptions) -> None:
+def _validate_manifest(
+    manifest: dict[str, Any],
+    *,
+    options: RunnerOptions,
+    answerability: dict[str, Any] | None = None,
+) -> None:
     _validate_required_sections(manifest)
     _validate_campaign(manifest)
     _validate_row_status_policy(manifest)
@@ -195,11 +205,11 @@ def _validate_manifest(manifest: dict[str, Any], *, options: RunnerOptions) -> N
         require_configured_outputs=options.require_configured_outputs,
     )
     _validate_durable_evidence(manifest)
-    answerability = answerability_from_manifest(manifest)
-    if options.require_answerable and answerability["state"] != "answerable":
+    evaluated_answerability = answerability or answerability_from_manifest(manifest)
+    if options.require_answerable and evaluated_answerability["state"] != "answerable":
         raise ManifestError(
             "answerability gate requires state=answerable, got "
-            f"{answerability['state']}: {answerability['reasons']}"
+            f"{evaluated_answerability['state']}: {evaluated_answerability['reasons']}"
         )
 
 
@@ -333,6 +343,8 @@ def _summary_payload(
     manifest_path: Path,
     rows: list[dict[str, Any]],
     validation_results: list[dict[str, Any]],
+    answerability: dict[str, Any],
+    answerability_proof: dict[str, Any],
 ) -> dict[str, Any]:
     status_counts = Counter(str(row["row_status"]) for row in rows)
     outputs = manifest["outputs"]
@@ -343,7 +355,8 @@ def _summary_payload(
         "evidence_tier": manifest["campaign"]["evidence_tier"],
         "claim_boundary": manifest["campaign"]["claim_boundary"],
         "final_decision": "diagnostic",
-        "answerability": answerability_from_manifest(manifest),
+        "answerability": answerability,
+        "answerability_proof": answerability_proof,
         "planner_rows": _planner_rows(manifest),
         "row_status_summary": dict(sorted(status_counts.items())),
         "artifact_paths": {
@@ -386,6 +399,16 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
         lines.append(f"- Reason: {reason}")
     for warning in summary["answerability"]["warnings"]:
         lines.append(f"- Warning: {warning}")
+    lines.extend(["", "## Answerability Proof Surfaces", ""])
+    proof_surfaces = summary["answerability_proof"].get("surfaces", {})
+    for surface, result in proof_surfaces.items():
+        status = result.get("status", "unknown")
+        required = result.get("required", False)
+        reason = result.get("reason")
+        suffix = f" — {reason}" if reason else ""
+        lines.append(
+            f"- `{surface}` (`{'required' if required else 'optional'}`): `{status}`{suffix}"
+        )
     lines.extend(
         [
             "",
@@ -443,14 +466,49 @@ def _write_context_note(path: Path, summary: dict[str, Any]) -> None:
         "",
         f"- `{summary['artifact_paths']['durable_evidence_plan']}`",
         "",
+        "## Answerability Proof Surfaces",
+        "",
     ]
+    for surface, result in summary["answerability_proof"].get("surfaces", {}).items():
+        reason = result.get("reason")
+        suffix = f" — {reason}" if reason else ""
+        body.append(f"- `{surface}`: `{result.get('status', 'unknown')}`{suffix}")
+    body.append("")
     path.write_text("\n".join(body), encoding="utf-8")
 
 
 def run(manifest_path: Path, output_dir: Path, *, options: RunnerOptions) -> dict[str, Any]:
     """Validate a manifest, emit packet files, and return the summary payload."""
     manifest = _load_manifest(manifest_path)
-    _validate_manifest(manifest, options=options)
+    base_options = RunnerOptions(
+        execute_validation=options.execute_validation,
+        require_configured_outputs=options.require_configured_outputs,
+        require_answerable=False,
+    )
+    _validate_manifest(manifest, options=base_options)
+
+    proof_report = collect_answerability_proof(
+        manifest,
+        repo_root=_repo_root(),
+        execute=options.execute_validation or options.require_answerable,
+        build_rows=_build_rows,
+    )
+    evaluated_manifest = manifest
+    answerability_contract = manifest.get("answerability")
+    if isinstance(answerability_contract, dict):
+        if options.require_answerable and "proof_surfaces" not in answerability_contract:
+            raise ManifestError(
+                "answerability.proof_surfaces is required when --require-answerable is used"
+            )
+        updated_contract = apply_proof_results(answerability_contract, proof_report)
+        evaluated_manifest = dict(manifest)
+        evaluated_manifest["answerability"] = updated_contract
+    answerability = answerability_from_manifest(evaluated_manifest)
+    _validate_manifest(
+        manifest,
+        options=options,
+        answerability=answerability,
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     rows = _build_rows(manifest)
@@ -458,12 +516,19 @@ def run(manifest_path: Path, output_dir: Path, *, options: RunnerOptions) -> dic
         manifest,
         execute=options.execute_validation,
     )
-    summary = _summary_payload(manifest, manifest_path, rows, validation_results)
+    summary = _summary_payload(
+        manifest,
+        manifest_path,
+        rows,
+        validation_results,
+        answerability,
+        proof_report,
+    )
 
     resolved_manifest = {
         "schema": "research_campaign_manifest_packet.v1",
         "source_manifest": str(manifest_path),
-        "manifest": manifest,
+        "manifest": evaluated_manifest,
     }
     _write_json(output_dir / "manifest_resolved.json", resolved_manifest)
     _write_jsonl(output_dir / "rows.jsonl", rows)
@@ -520,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
                 require_answerable=args.require_answerable,
             ),
         )
-    except (KeyError, ManifestError, OSError, yaml.YAMLError) as exc:
+    except (AnswerabilityProofError, KeyError, ManifestError, OSError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps({"ok": True, "output_dir": str(output_dir), "summary": summary}, indent=2))

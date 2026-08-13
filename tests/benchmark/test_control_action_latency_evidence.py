@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.control_action_latency_evidence import (
+from robot_sf.benchmark.latency.control_action_latency_evidence import (
     CLAIM_BOUNDARY,
     FIXED_SCOPE_COVERAGE_CONTRACT,
     FIXED_SCOPE_PLAN_SCHEMA_VERSION,
@@ -29,7 +29,7 @@ from robot_sf.benchmark.control_action_latency_evidence import (
     validate_fixed_scope_latency_coverage,
     write_latency_evidence,
 )
-from robot_sf.benchmark.control_action_latency_preflight import AXIS_KEY
+from robot_sf.benchmark.latency.control_action_latency_preflight import AXIS_KEY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_CONFIG = REPO_ROOT / "configs/research/fidelity_sensitivity_v1.yaml"

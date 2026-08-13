@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.latency_stress import classify_feasibility
+from robot_sf.benchmark.latency.latency_stress import classify_feasibility
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPO_ROOT / "scripts" / "benchmark" / "run_compute_feasibility_matrix.py"

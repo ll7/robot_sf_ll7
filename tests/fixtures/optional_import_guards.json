@@ -16,7 +16,7 @@
       "note": "Blessed broad catch: compiled-backend entry point may raise AttributeError when a native wheel component is absent.",
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
-        "robot_sf/benchmark/latency_stress.py:826",
+        "robot_sf/benchmark/latency/latency_stress.py:826",
         "robot_sf/planner/socnav_base.py:726"
       ]
     },
@@ -146,8 +146,8 @@
         "robot_sf/benchmark/full_classic/visual_deps.py:58",
         "robot_sf/benchmark/full_classic/visuals.py:49",
         "robot_sf/benchmark/helper_catalog.py:73",
-        "robot_sf/benchmark/latency_stress.py:660",
-        "robot_sf/benchmark/latency_stress.py:672",
+        "robot_sf/benchmark/latency/latency_stress.py:660",
+        "robot_sf/benchmark/latency/latency_stress.py:672",
         "robot_sf/benchmark/live_forecast_replay_gate.py:965",
         "robot_sf/benchmark/near_miss_determinism.py:402",
         "robot_sf/benchmark/plots.py:28",

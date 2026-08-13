@@ -1,0 +1,133 @@
+{
+  "schema_version": "evidence_synthesis_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "evidence_status": "diagnostic-only",
+  "claim_boundary": {
+    "benchmark_claim": false,
+    "paper_facing_claim": false,
+    "released_default_changed": false,
+    "promotion_claim": false,
+    "fallback_or_degraded_rows_included": false,
+    "execution_mode": "native_local_linux_x86_64"
+  },
+  "sources": {
+    "issue": 6962,
+    "predecessor_issue": 5149,
+    "implementation_commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
+    "base_commit": "080536c8ef12269753a4c3bc4a48f5bc006d68c1",
+    "harness": "robot_sf.research.emergent_phenomena",
+    "diagnostic_cli": "scripts/validation/run_issue_6962_lane_formation_sensitivity.py",
+    "historical_comparator_bundle": "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08",
+    "historical_comparator_git_head": "a31686e51f624638255d22968b89cda0257c2e4c",
+    "historical_comparator_platform": "macOS-26.5.2-arm64",
+    "historical_comparator_runs_sha256": "d48666187f15adc2193d03dc219bf7c379d9c10b49bbdd7430c141d8ad7e9d26"
+  },
+  "protocol": {
+    "seeds": [5149, 5150, 5151, 5152, 5153, 5154, 5155, 5156, 5157, 5158],
+    "lengths_m": [16.0, 24.0],
+    "corridor_widths_m": [3.5, 5.0],
+    "pedestrian_counts": [16, 24],
+    "steps": [200, 400],
+    "calibrations": ["released_default", "literature_typical"],
+    "thresholds": {
+      "lane_segregation_index": [0.15, 0.3, 0.5],
+      "lane_purity": [0.4, 0.6, 0.8]
+    },
+    "rows": 320,
+    "summary_cells": 32,
+    "execution_status": {"native:computed": 320}
+  },
+  "results": {
+    "surface": {
+      "released_default": {
+        "lane_segregation_index_mean": 0.1605276744,
+        "lane_segregation_index_sd": 0.1040488742,
+        "lane_segregation_index_range": [0.0211510599, 0.4658591448],
+        "weak_hit_rate_range": [0.3, 0.6],
+        "clear_hit_rate_max": 0.0,
+        "cell_mean_range": [0.1219430425, 0.1832638320]
+      },
+      "literature_typical": {
+        "lane_segregation_index_mean": 0.1491924698,
+        "lane_segregation_index_sd": 0.0908688199,
+        "lane_segregation_index_range": [0.0104353374, 0.3807599181],
+        "weak_hit_rate_range": [0.3, 0.6],
+        "clear_hit_rate_max": 0.0,
+        "cell_mean_range": [0.1162441355, 0.1633590948]
+      }
+    },
+    "default_cell": {
+      "definition": "length=24 m, corridor_width=5 m, pedestrians=24, steps=400",
+      "released_default": {
+        "lane_segregation_index": {"mean": 0.1582, "sd": 0.0844, "range": [0.0624, 0.2848]},
+        "lane_purity": {"mean": 0.3524, "sd": 0.0678},
+        "weak_hits": "5/10",
+        "clear_hits": "0/10"
+      },
+      "literature_typical": {
+        "lane_segregation_index": {"mean": 0.1513, "sd": 0.1013, "range": [0.0412, 0.2830]},
+        "lane_purity": {"mean": 0.3250, "sd": 0.0477},
+        "weak_hits": "4/10",
+        "clear_hits": "0/10"
+      }
+    },
+    "paired_effects_vs_default_cell": {
+      "unit": "same-seed lane_segregation_index difference",
+      "released_default_mean_range": [-0.0362351798, 0.0250856097],
+      "literature_typical_mean_range": [-0.0350421853, 0.0120727740],
+      "bootstrap": {
+        "resamples": 100000,
+        "rng_seed": 6962,
+        "interval": "percentile 95% per non-default cell",
+        "all_non_default_cell_intervals_include_zero": true
+      }
+    },
+    "cell_summaries": [
+      {"cal":"literature_typical","length_m":16,"width_m":3.5,"n":16,"steps":200,"lsi_mean":0.1634,"lsi_sd":0.1115,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.4056},
+      {"cal":"literature_typical","length_m":16,"width_m":3.5,"n":16,"steps":400,"lsi_mean":0.1449,"lsi_sd":0.1073,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.3858},
+      {"cal":"literature_typical","length_m":16,"width_m":3.5,"n":24,"steps":200,"lsi_mean":0.1598,"lsi_sd":0.0765,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3257},
+      {"cal":"literature_typical","length_m":16,"width_m":3.5,"n":24,"steps":400,"lsi_mean":0.1474,"lsi_sd":0.0879,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3015},
+      {"cal":"literature_typical","length_m":16,"width_m":5.0,"n":16,"steps":200,"lsi_mean":0.1517,"lsi_sd":0.1083,"weak":0.5,"mid":0.2,"clear":0.0,"purity_mean":0.3770},
+      {"cal":"literature_typical","length_m":16,"width_m":5.0,"n":16,"steps":400,"lsi_mean":0.1522,"lsi_sd":0.1109,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.3711},
+      {"cal":"literature_typical","length_m":16,"width_m":5.0,"n":24,"steps":200,"lsi_mean":0.1586,"lsi_sd":0.0850,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3399},
+      {"cal":"literature_typical","length_m":16,"width_m":5.0,"n":24,"steps":400,"lsi_mean":0.1464,"lsi_sd":0.1015,"weak":0.4,"mid":0.0,"clear":0.0,"purity_mean":0.3155},
+      {"cal":"literature_typical","length_m":24,"width_m":3.5,"n":16,"steps":200,"lsi_mean":0.1162,"lsi_sd":0.0734,"weak":0.3,"mid":0.0,"clear":0.0,"purity_mean":0.4594},
+      {"cal":"literature_typical","length_m":24,"width_m":3.5,"n":16,"steps":400,"lsi_mean":0.1457,"lsi_sd":0.1103,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.3773},
+      {"cal":"literature_typical","length_m":24,"width_m":3.5,"n":24,"steps":200,"lsi_mean":0.1592,"lsi_sd":0.0648,"weak":0.6,"mid":0.0,"clear":0.0,"purity_mean":0.3700},
+      {"cal":"literature_typical","length_m":24,"width_m":3.5,"n":24,"steps":400,"lsi_mean":0.1513,"lsi_sd":0.0842,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3087},
+      {"cal":"literature_typical","length_m":24,"width_m":5.0,"n":16,"steps":200,"lsi_mean":0.1453,"lsi_sd":0.0956,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.4840},
+      {"cal":"literature_typical","length_m":24,"width_m":5.0,"n":16,"steps":400,"lsi_mean":0.1489,"lsi_sd":0.1054,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.3544},
+      {"cal":"literature_typical","length_m":24,"width_m":5.0,"n":24,"steps":200,"lsi_mean":0.1447,"lsi_sd":0.0748,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3947},
+      {"cal":"literature_typical","length_m":24,"width_m":5.0,"n":24,"steps":400,"lsi_mean":0.1513,"lsi_sd":0.1013,"weak":0.4,"mid":0.0,"clear":0.0,"purity_mean":0.3250},
+      {"cal":"released_default","length_m":16,"width_m":3.5,"n":16,"steps":200,"lsi_mean":0.1395,"lsi_sd":0.1116,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.5531},
+      {"cal":"released_default","length_m":16,"width_m":3.5,"n":16,"steps":400,"lsi_mean":0.1810,"lsi_sd":0.1150,"weak":0.5,"mid":0.2,"clear":0.0,"purity_mean":0.4124},
+      {"cal":"released_default","length_m":16,"width_m":3.5,"n":24,"steps":200,"lsi_mean":0.1833,"lsi_sd":0.1162,"weak":0.6,"mid":0.2,"clear":0.0,"purity_mean":0.4938},
+      {"cal":"released_default","length_m":16,"width_m":3.5,"n":24,"steps":400,"lsi_mean":0.1562,"lsi_sd":0.0938,"weak":0.3,"mid":0.1,"clear":0.0,"purity_mean":0.3272},
+      {"cal":"released_default","length_m":16,"width_m":5.0,"n":16,"steps":200,"lsi_mean":0.1738,"lsi_sd":0.1063,"weak":0.5,"mid":0.2,"clear":0.0,"purity_mean":0.5575},
+      {"cal":"released_default","length_m":16,"width_m":5.0,"n":16,"steps":400,"lsi_mean":0.1621,"lsi_sd":0.1241,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.4190},
+      {"cal":"released_default","length_m":16,"width_m":5.0,"n":24,"steps":200,"lsi_mean":0.1681,"lsi_sd":0.0980,"weak":0.6,"mid":0.0,"clear":0.0,"purity_mean":0.4791},
+      {"cal":"released_default","length_m":16,"width_m":5.0,"n":24,"steps":400,"lsi_mean":0.1555,"lsi_sd":0.0864,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3022},
+      {"cal":"released_default","length_m":24,"width_m":3.5,"n":16,"steps":200,"lsi_mean":0.1749,"lsi_sd":0.1410,"weak":0.5,"mid":0.2,"clear":0.0,"purity_mean":0.7538},
+      {"cal":"released_default","length_m":24,"width_m":3.5,"n":16,"steps":400,"lsi_mean":0.1785,"lsi_sd":0.0996,"weak":0.5,"mid":0.2,"clear":0.0,"purity_mean":0.4743},
+      {"cal":"released_default","length_m":24,"width_m":3.5,"n":24,"steps":200,"lsi_mean":0.1219,"lsi_sd":0.0974,"weak":0.3,"mid":0.1,"clear":0.0,"purity_mean":0.6077},
+      {"cal":"released_default","length_m":24,"width_m":3.5,"n":24,"steps":400,"lsi_mean":0.1497,"lsi_sd":0.0896,"weak":0.4,"mid":0.1,"clear":0.0,"purity_mean":0.3791},
+      {"cal":"released_default","length_m":24,"width_m":5.0,"n":16,"steps":200,"lsi_mean":0.1526,"lsi_sd":0.1191,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.6593},
+      {"cal":"released_default","length_m":24,"width_m":5.0,"n":16,"steps":400,"lsi_mean":0.1520,"lsi_sd":0.1180,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.4545},
+      {"cal":"released_default","length_m":24,"width_m":5.0,"n":24,"steps":200,"lsi_mean":0.1611,"lsi_sd":0.1123,"weak":0.4,"mid":0.2,"clear":0.0,"purity_mean":0.7025},
+      {"cal":"released_default","length_m":24,"width_m":5.0,"n":24,"steps":400,"lsi_mean":0.1582,"lsi_sd":0.0844,"weak":0.5,"mid":0.0,"clear":0.0,"purity_mean":0.3524}
+    ]
+  },
+  "verdict": {
+    "classification": "diagnostic_screen_did_not_find_a_reproducible_clear_lane_regime",
+    "mechanism_conclusion": "Across the tested geometry, population, duration, and calibration levels, no cell reached the clear lane threshold reproducibly; weak-threshold rates varied with seed and cell, so the result narrows but does not distinguish scenario, threshold, and model explanations.",
+    "confidence": 0.9,
+    "condition_that_would_change_conclusion": "A threshold-calibrated reference configuration, independent warm-up/inflow controls, or a parameter sweep that produces stable clear segregation would change the interpretation."
+  },
+  "limitations": [
+    "This is a 2x2x2x2 diagnostic screen with ten seeds per cell, not a full parameter-identification campaign.",
+    "Duration changes the existing second-half metric window; warm-up and sustained inflow were not independently controlled.",
+    "The threshold grid is an explicit sensitivity analysis, not external calibration against a reference implementation or visually adjudicated lane-forming case.",
+    "All execution was native local Linux/x86_64; the historical #5149 comparator was generated on macOS/arm64, so cross-platform numeric identity is not claimed.",
+    "Raw rows, checkpoints, and logs remain ignored worktree-local artifacts with no durable retrieval pointer; this tracked summary is the compact evidence surface."
+  ]
+}

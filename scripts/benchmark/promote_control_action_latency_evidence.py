@@ -27,7 +27,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.control_action_latency_evidence import (
+from robot_sf.benchmark.latency.control_action_latency_evidence import (
     PROMOTION_SCHEMA_VERSION,
     LatencyEvidenceError,
     build_latency_evidence,

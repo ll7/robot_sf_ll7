@@ -19,7 +19,7 @@ so the moment real data is staged and reviewed it can be wired in without re-der
 schema. It makes **no measured-value claim** and does not collect or fabricate data.
 
 The contract is enforced by
-`robot_sf/benchmark/actuation_latency_measurement_manifest.py`
+`robot_sf/benchmark/latency/actuation_latency_measurement_manifest.py`
 (`check_amv_actuation_latency_measurement_manifest`), with the schema at
 `robot_sf/benchmark/schemas/amv_actuation_latency_measurement_manifest.v1.json` and a worked
 example at

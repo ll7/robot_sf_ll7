@@ -143,7 +143,8 @@
   "caption_assertions": [
     {
       "figure_id": "ch7_matched_start_process_contrast",
-      "assertion_text": "The matched-start traces show distinct observed paths and terminal outcomes from different recorded starts.",
+      "template_id": "observed_visualization.v1",
+      "assertion_text": "Observed figure 'ch7_matched_start_process_contrast' for estimand 'ch7_matched_planner_process_contrast' with direction 'not_applicable'.",
       "status": "observed",
       "bound_to_packet_fields": ["estimand_id", "comparison.direction", "claim_boundary.allowed"]
     }

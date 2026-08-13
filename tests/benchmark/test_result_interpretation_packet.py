@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -475,6 +477,50 @@ class TestFailClosedFigureEncoding:
         errors = validate_packet(payload)
         assert any("file does not exist" in e for e in errors)
 
+    def test_readme_bytes_cannot_be_declared_as_pdf_figure(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        readme = FIXTURES_DIR / "README.md"
+        payload["figure_links"][0]["encoding"] = "pdf"
+        payload["figure_links"][0]["path"] = (
+            "tests/fixtures/result_interpretation_packet/v1/README.md"
+        )
+        payload["figure_links"][0]["sha256"] = hashlib.sha256(readme.read_bytes()).hexdigest()
+        errors = validate_packet(payload)
+        assert any("suffix" in e or "bytes do not match" in e for e in errors)
+        assert any("artifact_catalog" in e for e in errors)
+
+    def test_available_figure_must_match_catalog_entry(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        figure = payload["figure_links"][0]
+        figure_path = Path("tests/fixtures/artifact_catalog/v1/fig_benchmark_outcome_matrix.svg")
+        caption_path = Path("tests/fixtures/artifact_catalog/v1/captions.md")
+        catalog_path = Path("tests/fixtures/artifact_catalog/v1/valid_catalog.yaml")
+        figure.update(
+            {
+                "artifact_id": "fig_benchmark_outcome_matrix",
+                "path": str(figure_path),
+                "sha256": hashlib.sha256(figure_path.read_bytes()).hexdigest(),
+                "encoding": "svg",
+                "caption_file": {
+                    "path": str(caption_path),
+                    "sha256": hashlib.sha256(caption_path.read_bytes()).hexdigest(),
+                },
+                "artifact_catalog": {
+                    "catalog_id": "fixture_camera_ready_artifacts",
+                    "path": str(catalog_path),
+                    "sha256": hashlib.sha256(catalog_path.read_bytes()).hexdigest(),
+                    "commit": subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        capture_output=True,
+                        check=True,
+                        text=True,
+                    ).stdout.strip(),
+                },
+            }
+        )
+        errors = validate_packet(payload)
+        assert errors == [], f"catalog-bound fixture should validate: {errors}"
+
 
 # ---------------------------------------------------------------------------
 # Fail-closed: unsupported decision vocabulary (full enum)
@@ -557,6 +603,40 @@ class TestFailClosedCaptionBinding:
         payload["caption_assertions"][0]["bound_to_packet_fields"] = ["arbitrary_field"]
         errors = validate_packet(payload)
         assert any("unknown packet field" in e for e in errors)
+
+    def test_caption_text_must_match_controlled_template(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["caption_assertions"][0]["assertion_text"] = (
+            "PPO dominates every planner in every scenario and should be deployed."
+        )
+        errors = validate_packet(payload)
+        assert any("generated observed_visualization.v1" in e for e in errors)
+
+
+class TestFailClosedAdmission:
+    def test_paper_grade_admission_requires_independent_review(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["evidence"]["tier"] = "paper_grade"
+        payload["evidence"]["admission_state"] = "admitted"
+        errors = validate_packet(payload)
+        assert any("independent reviewer" in e for e in errors)
+
+    def test_unknown_evidence_vocabulary_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["evidence"]["tier"] = "arbitrary_grade"
+        errors = validate_packet(payload)
+        assert any("evidence/tier" in e or "evidence.tier" in e for e in errors)
+
+    def test_reviewer_must_be_independent(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["reviewer"] = {
+            "actor_id": payload["producer"]["actor_id"],
+            "commit": payload["producer"]["commit"],
+            "command": "review_result_interpretation_packet",
+            "status": "draft",
+        }
+        errors = validate_packet(payload)
+        assert any("independent" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

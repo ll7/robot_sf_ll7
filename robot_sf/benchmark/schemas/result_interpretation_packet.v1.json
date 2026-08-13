@@ -187,11 +187,21 @@
         },
         "tier": {
           "type": "string",
-          "minLength": 1
+          "enum": [
+            "smoke_diagnostic",
+            "visualization_fixture",
+            "nominal_benchmark",
+            "paper_grade"
+          ]
         },
         "admission_state": {
           "type": "string",
-          "minLength": 1
+          "enum": [
+            "diagnostic_only",
+            "unavailable_causal_inference",
+            "bounded_simulator_defined",
+            "admitted"
+          ]
         },
         "rationale": {
           "type": "string",
@@ -685,6 +695,16 @@
               "type": "null"
             }
           ]
+        },
+        "artifact_catalog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/artifact_catalog_ref"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -794,11 +814,25 @@
     "caption_assertion": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["figure_id", "assertion_text", "status", "bound_to_packet_fields"],
+      "required": [
+        "figure_id",
+        "template_id",
+        "assertion_text",
+        "status",
+        "bound_to_packet_fields"
+      ],
       "properties": {
         "figure_id": {
           "type": "string",
           "minLength": 1
+        },
+        "template_id": {
+          "type": "string",
+          "enum": [
+            "observed_visualization.v1",
+            "unavailable_visualization.v1",
+            "metric_decision.v1"
+          ]
         },
         "assertion_text": {
           "type": "string",
@@ -877,6 +911,31 @@
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "artifact_catalog_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_id", "path", "sha256", "commit"],
+      "properties": {
+        "catalog_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 7,
+          "pattern": "^[0-9a-f]{7,64}$"
         }
       }
     }

@@ -24,8 +24,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+import yaml
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.artifact_catalog import load_artifact_catalog
 from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "result_interpretation_packet.v1"
@@ -49,6 +51,20 @@ _CLAIM_ESCALATION_PHRASES = (
 _VALID_DECISION_OUTCOMES = frozenset(
     {"supported", "not_supported", "inconclusive", "invalid", "unavailable"}
 )
+_VALID_EVIDENCE_TIERS = frozenset(
+    {"smoke_diagnostic", "visualization_fixture", "nominal_benchmark", "paper_grade"}
+)
+_VALID_ADMISSION_STATES = frozenset(
+    {"diagnostic_only", "unavailable_causal_inference", "bounded_simulator_defined", "admitted"}
+)
+_VALID_TIER_ADMISSION_STATES = {
+    "smoke_diagnostic": frozenset({"diagnostic_only"}),
+    "visualization_fixture": frozenset({"unavailable_causal_inference"}),
+    "nominal_benchmark": frozenset({"bounded_simulator_defined", "admitted"}),
+    "paper_grade": frozenset({"admitted"}),
+}
+_REVIEW_REQUIRED_ADMISSION_STATES = frozenset({"admitted"})
+_REVIEW_REQUIRED_EVIDENCE_TIERS = frozenset({"paper_grade"})
 _VALID_DESIRABILITY = frozenset(
     {"higher_is_better", "lower_is_better", "target_range", "not_applicable"}
 )
@@ -63,6 +79,10 @@ _VALID_COMPARATOR_DIRECTIONS = frozenset(
     {"comparison_minus_reference", "reference_minus_comparison", "not_applicable"}
 )
 _VALID_FIGURE_ENCODINGS = frozenset({"png", "pdf", "svg", "unavailable"})
+_VALID_CAPTION_TEMPLATES = frozenset(
+    {"observed_visualization.v1", "unavailable_visualization.v1", "metric_decision.v1"}
+)
+_FIGURE_SUFFIXES = {"png": ".png", "pdf": ".pdf", "svg": ".svg"}
 _VALID_CAPTION_FIELD_REFS = frozenset(
     {
         "packet_id",
@@ -256,6 +276,16 @@ class FileRef:
 
 
 @dataclass(frozen=True, slots=True)
+class ArtifactCatalogRef:
+    """Tracked artifact catalog that owns an available figure output."""
+
+    catalog_id: str
+    path: str
+    sha256: str
+    commit: str
+
+
+@dataclass(frozen=True, slots=True)
 class FigureVisualContract:
     """Explicit visual grammar for a figure or unavailable figure slot."""
 
@@ -283,6 +313,7 @@ class FigureLink:
     encoding: str
     visual_contract: FigureVisualContract
     caption_file: FileRef | None = None
+    artifact_catalog: ArtifactCatalogRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,6 +321,7 @@ class CaptionAssertion:
     """A structured caption assertion bound to figure fields."""
 
     figure_id: str
+    template_id: str
     assertion_text: str
     status: str
     bound_to_packet_fields: list[str] = field(default_factory=list)
@@ -400,11 +432,24 @@ def _validate_population(p: Population, errors: list[str]) -> None:
 
 
 def _validate_evidence(evidence: Evidence, errors: list[str]) -> None:
-    """Require explicit evidence identity and admission rationale."""
+    """Require controlled evidence identity and a compatible admission state."""
 
     for field_name in ("evidence_id", "tier", "admission_state", "rationale"):
         if not getattr(evidence, field_name).strip():
             errors.append(f"evidence.{field_name} is required")
+    if evidence.tier not in _VALID_EVIDENCE_TIERS:
+        errors.append(f"evidence.tier {evidence.tier!r} not in {sorted(_VALID_EVIDENCE_TIERS)}")
+    if evidence.admission_state not in _VALID_ADMISSION_STATES:
+        errors.append(
+            "evidence.admission_state "
+            f"{evidence.admission_state!r} not in {sorted(_VALID_ADMISSION_STATES)}"
+        )
+    allowed_states = _VALID_TIER_ADMISSION_STATES.get(evidence.tier)
+    if allowed_states is not None and evidence.admission_state not in allowed_states:
+        errors.append(
+            f"evidence tier {evidence.tier!r} cannot use admission state "
+            f"{evidence.admission_state!r}; expected one of {sorted(allowed_states)}"
+        )
 
 
 def _validate_execution_mode(mode: ExecutionMode, errors: list[str]) -> None:
@@ -652,7 +697,7 @@ def _validate_claim_escalation(label: str, text: str, errors: list[str]) -> None
         errors.append(f"{label}: forbidden positive claim phrase(s): {sorted(matches)}")
 
 
-def _validate_caption_assertions(
+def _validate_caption_assertions(  # noqa: C901
     captions: list[CaptionAssertion],
     packet: ResultInterpretationPacket,
     errors: list[str],
@@ -661,6 +706,11 @@ def _validate_caption_assertions(
     for ca in captions:
         if ca.figure_id not in figure_ids:
             errors.append(f"caption assertion for {ca.figure_id!r} references an undeclared figure")
+        if ca.template_id not in _VALID_CAPTION_TEMPLATES:
+            errors.append(
+                f"caption assertion for {ca.figure_id!r}: template_id {ca.template_id!r} "
+                f"not in {sorted(_VALID_CAPTION_TEMPLATES)}"
+            )
         if ca.status not in _VALID_CAPTION_STATUSES:
             errors.append(
                 f"caption assertion for {ca.figure_id!r}: status {ca.status!r} "
@@ -684,6 +734,73 @@ def _validate_caption_assertions(
             _validate_claim_escalation(
                 f"caption assertion for {ca.figure_id!r}", ca.assertion_text, errors
             )
+        expected_text = _render_caption_assertion(ca, packet)
+        if expected_text is None:
+            errors.append(
+                f"caption assertion for {ca.figure_id!r}: template {ca.template_id!r} "
+                "does not have sufficient structured bindings"
+            )
+        elif ca.assertion_text != expected_text:
+            errors.append(
+                f"caption assertion for {ca.figure_id!r}: assertion_text must equal the "
+                f"generated {ca.template_id} text"
+            )
+
+
+def _render_caption_assertion(
+    assertion: CaptionAssertion,
+    packet: ResultInterpretationPacket,
+) -> str | None:
+    """Render the controlled caption grammar for one structured assertion.
+
+    Returns:
+        Generated caption text, or ``None`` when the template lacks enough
+        structured bindings to render safely.
+    """
+
+    if assertion.template_id == "observed_visualization.v1":
+        required_fields = {
+            "estimand_id",
+            "comparison.direction",
+            "claim_boundary.allowed",
+        }
+        if not required_fields.issubset(assertion.bound_to_packet_fields):
+            return None
+        direction = (
+            packet.estimand.comparator.direction
+            if packet.estimand.comparator is not None
+            else "not_applicable"
+        )
+        return (
+            f"Observed figure '{assertion.figure_id}' for estimand "
+            f"'{packet.estimand.estimand_id}' with direction '{direction}'."
+        )
+    if assertion.template_id == "unavailable_visualization.v1":
+        if assertion.status != "unavailable":
+            return None
+        return (
+            f"Figure '{assertion.figure_id}' is unavailable under admission state "
+            f"'{packet.evidence.admission_state}'."
+        )
+    if assertion.template_id == "metric_decision.v1":
+        decision_refs = [
+            field_ref
+            for field_ref in assertion.bound_to_packet_fields
+            if field_ref.startswith("decision.") and field_ref.endswith(".outcome")
+        ]
+        if len(decision_refs) != 1:
+            return None
+        decision_id = decision_refs[0].split(".")[1]
+        decision = next(
+            (item for item in packet.decisions if item.decision_id == decision_id), None
+        )
+        if decision is None:
+            return None
+        return (
+            f"Decision '{decision.decision_id}' for metric '{decision.metric_id}' is "
+            f"'{decision.outcome}'."
+        )
+    return None
 
 
 def _caption_field_ref_exists(field_ref: str, packet: ResultInterpretationPacket) -> bool:
@@ -719,17 +836,25 @@ def _validate_figure_links(
                 f"{sorted(_VALID_FIGURE_ENCODINGS)}"
             )
         if fl.encoding != "unavailable" and not _SHA256_RE.match(fl.sha256):
-            errors.append(
-                f"figure {fl.figure_id!r}: sha256 must be 64-hex when encoding is not 'unavailable'"
-            )
+            errors.append(f"figure {fl.figure_id!r}: sha256 must be 64-hex for an available figure")
+        if fl.encoding != "unavailable" and fl.sha256 == _ZERO_SHA256:
+            errors.append(f"figure {fl.figure_id!r}: available figures require a non-zero sha256")
         _validate_file_ref(
             fl.path,
             fl.sha256,
             f"figure {fl.figure_id!r}",
             errors,
             require_exists=fl.encoding != "unavailable",
-            verify_digest=fl.encoding != "unavailable" and fl.sha256 != _ZERO_SHA256,
+            verify_digest=fl.encoding != "unavailable",
         )
+        if fl.encoding != "unavailable":
+            _validate_figure_file_type(fl, errors)
+            if fl.artifact_catalog is None:
+                errors.append(
+                    f"figure {fl.figure_id!r}: available figures require an artifact_catalog ref"
+                )
+            else:
+                _validate_artifact_catalog_binding(fl, errors)
         if fl.caption_file is not None:
             _validate_file_ref(
                 fl.caption_file.path,
@@ -739,6 +864,153 @@ def _validate_figure_links(
                 require_exists=True,
                 verify_digest=True,
             )
+            _validate_caption_file_type(fl, errors)
+
+
+def _validate_figure_file_type(figure: FigureLink, errors: list[str]) -> None:
+    """Require a rendered figure's suffix and magic bytes to match its encoding."""
+
+    path = _REPO_ROOT / figure.path
+    if not path.is_file():
+        return
+    expected_suffix = _FIGURE_SUFFIXES.get(figure.encoding)
+    if expected_suffix is None:
+        return
+    if path.suffix.casefold() != expected_suffix:
+        errors.append(
+            f"figure {figure.figure_id!r}: path suffix {path.suffix!r} does not match "
+            f"encoding {figure.encoding!r}"
+        )
+        return
+    prefix = path.read_bytes()[:32]
+    try:
+        svg_text = path.read_text(encoding="utf-8")[:4096] if figure.encoding == "svg" else ""
+    except (OSError, UnicodeDecodeError) as exc:
+        errors.append(f"figure {figure.figure_id!r}: cannot read SVG bytes: {exc}")
+        return
+    signature_matches = {
+        "png": prefix.startswith(b"\x89PNG\r\n\x1a\n"),
+        "pdf": prefix.startswith(b"%PDF-"),
+        "svg": bool(re.search(r"<svg(?:\s|>)", svg_text, re.I)),
+    }
+    if not signature_matches[figure.encoding]:
+        errors.append(
+            f"figure {figure.figure_id!r}: bytes do not match declared encoding {figure.encoding!r}"
+        )
+
+
+def _validate_caption_file_type(figure: FigureLink, errors: list[str]) -> None:
+    """Require caption references to be durable UTF-8 text files."""
+
+    if figure.caption_file is None:
+        return
+    path = _REPO_ROOT / figure.caption_file.path
+    if path.suffix.casefold() not in {".md", ".markdown", ".txt"}:
+        errors.append(
+            f"figure {figure.figure_id!r} caption_file must be Markdown or plain text: "
+            f"{figure.caption_file.path}"
+        )
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        errors.append(f"figure {figure.figure_id!r} caption_file is not readable UTF-8 text: {exc}")
+        return
+    if not text.strip():
+        errors.append(f"figure {figure.figure_id!r} caption_file must not be empty")
+
+
+def _validate_artifact_catalog_binding(figure: FigureLink, errors: list[str]) -> None:  # noqa: C901, PLR0912
+    """Bind an available figure and caption to an existing artifact catalog entry."""
+
+    catalog_ref = figure.artifact_catalog
+    if catalog_ref is None:
+        return
+    catalog_path = _REPO_ROOT / catalog_ref.path
+    _validate_file_ref(
+        catalog_ref.path,
+        catalog_ref.sha256,
+        f"figure {figure.figure_id!r} artifact_catalog",
+        errors,
+        require_exists=True,
+        verify_digest=True,
+    )
+    if not _COMMIT_RE.match(catalog_ref.commit):
+        errors.append(
+            f"figure {figure.figure_id!r} artifact_catalog commit is not a hexadecimal git revision"
+        )
+    elif not _git_commit_exists(catalog_ref.commit):
+        errors.append(
+            f"figure {figure.figure_id!r} artifact_catalog commit is unavailable: "
+            f"{catalog_ref.commit}"
+        )
+    else:
+        tracked_digest = _git_file_sha256(catalog_ref.commit, catalog_ref.path)
+        if tracked_digest != catalog_ref.sha256:
+            errors.append(
+                f"figure {figure.figure_id!r} artifact_catalog is not bound to commit "
+                f"{catalog_ref.commit}"
+            )
+    if not catalog_path.is_file():
+        return
+    try:
+        catalog = load_artifact_catalog(catalog_path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        errors.append(f"figure {figure.figure_id!r} artifact_catalog could not be loaded: {exc}")
+        return
+    if catalog.catalog_id != catalog_ref.catalog_id:
+        errors.append(
+            f"figure {figure.figure_id!r}: artifact_catalog id {catalog.catalog_id!r} does not "
+            f"match declared {catalog_ref.catalog_id!r}"
+        )
+    entries = [entry for entry in catalog.artifacts if entry.artifact_id == figure.artifact_id]
+    if len(entries) != 1:
+        errors.append(
+            f"figure {figure.figure_id!r}: artifact_id {figure.artifact_id!r} must identify "
+            "exactly one catalog entry"
+        )
+        return
+    entry = entries[0]
+    if entry.artifact_kind != "figure":
+        errors.append(
+            f"figure {figure.figure_id!r}: catalog entry must have artifact_kind 'figure'"
+        )
+    output = entry.outputs.get(figure.encoding)
+    if output is None:
+        errors.append(
+            f"figure {figure.figure_id!r}: catalog entry has no {figure.encoding!r} output"
+        )
+    else:
+        expected_path = (catalog_path.parent / output.path).resolve()
+        actual_path = (_REPO_ROOT / figure.path).resolve()
+        if expected_path != actual_path:
+            errors.append(
+                f"figure {figure.figure_id!r}: path does not match the catalog output path"
+            )
+        if output.sha256 != figure.sha256:
+            errors.append(f"figure {figure.figure_id!r}: sha256 does not match the catalog output")
+    if entry.caption_file is None:
+        errors.append(f"figure {figure.figure_id!r}: catalog entry has no caption_file")
+    elif figure.caption_file is None:
+        errors.append(f"figure {figure.figure_id!r}: available figures require a caption_file")
+    else:
+        expected_caption = (catalog_path.parent / entry.caption_file.path).resolve()
+        actual_caption = (_REPO_ROOT / figure.caption_file.path).resolve()
+        if expected_caption != actual_caption:
+            errors.append(
+                f"figure {figure.figure_id!r}: caption_file path does not match the catalog"
+            )
+        if entry.caption_file.sha256 != figure.caption_file.sha256:
+            errors.append(
+                f"figure {figure.figure_id!r}: caption_file sha256 does not match the catalog"
+            )
+    if not _COMMIT_RE.match(entry.generation_commit) or not _git_commit_exists(
+        entry.generation_commit
+    ):
+        errors.append(
+            f"figure {figure.figure_id!r}: catalog generation_commit is unavailable: "
+            f"{entry.generation_commit}"
+        )
 
 
 def _validate_file_ref(
@@ -1096,6 +1368,15 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         if fl.get("caption_file") is not None:
             cf = fl["caption_file"]
             cap = FileRef(path=cf["path"], sha256=cf["sha256"])
+        artifact_catalog = None
+        if fl.get("artifact_catalog") is not None:
+            catalog = fl["artifact_catalog"]
+            artifact_catalog = ArtifactCatalogRef(
+                catalog_id=catalog["catalog_id"],
+                path=catalog["path"],
+                sha256=catalog["sha256"],
+                commit=catalog["commit"],
+            )
         vc = fl["visual_contract"]
         visual_contract = FigureVisualContract(
             plot_type=vc["plot_type"],
@@ -1119,12 +1400,14 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
                 encoding=fl["encoding"],
                 visual_contract=visual_contract,
                 caption_file=cap,
+                artifact_catalog=artifact_catalog,
             )
         )
 
     caption_assertions = [
         CaptionAssertion(
             figure_id=ca["figure_id"],
+            template_id=ca["template_id"],
             assertion_text=ca["assertion_text"],
             status=ca["status"],
             bound_to_packet_fields=ca.get("bound_to_packet_fields", []),
@@ -1244,7 +1527,7 @@ def compute_post_review_digest(packet: ResultInterpretationPacket) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def validate_review_binding(packet: ResultInterpretationPacket) -> list[str]:
+def validate_review_binding(packet: ResultInterpretationPacket) -> list[str]:  # noqa: C901
     """Validate the optional review binding against the packet content.
 
     Returns:
@@ -1253,15 +1536,27 @@ def validate_review_binding(packet: ResultInterpretationPacket) -> list[str]:
 
     errors: list[str] = []
     if packet.reviewer is None:
+        if _review_is_required(packet):
+            errors.append(
+                "evidence admission requires an independent reviewer with exact review digests"
+            )
         if packet.reviewed_packet_digest is not None or packet.post_review_digest is not None:
             errors.append("review digests require a reviewer identity")
         return errors
+    if packet.reviewer.actor_id == packet.producer.actor_id:
+        errors.append("reviewer identity must be independent from producer identity")
     if packet.reviewer.status not in {"reviewed", "final"}:
+        if _review_is_required(packet):
+            errors.append("evidence admission requires reviewer status 'reviewed' or 'final'")
         if packet.reviewed_packet_digest is not None or packet.post_review_digest is not None:
             errors.append(
                 "reviewer status must be 'reviewed' or 'final' when review digests are set"
             )
         return errors
+    if not _COMMIT_RE.match(packet.reviewer.commit):
+        errors.append("reviewer commit is not a hexadecimal git revision")
+    elif not _git_commit_exists(packet.reviewer.commit):
+        errors.append(f"reviewer commit is unavailable: {packet.reviewer.commit}")
     if packet.reviewed_packet_digest is None:
         errors.append("reviewed_packet_digest is required for a reviewed packet")
     elif packet.reviewed_packet_digest != compute_packet_digest(packet):
@@ -1271,6 +1566,15 @@ def validate_review_binding(packet: ResultInterpretationPacket) -> list[str]:
     elif packet.post_review_digest != compute_post_review_digest(packet):
         errors.append("post_review_digest does not match the reviewed packet content")
     return errors
+
+
+def _review_is_required(packet: ResultInterpretationPacket) -> bool:
+    """Return whether the evidence tier/state may only be admitted after review."""
+
+    return (
+        packet.evidence.admission_state in _REVIEW_REQUIRED_ADMISSION_STATES
+        or packet.evidence.tier in _REVIEW_REQUIRED_EVIDENCE_TIERS
+    )
 
 
 def write_deterministic_json(payload: dict[str, Any], path: Path) -> None:
@@ -1346,6 +1650,10 @@ def _packet_checksum_files(packet: ResultInterpretationPacket) -> dict[str, Path
     for source in packet.sources:
         files[f"source/{source.source_id}/{source.path}"] = _REPO_ROOT / source.path
     for figure in packet.figure_links:
+        if figure.artifact_catalog is not None:
+            files[f"catalog/{figure.figure_id}/{figure.artifact_catalog.path}"] = (
+                _REPO_ROOT / figure.artifact_catalog.path
+            )
         if figure.encoding != "unavailable":
             files[f"figure/{figure.figure_id}/{figure.path}"] = _REPO_ROOT / figure.path
         if figure.caption_file is not None:

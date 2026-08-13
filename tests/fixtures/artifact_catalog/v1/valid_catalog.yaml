@@ -11,6 +11,9 @@ artifacts:
       png:
         path: fig_benchmark_outcome_matrix.png
         sha256: eedbd154d18d684d3e4963cc6e4c5180713ec6fbcb18561ae7f66997d493b3e7
+      svg:
+        path: fig_benchmark_outcome_matrix.svg
+        sha256: 3b15d9278f0eef7e03c2f87bbf12be0dfa163ee3dc30e78f6c0d0d3c4469786e
     caption_file:
       path: captions.md
       sha256: 31edf86d8bd42a79b573d348bb3b32ffca443b25384c8f512100103a72aa4e53

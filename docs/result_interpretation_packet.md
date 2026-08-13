@@ -15,7 +15,7 @@ interpretation of benchmark or diagnostic results.  It answers three questions:
 2. **How was it computed, and what population/modes does it cover?**
 3. **What is it allowed and forbidden to claim?**
 
-Each packet also records an explicit evidence identity/tier and admission state.
+Each packet also records an explicit controlled evidence tier and admission state.
 This keeps a nominal benchmark result, diagnostic observation, and visualization
 fixture distinct even when they share the same packet schema.
 
@@ -74,6 +74,19 @@ The validator rejects at minimum:
   support threshold, or complete native/adapter-only execution population.
 - Population accounting errors (`included + excluded != total`).
 - Empty claim boundary lists.
+
+Evidence tiers are controlled (`smoke_diagnostic`, `visualization_fixture`,
+`nominal_benchmark`, or `paper_grade`) and admission states are controlled and
+cross-checked. `admitted` or `paper_grade` packets require an independent
+reviewer, a reviewer commit, and both exact review digests. A producer cannot
+serve as its own reviewer.
+
+Caption assertions carry a controlled template ID. Available figure links must
+also carry a checksum-bound `artifact_catalog` reference; the validator loads
+the existing catalog, checks the catalog commit, output identity, caption
+identity, and PNG/PDF/SVG signature. An unavailable figure remains explicit and
+does not require rendered bytes. This packet contract does not replace or
+re-register the repository's artifact catalog.
 
 Source references are repository-relative durable files.  Each source must carry
 its SHA-256 digest, generation commit, tracked commit, and generation command.
@@ -150,8 +163,8 @@ digest = compute_packet_digest(packet)
 
 ## Relationship to existing contracts
 
-- **`artifact_catalog.v1/v2`**: The packet references figures via `file_ref`
-  (path + SHA-256) without re-registering them in the catalog.
+- **`artifact_catalog.v1/v2`**: The packet references figures through a
+  checksum- and commit-bound catalog entry without re-registering the artifact.
 - **`figure_qa.py`**: Caption assertions in the packet are compatible with
   the v2 figure semantics QA surface.
 - Figure links carry a visual contract covering plot type, encodings,

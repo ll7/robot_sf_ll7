@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 ANSWERABILITY_SCHEMA = "research_answerability.v1"
 ANSWERABILITY_STATES = (
@@ -20,8 +20,18 @@ ANSWERABILITY_STATES = (
     "blocked_analysis_contract",
     "blocked_noncomparable_rows",
     "blocked_artifact_plan",
+    "blocked_missing_proof",
     "invalid_contract",
 )
+PROOF_SURFACES = (
+    "producer",
+    "preregistration",
+    "evidence_contract",
+    "analysis",
+    "artifact",
+    "result_packet",
+)
+PROOF_STATUSES = ("passed", "unavailable", "failed", "not_run")
 _DECISION_VOCABULARY = {"continue", "stop", "inconclusive", "invalid"}
 _REQUIRED_SECTIONS = ("question", "estimand", "producers", "analysis", "design", "artifacts")
 _REQUIRED_TEXT_FIELDS = {
@@ -76,10 +86,49 @@ _VALID_COMPARABILITY_STATUSES = {
     "unknown",
     "mismatched",
 }
+ProofStatus = Literal["passed", "unavailable", "failed", "not_run"]
 
 
 class AnswerabilityContractError(ValueError):
     """Raised when a research-answerability contract is structurally invalid."""
+
+
+@dataclass(frozen=True)
+class ProofSurface:
+    """Typed admission proof for one answerability surface."""
+
+    status: ProofStatus
+    required: bool
+    unavailable_reason: str | None = None
+
+    @classmethod
+    def from_mapping(cls, value: Any, field: str) -> ProofSurface:
+        """Build and validate a proof surface from its contract mapping.
+
+        Returns:
+            The validated proof surface.
+        """
+        surface = _mapping(value, field)
+        status = surface.get("status")
+        if status not in PROOF_STATUSES:
+            raise AnswerabilityContractError(
+                f"{field}.status must be one of {list(PROOF_STATUSES)}"
+            )
+        required = surface.get("required")
+        if not isinstance(required, bool):
+            raise AnswerabilityContractError(f"{field}.required must be a boolean")
+        reason = surface.get("unavailable_reason")
+        if status == "unavailable":
+            if not isinstance(reason, str) or not reason.strip():
+                raise AnswerabilityContractError(
+                    f"{field}.unavailable_reason is required when status is unavailable"
+                )
+            reason = reason.strip()
+        elif reason is not None and (not isinstance(reason, str) or not reason.strip()):
+            raise AnswerabilityContractError(
+                f"{field}.unavailable_reason must be a non-empty string when provided"
+            )
+        return cls(status=status, required=required, unavailable_reason=reason)
 
 
 @dataclass(frozen=True)
@@ -206,6 +255,52 @@ def _validate_artifacts(artifacts: Mapping[str, Any]) -> None:
         )
 
 
+def _validate_proof_surfaces(contract: Mapping[str, Any]) -> dict[str, ProofSurface]:
+    """Validate an explicitly declared proof surface set.
+
+    The section is optional for compatibility with pre-proof contracts. Once
+    declared, all six named surfaces are required and each entry is strict.
+
+    Returns:
+        The validated proof surfaces, or an empty mapping for legacy contracts.
+    """
+    value = contract.get("proof_surfaces")
+    if value is None:
+        return {}
+    surfaces = _mapping(value, "answerability.proof_surfaces")
+    missing = sorted(set(PROOF_SURFACES) - set(surfaces))
+    if missing:
+        raise AnswerabilityContractError(
+            "answerability.proof_surfaces is missing: " + ", ".join(missing)
+        )
+    unknown = sorted(set(surfaces) - set(PROOF_SURFACES))
+    if unknown:
+        raise AnswerabilityContractError(
+            "answerability.proof_surfaces contains unsupported values: " + ", ".join(unknown)
+        )
+    return {
+        name: ProofSurface.from_mapping(surfaces[name], f"answerability.proof_surfaces.{name}")
+        for name in PROOF_SURFACES
+    }
+
+
+def _proof_findings(
+    contract: Mapping[str, Any],
+) -> tuple[list[str], list[str]]:
+    proof_surfaces = _validate_proof_surfaces(contract)
+    missing = [
+        name
+        for name, proof in proof_surfaces.items()
+        if proof.required and proof.status != "passed"
+    ]
+    optional_unavailable = [
+        name
+        for name, proof in proof_surfaces.items()
+        if not proof.required and proof.status == "unavailable"
+    ]
+    return missing, optional_unavailable
+
+
 def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
     """Validate the structural contract without interpreting campaign results."""
     if not isinstance(contract, Mapping):
@@ -224,9 +319,10 @@ def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
     _validate_analysis(_mapping(contract["analysis"], "answerability.analysis"))
     _validate_design(_mapping(contract["design"], "answerability.design"))
     _validate_artifacts(_mapping(contract["artifacts"], "answerability.artifacts"))
+    _validate_proof_surfaces(contract)
 
 
-def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
+def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:  # noqa: C901
     """Return the most conservative state supported by *contract*.
 
     Structural defects return ``invalid_contract``. Semantic blockers are
@@ -293,17 +389,34 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
             (f"durable evidence plan is {durability_status}",),
         )
 
-    warnings = ()
+    missing_proof, optional_unavailable_proof = _proof_findings(contract)
+
+    warnings_list = []
     if optional_unavailable:
-        warnings = (
+        warnings_list.append(
             "optional unavailable producers remain explicit and cannot be interpreted as zero: "
-            + ", ".join(sorted(optional_unavailable)),
+            + ", ".join(sorted(optional_unavailable))
         )
+    if optional_unavailable_proof:
+        warnings_list.append(
+            "optional proof surfaces are unavailable and cannot support admission: "
+            + ", ".join(sorted(optional_unavailable_proof))
+        )
+    warnings = tuple(warnings_list)
     if design["mode"] == "diagnostic" or durability_status == "planned":
         return AnswerabilityResult(
             "diagnostic_only",
             (
                 "contract is executable only as a bounded diagnostic, not a decision-capable campaign",
+            ),
+            warnings,
+        )
+    if missing_proof:
+        return AnswerabilityResult(
+            "blocked_missing_proof",
+            (
+                "required proof surfaces are missing, not_run, unavailable, or failed: "
+                + ", ".join(sorted(missing_proof)),
             ),
             warnings,
         )
@@ -335,8 +448,12 @@ def answerability_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
 __all__ = [
     "ANSWERABILITY_SCHEMA",
     "ANSWERABILITY_STATES",
+    "PROOF_STATUSES",
+    "PROOF_SURFACES",
     "AnswerabilityContractError",
     "AnswerabilityResult",
+    "ProofStatus",
+    "ProofSurface",
     "answerability_from_manifest",
     "evaluate_answerability",
     "validate_answerability_contract",

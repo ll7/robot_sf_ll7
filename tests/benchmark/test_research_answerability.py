@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.research_answerability import (
+    PROOF_SURFACES,
     answerability_from_manifest,
     evaluate_answerability,
 )
@@ -31,6 +32,14 @@ def _example_contract() -> dict[str, object]:
     return copy.deepcopy(payload["answerability"])
 
 
+def _proof_contract() -> dict[str, object]:
+    contract = json.loads(ISSUE_6474_FIXTURE.read_text(encoding="utf-8"))
+    contract["proof_surfaces"] = {
+        name: {"status": "passed", "required": True} for name in PROOF_SURFACES
+    }
+    return contract
+
+
 def test_example_contract_is_diagnostic_only() -> None:
     """The canonical example is executable only as a bounded diagnostic packet."""
     result = evaluate_answerability(_example_contract())
@@ -48,6 +57,60 @@ def test_optional_unavailable_metric_is_preserved_without_blocking() -> None:
     assert result.state == "answerable"
     assert result.warnings
     assert "secondary_realism_metric" in result.warnings[0]
+
+
+def test_missing_proof_surface_is_invalid() -> None:
+    """A declared proof set must name every admission surface explicitly."""
+    contract = _proof_contract()
+    del contract["proof_surfaces"]["result_packet"]
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert "result_packet" in result.reasons[0]
+
+
+@pytest.mark.parametrize("status", ["not_run", "unavailable", "failed"])
+def test_required_proof_status_blocks_decision_capable_answerability(status: str) -> None:
+    """Required proof cannot be silently promoted to a decision-capable result."""
+    contract = _proof_contract()
+    contract["proof_surfaces"]["analysis"] = {
+        "status": status,
+        "required": True,
+        **(
+            {"unavailable_reason": "analysis proof was not produced"}
+            if status == "unavailable"
+            else {}
+        ),
+    }
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "blocked_missing_proof"
+    assert "analysis" in result.reasons[0]
+
+
+def test_optional_unavailable_proof_is_a_warning() -> None:
+    """Optional unavailable proof remains visible without blocking admission."""
+    contract = _proof_contract()
+    contract["proof_surfaces"]["result_packet"] = {
+        "status": "unavailable",
+        "required": False,
+        "unavailable_reason": "packet export is not needed for this local comparison",
+    }
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "answerable"
+    assert any("result_packet" in warning for warning in result.warnings)
+
+
+def test_all_required_proof_surfaces_pass() -> None:
+    """A complete passed proof set preserves decision-capable answerability."""
+    result = evaluate_answerability(_proof_contract())
+
+    assert result.state == "answerable"
+    assert not any("proof surfaces" in warning for warning in result.warnings)
 
 
 @pytest.mark.parametrize(

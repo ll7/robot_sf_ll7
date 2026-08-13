@@ -243,6 +243,36 @@ def test_resolve_episode_source_reports_fail_closed_provenance_states(
     assert unsupported["reason_code"] == "unsupported_campaign_row_status:fallback"
 
 
+def test_resolve_episode_source_rejects_duplicate_campaign_episode_identity(
+    tmp_path: Path,
+) -> None:
+    """Duplicate source rows must not be collapsed into an arbitrary episode."""
+    source = _write_typed_source(tmp_path)
+    row = _resolved_row(source)
+    duplicate = dict(row)
+    duplicate["run_id"] = "run-other"
+    store = _write_store(tmp_path, source)
+
+    write_result_store(
+        store,
+        [row, duplicate],
+        study_id="trace-dossier-duplicate",
+        command="fixture",
+    )
+
+    result = resolve_episode_source(
+        scenario_id="francis2023_blind_corner",
+        planner_id="goal",
+        seed=111,
+        campaign_store_dir=store,
+    )
+
+    assert result["resolution_status"] == "provenance-incomplete"
+    assert result["reason_code"].startswith(
+        "campaign_store_unreadable:campaign result store has duplicate episode identity:"
+    )
+
+
 def test_resolve_episode_source_rejects_bad_hash_and_ambiguous_artifacts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -311,3 +341,20 @@ def test_resolve_episode_source_rejects_incomplete_row_provenance(
     )
     assert result["resolution_status"] == "provenance-incomplete"
     assert result["reason_code"] == "campaign_row_missing_artifact_provenance"
+
+
+def test_export_trace_dossier_rejects_output_source_overlap(tmp_path: Path) -> None:
+    """The output bundle must not overwrite a source artifact in place."""
+    source = tmp_path / "trace.json"
+    source.write_bytes(_write_typed_source(tmp_path).read_bytes())
+    store = _write_store(tmp_path, source)
+
+    with pytest.raises(TraceDossierExportError, match="overlaps the existing source artifact"):
+        export_trace_dossier(
+            scenario_id="francis2023_blind_corner",
+            planner_id="goal",
+            seed=111,
+            release_manifest_path=_RELEASE,
+            campaign_store_dir=store,
+            output_dir=tmp_path,
+        )

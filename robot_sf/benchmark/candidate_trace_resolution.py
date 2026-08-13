@@ -236,6 +236,10 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
         ):
             continue
         key = _episode_key(scenario_id, planner, seed, episode_id)
+        if key in by_key:
+            raise CandidateTraceResolutionError(
+                f"campaign result store has duplicate episode identity: {key}"
+            )
         by_key[key] = {
             "run_id": run_id,
             "episode_id": episode_id,

@@ -284,8 +284,22 @@ def export_trace_dossier(
     ):
         raise TraceDossierExportError("converted trace identity does not match campaign tuple")
     trace = simulation_trace_export_from_dict(payload, source=source_path)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir_resolved = output_dir.resolve()
+    source_path_resolved = source_path.resolve()
     known_outputs = {"trace.json", "normalization_receipt.json", "manifest.json", "SHA256SUMS"}
+    overlapping_output = next(
+        (
+            output_dir_resolved / output_name
+            for output_name in sorted(known_outputs)
+            if output_dir_resolved / output_name == source_path_resolved
+        ),
+        None,
+    )
+    if overlapping_output is not None:
+        raise TraceDossierExportError(
+            f"output directory overlaps the existing source artifact: {overlapping_output}"
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
     unexpected_outputs = sorted(
         path.name
         for path in output_dir.iterdir()

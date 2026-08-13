@@ -91,10 +91,14 @@ uv run python scripts/analysis/report_research_yield.py \
 ```
 
 The report keeps empirical answers, infrastructure/preflight throughput,
-explicit failure reasons, and lag fields separate. Its source snapshot digest
-and filter definitions remain in the JSON output so a later synthesis can
-reproduce the counts without treating implementation activity as scientific
-evidence.
+explicit failure reasons, lag fields, and query-defined dimensions separate.
+The dimension set is intentionally closed: duplicate/competing pull requests,
+post-merge repairs, admitted result packets, and blocked-age categories must be
+declared in the frozen snapshot with explicit queries, denominators, and
+buckets. Unknown dimension names, fields, or buckets are rejected instead of
+inferred from live issue, pull-request, or campaign state. The source snapshot digest and
+filter definitions remain in the JSON output so a later synthesis can reproduce
+the counts without treating implementation activity as scientific evidence.
 
 ## Required Fields
 

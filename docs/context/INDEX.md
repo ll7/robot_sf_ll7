@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #6792 Chapter 7 evidence admission packet: immutable `ch7-evidence-package.v1` payload,
+trusted source-registry approval, and the separate `ch7-evidence-admission.v1` receipt. The
+package remains blocked until the author approves the exact digest; no trajectory or causal claim
+is promoted:
+[issue_6792_ch7_admission_execution_packet.md](issue_6792_ch7_admission_execution_packet.md).
+
 Issue #6972 analysis-trace overhead repair: reuses the episode commit hash and
 trace builder digest on the opt-in path, with action-sequence regression proof
 and a pinned local before/after receipt (5.890% post-change overhead; diagnostic

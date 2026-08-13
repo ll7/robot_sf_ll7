@@ -123,6 +123,61 @@ def test_base_freshness_unavailable_current_main_blocks_merge_ready_action() -> 
     assert pr["next_action"] == "refresh_current_main_before_queue_routing"
 
 
+@pytest.mark.parametrize(
+    ("label", "next_owner_or_gate"),
+    [
+        ("blocked", "blocker_owner_or_maintainer"),
+        ("decision-required", "maintainer_decision_or_approval"),
+        ("evidence:blocked", "evidence_or_domain_approval"),
+        ("state:blocked", "blocker_owner_or_maintainer"),
+        ("state:blocked-external-input", "external_input_owner_or_staging_gate"),
+        ("state:hold", "maintainer_decision_or_approval"),
+    ],
+)
+def test_explicit_blocker_overrides_green_merge_ready_routing(
+    label: str, next_owner_or_gate: str
+) -> None:
+    """Explicit stop-state labels must wait for their owner or approval gate."""
+    pr_data = _base_freshness_pr()
+    pr_data["labels"] = [{"name": "merge-ready"}, {"name": label}]
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    blocked_state = pr["preflight"]["blocked_state"]
+    assert blocked_state["status"] == "blocked"
+    assert blocked_state["labels"] == [label]
+    assert blocked_state["reasons"] == [f"explicit_blocked:{label}"]
+    assert blocked_state["next_owner_or_gate"] == next_owner_or_gate
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["next_action"] == "await_blocker_owner_or_approval"
+    assert pr["attention"] == "blocked_attention"
+
+
+def test_explicit_blocker_precedes_stale_base_refresh_hint() -> None:
+    """A blocked PR remains owner-gated even when its base also needs refresh."""
+    pr_data = _base_freshness_pr()
+    pr_data["labels"] = [{"name": "state:blocked"}, {"name": "merge-ready"}]
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="old-base",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["preflight"]["status"] == "blocked"
+    assert "base_sha_stale" in pr["preflight"]["reasons"]
+    assert "explicit_blocked:state:blocked" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "await_blocker_owner_or_approval"
+
+
 def test_snapshot_prs_emits_headline_state() -> None:
     """PR snapshots should summarize CI/review state without raw rollups."""
     pr_payload = {

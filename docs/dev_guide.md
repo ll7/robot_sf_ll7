@@ -800,6 +800,33 @@ All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
 `goal-issue-implementation`, etc.) use `gh_issue_rest.py thread` as the primary path;
 see `docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
 
+#### Blocked-queue re-surfacing (issue #7070)
+
+Use the blocked-queue watcher to report blocked issues whose explicit
+`blocked-triage-v1` issue/PR dependency is closed or merged:
+
+```bash
+uv run python scripts/dev/blocked_queue_watcher.py \
+  --repo ll7/robot_sf_ll7 --json
+```
+
+The default is report-only. The tier-1 issue-graph evaluator resolves all
+referenced issues and pull requests in one GraphQL request, and classifies
+path, external, in-repository, malformed, or otherwise unsupported conditions
+as `unevaluatable`. API failures are errors, never clean/not-fired results.
+
+After reviewing the report, an explicitly authorized routing pass may add only
+`needs-triage` to fired issues:
+
+```bash
+uv run python scripts/dev/blocked_queue_watcher.py \
+  --repo ll7/robot_sf_ll7 --apply --json
+```
+
+The watcher never writes `state:ready`; human review remains required before a
+blocked issue becomes dispatchable. The path/external/in-repository tiers need
+separately reviewed adapters and are not inferred from issue prose.
+
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`

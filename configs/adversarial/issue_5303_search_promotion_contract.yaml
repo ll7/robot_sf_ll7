@@ -102,7 +102,9 @@ input_provenance:
       sha256: 075f19c69b5d0021b9608f22dbbc4817da9651cb9a8eb52acfcfc616ccb355c8
     - id: objective_registry
       path: robot_sf/adversarial/objectives.py
-      sha256: 7c5bbdb5d19c548fcf492306efc6c89d712b28047866cb51787cdeab1a05125c
+      # Refreshed after the additive issue-4360 open-loop objective; the frozen
+      # #5303 objective definition and diagnostic binding remain unchanged.
+      sha256: 19c30bbc49ccc11d28998c18517ce91acbb3a403d1282c4cc35b9c8a82e0e6d8
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
       sha256: 01e2477c5741a5404d793b1e8341cb1f2ec714051453790b946e5a8a0a4cc828

@@ -1,0 +1,33 @@
+schema_version: adversarial-search-space.v1
+source_space: configs/adversarial/crossing_ttc_space.yaml
+description: >
+  Packet-scoped frozen crossing/TTC search space for issue #6921. It preserves
+  the approved crossing/TTC parameter bounds while freezing the per-candidate
+  scenario seed to the checked-in crossing_ttc_template seed 123.
+variables:
+  start_x:
+    min: 1.0
+    max: 3.0
+  start_y:
+    min: 2.0
+    max: 4.0
+  goal_x:
+    min: 7.0
+    max: 9.0
+  goal_y:
+    min: 2.0
+    max: 4.0
+  spawn_time_s:
+    min: 0.0
+    max: 2.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  pedestrian_delay_s:
+    min: 0.0
+    max: 2.0
+  scenario_seed:
+    min: 123
+    max: 123
+constraints:
+  min_start_goal_distance_m: 2.0

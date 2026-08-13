@@ -38,6 +38,14 @@
       "candidate_manifest_id": "pool_12",
       "candidate_manifest_sha256": "d02b3688f1ff261c17ee896ecd0fb2e18c619fef75430cd49df4a17092ad075d",
       "candidate_pool_index": 12,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100060,
         8100061,
@@ -69,7 +77,7 @@
       ],
       "model_rank": 23,
       "normalized_control_hash": "7cf2f9948247610a",
-      "record_sha256": "0b1a8d4b4021ad6da39ba6031aeac8f0a6694c355343db8fa8a93cabfb13a46b",
+      "record_sha256": "14c3b2750d21296434565e24c9ea836fb7aba4e81e9ce6b32c123802a0a05ff7",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 641,
       "score": -1.5994457649999998,
@@ -103,6 +111,14 @@
       "candidate_manifest_id": "pool_28",
       "candidate_manifest_sha256": "96272cf39cf59d69219bd8ebaa4dc13082c90a9848f346f9b40ab6c98c8f2a30",
       "candidate_pool_index": 28,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100140,
         8100141,
@@ -134,7 +150,7 @@
       ],
       "model_rank": 18,
       "normalized_control_hash": "d5591b4d024288bf",
-      "record_sha256": "5d46dd739d2a560df63d004c6a53d23db0e57341181469e45b4f3154d87b9622",
+      "record_sha256": "d0b32544a491357eec6d9016dd3c7aa827a19d3e2765edc12aba1ad691928833",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 294,
       "score": -1.459216027,
@@ -168,6 +184,14 @@
       "candidate_manifest_id": "pool_30",
       "candidate_manifest_sha256": "ba81f2bb0cbe9d5a27d4809988a5ca54fad83b3a1564cb01691d0de62559164e",
       "candidate_pool_index": 30,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100150,
         8100151,
@@ -199,7 +223,7 @@
       ],
       "model_rank": 40,
       "normalized_control_hash": "e11855aa8299a46f",
-      "record_sha256": "a3cd277fe23f1606ac6f52e51255fee9503ddd771c6a58f7ca3df86f6a0a75f2",
+      "record_sha256": "a8430dba3a58ca2b919eb15d0da805b295e6087b019bfe9f561d6825674195fd",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 982,
       "score": -1.754359333,
@@ -233,6 +257,14 @@
       "candidate_manifest_id": "pool_6",
       "candidate_manifest_sha256": "05fe4c4ca3cfa98c7beae12853cda94f052a9d968ac6eeb5ebb059d73d1d0385",
       "candidate_pool_index": 6,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100030,
         8100031,
@@ -264,7 +296,7 @@
       ],
       "model_rank": 51,
       "normalized_control_hash": "d0eac81245329e69",
-      "record_sha256": "09c972da6384cda9f158f99de5684d3019f57b4db0970e63c9fb93f4bf3e479a",
+      "record_sha256": "8dd99fd7fe3f91e7b99836b8e6b64c239b8e7a855033611a012ec56e6b9fec0d",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 373,
       "score": -1.932293902,
@@ -298,6 +330,14 @@
       "candidate_manifest_id": "pool_26",
       "candidate_manifest_sha256": "c61be5a0255698a8285117468895de74291304f42e12e97ee4fd8e6e48b35e1d",
       "candidate_pool_index": 26,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100130,
         8100131,
@@ -329,7 +369,7 @@
       ],
       "model_rank": 57,
       "normalized_control_hash": "4ad2088165de0f6b",
-      "record_sha256": "fb5a627825f6d60f54421dd3bb19cadcaf6db0e57eab4c09fc57f461299f571e",
+      "record_sha256": "3a38aced09882ccdd654276aabcce3569b45149ab362db88053c84adef70cade",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 270,
       "score": -2.070982506,
@@ -363,6 +403,14 @@
       "candidate_manifest_id": "pool_47",
       "candidate_manifest_sha256": "da5384b5c9e6e6b09d643fd9dabbc4695c9addbdb3b04054bced64b118a6b702",
       "candidate_pool_index": 47,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100235,
         8100236,
@@ -394,7 +442,7 @@
       ],
       "model_rank": 45,
       "normalized_control_hash": "5a081c452448f18e",
-      "record_sha256": "de5374d864eee1ec03f611057ac411657d6f0cceb1313d6092ba64b44d98a281",
+      "record_sha256": "dfabcdf40c3f87254e616af5caf23971f125d482447ccd38318bdf9ec6395c96",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 720,
       "score": -1.848487515,
@@ -428,6 +476,14 @@
       "candidate_manifest_id": "pool_21",
       "candidate_manifest_sha256": "d1aaca1b401a9a8b8d68ef9e88ed7251ca22028977de5b0ff514755ea3bb58ac",
       "candidate_pool_index": 21,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100105,
         8100106,
@@ -459,7 +515,7 @@
       ],
       "model_rank": 46,
       "normalized_control_hash": "1b45a6572d4e6b94",
-      "record_sha256": "58cf962658f48963bd31fbb65f5c672bc69995d949980148a3cb09aaab1a9406",
+      "record_sha256": "744adf1760cd8063f52c6a1ac0b2ccf8e2d9521dadee45d035fabccae92ced4e",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 626,
       "score": -1.878800623,
@@ -493,6 +549,14 @@
       "candidate_manifest_id": "pool_49",
       "candidate_manifest_sha256": "00f4d0767aeaa4deb64f949b7327bc6a3df54899bc3aeb7a1805eb05d0d83df1",
       "candidate_pool_index": 49,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100245,
         8100246,
@@ -524,7 +588,7 @@
       ],
       "model_rank": 42,
       "normalized_control_hash": "bf13f86688a97683",
-      "record_sha256": "1c28f4d1d83e058e3f3884f4635bc0f57fd1198baba93da5fcbf53d1c2a7f13b",
+      "record_sha256": "5f50d2fbb2255e28a378652f850553a90c8c1eb0ad21411ff2d5778e68562920",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 438,
       "score": -1.767452863,
@@ -558,6 +622,14 @@
       "candidate_manifest_id": "pool_24",
       "candidate_manifest_sha256": "b075abee56e2e54e007b5edaf95d68bc687c5af0cd4186677f546f968b0884c8",
       "candidate_pool_index": 24,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100120,
         8100121,
@@ -589,7 +661,7 @@
       ],
       "model_rank": 16,
       "normalized_control_hash": "b8f9c8001a7fe7dc",
-      "record_sha256": "5d41373dc7291507da68e3d41e44bf28d6009a8e2e9157a443ea41db00f1b0a9",
+      "record_sha256": "04f6cd760b9b8aedd41e8eb548f6a061cff22a9660f06126bc61673aee2c076c",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 294,
       "score": -1.452556459,
@@ -623,6 +695,14 @@
       "candidate_manifest_id": "pool_14",
       "candidate_manifest_sha256": "ae9c8abec9792c6ab7e67281b84940f97cf981f0cdbc06e2dfc180808cce6ae0",
       "candidate_pool_index": 14,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100070,
         8100071,
@@ -654,7 +734,7 @@
       ],
       "model_rank": 32,
       "normalized_control_hash": "2e52b22ce6b0633e",
-      "record_sha256": "a56b681f68f760a8ac7415db960472c49eced3bfd56208c973582b2a857fb91a",
+      "record_sha256": "d7c348bc3ffb1bf60c1b030504b95df467da899bbb51ccfef765084bb6635114",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 612,
       "score": -1.667431583,
@@ -688,6 +768,14 @@
       "candidate_manifest_id": "pool_58",
       "candidate_manifest_sha256": "4dae94d75f09c9be2f87a2a5cdc4586c664b0397a11cc06fed6d51091052a12d",
       "candidate_pool_index": 58,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100290,
         8100291,
@@ -719,7 +807,7 @@
       ],
       "model_rank": 62,
       "normalized_control_hash": "63e47fb2097d8d36",
-      "record_sha256": "a4c4102637888b147d92d2aa23de617fa7c0e44ba01e318cfe6304e3dcdc700d",
+      "record_sha256": "05be7cdfe6b6822d87c6363ed20293056f8f978d2e0c295d7c590f29d3ba4629",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 727,
       "score": -2.22977875,
@@ -753,6 +841,14 @@
       "candidate_manifest_id": "pool_29",
       "candidate_manifest_sha256": "6b64a1ba631e90856187f60f5e42f971ddd7eb2397fa8348ff3814c0555e3886",
       "candidate_pool_index": 29,
+      "execution_identity": {
+        "adapter_name": "SocialForcePlannerAdapter",
+        "benchmark_command_space": "unicycle_vw",
+        "execution_mode": "adapter",
+        "policy_semantics": "social_force_adapter",
+        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+        "upstream_command_space": "velocity_vector_xy"
+      },
       "execution_seeds": [
         8100145,
         8100146,
@@ -784,7 +880,7 @@
       ],
       "model_rank": 63,
       "normalized_control_hash": "1f13c44781ee4461",
-      "record_sha256": "957aa840d4247613123c03e5ec92363478a0045786329f0c3e86682ba666269f",
+      "record_sha256": "4d2d62440fea079324588f201ad1e71fb9560998b28597fc91ebd23d9b8ccd52",
       "scenario_family": "classic_cross_trap_medium",
       "scenario_seed": 614,
       "score": -2.363426296,
@@ -803,6 +899,14 @@
   "target_planner": {
     "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
     "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "execution_identity": {
+      "adapter_name": "SocialForcePlannerAdapter",
+      "benchmark_command_space": "unicycle_vw",
+      "execution_mode": "adapter",
+      "policy_semantics": "social_force_adapter",
+      "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+      "upstream_command_space": "velocity_vector_xy"
+    },
     "id": "social_force"
   }
 }

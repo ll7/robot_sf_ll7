@@ -82,6 +82,7 @@ outputs:
       - git_commit
       - planner_rows
       - row_status_summary
+      - answerability
       - artifact_paths
       - caveats
   summary_table:
@@ -107,6 +108,89 @@ durable_evidence:
     The output/ tree is a disposable local cache. Durable review evidence must
     be copied or summarized under docs/context/evidence, a release artifact, or
     an external artifact pointer with checksums.
+
+answerability:
+  schema_version: research_answerability.v1
+  question:
+    research_question: Can the declared planner rows be compared on this frozen example suite?
+    bounded_claim: The manifest shape is executable as a diagnostic packet only.
+    decision_vocabulary:
+      - continue
+      - stop
+      - inconclusive
+      - invalid
+    negative_result_meaning: A dry-run packet cannot establish planner performance or a null effect.
+  estimand:
+    primary: Per-planner scenario-seed metric values with explicit denominators.
+    reference_or_null: No reference arm is declared for this manifest example.
+    decision_predicates: A diagnostic packet is never a decision-capable campaign result.
+    minimally_important_effect: Not required for a manifest-shape diagnostic.
+  producers:
+    - field: success_rate
+      producer: research_campaign_manifest._build_rows
+      source: scripts/validation/run_research_campaign_manifest.py
+      unit: proportion
+      direction: higher_is_better
+      denominator: planner_scenario_seed
+      pairing_key: scenario_id_planner_id_seed
+      missingness_rule: Preserve null when no executed value exists.
+      status: available
+      execution_mode: native
+      required: true
+    - field: collision_rate
+      producer: research_campaign_manifest._build_rows
+      source: scripts/validation/run_research_campaign_manifest.py
+      unit: proportion
+      direction: lower_is_better
+      denominator: planner_scenario_seed
+      pairing_key: scenario_id_planner_id_seed
+      missingness_rule: Preserve null when no executed value exists.
+      status: available
+      execution_mode: native
+      required: true
+    - field: min_clearance_m
+      producer: research_campaign_manifest._build_rows
+      source: scripts/validation/run_research_campaign_manifest.py
+      unit: metres
+      direction: higher_is_better
+      denominator: planner_scenario_seed
+      pairing_key: scenario_id_planner_id_seed
+      missingness_rule: Preserve null when no executed value exists.
+      status: available
+      execution_mode: native
+      required: true
+    - field: timeout_rate
+      producer: research_campaign_manifest._build_rows
+      source: scripts/validation/run_research_campaign_manifest.py
+      unit: proportion
+      direction: lower_is_better
+      denominator: planner_scenario_seed
+      pairing_key: scenario_id_planner_id_seed
+      missingness_rule: Preserve null when no executed value exists.
+      status: available
+      execution_mode: native
+      required: true
+  analysis:
+    analysis_unit: planner_scenario_seed
+    resampling_unit: fixed_suite
+    command: uv run python scripts/validation/run_research_campaign_manifest.py
+    multiplicity: No inferential comparison is made by the example packet.
+    sensitivity_plan: Keep fallback, degraded, unavailable, and null values visible.
+    dry_run_status: passed
+    comparability_status: passed
+  design:
+    mode: diagnostic
+    power_status: not_required
+    budget: Four planner-scenario-seed dry-run rows.
+    sample_size: Four generated rows; no decision-capable effect claim.
+  artifacts:
+    raw_owner: Campaign runner output owner.
+    durable_path: docs/context/evidence/issue_3062_campaign_manifest_example/README.md
+    checksums:
+      - manifest_resolved.json
+      - summary.json
+    durability_status: planned
+    incomplete_policy: Interrupted or unavailable outputs remain explicit and cannot be promoted.
 
 validation:
   commands:

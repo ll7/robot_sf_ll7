@@ -1,0 +1,44 @@
+{
+  "schema_version": "research_yield_snapshot.v1",
+  "window": {
+    "start": "2026-07-30T00:00:00Z",
+    "end": "2026-08-13T23:59:59Z"
+  },
+  "records": [
+    {
+      "id": "pr-6952",
+      "kind": "empirical_result",
+      "status": "inconclusive",
+      "approval_to_first_result_days": 4.0,
+      "result_to_package_days": 1.5,
+      "failure_reason": "scenario_or_threshold_dependence"
+    },
+    {
+      "id": "pr-7035",
+      "kind": "empirical_result",
+      "status": "completed",
+      "approval_to_first_result_days": 0.8,
+      "result_to_package_days": 0.2
+    },
+    {
+      "id": "pr-7019",
+      "kind": "empirical_result",
+      "status": "inconclusive",
+      "approval_to_first_result_days": 2.0,
+      "result_to_package_days": 1.0,
+      "failure_reason": "collision_dominated_diagnostic"
+    },
+    {
+      "id": "pr-7027",
+      "kind": "infrastructure",
+      "status": "completed",
+      "post_merge_repairs": 0
+    },
+    {
+      "id": "issue-7031",
+      "kind": "preflight",
+      "status": "launched",
+      "failure_reason": "missing_producer_contract"
+    }
+  ]
+}

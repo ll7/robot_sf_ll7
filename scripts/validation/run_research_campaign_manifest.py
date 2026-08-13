@@ -19,6 +19,8 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.research_answerability import answerability_from_manifest
+
 REQUIRED_SECTIONS = (
     "campaign",
     "scenario_suite",
@@ -43,6 +45,7 @@ class RunnerOptions:
 
     execute_validation: bool
     require_configured_outputs: bool
+    require_answerable: bool
 
 
 def _repo_root() -> Path:
@@ -192,6 +195,12 @@ def _validate_manifest(manifest: dict[str, Any], *, options: RunnerOptions) -> N
         require_configured_outputs=options.require_configured_outputs,
     )
     _validate_durable_evidence(manifest)
+    answerability = answerability_from_manifest(manifest)
+    if options.require_answerable and answerability["state"] != "answerable":
+        raise ManifestError(
+            "answerability gate requires state=answerable, got "
+            f"{answerability['state']}: {answerability['reasons']}"
+        )
 
 
 def _scenario_ids(manifest: dict[str, Any]) -> list[str]:
@@ -334,6 +343,7 @@ def _summary_payload(
         "evidence_tier": manifest["campaign"]["evidence_tier"],
         "claim_boundary": manifest["campaign"]["claim_boundary"],
         "final_decision": "diagnostic",
+        "answerability": answerability_from_manifest(manifest),
         "planner_rows": _planner_rows(manifest),
         "row_status_summary": dict(sorted(status_counts.items())),
         "artifact_paths": {
@@ -367,9 +377,23 @@ def _write_report(path: Path, summary: dict[str, Any], rows: list[dict[str, Any]
         "",
         str(summary["claim_boundary"]).strip(),
         "",
-        "## Row Status Summary",
+        "## Answerability",
         "",
+        f"- State: `{summary['answerability']['state']}`",
+        f"- Decision-capable: `{summary['answerability']['decision_capable']}`",
     ]
+    for reason in summary["answerability"]["reasons"]:
+        lines.append(f"- Reason: {reason}")
+    for warning in summary["answerability"]["warnings"]:
+        lines.append(f"- Warning: {warning}")
+    lines.extend(
+        [
+            "",
+            "",
+            "## Row Status Summary",
+            "",
+        ]
+    )
     for status, count in summary["row_status_summary"].items():
         lines.append(f"- `{status}`: {count}")
     lines.extend(
@@ -471,6 +495,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Fail if outputs.required_paths are not already present under outputs.local_root.",
     )
+    parser.add_argument(
+        "--require-answerable",
+        action="store_true",
+        help="Fail unless the optional research_answerability.v1 contract is decision-capable.",
+    )
     return parser.parse_args(argv)
 
 
@@ -488,6 +517,7 @@ def main(argv: list[str] | None = None) -> int:
             options=RunnerOptions(
                 execute_validation=args.execute_validation,
                 require_configured_outputs=args.require_configured_outputs,
+                require_answerable=args.require_answerable,
             ),
         )
     except (KeyError, ManifestError, OSError, yaml.YAMLError) as exc:

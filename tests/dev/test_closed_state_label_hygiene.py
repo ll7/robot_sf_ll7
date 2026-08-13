@@ -306,6 +306,264 @@ def test_run_search_command_reports_invalid_json(monkeypatch: pytest.MonkeyPatch
         closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])
 
 
+def _rest_page(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
+    """Build a successful mocked ``gh api`` page."""
+    return subprocess.CompletedProcess(args=("gh", "api"), returncode=0, stdout=json.dumps(rows))
+
+
+def _rest_issue(number: int, title: str, labels: list[str]) -> dict[str, object]:
+    """Build a raw REST issue row."""
+    return {
+        "number": number,
+        "title": title,
+        "html_url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
+        "state": "closed",
+        "labels": [{"name": label} for label in labels],
+    }
+
+
+def test_fetch_closed_issues_by_label_rest_paginates_until_partial_page() -> None:
+    """REST discovery reads bounded pages and emits existing candidate row shape."""
+    seen_paths: list[str] = []
+
+    def fake_gh_api(path: str) -> subprocess.CompletedProcess[str]:
+        seen_paths.append(path)
+        if "page=1" in path:
+            return _rest_page(
+                [
+                    _rest_issue(12, "done but still queued", ["state:ready"]),
+                    _rest_issue(13, "also queued", ["state:ready"]),
+                ]
+            )
+        if "page=2" in path:
+            return _rest_page([_rest_issue(14, "last queued", ["state:ready"])])
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    result = closed_state_label_hygiene.fetch_closed_issues_by_label_rest(
+        repo="ll7/robot_sf_ll7",
+        labels=("state:ready",),
+        max_pages=3,
+        per_page=2,
+        gh_api=fake_gh_api,
+    )
+
+    assert [row["number"] for row in result.rows_by_label["state:ready"]] == [12, 13, 14]
+    assert result.source == "rest"
+    assert result.truncations == [
+        {
+            "label": "state:ready",
+            "truncated": False,
+            "row_count": 3,
+            "limit": 6,
+            "pages_read": 2,
+            "per_page": 2,
+            "page_budget": 3,
+            "source": "rest",
+            "note": "",
+        }
+    ]
+    assert seen_paths == [
+        "repos/ll7/robot_sf_ll7/issues?state=closed&labels=state%3Aready&per_page=2&page=1",
+        "repos/ll7/robot_sf_ll7/issues?state=closed&labels=state%3Aready&per_page=2&page=2",
+    ]
+
+
+def test_fetch_closed_issues_by_label_rest_marks_page_budget_exhaustion() -> None:
+    """A full final REST page is marked as partial inventory."""
+
+    def fake_gh_api(path: str) -> subprocess.CompletedProcess[str]:
+        page = 1 if "page=1" in path else 2
+        offset = 10 * page
+        return _rest_page(
+            [
+                _rest_issue(offset + 1, "queued a", ["state:ready"]),
+                _rest_issue(offset + 2, "queued b", ["state:ready"]),
+            ]
+        )
+
+    result = closed_state_label_hygiene.fetch_closed_issues_by_label_rest(
+        repo="ll7/robot_sf_ll7",
+        labels=("state:ready",),
+        max_pages=2,
+        per_page=2,
+        gh_api=fake_gh_api,
+    )
+
+    marker = result.truncations[0]
+    assert marker["truncated"] is True
+    assert marker["row_count"] == 4
+    assert marker["pages_read"] == 2
+    assert "raise --max-rest-pages" in marker["note"]
+
+
+def test_discover_closed_issues_falls_back_to_rest_when_search_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GraphQL/search exhaustion should not block REST candidate discovery."""
+
+    def fail_search(**kwargs: object) -> dict[str, list[dict[str, object]]]:
+        raise RuntimeError("GitHub CLI command failed (gh search issues): GraphQL: API rate limit")
+
+    monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fail_search)
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label_rest",
+        lambda **kwargs: closed_state_label_hygiene.CandidateDiscoveryResult(
+            rows_by_label={
+                "state:ready": [
+                    {
+                        "number": 12,
+                        "title": "done but still queued",
+                        "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+                        "state": "closed",
+                        "labels": [{"name": "state:ready"}],
+                    }
+                ]
+            },
+            truncations=[],
+            source="rest",
+        ),
+    )
+
+    result = closed_state_label_hygiene.discover_closed_issues_by_label(
+        repo="ll7/robot_sf_ll7",
+        labels=("state:ready",),
+        limit=1000,
+        max_rest_pages=2,
+    )
+
+    assert result.source == "rest"
+    assert result.rows_by_label["state:ready"][0]["number"] == 12
+
+
+def test_discover_closed_issues_keeps_non_graphql_failures_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authentication and repository errors must not be hidden by REST fallback."""
+    search_error = RuntimeError("GitHub CLI command failed: authentication required")
+
+    def fail_search(**kwargs: object) -> dict[str, list[dict[str, object]]]:
+        raise search_error
+
+    def fail_rest(**kwargs: object) -> closed_state_label_hygiene.CandidateDiscoveryResult:
+        raise AssertionError("REST fallback must not mask non-GraphQL failures")
+
+    monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fail_search)
+    monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label_rest", fail_rest)
+
+    with pytest.raises(RuntimeError, match="authentication required"):
+        closed_state_label_hygiene.discover_closed_issues_by_label(
+            repo="ll7/robot_sf_ll7",
+            labels=("state:ready",),
+            limit=1000,
+        )
+
+
+def test_main_rest_fallback_truncation_exits_nonzero_without_silent_success(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A partial REST fallback inventory must not be treated as a complete clean audit."""
+
+    def fail_search(**kwargs: object) -> dict[str, list[dict[str, object]]]:
+        raise RuntimeError("GitHub CLI command failed (gh search issues): GraphQL: API rate limit")
+
+    monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fail_search)
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label_rest",
+        lambda **kwargs: closed_state_label_hygiene.CandidateDiscoveryResult(
+            rows_by_label={"state:ready": []},
+            truncations=[
+                {
+                    "label": "state:ready",
+                    "truncated": True,
+                    "row_count": 100,
+                    "limit": 100,
+                    "pages_read": 1,
+                    "per_page": 100,
+                    "page_budget": 1,
+                    "source": "rest",
+                    "note": "closed-issue REST label inventory may be partial",
+                }
+            ],
+            source="rest",
+        ),
+    )
+
+    exit_code = closed_state_label_hygiene.main(
+        ["--repo", "ll7/robot_sf_ll7", "--label", "state:ready", "--max-rest-pages", "1"]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["ok"] is True
+    assert payload["stale_count"] == 0
+    assert payload["candidate_discovery_source"] == "rest"
+    assert payload["truncated_any"] is True
+
+
+def test_main_skips_fix_when_candidate_discovery_is_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A partial inventory must not mutate any issue through ``--fix``."""
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("GraphQL: rate limit")),
+    )
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "fetch_closed_issues_by_label_rest",
+        lambda **kwargs: closed_state_label_hygiene.CandidateDiscoveryResult(
+            rows_by_label={
+                "state:ready": [
+                    {
+                        "number": 12,
+                        "title": "stale candidate",
+                        "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+                        "state": "closed",
+                        "labels": [{"name": "state:ready"}],
+                    }
+                ]
+            },
+            truncations=[{"label": "state:ready", "truncated": True}],
+            source="rest",
+        ),
+    )
+    monkeypatch.setattr(
+        closed_state_label_hygiene,
+        "reconcile_stale_issues",
+        lambda **kwargs: [_stale(12, ("state:ready",))],
+    )
+
+    def fail_if_mutated(**kwargs: object) -> list[dict[str, object]]:
+        raise AssertionError("partial discovery must not enter fix mode")
+
+    monkeypatch.setattr(closed_state_label_hygiene, "fix_stale_issues", fail_if_mutated)
+
+    exit_code = closed_state_label_hygiene.main(
+        ["--repo", "ll7/robot_sf_ll7", "--label", "state:ready", "--fix"]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["fix_applied"] is False
+    assert payload["fix_skipped"] == "candidate discovery was truncated"
+    assert payload["truncated_any"] is True
+
+
+def test_main_rejects_nonpositive_rest_page_budget(capsys: pytest.CaptureFixture[str]) -> None:
+    """REST fallback bounds should be validated before candidate discovery."""
+    exit_code = closed_state_label_hygiene.main(["--max-rest-pages", "0"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert "--max-rest-pages must be >= 1" in payload["error"]
+
+
 def _stale(number: int, labels: tuple[str, ...]) -> closed_state_label_hygiene.StaleIssue:
     """Build a StaleIssue fixture for fix-mode tests."""
     return closed_state_label_hygiene.StaleIssue(

@@ -150,6 +150,33 @@ def test_research_yield_report_separates_empirical_and_infrastructure() -> None:
     assert "## Empirical Answers" in render_markdown(report)
 
 
+def test_research_yield_report_renders_query_defined_dimensions() -> None:
+    """Issue #7090 dimensions are copied from explicit snapshot queries, not inferred."""
+    snapshot = load_snapshot(YIELD_FIXTURE)
+    report = build_research_yield_report(snapshot, source_path=YIELD_FIXTURE)
+    markdown = render_markdown(report)
+
+    duplicate_dimension = report["dimensions"]["duplicate_competing_prs"]
+    assert duplicate_dimension["denominator"] == 5
+    assert duplicate_dimension["buckets"] == {
+        "competing_pr": 1,
+        "duplicate_and_competing": 0,
+        "duplicate_pr": 1,
+        "no_duplicate_or_competing": 3,
+    }
+    assert report["dimensions"]["post_merge_repairs"]["buckets"]["post_merge_repair"] == 1
+    assert report["dimensions"]["admitted_result_packets"]["buckets"]["admitted_packet"] == 1
+    assert report["dimensions"]["blocked_age_categories"]["buckets"] == {
+        "blocked_0_7_days": 1,
+        "blocked_8_30_days": 1,
+        "blocked_over_30_days": 0,
+        "not_blocked": 3,
+    }
+    assert "## Query-Defined Dimensions" in markdown
+    assert "duplicate_competing_prs" in markdown
+    assert "duplicate_or_competing_pr classification" in duplicate_dimension["query"]
+
+
 def test_research_yield_report_rejects_unknown_kind(tmp_path: Path) -> None:
     """The report must not silently classify an unknown workflow record."""
     payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
@@ -158,4 +185,91 @@ def test_research_yield_report_rejects_unknown_kind(tmp_path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ResearchYieldError, match="kind is unsupported"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_unknown_dimension(tmp_path: Path) -> None:
+    """Snapshot dimensions are explicit reporting queries, not an open-ended tag bag."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["merged_without_review"] = {
+        "query": "unsupported query",
+        "denominator": 0,
+        "buckets": {},
+    }
+    path = tmp_path / "invalid_dimension.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="unsupported names"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_missing_required_dimension(tmp_path: Path) -> None:
+    """Every supported dimension must remain explicit in the frozen snapshot."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    del payload["dimensions"]["blocked_age_categories"]
+    path = tmp_path / "missing_dimension.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="missing required names"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_unknown_dimension_bucket(tmp_path: Path) -> None:
+    """Known dimensions cannot accept inferred or ad-hoc bucket names."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["post_merge_repairs"]["buckets"]["repair_inferred_from_ci"] = 1
+    path = tmp_path / "unknown_bucket.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="buckets contain unsupported names"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_unknown_dimension_field(tmp_path: Path) -> None:
+    """A dimension cannot silently preserve fields outside its versioned contract."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["post_merge_repairs"]["review_source"] = "live-state"
+    path = tmp_path / "unknown_dimension_field.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="contains unsupported fields"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_dimension_denominator_mismatch(tmp_path: Path) -> None:
+    """Dimension denominators must match the explicit bucket total."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["admitted_result_packets"]["denominator"] = 6
+    path = tmp_path / "denominator_mismatch.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="buckets sum to 5, expected denominator 6"):
+        load_snapshot(path)
+
+
+@pytest.mark.parametrize("bad_count", [-1, 1.5, True])
+def test_research_yield_report_rejects_non_integer_dimension_counts(
+    tmp_path: Path, bad_count: object
+) -> None:
+    """Dimension counts are non-negative integers; bool is rejected despite being an int subtype."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["duplicate_competing_prs"]["buckets"]["duplicate_pr"] = bad_count
+    path = tmp_path / "bad_bucket_count.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="must be a non-negative integer"):
+        load_snapshot(path)
+
+
+@pytest.mark.parametrize("bad_denominator", [-1, 5.0, False])
+def test_research_yield_report_rejects_non_integer_dimension_denominator(
+    tmp_path: Path, bad_denominator: object
+) -> None:
+    """Dimension denominators use the same non-negative integer contract as bucket counts."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["dimensions"]["blocked_age_categories"]["denominator"] = bad_denominator
+    path = tmp_path / "bad_denominator.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="must be a non-negative integer"):
         load_snapshot(path)

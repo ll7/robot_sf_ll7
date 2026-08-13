@@ -52,6 +52,22 @@ WATCH_TERMS = (
 )
 SUCCESS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 JOB_ID_RE = re.compile(r"\b(?:job(?:[_ -]?id)?|slurm(?:[_ -]?job)?)[\s:#=]+\d+\b", re.I)
+SLURM_STATE_LINE_RE = re.compile(r"(?im)^[ \t]*slurm_state[ \t]*:[ \t]*(?P<value>.*?)[ \t]*$")
+SLURM_STATES = frozenset(
+    {
+        "not_submitted",
+        "submitted_running",
+        "completed_pending_artifact_promotion",
+        "artifact_rescue",
+        "rerun_required",
+        "failed_closed",
+        "inconclusive_close",
+        "completed_with_durable_evidence",
+        "parent_blocked",
+        "insufficient_data",
+    }
+)
+SUBMITTED_SLURM_STATE = "submitted_running"
 HANDOFF_TERMS = ("dissertation", "diss#", "evidence handoff", "parent handoff")
 PROPAGATION_TERMS = ("parent", "propagat", "follow-up", "follow up", "refs #")
 TERMINAL_TERMS = ("complete", "completed", "terminal", "admitted", "evidence freeze")
@@ -111,6 +127,33 @@ def _finding(
         "url": str(target.get("html_url") or target.get("url") or ""),
         "detail": detail,
     }
+
+
+def _parse_slurm_state(body: str) -> tuple[str | None, str | None]:
+    """Return the one explicit canonical SLURM state, or an unavailable reason."""
+    matches = list(SLURM_STATE_LINE_RE.finditer(body))
+    if not matches:
+        return None, "missing explicit slurm_state"
+    if len(matches) != 1:
+        return None, "multiple slurm_state declarations"
+
+    raw_value = matches[0].group("value").strip()
+    if raw_value.startswith(("'", '"')):
+        quote = raw_value[0]
+        closing_quote = raw_value.find(quote, 1)
+        if closing_quote < 0:
+            return None, "unterminated quoted slurm_state"
+        trailing = raw_value[closing_quote + 1 :].strip()
+        if trailing and not trailing.startswith("#"):
+            return None, "unexpected text after quoted slurm_state"
+        value = raw_value[1:closing_quote].strip()
+    else:
+        value = raw_value.split("#", 1)[0].strip()
+    if not value or not re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*", value):
+        return None, f"malformed slurm_state={raw_value or '<empty>'!r}"
+    if value not in SLURM_STATES:
+        return None, f"unsupported slurm_state={value!r}"
+    return value, None
 
 
 def _canonical_json(value: Any) -> str:
@@ -232,19 +275,34 @@ def _surface_findings(issue: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
-    if (
-        "evidence:launch-packet" in label_set
-        and ("resource:slurm" in label_set or "slurm" in label_set or "slurm" in body)
-        and not JOB_ID_RE.search(body)
+    if "evidence:launch-packet" in label_set and (
+        "resource:slurm" in label_set or "slurm" in label_set or "slurm" in body
     ):
-        findings.append(
-            _finding(
-                finding_id=f"issue:{issue['number']}:launch-without-job-id",
-                kind="launch_packet_without_job_id",
-                target=issue,
-                detail="SLURM launch packet has no recorded job ID",
+        slurm_state, state_error = _parse_slurm_state(str(issue.get("body") or ""))
+        if state_error:
+            findings.append(
+                _finding(
+                    finding_id=f"issue:{issue['number']}:launch-state-unavailable",
+                    kind="launch_packet_state_unavailable",
+                    target=issue,
+                    detail=(
+                        f"SLURM launch packet has no usable canonical state ({state_error}); "
+                        "no execution claim inferred"
+                    ),
+                )
             )
-        )
+        elif slurm_state == SUBMITTED_SLURM_STATE and not JOB_ID_RE.search(body):
+            findings.append(
+                _finding(
+                    finding_id=f"issue:{issue['number']}:launch-without-job-id",
+                    kind="launch_packet_without_job_id",
+                    target=issue,
+                    detail=(
+                        "SLURM launch packet explicitly reports submitted_running but has "
+                        "no recorded job ID"
+                    ),
+                )
+            )
 
     terminal_evidence = bool(
         any(term in body for term in TERMINAL_TERMS)

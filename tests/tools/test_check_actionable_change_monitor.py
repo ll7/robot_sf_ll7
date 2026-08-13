@@ -111,7 +111,7 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
     contradictory_launch = _issue(
         10,
         title="SLURM launch packet",
-        body="This blocked campaign is ready to proceed.",
+        body="This blocked campaign is ready to proceed.\nslurm_state: submitted_running",
         labels=_labels("research", "blocked", "state:ready", "evidence:launch-packet", "slurm"),
     )
     admitted_evidence = _issue(
@@ -141,6 +141,65 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
         "terminal_evidence_without_parent_propagation",
         "evidence_admission_without_dissertation_handoff",
     }
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_kinds"),
+    [
+        (
+            "SLURM launch packet\nslurm_state: not_submitted",
+            {"watched_research_surface"},
+        ),
+        (
+            "SLURM launch packet\nslurm_state: submitted_running",
+            {"watched_research_surface", "launch_packet_without_job_id"},
+        ),
+        (
+            "SLURM launch packet\nslurm_state: submitted_running\nJob 12345",
+            {"watched_research_surface"},
+        ),
+        (
+            "SLURM launch packet\nslurm_state: completed_pending_artifact_promotion",
+            {"watched_research_surface"},
+        ),
+        (
+            "SLURM launch packet",
+            {"watched_research_surface", "launch_packet_state_unavailable"},
+        ),
+        (
+            "SLURM launch packet\nslurm_state: made_up",
+            {"watched_research_surface", "launch_packet_state_unavailable"},
+        ),
+        (
+            'SLURM launch packet\nslurm_state: "not_submitted',
+            {"watched_research_surface", "launch_packet_state_unavailable"},
+        ),
+        (
+            "SLURM launch packet\nslurm_state: not_submitted\nslurm_state: submitted_running",
+            {"watched_research_surface", "launch_packet_state_unavailable"},
+        ),
+    ],
+)
+def test_launch_packet_requires_explicit_canonical_state(
+    body: str, expected_kinds: set[str]
+) -> None:
+    issue = _issue(
+        30,
+        title="SLURM launch packet",
+        body=body,
+        labels=_labels("research", "evidence:launch-packet", "resource:slurm"),
+    )
+
+    findings = monitor._surface_findings(issue)
+
+    assert {finding["kind"] for finding in findings} == expected_kinds
+
+
+def test_launch_packet_state_parser_accepts_quoted_yaml_scalar_and_comment() -> None:
+    assert monitor._parse_slurm_state('slurm_state: "not_submitted" # no execution') == (
+        "not_submitted",
+        None,
+    )
 
 
 @pytest.mark.parametrize(

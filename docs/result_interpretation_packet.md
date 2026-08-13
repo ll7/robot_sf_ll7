@@ -65,6 +65,7 @@ The validator rejects at minimum:
 - Unrecorded multiplicity.
 - Source/packet/figure/caption/review digest drift after review.
 - Caption assertion text/status mismatch or `inferred` status.
+- Caption assertions without controlled `bound_to_packet_fields` references.
 - Forbidden claim escalation via decision outcome.
 - Duplicate IDs across metrics, decisions, figures, and sources.
 - Unsupported decision vocabulary.
@@ -79,7 +80,9 @@ its SHA-256 digest, generation commit, tracked commit, and generation command.
 The generation commit records how the source was produced; `tracked_commit`
 binds the digest to the exact repository bytes that are retained.  Validation
 hashes both the current file and the tracked bytes and fails closed on drift,
-missing files, or unavailable commits.  Rendered figure links are similarly
+missing files, unavailable commits, or commands that do not name a script
+present at the generation commit.  Review-marker sources use the explicit
+`evidence-review-marker.v1` command.  Rendered figure links are similarly
 required to resolve to durable repository files with matching digests.
 Execution-mode counts must reconcile exactly with the included population.  A reviewed packet
 must bind both `reviewed_packet_digest` and `post_review_digest`; the latter
@@ -89,6 +92,11 @@ claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard
 prevents supported decisions, allowed claims, findings, or observed captions
 from silently escalating beyond that boundary.
+
+Supported decisions additionally require complete metric data, a declared null
+value, at least one observed interval or p-value, and no fallback/degraded rows.
+Checksum manifests include generated outputs plus every source and available
+rendered-figure/caption file referenced by the packet.
 
 ## Source fixtures
 

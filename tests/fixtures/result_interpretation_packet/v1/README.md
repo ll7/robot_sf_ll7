@@ -18,7 +18,9 @@ All SHA-256 digests were computed with `sha256sum` against tracked repository
 files at the base commit.  Each source records both the generation commit and
 the `tracked_commit` that contains the exact bytes behind the digest.  Fixtures
 are single-line JSON for deterministic serialization.  No raw episode data is
-copied; only tracked paths and digests are bound.
+copied; only tracked paths and digests are bound.  Generation commands must
+name a script present at the recorded generation commit; review sidecars use
+the explicit `evidence-review-marker.v1` marker.
 
 ## Regeneration
 

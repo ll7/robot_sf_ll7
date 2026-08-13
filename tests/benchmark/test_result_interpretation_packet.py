@@ -402,6 +402,25 @@ class TestFailClosedDigestDrift:
         errors = validate_packet(payload)
         assert any("below the declared support_threshold" in e for e in errors)
 
+    def test_supported_partial_metric_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["missingness"] = "partial"
+        errors = validate_packet(payload)
+        assert any("complete metric data" in e for e in errors)
+
+    def test_supported_uncertainty_without_observed_values_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["uncertainty"] = {
+            "declared": True,
+            "method": "percentile_bootstrap_95_ci",
+            "ci_low": None,
+            "ci_high": None,
+            "p_value_raw": None,
+            "p_value_adjusted": None,
+        }
+        errors = validate_packet(payload)
+        assert any("observed uncertainty values" in e for e in errors)
+
     def test_execution_count_drift_rejected(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["execution_mode"]["counts"]["adapter"] = 359
@@ -526,6 +545,20 @@ class TestFailClosedClaimBoundary:
         assert any("universally superior" in e for e in errors)
 
 
+class TestFailClosedCaptionBinding:
+    def test_caption_binding_is_required(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["caption_assertions"][0]["bound_to_packet_fields"] = []
+        errors = validate_packet(payload)
+        assert any("bound_to_packet_fields" in e for e in errors)
+
+    def test_caption_binding_must_name_known_packet_field(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["caption_assertions"][0]["bound_to_packet_fields"] = ["arbitrary_field"]
+        errors = validate_packet(payload)
+        assert any("unknown packet field" in e for e in errors)
+
+
 # ---------------------------------------------------------------------------
 # Fail-closed: decision references undeclared metric
 # ---------------------------------------------------------------------------
@@ -606,6 +639,20 @@ class TestMutationTests:
         payload["sources"][0]["sha256"] = "x" * 64
         errors = validate_packet(payload)
         assert any("sha256" in e for e in errors)
+
+    def test_generation_command_must_bind_to_tracked_script(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["command"] = "echo forged"
+        errors = validate_packet(payload)
+        assert any("command must name a tracked Python script" in e for e in errors)
+
+    def test_generation_commit_must_contain_command_script(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["command"] = (
+            "uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py"
+        )
+        errors = validate_packet(payload)
+        assert any("does not contain command script" in e for e in errors)
 
     def test_mutate_missingness_to_invalid_value(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
@@ -760,3 +807,4 @@ class TestScriptCLI:
         assert checksum_file.exists()
         assert "admission=unavailable_causal_inference" in caption_file.read_text(encoding="utf-8")
         assert "packet.json" in checksum_file.read_text(encoding="utf-8")
+        assert "source/portfolio_schema/" in checksum_file.read_text(encoding="utf-8")

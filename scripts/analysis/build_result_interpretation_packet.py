@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         write_review_report(packet, args.review_output)
         generated["review.json"] = args.review_output
     if args.checksum_output is not None:
-        write_checksum_manifest(generated, args.checksum_output)
+        write_checksum_manifest(generated, args.checksum_output, packet=packet)
     post_review = compute_post_review_digest(packet)
     print(f"written {output}")
     print(f"packet_digest: {digest}")

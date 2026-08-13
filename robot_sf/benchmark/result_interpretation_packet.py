@@ -63,6 +63,38 @@ _VALID_COMPARATOR_DIRECTIONS = frozenset(
     {"comparison_minus_reference", "reference_minus_comparison", "not_applicable"}
 )
 _VALID_FIGURE_ENCODINGS = frozenset({"png", "pdf", "svg", "unavailable"})
+_VALID_CAPTION_FIELD_REFS = frozenset(
+    {
+        "packet_id",
+        "question.text",
+        "evidence.tier",
+        "evidence.admission_state",
+        "population.total",
+        "population.included",
+        "population.excluded",
+        "execution_mode.counts",
+        "estimand_id",
+        "analysis_unit",
+        "resampling_unit",
+        "pairing_key",
+        "comparison.direction",
+        "claim_boundary.allowed",
+        "claim_boundary.forbidden",
+        "forbidden_claims",
+        "findings",
+        "limitations",
+    }
+)
+_VALID_CAPTION_DYNAMIC_FIELDS = {
+    "metric": frozenset(
+        {"support", "denominator", "effect", "uncertainty", "null_value", "multiplicity"}
+    ),
+    "decision": frozenset({"outcome", "rationale", "comparator", "effect"}),
+    "figure": frozenset({"artifact_id", "visual_contract", "encoding"}),
+    "source": frozenset({"sha256", "commit", "tracked_commit", "kind"}),
+}
+_SCRIPT_PATH_RE = re.compile(r"(?P<path>(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.py)(?:$|\s)")
+_CAPTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class ResultInterpretationPacketError(RobotSfError, ValueError):
@@ -524,6 +556,14 @@ def _validate_supported_decision(
             f"decision {d.decision_id!r}: supported outcome requires declared multiplicity",
         ),
         (
+            metric.missingness != "complete",
+            f"decision {d.decision_id!r}: supported outcome requires complete metric data",
+        ),
+        (
+            metric.null_value is None,
+            f"decision {d.decision_id!r}: supported outcome requires a declared null_value",
+        ),
+        (
             d.comparator is None or d.comparator.direction == "not_applicable",
             f"decision {d.decision_id!r}: supported outcome requires a directed comparator",
         ),
@@ -535,6 +575,19 @@ def _validate_supported_decision(
     for invalid, message in requirements:
         if invalid:
             errors.append(message)
+    if metric.uncertainty is not None and metric.uncertainty.declared:
+        if not any(
+            value is not None
+            for value in (
+                metric.uncertainty.ci_low,
+                metric.uncertainty.ci_high,
+                metric.uncertainty.p_value_raw,
+                metric.uncertainty.p_value_adjusted,
+            )
+        ):
+            errors.append(
+                f"decision {d.decision_id!r}: supported outcome requires observed uncertainty values"
+            )
     if metric.support_threshold is None:
         errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")
     elif metric.support < metric.support_threshold:
@@ -601,9 +654,10 @@ def _validate_claim_escalation(label: str, text: str, errors: list[str]) -> None
 
 def _validate_caption_assertions(
     captions: list[CaptionAssertion],
-    figure_ids: set[str],
+    packet: ResultInterpretationPacket,
     errors: list[str],
 ) -> None:
+    figure_ids = {fl.figure_id for fl in packet.figure_links}
     for ca in captions:
         if ca.figure_id not in figure_ids:
             errors.append(f"caption assertion for {ca.figure_id!r} references an undeclared figure")
@@ -617,10 +671,41 @@ def _validate_caption_assertions(
                 f"caption assertion for {ca.figure_id!r}: 'inferred' status is "
                 "forbidden; use 'observed' or 'unavailable'"
             )
+        if not ca.bound_to_packet_fields:
+            errors.append(
+                f"caption assertion for {ca.figure_id!r}: bound_to_packet_fields is required"
+            )
+        for field_ref in ca.bound_to_packet_fields:
+            if not _caption_field_ref_exists(field_ref, packet):
+                errors.append(
+                    f"caption assertion for {ca.figure_id!r}: unknown packet field {field_ref!r}"
+                )
         if ca.status == "observed":
             _validate_claim_escalation(
                 f"caption assertion for {ca.figure_id!r}", ca.assertion_text, errors
             )
+
+
+def _caption_field_ref_exists(field_ref: str, packet: ResultInterpretationPacket) -> bool:
+    """Return whether a caption binding names a known packet field."""
+
+    if field_ref in _VALID_CAPTION_FIELD_REFS:
+        return True
+    parts = field_ref.split(".")
+    if len(parts) != 3 or parts[0] not in _VALID_CAPTION_DYNAMIC_FIELDS:
+        return False
+    if (
+        not _CAPTION_ID_RE.match(parts[1])
+        or parts[2] not in _VALID_CAPTION_DYNAMIC_FIELDS[parts[0]]
+    ):
+        return False
+    identifiers = {
+        "metric": {metric.metric_id for metric in packet.metrics},
+        "decision": {decision.decision_id for decision in packet.decisions},
+        "figure": {figure.figure_id for figure in packet.figure_links},
+        "source": {source.source_id for source in packet.sources},
+    }
+    return parts[1] in identifiers[parts[0]]
 
 
 def _validate_figure_links(
@@ -712,6 +797,7 @@ def _validate_source_refs(sources: list[SourceRef], errors: list[str]) -> None:
                 errors.append(
                     f"source {source.source_id!r}: {commit_label} is unavailable: {commit}"
                 )
+        _validate_generation_command(source, errors)
         tracked_digest = _git_file_sha256(source.tracked_commit, source.path)
         if tracked_digest is None:
             errors.append(
@@ -721,6 +807,29 @@ def _validate_source_refs(sources: list[SourceRef], errors: list[str]) -> None:
             errors.append(
                 f"source {source.source_id!r}: tracked_commit bytes do not match {source.path} "
                 f"(declared {source.sha256}, tracked {tracked_digest})"
+            )
+
+
+def _validate_generation_command(source: SourceRef, errors: list[str]) -> None:
+    """Bind recorded generation commands to scripts present at their commit."""
+
+    if source.command == "evidence-review-marker.v1":
+        if "review" not in source.kind.casefold():
+            errors.append(
+                f"source {source.source_id!r}: review marker command requires a review source kind"
+            )
+        return
+    script_paths = [match.group("path") for match in _SCRIPT_PATH_RE.finditer(source.command)]
+    if not script_paths:
+        errors.append(
+            f"source {source.source_id!r}: command must name a tracked Python script or review marker"
+        )
+        return
+    for script_path in script_paths:
+        if _git_file_sha256(source.commit, script_path) is None:
+            errors.append(
+                f"source {source.source_id!r}: generation commit {source.commit} does not contain "
+                f"command script {script_path}"
             )
 
 
@@ -791,8 +900,7 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
     for index, finding in enumerate(packet.findings):
         _validate_claim_escalation(f"findings[{index}]", finding, errors)
 
-    figure_ids = {fl.figure_id for fl in packet.figure_links}
-    _validate_caption_assertions(packet.caption_assertions, figure_ids, errors)
+    _validate_caption_assertions(packet.caption_assertions, packet, errors)
     _validate_figure_links(packet.figure_links, errors)
     _validate_source_refs(packet.sources, errors)
 
@@ -1231,10 +1339,34 @@ def write_review_report(packet: ResultInterpretationPacket, path: Path) -> None:
     write_deterministic_json(report, path)
 
 
-def write_checksum_manifest(files: dict[str, Path], path: Path) -> None:
-    """Write sorted SHA-256 entries for generated packet outputs."""
+def _packet_checksum_files(packet: ResultInterpretationPacket) -> dict[str, Path]:
+    """Return durable source and rendered-evidence files for a packet manifest."""
 
-    lines = [f"{_sha256_file(files[name])}  {name}" for name in sorted(files)]
+    files: dict[str, Path] = {}
+    for source in packet.sources:
+        files[f"source/{source.source_id}/{source.path}"] = _REPO_ROOT / source.path
+    for figure in packet.figure_links:
+        if figure.encoding != "unavailable":
+            files[f"figure/{figure.figure_id}/{figure.path}"] = _REPO_ROOT / figure.path
+        if figure.caption_file is not None:
+            files[f"caption/{figure.figure_id}/{figure.caption_file.path}"] = (
+                _REPO_ROOT / figure.caption_file.path
+            )
+    return files
+
+
+def write_checksum_manifest(
+    files: dict[str, Path],
+    path: Path,
+    *,
+    packet: ResultInterpretationPacket | None = None,
+) -> None:
+    """Write sorted SHA-256 entries for outputs and packet evidence files."""
+
+    manifest_files = dict(files)
+    if packet is not None:
+        manifest_files.update(_packet_checksum_files(packet))
+    lines = [f"{_sha256_file(manifest_files[name])}  {name}" for name in sorted(manifest_files)]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

@@ -841,7 +841,7 @@ adapter:
   version: 1
   kind: path_presence
   name: path_exists
-  path: configs/approved_manifest.yaml
+  path: configs/benchmark/risk_layer_ablation.yaml
   path_type: file
 ```
 

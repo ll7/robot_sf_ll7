@@ -106,10 +106,15 @@ def _run_cli(module: ModuleType, argv: list[str]) -> int:
 
 
 def _single_planner_manifest(manifest: dict[str, Any], planner: str) -> dict[str, Any]:
-    """Return a self-consistent manifest slice for one independently completed planner shard."""
+    """Return a production-shaped manifest slice for one planner shard."""
     shard_manifest = json.loads(json.dumps(manifest))
     shard_manifest["manifest_rows"] = [
         row for row in shard_manifest["manifest_rows"] if row["planner"] == planner
+    ]
+    shard_manifest["planner_rows"] = [
+        row
+        for row in shard_manifest["planner_rows"]
+        if row.get("planner", row.get("key")) == planner
     ]
     shard_manifest["row_count"] = len(shard_manifest["manifest_rows"])
     return shard_manifest
@@ -194,6 +199,24 @@ def _current_head() -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def _assert_finalizer_head_recorded(finalization: dict[str, Any]) -> None:
+    expected_head = _current_head()
+    assert finalization["finalizer_head"] == expected_head
+    assert finalization["command_identity"]["finalizer_head"] == expected_head
+
+
+def _assert_direct_report_semantics(final_summary: dict[str, Any], direct_output: Path) -> None:
+    assert hashlib.sha256((direct_output / "analysis.md").read_bytes()).hexdigest() == (
+        PRE_CHANGE_ANALYSIS_SHA256
+    )
+    direct_summary = json.loads((direct_output / "summary.json").read_text(encoding="utf-8"))
+    assert final_summary["rank_sensitivity"] == direct_summary["rank_sensitivity"]
+    assert (
+        final_summary["per_archetype_metric_reports"]
+        == direct_summary["per_archetype_metric_reports"]
+    )
 
 
 def test_report_metric_direction_contract_is_explicit_and_fail_closed() -> None:
@@ -426,6 +449,58 @@ def test_streaming_shard_reduction_preserves_whole_shard_semantics(tmp_path: Pat
     }
 
 
+@pytest.mark.parametrize(
+    "planner_rows",
+    [
+        [],
+        [{"key": "goal", "algo": "goal"}, {"key": "orca", "algo": "orca"}],
+        [{"key": "goal", "algo": "goal"}, {"key": "goal", "algo": "goal"}],
+        [{"key": ""}],
+        [{"algo": "goal"}],
+        [{"key": "orca", "algo": "orca"}],
+    ],
+    ids=("empty", "multi", "duplicate", "empty-key", "missing-key", "mismatch"),
+)
+def test_shard_rejects_invalid_single_planner_catalog(
+    tmp_path: Path, planner_rows: list[dict[str, Any]]
+) -> None:
+    """Shard receipts fail closed unless their catalog identifies exactly one planner."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
+    manifest = _single_planner_manifest(
+        build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH)), "goal"
+    )
+    manifest["planner_rows"] = planner_rows
+    manifest_path, records_path = _write_shard_inputs(tmp_path, manifest, "goal")
+    written_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    written_manifest["planner_rows"] = planner_rows
+    manifest_path.write_text(json.dumps(written_manifest), encoding="utf-8")
+    output_dir = tmp_path / "output"
+
+    code = _run_cli(
+        _load_report_cli(),
+        [
+            "build_heterogeneous_population_ablation_report.py",
+            "--manifest",
+            str(manifest_path),
+            "--records",
+            str(records_path),
+            "--output-dir",
+            str(output_dir),
+            "--mode",
+            "shard",
+            "--source-artifact-head",
+            OLD_SOURCE_ARTIFACT_HEAD,
+        ],
+    )
+
+    assert code == 2
+    blocker = json.loads((output_dir / "shard_receipt_blocked.json").read_text(encoding="utf-8"))
+    assert blocker["reason"] == "invalid_shard_identity"
+    assert "planner_rows" in blocker["error"]
+
+
 def test_shard_preserves_established_blocked_manifest_readiness(tmp_path: Path) -> None:
     """Shard mode neither rewrites nor bypasses blocked_pending_control_trace."""
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -609,6 +684,7 @@ def test_finalize_three_verified_shards_builds_existing_rank_report(tmp_path: Pa
     assert all(len(row["receipt"]["sha256"]) == 64 for row in finalization["receipts"])
     assert finalization["source_artifact_head"] == OLD_SOURCE_ARTIFACT_HEAD
     assert finalization["receipt_builder_heads"] == [_current_head()]
+    _assert_finalizer_head_recorded(finalization)
     assert all(
         row["source_artifact_head"] == OLD_SOURCE_ARTIFACT_HEAD for row in finalization["receipts"]
     )
@@ -654,8 +730,7 @@ def test_finalize_three_verified_shards_builds_existing_rank_report(tmp_path: Pa
         == 0
     )
     analysis_bytes = (final_output / "analysis.md").read_bytes()
-    assert analysis_bytes == (direct_output / "analysis.md").read_bytes()
-    assert hashlib.sha256(analysis_bytes).hexdigest() == PRE_CHANGE_ANALYSIS_SHA256
+    _assert_direct_report_semantics(summary, direct_output)
     analysis = analysis_bytes.decode("utf-8")
     for prior_section in (
         "## Claim Boundary",
@@ -736,6 +811,50 @@ def test_finalize_rejects_tampered_receipt(tmp_path: Path) -> None:
     blocker = json.loads((final_output / "finalization_blocked.json").read_text(encoding="utf-8"))
     assert blocker["reason"] == "shard_receipt_verification_failed"
     assert "planner does not match" in blocker["error"]
+    assert not (final_output / "summary.json").exists()
+
+
+def test_finalize_rejects_tampered_planner_catalog_source(tmp_path: Path) -> None:
+    """Receipt verification rechecks a source catalog after its recorded digest is updated."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
+    manifest = build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH))
+    output_root = tmp_path / "shard-output"
+    durable_root = tmp_path / "shard-durable"
+    goal_receipt, goal_manifest, _ = _emit_shard_receipt(
+        root=tmp_path,
+        manifest=manifest,
+        planner="goal",
+        output_root=output_root,
+        durable_root=durable_root,
+    )
+    orca_receipt, _, _ = _emit_shard_receipt(
+        root=tmp_path,
+        manifest=manifest,
+        planner="orca",
+        output_root=output_root,
+        durable_root=durable_root,
+    )
+
+    tampered_manifest = json.loads(goal_manifest.read_text(encoding="utf-8"))
+    tampered_manifest["planner_rows"] = [{"key": "orca", "algo": "orca"}]
+    goal_manifest.write_text(json.dumps(tampered_manifest), encoding="utf-8")
+    manifest_bytes = goal_manifest.read_bytes()
+    tampered_receipt = json.loads(goal_receipt.read_text(encoding="utf-8"))
+    manifest_identity = tampered_receipt["provenance"]["manifest"]
+    manifest_identity["size_bytes"] = len(manifest_bytes)
+    manifest_identity["sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+    tampered_receipt["provenance"]["command_identity"]["manifest_sha256"] = manifest_identity[
+        "sha256"
+    ]
+    goal_receipt.write_text(json.dumps(tampered_receipt), encoding="utf-8")
+
+    final_output = tmp_path / "final-output"
+    assert _run_finalize([goal_receipt, orca_receipt], final_output) == 2
+    blocker = json.loads((final_output / "finalization_blocked.json").read_text(encoding="utf-8"))
+    assert blocker["reason"] == "shard_receipt_verification_failed"
+    assert "planner_rows" in blocker["error"]
     assert not (final_output / "summary.json").exists()
 
 
@@ -900,6 +1019,7 @@ def test_source_and_builder_heads_have_independent_finalization_contracts(
         _current_head(),
         "older-receipt-builder",
     ]
+    _assert_finalizer_head_recorded(independent)
 
     orca_payload["provenance"]["source_artifact_head"] = "different-source-head"
     orca_payload["provenance"]["command_identity"]["source_artifact_head"] = "different-source-head"

@@ -58,7 +58,6 @@ MANIFEST_COMPATIBILITY_FIELDS = (
     "issue",
     "paired_arms",
     "scenario_rows",
-    "planner_rows",
     "seed_rows",
     "response_law_fractions",
     "trace_metric_keys",
@@ -243,6 +242,51 @@ def _manifest_planner_order(manifest: dict[str, Any]) -> list[str]:
         for row in manifest.get("planner_rows", [])
         if isinstance(row, dict) and ("planner" in row or "key" in row)
     ]
+
+
+def _planner_row_identity(row: Any, index: int) -> str:
+    """Resolve and validate one manifest planner catalog row."""
+    if not isinstance(row, dict):
+        raise ValueError(f"planner_rows[{index}] must be a mapping")
+    key = row.get("key")
+    planner_alias = row.get("planner")
+    if key is None and planner_alias is None:
+        raise ValueError(f"planner_rows[{index}] has no planner identity")
+    for field, value in (("key", key), ("planner", planner_alias)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"planner_rows[{index}].{field} must be a non-empty string")
+    if key is not None and planner_alias is not None and key != planner_alias:
+        raise ValueError(f"planner_rows[{index}] key and planner identities differ")
+    algo = row.get("algo")
+    if algo is not None and (not isinstance(algo, str) or not algo.strip()):
+        raise ValueError(f"planner_rows[{index}].algo must be a non-empty string")
+    resolved = str(key if key is not None else planner_alias)
+    _planner_artifact_key(resolved)
+    return resolved
+
+
+def _verified_single_planner_catalog(manifest: dict[str, Any], planner: str) -> str:
+    """Require a manifest catalog to identify exactly the verified shard planner."""
+    planner_rows = manifest.get("planner_rows")
+    if not isinstance(planner_rows, list) or not planner_rows:
+        raise ValueError("planner_rows must be a non-empty sequence")
+
+    resolved_planners = [
+        _planner_row_identity(row, index) for index, row in enumerate(planner_rows)
+    ]
+
+    if len(set(resolved_planners)) != len(resolved_planners):
+        raise ValueError(f"planner_rows contains duplicate planner identities: {resolved_planners}")
+    if len(resolved_planners) != 1:
+        raise ValueError(
+            f"planner_rows must contain exactly one planner for a shard; found {resolved_planners}"
+        )
+    if resolved_planners[0] != planner:
+        raise ValueError(
+            f"receipt planner does not match planner_rows catalog: "
+            f"catalog={resolved_planners[0]!r}, verified={planner!r}"
+        )
+    return resolved_planners[0]
 
 
 def _csv_row(record: dict[str, Any]) -> dict[str, Any]:
@@ -682,6 +726,20 @@ def _receipt_builder_head() -> str:
         raise ValueError("receipt builder git HEAD cannot be captured") from exc
 
 
+def _finalizer_head() -> str:
+    """Capture the active finalizer checkout independently from receipt builders."""
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("finalizer git HEAD cannot be captured") from exc
+
+
 def _write_json(destinations: Iterable[Path], filename: str, payload: dict[str, Any]) -> None:
     for destination in destinations:
         destination.mkdir(parents=True, exist_ok=True)
@@ -739,6 +797,7 @@ def _build_shard_receipt(
     records_identity: dict[str, Any],
     reduced: dict[str, Any],
 ) -> dict[str, Any]:
+    _verified_single_planner_catalog(manifest, planner)
     return {
         "schema_version": SHARD_RECEIPT_SCHEMA,
         "status": "validated",
@@ -919,6 +978,7 @@ def _verify_receipt(  # noqa: C901, PLR0912
     if not isinstance(receipt_builder_head, str) or not receipt_builder_head:
         raise ValueError(f"receipt {receipt_path} has no receipt builder head")
     manifest, actual_manifest = _verified_manifest_source(provenance["manifest"], source_roots)
+    _verified_single_planner_catalog(manifest, planner)
     receipt_streaming_stats = receipt.get("streaming_stats")
     if not isinstance(receipt_streaming_stats, dict):
         raise ValueError(f"receipt {receipt_path} has no streaming stats")
@@ -983,7 +1043,7 @@ def _merge_reduced(
     shards: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]],
 ) -> dict[str, Any]:
     first_manifest = shards[0][0]
-    planner_order_list = _manifest_planner_order(first_manifest)
+    planner_order_list = sorted({verified["planner"] for _, _, verified in shards})
     planner_order = {planner: index for index, planner in enumerate(planner_order_list)}
     ordered_shards = sorted(
         shards,
@@ -1074,6 +1134,7 @@ def _finalize_receipts(
     if any(not head for head in source_heads) or len(set(source_heads)) != 1:
         raise ValueError("all shard source artifact heads must be present and equal")
     builder_heads = sorted({item[2]["receipt_builder_head"] for item in shards})
+    finalizer_head = _finalizer_head()
     first_manifest = shards[0][0]
     for manifest, _, _ in shards[1:]:
         for field in MANIFEST_COMPATIBILITY_FIELDS:
@@ -1097,6 +1158,7 @@ def _finalize_receipts(
         "mode": "finalize",
         "source_artifact_head": source_heads[0],
         "receipt_builder_heads": builder_heads,
+        "finalizer_head": finalizer_head,
         "planners": sorted(planners),
         "planner_count": len(planners),
         "receipt_count": len(shards),
@@ -1107,6 +1169,7 @@ def _finalize_receipts(
             "schema_version": FINALIZATION_PROVENANCE_SCHEMA,
             "source_artifact_head": source_heads[0],
             "receipt_builder_heads": builder_heads,
+            "finalizer_head": finalizer_head,
             "receipt_sha256": receipt_digests,
         },
     }
@@ -1381,6 +1444,15 @@ def main() -> int:  # noqa: C901
             planner = _planner_artifact_key(planners[0])
             source_artifact_head = _source_artifact_head(manifest, args.source_artifact_head)
             receipt_builder_head = _receipt_builder_head()
+            receipt = _build_shard_receipt(
+                planner=planner,
+                source_artifact_head=source_artifact_head,
+                receipt_builder_head=receipt_builder_head,
+                manifest=manifest,
+                manifest_identity=manifest_identity,
+                records_identity=records_identity,
+                reduced=reduced,
+            )
         except ValueError as exc:
             _write_blocker(
                 output_dir, "shard_receipt_blocked.json", "invalid_shard_identity", str(exc)
@@ -1389,15 +1461,6 @@ def main() -> int:  # noqa: C901
         destinations = (
             output_dir / "shards" / planner,
             durable_dir / "shards" / planner,
-        )
-        receipt = _build_shard_receipt(
-            planner=planner,
-            source_artifact_head=source_artifact_head,
-            receipt_builder_head=receipt_builder_head,
-            manifest=manifest,
-            manifest_identity=manifest_identity,
-            records_identity=records_identity,
-            reduced=reduced,
         )
         _write_json(destinations, "shard_receipt.json", receipt)
         _write_csv(destinations, reduced["csv_rows"])

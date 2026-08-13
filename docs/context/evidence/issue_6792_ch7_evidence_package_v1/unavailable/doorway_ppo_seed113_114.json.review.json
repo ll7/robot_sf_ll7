@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/unavailable/doorway_ppo_seed113_114.json",
+  "artifact_sha256": "f4b91c6b4f6e3d0786a5486051d076cde4c098bc6c7ee716891e60ae958daee5",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

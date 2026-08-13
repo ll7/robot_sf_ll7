@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/unavailable/trace_viewer.json",
+  "artifact_sha256": "26289a54a05ee6524e5db2b2bd5aa86f5bf5c78bbc0eade28b38c8226f441e8b",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

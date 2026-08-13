@@ -84,8 +84,11 @@ GitHub Actions currently installs these Ubuntu packages for headless jobs:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu-core jq
+sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu-core jq poppler-utils
 ```
+
+`poppler-utils` provides `pdftoppm`, which the Chapter 7 evidence-package builder uses for
+mandatory rendered-page quality assurance.
 
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.

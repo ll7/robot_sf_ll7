@@ -17,7 +17,7 @@ artifacts:
     caption_file:
       path: captions.md
       sha256: 31edf86d8bd42a79b573d348bb3b32ffca443b25384c8f512100103a72aa4e53
-    generation_command: uv run python scripts/tools/example_generator.py --fixture
+    generation_command: uv run python scripts/validation/validate_artifact_catalog.py tests/fixtures/artifact_catalog/v1/valid_catalog.yaml
     generation_commit: fbc7e125
     claim_boundary: fixture-only catalog contract; not benchmark evidence
   - artifact_id: tab_planner_execution_modes
@@ -30,6 +30,6 @@ artifacts:
       md:
         path: tab_planner_execution_modes.md
         sha256: 5fb8c9672b43950ceeab0d6849b68975f25e6badba92fc3529571243984a8026
-    generation_command: uv run python scripts/tools/example_table_exporter.py --fixture
+    generation_command: uv run python scripts/validation/validate_artifact_catalog.py tests/fixtures/artifact_catalog/v1/valid_catalog.yaml
     generation_commit: fbc7e125
     claim_boundary: fixture-only catalog contract; not benchmark evidence

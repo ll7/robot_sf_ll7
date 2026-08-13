@@ -1048,6 +1048,12 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 QUOTA_STDERR = "GraphQL: API rate limit already exceeded."
 
 
+@pytest.fixture
+def isolated_workflow_id_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate process-level workflow identity state so fixtures can safely reuse run IDs."""
+    monkeypatch.setattr(ci_status, "_WORKFLOW_ID_BY_RUN_ID", {})
+
+
 def _rest_check_run(
     *, run_id: int, job_id: int, status: str, conclusion: str | None, started_at: str
 ) -> dict[str, object]:
@@ -1133,6 +1139,7 @@ def _enrich_rest_runs(
 )
 def test_rest_workflow_identity_preserves_supersession_and_fail_closed_cases(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
     replacement: tuple[str, str | None] | None,
     workflow_ids: dict[int, int],
     expected_overall: str,
@@ -1171,11 +1178,57 @@ def test_rest_workflow_identity_preserves_supersession_and_fail_closed_cases(
     assert superseded == expected_superseded
 
 
-def test_bounded_polling_continues_after_rest_superseded_cancellation(
+def test_rest_workflow_identity_cache_reuses_success_and_retries_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
+) -> None:
+    """Successful IDs persist across polls while a transient lookup failure is retried."""
+    calls: list[str] = []
+    transient_attempts = 0
+
+    def _fake_rest(path: str) -> dict[str, int] | None:
+        nonlocal transient_attempts
+        calls.append(path)
+        if path == "actions/runs/201":
+            return {"workflow_id": 9001}
+        if path == "actions/runs/202":
+            transient_attempts += 1
+            return {"workflow_id": 9002} if transient_attempts > 1 else None
+        return None
+
+    monkeypatch.setattr(ci_status, "_rest_api_get", _fake_rest)
+    runs = [
+        _rest_check_run(
+            run_id=201,
+            job_id=2001,
+            status="completed",
+            conclusion="success",
+            started_at="2026-08-13T06:23:14Z",
+        ),
+        _rest_check_run(
+            run_id=202,
+            job_id=2002,
+            status="in_progress",
+            conclusion=None,
+            started_at="2026-08-13T06:54:24Z",
+        ),
+    ]
+
+    first = ci_status._enrich_rest_check_runs(runs)
+    second = ci_status._enrich_rest_check_runs(runs)
+
+    assert first[0]["workflow_id"] == "9001"
+    assert "workflow_id" not in first[1]
+    assert second[0]["workflow_id"] == "9001"
+    assert second[1]["workflow_id"] == "9002"
+    assert calls == ["actions/runs/201", "actions/runs/202", "actions/runs/202"]
+
+
+def test_bounded_polling_continues_until_replacement_success(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
-    """A superseded REST cancellation must not terminate bounded polling before replacement CI."""
+    """Pending representative REST input keeps polling until replacement CI succeeds."""
     pending = {
         "status": "ok",
         "pr": 6995,

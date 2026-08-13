@@ -28,6 +28,7 @@ _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
 )
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
+_WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -201,10 +202,10 @@ def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
 
     REST check-run payloads omit the GraphQL ``workflowName`` field used to collapse reruns on the
     same commit. Their job URLs identify an Actions run, whose REST payload supplies the stable
-    ``workflow_id``. Runs that cannot be enriched remain identity-less and independently
-    fail-closed; job names alone are never used for deduplication.
+    ``workflow_id``. Successful lookups are cached across bounded polling attempts; failed lookups
+    are retried. Runs that cannot be enriched remain identity-less and independently fail-closed;
+    job names alone are never used for deduplication.
     """
-    workflow_by_run_id: dict[str, str | None] = {}
     enriched_runs: list[dict[str, Any]] = []
     for check_run in check_runs:
         if not isinstance(check_run, dict):
@@ -217,11 +218,13 @@ def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
             continue
 
         run_id = match.group("run_id")
-        if run_id not in workflow_by_run_id:
+        workflow_id = _WORKFLOW_ID_BY_RUN_ID.get(run_id)
+        if workflow_id is None:
             run = _rest_api_get(f"actions/runs/{run_id}")
-            workflow_id = run.get("workflow_id") if isinstance(run, dict) else None
-            workflow_by_run_id[run_id] = str(workflow_id) if workflow_id is not None else None
-        workflow_id = workflow_by_run_id[run_id]
+            raw_workflow_id = run.get("workflow_id") if isinstance(run, dict) else None
+            workflow_id = str(raw_workflow_id) if raw_workflow_id is not None else None
+            if workflow_id is not None:
+                _WORKFLOW_ID_BY_RUN_ID[run_id] = workflow_id
         if workflow_id:
             enriched["workflow_id"] = workflow_id
         enriched_runs.append(enriched)

@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "bindings": [
     {
       "document_digest_pointer": "/inputs/portfolio_config/sha256",

@@ -1,3 +1,4 @@
+# evidence-writer-exempt: isolated temporary evidence fixtures intentionally use raw writes so the linter can test malformed and marker-free inputs without mutating the repository catalog.
 """Contract tests for the evidence-registry integrity linter (issue #5255)."""
 
 from __future__ import annotations

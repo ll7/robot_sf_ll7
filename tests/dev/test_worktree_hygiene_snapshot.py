@@ -33,6 +33,20 @@ def _artifacts(classification: str = "none", status: str = "ok"):
     ]
 
 
+def _worktree_row(path: str, branch: str = "issue-1") -> snapshot.WorktreeHygiene:
+    return snapshot.WorktreeHygiene(
+        path=path,
+        branch=branch,
+        head_sha="aaa",
+        is_current=False,
+        is_detached=False,
+        dirty_entries=0,
+        upstream=f"origin/{branch}",
+        ahead=0,
+        behind=0,
+    )
+
+
 def test_parse_worktree_porcelain_handles_branch_and_detached() -> None:
     """Parse branch and detached rows from porcelain worktree output."""
     rows = snapshot._parse_worktree_porcelain(
@@ -488,3 +502,101 @@ def test_output_root_inspection_preserves_durable_evidence(monkeypatch, tmp_path
             reason="output/ contains evidence-like paths",
         )
     ]
+
+
+def test_output_root_inspection_allows_clean_baseline_tracked_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Clean output files already tracked on origin/main are not local preservation risk."""
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    row = _worktree_row(str(worktree))
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
+        del cwd, timeout
+        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
+            return _result("")
+        if args == ["git", "ls-files", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+
+    artifacts = snapshot._inspect_output_root(row)
+    preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
+
+    assert artifacts == [
+        snapshot.ArtifactRootInspection(
+            root="output",
+            classification="tracked_baseline",
+            status="ok",
+            tracked_entries=1,
+            sample_paths=["output/fixtures/baseline.json"],
+            reason="clean baseline-tracked files exist under output/",
+        )
+    ]
+    assert preserve is False
+    assert review is False
+    assert reasons == []
+
+
+def test_output_root_inspection_preserves_modified_tracked_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Modified tracked output files remain preservation evidence."""
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    row = _worktree_row(str(worktree))
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
+        del cwd, timeout
+        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
+            return _result(" M output/fixtures/baseline.json\n")
+        if args == ["git", "ls-files", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+
+    artifacts = snapshot._inspect_output_root(row)
+    preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
+
+    assert artifacts[0].classification == "tracked_evidence"
+    assert artifacts[0].reason == "tracked output/ files have local modifications"
+    assert preserve is True
+    assert review is False
+    assert reasons == ["output has tracked_evidence"]
+
+
+def test_output_root_inspection_preserves_branch_local_tracked_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Tracked output files absent from origin/main remain preservation evidence."""
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    row = _worktree_row(str(worktree))
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
+        del cwd, timeout
+        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
+            return _result("")
+        if args == ["git", "ls-files", "--", "output"]:
+            return _result("output/research_reports/local.json\n")
+        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
+            return _result("")
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+
+    artifacts = snapshot._inspect_output_root(row)
+    preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
+
+    assert artifacts[0].classification == "tracked_evidence"
+    assert artifacts[0].reason == "branch-local tracked files exist under output/"
+    assert preserve is True
+    assert review is False
+    assert reasons == ["output has tracked_evidence"]

@@ -253,8 +253,9 @@ def _sample_paths(paths: list[str], *, limit: int = 8) -> list[str]:
     return sorted(set(paths))[:limit]
 
 
-def _status_paths(stdout: str) -> tuple[list[str], list[str]]:
-    """Split short-status output into untracked and ignored paths."""
+def _status_paths(stdout: str) -> tuple[list[str], list[str], list[str]]:
+    """Split short-status output into tracked-dirty, untracked, and ignored paths."""
+    tracked_dirty: list[str] = []
     untracked: list[str] = []
     ignored: list[str] = []
     for raw_line in stdout.splitlines():
@@ -266,19 +267,27 @@ def _status_paths(stdout: str) -> tuple[list[str], list[str]]:
             untracked.append(path)
         elif line.startswith("!! ") and path:
             ignored.append(path)
-    return untracked, ignored
+        elif path:
+            tracked_dirty.append(path)
+    return tracked_dirty, untracked, ignored
 
 
 def _classify_output_root(
     *,
-    tracked_entries: int,
+    tracked_paths: list[str],
+    baseline_tracked_paths: list[str],
+    tracked_dirty_paths: list[str],
     untracked_paths: list[str],
     ignored_paths: list[str],
 ) -> tuple[str, str]:
     """Classify output-like roots without deleting or moving content."""
     all_paths = untracked_paths + ignored_paths
-    if tracked_entries:
-        return "tracked_evidence", "tracked files exist under output/"
+    if tracked_dirty_paths:
+        return "tracked_evidence", "tracked output/ files have local modifications"
+    if set(tracked_paths) - set(baseline_tracked_paths):
+        return "tracked_evidence", "branch-local tracked files exist under output/"
+    if tracked_paths:
+        return "tracked_baseline", "clean baseline-tracked files exist under output/"
     if not all_paths:
         return "none", "output/ is absent or empty"
 
@@ -355,10 +364,30 @@ def _inspect_output_root(row: WorktreeHygiene) -> list[ArtifactRootInspection]:
             )
         ]
 
-    untracked_paths, ignored_paths = _status_paths(status.stdout)
+    tracked_dirty_paths, untracked_paths, ignored_paths = _status_paths(status.stdout)
     tracked_paths = [line for line in tracked.stdout.splitlines() if line.strip()]
+    baseline_tracked_paths: list[str] = []
+    if tracked_paths:
+        baseline = _run_command(
+            ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"],
+            cwd=path,
+        )
+        if baseline.returncode != 0:
+            return [
+                ArtifactRootInspection(
+                    root="output",
+                    classification="unavailable",
+                    status="unavailable",
+                    tracked_entries=len(tracked_paths),
+                    sample_paths=_sample_paths(tracked_paths),
+                    reason="git ls-tree for baseline output/ failed",
+                )
+            ]
+        baseline_tracked_paths = [line for line in baseline.stdout.splitlines() if line.strip()]
     classification, reason = _classify_output_root(
-        tracked_entries=len(tracked_paths),
+        tracked_paths=tracked_paths,
+        baseline_tracked_paths=baseline_tracked_paths,
+        tracked_dirty_paths=tracked_dirty_paths,
         untracked_paths=untracked_paths,
         ignored_paths=ignored_paths,
     )

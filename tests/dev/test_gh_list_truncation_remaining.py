@@ -78,6 +78,7 @@ def test_snapshot_claimable_issues_records_truncated_at_limit() -> None:
 
     assert payload["truncated"] is True
     assert "--limit 3" in payload["truncation_note"]
+    assert "raise --limit" in payload["truncation_note"]
     assert len(payload["issues"]) == limit
 
 

@@ -796,15 +796,22 @@ def snapshot_claimable_issues(
         if include_blocked_external or issue.get("classification") != "blocked_external"
     ]
     truncated = is_likely_truncated(len(listed), limit=limit) or bool(listing["resume_cursor"])
+    if listing["resume_cursor"]:
+        truncation_note = (
+            f"issue discovery may be capped: got {len(listed)} rows at --limit {limit}; "
+            "resume with the returned cursor"
+        )
+    elif truncated:
+        truncation_note = (
+            f"issue discovery may be capped: got {len(listed)} rows at --limit {limit}; "
+            "raise --limit to inspect more rows"
+        )
+    else:
+        truncation_note = ""
     return {
         **base,
         "truncated": truncated,
-        "truncation_note": (
-            f"issue discovery may be capped: got {len(listed)} rows at --limit {limit}; "
-            "resume with the returned cursor"
-            if truncated
-            else ""
-        ),
+        "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,
         "excluded_counts": {
             "blocked_external": sum(

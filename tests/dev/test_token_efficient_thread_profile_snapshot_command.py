@@ -22,7 +22,7 @@ DOC_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "templates" / "token_efficient_thread_profile.md"
 )
 SNAPSHOT_COMMAND_RE = re.compile(
-    r"`uv run python scripts/dev/snapshot_pr_queue\.py (?P<args>[^`]+)`"
+    r"`uv run python -m scripts\.dev\.snapshot_pr_queue (?P<args>[^`]+)`"
 )
 
 

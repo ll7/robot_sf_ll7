@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 6776
-latest_reviewed_date: 2026-08-12
+latest_reconciliation_issue: 7047
+latest_reviewed_date: 2026-08-13
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 421
-refreshed_baseline_files_with_findings: 93
+refreshed_baseline_total_findings: 419
+refreshed_baseline_files_with_findings: 91
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -93,6 +93,15 @@ decision_summary: >-
   packets from #6095 reference the real producing commit d791c08f, which is unreachable from
   main after the #6106 squash merge. The four resulting dangling_commit/config_missing_at_commit
   findings are explicitly baselined below; the source packets and producer SHA are preserved.
+  Chapter 7 portfolio addendum (issue #7047): the Chapter 7 release-cell package remains
+  byte-frozen under issue_6792_ch7_evidence_package_v1, but the external portfolio input is now
+  bound by docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json to the tracked
+  source config configs/analysis/ch7_worked_example_portfolio.v1.yaml at SHA-256
+  2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec. The linter validates the
+  companion fail-closed against exact document paths, JSON pointers, document digests, target path,
+  target tracking state, and target digest, then resolves only the two exact #7047 findings. The
+  baseline is refreshed from 421 findings across 93 files to 419 findings across 91 files while
+  preserving the package bytes and without changing the release-cell-only claim boundary.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -258,22 +267,6 @@ reviewed_files:
       (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
       class as the other dangling_commit entries; recorded here rather than rewriting the
       producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
-  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json
-    codes: [hash_without_artifact_path]
-    disposition: baseline
-    reason: >-
-      The blocked #6792 package records the digest of the approved external source package. The
-      source is intentionally outside Git and independently verified by its exact SHA256SUMS
-      digest; the generic registry linter cannot bind this external hash to a repository path.
-      The package remains visualization-only and domain approval is still pending.
-  - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/materialization_overlay.json
-    codes: [uncommitted_artifact_missing_location]
-    disposition: baseline
-    reason: >-
-      The materialization overlay intentionally records the frozen external portfolio contract
-      and configuration digest without copying that source into the evidence package. The
-      package is not admitted evidence; source and portfolio digests are verified by the builder
-      and issue checkpoint rather than by a repository-relative artifact path.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

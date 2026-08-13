@@ -111,7 +111,11 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
     contradictory_launch = _issue(
         10,
         title="SLURM launch packet",
-        body="This blocked campaign is ready to proceed.\nslurm_state: submitted_running",
+        body=(
+            "This blocked campaign is ready to proceed.\n"
+            "slurm_issue_pointer:\n"
+            "  slurm_state: submitted_running"
+        ),
         labels=_labels("research", "blocked", "state:ready", "evidence:launch-packet", "slurm"),
     )
     admitted_evidence = _issue(
@@ -147,19 +151,19 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
     ("body", "expected_kinds"),
     [
         (
-            "SLURM launch packet\nslurm_state: not_submitted",
+            "SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: not_submitted",
             {"watched_research_surface"},
         ),
         (
-            "SLURM launch packet\nslurm_state: submitted_running",
+            "SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: submitted_running",
             {"watched_research_surface", "launch_packet_without_job_id"},
         ),
         (
-            "SLURM launch packet\nslurm_state: submitted_running\nJob 12345",
+            "SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: submitted_running\n  slurm_job_id: 12345",
             {"watched_research_surface"},
         ),
         (
-            "SLURM launch packet\nslurm_state: completed_pending_artifact_promotion",
+            "SLURM launch packet\nslurm_issue_status:\n  state: completed_pending_artifact_promotion\n  slurm_job_id: 12345",
             {"watched_research_surface"},
         ),
         (
@@ -167,15 +171,15 @@ def test_build_findings_covers_readiness_launch_and_evidence_contracts() -> None
             {"watched_research_surface", "launch_packet_state_unavailable"},
         ),
         (
-            "SLURM launch packet\nslurm_state: made_up",
+            "SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: made_up",
             {"watched_research_surface", "launch_packet_state_unavailable"},
         ),
         (
-            'SLURM launch packet\nslurm_state: "not_submitted',
+            'SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: "not_submitted',
             {"watched_research_surface", "launch_packet_state_unavailable"},
         ),
         (
-            "SLURM launch packet\nslurm_state: not_submitted\nslurm_state: submitted_running",
+            "SLURM launch packet\nslurm_issue_pointer:\n  slurm_state: not_submitted\n  slurm_state: submitted_running",
             {"watched_research_surface", "launch_packet_state_unavailable"},
         ),
     ],
@@ -196,10 +200,60 @@ def test_launch_packet_requires_explicit_canonical_state(
 
 
 def test_launch_packet_state_parser_accepts_quoted_yaml_scalar_and_comment() -> None:
-    assert monitor._parse_slurm_state('slurm_state: "not_submitted" # no execution') == (
+    assert monitor._parse_slurm_execution_state(
+        'slurm_issue_pointer:\n  slurm_state: "not_submitted" # no execution'
+    ) == (
+        "not_submitted",
+        None,
+        None,
+    )
+
+
+def test_canonical_ledger_block_requires_and_accepts_explicit_job_id() -> None:
+    assert monitor._parse_slurm_execution_state(
+        "slurm_experiment_state:\n  state: not_submitted\n  slurm_job_id: not_submitted"
+    ) == ("not_submitted", "not_submitted", None)
+    assert monitor._parse_slurm_execution_state(
+        "slurm_experiment_state:\n  state: submitted_running\n  slurm_job_id: 12345"
+    ) == ("submitted_running", "12345", None)
+
+
+def test_compatible_aliases_must_agree_with_the_canonical_block() -> None:
+    body = (
+        "slurm_experiment_state:\n"
+        "  state: not_submitted\n"
+        "  slurm_job_id: not_submitted\n"
+        "slurm_issue_pointer:\n"
+        "  slurm_state: not_submitted\n"
+        "slurm_issue_status:\n"
+        "  state: not_submitted\n"
+        "  slurm_job_id: not_submitted"
+    )
+    assert monitor._parse_slurm_execution_state(body) == (
+        "not_submitted",
         "not_submitted",
         None,
     )
+
+    conflict = body.replace("slurm_state: not_submitted", "slurm_state: submitted_running")
+    state, job_id, error = monitor._parse_slurm_execution_state(conflict)
+    assert (state, job_id) == (None, None)
+    assert error == "contradictory structured SLURM states"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "slurm_experiment_state:\n  state: not_submitted",
+        "slurm_experiment_state:\n  state: submitted_running\n  slurm_job_id: not_submitted",
+        "slurm_experiment_state:\n  state: not_submitted\n  slurm_job_id: 12345",
+        "slurm_issue_status:\n  state: not_submitted\n  slurm_job_id: nope",
+    ],
+)
+def test_invalid_structured_execution_state_fails_closed(body: str) -> None:
+    state, job_id, error = monitor._parse_slurm_execution_state(body)
+    assert (state, job_id) == (None, None)
+    assert error
 
 
 @pytest.mark.parametrize(

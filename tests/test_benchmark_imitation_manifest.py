@@ -168,6 +168,7 @@ def test_training_run_manifest_writes_to_runs_folder(
         scenario_coverage={"scenario_a": 3, "scenario_b": 1},
         evaluation_scenario_config=Path("configs/scenarios/sets/ppo_full_maintained_eval_v1.yaml"),
         notes=["warm start converged"],
+        metadata={"objective": {"objective_name": "mean_expert_action_nll"}},
     )
 
     output_path = imitation_manifest.write_training_run_manifest(artifact)
@@ -189,6 +190,7 @@ def test_training_run_manifest_writes_to_runs_folder(
     assert payload["status"] == TrainingRunStatus.COMPLETED.value
     assert payload["scenario_coverage"] == {"scenario_a": 3, "scenario_b": 1}
     assert payload["notes"] == ["warm start converged"]
+    assert payload["metadata"] == {"objective": {"objective_name": "mean_expert_action_nll"}}
 
 
 def test_path_to_manifest_fails_closed_for_absolute_paths_outside_repo() -> None:

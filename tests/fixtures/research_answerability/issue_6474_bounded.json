@@ -1,0 +1,65 @@
+{
+  "schema_version": "research_answerability.v1",
+  "question": {
+    "research_question": "Does the bounded social-compliance comparison change comfort exposure?",
+    "bounded_claim": "The frozen fixture supports only its declared paired comparison.",
+    "decision_vocabulary": ["continue", "stop", "inconclusive", "invalid"],
+    "negative_result_meaning": "A null or unavailable secondary metric does not prove no effect."
+  },
+  "estimand": {
+    "primary": "Paired delta in the declared comfort-exposure metric.",
+    "reference_or_null": "Zero paired delta.",
+    "decision_predicates": "Use the preregistered interval and support rule.",
+    "minimally_important_effect": "The fixture's frozen minimally important effect."
+  },
+  "producers": [
+    {
+      "field": "comfort_exposure",
+      "producer": "issue_6474_report",
+      "source": "docs/context/evidence/issue_6474_social_compliance_preregistration.json",
+      "unit": "seconds",
+      "direction": "lower_is_better",
+      "denominator": "paired_episode",
+      "pairing_key": "scenario_seed_pair",
+      "missingness_rule": "Exclude malformed pairs and report their count.",
+      "status": "available",
+      "execution_mode": "native",
+      "required": true
+    },
+    {
+      "field": "secondary_realism_metric",
+      "producer": "not_available_in_fixture",
+      "source": "docs/context/evidence/issue_6474_social_compliance_preregistration.json",
+      "unit": "unspecified",
+      "direction": "not_applicable",
+      "denominator": "not_applicable",
+      "pairing_key": "not_applicable",
+      "missingness_rule": "Preserve unavailable; never impute zero.",
+      "status": "unavailable",
+      "execution_mode": "unavailable",
+      "required": false
+    }
+  ],
+  "analysis": {
+    "analysis_unit": "paired_episode",
+    "resampling_unit": "scenario_seed_pair",
+    "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py",
+    "multiplicity": "The frozen primary contrast is reported separately from secondary metrics.",
+    "sensitivity_plan": "Report support, unavailable fields, and interval sensitivity.",
+    "dry_run_status": "passed",
+    "comparability_status": "passed"
+  },
+  "design": {
+    "mode": "decision_capable",
+    "power_status": "adequate",
+    "budget": "Frozen nominal fixture.",
+    "sample_size": "Recorded by the source packet."
+  },
+  "artifacts": {
+    "raw_owner": "Issue 6474 evidence owner.",
+    "durable_path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md",
+    "checksums": ["source-manifest-sha256", "summary-sha256"],
+    "durability_status": "ready",
+    "incomplete_policy": "Unavailable optional metrics remain unavailable in every report."
+  }
+}

@@ -29,6 +29,7 @@ def test_research_campaign_manifest_example_covers_required_sections() -> None:
         "validation",
     ):
         assert section in manifest
+    assert manifest["answerability"]["schema_version"] == "research_answerability.v1"
 
 
 def test_research_campaign_manifest_example_preserves_row_status_contract() -> None:

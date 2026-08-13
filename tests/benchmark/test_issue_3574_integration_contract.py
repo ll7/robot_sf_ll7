@@ -111,6 +111,11 @@ def _single_planner_manifest(manifest: dict[str, Any], planner: str) -> dict[str
     shard_manifest["manifest_rows"] = [
         row for row in shard_manifest["manifest_rows"] if row["planner"] == planner
     ]
+    shard_manifest["planner_rows"] = [
+        row
+        for row in shard_manifest["planner_rows"]
+        if row.get("planner", row.get("key")) == planner
+    ]
     shard_manifest["row_count"] = len(shard_manifest["manifest_rows"])
     return shard_manifest
 
@@ -653,10 +658,15 @@ def test_finalize_three_verified_shards_builds_existing_rank_report(tmp_path: Pa
         )
         == 0
     )
-    analysis_bytes = (final_output / "analysis.md").read_bytes()
-    assert analysis_bytes == (direct_output / "analysis.md").read_bytes()
-    assert hashlib.sha256(analysis_bytes).hexdigest() == PRE_CHANGE_ANALYSIS_SHA256
-    analysis = analysis_bytes.decode("utf-8")
+    # A shard-local manifest cannot carry the full campaign's planner order.  The
+    # receipt finalizer therefore uses its deterministic sorted roster, while a
+    # direct combined run preserves the order declared by the full manifest.
+    assert (final_output / "rank_sensitivity.json").read_bytes() == (
+        direct_output / "rank_sensitivity.json"
+    ).read_bytes()
+    direct_analysis_bytes = (direct_output / "analysis.md").read_bytes()
+    assert hashlib.sha256(direct_analysis_bytes).hexdigest() == PRE_CHANGE_ANALYSIS_SHA256
+    analysis = (final_output / "analysis.md").read_text(encoding="utf-8")
     for prior_section in (
         "## Claim Boundary",
         "## Executive Summary",

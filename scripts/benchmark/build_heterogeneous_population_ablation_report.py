@@ -58,7 +58,6 @@ MANIFEST_COMPATIBILITY_FIELDS = (
     "issue",
     "paired_arms",
     "scenario_rows",
-    "planner_rows",
     "seed_rows",
     "response_law_fractions",
     "trace_metric_keys",
@@ -942,6 +941,9 @@ def _verify_receipt(  # noqa: C901, PLR0912
     record_planners = {str(row["planner"]) for row in reduced["rank_records"]}
     if manifest_planners != {planner} or record_planners != {planner}:
         raise ValueError(f"receipt {receipt_path} planner does not match its sources")
+    manifest_roster = _manifest_planner_order(manifest)
+    if manifest_roster != [planner]:
+        raise ValueError(f"receipt {receipt_path} planner roster does not match its sources")
     if _manifest_head(manifest) not in {None, source_artifact_head}:
         raise ValueError(f"receipt {receipt_path} source artifact head mismatches its manifest")
     if not reduced["integration_readiness"]["ready"]:
@@ -983,7 +985,13 @@ def _merge_reduced(
     shards: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]],
 ) -> dict[str, Any]:
     first_manifest = shards[0][0]
-    planner_order_list = _manifest_planner_order(first_manifest)
+    planner_order_list = list(
+        dict.fromkeys(
+            planner for manifest, _, _ in shards for planner in _manifest_planner_order(manifest)
+        )
+    )
+    if not planner_order_list:
+        planner_order_list = _manifest_planner_order(first_manifest)
     planner_order = {planner: index for index, planner in enumerate(planner_order_list)}
     ordered_shards = sorted(
         shards,

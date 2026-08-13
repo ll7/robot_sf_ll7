@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-evidence-admission.v1.json",
+  "title": "Chapter 7 evidence package admission receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "status",
+    "package",
+    "source",
+    "approval",
+    "scope",
+    "roles",
+    "retrieval"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-evidence-admission.v1"},
+    "issue": {"const": 6792},
+    "status": {"const": "admitted"},
+    "package": {"$ref": "#/$defs/package"},
+    "source": {"$ref": "#/$defs/source"},
+    "approval": {"$ref": "#/$defs/approval"},
+    "scope": {"$ref": "#/$defs/scope"},
+    "roles": {"$ref": "#/$defs/roles"},
+    "retrieval": {"$ref": "#/$defs/retrieval"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonempty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256sums_sha256", "manifest_sha256"],
+      "properties": {
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_package_sha256sums",
+        "release_archive_sha256",
+        "compact_packet_sha256",
+        "compact_sha256sums_sha256",
+        "source_registry_sha256"
+      ],
+      "properties": {
+        "source_package_sha256sums": {"$ref": "#/$defs/sha256"},
+        "release_archive_sha256": {"$ref": "#/$defs/sha256"},
+        "compact_packet_sha256": {"$ref": "#/$defs/sha256"},
+        "compact_sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "source_registry_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_id", "approval_url", "decision"],
+      "properties": {
+        "approval_id": {
+          "type": "string",
+          "pattern": "^issue6792-comment-[0-9]+$"
+        },
+        "approval_url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/ll7/robot_sf_ll7/issues/6792#issuecomment-[0-9]+$"
+        },
+        "decision": {"const": "approve"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_boundary", "forbidden_claims"],
+      "properties": {
+        "claim_boundary": {"$ref": "#/$defs/nonempty"},
+        "forbidden_claims": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 5,
+          "items": {
+            "enum": [
+              "matched_comparison",
+              "causal_divergence",
+              "counterfactual_branching",
+              "trajectory_divergence",
+              "pooled_arm_replication"
+            ]
+          }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "unavailable"],
+      "properties": {
+        "available": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cross_cell_inversion", "feasibility_criticism"],
+          "properties": {
+            "cross_cell_inversion": {"$ref": "#/$defs/available_role"},
+            "feasibility_criticism": {"$ref": "#/$defs/available_role"}
+          }
+        },
+        "unavailable": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["planner_upset", "seed_sensitivity"],
+          "properties": {
+            "planner_upset": {"$ref": "#/$defs/unavailable_role"},
+            "seed_sensitivity": {"$ref": "#/$defs/unavailable_role"}
+          }
+        }
+      }
+    },
+    "available_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grain"],
+      "properties": {
+        "grain": {
+          "enum": ["release_cell", "release_cell_geometry"]
+        }
+      }
+    },
+    "unavailable_role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grain", "reasons"],
+      "properties": {
+        "grain": {"const": "trace"},
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/nonempty"}
+        }
+      }
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_package_key",
+        "release_archive_key",
+        "compact_packet_key"
+      ],
+      "properties": {
+        "source_package_key": {"$ref": "#/$defs/nonempty"},
+        "release_archive_key": {"$ref": "#/$defs/nonempty"},
+        "compact_packet_key": {"$ref": "#/$defs/nonempty"}
+      }
+    }
+  }
+}

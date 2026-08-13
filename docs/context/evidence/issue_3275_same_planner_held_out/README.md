@@ -13,7 +13,7 @@ preflight_evidence_only: this packet proves deterministic manifest construction,
 - Target planner: `social_force` (config SHA-256 `dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735`).
 - Candidate pool seed `42`, pool size 64, budget 12 per arm.
 - Execution-seed domain base 8100000, disjoint from every archive-certification seed (max 2000364).
-- Code revision: `80cc6147b663bf0aeb584f8a0cfefbffbd827d0d`.
+- Code revision: `40db0c19648e268d367c9426f81a21ba295f188a`.
 
 ## Duplicate and overlap accounting
 

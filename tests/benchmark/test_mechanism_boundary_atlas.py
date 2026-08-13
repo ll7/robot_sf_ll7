@@ -198,6 +198,26 @@ def test_no_claim_promotion_in_bounded_claims() -> None:
     assert any("promotion pattern" in issue.message for issue in issues)
 
 
+def test_no_claim_promotion_in_top_level_claim_boundary() -> None:
+    payload = _payload()
+    payload["claim_boundary"] = "This is benchmark evidence."
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any(
+        issue.path == "/claim_boundary" and "promotion pattern" in issue.message for issue in issues
+    )
+
+
+def test_top_level_claim_boundary_allows_explicit_negative_wording() -> None:
+    payload = _payload()
+    payload["claim_boundary"] = "Diagnostic planning atlas only; not benchmark evidence."
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert not any(issue.path == "/claim_boundary" for issue in issues)
+
+
 def test_forbidden_wording_can_name_disallowed_phrases() -> None:
     payload = _payload()
     payload["cards"][0]["claim_boundary"]["forbidden_wording"].append("paper-grade evidence")

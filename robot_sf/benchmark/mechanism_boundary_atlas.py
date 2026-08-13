@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
@@ -328,6 +329,9 @@ def _schema_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]:
 
 def _semantic_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]:  # noqa: C901
     issues: list[AtlasValidationIssue] = []
+    top_level_claim_boundary = payload.get("claim_boundary")
+    if isinstance(top_level_claim_boundary, str):
+        _claim_promotion_text_issues(top_level_claim_boundary, "/claim_boundary", issues)
     cards = payload.get("cards")
     if not isinstance(cards, list):
         return issues
@@ -406,15 +410,36 @@ def _claim_promotion_issues(
     if isinstance(claim_boundary, Mapping):
         text_parts.extend(_strings_in(claim_boundary.get("bounded_claims", [])))
         text_parts.extend(_strings_in(claim_boundary.get("smallest_next_proof_or_stop", "")))
-    text = "\n".join(text_parts).lower()
+    _claim_promotion_text_issues("\n".join(text_parts), prefix, issues)
+
+
+def _claim_promotion_text_issues(
+    text: str,
+    prefix: str,
+    issues: list[AtlasValidationIssue],
+) -> None:
+    """Reject promotion wording in any claim-boundary text surface."""
+
+    normalized_text = text.lower()
     for pattern in PROMOTION_PATTERNS:
-        if pattern in text:
+        if _contains_unnegated_pattern(normalized_text, pattern):
             issues.append(
                 AtlasValidationIssue(
                     prefix,
                     f"claim text contains promotion pattern {pattern!r}",
                 )
             )
+
+
+def _contains_unnegated_pattern(text: str, pattern: str) -> bool:
+    """Return whether promotion wording appears outside an explicit negation."""
+
+    negation = re.compile(r"(?:\bnot|\bno|\bnever|\bwithout|\bexcluding)\s+$")
+    for match in re.finditer(re.escape(pattern), text):
+        context = text[max(0, match.start() - 24) : match.start()]
+        if not negation.search(context):
+            return True
+    return False
 
 
 def _strings_in(value: object) -> list[str]:

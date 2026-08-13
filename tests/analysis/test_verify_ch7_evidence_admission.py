@@ -20,6 +20,11 @@ APPROVAL_URL = "https://github.com/ll7/robot_sf_ll7/issues/6792#issuecomment-527
 CLAIM_BOUNDARY = "Release-cell descriptive evidence only. Trace-level trajectory dossiers remain typed unavailable."
 
 
+@pytest.fixture(autouse=True)
+def _use_tmp_default_registry(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(admission, "DEFAULT_REGISTRY", tmp_path / "source-registry.json")
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -250,6 +255,28 @@ def test_valid_admission_receipt_binds_all_inputs(tmp_path: Path) -> None:
     assert result["scope"]["forbidden_claims"] == list(admission.FORBIDDEN_CLAIMS)
     assert result["roles"]["unavailable"]["seed_sensitivity"]["grain"] == "trace"
     assert result["approval_url"] == APPROVAL_URL
+
+
+def test_public_callable_rejects_self_consistent_noncanonical_registry(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    forged_registry = tmp_path / "forged-source-registry.json"
+    forged_registry.write_bytes(args["registry"].read_bytes())
+    payload = json.loads(args["receipt"].read_text(encoding="utf-8"))
+    payload["source"]["source_registry_sha256"] = _sha256(forged_registry)
+    _write_json(args["receipt"], payload)
+
+    with pytest.raises(
+        admission.Ch7EvidenceAdmissionError,
+        match="repository-controlled canonical registry",
+    ):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=forged_registry,
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
 
 
 def test_unbound_review_sidecar_fails_closed(tmp_path: Path) -> None:
@@ -488,7 +515,9 @@ def test_role_scope_and_forbidden_claim_mutation_fail_closed(tmp_path: Path) -> 
         )
 
 
-def test_package_extra_file_and_compact_extra_file_fail_closed(tmp_path: Path) -> None:
+def test_package_extra_file_and_compact_extra_file_fail_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     args = _verify_args(tmp_path)
     (args["package"] / "unlisted.json").write_text("{}\n", encoding="utf-8")
     with pytest.raises(admission.Ch7EvidenceAdmissionError, match="unlisted"):
@@ -502,6 +531,7 @@ def test_package_extra_file_and_compact_extra_file_fail_closed(tmp_path: Path) -
         )
 
     args = _verify_args(tmp_path / "compact-case")
+    monkeypatch.setattr(admission, "DEFAULT_REGISTRY", args["registry"])
     (args["compact"] / "unlisted.json").write_text("{}\n", encoding="utf-8")
     with pytest.raises(admission.Ch7EvidenceAdmissionError, match="unlisted"):
         admission.verify_admission(

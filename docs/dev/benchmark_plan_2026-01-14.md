@@ -15,7 +15,7 @@ The remainder of this document details evidence and a structured gap analysis, t
 - `robot_sf/benchmark/runner.py` runs a synthetic benchmark using `robot_sf/benchmark/scenario_generator.py` and `FastPysfWrapper`. It outputs per-episode JSON records with `scenario_params`, `algorithm_metadata`, and metrics. This path does not use map-based Gymnasium environments or the SVG scenario packs.
 - `robot_sf/benchmark/full_classic/` and `scripts/classic_benchmark_full.py` run the map-based "classic interactions" suite with the Gymnasium environment. The orchestrator currently uses a simple goal-seeking policy for rollouts, not a baseline/planner integration.
 - Canonical schema under `robot_sf/benchmark/schemas/episode.schema.v1.json` is smaller than the schema in `docs/dev/issues/social-navigation-benchmark/episode_schema.json`; the runner emits keys (`scenario_params`, `algorithm_metadata`, `timestamps`, `config_hash`) that are only defined in the docs-side schema.
-- Scenario schema under `robot_sf/benchmark/schema/scenarios.schema.json` covers the synthetic parameterized scenario generator (density, flow, obstacle) and does not validate the map-based scenario YAMLs in `configs/scenarios/`.
+- Scenario schema under `robot_sf/benchmark/schemas/scenarios.schema.json` covers the synthetic parameterized scenario generator (density, flow, obstacle) and does not validate the map-based scenario YAMLs in `configs/scenarios/`.
 
 ### 2) Metrics
 
@@ -108,7 +108,7 @@ We want to use a runner that uses map-based Gymnasium environments with a combin
 
 Evidence:
 
-- `robot_sf/benchmark/schema/scenarios.schema.json` only validates the synthetic scenario format.
+- `robot_sf/benchmark/schemas/scenarios.schema.json` only validates the synthetic scenario format.
 - `configs/scenarios/classic_interactions.yaml` and `configs/scenarios/francis2023.yaml` use a different schema (map_file, simulation_config, single_pedestrians, metadata).
 
 Why it matters:

@@ -19,6 +19,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
+from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows
+
 SCHEMA = "prepublication_state.v1"
 DECISION_SCHEMA = "prepublication_decision.v1"
 EXIT_CODES = {
@@ -35,6 +38,18 @@ _CLOSING_REFERENCE_RE = re.compile(
 )
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 DEFAULT_TIMEOUT_SECONDS = 120
+GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ", "api rate limit")
+GRAPHQL_FAIL_CLOSED_MARKERS = (
+    "bad credentials",
+    "requires authentication",
+    "authentication required",
+    "resource not accessible by integration",
+    "forbidden",
+    "permission denied",
+    "could not resolve to a repository",
+    "could not resolve to an issue",
+    "repository not found",
+)
 
 
 class GateError(RuntimeError):
@@ -116,6 +131,14 @@ def _normalized_state(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
+def _is_graphql_fallback_error(error: GateError) -> bool:
+    """Return whether a native GitHub read is eligible for REST fallback."""
+    message = str(error).lower()
+    if any(marker in message for marker in GRAPHQL_FAIL_CLOSED_MARKERS):
+        return False
+    return any(marker in message for marker in GRAPHQL_FALLBACK_MARKERS)
+
+
 def _fetch_refs(*, remote: str, base_ref: str, branch: str) -> tuple[str, str | None]:
     """Refresh the base ref and read the remote publication branch tip."""
     _run(
@@ -155,6 +178,33 @@ def _fetch_remote_branch(*, remote: str, branch: str) -> None:
     )
 
 
+def _closing_issue_numbers(searchable: str, *, repo: str) -> set[int]:
+    """Extract repository-qualified closing references from PR text."""
+    closes: set[int] = set()
+    for match in _CLOSING_REFERENCE_RE.finditer(searchable):
+        qualifier = match.group("url_repo") or match.group("repo")
+        if qualifier and qualifier.casefold() != repo.casefold():
+            continue
+        closes.add(int(match.group("number")))
+    return closes
+
+
+def _normalize_closing_pr_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one REST pull row to the native closing-PR snapshot shape."""
+    head = row.get("head") if isinstance(row.get("head"), dict) else {}
+    base = row.get("base") if isinstance(row.get("base"), dict) else {}
+    merge_sha = row.get("merge_commit_sha")
+    return {
+        "number": row.get("number"),
+        "title": row.get("title"),
+        "merged_at": row.get("merged_at"),
+        "merge_commit": {"oid": merge_sha} if merge_sha else None,
+        "head_ref": head.get("ref"),
+        "head_sha": head.get("sha"),
+        "base_ref": base.get("ref"),
+    }
+
+
 def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
     """Return merged PRs whose body or title closes *issue* explicitly."""
     payload = _json_command(
@@ -182,13 +232,7 @@ def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
         if not isinstance(pull_request, dict):
             continue
         searchable = "\n".join(str(pull_request.get(field) or "") for field in ("title", "body"))
-        closes = set()
-        for match in _CLOSING_REFERENCE_RE.finditer(searchable):
-            qualifier = match.group("url_repo") or match.group("repo")
-            if qualifier and qualifier.casefold() != repo.casefold():
-                continue
-            closes.add(int(match.group("number")))
-        if issue not in closes:
+        if issue not in _closing_issue_numbers(searchable, repo=repo):
             continue
         matches.append(
             {
@@ -204,6 +248,69 @@ def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
     return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
 
 
+def _rest_json(
+    path: str,
+    *,
+    context: str,
+    gh_api: Any = None,
+) -> Any:
+    """Read and parse one GitHub REST JSON endpoint."""
+    if gh_api is None:
+        from scripts.dev.gh_issue_rest import _gh_api
+
+        gh_api = _gh_api
+    result = gh_api(path)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise GateError(f"GitHub REST read failed ({context}): {detail or result.returncode}")
+    try:
+        return json.loads(result.stdout or "null")
+    except json.JSONDecodeError as exc:
+        raise GateError(f"GitHub REST returned invalid JSON ({context}): {exc.msg}") from exc
+
+
+def _issue_state_rest(*, repo: str, issue: int, gh_api: Any = None) -> dict[str, Any]:
+    """Read issue state and timestamps through the REST issue endpoint."""
+    path = f"repos/{repo}/issues/{issue}"
+    payload = _rest_json(path, context=path, gh_api=gh_api)
+    if not isinstance(payload, dict):
+        raise GateError(f"GitHub REST issue payload was not an object ({path})")
+    issue_state = _normalized_state(payload.get("state"))
+    if issue_state not in {"OPEN", "CLOSED"}:
+        raise GateError(f"GitHub REST issue returned unknown state: {issue_state!r}")
+    return {
+        "state": issue_state,
+        "updatedAt": payload.get("updated_at"),
+        "closedAt": payload.get("closed_at"),
+    }
+
+
+def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+    """Find merged PRs closing an issue through a bounded REST inventory."""
+    try:
+        rows, meta = fetch_closed_pr_rows(
+            repo=repo,
+            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise GateError(f"GitHub REST merged-PR fallback failed: {exc}") from exc
+    if meta.truncated:
+        raise GateError(
+            "GitHub REST merged-PR inventory is truncated: "
+            f"read {meta.row_count} rows in {meta.pages_read}/{meta.page_budget} pages; "
+            "raise the REST page budget before publication"
+        )
+
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("merged_at"):
+            continue
+        searchable = "\n".join(str(row.get(field) or "") for field in ("title", "body"))
+        if issue in _closing_issue_numbers(searchable, repo=repo):
+            matches.append(_normalize_closing_pr_row(row))
+    return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
+
+
 def collect_live_state(
     *,
     repo: str,
@@ -213,28 +320,48 @@ def collect_live_state(
     remote: str = "origin",
 ) -> dict[str, Any]:
     """Fetch and assemble the live issue, ref, and local worktree state."""
-    issue_payload = _json_command(
-        [
-            "gh",
-            "issue",
-            "view",
-            str(issue),
-            "--repo",
-            repo,
-            "--json",
-            "state,updatedAt,closedAt",
-        ]
-    )
-    if not isinstance(issue_payload, dict):
-        raise GateError("gh issue view returned a non-object payload")
-    issue_state = _normalized_state(issue_payload.get("state"))
-    if issue_state not in {"OPEN", "CLOSED"}:
-        raise GateError(f"gh issue view returned unknown state: {issue_state!r}")
+    remote_state_sources = {"issue": "graphql", "closing_prs": "graphql"}
+    remote_state_fallbacks: dict[str, str] = {}
+    try:
+        issue_payload = _json_command(
+            [
+                "gh",
+                "issue",
+                "view",
+                str(issue),
+                "--repo",
+                repo,
+                "--json",
+                "state,updatedAt,closedAt",
+            ]
+        )
+        if not isinstance(issue_payload, dict):
+            raise GateError("gh issue view returned a non-object payload")
+        issue_state = _normalized_state(issue_payload.get("state"))
+        if issue_state not in {"OPEN", "CLOSED"}:
+            raise GateError(f"gh issue view returned unknown state: {issue_state!r}")
+    except GateError as exc:
+        if not _is_graphql_fallback_error(exc):
+            raise
+        issue_payload = _issue_state_rest(repo=repo, issue=issue)
+        remote_state_sources["issue"] = "rest"
+        remote_state_fallbacks["issue"] = str(exc)
+        issue_state = issue_payload["state"]
+
     base_sha, remote_branch_sha = _fetch_refs(
         remote=remote,
         base_ref=base_ref,
         branch=branch,
     )
+    try:
+        closing_prs = _closing_prs(repo=repo, issue=issue)
+    except GateError as exc:
+        if not _is_graphql_fallback_error(exc):
+            raise
+        closing_prs = _closing_prs_rest(repo=repo, issue=issue)
+        remote_state_sources["closing_prs"] = "rest"
+        remote_state_fallbacks["closing_prs"] = str(exc)
+
     return {
         "schema": SCHEMA,
         "kind": "snapshot",
@@ -244,7 +371,9 @@ def collect_live_state(
         "issue_state": issue_state,
         "issue_updated_at": issue_payload.get("updatedAt"),
         "issue_closed_at": issue_payload.get("closedAt"),
-        "closing_prs": _closing_prs(repo=repo, issue=issue),
+        "closing_prs": closing_prs,
+        "remote_state_sources": remote_state_sources,
+        "remote_state_fallbacks": remote_state_fallbacks,
         "remote": remote,
         "base_ref": base_ref,
         "base_sha": base_sha,

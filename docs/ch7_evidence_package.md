@@ -37,3 +37,31 @@ domain approval and are not a substitute for the exact-source admission gate.
 The package must not pool hybrid arms as independent replications, infer a mechanism from a terminal
 outcome, use DTW, introduce counterfactual branches, or claim causal divergence. A digest mismatch,
 non-deterministic rebuild, missing report, or unsafe archive member stops the build.
+
+## Author admission boundary
+
+The builder's `blocked_pending_domain_approval` manifest is intentionally immutable. After the
+author approves the exact package digest on [RobotSF issue #6792](https://github.com/ll7/robot_sf_ll7/issues/6792),
+create a separate `ch7-evidence-admission.v1` receipt and populate the trusted source registry with
+the approved source entry. The receipt binds the package `SHA256SUMS`, manifest, source package,
+release archive, #6814 compact packet, registry, approval comment, role grains, unavailable reasons,
+and forbidden claim classes. It is not valid unless all external inputs are supplied and rehashed:
+
+```bash
+uv run python scripts/analysis/verify_ch7_evidence_admission.py \
+  --package-dir <package> \
+  --source-registry configs/analysis/source_gate_registry.v1.json \
+  --receipt <external-admission-receipt.json> \
+  --source-package <approved-#6412-package> \
+  --release-archive <release-0.0.3-archive> \
+  --compact-dir <external-#6814-compact-packet>
+```
+
+The verifier rejects unlisted package or compact files, unbound or missing review sidecars, forged
+approval IDs, digest mismatches (including source-package members and `package_complete.json`),
+changed role scope, custom schemas, non-canonical registries, special filesystem entries, and any
+package manifest that was rewritten to look admitted. The package payload must remain
+byte-identical; the receipt is the effective admission record and remains outside the 21-file
+package payload. The registry and receipt are an offline author-controlled trust anchor: the
+verifier checks their exact digests and canonical issue-comment URL, but does not claim to
+authenticate GitHub identity without a separate online review.

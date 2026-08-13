@@ -44,6 +44,29 @@ The package must not pool hybrid arms as independent replications, infer a mecha
 outcome, use DTW, introduce counterfactual branches, or claim causal divergence. A digest mismatch,
 non-deterministic rebuild, missing report, or unsafe archive member stops the build.
 
+## Terminal outcome labels
+
+The reduced atlas `terminal_counts` field uses a stable, normalized label vocabulary. It is not a
+verbatim count of the source episode `termination_reason` values. The builder applies this
+precedence for each episode in [`_terminal_label()`](../scripts/analysis/build_ch7_evidence_package.py#L299-L310):
+
+| Normalized label | Source condition |
+| --- | --- |
+| `route_complete` | `outcome.route_complete` passes the builder's boolean predicate; this takes precedence over later checks. |
+| `collision_event` | `outcome.collision_event` passes the builder's boolean predicate and the route is not complete. |
+| `timeout` | `termination_reason` is one of `terminated`, `timeout`, `max_steps`, `truncated`, or `horizon`, after the preceding checks. |
+| `unavailable` | No recognized route, collision, or termination condition is present. |
+
+Consequently, a `timeout` count can include source episodes whose raw reason is `terminated`.
+The label describes the package's normalized terminal category, not a claim that every episode
+exceeded a wall-clock or step limit. Consumers that need the raw reason must use the source episode
+records; the frozen #6792 payload does not contain a raw-label breakdown.
+
+For a future package version, retain the normalized `terminal_counts` field for compatibility and
+add an explicitly named per-cell raw-label breakdown (for example, `raw_termination_counts`) with
+its own schema and source-provenance contract. That v2 change requires a new package digest and
+reviewed admission decision; it is not a rewrite of the frozen #6792 payload.
+
 ## Author admission boundary
 
 The builder's `blocked_pending_domain_approval` manifest is intentionally immutable. After the

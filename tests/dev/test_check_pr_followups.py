@@ -302,6 +302,42 @@ def test_domain_approval_required_for_non_na_research_fields() -> None:
     assert "Result classification: blocker-resolution" in report.sensitive_terms
 
 
+def test_domain_approval_detects_preregistration_design_markers_without_guidance_section() -> None:
+    """Research-design markers require approval even without the standard guidance heading."""
+    body = """## Summary
+Freeze a preregistration research design with a paired estimand, held-out seeds, and fidelity-cost surfaces.
+
+## Research and evidence boundary
+- Evidence tier: proposal contract only.
+- No compute or benchmark claim is made.
+"""
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "missing_domain_approval"
+    assert any("preregistration" in term for term in report.sensitive_terms)
+    assert any("estimand" in term for term in report.sensitive_terms)
+    assert any("held-out" in term for term in report.sensitive_terms)
+    assert any("fidelity-cost" in term for term in report.sensitive_terms)
+    assert any("evidence tier:" in term.lower() for term in report.sensitive_terms)
+
+
+def test_domain_approval_research_design_markers_preserve_docs_only_opt_out() -> None:
+    """A prose-only docs mention may still use the explicit not-required branch."""
+    body = """## Summary
+Document the meaning of a preregistration research design for contributors; no contract changes.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only reference, no research-design change
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA - docs-only
+"""
+    report = analyze_domain_approval(body, source="fixture")
+
+    assert report.status == "ok"
+    assert any("preregistration" in term for term in report.sensitive_terms)
+
+
 @pytest.mark.parametrize(
     ("pr_number", "body"),
     [

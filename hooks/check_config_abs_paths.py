@@ -76,6 +76,12 @@ PINNED_VERBATIM_EVIDENCE_SHA256 = {
     (
         "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json"
     ): "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
+    (
+        "docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md"
+    ): "14a131eceb2f767e70609d573d32a942ba15e703378d2bb921cb7da82e768179",
+    (
+        "docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json"
+    ): "2e14b777170450825f7671418ea8ed7130576adbd6bd473bf0d63062d9ee49ae",
 }
 
 

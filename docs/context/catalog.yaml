@@ -100,6 +100,10 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_6464_brne_corridor_diagnostic_summary.json
   status: evidence
   freshness: evidence

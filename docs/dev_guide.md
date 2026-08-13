@@ -186,6 +186,11 @@ Before deleting old worktrees, run `git worktree list --porcelain` from the main
 each candidate with `git -C <path> status --short --branch`. If the worktree may contain generated
 evidence or local experiment outputs, also inspect relevant ignored paths, for example
 `[ -d "<path>/output" ] && git -C <path> status --ignored --short -uall output`.
+For a compact first pass, run
+`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
+The retirement projection is a read-only review aid: it can classify rows as `preserve`, `review`,
+or `removable`, but it never deletes worktrees and does not replace human approval before any later
+`git worktree remove` command.
 
 Only remove a worktree after preserving relevant tracked, untracked, and ignored-but-important
 changes through a commit, stash, patch, durable artifact promotion, or explicit handoff note. Do not
@@ -670,7 +675,7 @@ For routine goal-autopilot orientation, prefer the compact state snapshot helper
 thread reads:
 
 ```bash
-uv run python scripts/dev/autopilot_state_snapshot.py \
+uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
@@ -688,29 +693,66 @@ roots that are present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.
+
+### Stale issue-claim reconciliation (issue #7025)
+
+Claims are cross-machine leases, not disposable branches. Inspect the bounded, read-only claim
+audit before considering cleanup:
+
+```bash
+uv run python scripts/dev/issue_claim.py reconcile --limit 100
+```
+
+The report joins each `agent-claims/issue-<number>` ref with the live issue state and explicit PR
+references. It marks a claim releasable only when the issue is closed, or when only terminal
+covering PRs remain, and no open covering PR is observed. Missing or contradictory issue state,
+active coverage, malformed responses, and capped PR inventories remain preserved with a reason;
+`ok: false` is an intentional fail-closed result, not permission to delete anything.
+
+An explicit cleanup pass requires a terminal reason and re-reads the claim SHA, issue state, and
+coverage immediately before using Git's compare-and-delete lease:
+
+```bash
+uv run python scripts/dev/issue_claim.py reconcile \
+  --release-stale --reason closed --limit 100
+```
+
+Do not run the cleanup form as a substitute for reviewing the report, and never delete historical
+claim refs by branch age or by name alone. An SHA race, state change, active PR, or incomplete
+snapshot retains the claim.
+
 Worktree rows are capped by default; use `worktree_count` and `worktrees_truncated` to decide
 whether a larger `--worktree-limit` is worth the parent-thread context cost.
 For remote cleanup and branch-drift triage, use the read-only hygiene snapshot before broad
 `git worktree` output or stale-worktree cleanup:
 
 ```bash
-uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json
+uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json
 ```
 
 The payload reports total and included worktree counts, dirty worktrees, missing upstreams,
-ahead/behind drift, detached heads, and truncation status. Use `--filter <branch-or-path-substring>`
-or `--worktree-limit <n>` when remote hosts have many linked worktrees.
+ahead/behind drift, detached heads, truncation status, and optional preservation-aware retirement
+reasons. The retirement projection fails closed to `preserve` or `review` for dirty tracked or
+untracked content, unpushed commits, detached or missing-upstream rows, active or unavailable claim
+state, unavailable merge state, and ignored `output/` content that looks durable or needs handoff.
+Use `--filter <branch-or-path-substring>` or `--worktree-limit <n>` when remote hosts have many
+linked worktrees.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 
 - Preflight lanes with `--expected-head-sha <sha>` before dispatch.
 - Reuse `preflight.status` (`healthy` | `stale` | `blocked`) and `next_action` to avoid stale or noisy routes.
 - Invalidate stale-lane routes (refresh snapshot) before reassigning or reviewing.
+- Schema `pr_queue_snapshot.v2` adds `base_freshness` to each PR row, with `base_sha`,
+  `current_main_sha`, a bounded verdict (`fresh`, `stale`, `missing-base`, or
+  `unavailable-current-main`), and the required action. Stale bases are `stale`; missing or
+  unavailable provenance is `blocked`, so those rows cannot route to merge readiness from the
+  compact snapshot alone.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
 
 ```bash
-uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 --json \
+uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
   --expected-head-sha "$PR_HEAD_SHA"
 ```
 
@@ -757,6 +799,74 @@ uv run python scripts/dev/gh_issue_rest.py view <number> --json number title sta
 All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
 `goal-issue-implementation`, etc.) use `gh_issue_rest.py thread` as the primary path;
 see `docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
+
+#### Blocked-queue re-surfacing (issue #7070)
+
+Use the blocked-queue watcher to report blocked issues whose explicit
+`blocked-triage-v1` issue/PR dependency is closed or merged:
+
+```bash
+uv run python scripts/dev/blocked_queue_watcher.py \
+  --repo ll7/robot_sf_ll7 --json
+```
+
+The default is report-only. The tier-1 issue-graph evaluator resolves all
+referenced issues and pull requests in one GraphQL request, and classifies
+path, external, in-repository, malformed, or otherwise unsupported conditions
+as `unevaluatable`. API failures are errors, never clean/not-fired results.
+
+After reviewing the report, an explicitly authorized routing pass may add only
+`needs-triage` to fired issues:
+
+```bash
+uv run python scripts/dev/blocked_queue_watcher.py \
+  --repo ll7/robot_sf_ll7 --apply --json
+```
+
+The watcher never writes `state:ready`; human review remains required before a
+blocked issue becomes dispatchable. The path/external/in-repository tiers need
+separately reviewed adapters and are not inferred from issue prose.
+
+Issue #7074 adds opt-in `blocked-triage-v1` adapter mappings. The mapping is
+the executable contract; prose in `unblock_condition` and `watcher` remains
+descriptive only. All adapters require `version: 1`, reject unknown fields,
+and produce `fired`, `not-fired`, `unevaluatable`, or `error` with proof
+provenance. A malformed mapping is `unevaluatable`, and an adapter/API failure
+is `error`, so `--apply` will not route either case.
+
+Supported mappings are deliberately small and bounded:
+
+```yaml
+adapter:
+  version: 1
+  kind: path_presence
+  name: path_exists
+  path: configs/benchmark/risk_layer_ablation.yaml
+  path_type: file
+```
+
+```yaml
+adapter:
+  version: 1
+  kind: external_probe
+  name: github_graphql_quota
+  minimum_remaining: 100
+```
+
+```yaml
+adapter:
+  version: 1
+  kind: repo_predicate
+  name: text_present
+  path: robot_sf/adversarial
+  text: adversarial_independent_outcomes
+```
+
+Path checks stay below the repository root. Repository predicates may only
+scan `configs/`, `docs/`, `robot_sf/`, `scripts/`, or `tests/`, and are limited
+to 256 files and 8 MiB. The external probe is a fixed GitHub CLI quota lookup;
+arbitrary shell commands, URLs, credentials, issue prose, and `state:ready`
+writes are not supported.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
@@ -831,16 +941,16 @@ For token-efficient autopilot runs, collect compact local snapshots before broad
 GitHub or repository reads:
 
 ```bash
-uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json
-uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json \
+uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json
+uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json \
   --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
-uv run python scripts/dev/snapshot_issue_batch.py --claimable --json
-uv run python scripts/dev/snapshot_issue_batch.py --blocked-external-report \
+uv run python -m scripts.dev.snapshot_issue_batch --claimable --json
+uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/blocked-external-assets.md"
-uv run python scripts/dev/snapshot_issue_batch.py --active-portfolio \
+uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/active-issue-portfolio.md" \
   --json
-uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
+uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 2678 2679 --json \
   --expected-head-sha "$PR_HEAD_SHA"
 uv run python scripts/dev/pr_babysitter_snapshot.py 2679 --expected-head-sha "$SHA" --json
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
@@ -904,7 +1014,7 @@ still inspect the diff and run the required local validation.
 PR-loop dry-run policy can consume the same routed-worker manifests directly:
 
 ```bash
-uv run python scripts/dev/pr_loop_policy.py --snapshot output/pr_queue.json \
+uv run python -m scripts.dev.pr_loop_policy --snapshot output/pr_queue.json \
   --manifest 1234=output/issue-2764/worker/routing_manifest.json --json
 ```
 

@@ -21,10 +21,10 @@ fail-closed, execution-gated pipeline built from one predeclared packet.
 | Stage | Module | Consumes | Produces (schema) | Landed |
 | --- | --- | --- | --- | --- |
 | Packet | `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml` | — | `robot_sf.issue_4142_dpcbf_dense_comparison.v1` | #4142 |
-| Readiness | `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py` | packet | `issue-4142-dpcbf-dense-readiness.v1` | #4299 |
-| Run planner | `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` | packet (gated on readiness) | `robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1` | #4318 |
-| Executor | `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` (`execute_run_plan`) | resolved plan + authorization ID | `robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1` | #5419 |
-| Summarizer | `robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py` | resolved run plan | `robot_sf.issue_4142_dpcbf_dense_comparison_summary.v1` | #4345 |
+| Readiness | `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py` | packet | `issue-4142-dpcbf-dense-readiness.v1` | #4299 |
+| Run planner | `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py` | packet (gated on readiness) | `robot_sf.issue_4142_dpcbf_dense_comparison_plan.v1` | #4318 |
+| Executor | `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py` (`execute_run_plan`) | resolved plan + authorization ID | `robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1` | #5419 |
+| Summarizer | `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_summary.py` | resolved run plan | `robot_sf.issue_4142_dpcbf_dense_comparison_summary.v1` | #4345 |
 
 Per-stage context notes: [`issue_4142_dpcbf_dense_readiness.md`](issue_4142_dpcbf_dense_readiness.md),
 [`issue_4142_dpcbf_dense_runner.md`](issue_4142_dpcbf_dense_runner.md),

@@ -105,6 +105,16 @@ In token-efficient mode:
 - Require artifact-first compact worker artifacts before reading raw logs.
 - For every delegated implementation/review/queue task, the worker **must** write compact artifacts in
   `<run_artifact_dir>` as: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`.
+  The repository-side `scripts/dev/routed_worker_manifest.py` additionally records a versioned
+  `terminal_state` for `timeout`, `exception`, `non_zero_exit`, `missing_artifact`, and
+  `route_not_started` outcomes, plus `unavailable` when the wrapper did not provide enough
+  terminal detail. It also records per-attempt `scope_check` and `compact_artifacts` fields.
+  The manifest's compact bundle names `status.txt` and `validation.txt` explicitly, or records
+  their missing/unavailable reason during migration.
+  `scope_violation` is a route-hygiene failure: it covers target-worktree mismatch and artifacts
+  outside the assigned run bundle, including direct files spilled into the shared Git artifact root.
+  A complete bundle or `terminal_state: none` remains route evidence only; parent acceptance is
+  established only after exact-diff review and targeted local validation.
   Parent review order is mandatory:
   1. Read `result.json`.
   2. Read `RESULT.md` for narrative and risk summary.

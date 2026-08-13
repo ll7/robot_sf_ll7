@@ -1,0 +1,28 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "bindings": [
+    {
+      "document_digest_pointer": "/inputs/portfolio_config/sha256",
+      "document_json_pointer": "/inputs/portfolio_config/sha256",
+      "document_json_value": "2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec",
+      "document_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json",
+      "document_sha256": "39885f8a5abcd5acb1d02db9fa51ea03fd914460415babe0ede0a7744d9a35d1",
+      "finding_code": "hash_without_artifact_path",
+      "finding_message": "sha256 lacks an adjacent artifact path"
+    },
+    {
+      "document_digest_pointer": "/source_portfolio/sha256",
+      "document_json_pointer": "/source_portfolio/path",
+      "document_json_value": "ch7_worked_example_portfolio.v1.yaml",
+      "document_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/materialization_overlay.json",
+      "document_sha256": "16a282c3ede036c9fbd7ddb1ac8d39d1e6f267f0f2b1c0db983b84d41e2b30f2",
+      "finding_code": "uncommitted_artifact_missing_location",
+      "finding_message": "ch7_worked_example_portfolio.v1.yaml is not tracked and lacks an explicit location marker"
+    }
+  ],
+  "claim_boundary": "Companion binding only. It binds the frozen package references to a tracked source config and does not admit new Chapter 7 evidence or change package bytes.",
+  "issue": 7047,
+  "schema_version": "evidence_registry_companion_binding.v1",
+  "target_path": "configs/analysis/ch7_worked_example_portfolio.v1.yaml",
+  "target_sha256": "2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec"
+}

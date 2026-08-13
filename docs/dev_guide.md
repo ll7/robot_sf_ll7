@@ -738,10 +738,47 @@ state, unavailable merge state, and ignored `output/` content that looks durable
 Use `--filter <branch-or-path-substring>` or `--worktree-limit <n>` when remote hosts have many
 linked worktrees.
 
+For a read-only preservation-aware retirement projection, use the bounded report explicitly:
+
+```bash
+uv run python scripts/dev/worktree_hygiene_snapshot.py \
+  --retirement-plan --include-all-worktrees --json
+```
+
+The retirement projection classifies each row as `preserve`, `review`, or `removeable`. It joins
+bounded PR coverage and remote issue-claim state, reports dirty/ahead/detached/missing-upstream
+reasons, and classifies ignored roots as cache, documented disposable output, durable-required, or
+handoff-needed. Unknown PR, claim, status, or artifact evidence is a blocker. The command never
+removes worktrees; any later removal still requires human approval and the preservation procedure
+above.
+
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 
 - Preflight lanes with `--expected-head-sha <sha>` before dispatch.
 - Reuse `preflight.status` (`healthy` | `stale` | `blocked`) and `next_action` to avoid stale or noisy routes.
+- Explicit stop-state labels (`blocked`, `state:blocked`, `state:blocked-external-input`,
+  `evidence:blocked`, `state:hold`, or `decision-required`) are preserved in
+  `preflight.blocked_state`. They take precedence over review or merge hints and emit
+  `await_blocker_owner_or_approval` with the relevant `next_owner_or_gate`; a green check result
+  does not clear an explicit policy, evidence, or approval blocker.
+
+For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
+
+```json
+{
+  "preflight": {
+    "status": "blocked",
+    "blocked_state": {
+      "status": "blocked",
+      "labels": ["state:blocked"],
+      "reasons": ["explicit_blocked:state:blocked"],
+      "next_owner_or_gate": "blocker_owner_or_maintainer"
+    }
+  },
+  "next_action": "await_blocker_owner_or_approval"
+}
+```
+
 - Invalidate stale-lane routes (refresh snapshot) before reassigning or reviewing.
 - Schema `pr_queue_snapshot.v2` adds `base_freshness` to each PR row, with `base_sha`,
   `current_main_sha`, a bounded verdict (`fresh`, `stale`, `missing-base`, or

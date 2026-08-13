@@ -4,9 +4,9 @@ Issue #4142 asks for a bounded dense dynamic-obstacle comparison of three predec
 Control Barrier Function (CBF) arms -- unfiltered (``cbf_off``), collision-cone CBF
 (``cbf_collision_cone_on``), and the Dynamic Parabolic CBF variant
 (``cbf_dynamic_parabolic_v1_on``). The upstream slices built the read-only *readiness*
-surface (:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_readiness`, PR #4299) and the
+surface (:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness`, PR #4299) and the
 packet-consuming *run planner*
-(:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_runner`, PR #4318) that resolves the
+(:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner`, PR #4318) that resolves the
 packet schema ``robot_sf.issue_4142_dpcbf_dense_comparison.v1`` into an ordered three-arm
 run plan with a per-arm output JSONL path each. The plan is executable-in-principle but
 execution stays authorization-gated, so no arm output exists yet.
@@ -23,7 +23,7 @@ Design boundaries (all fail-closed):
 - **Single source of truth.** The set of arms, their output paths, the shared fail-closed
   row-status exclusion (``fallback``, ``degraded``, ``failed``, ``ineligible`` are caveats,
   never success evidence), and the plan/readiness gates all come from
-  :func:`robot_sf.benchmark.issue_4142_dpcbf_dense_runner.build_run_plan`. Nothing is
+  :func:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner.build_run_plan`. Nothing is
   re-derived from the packet here.
 - **Plan gate.** If the run plan is not ``plan_ready_campaign_gated`` the summary is
   ``plan_blocked``: it consumes no artifacts and surfaces the plan's blockers. There is no
@@ -54,8 +54,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import REQUIRED_ARMS
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import REQUIRED_ARMS
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
     DEFAULT_OUTPUT_DIR,
     PACKET_PATH,
     DenseComparisonRunnerError,

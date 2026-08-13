@@ -25,7 +25,7 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     DpcbfDenseReadinessError,
     evaluate_readiness,

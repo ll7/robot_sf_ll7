@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#6951, 2026-08-13) - NEEDS-REVIEW -->
+
 # Issue #6951 progress-shaped behavioral cloning diagnostic
 
 This is diagnostic-only smoke evidence for the issue #6951 objective ablation. It does not

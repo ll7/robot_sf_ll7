@@ -1,5 +1,6 @@
 {
   "schema_version": "evidence_synthesis_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "evidence_status": "diagnostic-only",
   "claim_boundary": {
     "benchmark_claim": false,

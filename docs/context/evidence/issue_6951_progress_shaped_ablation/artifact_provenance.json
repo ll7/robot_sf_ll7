@@ -1,5 +1,6 @@
 {
   "schema_version": "artifact_provenance_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "commit_sha": "c010542780629d71b478f32d7a40b0471953ec8b",
   "artifact_root": "output",
   "location": "worktree-local ignored output/; no durable retrieval pointer",

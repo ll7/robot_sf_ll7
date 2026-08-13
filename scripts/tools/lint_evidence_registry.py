@@ -53,19 +53,28 @@ CH7_PORTFOLIO_COMPANION_BINDING = Path(
 )
 CH7_PORTFOLIO_TARGET_PATH = "configs/analysis/ch7_worked_example_portfolio.v1.yaml"
 CH7_PORTFOLIO_TARGET_SHA256 = "2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec"
-CH7_PORTFOLIO_ALLOWED_BINDINGS = {
+CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS = {
     (
         "docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json",
         "hash_without_artifact_path",
         "sha256 lacks an adjacent artifact path",
-    ),
+    ): {
+        "document_digest_pointer": "/inputs/portfolio_config/sha256",
+        "document_json_pointer": "/inputs/portfolio_config/sha256",
+        "document_json_value": CH7_PORTFOLIO_TARGET_SHA256,
+    },
     (
         "docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/"
         "materialization_overlay.json",
         "uncommitted_artifact_missing_location",
         "ch7_worked_example_portfolio.v1.yaml is not tracked and lacks an explicit location marker",
-    ),
+    ): {
+        "document_digest_pointer": "/source_portfolio/sha256",
+        "document_json_pointer": "/source_portfolio/path",
+        "document_json_value": "ch7_worked_example_portfolio.v1.yaml",
+    },
 }
+CH7_PORTFOLIO_ALLOWED_BINDINGS = frozenset(CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS)
 
 
 @dataclass(frozen=True)
@@ -302,7 +311,11 @@ def _validate_ch7_document_digest(
 
 
 def _validate_ch7_document_pointers(
-    document_path: str, document: Path, binding: Mapping[str, Any], index: int
+    document_path: str,
+    document: Path,
+    binding: Mapping[str, Any],
+    index: int,
+    expected: Mapping[str, str],
 ) -> None:
     """Validate the bound package JSON pointers and digest value."""
     pointer = binding.get("document_json_pointer")
@@ -319,6 +332,9 @@ def _validate_ch7_document_pointers(
         raise _ch7_binding_error(f"pointer value mismatch for {document_path}")
     if actual_digest_value != CH7_PORTFOLIO_TARGET_SHA256:
         raise _ch7_binding_error(f"digest pointer mismatch for {document_path}")
+    for field, expected_value in expected.items():
+        if binding.get(field) != expected_value:
+            raise _ch7_binding_error(f"unexpected {field} for {document_path}")
 
 
 def _validate_ch7_binding_entry(
@@ -333,7 +349,8 @@ def _validate_ch7_binding_entry(
         raise _ch7_binding_error(f"duplicate binding for {document_path}/{code}")
     document_path = resolution_key[0]
     document = _validate_ch7_document_digest(repo_root, binding, document_path)
-    _validate_ch7_document_pointers(document_path, document, binding, index)
+    expected = CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS[resolution_key]
+    _validate_ch7_document_pointers(document_path, document, binding, index, expected)
     resolutions.add(resolution_key)
 
 

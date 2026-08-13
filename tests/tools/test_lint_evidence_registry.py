@@ -208,6 +208,28 @@ def test_ch7_portfolio_companion_binding_pointer_mismatch_fails_closed(
         linter.lint_evidence_registry(repo, package)
 
 
+def test_ch7_portfolio_companion_binding_valid_wrong_pointer_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """A valid but non-canonical pointer must not stand in for the exact #7047 binding."""
+    linter = _load_linter()
+    repo, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+
+    def use_valid_wrong_pointer(binding):
+        overlay_binding = binding["bindings"][1]
+        overlay_binding["document_json_pointer"] = "/source_portfolio/sha256"
+        overlay_binding["document_json_value"] = linter.CH7_PORTFOLIO_TARGET_SHA256
+
+    package = _write_ch7_companion_fixture(
+        repo,
+        linter=linter,
+        mutate_binding=use_valid_wrong_pointer,
+    )
+
+    with pytest.raises(linter.CompanionBindingError, match="unexpected document_json_pointer"):
+        linter.lint_evidence_registry(repo, package)
+
+
 def test_ch7_portfolio_companion_binding_duplicate_ambiguity_fails_closed(
     tmp_path: Path,
 ) -> None:

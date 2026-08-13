@@ -19,6 +19,11 @@ trace also records `evidence_status` and `simulator_steps_source`, so the
 local canary's synthetic episode records and one-step controller snapshot
 cannot be mistaken for observed production simulator evidence. It fails
 closed on missing, fallback, degraded, unavailable, or non-finite accounting.
+Accepted, rejected, and invalid candidate counts are a disjoint partition of
+`candidate_evaluations`; failed open-loop evaluations are rejected and cannot
+also be counted as accepted.
+The probe validates the returned `SearchRunResult` counters against this
+partition and fails closed on an inconsistent legacy valid-count field.
 
 The packet still runs no comparison campaign, submits no SLURM job, and makes
 no benchmark, stress-strength, safety, planner-ranking, superiority, or
@@ -100,7 +105,10 @@ code-path identity only; the current injected open-loop canary is
 and the reactive snapshot canary is `diagnostic_only_preflight` with
 `controller_snapshot` provenance. Neither can populate observed simulator
 physics steps. A `production_observed` trace is reserved for a later canary
-that runs the actual evaluator/simulator and records its provenance.
+that runs the actual evaluator/simulator and records its provenance. The
+current probe never emits `production_observed`: omitting the optional
+runner/evaluator hooks proves only callable selection, not per-candidate
+native/no-fallback provenance or complete episode provenance.
 
 ## Canonical local validation
 

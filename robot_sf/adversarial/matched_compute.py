@@ -172,7 +172,7 @@ def _validate_trace_identity(trace: MatchedComputeRuntimeTrace) -> None:
 
 
 def _validate_trace_accounting(trace: MatchedComputeRuntimeTrace) -> None:
-    """Validate non-negative packet accounting fields."""
+    """Validate non-negative packet accounting and its disjoint partition."""
     _require_nonnegative_int(trace.scenario_seed, "scenario_seed")
     _require_nonnegative_int(trace.search_seed, "search_seed")
     _require_nonnegative_int(trace.candidate_budget, "candidate_budget")
@@ -183,6 +183,8 @@ def _validate_trace_accounting(trace: MatchedComputeRuntimeTrace) -> None:
     _require_nonnegative_int(trace.accepted, "accepted")
     _require_nonnegative_int(trace.rejected, "rejected")
     _require_nonnegative_int(trace.invalid, "invalid")
+    if trace.accepted + trace.rejected + trace.invalid != trace.candidate_evaluations:
+        raise ValueError("accepted + rejected + invalid must equal candidate_evaluations")
 
 
 def _validate_trace_status(trace: MatchedComputeRuntimeTrace) -> None:
@@ -378,16 +380,27 @@ def probe_open_loop_runtime(
         simulator_steps_source = "synthetic_episode_fixture"
         reported_simulator_steps = None
     else:
-        evidence_status = "production_observed"
-        simulator_steps_source = "observed_episode_record"
-        reported_simulator_steps = simulator_steps
+        evidence_status = "diagnostic_only_preflight"
+        simulator_steps_source = "unavailable"
+        reported_simulator_steps = None
     invalid = _require_nonnegative_int(
         result.num_invalid_candidates, "result.num_invalid_candidates"
     )
     rejected = _require_nonnegative_int(
         result.num_failed_evaluations, "result.num_failed_evaluations"
     )
-    accepted = _require_nonnegative_int(result.num_valid_candidates, "result.num_valid_candidates")
+    reported_accepted = _require_nonnegative_int(
+        result.num_valid_candidates, "result.num_valid_candidates"
+    )
+    if invalid + rejected > candidate_evaluations:
+        raise ValueError("open-loop invalid and failed evaluations exceed candidate_evaluations")
+    accepted = candidate_evaluations - invalid - rejected
+    if reported_accepted != accepted:
+        raise ValueError(
+            "open-loop SearchRunResult accounting is inconsistent: "
+            "num_valid_candidates must equal candidate_evaluations - "
+            "num_invalid_candidates - num_failed_evaluations"
+        )
     return MatchedComputeRuntimeTrace(
         arm="open_loop",
         scenario_seed=_scenario_seed_from_config(config),
@@ -419,9 +432,14 @@ def probe_open_loop_runtime(
             "preflight_reason": (
                 "injected runner/evaluator; episode steps are synthetic fixtures"
                 if preflight_only
-                else None
+                else (
+                    "production-observed admission is reserved for a successor canary; "
+                    "omitted test hooks do not prove per-candidate provenance"
+                )
             ),
             "preflight_simulator_physics_steps": simulator_steps if preflight_only else None,
+            "production_observed_admission": "reserved_for_successor_canary",
+            "production_provenance_validated": False,
         },
     )
 

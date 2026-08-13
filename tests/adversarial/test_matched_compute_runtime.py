@@ -343,6 +343,77 @@ def test_open_loop_adapter_runs_actual_search_seam_without_batch_execution(
     assert trace.degraded is False
 
 
+def test_open_loop_default_call_shape_does_not_admit_production_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omitted test hooks do not prove complete production provenance."""
+
+    monkeypatch.setattr(
+        adversarial_search,
+        "production_candidate_evaluator",
+        lambda: lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        adversarial_search,
+        "run_adversarial_search",
+        lambda _config, *, evaluator: _search_result(tmp_path, steps=5),
+    )
+
+    trace = probe_open_loop_runtime(_search_config(tmp_path), macro_actions=10)
+
+    assert trace.status == "native"
+    assert trace.evidence_status == "diagnostic_only_preflight"
+    assert trace.simulator_steps_source == "unavailable"
+    assert trace.simulator_physics_steps is None
+    assert trace.metadata["production_observed_admission"] == ("reserved_for_successor_canary")
+    assert trace.metadata["production_provenance_validated"] is False
+    assert "omitted test hooks" in trace.metadata["preflight_reason"]
+
+
+def test_open_loop_accounting_partitions_failed_evaluations(tmp_path: Path) -> None:
+    """Failed open-loop evaluations are rejected, not also accepted."""
+    result = _search_result(tmp_path, steps=5)
+    result = SearchRunResult(
+        manifest_path=result.manifest_path,
+        best_candidate=result.best_candidate,
+        best_bundle_path=result.best_bundle_path,
+        num_candidates=3,
+        num_valid_candidates=1,
+        num_invalid_candidates=1,
+        num_failed_evaluations=1,
+    )
+
+    trace = probe_open_loop_runtime(
+        _search_config(tmp_path, budget=3),
+        macro_actions=10,
+        runner=lambda _config, **_kwargs: result,
+    )
+
+    assert (trace.accepted, trace.rejected, trace.invalid) == (1, 1, 1)
+    assert trace.accepted + trace.rejected + trace.invalid == trace.candidate_evaluations
+
+
+def test_open_loop_accounting_rejects_inconsistent_result(tmp_path: Path) -> None:
+    """Inconsistent SearchRunResult counters fail closed before trace emission."""
+    result = _search_result(tmp_path, steps=5)
+    result = SearchRunResult(
+        manifest_path=result.manifest_path,
+        best_candidate=result.best_candidate,
+        best_bundle_path=result.best_bundle_path,
+        num_candidates=3,
+        num_valid_candidates=2,
+        num_invalid_candidates=1,
+        num_failed_evaluations=1,
+    )
+
+    with pytest.raises(ValueError, match="SearchRunResult accounting is inconsistent"):
+        probe_open_loop_runtime(
+            _search_config(tmp_path, budget=3),
+            macro_actions=10,
+            runner=lambda _config, **_kwargs: result,
+        )
+
+
 def test_open_loop_adapter_accepts_trace_step_lists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

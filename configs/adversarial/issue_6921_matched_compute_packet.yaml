@@ -42,6 +42,7 @@ arms:
       execution_mode: native
       candidate_budget_field: budget
       trace_schema: matched_compute_trace.v1
+      production_observed_admission: reserved_for_successor_canary
   reactive:
     label: residual_search_reactive
     description: >
@@ -111,8 +112,12 @@ budget:
     - evidence_status
     - simulator_steps_source
   accounting_rule: >
-    The canary must report candidate evaluations from the actual arm seam and
-    must identify the source and evidence tier of every simulator-step field.
+    Accepted, rejected, and invalid candidate counts are a disjoint partition
+    of candidate_evaluations; the trace must enforce accepted + rejected +
+    invalid == candidate_evaluations. The canary must report candidate
+    evaluations from the actual arm seam and must identify the source and
+    evidence tier of every simulator-step field. Inconsistent legacy
+    SearchRunResult valid-count summaries fail closed before trace emission.
     Synthetic episode fixtures and one-step controller snapshots are
     diagnostic-only preflight inputs; their step counters must not populate
     observed simulator physics fields. Missing, fallback, degraded,
@@ -125,6 +130,8 @@ budget:
     candidate evaluations. The current local canaries record seam-level
     candidate counts and diagnostic fixture/controller counters separately;
     they must not infer production simulator parity from these declarations.
+    This preflight probe does not admit production_observed evidence; that
+    status is reserved for the separately reviewed successor canary.
 seeds:
   frozen_scenario_seeds:
     - 123

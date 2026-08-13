@@ -13,6 +13,7 @@ from robot_sf.adversarial.independent_outcome_producer import (
     EXECUTION_RECORD_SCHEMA_VERSION,
     _merge_existing_packet,
     build_outcome_packet,
+    load_execution_records,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -224,6 +225,136 @@ def test_producer_cli_reads_jsonl_and_writes_packet(
     assert (
         packet["execution_records_sha256"] == hashlib.sha256(records_path.read_bytes()).hexdigest()
     )
+
+
+@pytest.mark.parametrize(
+    ("contents", "expected_fragment"),
+    [
+        ("", "missing or empty"),
+        ("not-json\n", "line 1 is malformed"),
+        ("[]\n", "line 1 must be an object"),
+        ("\n", "JSONL is empty"),
+    ],
+)
+def test_execution_record_loader_rejects_partial_or_malformed_input(
+    tmp_path: Path, contents: str, expected_fragment: str
+) -> None:
+    """The JSON Lines boundary rejects incomplete or non-object input."""
+    records_path = tmp_path / "records.jsonl"
+    records_path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        load_execution_records(records_path)
+
+
+def test_producer_rejects_common_envelope_provenance_drift(tmp_path: Path) -> None:
+    """Every envelope must carry exact schema, command, and configuration lineage."""
+    mutations = (
+        ("schema_version", "schema version is unsupported"),
+        ("episode_record", "missing episode_record"),
+        ("execution_command", "no execution_command"),
+        ("execution_config_lineage", "no execution_config_lineage"),
+        ("contract_sha256", "contract SHA-256 mismatch"),
+        ("bindings_sha256", "bindings SHA-256 mismatch"),
+        ("target_planner_config_sha256", "target config hash mismatch"),
+        ("planner_reference_commit", "planner reference commit mismatch"),
+        ("producer_commit", "producer commit mismatch"),
+        ("scenario_family", "scenario family mismatch"),
+        ("scenario_certification_status", "scenario certification is not passed"),
+    )
+    for field, expected_fragment in mutations:
+        case_dir = tmp_path / field
+        case_dir.mkdir()
+        contract_path, binding_path = _contract_and_binding(case_dir)
+        records = _execution_records(contract_path, binding_path)
+        if field in {"contract_sha256", "bindings_sha256", "target_planner_config_sha256"}:
+            records[0]["execution_config_lineage"][field] = "b" * 64
+        elif field in {"planner_reference_commit", "producer_commit"}:
+            records[0]["execution_config_lineage"][field] = "b" * 40
+        elif field == "scenario_family":
+            records[0][field] = "other_family"
+        elif field == "scenario_certification_status":
+            records[0][field] = "not_passed"
+        elif field == "schema_version":
+            records[0][field] = "unsupported"
+        elif field == "execution_command":
+            records[0][field] = []
+        else:
+            records[0][field] = None
+
+        with pytest.raises(ValueError, match=expected_fragment):
+            build_outcome_packet(
+                records,
+                contract_path=contract_path,
+                binding_path=binding_path,
+                producer_commit=PRODUCER_COMMIT,
+            )
+
+
+def test_producer_rejects_episode_record_provenance_drift(tmp_path: Path) -> None:
+    """Episode metadata and producer provenance are independently fail-closed."""
+    mutations = (
+        ("algorithm_metadata", None, "missing algorithm_metadata"),
+        ("canonical_algorithm", "other", "canonical_algorithm is not social_force"),
+        ("policy_semantics", "other", "policy_semantics does not match"),
+        ("planner_kinematics", None, "missing planner_kinematics"),
+        ("scenario_id", None, "missing scenario provenance"),
+        ("outcome", None, "missing outcome provenance"),
+        ("termination_reason", None, "missing outcome provenance"),
+    )
+    for field, value, expected_fragment in mutations:
+        case_dir = tmp_path / field
+        case_dir.mkdir()
+        contract_path, binding_path = _contract_and_binding(case_dir)
+        records = _execution_records(contract_path, binding_path)
+        episode = records[0]["episode_record"]
+        if field in {"canonical_algorithm", "policy_semantics", "planner_kinematics"}:
+            if field == "planner_kinematics":
+                episode["algorithm_metadata"][field] = value
+            else:
+                episode["algorithm_metadata"][field] = value
+        else:
+            episode[field] = value
+
+        with pytest.raises(ValueError, match=expected_fragment):
+            build_outcome_packet(
+                records,
+                contract_path=contract_path,
+                binding_path=binding_path,
+                producer_commit=PRODUCER_COMMIT,
+            )
+
+
+def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> None:
+    """Replay signatures and confirmation seeds must match the frozen design."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    mutations = (
+        ("replay_seed", "replay execution_seed must be null"),
+        ("replay_record_seed", "replay seed does not match scenario seed"),
+        ("replay_lineage", "missing replay_lineage"),
+        ("confirmation_seed", "unbound confirmation seed"),
+        ("confirmation_record_seed", "record seed does not match execution seed"),
+    )
+    for mutation, expected_fragment in mutations:
+        records = _execution_records(contract_path, binding_path)
+        if mutation == "replay_seed":
+            records[0]["execution_seed"] = 999
+        elif mutation == "replay_record_seed":
+            records[0]["episode_record"]["seed"] = 999
+        elif mutation == "replay_lineage":
+            records[0].pop("replay_lineage")
+        elif mutation == "confirmation_seed":
+            records[1]["execution_seed"] = 999
+        else:
+            records[1]["episode_record"]["seed"] = 999
+
+        with pytest.raises(ValueError, match=expected_fragment):
+            build_outcome_packet(
+                records,
+                contract_path=contract_path,
+                binding_path=binding_path,
+                producer_commit=PRODUCER_COMMIT,
+            )
 
 
 @pytest.mark.parametrize(

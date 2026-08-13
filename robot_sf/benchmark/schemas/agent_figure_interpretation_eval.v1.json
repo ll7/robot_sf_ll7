@@ -108,7 +108,128 @@
             }
           },
           "aggregate_score": {"type": "number", "minimum": 0, "maximum": 1},
-          "claim_boundary": {"type": "string", "minLength": 1}
+          "claim_boundary": {"type": "string", "minLength": 1},
+          "interpretation_variant_comparison": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["baseline", "packet_constrained", "delta"],
+            "properties": {
+              "baseline": {"$ref": "#/$defs/variant_summary"},
+              "packet_constrained": {"$ref": "#/$defs/variant_summary"},
+              "delta": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "aggregate_score",
+                  "critical_error_count",
+                  "packet_constrained_reduces_critical_errors",
+                  "packet_constrained_preserves_source_fidelity"
+                ],
+                "properties": {
+                  "aggregate_score": {"type": "number", "minimum": -1, "maximum": 1},
+                  "critical_error_count": {"type": "integer"},
+                  "packet_constrained_reduces_critical_errors": {"type": "boolean"},
+                  "packet_constrained_preserves_source_fidelity": {"type": "boolean"}
+                }
+              }
+            }
+          },
+          "reviewer_accounting": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reviewed",
+              "blinded",
+              "reviewer_count",
+              "dimension_count",
+              "agreed_dimensions",
+              "disagreement_count",
+              "agreement_rate",
+              "disagreements",
+              "adjudicated_dimensions",
+              "adjudication_complete"
+            ],
+            "properties": {
+              "reviewed": {"const": true},
+              "blinded": {"const": true},
+              "reviewer_count": {"type": "integer", "minimum": 2},
+              "dimension_count": {"type": "integer", "minimum": 8},
+              "agreed_dimensions": {"type": "integer", "minimum": 0},
+              "disagreement_count": {"type": "integer", "minimum": 0},
+              "agreement_rate": {"type": "number", "minimum": 0, "maximum": 1},
+              "disagreements": {"type": "object"},
+              "adjudicated_dimensions": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              },
+              "adjudication_complete": {"type": "boolean"}
+            }
+          },
+          "correction_priority_ranking": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rank",
+                "id",
+                "dimension",
+                "severity",
+                "triggered_by_critical_error",
+                "dimension_failed"
+              ],
+              "properties": {
+                "rank": {"type": "integer", "minimum": 1},
+                "id": {"type": "string", "minLength": 1},
+                "dimension": {"type": "string", "minLength": 1},
+                "severity": {"enum": ["critical", "major", "minor"]},
+                "triggered_by_critical_error": {"type": "boolean"},
+                "dimension_failed": {"type": "boolean"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "variant_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aggregate_score",
+        "critical_error_count",
+        "dimension_failures",
+        "critical_errors"
+      ],
+      "properties": {
+        "aggregate_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "critical_error_count": {"type": "integer", "minimum": 0},
+        "dimension_failures": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "critical_errors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unavailable_to_zero",
+            "denominator_loss",
+            "wrong_pairing_resampling",
+            "fallback_degraded_promotion",
+            "causal_overclaim",
+            "unsupported_ranking",
+            "null_overclaim"
+          ],
+          "properties": {
+            "unavailable_to_zero": {"type": "boolean"},
+            "denominator_loss": {"type": "boolean"},
+            "wrong_pairing_resampling": {"type": "boolean"},
+            "fallback_degraded_promotion": {"type": "boolean"},
+            "causal_overclaim": {"type": "boolean"},
+            "unsupported_ranking": {"type": "boolean"},
+            "null_overclaim": {"type": "boolean"}
+          }
         }
       }
     }

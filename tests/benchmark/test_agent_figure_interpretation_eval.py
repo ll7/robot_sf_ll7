@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 from robot_sf.benchmark import agent_figure_interpretation_eval as eval_mod
@@ -18,6 +20,7 @@ from robot_sf.benchmark.agent_figure_interpretation_eval import (
     EXPECTED_PACKET_SCHEMA,
     AgentFigureEvalError,
     evaluate_manifest,
+    evaluate_packet,
     load_verified_packets,
 )
 
@@ -37,6 +40,14 @@ def _copy_fixture_tree(tmp_path: Path) -> Path:
     root = tmp_path / "v1"
     shutil.copytree(FIXTURE_DIR, root)
     return root
+
+
+def _clean_packet() -> dict[str, object]:
+    return json.loads((FIXTURE_DIR / "clean.json").read_text(encoding="utf-8"))
+
+
+def _review_scores(value: float = 1.0) -> dict[str, float]:
+    return dict.fromkeys(DIMENSIONS, value)
 
 
 def test_clean_output_has_all_dimension_scores_and_no_critical_errors() -> None:
@@ -127,6 +138,162 @@ def test_packet_schema_mismatch_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(AgentFigureEvalError, match="packet schema_version"):
         load_verified_packets(root / "manifest.json")
+
+
+def test_variant_comparison_is_packet_aware_and_preserves_fidelity() -> None:
+    packet = _clean_packet()
+    reference = copy.deepcopy(packet["reference"])
+    assert isinstance(reference, dict)
+    baseline = copy.deepcopy(reference)
+    baseline["claim_boundary"]["causal_claim_allowed"] = True
+    constrained = copy.deepcopy(reference)
+    packet["interpretation_variants"] = {
+        "baseline": baseline,
+        "packet_constrained": constrained,
+    }
+
+    result = evaluate_packet(packet).to_dict()
+    comparison = result["interpretation_variant_comparison"]
+
+    assert comparison["delta"]["critical_error_count"] == -1
+    assert comparison["delta"]["packet_constrained_reduces_critical_errors"] is True
+    assert comparison["delta"]["packet_constrained_preserves_source_fidelity"] is True
+
+
+def test_variant_comparison_does_not_hide_constrained_source_loss() -> None:
+    packet = _clean_packet()
+    reference = copy.deepcopy(packet["reference"])
+    assert isinstance(reference, dict)
+    baseline = copy.deepcopy(reference)
+    constrained = copy.deepcopy(reference)
+    baseline["source_denominator"]["denominator_n"] = 23
+    constrained["source_denominator"]["denominator_n"] = 23
+    packet["interpretation_variants"] = {
+        "baseline": baseline,
+        "packet_constrained": constrained,
+    }
+
+    comparison = evaluate_packet(packet).to_dict()["interpretation_variant_comparison"]
+
+    assert comparison["delta"]["packet_constrained_preserves_source_fidelity"] is False
+
+
+def test_variant_metadata_fails_closed_when_workflows_are_incomplete() -> None:
+    packet = _clean_packet()
+    packet["interpretation_variants"] = {"baseline": packet["reference"]}
+
+    with pytest.raises(AgentFigureEvalError, match="exactly baseline and packet_constrained"):
+        evaluate_packet(packet)
+
+
+def test_blinded_reviewer_disagreement_and_adjudication_are_accounted_for() -> None:
+    packet = _clean_packet()
+    packet["reference_metadata"] = {
+        "reviewed": True,
+        "blinded": True,
+        "reviewers": [
+            {"reviewer_id": "reviewer-a", "scores": _review_scores()},
+            {
+                "reviewer_id": "reviewer-b",
+                "scores": {**_review_scores(), "claim_boundary": 0.0},
+            },
+        ],
+        "adjudication": {
+            "adjudicator_id": "adjudicator-a",
+            "resolved_scores": {"claim_boundary": 1.0},
+        },
+    }
+
+    accounting = evaluate_packet(packet).to_dict()["reviewer_accounting"]
+
+    assert accounting["reviewer_count"] == 2
+    assert accounting["agreement_rate"] == pytest.approx(7 / 8)
+    assert accounting["disagreement_count"] == 1
+    assert accounting["adjudicated_dimensions"] == ["claim_boundary"]
+    assert accounting["adjudication_complete"] is True
+
+
+def test_reviewer_disagreement_requires_exact_adjudication() -> None:
+    packet = _clean_packet()
+    packet["reference_metadata"] = {
+        "reviewed": True,
+        "blinded": True,
+        "reviewers": [
+            {"reviewer_id": "reviewer-a", "scores": _review_scores()},
+            {
+                "reviewer_id": "reviewer-b",
+                "scores": {**_review_scores(), "claim_boundary": 0.0},
+            },
+        ],
+        "adjudication": {
+            "adjudicator_id": "adjudicator-a",
+            "resolved_scores": {
+                "claim_boundary": 1.0,
+                "visual_semantics": 1.0,
+            },
+        },
+    }
+
+    with pytest.raises(AgentFigureEvalError, match="exactly cover disagreements"):
+        evaluate_packet(packet)
+
+
+def test_correction_priority_ranking_is_deterministic_and_critical_first() -> None:
+    packet = _clean_packet()
+    observed = copy.deepcopy(packet["reference"])
+    assert isinstance(observed, dict)
+    observed["source_denominator"]["denominator_n"] = 23
+    observed["claim_boundary"]["causal_claim_allowed"] = True
+    packet["interpretation"] = observed
+    packet["correction_candidates"] = [
+        {"id": "caption", "dimension": "caption_accuracy", "severity": "major"},
+        {"id": "claim", "dimension": "claim_boundary", "severity": "critical"},
+        {"id": "denominator", "dimension": "source_denominator", "severity": "critical"},
+    ]
+
+    ranking = evaluate_packet(packet).to_dict()["correction_priority_ranking"]
+
+    assert [item["id"] for item in ranking] == ["denominator", "claim", "caption"]
+    assert ranking[0]["triggered_by_critical_error"] is True
+    assert ranking[-1]["dimension_failed"] is False
+
+
+def test_extended_evaluation_output_matches_schema() -> None:
+    packet = _clean_packet()
+    reference = copy.deepcopy(packet["reference"])
+    assert isinstance(reference, dict)
+    packet["interpretation_variants"] = {
+        "baseline": copy.deepcopy(reference),
+        "packet_constrained": copy.deepcopy(reference),
+    }
+    packet["reference_metadata"] = {
+        "reviewed": True,
+        "blinded": True,
+        "reviewers": [
+            {"reviewer_id": "reviewer-a", "scores": _review_scores()},
+            {"reviewer_id": "reviewer-b", "scores": _review_scores()},
+        ],
+    }
+    packet["correction_candidates"] = [
+        {"id": "source", "dimension": "source_denominator", "severity": "critical"}
+    ]
+    case = evaluate_packet(packet).to_dict()
+    report = {
+        "schema_version": eval_mod.EVAL_SCHEMA_VERSION,
+        "status": "evaluation_artifacts_only",
+        "claim_boundary": "fixture replay only; no benchmark claims",
+        "case_count": 1,
+        "critical_error_counts": dict.fromkeys(CRITICAL_ERROR_KINDS, 0),
+        "cases": [case],
+    }
+    schema = json.loads(
+        (Path("robot_sf/benchmark/schemas/agent_figure_interpretation_eval.v1.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    jsonschema.Draft202012Validator.check_schema(schema)
+    jsonschema.validate(report, schema)
 
 
 def test_cli_help_and_fixture_only_replay() -> None:

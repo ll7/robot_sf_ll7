@@ -344,21 +344,49 @@ def _label_names(pr: dict[str, Any]) -> list[str]:
     return [str(label) for label in labels]
 
 
+def _base_freshness_provenance(pr: dict[str, Any]) -> tuple[str, str, str]:
+    """Return normalized base-freshness verdict, PR base SHA, and current main SHA.
+
+    ``pr_queue_snapshot.v2`` records authoritative base freshness under the
+    nested ``base_freshness`` object. Older snapshots only exposed top-level
+    ``base_sha``/``main_sha`` provenance; keep that compatibility path without
+    treating legacy missing values as a new hard blocker.
+    """
+    raw = pr.get("base_freshness")
+    if isinstance(raw, dict):
+        verdict = str(raw.get("verdict", "") or "")
+        base_sha = str(raw.get("base_sha", "") or "")
+        current_main_sha = str(raw.get("current_main_sha", "") or "")
+        return verdict, base_sha, current_main_sha
+
+    base_sha = str(pr.get("base_sha", "") or "")
+    main_sha = str(pr.get("main_sha", "") or "")
+    if base_sha and main_sha:
+        return ("fresh" if base_sha == main_sha else "stale"), base_sha, main_sha
+    return "", base_sha, main_sha
+
+
+def _base_freshness_state(pr: dict[str, Any]) -> str | None:
+    """Return a fail-closed state for blocking base-freshness verdicts."""
+    verdict, _, _ = _base_freshness_provenance(pr)
+    if verdict in {"stale", "missing-base", "unavailable-current-main"}:
+        return "stale_merge_base"
+    return None
+
+
 def _merge_ready_state(
     pr: dict[str, Any],
     *,
     label_names: list[str],
     overall: str,
     head_sha: str,
-    base_sha: str = "",
-    main_sha: str = "",
 ) -> str | None:
     """Return the merge-readiness state for a green, merge-ready PR, or None.
 
-    Stale merge base (issue #6269): when ``base_sha`` and ``main_sha`` are both
-    present and differ, the PR's merge base is not current with ``origin/main``.
-    Fail closed — ``stale_merge_base`` — so the PR is never marked ``ready_to_merge``
-    without an up-to-date base.
+    Stale merge base (issue #6269/#7021): when snapshot provenance says the PR
+    base is stale, missing, or cannot be compared with current main, fail closed
+    as ``stale_merge_base`` so the PR is never marked ``ready_to_merge`` without
+    an up-to-date, verified base.
 
     Gate-verdict contract (issue #6019): reject any exact head unless a current
     exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. The final
@@ -367,8 +395,9 @@ def _merge_ready_state(
     """
     if "merge-ready" not in label_names or overall != "success":
         return None
-    if base_sha and main_sha and base_sha != main_sha:
-        return "stale_merge_base"
+    base_state = _base_freshness_state(pr)
+    if base_state is not None:
+        return base_state
     if not has_current_accepted_gate_verdict(pr, head_sha):
         return "pending_gate_verdict"
     metadata_digest = str(pr.get("metadata_digest", "") or "")
@@ -410,16 +439,12 @@ def classify_pr_state(
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state
-    base_sha = str(pr.get("base_sha", "") or "")
-    main_sha = str(pr.get("main_sha", "") or "")
     return (
         _merge_ready_state(
             pr,
             label_names=label_names,
             overall=overall,
             head_sha=head_sha,
-            base_sha=base_sha,
-            main_sha=main_sha,
         )
         or "no_action"
     )
@@ -687,8 +712,10 @@ def evaluate_queue(
                 ).to_dict()
             )
             break
-        stale_base = str(enriched.get("base_sha", "")) if state == "stale_merge_base" else ""
-        current_main = str(enriched.get("main_sha", "")) if state == "stale_merge_base" else ""
+        stale_base = ""
+        current_main = ""
+        if state == "stale_merge_base":
+            _, stale_base, current_main = _base_freshness_provenance(enriched)
         decision = recommend_action(
             state,
             pr_number=num,

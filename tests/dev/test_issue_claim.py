@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 import pytest
 
@@ -856,6 +857,43 @@ def test_release_retains_claim_when_open_pr_snapshot_malformed(
     assert payload["ok"] is False
     assert payload["claimed"] is True
     assert "open_pr_snapshot_unavailable" in payload["error"]
+
+
+def test_release_retains_claim_when_open_pr_snapshot_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A capped open-PR snapshot must not authorize a release."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            payload = [
+                {"number": number, "body": "", "title": f"unrelated {number}"}
+                for number in range(1, issue_claim.PR_SNAPSHOT_LIMIT + 1)
+            ]
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError("claim ref must not be deleted when snapshot is truncated")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is False
+    assert payload["claimed"] is True
+    assert "open_pr_snapshot_truncated" in payload["error"]
+    assert all(command[0:2] != ["git", "push"] for command in calls)
 
 
 def test_release_retains_claim_when_open_pr_snapshot_nonzero(

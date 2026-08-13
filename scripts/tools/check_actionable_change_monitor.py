@@ -465,6 +465,17 @@ def _surface_findings(issue: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
+    if _has_watch_label(labels) or any(term in body for term in WATCH_TERMS):
+        watched_labels = ", ".join(labels) or "keyword-only"
+        findings.append(
+            _finding(
+                finding_id=f"issue:{issue['number']}:watched-surface",
+                kind="watched_research_surface",
+                target=issue,
+                detail=f"labels/terms={watched_labels}; updated={issue.get('updated_at', 'unknown')}",
+            )
+        )
+
     return findings
 
 
@@ -504,7 +515,11 @@ def build_findings(
     for issue in issues:
         number = int(issue["number"])
         if number != target_issue and _is_research_surface(issue):
-            findings.extend(_surface_findings(issue))
+            findings.extend(
+                finding
+                for finding in _surface_findings(issue)
+                if finding["kind"] != "watched_research_surface"
+            )
     return sorted(findings, key=lambda row: (row["kind"], row["number"], row["id"]))
 
 

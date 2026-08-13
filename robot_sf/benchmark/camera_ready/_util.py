@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.latency_stress import LatencyStressProfile
+    from robot_sf.benchmark.latency.latency_stress import LatencyStressProfile
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
 
 

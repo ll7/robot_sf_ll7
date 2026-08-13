@@ -37,3 +37,54 @@ domain approval and are not a substitute for the exact-source admission gate.
 The package must not pool hybrid arms as independent replications, infer a mechanism from a terminal
 outcome, use DTW, introduce counterfactual branches, or claim causal divergence. A digest mismatch,
 non-deterministic rebuild, missing report, or unsafe archive member stops the build.
+
+## Terminal outcome labels
+
+The reduced atlas `terminal_counts` field uses a stable, normalized label vocabulary. It is not a
+verbatim count of the source episode `termination_reason` values. The builder applies this
+precedence for each episode in [`_terminal_label()`](../scripts/analysis/build_ch7_evidence_package.py#L299-L310):
+
+| Normalized label | Source condition |
+| --- | --- |
+| `route_complete` | `outcome.route_complete` passes the builder's boolean predicate; this takes precedence over later checks. |
+| `collision_event` | `outcome.collision_event` passes the builder's boolean predicate and the route is not complete. |
+| `timeout` | `termination_reason` is one of `terminated`, `timeout`, `max_steps`, `truncated`, or `horizon`, after the preceding checks. |
+| `unavailable` | No recognized route, collision, or termination condition is present. |
+
+Consequently, a `timeout` count can include source episodes whose raw reason is `terminated`.
+The label describes the package's normalized terminal category, not a claim that every episode
+exceeded a wall-clock or step limit. Consumers that need the raw reason must use the source episode
+records; the frozen #6792 payload does not contain a raw-label breakdown.
+
+For a future package version, retain the normalized `terminal_counts` field for compatibility and
+add an explicitly named per-cell raw-label breakdown (for example, `raw_termination_counts`) with
+its own schema and source-provenance contract. That v2 change requires a new package digest and
+reviewed admission decision; it is not a rewrite of the frozen #6792 payload.
+
+## Author admission boundary
+
+The builder's `blocked_pending_domain_approval` manifest is intentionally immutable. After the
+author approves the exact package digest on [RobotSF issue #6792](https://github.com/ll7/robot_sf_ll7/issues/6792),
+create a separate `ch7-evidence-admission.v1` receipt and populate the trusted source registry with
+the approved source entry. The receipt binds the package `SHA256SUMS`, manifest, source package,
+release archive, #6814 compact packet, registry, approval comment, role grains, unavailable reasons,
+and forbidden claim classes. It is not valid unless all external inputs are supplied and rehashed:
+
+```bash
+uv run python scripts/analysis/verify_ch7_evidence_admission.py \
+  --package-dir <package> \
+  --source-registry configs/analysis/source_gate_registry.v1.json \
+  --receipt <external-admission-receipt.json> \
+  --source-package <approved-#6412-package> \
+  --release-archive <release-0.0.3-archive> \
+  --compact-dir <external-#6814-compact-packet>
+```
+
+The verifier rejects unlisted package or compact files, unbound or missing review sidecars, forged
+approval IDs, digest mismatches (including source-package members and `package_complete.json`),
+changed role scope, custom schemas, non-canonical registries, special filesystem entries, and any
+package manifest that was rewritten to look admitted. The package payload must remain
+byte-identical; the receipt is the effective admission record and remains outside the 21-file
+package payload. The registry and receipt are an offline author-controlled trust anchor: the
+verifier checks their exact digests and canonical issue-comment URL, but does not claim to
+authenticate GitHub identity without a separate online review.

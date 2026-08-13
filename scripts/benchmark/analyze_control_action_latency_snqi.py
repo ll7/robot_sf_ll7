@@ -35,7 +35,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from robot_sf.benchmark.control_action_latency_snqi import (
+from robot_sf.benchmark.latency.control_action_latency_snqi import (
     ANALYSIS_SCHEMA_VERSION,
     BASELINE_SHA256,
     UNCERTAINTY_REISSUE_SCHEMA_VERSION,
@@ -68,7 +68,7 @@ DEFAULT_BASELINE = REPO_ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3
 DEFAULT_REFERENCE = EVIDENCE_DIR / "snqi_analysis.json"
 DEFAULT_REISSUE_OUTPUT = EVIDENCE_DIR / "snqi_uncertainty_reissued.json"
 DEFAULT_REISSUE_REVIEW = EVIDENCE_DIR / "snqi_uncertainty_reissued.json.review.json"
-ANALYZER_SOURCE_REL_PATH = "robot_sf/benchmark/control_action_latency_snqi.py"
+ANALYZER_SOURCE_REL_PATH = "robot_sf/benchmark/latency/control_action_latency_snqi.py"
 
 
 def _git_head() -> str:
@@ -232,7 +232,7 @@ def _run_promote_input(args: argparse.Namespace) -> int:
 
 def _axis_label() -> str:
     """Return the control-action-latency axis key (kept out of the hot import path)."""
-    from robot_sf.benchmark.control_action_latency_preflight import AXIS_KEY
+    from robot_sf.benchmark.latency.control_action_latency_preflight import AXIS_KEY
 
     return AXIS_KEY
 

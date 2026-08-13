@@ -37,7 +37,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.latency_stress import (
+from robot_sf.benchmark.latency.latency_stress import (
     LatencyMeasurementHarness,
     classify_feasibility,
     collect_environment_provenance,

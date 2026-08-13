@@ -12,11 +12,11 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     DpcbfDenseReadinessError,
 )
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
     DEFAULT_OUTPUT_DIR,
     DenseComparisonExecutionGatedError,
     DenseComparisonProvenanceMismatchError,

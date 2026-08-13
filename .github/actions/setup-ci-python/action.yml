@@ -48,10 +48,11 @@ runs:
       shell: bash
       env:
         CI_STEP_TIMEOUT_SECONDS: "1200"
+      # Chapter 7 rendered-page QA invokes pdftoppm through Poppler.
       run: >
         bash scripts/dev/ci_step_timer.sh "System packages for headless"
         bash scripts/dev/ci_install_headless_packages.sh
-        libglib2.0-0 libgl1 fonts-dejavu-core jq
+        libglib2.0-0 libgl1 fonts-dejavu-core jq poppler-utils
 
     - name: Free runner disk space
       shell: bash

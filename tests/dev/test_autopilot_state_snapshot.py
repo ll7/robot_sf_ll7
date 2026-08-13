@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+from typing import TYPE_CHECKING
 
 from scripts.dev import autopilot_state_snapshot as snapshot
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _result(command: list[str], *, stdout: str = "", stderr: str = "", returncode: int = 0):
@@ -303,6 +307,60 @@ def test_run_converts_timeouts_to_compact_command_result(monkeypatch) -> None:
     assert result.returncode == 124
     assert result.stdout == ""
     assert result.stderr == "command timed out after 5 seconds"
+
+
+def test_route_manifest_snapshot_exposes_failed_route_without_acceptance(tmp_path: Path) -> None:
+    """Route handoffs should expose terminal/missing state while keeping acceptance unset."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "opencode-go"},
+                "chosen_run_dir": str(tmp_path / "run-1"),
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "opencode-go"},
+                        "returncode": 124,
+                        "failure_class": "timeout",
+                        "terminal_state": "timeout",
+                        "run_dir": str(tmp_path / "run-1"),
+                        "scope_check": {
+                            "ok": True,
+                            "spill_detected": False,
+                        },
+                        "compact_artifacts": {
+                            "result_json": {"present": False, "reason": "missing"},
+                            "result_md": {"present": True},
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "ok"
+    assert row["chosen_terminal_state"] == "timeout"
+    assert row["chosen_failure_class"] == "timeout"
+    assert row["chosen_missing_artifacts"] == ["result_json"]
+    assert row["acceptance_state"] == "not_established"
+    assert row["route_evidence_only"] is True
+    assert len(row["failed_attempts"]) == 1
+    assert row["next_action"] == "inspect_parent_diff_and_run_local_validation"
+
+
+def test_route_manifest_snapshot_reports_unavailable_manifest(tmp_path: Path) -> None:
+    """A missing route manifest must remain an explicit handoff error."""
+    row = snapshot.route_manifest_snapshot(tmp_path / "missing-routing-manifest.json")
+
+    assert row["status"] == "unavailable"
+    assert row["acceptance_state"] == "not_established"
+    assert "route manifest unavailable" in row["error"]
 
 
 def test_checks_summary_ignores_malformed_rollup_entries() -> None:

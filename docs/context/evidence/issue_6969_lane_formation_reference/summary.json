@@ -1,0 +1,123 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_6969_lane_formation_reference_compact_summary.v1",
+  "issue": "robot_sf_ll7#6969",
+  "claim_boundary": "diagnostic_only_not_benchmark_or_paper_evidence",
+  "reference_stage": {
+    "implementation_commit": "e298120d5ffd9782046c8401c8163877a1e245bc",
+    "native_rows": 12,
+    "native_execution": "12/12 native:computed",
+    "protocol": {
+      "seeds": [5149, 5150, 5151],
+      "warmup_steps": 100,
+      "observation_steps": 200,
+      "length_m": 24.0,
+      "half_width_m": 2.5,
+      "n_pedestrians": 24,
+      "sampling_strides": [1, 2, 4]
+    },
+    "metric_audit": {
+      "passed": true,
+      "synthetic_mixed_lsi_approx": 0.0,
+      "synthetic_separated_lsi_approx": 0.99979,
+      "sampling_stride_checks": [1, 2, 4]
+    },
+    "native_summaries": [
+      {
+        "condition": "mixed_sustained_flow",
+        "calibration": "released_default",
+        "n_seeds": 3,
+        "mean_lsi": 0.185677,
+        "lsi_range": [0.068798, 0.275329],
+        "mean_lane_purity": 0.510451,
+        "clear_lsi_hits": 0,
+        "clear_lsi_total": 3,
+        "max_per_run_sampling_lsi_spread": 0.002313,
+        "max_per_run_sampling_purity_spread": 0.005871,
+        "recycled_agents_total": 7
+      },
+      {
+        "condition": "mixed_sustained_flow",
+        "calibration": "literature_typical",
+        "n_seeds": 3,
+        "mean_lsi": 0.094979,
+        "lsi_range": [0.053620, 0.168954],
+        "mean_lane_purity": 0.616062,
+        "clear_lsi_hits": 0,
+        "clear_lsi_total": 3,
+        "max_per_run_sampling_lsi_spread": 0.002503,
+        "max_per_run_sampling_purity_spread": 0.005427,
+        "recycled_agents_total": 66
+      },
+      {
+        "condition": "separated_lane_control",
+        "calibration": "released_default",
+        "n_seeds": 3,
+        "mean_lsi": 0.768821,
+        "lsi_range": [0.710422, 0.860164],
+        "mean_lane_purity": 0.849835,
+        "clear_lsi_hits": 3,
+        "clear_lsi_total": 3,
+        "max_per_run_sampling_lsi_spread": 0.000488,
+        "max_per_run_sampling_purity_spread": 0.003708,
+        "recycled_agents_total": 11,
+        "positive_control_not_emergence": true
+      },
+      {
+        "condition": "separated_lane_control",
+        "calibration": "literature_typical",
+        "n_seeds": 3,
+        "mean_lsi": 0.936009,
+        "lsi_range": [0.931974, 0.938369],
+        "mean_lane_purity": 0.996150,
+        "clear_lsi_hits": 3,
+        "clear_lsi_total": 3,
+        "max_per_run_sampling_lsi_spread": 0.000110,
+        "max_per_run_sampling_purity_spread": 0.001383,
+        "recycled_agents_total": 75,
+        "positive_control_not_emergence": true
+      }
+    ]
+  },
+  "stage_a": {
+    "implementation_commit": "8273fc384210a453b09e86d898141f7ae5d358c0",
+    "native_rows": 30,
+    "native_execution": "30/30 native:computed",
+    "design": {
+      "method": "latin_hypercube_plus_fixed_anchors",
+      "space_filling_profiles": 8,
+      "fixed_anchors": ["anchor_released_default", "anchor_literature_typical"],
+      "profile_seed": 6969,
+      "seeds": [5149, 5150, 5151],
+      "clear_threshold_lsi": 0.5,
+      "selection_rule": "no_response_dependent_selection_in_stage_a",
+      "bounds": {
+        "social_force_factor": [2.55, 10.2],
+        "interaction_range_gamma": [0.175, 0.7],
+        "relaxation_time": [0.25, 1.0],
+        "anisotropy_lambda_importance": [1.0, 4.0],
+        "agent_radius_m": [0.25, 0.5],
+        "desired_speed_mean_mps": [0.65, 1.3],
+        "desired_speed_std_mps": [0.0, 0.2]
+      }
+    },
+    "profile_summaries": [
+      {"profile_id": "anchor_literature_typical", "mean_lsi": 0.094979, "lsi_range": [0.053620, 0.168954], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "anchor_released_default", "mean_lsi": 0.185677, "lsi_range": [0.068798, 0.275329], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_01", "mean_lsi": 0.266297, "lsi_range": [0.044398, 0.397335], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_02", "mean_lsi": 0.325505, "lsi_range": [0.276264, 0.375808], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_03", "mean_lsi": 0.050329, "lsi_range": [0.017988, 0.103521], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_04", "mean_lsi": 0.166729, "lsi_range": [0.059930, 0.320447], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_05", "mean_lsi": 0.303452, "lsi_range": [0.121258, 0.534582], "clear_lsi_hits": 1, "clear_lsi_total": 3},
+      {"profile_id": "lhs_06", "mean_lsi": 0.198768, "lsi_range": [0.072265, 0.286441], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_07", "mean_lsi": 0.268017, "lsi_range": [0.137248, 0.366657], "clear_lsi_hits": 0, "clear_lsi_total": 3},
+      {"profile_id": "lhs_08", "mean_lsi": 0.182663, "lsi_range": [0.099516, 0.232856], "clear_lsi_hits": 0, "clear_lsi_total": 3}
+    ],
+    "decision": {
+      "classification": "diagnostic_only",
+      "robust_clear_profile_found": false,
+      "next_stage": "hold_stage_b_until_a_candidate_and_fidelity_contract_are_separately_frozen",
+      "released_default_changed": false
+    }
+  }
+}

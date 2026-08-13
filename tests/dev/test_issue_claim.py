@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 import pytest
 
@@ -418,6 +419,173 @@ def test_open_pr_coverage_detects_ref_in_title(monkeypatch: pytest.MonkeyPatch) 
     assert payload["covering_prs"] == [789]
 
 
+def test_reconciliation_commands_are_bounded_and_read_only() -> None:
+    assert issue_claim.build_claim_snapshot_command(remote="origin") == [
+        "git",
+        "ls-remote",
+        "--heads",
+        "origin",
+        "refs/heads/agent-claims/issue-*",
+    ]
+    assert issue_claim.build_issue_state_command(123, repo="ll7/robot_sf_ll7") == [
+        "gh",
+        "api",
+        "repos/ll7/robot_sf_ll7/issues/123",
+        "--jq",
+        "{number: .number, state: .state, title: .title, url: .html_url}",
+    ]
+    command = issue_claim.build_all_pr_command(repo="ll7/robot_sf_ll7")
+    assert command[0:7] == [
+        "gh",
+        "pr",
+        "list",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--state",
+        "all",
+    ]
+    assert "--limit" in command
+    assert "--json" in command
+
+
+def test_claim_snapshot_rejects_malformed_refs_instead_of_dropping_them() -> None:
+    result = issue_claim.CommandResult(
+        command=("git", "ls-remote"),
+        returncode=0,
+        stdout=(
+            "abc123\trefs/heads/agent-claims/issue-123\n"
+            "def456\trefs/heads/agent-claims/issue-not-a-number\n"
+        ),
+        stderr="",
+    )
+
+    payload = issue_claim._parse_claim_snapshot(result, issue_number=None, limit=10)
+
+    assert payload["ok"] is False
+    assert payload["claims"] == [
+        {"issue": 123, "claim_ref": "agent-claims/issue-123", "sha": "abc123"}
+    ]
+    assert "malformed claim ref" in payload["error"]
+
+
+@pytest.mark.parametrize(
+    ("issue", "prs", "classification", "safe"),
+    [
+        (
+            {"ok": True, "state": "CLOSED", "title": "closed", "url": "u"},
+            {"ok": True, "open_prs": [], "terminal_prs": [], "truncated": False},
+            "stale_closed_issue",
+            True,
+        ),
+        (
+            {"ok": True, "state": "OPEN", "title": "open", "url": "u"},
+            {"ok": True, "open_prs": [], "terminal_prs": [], "truncated": False},
+            "active_issue_no_open_pr",
+            False,
+        ),
+        (
+            {"ok": True, "state": "OPEN", "title": "open", "url": "u"},
+            {"ok": True, "open_prs": [456], "terminal_prs": [], "truncated": False},
+            "active_open_pr",
+            False,
+        ),
+        (
+            {"ok": True, "state": "OPEN", "title": "open", "url": "u"},
+            {"ok": True, "open_prs": [], "terminal_prs": [456], "truncated": False},
+            "stale_terminal_coverage",
+            True,
+        ),
+        (
+            {"ok": False, "state": None, "title": "", "url": "", "error": "missing"},
+            {"ok": True, "open_prs": [], "terminal_prs": [], "truncated": False},
+            "state_unknown",
+            False,
+        ),
+    ],
+)
+def test_reconciliation_classifies_claims_fail_closed(
+    issue: dict[str, object],
+    prs: dict[str, object],
+    classification: str,
+    safe: bool,
+) -> None:
+    row = issue_claim._classify_reconciliation_row(
+        {"issue": 123, "claim_ref": "agent-claims/issue-123", "sha": "abc123"},
+        issue=issue,
+        prs=prs,
+    )
+
+    assert row["classification"] == classification
+    assert row["safe_to_release"] is safe
+
+
+def test_reconcile_claims_reports_closed_candidate_without_mutating(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="[]", stderr=""
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout='{"number":123,"state":"closed","title":"old","url":"u"}',
+                stderr="",
+            )
+        raise AssertionError(f"unexpected mutation command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.reconcile_claims(remote="origin", repo="ll7/robot_sf_ll7", limit=10)
+
+    assert payload["ok"] is True
+    assert payload["read_only"] is True
+    assert payload["candidate_count"] == 1
+    assert payload["claims"][0]["classification"] == "stale_closed_issue"
+    assert all(command[0:2] != ["git", "push"] for command in calls)
+
+
+def test_reconcile_claims_retains_claim_when_issue_state_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="[]", stderr=""
+            )
+        return issue_claim.CommandResult(
+            command=tuple(command), returncode=1, stdout="", stderr="API unavailable"
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.reconcile_claims(remote="origin", repo="ll7/robot_sf_ll7", limit=10)
+
+    assert payload["ok"] is False
+    assert payload["candidate_count"] == 0
+    assert payload["claims"][0]["classification"] == "state_unknown"
+    assert payload["claims"][0]["safe_to_release"] is False
+
+
 def test_open_pr_coverage_detects_ref_in_body(monkeypatch: pytest.MonkeyPatch) -> None:
     """Explicit Refs #N in the PR body must block release."""
     calls: list[list[str]] = []
@@ -689,6 +857,43 @@ def test_release_retains_claim_when_open_pr_snapshot_malformed(
     assert payload["ok"] is False
     assert payload["claimed"] is True
     assert "open_pr_snapshot_unavailable" in payload["error"]
+
+
+def test_release_retains_claim_when_open_pr_snapshot_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A capped open-PR snapshot must not authorize a release."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            payload = [
+                {"number": number, "body": "", "title": f"unrelated {number}"}
+                for number in range(1, issue_claim.PR_SNAPSHOT_LIMIT + 1)
+            ]
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+        raise AssertionError("claim ref must not be deleted when snapshot is truncated")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is False
+    assert payload["claimed"] is True
+    assert "open_pr_snapshot_truncated" in payload["error"]
+    assert all(command[0:2] != ["git", "push"] for command in calls)
 
 
 def test_release_retains_claim_when_open_pr_snapshot_nonzero(

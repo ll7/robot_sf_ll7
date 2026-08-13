@@ -1,0 +1,53 @@
+{
+  "schema_version": "ch7-evidence-admission.v1",
+  "issue": 6792,
+  "status": "admitted",
+  "package": {
+    "sha256sums_sha256": "6807fdc9275133365812c8f51f51e057da6054f8dcaf77cb5fa8a32b08c4a87f",
+    "manifest_sha256": "39885f8a5abcd5acb1d02db9fa51ea03fd914460415babe0ede0a7744d9a35d1"
+  },
+  "source": {
+    "source_package_sha256sums": "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543",
+    "source_package_complete_sha256": "1457877aca9e6ff892e4d82030d26a63f5fa9413b8eab57a5cc653328db0045b",
+    "release_archive_sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7",
+    "compact_packet_sha256": "44360d5da575233131ac8e93c25a0dd539d980a2c8a0146651017d686c45dadb",
+    "compact_sha256sums_sha256": "59ef90567c2eba5ef1f8431bc19e0962a9ddceec15ac81afce0b360c6ecac3b7",
+    "source_registry_sha256": "ebff0f47aeefd5e423c968f9c63f44961a7338765898874bb53b3a623e05944a"
+  },
+  "approval": {
+    "approval_id": "issue6792-comment-5278040955",
+    "approval_url": "https://github.com/ll7/robot_sf_ll7/issues/6792#issuecomment-5278040955",
+    "decision": "approve"
+  },
+  "scope": {
+    "claim_boundary": "Release-cell descriptive evidence package. No trace-level or causal claim is admitted.",
+    "forbidden_claims": [
+      "matched_comparison",
+      "causal_divergence",
+      "counterfactual_branching",
+      "trajectory_divergence",
+      "pooled_arm_replication"
+    ]
+  },
+  "roles": {
+    "available": {
+      "cross_cell_inversion": {"grain": "release_cell"},
+      "feasibility_criticism": {"grain": "release_cell_geometry"}
+    },
+    "unavailable": {
+      "planner_upset": {
+        "grain": "trace",
+        "reasons": ["#6814 incompatible seed-118 starts and no shared-start receipt"]
+      },
+      "seed_sensitivity": {
+        "grain": "trace",
+        "reasons": ["#6814 shared_prefix=false and unequal starts"]
+      }
+    }
+  },
+  "retrieval": {
+    "source_package_key": "issue-6792/source-package-6412",
+    "release_archive_key": "issue-6792/release-0.0.3",
+    "compact_packet_key": "issue-6792/compact-6814"
+  }
+}

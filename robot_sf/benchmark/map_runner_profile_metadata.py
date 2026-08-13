@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from robot_sf.benchmark.latency_stress import LatencyStressProfile, load_latency_stress_profile
+from robot_sf.benchmark.latency.latency_stress import (
+    LatencyStressProfile,
+    load_latency_stress_profile,
+)
 from robot_sf.benchmark.synthetic_actuation import (
     SyntheticActuationProfile,
     validate_actuation_profile_claim_boundary,

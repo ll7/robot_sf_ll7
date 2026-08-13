@@ -347,7 +347,9 @@ that the claimed issue remains open and has not gained a merged closing PR. A `r
 the only publication-permitting result; `superseded` and `blocked` stop the route, while
 `refresh-required` requires `sync --integrate` (or an explicit manual merge), a fresh readiness
 run, and a new snapshot. The integration path uses ordinary Git merges and never resets or
-deletes the worktree.
+deletes the worktree. Under exhausted GraphQL quota, the gate may record an auditable REST source
+for issue state or closing-PR discovery in `remote_state_sources`; auth, malformed-response, and
+truncated-inventory failures still block publication.
 
 ## What This Note Does Not Replace
 

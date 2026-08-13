@@ -54,7 +54,7 @@ AMV_ACTUATION_LATENCY_MEASUREMENT_MANIFEST_SCHEMA_VERSION = (
     "amv_actuation_latency_measurement_manifest.v1"
 )
 AMV_ACTUATION_LATENCY_MEASUREMENT_MANIFEST_SCHEMA_FILE = (
-    Path(__file__).with_name("schemas") / "amv_actuation_latency_measurement_manifest.v1.json"
+    Path(__file__).parent.parent / "schemas" / "amv_actuation_latency_measurement_manifest.v1.json"
 )
 
 #: Explicit boundary stamped on every report so a passing intake check is never

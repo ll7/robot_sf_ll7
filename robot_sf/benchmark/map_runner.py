@@ -34,7 +34,7 @@ from robot_sf.benchmark.algorithm_readiness import (
 from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
 from robot_sf.benchmark.fallback_policy import availability_payload
-from robot_sf.benchmark.latency_stress import (
+from robot_sf.benchmark.latency.latency_stress import (
     not_available_latency_metrics,
 )
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS

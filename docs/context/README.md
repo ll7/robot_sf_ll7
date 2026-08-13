@@ -138,6 +138,8 @@ knowledge, not every transient iteration detail.
   [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md)
 * Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle (Gate 3 of #6600):
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
+* Issue #6646 held-out diagnosis comparison infrastructure and fail-closed admission contract:
+  [issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md)
 * Issue #6871 diagnosis and execution report crosswalk:
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 * Issue #6875 camera-ready report crosswalk producer:
@@ -146,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_6970_paired_effect_metric_contract.md](issue_6970_paired_effect_metric_contract.md)
 * Issue #6971 safety-wrapper paired-campaign preregistration:
   [issue_6971_safety_wrapper_paired_preregistration.md](issue_6971_safety_wrapper_paired_preregistration.md)
+* Issue #7047 Chapter 7 portfolio companion binding:
+  [issue_7047_ch7_portfolio_companion_binding.md](issue_7047_ch7_portfolio_companion_binding.md)
 * Issue #6934 BRNE action-weight scaling and source-aligned aggregation:
   [issue_6934_brne_action_scaling.md](issue_6934_brne_action_scaling.md)
 * Issue #6615 ORCA adapter-validation harness and diagnostic projection trace:

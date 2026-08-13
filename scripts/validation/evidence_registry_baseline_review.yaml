@@ -14,8 +14,8 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 6776
-latest_reviewed_date: 2026-08-12
+latest_reconciliation_issue: 7047
+latest_reviewed_date: 2026-08-13
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
@@ -93,6 +93,15 @@ decision_summary: >-
   packets from #6095 reference the real producing commit d791c08f, which is unreachable from
   main after the #6106 squash merge. The four resulting dangling_commit/config_missing_at_commit
   findings are explicitly baselined below; the source packets and producer SHA are preserved.
+  Chapter 7 portfolio addendum (issue #7047): the Chapter 7 release-cell package remains
+  byte-frozen under issue_6792_ch7_evidence_package_v1, but the external portfolio input is now
+  bound by docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json to the tracked
+  source config configs/analysis/ch7_worked_example_portfolio.v1.yaml at SHA-256
+  2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec. The linter validates the
+  companion fail-closed against exact document paths, JSON pointers, document digests, target path,
+  target tracking state, and target digest, then resolves only the two exact #7047 findings. The
+  baseline is refreshed from 421 findings across 93 files to 419 findings across 91 files while
+  preserving the package bytes and without changing the release-cell-only claim boundary.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -176,11 +185,13 @@ reviewed_files:
       Campaign atlas catalog references untracked atlas caption/provenance/summary/svg artifacts
       and a /tmp inventory path; artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_summary.json
-    codes: [missing_commit, missing_config_path, missing_config_sha256]
+    codes: [duplicate_campaign_id, missing_commit, missing_config_path, missing_config_sha256]
     disposition: baseline
     reason: >-
       Campaign atlas summary record lacks the producing commit and producing config provenance;
-      provenance-backfill-required legacy debt.
+      provenance-backfill-required legacy debt. The Chapter 7 package deliberately retains the
+      same source campaign identity and records it as `source_campaign_id`; this duplicate is a
+      cross-bundle identity reference, not an independent campaign replication.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml
     codes: [uncommitted_artifact_missing_location]
     disposition: baseline

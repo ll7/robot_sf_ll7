@@ -48,6 +48,33 @@ ARTIFACT_PATH_KEYS = {
     "path",
     "source_path",
 }
+CH7_PORTFOLIO_COMPANION_BINDING = Path(
+    "docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json"
+)
+CH7_PORTFOLIO_TARGET_PATH = "configs/analysis/ch7_worked_example_portfolio.v1.yaml"
+CH7_PORTFOLIO_TARGET_SHA256 = "2fe0723bbb67eb18d25944b6933575b7c7b5a31836062c0bd56540fe4e3923ec"
+CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS = {
+    (
+        "docs/context/evidence/issue_6792_ch7_evidence_package_v1/manifest.json",
+        "hash_without_artifact_path",
+        "sha256 lacks an adjacent artifact path",
+    ): {
+        "document_digest_pointer": "/inputs/portfolio_config/sha256",
+        "document_json_pointer": "/inputs/portfolio_config/sha256",
+        "document_json_value": CH7_PORTFOLIO_TARGET_SHA256,
+    },
+    (
+        "docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/"
+        "materialization_overlay.json",
+        "uncommitted_artifact_missing_location",
+        "ch7_worked_example_portfolio.v1.yaml is not tracked and lacks an explicit location marker",
+    ): {
+        "document_digest_pointer": "/source_portfolio/sha256",
+        "document_json_pointer": "/source_portfolio/path",
+        "document_json_value": "ch7_worked_example_portfolio.v1.yaml",
+    },
+}
+CH7_PORTFOLIO_ALLOWED_BINDINGS = frozenset(CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS)
 
 
 @dataclass(frozen=True)
@@ -83,6 +110,10 @@ def _git_succeeds(repo_root: Path, *args: str) -> bool:
 
 class ShallowRepositoryError(RuntimeError):
     """Raised when commit reachability cannot be classified completely."""
+
+
+class CompanionBindingError(RuntimeError):
+    """Raised when a companion binding cannot be trusted to resolve linter findings."""
 
 
 def _require_full_history(repo_root: Path) -> None:
@@ -174,6 +205,180 @@ def _load_document(path: Path) -> Any:
     if suffix == ".csv":
         return list(csv.DictReader(raw.splitlines()))
     return raw
+
+
+def _json_pointer_get(value: Any, pointer: str) -> Any:
+    """Resolve one RFC 6901 JSON pointer from a loaded document."""
+    if pointer == "":
+        return value
+    if not pointer.startswith("/"):
+        raise ValueError(f"invalid JSON pointer {pointer!r}")
+    current = value
+    for raw_part in pointer.split("/")[1:]:
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, Mapping):
+            if part not in current:
+                raise KeyError(pointer)
+            current = current[part]
+        elif isinstance(current, list):
+            try:
+                index = int(part)
+            except ValueError as exc:
+                raise KeyError(pointer) from exc
+            try:
+                current = current[index]
+            except IndexError as exc:
+                raise KeyError(pointer) from exc
+        else:
+            raise KeyError(pointer)
+    return current
+
+
+def _ch7_binding_error(message: str) -> CompanionBindingError:
+    """Return a consistently prefixed companion-binding error."""
+    return CompanionBindingError(f"{CH7_PORTFOLIO_COMPANION_BINDING}: {message}")
+
+
+def _load_ch7_companion_payload(path: Path) -> Mapping[str, Any]:
+    """Load and parse the #7047 companion payload."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise _ch7_binding_error("could not read JSON") from exc
+    if not isinstance(value, Mapping):
+        raise _ch7_binding_error("root must be an object")
+    return value
+
+
+def _validate_ch7_companion_header(value: Mapping[str, Any]) -> list[Any]:
+    """Validate schema-level companion fields and return the binding list."""
+    if value.get("schema_version") != "evidence_registry_companion_binding.v1":
+        raise _ch7_binding_error("schema_version must be evidence_registry_companion_binding.v1")
+    if value.get("issue") != 7047:
+        raise _ch7_binding_error("issue must be 7047")
+    if value.get("target_path") != CH7_PORTFOLIO_TARGET_PATH:
+        raise _ch7_binding_error(f"target_path must be {CH7_PORTFOLIO_TARGET_PATH}")
+    if value.get("target_sha256") != CH7_PORTFOLIO_TARGET_SHA256:
+        raise _ch7_binding_error("target_sha256 must match the approved digest")
+    bindings = value.get("bindings")
+    if not isinstance(bindings, list) or len(bindings) != len(CH7_PORTFOLIO_ALLOWED_BINDINGS):
+        raise _ch7_binding_error(
+            f"bindings must contain exactly {len(CH7_PORTFOLIO_ALLOWED_BINDINGS)} entries"
+        )
+    return bindings
+
+
+def _validate_ch7_target(repo_root: Path) -> None:
+    """Validate that the approved source config is tracked and byte-matching."""
+    target = _resolve_repo_path(repo_root, CH7_PORTFOLIO_TARGET_PATH)
+    if target is None or not _is_tracked(repo_root, target[0]):
+        raise _ch7_binding_error(f"target_path is not tracked: {CH7_PORTFOLIO_TARGET_PATH}")
+    actual_target_sha256 = hashlib.sha256(target[1].read_bytes()).hexdigest()
+    if actual_target_sha256 != CH7_PORTFOLIO_TARGET_SHA256:
+        raise _ch7_binding_error("target_path digest mismatch")
+
+
+def _ch7_resolution_key(binding: Mapping[str, Any], index: int) -> tuple[str, str, str]:
+    """Return and validate the exact finding key named by one binding entry."""
+    document_path = binding.get("document_path")
+    code = binding.get("finding_code")
+    message = binding.get("finding_message")
+    resolution_key = (document_path, code, message)
+    if not all(isinstance(item, str) and item for item in resolution_key):
+        raise _ch7_binding_error(
+            f"bindings[{index}] requires document_path, finding_code, and finding_message"
+        )
+    if resolution_key not in CH7_PORTFOLIO_ALLOWED_BINDINGS:
+        raise _ch7_binding_error(f"bindings[{index}] is not an allowed #7047 finding")
+    return resolution_key
+
+
+def _validate_ch7_document_digest(
+    repo_root: Path, binding: Mapping[str, Any], document_path: str
+) -> Path:
+    """Validate that the bound package document is tracked and byte-matching."""
+    document = _resolve_repo_path(repo_root, document_path)
+    if document is None or not _is_tracked(repo_root, document[0]):
+        raise _ch7_binding_error(f"document_path is not tracked: {document_path}")
+    document_sha256 = binding.get("document_sha256")
+    if (
+        not isinstance(document_sha256, str)
+        or not SHA256_RE.fullmatch(document_sha256)
+        or hashlib.sha256(document[1].read_bytes()).hexdigest() != document_sha256
+    ):
+        raise _ch7_binding_error(f"document digest mismatch for {document_path}")
+    return document[1]
+
+
+def _validate_ch7_document_pointers(
+    document_path: str,
+    document: Path,
+    binding: Mapping[str, Any],
+    index: int,
+    expected: Mapping[str, str],
+) -> None:
+    """Validate the bound package JSON pointers and digest value."""
+    pointer = binding.get("document_json_pointer")
+    digest_pointer = binding.get("document_digest_pointer")
+    if not isinstance(pointer, str) or not isinstance(digest_pointer, str):
+        raise _ch7_binding_error(f"bindings[{index}] requires JSON pointers")
+    try:
+        document_value = _load_document(document)
+        actual_value = _json_pointer_get(document_value, pointer)
+        actual_digest_value = _json_pointer_get(document_value, digest_pointer)
+    except (KeyError, ValueError) as exc:
+        raise _ch7_binding_error(f"JSON pointer does not resolve for {document_path}") from exc
+    if actual_value != binding.get("document_json_value"):
+        raise _ch7_binding_error(f"pointer value mismatch for {document_path}")
+    if actual_digest_value != CH7_PORTFOLIO_TARGET_SHA256:
+        raise _ch7_binding_error(f"digest pointer mismatch for {document_path}")
+    for field, expected_value in expected.items():
+        if binding.get(field) != expected_value:
+            raise _ch7_binding_error(f"unexpected {field} for {document_path}")
+
+
+def _validate_ch7_binding_entry(
+    repo_root: Path, binding: Any, index: int, resolutions: set[tuple[str, str, str]]
+) -> None:
+    """Validate one #7047 companion binding entry."""
+    if not isinstance(binding, Mapping):
+        raise _ch7_binding_error(f"bindings[{index}] must be an object")
+    resolution_key = _ch7_resolution_key(binding, index)
+    if resolution_key in resolutions:
+        document_path, code, _message = resolution_key
+        raise _ch7_binding_error(f"duplicate binding for {document_path}/{code}")
+    document_path = resolution_key[0]
+    document = _validate_ch7_document_digest(repo_root, binding, document_path)
+    expected = CH7_PORTFOLIO_ALLOWED_BINDING_POINTERS[resolution_key]
+    _validate_ch7_document_pointers(document_path, document, binding, index, expected)
+    resolutions.add(resolution_key)
+
+
+def _load_ch7_portfolio_companion_resolutions(repo_root: Path) -> frozenset[tuple[str, str, str]]:
+    """Load the canonical #7047 companion binding and return exact findings it resolves."""
+    path = repo_root / CH7_PORTFOLIO_COMPANION_BINDING
+    if not path.is_file():
+        return frozenset()
+    value = _load_ch7_companion_payload(path)
+    bindings = _validate_ch7_companion_header(value)
+    _validate_ch7_target(repo_root)
+    resolutions: set[tuple[str, str, str]] = set()
+    for index, binding in enumerate(bindings):
+        _validate_ch7_binding_entry(repo_root, binding, index, resolutions)
+    if resolutions != CH7_PORTFOLIO_ALLOWED_BINDINGS:
+        raise _ch7_binding_error("bindings do not cover the exact #7047 set")
+    return frozenset(resolutions)
+
+
+def _apply_companion_resolutions(
+    findings: Sequence[dict[str, str]], resolutions: frozenset[tuple[str, str, str]]
+) -> list[dict[str, str]]:
+    """Remove only findings proven by a validated companion binding."""
+    return [
+        item
+        for item in findings
+        if (item["path"], item["code"], item["message"]) not in resolutions
+    ]
 
 
 def _load_strict_exclusion_policy(path: Path) -> frozenset[str]:
@@ -540,6 +745,7 @@ def lint_evidence_registry(
     """Return a deterministic integrity report for every supported evidence file."""
     repo_root = repo_root.resolve()
     _require_full_history(repo_root)
+    companion_resolutions = _load_ch7_portfolio_companion_resolutions(repo_root)
     registry_root = registry_root.resolve()
     campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
@@ -586,6 +792,7 @@ def lint_evidence_registry(
                 )
             )
     findings.sort(key=lambda item: (item["path"], item["code"], item["message"]))
+    findings = _apply_companion_resolutions(findings, companion_resolutions)
     excluded = [item for item in findings if item["code"] in exclude_codes]
     active = [item for item in findings if item["code"] not in exclude_codes]
     by_code = dict(sorted(Counter(item["code"] for item in active).items()))
@@ -675,7 +882,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     try:
         report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
-    except ShallowRepositoryError as exc:
+    except (CompanionBindingError, ShallowRepositoryError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(report, indent=2, sort_keys=True))

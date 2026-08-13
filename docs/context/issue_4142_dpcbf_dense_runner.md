@@ -7,7 +7,7 @@ Slurm/GPU submission, no safety-performance or collision-reduction claim.
 ## What this adds
 
 PR #4299 added the read-only *readiness* surface
-(`robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py`) that validates the predeclared
+(`robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py`) that validates the predeclared
 packet `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`, and it explicitly left
 one downstream gate open:
 
@@ -17,7 +17,7 @@ one downstream gate open:
 
 This slice closes that first gate at the **planning** level. It does not run the comparison.
 
-- `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` — consumes the packet schema and
+- `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py` — consumes the packet schema and
   resolves it into an ordered, per-arm run plan (`cbf_off`, `cbf_collision_cone_on`,
   `cbf_dynamic_parabolic_v1_on`). Each arm resolves to one benchmark job pinned to the
   packet's shared algorithm (`prediction_mpc_cv`), that arm's validated adapter config, the
@@ -90,13 +90,13 @@ authorized executor.
 - An authorized executor that runs the resolved plan (the second declared gate: explicit
   human/Slurm authorization) — out of scope here.
 - A dense-comparison summarizer that consumes the per-arm outputs under the plan's fail-closed
-  exclusion now exists (`robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py`, PR #4142
+  exclusion now exists (`robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_summary.py`, PR #4142
   summary slice; see `docs/context/issue_4142_dpcbf_dense_summary.md`). The bounded dense
   comparison itself remains out of scope until execution is authorized.
 
 ## Related
 
-- Readiness surface: `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py`
+- Readiness surface: `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py`
   (`docs/context/issue_4142_dpcbf_dense_readiness.md`)
 - Packet: `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`
 - Runtime arm contract: `robot_sf/benchmark/safety/cbf_safety_filter_runtime.py`

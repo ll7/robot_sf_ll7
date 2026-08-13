@@ -1,0 +1,161 @@
+"""Tests for fail-closed research answerability and yield reporting."""
+
+from __future__ import annotations
+
+import copy
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+from robot_sf.benchmark.research_answerability import (
+    answerability_from_manifest,
+    evaluate_answerability,
+)
+from scripts.analysis.report_research_yield import (
+    ResearchYieldError,
+    build_research_yield_report,
+    load_snapshot,
+    render_markdown,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EXAMPLE_MANIFEST = REPO_ROOT / "configs/benchmarks/research_campaign_manifest.example.yaml"
+ISSUE_6474_FIXTURE = REPO_ROOT / "tests/fixtures/research_answerability/issue_6474_bounded.json"
+YIELD_FIXTURE = REPO_ROOT / "tests/fixtures/research_yield_snapshot.v1.json"
+
+
+def _example_contract() -> dict[str, object]:
+    payload = yaml.safe_load(EXAMPLE_MANIFEST.read_text(encoding="utf-8"))
+    return copy.deepcopy(payload["answerability"])
+
+
+def test_example_contract_is_diagnostic_only() -> None:
+    """The canonical example is executable only as a bounded diagnostic packet."""
+    result = evaluate_answerability(_example_contract())
+
+    assert result.state == "diagnostic_only"
+    assert result.as_dict()["decision_capable"] is False
+
+
+def test_optional_unavailable_metric_is_preserved_without_blocking() -> None:
+    """A bounded fixture may keep optional unavailable metrics explicit."""
+    contract = json.loads(ISSUE_6474_FIXTURE.read_text(encoding="utf-8"))
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "answerable"
+    assert result.warnings
+    assert "secondary_realism_metric" in result.warnings[0]
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "expected"),
+    [
+        ("producers", "status", "missing", "blocked_missing_producer"),
+        ("producers", "execution_mode", "fallback", "blocked_missing_producer"),
+        ("design", "power_status", "underpowered", "blocked_underpowered"),
+        ("analysis", "dry_run_status", "failed", "blocked_analysis_contract"),
+        ("analysis", "comparability_status", "mismatched", "blocked_noncomparable_rows"),
+        ("artifacts", "durability_status", "blocked", "blocked_artifact_plan"),
+    ],
+)
+def test_known_answerability_blockers_are_fail_closed(
+    section: str, field: str, value: str, expected: str
+) -> None:
+    """Known campaign failure classes map to explicit non-answerable states."""
+    contract = _example_contract()
+    if section == "producers":
+        contract[section][0][field] = value
+    else:
+        contract[section][field] = value
+
+    assert evaluate_answerability(contract).state == expected
+
+
+def test_malformed_contract_is_invalid() -> None:
+    """Missing schema fields cannot be mistaken for an underpowered campaign."""
+    contract = _example_contract()
+    del contract["estimand"]["primary"]
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert "primary" in result.reasons[0]
+
+
+@pytest.mark.parametrize(
+    ("case_id", "mutator", "expected"),
+    [
+        (
+            "6970_missing_normalized_producer",
+            lambda contract: contract["producers"][0].update(
+                {"status": "missing", "field": "normalized_reference_value"}
+            ),
+            "blocked_missing_producer",
+        ),
+        (
+            "6849_underpowered_held_out_design",
+            lambda contract: contract["design"].update({"power_status": "underpowered"}),
+            "blocked_underpowered",
+        ),
+        (
+            "6980_missing_reference_exposure",
+            lambda contract: contract["analysis"].update({"comparability_status": "mismatched"}),
+            "blocked_noncomparable_rows",
+        ),
+        (
+            "6814_missing_durable_provenance",
+            lambda contract: contract["artifacts"].update({"durability_status": "blocked"}),
+            "blocked_artifact_plan",
+        ),
+    ],
+)
+def test_known_failure_cases_have_explicit_states(case_id: str, mutator, expected: str) -> None:
+    """Known issue failure classes cannot be silently promoted to answerable."""
+    contract = _example_contract()
+    mutator(contract)
+
+    result = evaluate_answerability(contract)
+
+    assert case_id
+    assert result.state == expected
+
+
+def test_manifest_without_answerability_is_not_declared() -> None:
+    """Existing manifests remain loadable but can be gated explicitly."""
+    manifest = {"campaign": {}}
+
+    result = answerability_from_manifest(manifest)
+
+    assert result["state"] == "not_declared"
+    assert result["decision_capable"] is False
+
+
+def test_research_yield_report_separates_empirical_and_infrastructure() -> None:
+    """Yield dimensions remain separate and carry the frozen source digest."""
+    snapshot = load_snapshot(YIELD_FIXTURE)
+    report = build_research_yield_report(snapshot, source_path=YIELD_FIXTURE)
+
+    assert report["records_total"] == 5
+    assert report["empirical_answers"] == {
+        "records": 3,
+        "statuses": {"completed": 1, "inconclusive": 2},
+    }
+    assert report["infrastructure_throughput"]["records"] == 2
+    assert report["lag_days"]["approval_to_first_result"]["median_days"] == 2.0
+    assert report["source_snapshot"]["sha256"]
+    assert "closure" in report["definitions"]["empirical_answers"]
+    assert "## Empirical Answers" in render_markdown(report)
+
+
+def test_research_yield_report_rejects_unknown_kind(tmp_path: Path) -> None:
+    """The report must not silently classify an unknown workflow record."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["records"][0]["kind"] = "merged_issue"
+    path = tmp_path / "invalid.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="kind is unsupported"):
+        load_snapshot(path)

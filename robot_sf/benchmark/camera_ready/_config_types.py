@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.latency_stress import LatencyStressProfile
+    from robot_sf.benchmark.latency.latency_stress import LatencyStressProfile
     from robot_sf.benchmark.synthetic_actuation import SyntheticActuationProfile
     from robot_sf.benchmark.tuning_run_provenance import TuningRunSpec
 

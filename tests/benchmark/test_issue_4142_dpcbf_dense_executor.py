@@ -12,12 +12,12 @@ from typing import Any
 import pytest
 import yaml
 
-import robot_sf.benchmark.issue_4142_dpcbf_dense_runner as dense_runner
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+import robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner as dense_runner
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     REQUIRED_ARMS,
 )
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
     EPISODE_SCHEMA_PATH,
     EXECUTION_MANIFEST_FILENAME,
     EXECUTION_MANIFEST_SCHEMA_VERSION,

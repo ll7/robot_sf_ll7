@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-12
+updated_at: 2026-08-13
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,30 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6969_lane_formation_reference/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6969_lane_formation_reference/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_analysis_trace_overhead_2026-08-12/README.md
   status: evidence
   freshness: evidence
@@ -60,7 +84,23 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_6951_progress_shaped_ablation/README.md
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_6951_progress_shaped_ablation/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_6951_progress_shaped_ablation/summary.json
+  status: evidence
+  freshness: evidence
+  area: training
 - path: docs/context/evidence/issue_6792_ch7_evidence_package_v1
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json
   status: evidence
   freshness: evidence
   area: workflow_evidence
@@ -161,6 +201,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_6646_held_out_comparison_design.md
+  status: current
+  freshness: maintained
+  area: research_design
 - path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md
   status: evidence
   freshness: evidence
@@ -174,6 +218,22 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/chapter7_release_cells.pdf",
+  "artifact_sha256": "f3dd2e7b0c505c630a55ff815a2c24b431a2366d2af676fc400d01756818a593",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

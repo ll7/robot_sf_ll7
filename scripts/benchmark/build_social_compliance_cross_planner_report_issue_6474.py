@@ -73,8 +73,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from robot_sf.benchmark.control_action_latency_snqi import NATIVE_EXECUTION_MODES
 from robot_sf.benchmark.fallback_policy import resolve_execution_mode
+from robot_sf.benchmark.latency.control_action_latency_snqi import NATIVE_EXECUTION_MODES
 from robot_sf.benchmark.social_compliance import (
     SOCIAL_COMPLIANCE_CLAIM_CLASS,
     SOCIAL_COMPLIANCE_SCHEMA_VERSION,

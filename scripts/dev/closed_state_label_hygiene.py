@@ -13,13 +13,27 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from scripts.dev._gh_pagination import is_likely_truncated
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LIVE_STATE_LABELS = ("state:ready", "state:running", "state:blocked")
 JSON_FIELDS = "number,title,url,state,labels"
+PER_PAGE = 100
+DEFAULT_MAX_REST_PAGES = 10
+GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ")
+GRAPHQL_FAIL_CLOSED_MARKERS = (
+    "bad credentials",
+    "requires authentication",
+    "authentication required",
+    "resource not accessible by integration",
+    "forbidden",
+    "permission denied",
+    "could not resolve to a repository",
+    "could not resolve to an issue",
+    "repository not found",
+)
 
 
 @dataclass(frozen=True)
@@ -41,6 +55,27 @@ class StaleIssue:
             "state": self.state,
             "stale_labels": list(self.stale_labels),
         }
+
+
+@dataclass(frozen=True)
+class RestLabelPageMeta:
+    """Pagination metadata for one bounded REST label inventory."""
+
+    label: str
+    pages_read: int
+    per_page: int
+    page_budget: int
+    row_count: int
+    truncated: bool
+
+
+@dataclass(frozen=True)
+class CandidateDiscoveryResult:
+    """Candidate rows plus truncation metadata from one discovery path."""
+
+    rows_by_label: dict[str, list[dict[str, object]]]
+    truncations: list[dict[str, Any]]
+    source: str
 
 
 def _label_names(raw_labels: object) -> set[str]:
@@ -108,6 +143,80 @@ def _run_search_command(command: list[str]) -> list[dict[str, object]]:
     if not isinstance(payload, list):
         raise ValueError(f"Expected a JSON list from {' '.join(command)}")
     return [row for row in payload if isinstance(row, dict)]
+
+
+def _parse_rest_list_payload(
+    stdout: str,
+    *,
+    context: str,
+) -> list[dict[str, object]]:
+    """Parse a REST list payload and require an object row list."""
+    try:
+        payload = json.loads(stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON from GitHub REST ({context}): {exc.msg}") from exc
+    if not isinstance(payload, list):
+        raise ValueError(f"Expected JSON list from GitHub REST ({context})")
+    rows: list[dict[str, object]] = []
+    for row in payload:
+        if not isinstance(row, dict):
+            raise ValueError(f"Expected JSON list of objects from GitHub REST ({context})")
+        rows.append(row)
+    return rows
+
+
+def _normalize_rest_issue_row(row: dict[str, object]) -> dict[str, object]:
+    """Project a REST issue row onto the gh-search row shape consumed by this audit."""
+    return {
+        "number": row.get("number"),
+        "title": str(row.get("title", "")),
+        "url": str(row.get("html_url") or row.get("url") or ""),
+        "state": str(row.get("state", "")),
+        "labels": row.get("labels"),
+    }
+
+
+def _paginate_rest_closed_issues_for_label(
+    *,
+    repo: str,
+    label: str,
+    max_pages: int,
+    per_page: int,
+    gh_api: Any = None,
+) -> tuple[list[dict[str, object]], RestLabelPageMeta]:
+    """Read closed issues for one label through bounded REST pagination."""
+    if gh_api is None:
+        from scripts.dev.gh_issue_rest import _gh_api as gh_api_rest
+
+        gh_api = gh_api_rest
+
+    rows: list[dict[str, object]] = []
+    pages_read = 0
+    encoded_label = quote(label, safe="")
+    base_path = f"repos/{repo}/issues?state=closed&labels={encoded_label}"
+    for page in range(1, max_pages + 1):
+        path = f"{base_path}&per_page={per_page}&page={page}"
+        result = gh_api(path)
+        if result.returncode != 0:
+            detail = (
+                result.stderr or result.stdout or ""
+            ).strip() or f"exit code {result.returncode}"
+            raise RuntimeError(f"GitHub REST read failed ({path}): {detail}")
+        page_rows = _parse_rest_list_payload(result.stdout, context=path)
+        rows.extend(_normalize_rest_issue_row(row) for row in page_rows)
+        pages_read = page
+        if len(page_rows) < per_page:
+            break
+
+    truncated = is_likely_truncated(len(rows), limit=max_pages * per_page)
+    return rows, RestLabelPageMeta(
+        label=label,
+        pages_read=pages_read,
+        per_page=per_page,
+        page_budget=max_pages,
+        row_count=len(rows),
+        truncated=truncated,
+    )
 
 
 def collect_stale_issues(
@@ -355,6 +464,34 @@ def build_label_truncations(
     return markers
 
 
+def build_rest_label_truncations(
+    metas: list[RestLabelPageMeta],
+) -> list[dict[str, Any]]:
+    """Return per-label truncation markers for bounded REST pagination."""
+    markers: list[dict[str, Any]] = []
+    for meta in metas:
+        markers.append(
+            {
+                "label": meta.label,
+                "truncated": meta.truncated,
+                "row_count": meta.row_count,
+                "limit": meta.page_budget * meta.per_page,
+                "pages_read": meta.pages_read,
+                "per_page": meta.per_page,
+                "page_budget": meta.page_budget,
+                "source": "rest",
+                "note": (
+                    f"closed-issue REST label inventory may be partial: read "
+                    f"{meta.row_count} rows in {meta.pages_read}/{meta.page_budget} pages "
+                    f"(per_page={meta.per_page}); raise --max-rest-pages"
+                    if meta.truncated
+                    else ""
+                ),
+            }
+        )
+    return markers
+
+
 def build_report(
     *,
     repo: str,
@@ -398,6 +535,71 @@ def fetch_closed_issues_by_label(
     return rows_by_label
 
 
+def fetch_closed_issues_by_label_rest(
+    *,
+    repo: str,
+    labels: tuple[str, ...],
+    max_pages: int = DEFAULT_MAX_REST_PAGES,
+    per_page: int = PER_PAGE,
+    gh_api: Any = None,
+) -> CandidateDiscoveryResult:
+    """Fetch closed issues for each label through bounded REST pagination."""
+    if max_pages < 1 or per_page < 1:
+        raise ValueError(
+            f"REST pagination budgets must be >= 1; got max_pages={max_pages}, per_page={per_page}"
+        )
+    rows_by_label: dict[str, list[dict[str, object]]] = {}
+    metas: list[RestLabelPageMeta] = []
+    for label in labels:
+        rows, meta = _paginate_rest_closed_issues_for_label(
+            repo=repo,
+            label=label,
+            max_pages=max_pages,
+            per_page=per_page,
+            gh_api=gh_api,
+        )
+        rows_by_label[label] = rows
+        metas.append(meta)
+    return CandidateDiscoveryResult(
+        rows_by_label=rows_by_label,
+        truncations=build_rest_label_truncations(metas),
+        source="rest",
+    )
+
+
+def _is_graphql_fallback_error(error: RuntimeError) -> bool:
+    """Return whether a search failure is eligible for the REST fallback."""
+    message = str(error).lower()
+    if any(marker in message for marker in GRAPHQL_FAIL_CLOSED_MARKERS):
+        return False
+    return any(marker in message for marker in GRAPHQL_FALLBACK_MARKERS)
+
+
+def discover_closed_issues_by_label(
+    *,
+    repo: str,
+    labels: tuple[str, ...],
+    limit: int,
+    max_rest_pages: int = DEFAULT_MAX_REST_PAGES,
+) -> CandidateDiscoveryResult:
+    """Discover candidate closed issues, falling back to REST when search is unavailable."""
+    try:
+        rows_by_label = fetch_closed_issues_by_label(repo=repo, labels=labels, limit=limit)
+    except RuntimeError as exc:
+        if not _is_graphql_fallback_error(exc):
+            raise
+        return fetch_closed_issues_by_label_rest(
+            repo=repo,
+            labels=labels,
+            max_pages=max_rest_pages,
+        )
+    return CandidateDiscoveryResult(
+        rows_by_label=rows_by_label,
+        truncations=build_label_truncations(rows_by_label, limit=limit),
+        source="search",
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -413,6 +615,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1000,
         help="Maximum search results to fetch per label.",
+    )
+    parser.add_argument(
+        "--max-rest-pages",
+        type=int,
+        default=DEFAULT_MAX_REST_PAGES,
+        help=(
+            "Maximum REST pages to fetch per label when gh search is unavailable "
+            f"(each {PER_PAGE} rows)."
+        ),
     )
     parser.add_argument(
         "--fix",
@@ -445,25 +656,35 @@ def main(argv: list[str] | None = None) -> int:
                     f"{', '.join(LIVE_STATE_LABELS)}; unsupported: "
                     f"{', '.join(unsupported_labels)}"
                 )
-        rows_by_label = fetch_closed_issues_by_label(
+        if args.max_rest_pages < 1:
+            raise ValueError(f"--max-rest-pages must be >= 1; got {args.max_rest_pages}")
+        discovery = discover_closed_issues_by_label(
             repo=args.repo,
             labels=labels,
             limit=args.limit,
+            max_rest_pages=args.max_rest_pages,
         )
-        candidates = collect_stale_issues(rows_by_label, watched_labels=labels)
+        candidates = collect_stale_issues(discovery.rows_by_label, watched_labels=labels)
         stale_issues = reconcile_stale_issues(
             repo=args.repo,
             candidates=candidates,
             watched_labels=labels,
         )
-        truncations = build_label_truncations(rows_by_label, limit=args.limit)
         report = build_report(
             repo=args.repo,
             checked_labels=labels,
             stale_issues=stale_issues,
-            truncations=truncations,
+            truncations=discovery.truncations,
         )
-        if args.fix:
+        report["candidate_discovery_source"] = discovery.source
+        if (
+            args.fix
+            and discovery.truncations
+            and any(marker.get("truncated") for marker in discovery.truncations)
+        ):
+            report["fix_applied"] = False
+            report["fix_skipped"] = "candidate discovery was truncated"
+        elif args.fix:
             fix_actions = fix_stale_issues(
                 repo=args.repo,
                 stale_issues=stale_issues,
@@ -490,7 +711,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _dump_json(report)
-    return 0 if report["ok"] else 1
+    return 0 if (report["ok"] and not report["truncated_any"]) else 1
 
 
 if __name__ == "__main__":

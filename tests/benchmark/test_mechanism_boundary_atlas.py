@@ -6,6 +6,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 
@@ -21,6 +24,7 @@ from robot_sf.benchmark.mechanism_boundary_atlas import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INPUT = REPO_ROOT / "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json"
+BUILDER = REPO_ROOT / "scripts/analysis/build_negative_result_mechanism_atlas.py"
 
 
 def _payload() -> dict:
@@ -214,6 +218,23 @@ def test_cli_error_path_does_not_write_output_for_invalid_digest(tmp_path: Path)
         build_atlas(bad_input, repo_root=REPO_ROOT, output_path=output)
 
     assert not output.exists()
+
+
+def test_builder_help_forwards_arguments_without_writing(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, str(BUILDER), "--help"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--input" in result.stdout
+    assert not (
+        tmp_path / "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json"
+    ).exists()
 
 
 def test_loader_returns_independent_nested_dataclasses(tmp_path: Path) -> None:

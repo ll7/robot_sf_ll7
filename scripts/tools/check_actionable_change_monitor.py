@@ -52,6 +52,35 @@ WATCH_TERMS = (
 )
 SUCCESS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 JOB_ID_RE = re.compile(r"\b(?:job(?:[_ -]?id)?|slurm(?:[_ -]?job)?)[\s:#=]+\d+\b", re.I)
+SLURM_STATE_BLOCK_RE = re.compile(
+    r"(?im)^(?P<indent>[ \t]*)(?P<block>"
+    r"slurm_experiment_state|slurm_issue_pointer|slurm_issue_status"
+    r")[ \t]*:[ \t]*(?:#.*)?$"
+)
+SLURM_STATE_FIELD_RE = re.compile(
+    r"^(?P<indent>[ \t]+)(?P<key>state|slurm_state|slurm_job_id)"
+    r"[ \t]*:[ \t]*(?P<value>.*?)[ \t]*$"
+)
+SLURM_STATES = frozenset(
+    {
+        "not_submitted",
+        "submitted_running",
+        "completed_pending_artifact_promotion",
+        "artifact_rescue",
+        "rerun_required",
+        "failed_closed",
+        "inconclusive_close",
+        "completed_with_durable_evidence",
+        "parent_blocked",
+        "insufficient_data",
+    }
+)
+SUBMITTED_SLURM_STATE = "submitted_running"
+SLURM_STATE_BLOCK_SPECS = {
+    "slurm_experiment_state": {"state_key": "state", "job_id_required": True},
+    "slurm_issue_pointer": {"state_key": "slurm_state", "job_id_required": False},
+    "slurm_issue_status": {"state_key": "state", "job_id_required": True},
+}
 HANDOFF_TERMS = ("dissertation", "diss#", "evidence handoff", "parent handoff")
 PROPAGATION_TERMS = ("parent", "propagat", "follow-up", "follow up", "refs #")
 TERMINAL_TERMS = ("complete", "completed", "terminal", "admitted", "evidence freeze")
@@ -111,6 +140,149 @@ def _finding(
         "url": str(target.get("html_url") or target.get("url") or ""),
         "detail": detail,
     }
+
+
+def _parse_scalar(raw_value: str, field: str) -> tuple[str | None, str | None]:
+    """Parse one conservative YAML scalar without treating prose as state."""
+    value = raw_value.strip()
+    if value.startswith(("'", '"')):
+        quote = value[0]
+        closing_quote = value.find(quote, 1)
+        if closing_quote < 0:
+            return None, f"unterminated quoted {field}"
+        trailing = value[closing_quote + 1 :].strip()
+        if trailing and not trailing.startswith("#"):
+            return None, f"unexpected text after quoted {field}"
+        value = value[1:closing_quote].strip()
+    else:
+        value = value.split("#", 1)[0].strip()
+    if not value:
+        return None, f"missing {field}"
+    return value, None
+
+
+def _parse_state_block_fields(
+    lines: list[str],
+    start: int,
+    header_indent: int,
+    block: str,
+    state_key: str,
+) -> tuple[dict[str, str], list[str]]:
+    """Extract the supported direct fields from one state block."""
+    fields: dict[str, str] = {}
+    errors: list[str] = []
+    for line in lines[start:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" \t"))
+        if indent <= header_indent:
+            break
+        field_match = SLURM_STATE_FIELD_RE.match(line)
+        if not field_match:
+            continue
+        key = field_match.group("key")
+        if key not in {state_key, "slurm_job_id"}:
+            errors.append(f"unexpected {key} in {block}")
+            continue
+        if key in fields:
+            errors.append(f"duplicate {key} in {block}")
+            continue
+        parsed, error = _parse_scalar(field_match.group("value"), key)
+        if error:
+            errors.append(f"{block}: {error}")
+        elif parsed is not None:
+            fields[key] = parsed
+    return fields, errors
+
+
+def _state_block_record(
+    block: str,
+    fields: dict[str, str],
+    *,
+    state_key: str,
+    job_id_required: bool,
+) -> tuple[tuple[str, str, str | None, bool] | None, list[str]]:
+    """Validate one block and return its normalized state/job-id record."""
+    errors: list[str] = []
+    state = fields.get(state_key)
+    if state is None:
+        return None, [f"{block}: missing {state_key}"]
+    if not re.fullmatch(r"[a-z0-9]+(?:_[a-z0-9]+)*", state):
+        errors.append(f"malformed {state_key}={state!r}")
+    elif state not in SLURM_STATES:
+        errors.append(f"unsupported {state_key}={state!r}")
+
+    raw_job_id = fields.get("slurm_job_id")
+    job_id: str | None = None
+    if raw_job_id == "not_submitted":
+        job_id = raw_job_id
+    elif raw_job_id is not None and re.fullmatch(r"\d+", raw_job_id):
+        job_id = raw_job_id
+    elif raw_job_id is not None:
+        errors.append(f"malformed slurm_job_id={raw_job_id!r}")
+    elif job_id_required:
+        errors.append(f"{block}: missing slurm_job_id")
+    return (block, state, job_id, job_id_required), errors
+
+
+def _parse_slurm_execution_state(
+    body: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Read the canonical ledger block and its documented compatibility aliases.
+
+    The monitor intentionally does not accept a free-standing ``slurm_state``
+    line: only ``slurm_experiment_state``, ``slurm_issue_pointer``, and
+    ``slurm_issue_status`` are structured state surfaces.  Multiple surfaces
+    are allowed when their values agree, which lets the short pointer coexist
+    with the full ledger block without creating a second execution vocabulary.
+    """
+    lines = body.splitlines()
+    records: list[tuple[str, str, str | None, bool]] = []
+    errors: list[str] = []
+    for header in SLURM_STATE_BLOCK_RE.finditer(body):
+        block = header.group("block")
+        header_indent = len(header.group("indent").expandtabs(8))
+        spec = SLURM_STATE_BLOCK_SPECS[block]
+        start = body[: header.start()].count("\n") + 1
+        fields, field_errors = _parse_state_block_fields(
+            lines, start, header_indent, block, spec["state_key"]
+        )
+        errors.extend(field_errors)
+        record, record_errors = _state_block_record(
+            block,
+            fields,
+            state_key=spec["state_key"],
+            job_id_required=spec["job_id_required"],
+        )
+        errors.extend(record_errors)
+        if record is not None:
+            records.append(record)
+
+    if not records:
+        return None, None, "missing structured SLURM execution state"
+    if errors:
+        return None, None, "; ".join(errors)
+
+    states = {record[1] for record in records}
+    if len(states) != 1:
+        return None, None, "contradictory structured SLURM states"
+    state = states.pop()
+    job_ids = {record[2] for record in records if record[2] is not None}
+    if len(job_ids) > 1:
+        return None, None, "contradictory structured SLURM job IDs"
+    job_id = next(iter(job_ids), None)
+
+    if state == "not_submitted" and job_id not in (None, "not_submitted"):
+        return None, None, "not_submitted state has a numeric SLURM job ID"
+    if state == SUBMITTED_SLURM_STATE and job_id == "not_submitted":
+        return None, None, "submitted_running state has slurm_job_id=not_submitted"
+    return state, job_id, None
+
+
+def _parse_slurm_state(body: str) -> tuple[str | None, str | None]:
+    """Return the normalized state and an unavailable reason for compatibility."""
+    state, _job_id, error = _parse_slurm_execution_state(body)
+    return state, error
 
 
 def _canonical_json(value: Any) -> str:
@@ -232,19 +404,36 @@ def _surface_findings(issue: dict[str, Any]) -> list[dict[str, Any]]:
             )
         )
 
-    if (
-        "evidence:launch-packet" in label_set
-        and ("resource:slurm" in label_set or "slurm" in label_set or "slurm" in body)
-        and not JOB_ID_RE.search(body)
+    if "evidence:launch-packet" in label_set and (
+        "resource:slurm" in label_set or "slurm" in label_set or "slurm" in body
     ):
-        findings.append(
-            _finding(
-                finding_id=f"issue:{issue['number']}:launch-without-job-id",
-                kind="launch_packet_without_job_id",
-                target=issue,
-                detail="SLURM launch packet has no recorded job ID",
-            )
+        slurm_state, slurm_job_id, state_error = _parse_slurm_execution_state(
+            str(issue.get("body") or "")
         )
+        if state_error:
+            findings.append(
+                _finding(
+                    finding_id=f"issue:{issue['number']}:launch-state-unavailable",
+                    kind="launch_packet_state_unavailable",
+                    target=issue,
+                    detail=(
+                        f"SLURM launch packet has no usable canonical state ({state_error}); "
+                        "no execution claim inferred"
+                    ),
+                )
+            )
+        elif slurm_state == SUBMITTED_SLURM_STATE and slurm_job_id is None:
+            findings.append(
+                _finding(
+                    finding_id=f"issue:{issue['number']}:launch-without-job-id",
+                    kind="launch_packet_without_job_id",
+                    target=issue,
+                    detail=(
+                        "SLURM launch packet explicitly reports submitted_running but has "
+                        "no recorded job ID"
+                    ),
+                )
+            )
 
     terminal_evidence = bool(
         any(term in body for term in TERMINAL_TERMS)

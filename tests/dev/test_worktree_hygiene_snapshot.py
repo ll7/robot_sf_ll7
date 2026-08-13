@@ -82,6 +82,19 @@ def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
     ) == ["dirty", "missing_upstream", "ahead", "behind"]
 
 
+def test_status_paths_preserves_modified_output_path() -> None:
+    """Parse short-status rows without stripping the leading status-space."""
+    assert snapshot._status_paths(
+        " M output/fixtures/baseline.json\n"
+        "?? output/benchmarks/new.jsonl\n"
+        "!! output/model_cache/cache.bin\n"
+    ) == (
+        ["output/fixtures/baseline.json"],
+        ["output/benchmarks/new.jsonl"],
+        ["output/model_cache/cache.bin"],
+    )
+
+
 def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path) -> None:
     """Filter worktrees and aggregate issue counts in the snapshot."""
     main = tmp_path / "main"
@@ -540,6 +553,41 @@ def test_output_root_inspection_allows_clean_baseline_tracked_output(
     assert preserve is False
     assert review is False
     assert reasons == []
+
+
+def test_output_root_inspection_preserves_mixed_baseline_and_durable_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Baseline-tracked output does not mask ignored or untracked durable evidence."""
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    row = _worktree_row(str(worktree))
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
+        del cwd, timeout
+        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
+            return _result("!! output/benchmarks/run/episodes.jsonl\n")
+        if args == ["git", "ls-files", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
+            return _result("output/fixtures/baseline.json\n")
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+
+    artifacts = snapshot._inspect_output_root(row)
+    preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
+
+    assert artifacts[0].classification == "durable_required"
+    assert artifacts[0].ignored_entries == 1
+    assert artifacts[0].tracked_entries == 1
+    assert artifacts[0].sample_paths == [
+        "output/benchmarks/run/episodes.jsonl",
+        "output/fixtures/baseline.json",
+    ]
+    assert preserve is True
+    assert review is False
+    assert reasons == ["output has durable_required"]
 
 
 def test_output_root_inspection_preserves_modified_tracked_output(

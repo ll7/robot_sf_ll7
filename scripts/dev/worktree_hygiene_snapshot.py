@@ -259,13 +259,13 @@ def _status_paths(stdout: str) -> tuple[list[str], list[str], list[str]]:
     untracked: list[str] = []
     ignored: list[str] = []
     for raw_line in stdout.splitlines():
-        line = raw_line.strip()
-        if not line:
+        if not raw_line.strip():
             continue
-        path = line[3:] if len(line) > 3 else ""
-        if line.startswith("?? ") and path:
+        status = raw_line[:2]
+        path = raw_line[3:] if len(raw_line) > 3 else ""
+        if status == "??" and path:
             untracked.append(path)
-        elif line.startswith("!! ") and path:
+        elif status == "!!" and path:
             ignored.append(path)
         elif path:
             tracked_dirty.append(path)
@@ -286,9 +286,9 @@ def _classify_output_root(
         return "tracked_evidence", "tracked output/ files have local modifications"
     if set(tracked_paths) - set(baseline_tracked_paths):
         return "tracked_evidence", "branch-local tracked files exist under output/"
-    if tracked_paths:
-        return "tracked_baseline", "clean baseline-tracked files exist under output/"
     if not all_paths:
+        if tracked_paths:
+            return "tracked_baseline", "clean baseline-tracked files exist under output/"
         return "none", "output/ is absent or empty"
 
     durable_markers = (

@@ -161,6 +161,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_6646_held_out_comparison_design.md
+  status: current
+  freshness: maintained
+  area: research_design
 - path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md
   status: evidence
   freshness: evidence

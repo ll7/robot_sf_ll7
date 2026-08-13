@@ -93,6 +93,32 @@ def test_snapshot_prs_pending_next_action() -> None:
     assert payload["route_health_overview"]["healthy"] == 1
 
 
+def test_snapshot_prs_blocked_labels_stop_review_routing() -> None:
+    """Explicitly blocked PRs must wait for the owner or approval gate."""
+    pr_payload = {
+        "number": 7020,
+        "title": "blocked policy PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [{"name": "state:blocked"}, {"name": "evidence:blocked"}],
+        "headRefName": "feature",
+        "headRefOid": "blocked123",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([7020], repo="ll7/robot_sf_ll7")
+
+    pr = payload["prs"][0]
+    assert pr["blocking_labels"] == ["evidence:blocked", "state:blocked"]
+    assert pr["next_action"] == "await_blocking_owner_or_approval"
+    assert pr["attention"] == "blocked_attention"
+    assert pr["next_action"] != "review_for_merge_ready"
+
+
 def test_snapshot_prs_suppresses_superseded_cancelled_run() -> None:
     """An older cancelled run must not override a newer pending replacement."""
     pr_payload = {

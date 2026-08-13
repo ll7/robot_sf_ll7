@@ -698,6 +698,8 @@ For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the e
 
 - Preflight lanes with `--expected-head-sha <sha>` before dispatch.
 - Reuse `preflight.status` (`healthy` | `stale` | `blocked`) and `next_action` to avoid stale or noisy routes.
+- Treat `blocking_labels` and `next_action=await_blocking_owner_or_approval` as an explicit stop
+  for policy/domain approval; do not route those PRs into review or merge work.
 - Invalidate stale-lane routes (refresh snapshot) before reassigning or reviewing.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.

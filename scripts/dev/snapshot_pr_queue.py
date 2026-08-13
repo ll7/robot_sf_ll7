@@ -31,6 +31,7 @@ REVIEW_THREAD_LIMIT = 12
 REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
 SCHEMA_VERSION = "pr_queue_snapshot.v1"
+BLOCKING_LABEL_PREFIXES = ("state:blocked", "evidence:blocked", "blocked:")
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -50,6 +51,13 @@ def _labels(pr: dict[str, Any]) -> list[str]:
         str(label.get("name", ""))
         for label in pr.get("labels", [])
         if isinstance(label, dict) and label.get("name")
+    )
+
+
+def _blocking_labels(labels: list[str]) -> list[str]:
+    """Return labels that explicitly prevent review or merge routing."""
+    return sorted(
+        label for label in labels if label == "blocked" or label.startswith(BLOCKING_LABEL_PREFIXES)
     )
 
 
@@ -484,6 +492,8 @@ def _next_action(
         return "invalidate_stale_lane"
     if status == "blocked":
         return "inspect_blocking_preflight"
+    if _blocking_labels(labels):
+        return "await_blocking_owner_or_approval"
     if checks.get("overall") == "failure":
         return "inspect_failing_checks"
     if checks.get("overall") == "pending":
@@ -501,6 +511,8 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
         return "stale_attention"
     if next_action == "inspect_blocking_preflight":
         return "preflight_attention"
+    if next_action == "await_blocking_owner_or_approval":
+        return "blocked_attention"
     if is_draft:
         return "draft_ready_or_review"
     if next_action == "inspect_failing_checks":
@@ -641,6 +653,7 @@ def _pr_payload_from_dict(
         "draft": is_draft,
         "url": pr.get("url", ""),
         "labels": labels,
+        "blocking_labels": _blocking_labels(labels),
         "head_branch": pr.get("headRefName", ""),
         "head_sha": head_sha,
         "mergeable": mergeable,

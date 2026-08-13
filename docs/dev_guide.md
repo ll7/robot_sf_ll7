@@ -675,7 +675,7 @@ For routine goal-autopilot orientation, prefer the compact state snapshot helper
 thread reads:
 
 ```bash
-uv run python scripts/dev/autopilot_state_snapshot.py \
+uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
@@ -752,7 +752,7 @@ For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the e
   full-comment payloads.
 
 ```bash
-uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 --json \
+uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
   --expected-head-sha "$PR_HEAD_SHA"
 ```
 
@@ -873,16 +873,16 @@ For token-efficient autopilot runs, collect compact local snapshots before broad
 GitHub or repository reads:
 
 ```bash
-uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json
-uv run python scripts/dev/snapshot_issue_batch.py 2665 2675 --json \
+uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json
+uv run python -m scripts.dev.snapshot_issue_batch 2665 2675 --json \
   --capsule-dir "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active"
-uv run python scripts/dev/snapshot_issue_batch.py --claimable --json
-uv run python scripts/dev/snapshot_issue_batch.py --blocked-external-report \
+uv run python -m scripts.dev.snapshot_issue_batch --claimable --json
+uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/blocked-external-assets.md"
-uv run python scripts/dev/snapshot_issue_batch.py --active-portfolio \
+uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio \
   --report-path "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/active-issue-portfolio.md" \
   --json
-uv run python scripts/dev/snapshot_pr_queue.py --prs 2677 2678 2679 --json \
+uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 2678 2679 --json \
   --expected-head-sha "$PR_HEAD_SHA"
 uv run python scripts/dev/pr_babysitter_snapshot.py 2679 --expected-head-sha "$SHA" --json
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
@@ -946,7 +946,7 @@ still inspect the diff and run the required local validation.
 PR-loop dry-run policy can consume the same routed-worker manifests directly:
 
 ```bash
-uv run python scripts/dev/pr_loop_policy.py --snapshot output/pr_queue.json \
+uv run python -m scripts.dev.pr_loop_policy --snapshot output/pr_queue.json \
   --manifest 1234=output/issue-2764/worker/routing_manifest.json --json
 ```
 

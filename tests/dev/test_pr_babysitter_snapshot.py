@@ -33,6 +33,14 @@ def _base_pr(**overrides):  # type: ignore[no-untyped-def]
     return pr
 
 
+def _current_main_payload(sha: str = "main-sha") -> dict[str, object]:
+    return {"commit": {"sha": sha}}
+
+
+def _pull_base_payload(sha: str = "main-sha") -> dict[str, object]:
+    return {"base": {"sha": sha}}
+
+
 def test_successful_mergeable_pr_routes_to_review_for_merge_ready() -> None:
     """Green mergeable PRs still need local merge-readiness review."""
     recommendation = classify_pr_action(_base_pr(), retry_state={"prs": {}})
@@ -251,14 +259,20 @@ def test_superseded_cancelled_run_recommends_wait_ci_not_diagnose() -> None:
     }
     with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
         mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(_current_main_payload()), stderr=""),
             MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(_pull_base_payload()), stderr=""),
             MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
         ]
         payload = build_babysitter_snapshot(
             [5869], repo="ll7/robot_sf_ll7", retry_state=load_retry_state(None)
         )
+    gh_calls = [call.args[0] for call in mock_gh.call_args_list]
 
     pr = payload["prs"][0]
+    assert gh_calls[0] == ["api", "repos/ll7/robot_sf_ll7/branches/main"]
+    assert gh_calls[2] == ["api", "repos/ll7/robot_sf_ll7/pulls/5869"]
+    assert pr["preflight"]["status"] == "healthy"
     assert pr["checks"]["overall"] == "pending"
     assert pr["recommendation"]["action"] == "wait"
     assert "ci_pending" in pr["recommendation"]["reasons"]
@@ -297,7 +311,9 @@ def test_build_snapshot_wraps_compact_pr_queue_and_records_retry(tmp_path) -> No
     retry_state = load_retry_state(state_file)
     with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
         mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(_current_main_payload()), stderr=""),
             MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(_pull_base_payload()), stderr=""),
             MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
         ]
         payload = build_babysitter_snapshot(
@@ -307,10 +323,15 @@ def test_build_snapshot_wraps_compact_pr_queue_and_records_retry(tmp_path) -> No
             retry_budget=1,
             record_retry_recommendations=True,
         )
+    gh_calls = [call.args[0] for call in mock_gh.call_args_list]
     save_retry_state(state_file, retry_state)
 
     pr = payload["prs"][0]
     assert payload["schema"] == "pr_babysitter_snapshot.v1"
+    assert gh_calls[0] == ["api", "repos/ll7/robot_sf_ll7/branches/main"]
+    assert gh_calls[2] == ["api", "repos/ll7/robot_sf_ll7/pulls/3001"]
+    assert "base_sha_stale" not in pr["preflight"]["reasons"]
+    assert "current_main_sha_unavailable" not in pr["preflight"]["reasons"]
     assert pr["recommendation"]["action"] == "diagnose_ci_failure"
     assert pr["recommendation"]["after_diagnosis_action"] == "stop_retry_budget_exhausted"
     persisted = load_retry_state(state_file)

@@ -840,6 +840,24 @@ def release_issue(
             "reason": reason,
             "covering_prs": [],
         }
+    if coverage.get("truncated"):
+        return {
+            "schema": "issue_claim.v1",
+            "action": "release",
+            "ok": False,
+            "claimed": True,
+            "issue": issue_number,
+            "remote": remote,
+            "repo": repo,
+            "claim_ref": short_claim_ref(issue_number),
+            "command": status["command"],
+            "stdout": "",
+            "stderr": "open PR snapshot reached its limit",
+            "error": "open_pr_snapshot_truncated; retain the claim",
+            "release_class": None,
+            "reason": reason,
+            "covering_prs": coverage["covering_prs"],
+        }
     if coverage["covering_prs"]:
         return {
             "schema": "issue_claim.v1",

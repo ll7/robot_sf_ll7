@@ -70,6 +70,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _load_json_mapping(path: Path, label: str) -> Mapping[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise StageBPreregistrationError(f"{label} must be readable JSON: {exc}") from exc
+    return _mapping(payload, label)
+
+
 def load_preregistration_config(path: str | Path = DEFAULT_CONFIG) -> dict[str, Any]:
     """Load and validate the tracked YAML packet."""
     config_path = Path(path)
@@ -118,6 +126,7 @@ def validate_preregistration_config(
 
     _validate_sources(config, config_path=config_path)
     _validate_stage_a_snapshot(config)
+    _validate_stage_a_snapshot_matches_summary(config)
     _validate_candidate_selection(config)
     _validate_held_out_plan(config)
     _validate_fidelity_surfaces(config)
@@ -242,6 +251,87 @@ def _validate_stage_a_snapshot(config: Mapping[str, Any]) -> None:
     )
     _require(
         near.get("eligible_for_stage_b") is False, "one-of-three Stage A hit cannot be eligible"
+    )
+
+
+def _validate_stage_a_snapshot_matches_summary(config: Mapping[str, Any]) -> None:
+    sources = _mapping(config.get("source_contracts"), "source_contracts")
+    summary_source = sources.get("stage_a_summary")
+    _require(
+        isinstance(summary_source, str) and summary_source.strip(),
+        "source_contracts.stage_a_summary is required",
+    )
+    summary = _load_json_mapping(
+        _relative_source_path(summary_source), "source_contracts.stage_a_summary"
+    )
+    stage_a = _mapping(summary.get("stage_a"), "stage_a_summary.stage_a")
+
+    snapshot = _mapping(config.get("stage_a_snapshot"), "stage_a_snapshot")
+    _require(
+        stage_a.get("native_rows") == snapshot.get("native_rows"),
+        "Stage A summary native row count disagrees with preregistration snapshot",
+    )
+    _require(
+        stage_a.get("native_execution") == snapshot.get("execution_status"),
+        "Stage A summary native execution status disagrees with preregistration snapshot",
+    )
+
+    design = _mapping(stage_a.get("design"), "stage_a_summary.stage_a.design")
+    profiles = _mapping(snapshot.get("profiles"), "stage_a_snapshot.profiles")
+    _require(
+        design.get("space_filling_profiles") == profiles.get("space_filling_count"),
+        "Stage A summary profile count disagrees with preregistration snapshot",
+    )
+    _require(
+        design.get("profile_seed") == profiles.get("profile_seed"),
+        "Stage A summary profile seed disagrees with preregistration snapshot",
+    )
+    _require(
+        design.get("seeds") == profiles.get("seeds"),
+        "Stage A summary seed schedule disagrees with preregistration snapshot",
+    )
+    threshold = _mapping(
+        profiles.get("clear_threshold"), "stage_a_snapshot.profiles.clear_threshold"
+    )
+    _require(
+        design.get("clear_threshold_lsi") == threshold.get("threshold"),
+        "Stage A summary clear threshold disagrees with preregistration snapshot",
+    )
+
+    decision = _mapping(stage_a.get("decision"), "stage_a_summary.stage_a.decision")
+    observed = _mapping(snapshot.get("observed_decision"), "stage_a_snapshot.observed_decision")
+    _require(
+        decision.get("robust_clear_profile_found") is False
+        and observed.get("robust_candidate_count") == 0,
+        "Stage A summary robust candidate decision disagrees with preregistration snapshot",
+    )
+
+    profile_summaries = _list(
+        stage_a.get("profile_summaries"), "stage_a_summary.stage_a.profile_summaries"
+    )
+    lhs_05_rows = [
+        _mapping(profile, "stage_a_summary.stage_a.profile_summaries[]")
+        for profile in profile_summaries
+        if _mapping(profile, "stage_a_summary.stage_a.profile_summaries[]").get("profile_id")
+        == "lhs_05"
+    ]
+    _require(
+        len(lhs_05_rows) == 1,
+        "Stage A summary must contain exactly one lhs_05 profile summary",
+    )
+    near = _mapping(
+        observed.get("near_candidate"), "stage_a_snapshot.observed_decision.near_candidate"
+    )
+    lhs_05 = lhs_05_rows[0]
+    _require(
+        near.get("profile_id") == lhs_05.get("profile_id")
+        and near.get("clear_hits") == lhs_05.get("clear_lsi_hits")
+        and near.get("clear_total") == lhs_05.get("clear_lsi_total"),
+        "Stage A summary lhs_05 near-hit disagrees with preregistration snapshot",
+    )
+    _require(
+        lhs_05.get("clear_lsi_hits") == 1 and lhs_05.get("clear_lsi_total") == 3,
+        "Stage A summary lhs_05 must remain a one-of-three near-hit",
     )
 
 

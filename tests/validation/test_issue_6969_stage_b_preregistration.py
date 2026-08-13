@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
@@ -16,12 +18,55 @@ from scripts.validation.check_issue_6969_stage_b_preregistration import (
     validate_preregistration_config,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET = REPO_ROOT / ("configs/benchmarks/issue_6969_lane_formation_stage_b_preregistration.yaml")
+SUMMARY = REPO_ROOT / "docs/context/evidence/issue_6969_lane_formation_reference/summary.json"
 
 
 def _packet() -> dict[str, object]:
     return load_preregistration_config(PACKET)
+
+
+def _mutated_summary_packet(
+    tmp_path: Path, mutate: Callable[[dict[str, Any]], None]
+) -> dict[str, object]:
+    packet = copy.deepcopy(_packet())
+    summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
+    mutate(summary)
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    packet["source_contracts"]["stage_a_summary"] = str(summary_path)  # type: ignore[index]
+    packet["source_sha256"]["stage_a_summary"] = hashlib.sha256(  # type: ignore[index]
+        summary_path.read_bytes()
+    ).hexdigest()
+    return packet
+
+
+def _stage_a(summary: dict[str, Any]) -> dict[str, Any]:
+    stage_a = summary["stage_a"]
+    assert isinstance(stage_a, dict)
+    return stage_a
+
+
+def _stage_a_design(summary: dict[str, Any]) -> dict[str, Any]:
+    design = _stage_a(summary)["design"]
+    assert isinstance(design, dict)
+    return design
+
+
+def _lhs_05_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    profiles = _stage_a(summary)["profile_summaries"]
+    assert isinstance(profiles, list)
+    matches = [
+        profile
+        for profile in profiles
+        if isinstance(profile, dict) and profile.get("profile_id") == "lhs_05"
+    ]
+    assert len(matches) == 1
+    return matches[0]
 
 
 def test_packet_is_proposal_only_and_has_no_current_candidate() -> None:
@@ -70,6 +115,53 @@ def test_stage_a_near_candidate_cannot_be_promoted() -> None:
     packet["stage_a_snapshot"]["observed_decision"]["near_candidate"]["eligible_for_stage_b"] = True  # type: ignore[index]
 
     with pytest.raises(StageBPreregistrationError, match="one-of-three Stage A hit"):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (
+            lambda summary: _stage_a(summary).__setitem__("native_rows", 29),
+            "native row count disagrees",
+        ),
+        (
+            lambda summary: _stage_a(summary).__setitem__(
+                "native_execution", "29/30 native:computed"
+            ),
+            "native execution status disagrees",
+        ),
+        (
+            lambda summary: _stage_a_design(summary).__setitem__("space_filling_profiles", 7),
+            "profile count disagrees",
+        ),
+        (
+            lambda summary: _stage_a_design(summary).__setitem__("seeds", [5149, 5150, 5152]),
+            "seed schedule disagrees",
+        ),
+        (
+            lambda summary: _stage_a_design(summary).__setitem__("clear_threshold_lsi", 0.45),
+            "clear threshold disagrees",
+        ),
+        (
+            lambda summary: _stage_a(summary)["decision"].__setitem__(  # type: ignore[index, union-attr]
+                "robust_clear_profile_found", True
+            ),
+            "robust candidate decision disagrees",
+        ),
+        (
+            lambda summary: _lhs_05_summary(summary).__setitem__("clear_lsi_hits", 2),
+            "lhs_05 near-hit disagrees",
+        ),
+    ],
+)
+def test_stage_a_summary_semantic_drift_fails_closed(
+    tmp_path: Path, mutate: Callable[[dict[str, Any]], None], match: str
+) -> None:
+    """The byte-pinned Stage A summary must agree with the preregistration snapshot."""
+    packet = _mutated_summary_packet(tmp_path, mutate)
+
+    with pytest.raises(StageBPreregistrationError, match=match):
         validate_preregistration_config(packet, config_path=PACKET)
 
 

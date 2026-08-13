@@ -57,7 +57,11 @@ uv run python scripts/analysis/verify_ch7_evidence_admission.py \
   --compact-dir <external-#6814-compact-packet>
 ```
 
-The verifier rejects unlisted package or compact files, forged approval IDs, digest mismatches,
-changed role scope, and any package manifest that was rewritten to look admitted. The package
-payload must remain byte-identical; the receipt is the effective admission record and remains
-outside the 21-file package payload.
+The verifier rejects unlisted package or compact files, unbound review sidecars, forged approval
+IDs, digest mismatches (including source-package members and `package_complete.json`), changed role
+scope, custom schemas, non-canonical registries, and any package manifest that was rewritten to
+look admitted. The package payload must remain byte-identical; the receipt is the effective
+admission record and remains outside the 21-file package payload. The registry and receipt are an
+offline author-controlled trust anchor: the verifier checks their exact digests and canonical
+issue-comment URL, but does not claim to authenticate GitHub identity without a separate online
+review.

@@ -35,6 +35,9 @@ DEFAULT_SCHEMA = (
     Path(__file__).resolve().parents[2]
     / "robot_sf/benchmark/schemas/ch7-evidence-admission.v1.json"
 )
+DEFAULT_REGISTRY = (
+    Path(__file__).resolve().parents[2] / "configs/analysis/source_gate_registry.v1.json"
+)
 
 
 class Ch7EvidenceAdmissionError(ValueError):
@@ -93,6 +96,48 @@ def _parse_sums(path: Path) -> list[tuple[str, str]]:
     return entries
 
 
+def _verify_review_sidecars(
+    root: Path,
+    sidecars: set[str],
+    listed: set[str],
+    sums_path: Path,
+    *,
+    label: str,
+) -> None:
+    expected_sidecars = {f"{relative}.review.json" for relative in listed}
+    expected_sidecars.add("SHA256SUMS.review.json")
+    unexpected_sidecars = sorted(sidecars - expected_sidecars)
+    if unexpected_sidecars:
+        raise Ch7EvidenceAdmissionError(
+            f"{label} contains unbound review sidecars: {unexpected_sidecars}"
+        )
+    for sidecar in sorted(sidecars):
+        base_relative = sidecar.removesuffix(".review.json")
+        artifact = sums_path if base_relative == "SHA256SUMS" else root / base_relative
+        marker = _read_object(root / sidecar, f"{label} review sidecar")
+        if marker.get("schema_version") != "evidence-review-marker.v1":
+            raise Ch7EvidenceAdmissionError(
+                f"{label} review sidecar has an unsupported schema: {sidecar}"
+            )
+        artifact_path = marker.get("artifact_path")
+        if not isinstance(artifact_path, str) or not artifact_path.endswith(base_relative):
+            raise Ch7EvidenceAdmissionError(
+                f"{label} review sidecar points at the wrong artifact: {sidecar}"
+            )
+        if marker.get("artifact_sha256") != _sha256_file(artifact):
+            raise Ch7EvidenceAdmissionError(
+                f"{label} review sidecar artifact hash mismatch: {sidecar}"
+            )
+        if marker.get("review_marker") != "AI-GENERATED NEEDS-REVIEW":
+            raise Ch7EvidenceAdmissionError(
+                f"{label} review sidecar marker is not review-only: {sidecar}"
+            )
+        if marker.get("preserved_exact_bytes") is not True:
+            raise Ch7EvidenceAdmissionError(
+                f"{label} review sidecar does not preserve exact bytes: {sidecar}"
+            )
+
+
 def _verify_members(root: Path, *, label: str) -> tuple[str, list[str]]:
     root = root.resolve()
     sums_path = root / "SHA256SUMS"
@@ -103,19 +148,62 @@ def _verify_members(root: Path, *, label: str) -> tuple[str, list[str]]:
     actual = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
-        if path.is_file() and path.name != "SHA256SUMS"
+        if path.is_file() and path != sums_path
     }
-    missing = sorted(listed - actual)
-    extra = sorted(actual - listed)
+    sidecars = {relative for relative in actual if relative.endswith(".review.json")}
+    payload_actual = actual - sidecars
+    missing = sorted(listed - payload_actual)
+    extra = sorted(payload_actual - listed)
     if missing:
         raise Ch7EvidenceAdmissionError(f"{label} SHA256SUMS lists missing files: {missing}")
     if extra:
         raise Ch7EvidenceAdmissionError(f"{label} contains unlisted files: {extra}")
+    _verify_review_sidecars(root, sidecars, listed, sums_path, label=label)
     for expected, relative in entries:
         member = root / relative
         if _sha256_file(member) != expected:
             raise Ch7EvidenceAdmissionError(f"{label} member hash mismatch: {relative}")
     return _sha256_file(sums_path), sorted(listed)
+
+
+def _verify_source_package(source_package: Path, expected_complete_sha256: str) -> str:
+    """Verify the approved source tree, including its intentionally unlisted completion receipt."""
+
+    root = source_package.resolve()
+    sums_path = root / "SHA256SUMS"
+    if not root.is_dir() or not sums_path.is_file():
+        raise Ch7EvidenceAdmissionError("source package must be a directory with SHA256SUMS")
+    entries = _parse_sums(sums_path)
+    listed = {relative for _digest, relative in entries}
+    actual = {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and path != sums_path
+    }
+    allowed_extra = {"package_complete.json"}
+    missing = sorted(listed - actual)
+    extra = sorted(actual - listed - allowed_extra)
+    if missing:
+        raise Ch7EvidenceAdmissionError(f"source package SHA256SUMS lists missing files: {missing}")
+    if extra:
+        raise Ch7EvidenceAdmissionError(f"source package contains unlisted files: {extra}")
+    for expected, relative in entries:
+        if _sha256_file(root / relative) != expected:
+            raise Ch7EvidenceAdmissionError(f"source package member hash mismatch: {relative}")
+    complete = root / "package_complete.json"
+    if not complete.is_file():
+        raise Ch7EvidenceAdmissionError("source package package_complete.json is missing")
+    complete_sha = _sha256_file(complete)
+    if complete_sha != expected_complete_sha256:
+        raise Ch7EvidenceAdmissionError(
+            "source package package_complete.json digest does not match receipt"
+        )
+    complete_payload = _read_object(complete, "source package completion receipt")
+    if complete_payload.get("sha256sums_sha256") != _sha256_file(sums_path):
+        raise Ch7EvidenceAdmissionError(
+            "source package completion receipt is not bound to SHA256SUMS"
+        )
+    return complete_sha
 
 
 def _verify_compact_directory(compact_dir: Path) -> tuple[str, str]:
@@ -128,16 +216,20 @@ def _verify_compact_directory(compact_dir: Path) -> tuple[str, str]:
     return packet_sha, sums_sha
 
 
-def _validate_schema(receipt: Mapping[str, Any], schema_path: Path) -> None:
-    schema = _read_object(schema_path, "admission schema")
+def _validate_schema(payload: Mapping[str, Any], schema_path: Path, *, label: str) -> None:
+    if label == "admission schema" and schema_path.resolve() != DEFAULT_SCHEMA.resolve():
+        raise Ch7EvidenceAdmissionError(
+            "custom admission schemas are not permitted at the promotion boundary"
+        )
+    schema = _read_object(schema_path, label)
     try:
         Draft202012Validator.check_schema(schema)
-        errors = sorted(Draft202012Validator(schema).iter_errors(receipt), key=str)
+        errors = sorted(Draft202012Validator(schema).iter_errors(payload), key=str)
     except (ValidationError, TypeError) as exc:
-        raise Ch7EvidenceAdmissionError("admission schema is invalid") from exc
+        raise Ch7EvidenceAdmissionError(f"{label} is invalid") from exc
     if errors:
         details = "; ".join(error.message for error in errors[:3])
-        raise Ch7EvidenceAdmissionError(f"admission receipt violates schema: {details}")
+        raise Ch7EvidenceAdmissionError(f"{label} validation failed: {details}")
 
 
 def _verify_package(package_dir: Path, receipt: Mapping[str, Any]) -> dict[str, Any]:
@@ -145,6 +237,11 @@ def _verify_package(package_dir: Path, receipt: Mapping[str, Any]) -> dict[str, 
     manifest_path = package_dir / "manifest.json"
     sums_sha, _listed = _verify_members(package_dir, label="evidence package")
     manifest = _read_object(manifest_path, "package manifest")
+    _validate_schema(
+        manifest,
+        DEFAULT_SCHEMA.parent / "ch7-evidence-package.v1.json",
+        label="package manifest schema",
+    )
     if manifest.get("schema_version") != PACKAGE_SCHEMA_VERSION or manifest.get("issue") != 6792:
         raise Ch7EvidenceAdmissionError("package manifest is not the Chapter 7 package")
     if (
@@ -228,6 +325,8 @@ def _verify_registry(registry_path: Path, receipt: Mapping[str, Any]) -> dict[st
     if registry_sha != receipt["source"]["source_registry_sha256"]:
         raise Ch7EvidenceAdmissionError("source registry digest does not match receipt")
     approval = receipt["approval"]
+    if APPROVAL_URL_RE.fullmatch(str(approval.get("approval_url"))) is None:
+        raise Ch7EvidenceAdmissionError("approval URL is not the canonical #6792 issue comment")
     source = receipt["source"]
     matches = [
         entry
@@ -237,6 +336,7 @@ def _verify_registry(registry_path: Path, receipt: Mapping[str, Any]) -> dict[st
         and entry.get("approval_url") == approval["approval_url"]
         and entry.get("status") == "approved"
         and entry.get("source_package_sha256sums") == source["source_package_sha256sums"]
+        and entry.get("source_package_complete_sha256") == source["source_package_complete_sha256"]
         and entry.get("release_archive_sha256") == source["release_archive_sha256"]
         and entry.get("compact_packet_sha256") == source["compact_packet_sha256"]
         and entry.get("compact_sha256sums_sha256") == source["compact_sha256sums_sha256"]
@@ -266,15 +366,20 @@ def verify_admission(
     """Verify the complete author-admission boundary and return a readback receipt."""
 
     admission = _read_object(receipt.resolve(), "admission receipt")
-    _validate_schema(admission, schema.resolve())
+    _validate_schema(admission, schema.resolve(), label="admission schema")
     package = _verify_package(package_dir, admission)
     registry = _verify_registry(source_registry, admission)
+    expected_source = admission["source"]
     source_sha = _sha256_file(source_package.resolve() / "SHA256SUMS")
+    source_complete_sha = _verify_source_package(
+        source_package, expected_source["source_package_complete_sha256"]
+    )
     release_sha = _sha256_file(release_archive.resolve())
     compact_packet_sha, compact_sums_sha = _verify_compact_directory(compact_dir.resolve())
-    expected_source = admission["source"]
     if source_sha != expected_source["source_package_sha256sums"]:
         raise Ch7EvidenceAdmissionError("restored source package digest does not match receipt")
+    if source_complete_sha != expected_source["source_package_complete_sha256"]:
+        raise Ch7EvidenceAdmissionError("source package completion digest does not match receipt")
     if release_sha != expected_source["release_archive_sha256"]:
         raise Ch7EvidenceAdmissionError("release archive digest does not match receipt")
     if compact_packet_sha != expected_source["compact_packet_sha256"]:
@@ -294,6 +399,9 @@ def verify_admission(
             "registry_sha256": registry["registry_sha256"],
         },
         "approval_id": admission["approval"]["approval_id"],
+        "approval_url": admission["approval"]["approval_url"],
+        "scope": admission["scope"],
+        "roles": admission["roles"],
         "retrieval": admission["retrieval"],
     }
 
@@ -306,7 +414,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-package", type=Path, required=True)
     parser.add_argument("--release-archive", type=Path, required=True)
     parser.add_argument("--compact-dir", type=Path, required=True)
-    parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
+    parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
     return parser
 
 
@@ -315,6 +423,10 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     args = _build_parser().parse_args(argv)
     try:
+        if args.source_registry.resolve() != DEFAULT_REGISTRY.resolve():
+            raise Ch7EvidenceAdmissionError(
+                "source registry must be the repository-controlled canonical registry"
+            )
         result = verify_admission(
             package_dir=args.package_dir,
             source_registry=args.source_registry,

@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.analysis import verify_ch7_evidence_admission as admission
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 SOURCE_SHA = "1" * 64
 RELEASE_SHA = "2" * 64
@@ -39,11 +36,40 @@ def _write_sums(root: Path) -> str:
     return _sha256(root / "SHA256SUMS")
 
 
+def _write_review_sidecars(root: Path) -> None:
+    for artifact in sorted(
+        path for path in root.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    ):
+        relative = artifact.relative_to(root).as_posix()
+        _write_json(
+            Path(f"{artifact}.review.json"),
+            {
+                "schema_version": "evidence-review-marker.v1",
+                "artifact_path": f"docs/context/evidence/fixture/{relative}",
+                "artifact_sha256": _sha256(artifact),
+                "review_marker": "AI-GENERATED NEEDS-REVIEW",
+                "preserved_exact_bytes": True,
+            },
+        )
+    _write_json(
+        root / "SHA256SUMS.review.json",
+        {
+            "schema_version": "evidence-review-marker.v1",
+            "artifact_path": "docs/context/evidence/fixture/SHA256SUMS",
+            "artifact_sha256": _sha256(root / "SHA256SUMS"),
+            "review_marker": "AI-GENERATED NEEDS-REVIEW",
+            "preserved_exact_bytes": True,
+        },
+    )
+
+
 def _make_external_inputs(tmp_path: Path) -> dict[str, Path | str]:
     source = tmp_path / "source"
     source.mkdir(parents=True)
     (source / "source.dat").write_bytes(b"approved-source")
     source_sha = _write_sums(source)
+    _write_json(source / "package_complete.json", {"sha256sums_sha256": source_sha})
+    source_complete_sha = _sha256(source / "package_complete.json")
 
     release = tmp_path / "release.tar.gz"
     release.write_bytes(b"approved-release")
@@ -58,6 +84,7 @@ def _make_external_inputs(tmp_path: Path) -> dict[str, Path | str]:
     return {
         "source": source,
         "source_sha": source_sha,
+        "source_complete_sha": source_complete_sha,
         "release": release,
         "release_sha": release_sha,
         "compact": compact,
@@ -79,7 +106,10 @@ def _make_package(tmp_path: Path, inputs: dict[str, Path | str]) -> Path:
             "release_archive_sha256": inputs["release_sha"],
             "issue6814_compact_packet_sha256": inputs["compact_sha"],
         },
-        "inputs": {"portfolio_config": {"name": "fixture", "sha256": "5" * 64}},
+        "inputs": {
+            "portfolio_config": {"name": "fixture", "sha256": "5" * 64},
+            "source_package_member_count": 1,
+        },
         "counts": {"requested": 90, "admitted": 88, "excluded": 2},
         "atlas": {"audit_cells": 672, "publication_cells": 20, "planner_arms": 14},
         "roles": {
@@ -107,6 +137,7 @@ def _make_package(tmp_path: Path, inputs: dict[str, Path | str]) -> Path:
         package / "audit" / "summary.json", {"requested": 90, "admitted": 88, "excluded": 2}
     )
     _write_sums(package)
+    _write_review_sidecars(package)
     return package
 
 
@@ -120,6 +151,7 @@ def _make_receipt(tmp_path: Path, package: Path, inputs: dict[str, Path | str]) 
                 "approval_url": APPROVAL_URL,
                 "status": "approved",
                 "source_package_sha256sums": inputs["source_sha"],
+                "source_package_complete_sha256": inputs["source_complete_sha"],
                 "release_archive_sha256": inputs["release_sha"],
                 "compact_packet_sha256": inputs["compact_sha"],
                 "compact_sha256sums_sha256": inputs["compact_sums_sha"],
@@ -143,6 +175,7 @@ def _make_receipt(tmp_path: Path, package: Path, inputs: dict[str, Path | str]) 
             },
             "source": {
                 "source_package_sha256sums": inputs["source_sha"],
+                "source_package_complete_sha256": inputs["source_complete_sha"],
                 "release_archive_sha256": inputs["release_sha"],
                 "compact_packet_sha256": inputs["compact_sha"],
                 "compact_sha256sums_sha256": inputs["compact_sums_sha"],
@@ -213,6 +246,114 @@ def test_valid_admission_receipt_binds_all_inputs(tmp_path: Path) -> None:
     assert result["source"]["compact_packet_sha256"] == _sha256(
         args["compact"] / "compact_packet.json"
     )
+    assert result["scope"]["forbidden_claims"] == list(admission.FORBIDDEN_CLAIMS)
+    assert result["roles"]["unavailable"]["seed_sensitivity"]["grain"] == "trace"
+    assert result["approval_url"] == APPROVAL_URL
+
+
+def test_unbound_review_sidecar_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    _write_json(
+        args["package"] / "unbound.json.review.json",
+        {
+            "schema_version": "evidence-review-marker.v1",
+            "artifact_path": "docs/context/evidence/fixture/unbound.json",
+            "artifact_sha256": "f" * 64,
+            "review_marker": "AI-GENERATED NEEDS-REVIEW",
+            "preserved_exact_bytes": True,
+        },
+    )
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="unbound review sidecars"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_review_sidecar_artifact_mutation_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    sidecar = args["package"] / "manifest.json.review.json"
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    payload["artifact_sha256"] = "f" * 64
+    _write_json(sidecar, payload)
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="review sidecar artifact hash"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_source_member_mutation_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    (args["source"] / "source.dat").write_bytes(b"tampered")
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="source package member hash"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_nested_checksum_file_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    nested = args["package"] / "audit" / "SHA256SUMS"
+    nested.write_text("", encoding="ascii")
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="unlisted"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_manifest_schema_mutation_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    manifest = json.loads((args["package"] / "manifest.json").read_text(encoding="utf-8"))
+    del manifest["inputs"]["portfolio_config"]
+    _write_json(args["package"] / "manifest.json", manifest)
+    manifest_sha = _sha256(args["package"] / "manifest.json")
+    sums_path = args["package"] / "SHA256SUMS"
+    sums = [
+        f"{manifest_sha}  manifest.json" if line.endswith("  manifest.json") else line
+        for line in sums_path.read_text(encoding="ascii").splitlines()
+    ]
+    sums_path.write_text("\n".join(sums) + "\n", encoding="ascii")
+    sidecar = args["package"] / "manifest.json.review.json"
+    sidecar_payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    sidecar_payload["artifact_sha256"] = manifest_sha
+    _write_json(sidecar, sidecar_payload)
+    sums_sha = _sha256(sums_path)
+    sums_sidecar = args["package"] / "SHA256SUMS.review.json"
+    sums_sidecar_payload = json.loads(sums_sidecar.read_text(encoding="utf-8"))
+    sums_sidecar_payload["artifact_sha256"] = sums_sha
+    _write_json(sums_sidecar, sums_sidecar_payload)
+    receipt = json.loads(args["receipt"].read_text(encoding="utf-8"))
+    receipt["package"]["manifest_sha256"] = manifest_sha
+    receipt["package"]["sha256sums_sha256"] = sums_sha
+    _write_json(args["receipt"], receipt)
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="package manifest schema"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
 
 
 @pytest.mark.parametrize(

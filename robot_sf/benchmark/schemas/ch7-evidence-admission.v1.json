@@ -49,6 +49,7 @@
       "additionalProperties": false,
       "required": [
         "source_package_sha256sums",
+        "source_package_complete_sha256",
         "release_archive_sha256",
         "compact_packet_sha256",
         "compact_sha256sums_sha256",
@@ -56,6 +57,7 @@
       ],
       "properties": {
         "source_package_sha256sums": {"$ref": "#/$defs/sha256"},
+        "source_package_complete_sha256": {"$ref": "#/$defs/sha256"},
         "release_archive_sha256": {"$ref": "#/$defs/sha256"},
         "compact_packet_sha256": {"$ref": "#/$defs/sha256"},
         "compact_sha256sums_sha256": {"$ref": "#/$defs/sha256"},

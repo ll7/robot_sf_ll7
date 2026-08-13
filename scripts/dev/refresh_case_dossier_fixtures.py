@@ -81,9 +81,14 @@ def _set_relative_source_refs(payload: dict[str, Any], target: Path) -> None:
         source["sha256"] = _sha256(path)
 
 
-def _refresh_one_fixture(builder: ModuleType, folder: str, grammar: str) -> Path:
+def _refresh_one_fixture(
+    builder: ModuleType,
+    fixture_root: Path,
+    folder: str,
+    grammar: str,
+) -> Path:
     """Generate one fixture package and its two deliberate negative inputs."""
-    target = FIXTURE_ROOT / folder
+    target = fixture_root / folder
     target.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="case-dossier-refresh-") as raw_dir:
         generated_root = Path(raw_dir)
@@ -116,6 +121,67 @@ def _refresh_one_fixture(builder: ModuleType, folder: str, grammar: str) -> Path
     return target / "input.json"
 
 
+def _fixture_files(root: Path) -> dict[str, Path]:
+    """Return all files in a generated or committed fixture tree by relative path."""
+    if not root.exists():
+        return {}
+    return {
+        path.relative_to(root).as_posix(): path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix == ".json"
+    }
+
+
+def _source_digests(root: Path) -> dict[str, dict[str, str]]:
+    """Extract source-bound digests from each generated portfolio for drift diagnostics."""
+    result: dict[str, dict[str, str]] = {}
+    for folder, _ in FIXTURE_SPECS:
+        portfolio_path = root / folder / "portfolio.json"
+        try:
+            portfolio = json.loads(portfolio_path.read_text(encoding="utf-8"))
+            selected = portfolio.get("selected") or []
+            source = selected[0].get("source", {}) if selected else {}
+            result[folder] = {
+                key: source[key]
+                for key in (
+                    "trace_package_sha256",
+                    "release_rows_sha256",
+                )
+                if isinstance(source.get(key), str)
+            }
+        except (OSError, json.JSONDecodeError, IndexError, AttributeError, TypeError):
+            result[folder] = {"error": f"unable to read {portfolio_path.name}"}
+    return result
+
+
+def _compare_fixture_trees(generated_root: Path, committed_root: Path) -> list[dict[str, str]]:
+    """Compare generated and committed fixture trees and return deterministic differences."""
+    generated = _fixture_files(generated_root)
+    committed = _fixture_files(committed_root)
+    differences: list[dict[str, str]] = []
+    for relative_path in sorted(generated.keys() | committed.keys()):
+        generated_path = generated.get(relative_path)
+        committed_path = committed.get(relative_path)
+        if generated_path is None:
+            differences.append({"path": relative_path, "status": "unexpected_committed_file"})
+            continue
+        if committed_path is None:
+            differences.append({"path": relative_path, "status": "missing_committed_file"})
+            continue
+        generated_bytes = generated_path.read_bytes()
+        committed_bytes = committed_path.read_bytes()
+        if generated_bytes != committed_bytes:
+            differences.append(
+                {
+                    "path": relative_path,
+                    "status": "content_mismatch",
+                    "generated_sha256": hashlib.sha256(generated_bytes).hexdigest(),
+                    "committed_sha256": hashlib.sha256(committed_bytes).hexdigest(),
+                }
+            )
+    return differences
+
+
 def _check_fixture(path: Path) -> dict[str, Any]:
     """Render one committed fixture in a disposable directory and return a compact report."""
     with tempfile.TemporaryDirectory(prefix="case-dossier-check-") as raw_dir:
@@ -130,7 +196,7 @@ def _check_fixture(path: Path) -> dict[str, Any]:
     }
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line options."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -138,16 +204,52 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate tracked fixture packages from the canonical test builder first.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Regenerate into a temporary tree and fail if it differs from tracked fixtures.",
+    )
+    args = parser.parse_args(argv)
+    if args.write and args.check:
+        parser.error("--write and --check are mutually exclusive")
+    return args
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Refresh when requested, then validate every committed production-shaped fixture."""
-    args = _parse_args()
-    builder = _load_test_builder() if args.write else None
+    args = _parse_args(argv)
+    builder = _load_test_builder() if args.write or args.check else None
+    if args.check:
+        if builder is None:
+            raise RuntimeError("canonical fixture builder unavailable")
+        with tempfile.TemporaryDirectory(prefix="case-dossier-refresh-check-") as raw_dir:
+            generated_root = Path(raw_dir)
+            for folder, grammar in FIXTURE_SPECS:
+                _refresh_one_fixture(builder, generated_root, folder, grammar)
+            differences = _compare_fixture_trees(generated_root, FIXTURE_ROOT)
+            if differences:
+                generated_digests = _source_digests(generated_root)
+                committed_digests = _source_digests(FIXTURE_ROOT)
+                print(
+                    json.dumps(
+                        {
+                            "status": "drift",
+                            "mode": "check",
+                            "first_difference": differences[0],
+                            "differences": differences,
+                            "generated_source_digests": generated_digests,
+                            "committed_source_digests": committed_digests,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return 1
+        print(json.dumps({"status": "ok", "mode": "check", "fixtures": FIXTURE_SPECS}))
+        return 0
     if builder is not None:
         for folder, grammar in FIXTURE_SPECS:
-            _refresh_one_fixture(builder, folder, grammar)
+            _refresh_one_fixture(builder, FIXTURE_ROOT, folder, grammar)
     reports = [_check_fixture(FIXTURE_ROOT / folder / "input.json") for folder, _ in FIXTURE_SPECS]
     print(json.dumps({"status": "ok", "fixtures": reports}, indent=2, sort_keys=True))
     return 0

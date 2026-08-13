@@ -122,6 +122,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_6102_robot_speed_tier_recovery/`: compact recovery receipt for the
+  structurally complete local copy of job 13828 (2,160 native cells). The recorded
+  independent result root is missing, so this packet remains `durable-required`,
+  provenance-unresolved, and not benchmark or paper-facing evidence.
+
 - `issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/`: generated
   `scenario_evidence_crosswalk.v1` instance (issue #5602 tooling) over the full
   48-scenario matrix pinned by release 0.0.3 / 0.0.3.post1

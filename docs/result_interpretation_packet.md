@@ -1,0 +1,146 @@
+# Result Interpretation Packet (`result_interpretation_packet.v1`)
+
+**Contract version:** `result_interpretation_packet.v1`
+**Schema:** `robot_sf/benchmark/schemas/result_interpretation_packet.v1.json`
+**Module:** `robot_sf/benchmark/result_interpretation_packet.py`
+**Script:** `scripts/analysis/build_result_interpretation_packet.py`
+**Issue:** #7029
+
+## Purpose
+
+The result interpretation packet is a **contract-only** container for structured
+interpretation of benchmark or diagnostic results.  It answers three questions:
+
+1. **What question does the evidence address?**
+2. **How was it computed, and what population/modes does it cover?**
+3. **What is it allowed and forbidden to claim?**
+
+Each packet also records an explicit evidence identity/tier and admission state.
+This keeps a nominal benchmark result, diagnostic observation, and visualization
+fixture distinct even when they share the same packet schema.
+
+The packet does not re-run experiments or infer values from filenames or plots.
+It preserves existing `artifact_catalog` and `figure_qa` contracts by referencing
+artifacts via `file_ref` digests rather than re-registering them.
+
+## Claim boundary
+
+Every packet carries an explicit `claim_boundary` with `allowed` and `forbidden`
+lists.  The packet is the *minimal* interpretation surface: it states what the
+evidence supports and what it explicitly does not.
+
+### Allowed claims (examples)
+
+- Bounded simulator-defined metric-family effects on a frozen scenario surface.
+- Diagnostic-only observations without inferential comparison.
+- Visualization-only process contrasts with causal abstention.
+
+### Forbidden claims (examples)
+
+- Planner ranking or universal superiority.
+- Causal mechanism or population generalization.
+- Paper-facing or dissertation-ready claims.
+- Real-world, fairness, deployment-ethics, or welfare claims.
+
+## Decision vocabulary
+
+All decisions use exactly one of five controlled outcomes:
+
+| Outcome | Meaning |
+|---------|---------|
+| `supported` | The evidence reaches the preregistered support threshold. |
+| `not_supported` | The evidence does not reach the threshold; reason recorded. |
+| `inconclusive` | The evidence is insufficient to decide. |
+| `invalid` | The source or execution is invalid; excluded from evidence. |
+| `unavailable` | The metric or comparison is not available for this packet. |
+
+## Fail-closed validation
+
+The validator rejects at minimum:
+
+- Missing denominator or analysis unit.
+- Unsupported zero imputation (`not_imputed` missingness).
+- Undefined comparator direction.
+- Inferential comparison without uncertainty declaration.
+- Unrecorded multiplicity.
+- Source/packet/figure/caption/review digest drift after review.
+- Caption assertion text/status mismatch or `inferred` status.
+- Forbidden claim escalation via decision outcome.
+- Duplicate IDs across metrics, decisions, figures, and sources.
+- Unsupported decision vocabulary.
+- `support > denominator` violations.
+- Population accounting errors (`included + excluded != total`).
+- Empty claim boundary lists.
+
+Source references are repository-relative durable files.  Each source must carry
+its SHA-256 digest, producing commit, and generation command; validation hashes
+the tracked bytes and fails closed on drift or missing files.  Execution-mode
+counts must reconcile exactly with the included population.  A reviewed packet
+must bind both `reviewed_packet_digest` and `post_review_digest`; the latter
+includes the reviewer identity and cannot be supplied as an arbitrary hex value.
+Packets also list `fail_closed_changes`, making the retained exclusions and
+claim refusals explicit in the review report.
+
+## Source fixtures
+
+Three compact, deterministic fixtures reference tracked repository evidence:
+
+| Fixture | Source issue | Decision |
+|---------|-------------|----------|
+| `issue_6474_comfort_exposure_supported.json` | #6474 | `supported` |
+| `issue_6944_brne_candidate_transition_diagnostic.json` | #6944 | `not_supported` |
+| `ch7_visualization_causal_abstention.json` | #6792 | `unavailable` |
+
+Fixtures bind source paths and SHA-256 digests, contain structured caption
+assertions generated from packet fields, and represent figure availability
+explicitly without inventing rendered results.
+
+## Usage
+
+### Validate a packet
+
+```bash
+uv run python scripts/analysis/build_result_interpretation_packet.py \
+    --input packet.json --validate-only
+```
+
+### Build and write validated output
+
+```bash
+uv run python scripts/analysis/build_result_interpretation_packet.py \
+    --input packet.json --output validated.json
+
+# Optional deterministic caption, review report, and checksum manifest
+uv run python scripts/analysis/build_result_interpretation_packet.py \
+    --input packet.json --output validated.json \
+    --caption-output caption.txt \
+    --review-output review.json \
+    --checksum-output SHA256SUMS
+```
+
+### Programmatic API
+
+```python
+from robot_sf.benchmark.result_interpretation_packet import (
+    build_and_validate_packet,
+    compute_packet_digest,
+    load_result_interpretation_packet,
+)
+
+packet = load_result_interpretation_packet(Path("packet.json"))
+digest = compute_packet_digest(packet)
+```
+
+## Relationship to existing contracts
+
+- **`artifact_catalog.v1/v2`**: The packet references figures via `file_ref`
+  (path + SHA-256) without re-registering them in the catalog.
+- **`figure_qa.py`**: Caption assertions in the packet are compatible with
+  the v2 figure semantics QA surface.
+- Figure links carry a visual contract covering plot type, encodings,
+  transforms, limits, reference lines, ordering, faceting, uncertainty,
+  sample-size display, legend identities, and accessibility.
+- **`benchmark_claim.v1`**: A packet may be a component of a broader claim
+  bundle but does not establish a claim on its own.
+- **`ch7_case_portfolio.v2`**: The Chapter 7 visualization fixture preserves
+  the controlled narrative grammar and causal-abstention contract.

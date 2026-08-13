@@ -1,0 +1,180 @@
+{
+  "schema_version": "result_interpretation_packet.v1",
+  "packet_id": "issue_6474_social_compliance_comfort_exposure_supported",
+  "question": {
+    "question_id": "q_6474_comfort_exposure_paired",
+    "text": "Do comfort-exposure paired mean differences reach the preregistered support threshold for the three declared planner pairs on the frozen scenario surface?",
+    "issue_refs": [6474]
+  },
+  "evidence": {
+    "evidence_id": "issue_6474_nominal_social_compliance",
+    "tier": "nominal_benchmark",
+    "admission_state": "bounded_simulator_defined",
+    "rationale": "The packet preserves the promoted nominal campaign boundary and excludes fallback, degraded, unavailable, invalid, and unknown rows."
+  },
+  "sources": [
+    {
+      "source_id": "interpretation_note",
+      "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md",
+      "sha256": "3bef8de3a9f7cd399d7a17abb6e68dd9c2775d42ba847b92cdff459bd2a70f70",
+      "kind": "interpretation_note",
+      "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
+      "description": "Nominal benchmark evidence interpretation for issue #6474 social-compliance campaign."
+    },
+    {
+      "source_id": "campaign_manifest",
+      "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_manifest.json",
+      "sha256": "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
+      "kind": "campaign_manifest",
+      "commit": "d0c8d3400f79c35b40062304b17f91598ccac98d",
+      "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
+      "description": "Campaign manifest recording 540 valid benchmark-capable rows."
+    },
+    {
+      "source_id": "report_summary",
+      "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json",
+      "sha256": "8fdb9fbb62a20b4cda5d5e0d3df4c037be252610f01428d97ef18f83c12ef43f",
+      "kind": "report_summary",
+      "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
+      "description": "Aggregated summary JSON with paired mean differences and bootstrap CIs."
+    },
+    {
+      "source_id": "interpretation_review",
+      "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md.review.json",
+      "sha256": "473e0801c0d581fbe70d45f65c3adedad843e8c7c3ac704f077464266ee65d57",
+      "kind": "review_sidecar",
+      "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "command": "evidence-review-marker.v1",
+      "description": "Review marker sidecar for the interpretation note."
+    }
+  ],
+  "population": {
+    "total": 540,
+    "included": 540,
+    "excluded": 0,
+    "attrition": {
+      "native": 0,
+      "adapter": 0,
+      "fallback": 0,
+      "degraded": 0,
+      "unavailable": 0,
+      "invalid": 0
+    },
+    "exclusion_reasons": []
+  },
+  "execution_mode": {
+    "counts": {"native": 180, "adapter": 360},
+    "fallback_permitted": false,
+    "degraded_permitted": false
+  },
+  "estimand": {
+    "estimand_id": "comfort_exposure_paired_difference",
+    "description": "Paired mean difference (comparison - reference) for comfort_exposure_person_s on frozen medium-band scenario families.",
+    "analysis_unit": "planner-pair-by-metric-family",
+    "resampling_unit": "pedestrian_steps",
+    "pairing_key": "scenario_seed",
+    "clustering_key": null,
+    "comparator": {
+      "reference": "goal",
+      "comparison": "social_force",
+      "direction": "comparison_minus_reference"
+    },
+    "contrast_direction": "paired_mean_difference"
+  },
+  "metrics": [
+    {
+      "metric_id": "comfort_exposure_person_s",
+      "unit": "person-seconds",
+      "desirability": "lower_is_better",
+      "support": 540,
+      "denominator": 540,
+      "missingness": "complete",
+      "unavailable_handling": "fail_closed",
+      "effect": -1.24056,
+      "uncertainty": {
+        "declared": true,
+        "method": "percentile_bootstrap_95_ci",
+        "ci_low": -1.93667,
+        "ci_high": -0.471569,
+        "p_value_raw": 0.001999,
+        "p_value_adjusted": 0.025987
+      },
+      "null_value": 0.0,
+      "multiplicity": {
+        "declared": true,
+        "method": "holm_stepdown",
+        "n_comparisons": 15
+      },
+      "sensitivity": null
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "d_comfort_exposure_goal_vs_social_force",
+      "metric_id": "comfort_exposure_person_s",
+      "outcome": "supported",
+      "rationale": "3/3 comfort-exposure decisions reach the preregistered support threshold and reject at Holm-adjusted alpha=0.05.",
+      "refusal_reason": null
+    },
+    {
+      "decision_id": "d_comfort_exposure_goal_vs_orca",
+      "metric_id": "comfort_exposure_person_s",
+      "outcome": "supported",
+      "rationale": "Goal vs orca: mean difference 2.76778 with CI95 [1.83771, 3.69947], Holm-adjusted p=0.007496.",
+      "refusal_reason": null
+    },
+    {
+      "decision_id": "d_comfort_exposure_sf_vs_orca",
+      "metric_id": "comfort_exposure_person_s",
+      "outcome": "supported",
+      "rationale": "Social_force vs orca: mean difference 4.00833 with CI95 [2.87981, 5.12642], Holm-adjusted p=0.007496.",
+      "refusal_reason": null
+    }
+  ],
+  "figure_links": [],
+  "caption_assertions": [],
+  "claim_boundary": {
+    "allowed": [
+      "Comfort-exposure paired mean differences differ across the declared planner pairs on the frozen simulator surface.",
+      "The campaign is diagnostic-only; SNQI contract remains diagnostic-only with warn enforcement."
+    ],
+    "forbidden": [
+      "Planner ranking or universal superiority claim.",
+      "Real-world social-validity, fairness, deployment-ethics, or welfare claim.",
+      "Causal mechanism or population generalization claim.",
+      "Paper-facing or dissertation-ready claim."
+    ]
+  },
+  "forbidden_claims": [
+    "Planner ranking or universal superiority claim.",
+    "Real-world social-validity, fairness, deployment-ethics, or welfare claim.",
+    "Causal mechanism or population generalization claim.",
+    "Paper-facing or dissertation-ready claim."
+  ],
+  "producer": {
+    "actor_id": "codex_agent",
+    "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+    "command": "build_result_interpretation_packet --input fixture_6474.json",
+    "status": "draft"
+  },
+  "reviewer": null,
+  "reviewed_packet_digest": null,
+  "post_review_digest": null,
+  "findings": [
+    "3/3 comfort-exposure decisions reach the preregistered support threshold and reject at Holm-adjusted alpha=0.05.",
+    "12/12 decisions for other metric families have zero paired support and remain diagnostic-only.",
+    "Effects are simulator-defined and scenario-dependent; no ranking or causal interpretation."
+  ],
+  "limitations": [
+    "Effects are bounded to frozen medium-band scenario families with seeds 111-140.",
+    "The campaign is marked paper_facing: false; SNQI contract is diagnostic-only.",
+    "Fallback, degraded, unavailable, invalid, and unknown rows are excluded from the admitted result.",
+    "No real-world, fairness, or deployment-ethics interpretation is supported."
+  ],
+  "fail_closed_changes": [
+    "Fallback, degraded, unavailable, invalid, and unknown rows remain excluded from admitted evidence.",
+    "Ranking, causal, real-world, and paper-facing claims remain forbidden."
+  ]
+}

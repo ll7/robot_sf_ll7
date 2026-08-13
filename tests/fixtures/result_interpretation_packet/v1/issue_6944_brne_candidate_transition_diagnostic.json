@@ -1,0 +1,169 @@
+{
+  "schema_version": "result_interpretation_packet.v1",
+  "packet_id": "issue_6944_brne_candidate_transition_diagnostic",
+  "question": {
+    "question_id": "q_6944_brne_candidate_transition",
+    "text": "What happens to the BRNE candidate distribution at the first planner-observation transition?",
+    "issue_refs": [6944]
+  },
+  "evidence": {
+    "evidence_id": "issue_6944_brne_candidate_transition",
+    "tier": "smoke_diagnostic",
+    "admission_state": "diagnostic_only",
+    "rationale": "The packet records three exact native traces and preserves the explicit no-ranking, no-safety, no-realism, and no-paper claim boundary."
+  },
+  "sources": [
+    {
+      "source_id": "transition_summary",
+      "path": "docs/context/evidence/issue_6944_brne_candidate_transition_summary.json",
+      "sha256": "38318cea403fb564854c49940da3d5df559029317e79fe5f089b974a3eee06f8",
+      "kind": "diagnostic_summary",
+      "commit": "8f9438632e794f084db72bb016a14b539bbca648",
+      "command": "NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6944_controller_parity_20260812T101747Z",
+      "description": "Smoke-diagnostic summary for BRNE candidate-transition investigation."
+    },
+    {
+      "source_id": "summary_review",
+      "path": "docs/context/evidence/issue_6944_brne_candidate_transition_summary.json.review.json",
+      "sha256": "49b77879bd5e44aa0211f570d3f2f051146b6da5e115135df5e676cb8fc2b0cf",
+      "kind": "review_sidecar",
+      "commit": "8f9438632e794f084db72bb016a14b539bbca648",
+      "command": "evidence-review-marker.v1",
+      "description": "Review marker sidecar for the diagnostic summary."
+    }
+  ],
+  "population": {
+    "total": 3,
+    "included": 3,
+    "excluded": 0,
+    "attrition": {
+      "native": 0,
+      "adapter": 0,
+      "fallback": 0,
+      "degraded": 0,
+      "unavailable": 0,
+      "invalid": 0
+    },
+    "exclusion_reasons": []
+  },
+  "execution_mode": {
+    "counts": {"native": 3},
+    "fallback_permitted": false,
+    "degraded_permitted": false
+  },
+  "estimand": {
+    "estimand_id": "brne_candidate_distribution_shift",
+    "description": "Trace-level native BRNE candidate-transition mechanism; no benchmark ranking, safety, realism, or paper claim.",
+    "analysis_unit": "planner_step",
+    "resampling_unit": "episode",
+    "pairing_key": null,
+    "clustering_key": null,
+    "contrast_direction": "descriptive_only"
+  },
+  "metrics": [
+    {
+      "metric_id": "first_to_second_candidate_mean_v_mps",
+      "unit": "m/s",
+      "desirability": "not_applicable",
+      "support": 3,
+      "denominator": 3,
+      "missingness": "complete",
+      "unavailable_handling": "diagnostic_only",
+      "effect": -0.36,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "null_value": null,
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": null
+    },
+    {
+      "metric_id": "first_to_second_weight_mean",
+      "unit": "dimensionless",
+      "desirability": "not_applicable",
+      "support": 3,
+      "denominator": 3,
+      "missingness": "complete",
+      "unavailable_handling": "diagnostic_only",
+      "effect": 0.0,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "null_value": null,
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": null
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "d_brne_candidate_shift_observed",
+      "metric_id": "first_to_second_candidate_mean_v_mps",
+      "outcome": "not_supported",
+      "rationale": "The candidate control distribution shifts from 0.40 to 0.04 m/s, but this is a diagnostic-only observation without uncertainty quantification or inferential comparison. No benchmark ranking or causal claim is supported.",
+      "refusal_reason": "Diagnostic-only: no inferential comparison, no uncertainty declared, no multiplicity accounting."
+    }
+  ],
+  "figure_links": [],
+  "caption_assertions": [],
+  "claim_boundary": {
+    "allowed": [
+      "Trace-level native BRNE candidate-transition mechanism observation.",
+      "Diagnostic-only interpretation; no benchmark ranking, safety, realism, or paper claim."
+    ],
+    "forbidden": [
+      "Benchmark ranking or planner superiority claim.",
+      "Causal mechanism or population generalization claim.",
+      "Paper-facing or dissertation-ready claim.",
+      "Safety or realism claim."
+    ]
+  },
+  "forbidden_claims": [
+    "Benchmark ranking or planner superiority claim.",
+    "Causal mechanism or population generalization claim.",
+    "Paper-facing or dissertation-ready claim.",
+    "Safety or realism claim."
+  ],
+  "producer": {
+    "actor_id": "codex_agent",
+    "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+    "command": "build_result_interpretation_packet --input fixture_6944.json",
+    "status": "draft"
+  },
+  "reviewer": null,
+  "reviewed_packet_digest": null,
+  "post_review_digest": null,
+  "findings": [
+    "The candidate distribution shifts from 0.40 to 0.04 m/s at the first planner-observation transition.",
+    "Mean-normalized robot weights remain uniform (1.0 mean, 0.0 std).",
+    "The adapter uses a straight_constant nominal command and passes 2 observed pedestrians without the pinned upstream <3.5 m activation gate.",
+    "Raw candidate or weight tensors are unavailable; the telemetry contract retains only aggregate statistics."
+  ],
+  "limitations": [
+    "3 exact runs only; no inferential comparison, no uncertainty quantification.",
+    "No benchmark ranking, safety, realism, or paper claim is supported.",
+    "Raw tensors are unavailable; only aggregate statistics are retained.",
+    "Result is diagnostic-only; no source pins, action limits, fallback policy, ranking, benchmark scope, safety, realism, or paper claims are changed."
+  ],
+  "fail_closed_changes": [
+    "The result remains diagnostic-only with no benchmark ranking, safety, realism, or paper admission.",
+    "No runtime source pin, action limit, fallback policy, or benchmark scope is changed."
+  ]
+}

@@ -1,0 +1,28 @@
+# result_interpretation_packet fixtures
+
+Compact, deterministic fixture packets for the `result_interpretation_packet.v1`
+contract (issue #7029).  Each fixture references tracked repository evidence by
+path and SHA-256 digest without copying raw episode data.
+
+## Fixtures
+
+| File | Source issue | Decision type |
+|------|-------------|---------------|
+| `issue_6474_comfort_exposure_supported.json` | #6474 | `supported` |
+| `issue_6944_brne_candidate_transition_diagnostic.json` | #6944 | `not_supported` |
+| `ch7_visualization_causal_abstention.json` | #6792 | `unavailable` |
+
+## Determinism
+
+All SHA-256 digests were computed with `sha256sum` against tracked repository
+files at the base commit.  Fixtures are single-line JSON for deterministic
+serialization.  No raw episode data is copied; only tracked paths and digests
+are bound.
+
+## Regeneration
+
+```bash
+sha256sum docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md
+sha256sum docs/context/evidence/issue_6944_brne_candidate_transition_summary.json
+# etc.
+```

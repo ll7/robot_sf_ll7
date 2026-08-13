@@ -415,6 +415,11 @@ trap cleanup_pr_ready_coverage EXIT
 printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
 
 printf 'Running core readiness lane.\n' >&2
+# PR_READY_ADVISORY is a body-contract escape hatch used to carry a pending
+# domain gate through this diagnostic readiness run. Do not leak it into pytest:
+# subprocess-based contract tests intentionally assert their non-advisory exit
+# codes and inherit the readiness environment.
+unset PR_READY_ADVISORY
 ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
 if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   printf 'Running optional-extra lane for predictive/optional changed files.\n' >&2

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-reduced-publication-atlas.v3.json",
+  "title": "Chapter 7 reduced publication atlas v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "metric_contract",
+    "terminal_label_normalization",
+    "cells",
+    "projections",
+    "excluded_metrics",
+    "roles",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-reduced-publication-atlas.v3"},
+    "metric_contract": {"const": "release_cell_safe_metrics_without_collision_fields.v1"},
+    "terminal_label_normalization": {"$ref": "#/$defs/terminal_label_normalization"},
+    "cells": {"type": "array", "minItems": 28, "maxItems": 28, "items": {"$ref": "#/$defs/cell"}},
+    "projections": {"$ref": "#/$defs/projections"},
+    "excluded_metrics": {"type": "array", "minItems": 10, "items": {"$ref": "#/$defs/excluded_metric"}},
+    "roles": {
+      "type": "array",
+      "const": ["cross_topology_inversion", "cross_mechanism_inversion", "feasibility_criticism"]
+    },
+    "claim_boundary": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_sha256sums_sha256", "member", "member_sha256", "source_row_sha256"],
+      "properties": {
+        "package_sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "member": {"const": "audit/campaign_atlas.csv"},
+        "member_sha256": {"$ref": "#/$defs/sha256"},
+        "source_row_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "panel",
+        "scenario_id",
+        "scenario_family",
+        "planner_key",
+        "arm_id",
+        "configuration_identity",
+        "kinematics",
+        "episodes",
+        "success_fraction",
+        "near_misses_mean",
+        "time_to_goal_norm_mean",
+        "path_efficiency_mean",
+        "terminal_counts",
+        "terminal_counts_status",
+        "terminal_counts_provenance",
+        "source_provenance"
+      ],
+      "properties": {
+        "panel": {"enum": ["cross_topology", "cross_mechanism", "narrow_doorway_terminal"]},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "scenario_family": {"type": "string", "minLength": 1},
+        "planner_key": {"type": "string", "minLength": 1},
+        "arm_id": {"type": "string", "minLength": 1},
+        "configuration_identity": {"type": "string", "minLength": 1},
+        "kinematics": {"type": "string", "minLength": 1},
+        "episodes": {"const": 30},
+        "success_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+        "near_misses_mean": {"type": "number", "minimum": 0},
+        "time_to_goal_norm_mean": {"type": "number", "minimum": 0},
+        "path_efficiency_mean": {"type": "number", "minimum": 0},
+        "terminal_counts": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "terminal_counts_status": {"enum": ["available", "unavailable"]},
+        "terminal_counts_provenance": {
+          "oneOf": [
+            {"$ref": "#/$defs/available_terminal_provenance"},
+            {"$ref": "#/$defs/unavailable_terminal_provenance"}
+          ]
+        },
+        "source_provenance": {"$ref": "#/$defs/source_provenance"}
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarios", "planners", "cell_count"],
+      "properties": {
+        "scenarios": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "planners": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "cell_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "projections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cross_topology", "cross_mechanism", "narrow_doorway_terminal"],
+      "properties": {
+        "cross_topology": {"$ref": "#/$defs/projection"},
+        "cross_mechanism": {"$ref": "#/$defs/projection"},
+        "narrow_doorway_terminal": {"$ref": "#/$defs/projection"}
+      }
+    },
+    "excluded_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "issue", "status", "reason"],
+      "properties": {
+        "metric": {"type": "string", "minLength": 1},
+        "issue": {"const": 7042},
+        "status": {"const": "excluded"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "available_terminal_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "member", "member_sha256"],
+      "properties": {
+        "status": {"const": "available"},
+        "member": {"const": "publication/reduced_atlas.json"},
+        "member_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "unavailable_terminal_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason"],
+      "properties": {
+        "status": {"const": "unavailable"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "terminal_label_normalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "applies_to",
+        "precedence",
+        "source_conditions",
+        "normalized_timeout_reasons",
+        "raw_termination_reason_included",
+        "note"
+      ],
+      "properties": {
+        "contract": {"const": "ch7-terminal-label-normalization.v1"},
+        "applies_to": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "precedence": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {"enum": ["route_complete", "collision_event", "timeout", "unavailable"]}
+        },
+        "source_conditions": {
+          "type": "object",
+          "additionalProperties": {"type": "string", "minLength": 1},
+          "required": ["route_complete", "collision_event", "timeout", "unavailable"]
+        },
+        "normalized_timeout_reasons": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1},
+          "contains": {"const": "terminated"}
+        },
+        "raw_termination_reason_included": {"const": false},
+        "note": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

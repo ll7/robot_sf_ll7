@@ -232,7 +232,7 @@ Issue #6105 step-3 #3275 same-planner held-out decision (historical,
 pre-producer): the packet records the earlier inconclusive decision caused by
 the absence of an outcome producer. It remains diagnostic-only historical
 lineage; the current producer contract and execution instructions are in
-[issue_7066_outcome_producer_readiness.md](issue_7066_outcome_producer_readiness.md).
+[evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md](evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md).
 The historical packet is explicitly marked as superseded and must not be read
 as evidence that the current producer has executed a campaign:
 [evidence/issue_3275_same_planner_held_out/step3_decision_packet.json](evidence/issue_3275_same_planner_held_out/step3_decision_packet.json).
@@ -244,7 +244,7 @@ adapter identity, preserves the historical planner/reference commit separately
 from the producing commit, and requires replay, confirmation, configuration,
 scenario, and episode-record lineage. This is a producer and validation path,
 not a campaign submission or empirical result:
-[issue_7066_outcome_producer_readiness.md](issue_7066_outcome_producer_readiness.md).
+[evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md](evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md).
 
 
 Issue #5303 step 2 frozen TPE-versus-random diagnostic preregistration (proposal/preflight only): the side-effect-free three-seed contract, hash manifest, and check command for `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`. The parent issue's 2026-07-28 domain ruling supersedes this design for promotion with a new six-seed preregistration; this historical packet remains an inconclusive-only diagnostic handoff and cannot authorize the #6145 campaign:

@@ -448,6 +448,118 @@ def test_terminal_signature_fixture_preserves_timeout_and_collision_counts(
     }
 
 
+def test_terminal_label_normalization_is_published_inside_the_package(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    """A consumer must be able to read the label mapping from the package alone."""
+
+    output = tmp_path / "package"
+    manifest = builder.build_ch7_evidence_package(
+        source_package=fixture_inputs["source"],
+        release_archive=fixture_inputs["archive"],
+        issue6814_compact=fixture_inputs["compact"],
+        output=output,
+        portfolio_config=fixture_inputs["portfolio"],
+    )
+    atlas = json.loads((output / "publication/reduced_atlas.json").read_text())
+    published = manifest["terminal_label_normalization"]
+    assert atlas["terminal_label_normalization"] == published
+    assert published["contract"] == "ch7-terminal-label-normalization.v1"
+    assert "terminated" in published["normalized_timeout_reasons"]
+    assert published["raw_termination_reason_included"] is False
+    assert published["precedence"] == [
+        "route_complete",
+        "collision_event",
+        "timeout",
+        "unavailable",
+    ]
+
+
+def test_published_terminal_mapping_matches_builder_behaviour() -> None:
+    """The published mapping must not drift from the label function that produced it."""
+
+    published = builder.terminal_label_normalization()
+    for reason in published["normalized_timeout_reasons"]:
+        assert builder._terminal_label({"termination_reason": reason}) == "timeout"
+    assert builder._terminal_label({"termination_reason": "not_a_declared_reason"}) == "unavailable"
+    assert (
+        builder._terminal_label(
+            {"termination_reason": "terminated", "outcome": {"route_complete": True}}
+        )
+        == "route_complete"
+    )
+    assert (
+        builder._terminal_label(
+            {"termination_reason": "terminated", "outcome": {"collision_event": True}}
+        )
+        == "collision_event"
+    )
+
+
+def test_atlas_schema_rejects_a_missing_or_weakened_terminal_mapping(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package(
+        source_package=fixture_inputs["source"],
+        release_archive=fixture_inputs["archive"],
+        issue6814_compact=fixture_inputs["compact"],
+        output=output,
+        portfolio_config=fixture_inputs["portfolio"],
+    )
+    payload = json.loads((output / "publication/reduced_atlas.json").read_text())
+    schema = json.loads(
+        (
+            Path(__file__).parents[2]
+            / "robot_sf/benchmark/schemas/ch7-reduced-publication-atlas.v2.json"
+        ).read_text(encoding="utf-8")
+    )
+    validator = builder.Draft202012Validator(schema)
+    assert not list(validator.iter_errors(payload))
+
+    dropped = json.loads(json.dumps(payload))
+    dropped.pop("terminal_label_normalization")
+    assert list(validator.iter_errors(dropped))
+
+    hidden_terminated = json.loads(json.dumps(payload))
+    hidden_terminated["terminal_label_normalization"]["normalized_timeout_reasons"] = ["timeout"]
+    assert list(validator.iter_errors(hidden_terminated))
+
+    claims_raw_labels = json.loads(json.dumps(payload))
+    claims_raw_labels["terminal_label_normalization"]["raw_termination_reason_included"] = True
+    assert list(validator.iter_errors(claims_raw_labels))
+
+
+def test_package_schema_accepts_legacy_manifests_without_the_terminal_mapping(
+    fixture_inputs: dict[str, Path], tmp_path: Path
+) -> None:
+    """The frozen #6792 manifest predates the block and must keep validating."""
+
+    output = tmp_path / "package"
+    manifest = builder.build_ch7_evidence_package(
+        source_package=fixture_inputs["source"],
+        release_archive=fixture_inputs["archive"],
+        issue6814_compact=fixture_inputs["compact"],
+        output=output,
+        portfolio_config=fixture_inputs["portfolio"],
+    )
+    schema = json.loads(
+        (
+            Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-package.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    validator = builder.Draft202012Validator(schema)
+    assert not list(validator.iter_errors(manifest))
+
+    legacy = json.loads(json.dumps(manifest))
+    legacy.pop("terminal_label_normalization")
+    assert not list(validator.iter_errors(legacy))
+
+    weakened = json.loads(json.dumps(manifest))
+    weakened["terminal_label_normalization"]["contract"] = "something-else.v1"
+    assert list(validator.iter_errors(weakened))
+
+
 def test_collision_count_means_are_not_emitted_as_fractions(
     fixture_inputs: dict[str, Path], tmp_path: Path
 ) -> None:

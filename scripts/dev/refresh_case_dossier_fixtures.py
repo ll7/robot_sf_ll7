@@ -81,9 +81,16 @@ def _set_relative_source_refs(payload: dict[str, Any], target: Path) -> None:
         source["sha256"] = _sha256(path)
 
 
-def _refresh_one_fixture(builder: ModuleType, folder: str, grammar: str) -> Path:
+def _refresh_one_fixture(
+    builder: ModuleType,
+    folder: str,
+    grammar: str,
+    *,
+    fixture_root: Path | None = None,
+) -> Path:
     """Generate one fixture package and its two deliberate negative inputs."""
-    target = FIXTURE_ROOT / folder
+    target_root = FIXTURE_ROOT if fixture_root is None else fixture_root
+    target = target_root / folder
     target.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="case-dossier-refresh-") as raw_dir:
         generated_root = Path(raw_dir)
@@ -116,12 +123,93 @@ def _refresh_one_fixture(builder: ModuleType, folder: str, grammar: str) -> Path
     return target / "input.json"
 
 
+def _fixture_tree_digest(root: Path) -> str:
+    """Return a stable digest over a fixture package's relative paths and bytes."""
+    digest = hashlib.sha256()
+    for path in sorted(path for path in root.rglob("*") if path.is_file()):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        digest.update(b"\0")
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _fixture_display_path(path: Path) -> str:
+    """Prefer repository-relative paths while keeping temporary test roots printable."""
+    try:
+        return path.relative_to(REPOSITORY_ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _first_differing_relative_path(generated: Path, tracked: Path) -> str | None:
+    """Return the first sorted relative file path whose presence or bytes differ."""
+    generated_paths = {
+        path.relative_to(generated).as_posix() for path in generated.rglob("*") if path.is_file()
+    }
+    tracked_paths = {
+        path.relative_to(tracked).as_posix() for path in tracked.rglob("*") if path.is_file()
+    }
+    for relative in sorted(generated_paths | tracked_paths):
+        generated_path = generated / relative
+        tracked_path = tracked / relative
+        if not generated_path.is_file() or not tracked_path.is_file():
+            return relative
+        if generated_path.read_bytes() != tracked_path.read_bytes():
+            return relative
+    if generated.is_dir() != tracked.is_dir():
+        return "<package-root>"
+    return None
+
+
+def _compare_fixture_package(generated: Path, tracked: Path, folder: str) -> dict[str, Any]:
+    """Compare one generated package with its committed counterpart."""
+    generated_digest = _fixture_tree_digest(generated)
+    tracked_digest = _fixture_tree_digest(tracked)
+    relative_difference = _first_differing_relative_path(generated, tracked)
+    report: dict[str, Any] = {
+        "fixture": folder,
+        "source_digest": generated_digest,
+        "tracked_digest": tracked_digest,
+    }
+    if relative_difference is None:
+        report["status"] = "ok"
+        return report
+    report.update(
+        {
+            "status": "drift",
+            "first_differing_path": _fixture_display_path(tracked / relative_difference),
+        }
+    )
+    return report
+
+
+def _check_generated_fixtures(builder: ModuleType) -> list[dict[str, Any]]:
+    """Regenerate both packages in temporary storage and compare them byte-for-byte."""
+    with tempfile.TemporaryDirectory(prefix="case-dossier-fixture-check-") as raw_dir:
+        generated_root = Path(raw_dir) / "fixtures"
+        reports = []
+        for folder, grammar in FIXTURE_SPECS:
+            _refresh_one_fixture(builder, folder, grammar, fixture_root=generated_root)
+            reports.append(
+                _compare_fixture_package(
+                    generated_root / folder,
+                    FIXTURE_ROOT / folder,
+                    folder,
+                )
+            )
+        return reports
+
+
 def _check_fixture(path: Path) -> dict[str, Any]:
     """Render one committed fixture in a disposable directory and return a compact report."""
     with tempfile.TemporaryDirectory(prefix="case-dossier-check-") as raw_dir:
         bundle = render_case_dossier(path, Path(raw_dir) / "rendered")
     return {
-        "path": path.relative_to(REPOSITORY_ROOT).as_posix(),
+        "path": _fixture_display_path(path),
         "status": "ok",
         "case_id": bundle.manifest["selection"]["case_id"],
         "comparison_grammar": bundle.manifest["comparison_grammar"],
@@ -130,20 +218,40 @@ def _check_fixture(path: Path) -> dict[str, Any]:
     }
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line options."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--write",
         action="store_true",
         help="Regenerate tracked fixture packages from the canonical test builder first.",
     )
-    return parser.parse_args()
+    modes.add_argument(
+        "--check",
+        action="store_true",
+        help=(
+            "Regenerate fixture packages in temporary storage and fail on byte-level drift "
+            "without modifying tracked files."
+        ),
+    )
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    """Refresh when requested, then validate every committed production-shaped fixture."""
-    args = _parse_args()
+def main(argv: list[str] | None = None) -> int:
+    """Refresh, compare, or validate the production-shaped fixture packages."""
+    args = _parse_args(argv)
+    if args.check:
+        builder = _load_test_builder()
+        reports = _check_generated_fixtures(builder)
+        status = "ok" if all(report["status"] == "ok" for report in reports) else "drift"
+        print(
+            json.dumps(
+                {"mode": "check", "status": status, "fixtures": reports}, indent=2, sort_keys=True
+            )
+        )
+        return 0 if status == "ok" else 1
+
     builder = _load_test_builder() if args.write else None
     if builder is not None:
         for folder, grammar in FIXTURE_SPECS:

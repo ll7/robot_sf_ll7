@@ -24,9 +24,12 @@ uv run python scripts/analysis/render_case_dossier.py \
 ```
 
 After a portfolio or provenance-contract change, refresh the tracked compact packages with the
-canonical test builder and then run its no-simulation integrity check:
+canonical test builder. To detect stale committed JSON without modifying the fixture tree, use
+the temporary `--check` mode:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py --write
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py --check
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/refresh_case_dossier_fixtures.py
+uv run pytest -q tests/dev/test_refresh_case_dossier_fixtures.py
 ```

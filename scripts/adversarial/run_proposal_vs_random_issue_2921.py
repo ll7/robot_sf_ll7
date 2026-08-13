@@ -21,7 +21,7 @@ geometry, uses the explicit held-out-family split, and rejects a non-frozen
 budget, archive, or search-space override.
 
 The comparison run keeps archive-nearness under an explicitly diagnostic
-namespace. When valid independent native planner-execution outcomes (the frozen
+namespace. When valid independent planner-execution outcomes matching the frozen
 ``adversarial_independent_outcomes.v2`` row contract) are supplied, the
 top-level comparison and the issue #2921 stop rule follow those outcomes
 exclusively, and the decision vocabulary is exactly ``continue | stop |
@@ -80,7 +80,7 @@ def classify_issue_2921_stop_rule(
 ) -> dict[str, Any]:
     """Return the issue #2921 ``continue | stop | inconclusive`` decision.
 
-    The decision follows independent native planner-execution outcomes only. When
+    The decision follows independent planner-execution outcomes only. When
     no valid independent outcome evaluation is available, the decision is
     ``inconclusive``; it is never ``continue`` or ``stop`` on archive-nearness.
     The vocabulary is exactly :data:`ISSUE_3275_DECISION_VOCABULARY` (no
@@ -974,6 +974,32 @@ def _contract_outcome_metadata(contract: dict[str, Any]) -> dict[str, str]:
         raise ValueError(f"frozen outcome schema must be {OUTCOME_SCHEMA_VERSION!r}")
     if outcome_contract.get("objective") != OUTCOME_OBJECTIVE:
         raise ValueError(f"frozen outcome objective must be {OUTCOME_OBJECTIVE!r}")
+    admitted_fields = outcome_contract.get("admitted_row_fields")
+    required_identity_fields = {
+        "execution_identity",
+        "producer_commit",
+        "episode_record_sha256",
+    }
+    if not isinstance(admitted_fields, list) or not required_identity_fields.issubset(
+        set(admitted_fields)
+    ):
+        raise ValueError(
+            "frozen outcome contract must declare adapter execution identity and producer hash fields"
+        )
+    planner_identity = contract.get("target_planner", {}).get("execution_identity")
+    if not isinstance(planner_identity, dict) or not planner_identity:
+        raise ValueError("frozen target planner must declare an execution_identity object")
+    if planner_identity.get("execution_mode") != "adapter":
+        raise ValueError("frozen social_force execution identity must use adapter mode")
+    for key in (
+        "policy_semantics",
+        "adapter_name",
+        "upstream_command_space",
+        "benchmark_command_space",
+        "projection_policy",
+    ):
+        if not isinstance(planner_identity.get(key), str) or not planner_identity[key]:
+            raise ValueError(f"frozen execution identity is missing {key!r}")
     return {
         "schema": OUTCOME_SCHEMA_VERSION,
         "objective": OUTCOME_OBJECTIVE,
@@ -994,6 +1020,10 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_pool_size": max(args.budget * 5, 50),
             "candidate_pool_seed": args.seed,
             "expected_execution_commit": None,
+            "expected_execution_mode": "native",
+            "expected_execution_identity": None,
+            "require_producer_commit": False,
+            "require_episode_record_sha256": False,
             "alpha_two_sided": 0.05,
             "null_test_permutations": args.null_test_permutations,
             "null_test_seed": args.seed,
@@ -1018,6 +1048,16 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "candidate_pool_size": contract["budget"]["candidate_pool_size"],
         "candidate_pool_seed": contract["budget"]["candidate_pool_seed"],
         "expected_execution_commit": contract["target_planner"]["execution_commit"],
+        "expected_execution_mode": contract["target_planner"]["execution_identity"][
+            "execution_mode"
+        ],
+        "expected_execution_identity": {
+            key: value
+            for key, value in contract["target_planner"]["execution_identity"].items()
+            if key != "execution_mode"
+        },
+        "require_producer_commit": True,
+        "require_episode_record_sha256": True,
         "outcome_metadata": outcome_metadata,
         **null_test_params,
     }
@@ -1249,6 +1289,10 @@ def _admission_spec_from_binding(frozen: dict[str, Any], binding: dict[str, Any]
         if binding is not None
         else None,
         expected_execution_commit=frozen["expected_execution_commit"],
+        expected_execution_mode=frozen["expected_execution_mode"],
+        expected_execution_identity=frozen["expected_execution_identity"],
+        require_producer_commit=frozen["require_producer_commit"],
+        require_episode_record_sha256=frozen["require_episode_record_sha256"],
     )
 
 

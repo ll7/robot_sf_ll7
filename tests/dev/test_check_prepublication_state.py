@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -250,7 +251,141 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
             "base_ref": "main",
         }
     ]
+    assert result["remote_state_sources"] == {"issue": "graphql", "closing_prs": "graphql"}
+    assert result["remote_state_fallbacks"] == {}
     assert [command[1] for command in commands] == ["issue", "pr"]
+
+
+def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> None:
+    """GraphQL quota exhaustion should produce a mixed-source, auditable snapshot."""
+    commands: list[list[str]] = []
+
+    def fail_graphql(command: list[str]) -> Any:
+        commands.append(command)
+        raise gate.GateError("GraphQL: API rate limit already exceeded")
+
+    monkeypatch.setattr(gate, "_json_command", fail_graphql)
+    monkeypatch.setattr(
+        gate,
+        "_issue_state_rest",
+        lambda **_: {
+            "state": "OPEN",
+            "updatedAt": "2026-08-13T07:00:00Z",
+            "closedAt": None,
+        },
+    )
+    monkeypatch.setattr(
+        gate,
+        "_closing_prs_rest",
+        lambda **_: [
+            {
+                "number": 7033,
+                "title": "fix: REST fallback (#7033)",
+                "merged_at": "2026-08-13T07:01:00Z",
+                "merge_commit": {"oid": "merge-rest"},
+                "head_ref": "fix/rest",
+                "head_sha": "head-rest",
+                "base_ref": "main",
+            }
+        ],
+    )
+    monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
+    monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+
+    result = gate.collect_live_state(
+        repo="ll7/robot_sf_ll7",
+        issue=7033,
+        branch="feature/rest-fallback",
+    )
+
+    assert result["issue_state"] == "OPEN"
+    assert result["closing_prs"][0]["number"] == 7033
+    assert result["remote_state_sources"] == {"issue": "rest", "closing_prs": "rest"}
+    assert result["remote_state_fallbacks"] == {
+        "issue": "GraphQL: API rate limit already exceeded",
+        "closing_prs": "GraphQL: API rate limit already exceeded",
+    }
+    assert [command[1] for command in commands] == ["issue", "pr"]
+
+
+def test_collect_live_state_does_not_mask_graphql_auth_failure(monkeypatch) -> None:
+    """GraphQL authentication failures must remain fail-closed instead of using REST."""
+    monkeypatch.setattr(
+        gate,
+        "_json_command",
+        lambda command: (_ for _ in ()).throw(
+            gate.GateError("GraphQL: Resource not accessible by integration")
+        ),
+    )
+    monkeypatch.setattr(
+        gate,
+        "_issue_state_rest",
+        lambda **_: (_ for _ in ()).throw(AssertionError("REST must not mask auth failure")),
+    )
+
+    with pytest.raises(gate.GateError, match="Resource not accessible"):
+        gate.collect_live_state(
+            repo="ll7/robot_sf_ll7",
+            issue=7033,
+            branch="feature/rest-fallback",
+        )
+
+
+def test_closing_prs_rest_normalizes_and_filters_rows(monkeypatch) -> None:
+    """REST closing-PR discovery keeps only merged PRs that close this repository issue."""
+    monkeypatch.setattr(
+        gate,
+        "fetch_closed_pr_rows",
+        lambda **_: (
+            [
+                {
+                    "number": 7033,
+                    "title": "fix: REST fallback",
+                    "body": "Closes https://github.com/ll7/robot_sf_ll7/issues/7033",
+                    "merged_at": "2026-08-13T07:01:00Z",
+                    "merge_commit_sha": "merge-rest",
+                    "head": {"ref": "fix/rest", "sha": "head-rest"},
+                    "base": {"ref": "main"},
+                },
+                {
+                    "number": 7034,
+                    "title": "fix unrelated issue",
+                    "body": "Closes other/repo#7033",
+                    "merged_at": "2026-08-13T07:02:00Z",
+                },
+                {"number": 7035, "title": "closed without merge", "merged_at": None},
+            ],
+            SimpleNamespace(truncated=False, row_count=3, pages_read=1, page_budget=20),
+        ),
+    )
+
+    assert gate._closing_prs_rest(repo="ll7/robot_sf_ll7", issue=7033) == [
+        {
+            "number": 7033,
+            "title": "fix: REST fallback",
+            "merged_at": "2026-08-13T07:01:00Z",
+            "merge_commit": {"oid": "merge-rest"},
+            "head_ref": "fix/rest",
+            "head_sha": "head-rest",
+            "base_ref": "main",
+        }
+    ]
+
+
+def test_closing_prs_rest_fails_closed_when_inventory_is_truncated(monkeypatch) -> None:
+    """A bounded REST PR inventory cannot authorize publication when it is partial."""
+    monkeypatch.setattr(
+        gate,
+        "fetch_closed_pr_rows",
+        lambda **_: (
+            [],
+            SimpleNamespace(truncated=True, row_count=2000, pages_read=20, page_budget=20),
+        ),
+    )
+
+    with pytest.raises(gate.GateError, match="inventory is truncated"):
+        gate._closing_prs_rest(repo="ll7/robot_sf_ll7", issue=7033)
 
 
 def test_non_fast_forward_integration_fails_closed_without_reset(monkeypatch) -> None:

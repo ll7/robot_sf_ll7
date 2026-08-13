@@ -4,8 +4,8 @@ These tests verify the versioned comparison packet is well-formed: required
 fields are present, the budget arithmetic is consistent and derived from
 simulation geometry, no residual bounds or benchmark claim boundary are
 relaxed, exclusions are complete, provenance paths resolve, both arms'
-max-candidates match the budget, arm budgets are equal, seeds are frozen
-and match across arms, and the domain-approval gate is present.
+runner bindings and trace schema are present, seeds are frozen and match
+across arms, and the domain-approval gate is present.
 
 This is a diagnostic-only specification slice: it makes no benchmark, metric,
 planner-ranking, safety, or paper-facing claim and runs no campaign.
@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from robot_sf.adversarial.config import SearchConfig, SearchSpaceConfig
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
 from robot_sf.ped_npc.residual_search import ResidualSearchConfig
 
@@ -42,8 +43,9 @@ def test_packet_file_exists() -> None:
 
 
 def test_packet_schema_version(packet: dict) -> None:
-    """Schema version must be the frozen v1 identifier."""
-    assert packet["schema_version"] == "matched_compute_packet.v1"
+    """Schema version must identify the revised v2 preflight packet."""
+    assert packet["schema_version"] == "matched_compute_packet.v2"
+    assert packet["previous_schema_version"] == "matched_compute_packet.v1"
 
 
 def test_packet_issue_number(packet: dict) -> None:
@@ -57,8 +59,8 @@ def test_packet_parent_issue(packet: dict) -> None:
 
 
 def test_packet_status(packet: dict) -> None:
-    """Status must be diagnostic_only_packet."""
-    assert packet["status"] == "diagnostic_only_packet"
+    """Status must remain diagnostic-only preflight."""
+    assert packet["status"] == "diagnostic_only_preflight"
 
 
 def test_packet_has_arms(packet: dict) -> None:
@@ -66,6 +68,35 @@ def test_packet_has_arms(packet: dict) -> None:
     arms = packet["arms"]
     assert "open_loop" in arms
     assert "reactive" in arms
+
+
+def test_packet_has_shared_trace_schema(packet: dict) -> None:
+    """Both arms must publish the same trace schema identifier."""
+    assert packet["packet"]["trace_schema"] == "matched_compute_trace.v1"
+    for arm in packet["arms"].values():
+        assert arm["runner_binding"]["trace_schema"] == "matched_compute_trace.v1"
+
+
+def test_packet_binds_native_runner_seams(packet: dict) -> None:
+    """The packet must name the production seams, not the former stand-in."""
+    open_loop = packet["arms"]["open_loop"]["runner_binding"]
+    assert open_loop["runner"] == "robot_sf.adversarial.search.run_adversarial_search"
+    assert (
+        open_loop["production_evaluator"]
+        == "robot_sf.adversarial.search.production_candidate_evaluator"
+    )
+    assert open_loop["policy"] == "social_force"
+    assert open_loop["objective"] == "minimize_episode_min_robot_distance"
+    assert open_loop["horizon_steps"] == packet["simulation"]["total_sim_steps"]
+    assert open_loop["dt_s"] == packet["simulation"]["dt_s"]
+    assert open_loop["budget"] == packet["budget"]["candidates_per_arm_per_episode"]
+    assert open_loop["search_seed"] == 42
+    assert open_loop["execution_mode"] == "native"
+
+    reactive = packet["arms"]["reactive"]["runner_binding"]
+    assert reactive["search_policy"] == "robot_sf.ped_npc.residual_search.FiniteGridSearchPolicy"
+    assert reactive["controller"] == "robot_sf.ped_npc.residual_adversary.BoundedResidualAdversary"
+    assert reactive["execution_mode"] == "native"
 
 
 def test_packet_has_scenario(packet: dict) -> None:
@@ -94,6 +125,8 @@ def test_packet_has_budget(packet: dict) -> None:
     assert "candidates_per_macro_action_per_arm" in budget
     assert "candidates_per_arm_per_episode" in budget
     assert "total_candidates_all_arms_per_episode" in budget
+    assert budget["open_loop_runner_budget_per_episode"] == 90
+    assert budget["shared_trace_fields"]
 
 
 def test_packet_has_seeds(packet: dict) -> None:
@@ -101,6 +134,7 @@ def test_packet_has_seeds(packet: dict) -> None:
     assert "seeds" in packet
     assert "frozen_scenario_seeds" in packet["seeds"]
     assert "search_seed" in packet["seeds"]
+    assert "open_loop_search_seed" in packet["seeds"]
     assert "residual_adversary_seed" in packet["seeds"]
 
 
@@ -155,13 +189,12 @@ def test_budget_macro_actions_per_episode(packet: dict) -> None:
 
 
 def test_budget_candidates_per_macro_action(packet: dict) -> None:
-    """Candidates per macro-action per arm must equal grid_points_per_dim ** 2."""
+    """Reactive candidates per macro-action must equal grid_points_per_dim ** 2."""
     budget = packet["budget"]
-    for arm_key in ("open_loop", "reactive"):
-        grid_pts = packet["arms"][arm_key]["residual_search"]["grid_points_per_dim"]
-        expected = grid_pts**2
-        assert budget["candidates_per_macro_action_per_arm"] == expected
-        assert expected == 9
+    grid_pts = packet["arms"]["reactive"]["residual_search"]["grid_points_per_dim"]
+    expected = grid_pts**2
+    assert budget["candidates_per_macro_action_per_arm"] == expected
+    assert expected == 9
 
 
 def test_budget_per_arm_episode_total(packet: dict) -> None:
@@ -195,23 +228,32 @@ def test_budget_non_vacuous(packet: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_arms_max_candidates_match_budget(packet: dict) -> None:
-    """Both arms' max_candidates must equal the budget candidates_per_macro_action."""
+def test_reactive_max_candidates_match_macro_budget(packet: dict) -> None:
+    """The reactive policy must evaluate the declared per-macro-action budget."""
     budget = packet["budget"]
-    for arm_key in ("open_loop", "reactive"):
-        max_cand = packet["arms"][arm_key]["residual_search"]["max_candidates"]
-        assert max_cand == budget["candidates_per_macro_action_per_arm"], (
-            f"{arm_key} max_candidates={max_cand} != "
-            f"budget candidates_per_macro_action={budget['candidates_per_macro_action_per_arm']}"
-        )
+    max_cand = packet["arms"]["reactive"]["residual_search"]["max_candidates"]
+    assert max_cand == budget["candidates_per_macro_action_per_arm"]
 
 
-def test_arms_budgets_are_equal(packet: dict) -> None:
-    """Both arms must have identical max_candidates and grid_points_per_dim."""
-    ol = packet["arms"]["open_loop"]["residual_search"]
-    re = packet["arms"]["reactive"]["residual_search"]
-    assert ol["max_candidates"] == re["max_candidates"]
-    assert ol["grid_points_per_dim"] == re["grid_points_per_dim"]
+def test_open_loop_runner_budget_matches_episode_budget(packet: dict) -> None:
+    """The open-loop runner must bind its budget to the per-arm episode total."""
+    assert (
+        packet["budget"]["open_loop_runner_budget_per_episode"]
+        == packet["budget"]["candidates_per_arm_per_episode"]
+    )
+    assert (
+        packet["arms"]["open_loop"]["runner_binding"]["budget"]
+        == packet["budget"]["open_loop_runner_budget_per_episode"]
+    )
+
+
+def test_arms_use_explicit_budget_contracts(packet: dict) -> None:
+    """Each arm must bind its own native budget field explicitly."""
+    assert packet["arms"]["open_loop"]["runner_binding"]["candidate_budget_field"] == "budget"
+    assert (
+        packet["arms"]["reactive"]["runner_binding"]["candidate_budget_field"] == "max_candidates"
+    )
+    assert packet["arms"]["reactive"]["residual_search"]["max_candidates"] == 9
 
 
 # ---------------------------------------------------------------------------
@@ -220,38 +262,29 @@ def test_arms_budgets_are_equal(packet: dict) -> None:
 
 
 def test_arms_have_search_seed(packet: dict) -> None:
-    """Both arms' residual_search must carry a seed field."""
-    for arm_key in ("open_loop", "reactive"):
-        rs = packet["arms"][arm_key]["residual_search"]
-        assert "seed" in rs, f"{arm_key} residual_search missing seed"
+    """Both native seams must carry their search seed field."""
+    assert packet["arms"]["open_loop"]["runner_binding"]["search_seed"] == 42
+    assert packet["arms"]["reactive"]["residual_search"]["seed"] == 42
 
 
 def test_arms_have_adversary_seed(packet: dict) -> None:
-    """Both arms' residual_adversary must carry a seed field."""
-    for arm_key in ("open_loop", "reactive"):
-        ra = packet["arms"][arm_key]["residual_adversary"]
-        assert "seed" in ra, f"{arm_key} residual_adversary missing seed"
+    """The reactive residual controller must carry its seed field."""
+    ra = packet["arms"]["reactive"]["residual_adversary"]
+    assert "seed" in ra
 
 
 def test_arm_search_seeds_match_packet_seed(packet: dict) -> None:
-    """Both arms' residual_search.seed must equal the packet search_seed."""
+    """Both native search seams must match the packet search seed."""
     packet_seed = packet["seeds"]["search_seed"]
-    for arm_key in ("open_loop", "reactive"):
-        arm_seed = packet["arms"][arm_key]["residual_search"]["seed"]
-        assert arm_seed == packet_seed, (
-            f"{arm_key} residual_search.seed={arm_seed} != packet search_seed={packet_seed}"
-        )
+    assert packet["arms"]["open_loop"]["runner_binding"]["search_seed"] == packet_seed
+    assert packet["arms"]["reactive"]["residual_search"]["seed"] == packet_seed
 
 
 def test_arm_adversary_seeds_match_packet_seed(packet: dict) -> None:
-    """Both arms' residual_adversary.seed must equal the packet residual_adversary_seed."""
+    """The reactive residual-adversary seed must match the packet seed."""
     packet_seed = packet["seeds"]["residual_adversary_seed"]
-    for arm_key in ("open_loop", "reactive"):
-        arm_seed = packet["arms"][arm_key]["residual_adversary"]["seed"]
-        assert arm_seed == packet_seed, (
-            f"{arm_key} residual_adversary.seed={arm_seed} != "
-            f"packet residual_adversary_seed={packet_seed}"
-        )
+    arm_seed = packet["arms"]["reactive"]["residual_adversary"]["seed"]
+    assert arm_seed == packet_seed
 
 
 def test_search_and_adversary_seeds_are_equal(packet: dict) -> None:
@@ -313,6 +346,31 @@ def test_scenario_search_space_path_resolves(packet: dict) -> None:
     assert path.exists(), f"Scenario search_space not found: {path}"
 
 
+def test_packet_search_space_freezes_template_seed(packet: dict) -> None:
+    """The packet runner must sample the same frozen seed as its template."""
+    search_space = SearchSpaceConfig.from_file(REPO_ROOT / packet["scenario"]["search_space"])
+    template_seed = packet["scenario"]["template_seed"]
+    assert search_space.scenario_seed.min == template_seed
+    assert search_space.scenario_seed.max == template_seed
+
+
+def test_packet_search_space_only_freezes_seed(packet: dict) -> None:
+    """The packet-scoped space must preserve source bounds except for scenario seed."""
+    frozen = yaml.safe_load(
+        (REPO_ROOT / packet["scenario"]["search_space"]).read_text(encoding="utf-8")
+    )
+    source = yaml.safe_load(
+        (REPO_ROOT / packet["scenario"]["source_search_space"]).read_text(encoding="utf-8")
+    )
+    frozen_variables = dict(frozen["variables"])
+    source_variables = dict(source["variables"])
+    assert frozen["source_space"] == packet["scenario"]["source_search_space"]
+    assert frozen_variables.pop("scenario_seed") == {"min": 123, "max": 123}
+    assert source_variables.pop("scenario_seed") == {"min": 100, "max": 999}
+    assert frozen_variables == source_variables
+    assert frozen["constraints"] == source["constraints"]
+
+
 def test_scenario_template_contains_template_id(packet: dict) -> None:
     """The template YAML must define the named template_id used in the packet."""
     rel = packet["scenario"]["template"]
@@ -341,10 +399,9 @@ def test_scenario_template_seed_matches(packet: dict) -> None:
 
 
 def test_target_ped_idx_is_single_target(packet: dict) -> None:
-    """Both arms must use target_ped_idx [0], not the upstream -1 all-target."""
-    for arm_key in ("open_loop", "reactive"):
-        tp = packet["arms"][arm_key]["residual_adversary"]["target_ped_idx"]
-        assert tp == [0], f"{arm_key} target_ped_idx={tp}, expected [0]"
+    """The reactive arm uses target_ped_idx [0], not the upstream all-target value."""
+    tp = packet["arms"]["reactive"]["residual_adversary"]["target_ped_idx"]
+    assert tp == [0]
 
 
 def test_upstream_default_is_all_target() -> None:
@@ -380,13 +437,13 @@ def test_residual_bounds_match_adversary_config(packet: dict) -> None:
 
 
 def test_bounds_identity_objective_proxy(packet: dict) -> None:
-    """Objective proxy must be the diagnostic magnitude proxy."""
-    assert packet["bounds_identity"]["objective_proxy"] == "maximize_residual_magnitude"
+    """Objective proxy must be the validated predicted-distance proxy."""
+    assert packet["bounds_identity"]["objective_proxy"] == "minimize_predicted_robot_distance"
 
 
 def test_arms_share_identical_residual_bounds(packet: dict) -> None:
-    """Both arms must use the same residual bounds."""
-    open_loop_bounds = packet["arms"]["open_loop"]["residual_adversary"]
+    """The packet's frozen reactive residual bounds must match the source config."""
+    bounds = packet["bounds_identity"]["residual_bounds"]
     reactive_bounds = packet["arms"]["reactive"]["residual_adversary"]
     for key in (
         "max_residual_accel_mps2",
@@ -396,7 +453,15 @@ def test_arms_share_identical_residual_bounds(packet: dict) -> None:
         "max_route_deviation_m",
         "min_separation_m",
     ):
-        assert open_loop_bounds[key] == reactive_bounds[key], f"bound mismatch: {key}"
+        assert bounds[key] == reactive_bounds[key], f"bound mismatch: {key}"
+
+
+def test_objective_projections_are_named_separately(packet: dict) -> None:
+    """The reactive proxy and open-loop episode objective must not be conflated."""
+    bounds = packet["bounds_identity"]
+    assert bounds["objective_proxy"] == "minimize_predicted_robot_distance"
+    assert bounds["open_loop_objective"] == "minimize_episode_min_robot_distance"
+    assert "not assumed" in bounds["objective_comparability"]
 
 
 # ---------------------------------------------------------------------------
@@ -462,20 +527,35 @@ def test_domain_approval_gate_requires_explicit_approval(packet: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_open_loop_residual_search_config_round_trip(packet: dict) -> None:
-    """The open-loop arm's search config must parse as a valid ResidualSearchConfig."""
-    rs = packet["arms"]["open_loop"]["residual_search"]
-    config = ResidualSearchConfig(
-        algorithm_name=rs["algorithm_name"],
-        objective_proxy=rs["objective_proxy"],
-        grid_points_per_dim=rs["grid_points_per_dim"],
-        max_candidates=rs["max_candidates"],
-        seed=rs["seed"],
+def test_open_loop_objective_binding_is_explicit(packet: dict) -> None:
+    """The open-loop runner must name its episode-record objective explicitly."""
+    binding = packet["arms"]["open_loop"]["runner_binding"]
+    assert binding["objective"] == "minimize_episode_min_robot_distance"
+    assert binding["scenario_search_space"] == packet["scenario"]["search_space"]
+
+
+def test_open_loop_binding_builds_valid_search_config(packet: dict) -> None:
+    """The packet binding must construct the canonical search configuration."""
+    binding = packet["arms"]["open_loop"]["runner_binding"]
+    config = SearchConfig.from_files(
+        policy=binding["policy"],
+        scenario_template=REPO_ROOT / packet["scenario"]["template"],
+        search_space=REPO_ROOT / binding["scenario_search_space"],
+        objective=binding["objective"],
+        output_dir=REPO_ROOT / "output" / "adversarial" / "matched_compute_test",
+        budget=binding["budget"],
+        seed=binding["search_seed"],
+        horizon=binding["horizon_steps"],
+        dt=binding["dt_s"],
     )
-    assert config.algorithm_name == "finite_grid_search_v1"
-    assert config.grid_points_per_dim == 3
-    assert config.max_candidates == 9
-    assert config.seed == 42
+    config.validate()
+    assert config.policy == "social_force"
+    assert config.objective == "minimize_episode_min_robot_distance"
+    assert config.budget == 90
+    assert config.horizon == 50
+    assert config.dt == 0.1
+    assert config.search_space.scenario_seed.min == 123
+    assert config.search_space.scenario_seed.max == 123
 
 
 def test_reactive_residual_search_config_round_trip(packet: dict) -> None:
@@ -495,15 +575,14 @@ def test_reactive_residual_search_config_round_trip(packet: dict) -> None:
 
 
 def test_residual_adversary_config_round_trip(packet: dict) -> None:
-    """Both arms' residual adversary configs must parse as valid ResidualAdversaryConfig."""
-    for arm_key in ("open_loop", "reactive"):
-        ra = packet["arms"][arm_key]["residual_adversary"]
-        config = ResidualAdversaryConfig(**ra)
-        assert config.is_active is True
-        assert config.macro_action_dt_s == 0.5
-        assert config.max_residual_accel_mps2 == 1.5
-        assert config.max_jerk_mps3 == 7.5
-        assert config.seed == 42
+    """The reactive residual adversary config must parse without adaptation."""
+    ra = packet["arms"]["reactive"]["residual_adversary"]
+    config = ResidualAdversaryConfig(**ra)
+    assert config.is_active is True
+    assert config.macro_action_dt_s == 0.5
+    assert config.max_residual_accel_mps2 == 1.5
+    assert config.max_jerk_mps3 == 7.5
+    assert config.seed == 42
 
 
 # ---------------------------------------------------------------------------

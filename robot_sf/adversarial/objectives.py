@@ -37,15 +37,41 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
     record = read_first_jsonl_record(evaluation.episode_record_path)
     if record is None:
         return None
-    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+    raw_metrics = record.get("metrics")
+    metrics: dict[str, Any] = raw_metrics if isinstance(raw_metrics, dict) else {}
     if "snqi" in metrics:
         return -_metric(metrics, "snqi")
-    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+    raw_outcome = record.get("outcome")
+    outcome: dict[str, Any] = raw_outcome if isinstance(raw_outcome, dict) else {}
     collision = 1.0 if bool(outcome.get("collision") or outcome.get("collision_event")) else 0.0
     timeout = 1.0 if bool(outcome.get("timeout") or outcome.get("timeout_event")) else 0.0
     success = _metric(metrics, "success", 1.0 if bool(outcome.get("route_complete")) else 0.0)
     near = _metric(metrics, "near_misses", 0.0)
     return float(collision * 10.0 + timeout * 3.0 + near - success)
+
+
+def minimize_episode_min_robot_distance(evaluation: CandidateEvaluation) -> float | None:
+    """Score a completed episode by its global minimum robot-pedestrian distance.
+
+    The open-loop scenario-search arm receives completed episode records rather than the
+    reactive arm's one-step state snapshot. Keep this projection separately named and
+    fail closed when the canonical ``metrics.min_distance`` value is missing, malformed,
+    negative, or non-finite. The search API maximizes scores, so the finite distance is
+    negated to prefer closer approaches.
+    """
+    record = read_first_jsonl_record(evaluation.episode_record_path)
+    if record is None:
+        return None
+    metrics = record.get("metrics")
+    if not isinstance(metrics, dict):
+        return None
+    value = metrics.get("min_distance")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    distance = float(value)
+    if not math.isfinite(distance) or distance < 0.0:
+        return None
+    return -distance
 
 
 def _valid_constraints_metric(name: str, value: Any) -> bool:
@@ -240,6 +266,7 @@ def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float
 
 _OBJECTIVES: dict[str, ObjectiveFn] = {
     "constraints_first_lexicographic_v1": constraints_first_lexicographic_v1,
+    "minimize_episode_min_robot_distance": minimize_episode_min_robot_distance,
     "worst_case_snqi": worst_case_snqi,
     "temporal_robustness": temporal_robustness_objective,
 }

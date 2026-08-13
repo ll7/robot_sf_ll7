@@ -23,6 +23,7 @@ SOURCE_REGISTRY_SCHEMA_VERSION = "case-source-integrity-registry.v1"
 APPROVAL_URL_RE = re.compile(
     r"^https://github\.com/ll7/robot_sf_ll7/issues/6792#issuecomment-[0-9]+$"
 )
+APPROVAL_ID_RE = re.compile(r"^issue6792-comment-[0-9]+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FORBIDDEN_CLAIMS = (
     "matched_comparison",
@@ -138,11 +139,20 @@ def _verify_review_sidecars(
             )
 
 
+def _reject_symlinks(root: Path, *, label: str) -> None:
+    links = sorted(
+        path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_symlink()
+    )
+    if links:
+        raise Ch7EvidenceAdmissionError(f"{label} contains symlinks: {links}")
+
+
 def _verify_members(root: Path, *, label: str) -> tuple[str, list[str]]:
     root = root.resolve()
     sums_path = root / "SHA256SUMS"
     if not root.is_dir() or not sums_path.is_file():
         raise Ch7EvidenceAdmissionError(f"{label} must be a directory with SHA256SUMS")
+    _reject_symlinks(root, label=label)
     entries = _parse_sums(sums_path)
     listed = {relative for _digest, relative in entries}
     actual = {
@@ -173,6 +183,7 @@ def _verify_source_package(source_package: Path, expected_complete_sha256: str) 
     sums_path = root / "SHA256SUMS"
     if not root.is_dir() or not sums_path.is_file():
         raise Ch7EvidenceAdmissionError("source package must be a directory with SHA256SUMS")
+    _reject_symlinks(root, label="source package")
     entries = _parse_sums(sums_path)
     listed = {relative for _digest, relative in entries}
     actual = {
@@ -325,6 +336,8 @@ def _verify_registry(registry_path: Path, receipt: Mapping[str, Any]) -> dict[st
     if registry_sha != receipt["source"]["source_registry_sha256"]:
         raise Ch7EvidenceAdmissionError("source registry digest does not match receipt")
     approval = receipt["approval"]
+    if APPROVAL_ID_RE.fullmatch(str(approval.get("approval_id"))) is None:
+        raise Ch7EvidenceAdmissionError("approval ID is not a canonical #6792 comment ID")
     if APPROVAL_URL_RE.fullmatch(str(approval.get("approval_url"))) is None:
         raise Ch7EvidenceAdmissionError("approval URL is not the canonical #6792 issue comment")
     source = receipt["source"]

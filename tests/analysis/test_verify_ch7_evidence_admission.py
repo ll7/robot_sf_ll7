@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -320,6 +321,20 @@ def test_nested_checksum_file_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_symlinked_package_member_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    os.symlink(args["package"] / "manifest.json", args["package"] / "alias.json")
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="symlinks"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
 def test_manifest_schema_mutation_fails_closed(tmp_path: Path) -> None:
     args = _verify_args(tmp_path)
     manifest = json.loads((args["package"] / "manifest.json").read_text(encoding="utf-8"))
@@ -382,6 +397,22 @@ def test_forged_approval_or_registry_entry_fails_closed(tmp_path: Path) -> None:
     payload["approval"]["approval_id"] = "issue6792-comment-9999999999"
     _write_json(args["receipt"], payload)
     with pytest.raises(admission.Ch7EvidenceAdmissionError, match="registry|schema"):
+        admission.verify_admission(
+            package_dir=args["package"],
+            source_registry=args["registry"],
+            receipt=args["receipt"],
+            source_package=args["source"],
+            release_archive=args["release"],
+            compact_dir=args["compact"],
+        )
+
+
+def test_approval_whitespace_fails_closed(tmp_path: Path) -> None:
+    args = _verify_args(tmp_path)
+    payload = json.loads(args["receipt"].read_text(encoding="utf-8"))
+    payload["approval"]["approval_url"] += "\n"
+    _write_json(args["receipt"], payload)
+    with pytest.raises(admission.Ch7EvidenceAdmissionError, match="approval URL|schema"):
         admission.verify_admission(
             package_dir=args["package"],
             source_registry=args["registry"],

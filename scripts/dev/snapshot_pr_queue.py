@@ -31,6 +31,17 @@ REVIEW_THREAD_LIMIT = 12
 REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
 SCHEMA_VERSION = "pr_queue_snapshot.v2"
+BLOCKING_LABELS = frozenset(
+    {
+        "blocked",
+        "decision-required",
+        "evidence:blocked",
+        "state:blocked",
+        "state:blocked-external-input",
+        "state:hold",
+    }
+)
+BLOCKED_NEXT_ACTION = "await_blocker_owner_or_approval"
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -245,6 +256,58 @@ def _base_freshness_next_action(reasons: Any) -> str | None:
     if "current_main_sha_unavailable" in reasons:
         return "refresh_current_main_before_queue_routing"
     return None
+
+
+def _blocked_state(labels: list[str]) -> dict[str, Any]:
+    """Return explicit blocker evidence and its next owner/gate.
+
+    Labels are the only bounded stop-state evidence available in the compact PR
+    query.  Preserve every recognized label so a downstream route cannot turn a
+    green-but-blocked PR into review or merge work.
+    """
+    blocker_labels = [label for label in labels if label in BLOCKING_LABELS]
+    if not blocker_labels:
+        return {
+            "status": "clear",
+            "labels": [],
+            "reasons": [],
+            "next_owner_or_gate": None,
+        }
+
+    if "state:blocked-external-input" in blocker_labels:
+        next_owner_or_gate = "external_input_owner_or_staging_gate"
+    elif "evidence:blocked" in blocker_labels:
+        next_owner_or_gate = "evidence_or_domain_approval"
+    elif {"decision-required", "state:hold"}.intersection(blocker_labels):
+        next_owner_or_gate = "maintainer_decision_or_approval"
+    else:
+        next_owner_or_gate = "blocker_owner_or_maintainer"
+    return {
+        "status": "blocked",
+        "labels": blocker_labels,
+        "reasons": [f"explicit_blocked:{label}" for label in blocker_labels],
+        "next_owner_or_gate": next_owner_or_gate,
+    }
+
+
+def _blocked_preflight_reasons(blocked_state: dict[str, Any]) -> list[str]:
+    """Return explicit blocker reasons suitable for the preflight envelope."""
+    if blocked_state.get("status") != "blocked":
+        return []
+    return [str(reason) for reason in blocked_state.get("reasons", [])]
+
+
+def _head_preflight(
+    *, expected_head_sha: str, head_sha: str
+) -> tuple[str | None, list[str], bool | None]:
+    """Return head freshness status, reasons, and exact-match evidence."""
+    if not expected_head_sha:
+        return None, [], None
+    if not head_sha:
+        return "blocked", ["missing_head_sha"], None
+    if head_sha != expected_head_sha:
+        return "stale", ["head_sha_mismatch"], False
+    return None, [], True
 
 
 def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
@@ -526,23 +589,20 @@ def _preflight(
     head_sha: str,
     is_draft: bool,
     mergeable: str,
+    blocked_state: dict[str, Any],
 ) -> dict[str, Any]:
     """Return compact lane preflight status and reasons."""
     reasons: list[str] = []
     if is_draft:
         reasons.append("pr_is_draft")
-    head_sha_matches = None
     preflight_status = "healthy"
-    if expected_head_sha:
-        if not head_sha:
-            preflight_status = "blocked"
-            reasons.append("missing_head_sha")
-        elif head_sha != expected_head_sha:
-            preflight_status = "stale"
-            reasons.append("head_sha_mismatch")
-            head_sha_matches = False
-        else:
-            head_sha_matches = True
+    head_status, head_reasons, head_sha_matches = _head_preflight(
+        expected_head_sha=expected_head_sha,
+        head_sha=head_sha,
+    )
+    if head_status:
+        preflight_status = head_status
+    reasons.extend(head_reasons)
     base_status, base_reason = _base_freshness_preflight(base_freshness)
     if base_status:
         preflight_status = base_status
@@ -554,6 +614,10 @@ def _preflight(
     if mergeable == "CONFLICTING":
         preflight_status = "blocked"
         reasons.append("mergeable_conflict")
+    blocked_reasons = _blocked_preflight_reasons(blocked_state)
+    if blocked_reasons:
+        preflight_status = "blocked"
+        reasons.extend(blocked_reasons)
     if not reasons:
         reasons.append("ok")
     return {
@@ -565,6 +629,7 @@ def _preflight(
         "base_freshness": base_freshness,
         "checks_overall": checks_overall,
         "mergeable": mergeable,
+        "blocked_state": blocked_state,
         "route_evidence_only": True,
     }
 
@@ -573,6 +638,9 @@ def _next_action(
     *, is_draft: bool, labels: list[str], checks: dict[str, Any], preflight: dict[str, Any]
 ) -> str:
     """Return a compact next-action hint for the parent orchestrator."""
+    blocked_state = preflight.get("blocked_state", {})
+    if isinstance(blocked_state, dict) and blocked_state.get("status") == "blocked":
+        return BLOCKED_NEXT_ACTION
     base_action = _base_freshness_next_action(preflight.get("reasons", []))
     if base_action:
         return base_action
@@ -598,6 +666,8 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
         return "stale_attention"
     if next_action == "inspect_blocking_preflight":
         return "preflight_attention"
+    if next_action == BLOCKED_NEXT_ACTION:
+        return "blocked_attention"
     if is_draft:
         return "draft_ready_or_review"
     if next_action == "inspect_failing_checks":
@@ -719,6 +789,7 @@ def _pr_payload_from_dict(
     checks = _checks(pr)
     head_sha = str(pr.get("headRefOid", "") or pr.get("head_sha", ""))
     mergeable = str(pr.get("mergeable", "unknown"))
+    blocked_state = _blocked_state(labels)
     base_freshness = _base_freshness(
         base_sha=base_sha,
         current_main_sha=current_main_sha,
@@ -730,6 +801,7 @@ def _pr_payload_from_dict(
         head_sha=head_sha,
         is_draft=is_draft,
         mergeable=mergeable,
+        blocked_state=blocked_state,
     )
     reviews = _reviews(pr)
     gate_verdicts = _extract_gate_verdicts(pr)

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/publication/reduced_atlas.csv",
+  "artifact_sha256": "31f261e76707ef11970c7f258c93da104ecf5049f5f4153e0ee20ea4bb68bb40",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

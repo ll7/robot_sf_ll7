@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/unavailable/double_bottleneck_goal_ppo_seed118.json",
+  "artifact_sha256": "abc9ae457c43eafbf36de3861d14db9dd3748b5191adbf73a493d2cbfec71dd4",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

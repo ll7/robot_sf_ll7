@@ -17,6 +17,7 @@ import pytest
 from gymnasium import spaces
 
 from robot_sf import common
+from robot_sf.nav.navigation import RouteNavigator
 
 
 @pytest.fixture
@@ -391,6 +392,15 @@ def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monk
 
         def __init__(self):
             self.state = SimpleNamespace(max_sim_steps=1, nav=SimpleNamespace(pos=(0.0, 0.0)))
+            self.simulator = SimpleNamespace(
+                robot_navs=[
+                    RouteNavigator(
+                        waypoints=[(1.0, 0.0)],
+                        proximity_threshold=0.1,
+                        pos=(0.0, 0.0),
+                    )
+                ]
+            )
 
         def reset(self):
             return {
@@ -399,6 +409,7 @@ def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monk
             }, {}
 
         def step(self, action):
+            self.simulator.robot_navs[0].update_position(self.state.nav.pos)
             return (
                 {
                     "kept": np.array([0.5], dtype=np.float32),
@@ -509,11 +520,21 @@ def test_collect_trajectories_merges_training_then_env_contract(tmp_path, monkey
 
         def __init__(self):
             self.state = SimpleNamespace(max_sim_steps=1, nav=SimpleNamespace(pos=(0.0, 0.0)))
+            self.simulator = SimpleNamespace(
+                robot_navs=[
+                    RouteNavigator(
+                        waypoints=[(1.0, 0.0)],
+                        proximity_threshold=0.1,
+                        pos=(0.0, 0.0),
+                    )
+                ]
+            )
 
         def reset(self):
             return {"obs": np.array([0.25], dtype=np.float32)}, {}
 
         def step(self, action):
+            self.simulator.robot_navs[0].update_position(self.state.nav.pos)
             return {"obs": np.array([0.5], dtype=np.float32)}, 0.0, True, False, {}
 
         def close(self):

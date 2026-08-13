@@ -5,20 +5,36 @@ from __future__ import annotations
 import argparse
 import ast
 import io
+import json
 import re
 import subprocess
 import sys
 import tokenize
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 EVIDENCE_PATH_FRAGMENT = "docs/context/evidence"
 EXEMPTION_PATTERN = re.compile(r"#\s*evidence-writer-exempt:\s*(.*)$", re.IGNORECASE)
 WRITE_METHODS = frozenset({"write_bytes", "write_text"})
+INVENTORY_PATH_PREFIXES = ("hooks/", "scripts/", "robot_sf/")
+BENCHMARK_PATH_PREFIXES = ("scripts/benchmark/", "robot_sf/benchmark/", "tests/benchmark/")
 # The shared evidence-writer package owns the canonical raw-write wrappers; flagging
 # its own definitions would be circular (those wrappers exist so other modules can
 # adopt them). The guard enforces adoption everywhere else.
 _SHARED_WRITER_MODULE_SUFFIX = ("robot_sf", "evidence", "writers.py")
 _ForwardingHelper = tuple[str, int | None]
+
+
+@dataclass(frozen=True, order=True)
+class EvidenceWriterInventoryFinding:
+    """One raw evidence-writer bypass found by inventory mode."""
+
+    path: str
+    line: int
+    operation: str
+    kind: str
+    exemption_status: str
+    exemption_reason: str | None = None
 
 
 def _string_literal_parts(expr: ast.AST) -> list[str]:
@@ -399,8 +415,8 @@ def _is_shared_writer_module(source_path: Path) -> bool:
     return resolved.parts[-suffix_length:] == _SHARED_WRITER_MODULE_SUFFIX
 
 
-def _exemption(source: str) -> tuple[bool, str | None]:
-    """Return whether source has a valid file-level exemption."""
+def _exemption_status(source: str) -> tuple[str, str | None, str | None]:
+    """Return ``(status, reason, error)`` for a file-level exemption marker."""
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         comment_tokens = (token for token in tokens if token.type == tokenize.COMMENT)
@@ -412,12 +428,86 @@ def _exemption(source: str) -> tuple[bool, str | None]:
                 continue
             reason = match.group(1).strip()
             if not reason:
-                return True, f"line {token.start[0]} has an empty evidence-writer exemption reason"
-            return True, None
+                return (
+                    "invalid",
+                    None,
+                    f"line {token.start[0]} has an empty evidence-writer exemption reason",
+                )
+            return "valid", reason, None
     except (IndentationError, tokenize.TokenError):
         # Let ast.parse below report malformed source as a fail-closed blocker.
-        return False, None
-    return False, None
+        return "none", None, None
+    return "none", None, None
+
+
+def _exemption(source: str) -> tuple[bool, str | None]:
+    """Return whether source has a valid file-level exemption."""
+    status, _, error = _exemption_status(source)
+    return status in {"valid", "invalid"}, error
+
+
+def _repo_root() -> Path:
+    """Return the current Git repository root."""
+    return Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+
+
+def _repo_relative_path(path: Path, repo_root: Path) -> str:
+    """Return a stable slash-separated repository-relative path when possible."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _violation_tuples(source_path: Path, source: str) -> list[tuple[int, str, str]]:
+    """Return raw evidence-writer bypasses in ``source``."""
+    tree = ast.parse(source, filename=str(source_path))
+    evidence_names, evidence_arg_dests = _evidence_name_sets(tree)
+    forwarding_helpers = _forwarding_helpers(tree)
+    has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
+
+    visitor = _DirectWriterVisitor(evidence_names, evidence_arg_dests, forwarding_helpers)
+    visitor.visit(tree)
+    violations = visitor.violations
+    violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))
+    return sorted(violations, key=lambda item: (item[0], item[1], item[2]))
+
+
+def inventory_file(
+    path: str | Path, repo_root: Path | None = None
+) -> list[EvidenceWriterInventoryFinding]:
+    """Return raw evidence-writer bypasses for one Python file, including exemption status."""
+    source_path = Path(path)
+    if (
+        source_path.suffix != ".py"
+        or not source_path.is_file()
+        or _is_shared_writer_module(source_path)
+    ):
+        return []
+    if repo_root is None:
+        repo_root = _repo_root()
+    source = source_path.read_text(encoding="utf-8")
+    exemption_status, exemption_reason, exemption_error = _exemption_status(source)
+    if exemption_error is not None:
+        exemption_reason = exemption_error
+    return [
+        EvidenceWriterInventoryFinding(
+            path=_repo_relative_path(source_path, repo_root),
+            line=line,
+            operation=operation,
+            kind=kind,
+            exemption_status=exemption_status,
+            exemption_reason=exemption_reason,
+        )
+        for line, operation, kind in _violation_tuples(source_path, source)
+    ]
 
 
 def check_file(path: str | Path) -> list[str]:
@@ -440,18 +530,9 @@ def check_file(path: str | Path) -> list[str]:
     if has_exemption:
         return []
     try:
-        tree = ast.parse(source, filename=str(source_path))
+        violations = _violation_tuples(source_path, source)
     except SyntaxError as exc:
         return [f"BLOCKER: cannot parse changed Python file '{source_path}': {exc}"]
-
-    evidence_names, evidence_arg_dests = _evidence_name_sets(tree)
-    forwarding_helpers = _forwarding_helpers(tree)
-    has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
-
-    visitor = _DirectWriterVisitor(evidence_names, evidence_arg_dests, forwarding_helpers)
-    visitor.visit(tree)
-    violations = visitor.violations
-    violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))
     return [
         _format_blocker(source_path, line, operation, kind) for line, operation, kind in violations
     ]
@@ -496,25 +577,98 @@ def check_changed_files(changed_files: list[str], base_ref: str = "origin/main")
     return blockers
 
 
+def _is_inventory_path(path: str) -> bool:
+    """Return whether a tracked Python path belongs in the non-benchmark inventory."""
+    return (
+        path.endswith(".py")
+        and any(path.startswith(prefix) for prefix in INVENTORY_PATH_PREFIXES)
+        and not any(path.startswith(prefix) for prefix in BENCHMARK_PATH_PREFIXES)
+    )
+
+
+def inventory_tracked_files() -> tuple[list[EvidenceWriterInventoryFinding], int]:
+    """Scan tracked non-benchmark Python files for raw evidence-writer bypasses."""
+    repo_root = _repo_root()
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--", "*.py"],
+        check=True,
+        capture_output=True,
+    )
+    paths = sorted(
+        path.decode("utf-8")
+        for path in result.stdout.split(b"\0")
+        if path and _is_inventory_path(path.decode("utf-8"))
+    )
+    findings: list[EvidenceWriterInventoryFinding] = []
+    for path in paths:
+        findings.extend(inventory_file(repo_root / path, repo_root))
+    return sorted(findings), len(paths)
+
+
+def _print_json(payload: dict[str, object]) -> None:
+    """Print deterministic JSON output."""
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _run_inventory(*, json_output: bool) -> int:
+    """Run the read-only tracked-file inventory mode."""
+    findings, scanned_paths = inventory_tracked_files()
+    if json_output:
+        _print_json(
+            {
+                "mode": "inventory",
+                "scanned_paths": scanned_paths,
+                "approved_prefixes": list(INVENTORY_PATH_PREFIXES),
+                "excluded_prefixes": list(BENCHMARK_PATH_PREFIXES),
+                "count": len(findings),
+                "findings": [asdict(finding) for finding in findings],
+            }
+        )
+        return 0
+    for finding in findings:
+        print(
+            f"{finding.path}:{finding.line}: operation={finding.operation} "
+            f"kind={finding.kind} exemption_status={finding.exemption_status}"
+        )
+    print(f"Inventory findings: {len(findings)} across {scanned_paths} tracked Python files")
+    return 0
+
+
 def main() -> int:
     """Run the changed-file evidence-writer guard."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--changed-files-file",
         type=Path,
-        required=True,
         help="newline-delimited changed-file paths",
     )
     parser.add_argument("--base-ref", default="origin/main", help="git base ref")
+    mode_group.add_argument(
+        "--inventory",
+        action="store_true",
+        help=(
+            "read-only inventory of tracked non-benchmark Python files; excludes "
+            "scripts/benchmark/, robot_sf/benchmark/, and tests/benchmark/"
+        ),
+    )
+    parser.add_argument("--json", action="store_true", help="emit deterministic JSON output")
     args = parser.parse_args()
+    if args.inventory:
+        return _run_inventory(json_output=args.json)
+    if args.changed_files_file is None:
+        parser.error("--changed-files-file is required unless --inventory is set")
     changed_files = [
         line.strip()
         for line in args.changed_files_file.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     blockers = check_changed_files(changed_files, args.base_ref)
-    for blocker in blockers:
-        print(blocker)
+    if args.json:
+        _print_json({"mode": "changed-files", "blockers": blockers, "count": len(blockers)})
+    else:
+        for blocker in blockers:
+            print(blocker)
     return 1 if blockers else 0
 
 

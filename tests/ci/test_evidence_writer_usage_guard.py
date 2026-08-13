@@ -5,9 +5,17 @@
 from __future__ import annotations
 
 import ast
+import json
+import subprocess
+import sys
 from pathlib import Path
 
-from scripts.ci.check_evidence_writer_usage import check_changed_files, check_file
+from scripts.ci.check_evidence_writer_usage import (
+    _is_inventory_path,
+    check_changed_files,
+    check_file,
+    inventory_file,
+)
 
 
 def _write_fixture(tmp_path: Path, source: str, name: str = "fixture.py") -> Path:
@@ -504,3 +512,166 @@ args.output.write_text('{}', encoding='utf-8')
 """,
     )
     assert check_file(path) == []
+
+
+def test_inventory_file_reports_raw_writer_with_exemption_status(tmp_path: Path) -> None:
+    """Inventory mode reports residual bypasses instead of honoring exemptions."""
+    path = _write_fixture(
+        tmp_path,
+        """
+# evidence-writer-exempt: legacy JSONL byte contract awaiting migration.
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+OUTPUT.write_text("{}", encoding="utf-8")
+""",
+    )
+
+    findings = inventory_file(path, tmp_path)
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding.path == "fixture.py"
+    assert finding.line == 6
+    assert finding.operation == ".write_text()"
+    assert finding.exemption_status == "valid"
+    assert finding.exemption_reason == "legacy JSONL byte contract awaiting migration."
+    assert check_file(path) == []
+
+
+def test_inventory_file_reports_unexempt_raw_writer(tmp_path: Path) -> None:
+    """Inventory findings include the path, line, operation, and missing exemption."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+OUTPUT.write_text("{}", encoding="utf-8")
+""",
+    )
+
+    findings = inventory_file(path, tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path == "fixture.py"
+    assert findings[0].line == 5
+    assert findings[0].operation == ".write_text()"
+    assert findings[0].exemption_status == "none"
+
+
+def test_inventory_file_reports_invalid_exemption_reason(tmp_path: Path) -> None:
+    """Inventory mode preserves malformed exemption diagnostics instead of hiding them."""
+    path = _write_fixture(
+        tmp_path,
+        """
+# evidence-writer-exempt:
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+OUTPUT.write_text("{}", encoding="utf-8")
+""",
+    )
+
+    findings = inventory_file(path, tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].exemption_status == "invalid"
+    assert "empty evidence-writer exemption reason" in findings[0].exemption_reason
+    assert check_file(path)
+
+
+def test_inventory_path_filter_excludes_benchmark_owned_paths() -> None:
+    """Inventory mode stays out of benchmark-owned Python paths."""
+    assert not _is_inventory_path("scripts/benchmark/run_case.py")
+    assert not _is_inventory_path("robot_sf/benchmark/metrics.py")
+    assert not _is_inventory_path("tests/benchmark/test_case.py")
+    assert not _is_inventory_path("tests/analysis/test_case.py")
+    assert _is_inventory_path("scripts/analysis/build_case.py")
+    assert _is_inventory_path("hooks/check_release.py")
+    assert _is_inventory_path("robot_sf/evidence/case.py")
+    assert not _is_inventory_path("scripts/analysis/README.md")
+
+
+def test_cli_help_advertises_inventory_and_json() -> None:
+    """The backward-compatible CLI documents the new optional modes."""
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "ci" / "check_evidence_writer_usage.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--changed-files-file" in result.stdout
+    assert "--inventory" in result.stdout
+    assert "--json" in result.stdout
+
+
+def test_cli_changed_files_json_output_preserves_guard_failure(tmp_path: Path) -> None:
+    """JSON output does not change changed-file guard exit semantics."""
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "ci" / "check_evidence_writer_usage.py"
+    fixture = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+OUTPUT.write_text("{}", encoding="utf-8")
+""",
+    )
+    changed_files = tmp_path / "changed-files.txt"
+    changed_files.write_text(f"{fixture}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--changed-files-file",
+            str(changed_files),
+            "--base-ref",
+            "missing-base-for-test",
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["mode"] == "changed-files"
+    assert payload["count"] == 1
+    assert "write_text" in payload["blockers"][0]
+
+
+def test_cli_inventory_json_smoke_current_checkout() -> None:
+    """Inventory CLI emits deterministic JSON for the current tracked checkout."""
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "ci" / "check_evidence_writer_usage.py"
+
+    result = subprocess.run(
+        [sys.executable, str(script), "--inventory", "--json"],
+        check=True,
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["mode"] == "inventory"
+    assert payload["approved_prefixes"] == ["hooks/", "scripts/", "robot_sf/"]
+    assert payload["excluded_prefixes"] == [
+        "scripts/benchmark/",
+        "robot_sf/benchmark/",
+        "tests/benchmark/",
+    ]
+    assert isinstance(payload["scanned_paths"], int)
+    assert isinstance(payload["findings"], list)
+    assert payload["count"] == len(payload["findings"])
+    paths = [finding["path"] for finding in payload["findings"]]
+    assert paths == sorted(paths)
+    assert all(_is_inventory_path(path) for path in paths)

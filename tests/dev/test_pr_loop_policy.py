@@ -1490,11 +1490,19 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
         ],
         "comments": [],
     }
+    current_main_sha = "fresh-base-sha"
 
     # Extract snapshot payload using snapshot_pr_queue helper
-    pr_snapshot = _pr_payload_from_dict(pr_raw, default_number=6130, expected_head_sha="")
+    pr_snapshot = _pr_payload_from_dict(
+        pr_raw,
+        base_sha=current_main_sha,
+        current_main_sha=current_main_sha,
+        default_number=6130,
+        expected_head_sha="",
+    )
 
     # Verify trailer was extracted to gate_verdicts while body_excerpt was truncated
+    assert pr_snapshot["base_freshness"]["verdict"] == "fresh"
     assert pr_snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
     assert pr_snapshot["metadata_digest"] == digest
     assert pr_snapshot["metadata_verdicts"] == [metadata_trailer(digest)]

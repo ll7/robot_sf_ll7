@@ -81,7 +81,7 @@ entries:
         status: met
         evidence: >-
           Pull request #4345 merged
-          `robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py`, the read-only
+          `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_summary.py`, the read-only
           CLI, and tests. The summarizer reports `plan_blocked`,
           `results_incomplete`, or `complete`; excluded/unknown/null-status rows
           are caveats, never success evidence.

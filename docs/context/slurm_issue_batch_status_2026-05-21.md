@@ -92,6 +92,19 @@ Field rules:
   are not durable evidence by themselves. Use the artifact vocabulary in
   `docs/context/artifact_evidence_vocabulary.md` before closing an issue as complete.
 
+### Actionable-change monitor submission gate
+
+The actionable-change monitor must read the canonical `slurm_experiment_state` block when deciding
+whether a launch packet has been submitted. The short `slurm_issue_pointer.slurm_state` and
+`slurm_issue_status.state` forms are compatibility aliases and must agree with the canonical block
+when more than one is present. The monitor must not infer execution from the
+`evidence:launch-packet` label, `resource:slurm` label, prose, or a missing numeric job ID.
+`not_submitted` and the terminal states above are preflight or post-execution states; only
+`submitted_running` authorizes the monitor to report `launch_packet_without_job_id` when the short
+pointer has no numeric job ID. A missing, duplicated, malformed, unsupported, or contradictory
+structured state produces a `launch_packet_state_unavailable` finding with no execution claim, so
+the surface remains blocked for explicit state repair.
+
 ## Current SLURM-Needed Training Issue Snapshot 2026-05-30
 
 This docs-only pass did not submit SLURM jobs, move artifacts, upload checkpoints, or write Project

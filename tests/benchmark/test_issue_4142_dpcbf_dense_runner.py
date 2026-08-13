@@ -19,12 +19,12 @@ import pathlib
 import pytest
 import yaml
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     REQUIRED_ARMS,
     REQUIRED_EXCLUDED_ROW_STATUSES,
 )
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
     PLAN_SCHEMA_VERSION,
     RUNNER_GATES,
     DenseComparisonExecutionGatedError,

@@ -77,8 +77,9 @@ DOMAIN_VALIDITY_LABELS = (
 FREEFORM_DOMAIN_TRIGGER_RE = re.compile(
     r"\b("
     r"evidence[_ -]?tier\s*:|claim[_ -]?boundary\s*:|diagnostic[- ]only|"
-    r"not\s+paper[- ]grade|benchmark interpretation|paper[- ]facing claim"
-    r")\b",
+    r"not\s+paper[- ]grade|benchmark interpretation|paper[- ]facing claim|"
+    r"preregistration|research[- ]design|estimand(?:s)?|held[- ]out|fidelity[- ]cost"
+    r")",
     re.IGNORECASE,
 )
 # A trigger phrase is ignored when it is negated in prose (e.g. "makes no paper-facing claim"),

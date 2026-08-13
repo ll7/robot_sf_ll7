@@ -16,7 +16,7 @@ import pathlib
 import pytest
 import yaml
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_readiness import (
     CAMPAIGN_GATES,
     PACKET_PATH,
     REQUIRED_ARMS,

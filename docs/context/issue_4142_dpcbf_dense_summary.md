@@ -7,7 +7,7 @@ episodes, no Slurm/GPU submission, no safety-performance or collision-reduction 
 ## What this adds
 
 PR #4318 added the packet-consuming *run planner*
-(`robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py`) that resolves the predeclared packet
+(`robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py`) that resolves the predeclared packet
 `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml` into an ordered three-arm run
 plan (`cbf_off`, `cbf_collision_cone_on`, `cbf_dynamic_parabolic_v1_on`), each with a per-arm
 output JSONL path. That planner's context note listed the next downstream gate as its own
@@ -18,10 +18,10 @@ remaining work:
 
 This slice closes that gate at the **summary** level. It does not run the comparison.
 
-- `robot_sf/benchmark/issue_4142_dpcbf_dense_summary.py` — consumes the resolved run plan and,
+- `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_summary.py` — consumes the resolved run plan and,
   for each planned arm, reads that arm's per-episode JSONL output (if present) into a
   fail-closed comparison summary. It reuses
-  `robot_sf.benchmark.issue_4142_dpcbf_dense_runner.build_run_plan` as the single source of
+  `robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner.build_run_plan` as the single source of
   truth for arms, output paths, the fail-closed row-status exclusion, and the plan/readiness
   gates (no re-derivation from the packet).
 - `scripts/tools/summarize_issue_4142_dpcbf_dense_comparison.py` — a thin CLI
@@ -89,9 +89,9 @@ produced or promoted by this slice.
 
 ## Related
 
-- Run planner: `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py`
+- Run planner: `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_runner.py`
   (`docs/context/issue_4142_dpcbf_dense_runner.md`)
-- Readiness surface: `robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py`
+- Readiness surface: `robot_sf/benchmark/constraint/issue_4142_dpcbf_dense_readiness.py`
   (`docs/context/issue_4142_dpcbf_dense_readiness.md`)
 - Packet: `configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`
 - Prior slices: DPCBF arm (PR #4168), passthrough gate hardening (PR #4231), readiness

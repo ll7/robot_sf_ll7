@@ -2,7 +2,7 @@
 """Summarize the issue #4142 dense DPCBF comparison from per-arm artifacts (read-only).
 
 Consumes the resolved three-arm run plan
-(:mod:`robot_sf.benchmark.issue_4142_dpcbf_dense_runner`) and reads each arm's per-episode
+(:mod:`robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner`) and reads each arm's per-episode
 JSONL output (``cbf_off``, ``cbf_collision_cone_on``, ``cbf_dynamic_parabolic_v1_on``) into
 a fail-closed comparison summary (schema
 ``robot_sf.issue_4142_dpcbf_dense_comparison_summary.v1``). It runs no episodes and
@@ -29,8 +29,11 @@ import json
 import sys
 from pathlib import Path
 
-from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import DEFAULT_OUTPUT_DIR, PACKET_PATH
-from robot_sf.benchmark.issue_4142_dpcbf_dense_summary import (
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_runner import (
+    DEFAULT_OUTPUT_DIR,
+    PACKET_PATH,
+)
+from robot_sf.benchmark.constraint.issue_4142_dpcbf_dense_summary import (
     DenseComparisonSummaryError,
     render_markdown,
     summarize_dense_comparison,

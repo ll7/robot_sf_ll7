@@ -16,12 +16,23 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
+    HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+    MEAN_MATCHED_EPISODE_READINESS_SCHEMA,
+    RANK_METRIC_KEY,
+    _campaign_row_key,
+    _episode_rank_metric_blockers,
+    _episode_trace_blockers,
+    _format_campaign_key,
+    _metric_keys,
+    _required_sequence,
+    _rows_by_campaign_key,
     assess_mean_matched_episode_records,
     build_per_archetype_ablation_report,
 )
 from robot_sf.benchmark.heterogeneous_population_metrics import (
     cvar,
     pedestrian_metric_observations_from_control_trace,
+    per_archetype_metrics_from_control_trace,
 )
 from robot_sf.benchmark.heterogeneous_rank_sensitivity import (
     compute_bootstrap_rank_sensitivity,
@@ -370,6 +381,247 @@ def _load_reduce_records(
     return reduced, identity
 
 
+def _stream_add_ready_record(
+    record: dict[str, Any],
+    key: tuple[str, str, int, str, float],
+    metric_keys: list[str],
+    rank_records: list[dict[str, Any]],
+    csv_rows: list[dict[str, Any]],
+    metric_report_groups: dict[str, dict[str, dict[str, Any]]],
+) -> None:
+    """Store compact derived values for one record that passed row validation."""
+
+    rank_records.append(_reduced_rank_record(record))
+    csv_rows.append(_csv_row(record))
+    trace = record["algorithm_metadata"]["pedestrian_control_trace"]
+    group_name = f"{key[0]}/seed_{key[2]}/{key[1]}/response_law_fraction_{key[4]:g}"
+    for metric_key in metric_keys:
+        higher_is_safer = metric_higher_is_safer(metric_key)
+        metric_report_groups[metric_key].setdefault(
+            group_name,
+            {
+                "schema_version": HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+                "evidence_kind": "trace_metric_breakdown",
+                "metric_key": metric_key,
+                "higher_is_safer": higher_is_safer,
+                "cvar_alpha": 0.2,
+                "pedestrian_metric_reducer": "mean",
+                "arms": {},
+            },
+        )["arms"][key[3]] = {
+            "status": "ready",
+            "ready": True,
+            "metrics": per_archetype_metrics_from_control_trace(
+                trace,
+                metric_key,
+                higher_is_safer=higher_is_safer,
+                cvar_alpha=0.2,
+                reducer="mean",
+            ),
+        }
+
+
+def _stream_build_readiness(
+    manifest: dict[str, Any],
+    metric_keys: list[str],
+    expected_by_key: dict[tuple[str, str, int, str, float], Any],
+    seen_keys: set[tuple[str, str, int, str, float]],
+    row_blockers: dict[tuple[str, str, int, str, float], list[str]],
+    index_blockers: list[str],
+    unexpected_keys: set[tuple[str, str, int, str, float]],
+) -> dict[str, Any]:
+    """Reproduce the established readiness payload from streaming indexes."""
+
+    row_readiness: list[dict[str, Any]] = []
+    blockers = list(index_blockers)
+    for key in sorted(expected_by_key):
+        row_level_blockers = (
+            ["episode record missing"] if key not in seen_keys else list(row_blockers.get(key, []))
+        )
+        row_readiness.append(
+            {
+                "scenario_id": key[0],
+                "planner": key[1],
+                "seed": key[2],
+                "population_arm": key[3],
+                "status": "ready" if not row_level_blockers else "blocked",
+                "ready": not row_level_blockers,
+                "blockers": row_level_blockers,
+            }
+        )
+        blockers.extend(f"{_format_campaign_key(key)}: {blocker}" for blocker in row_level_blockers)
+    blockers.extend(
+        f"unexpected episode record for {_format_campaign_key(key)}"
+        for key in sorted(unexpected_keys)
+    )
+    if str(manifest.get("status", "")).strip() == "blocked_pending_control_trace" and not blockers:
+        blockers.append(
+            "manifest status is blocked_pending_control_trace but episode records "
+            "appear complete; the manifest contract was not satisfied"
+        )
+    return {
+        "schema_version": MEAN_MATCHED_EPISODE_READINESS_SCHEMA,
+        "issue": 3574,
+        "status": "ready" if not blockers else "blocked",
+        "ready": not blockers,
+        "claim_boundary": "integration_readiness_only_no_ablation_result",
+        "trace_metric_keys": metric_keys,
+        "rank_metric_key": RANK_METRIC_KEY,
+        "expected_row_count": len(expected_by_key),
+        "observed_row_count": len(seen_keys),
+        "row_readiness": row_readiness,
+        "blockers": blockers,
+    }
+
+
+def _stream_finalize_metric_reports(
+    metric_report_groups: dict[str, dict[str, dict[str, Any]]],
+    metric_keys: list[str],
+    *,
+    ready: bool,
+) -> dict[str, dict[str, Any]]:
+    """Keep only complete paired-arm reports after the global readiness gate."""
+
+    if not ready:
+        return {metric_key: {} for metric_key in metric_keys}
+    return {
+        metric_key: {
+            group_name: report
+            for group_name, report in groups.items()
+            if {"heterogeneous", "mean_matched_homogeneous"}.issubset(report["arms"])
+        }
+        for metric_key, groups in metric_report_groups.items()
+    }
+
+
+def _stream_load_reduce_records(
+    path: Path,
+    *,
+    argument: str,
+    bundle_root: Path,
+    manifest: dict[str, Any],
+    label: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate one shard while retaining only compact derived report inputs.
+
+    Shard receipts are intentionally non-comparative, so they do not need the raw
+    episode list after each JSONL record has been checked.  Keeping only the
+    readiness index, reduced rank rows, CSV rows, and compact per-arm reports makes
+    recovery of large completed shards possible on hosts with bounded memory.
+    """
+
+    manifest_rows = _required_sequence(manifest, "manifest_rows")
+    metric_keys = _metric_keys(manifest.get("trace_metric_keys"))
+    expected_by_key = _rows_by_campaign_key(manifest_rows, source="manifest_rows")
+    expected_keys = set(expected_by_key)
+    seen_keys: set[tuple[str, str, int, str, float]] = set()
+    index_blockers: list[str] = []
+    row_blockers: dict[tuple[str, str, int, str, float], list[str]] = {}
+    unexpected_keys: set[tuple[str, str, int, str, float]] = set()
+    rank_records: list[dict[str, Any]] = []
+    csv_rows: list[dict[str, Any]] = []
+    metric_report_groups: dict[str, dict[str, dict[str, Any]]] = {
+        metric_key: {} for metric_key in metric_keys
+    }
+    digest = hashlib.sha256()
+    size_bytes = 0
+    record_count = 0
+    record_index = 0
+
+    with path.open("rb") as source:
+        _invoke_open_hook(path, label)
+        for raw_line in source:
+            digest.update(raw_line)
+            size_bytes += len(raw_line)
+            if not raw_line.strip():
+                continue
+            record_count += 1
+            current_index = record_index
+            record_index += 1
+            record = json.loads(raw_line)
+            if not isinstance(record, dict):
+                index_blockers.append(f"episode_records[{current_index}] must be mapping")
+                continue
+            try:
+                key = _campaign_row_key(record, context=f"episode_records[{current_index}]")
+            except ValueError as exc:
+                index_blockers.append(str(exc))
+                continue
+            if key in seen_keys:
+                index_blockers.append(f"duplicate episode record for {_format_campaign_key(key)}")
+                continue
+
+            seen_keys.add(key)
+            if key not in expected_keys:
+                unexpected_keys.add(key)
+                continue
+
+            blockers = _episode_trace_blockers(record, expected_by_key[key], metric_keys)
+            blockers.extend(_episode_rank_metric_blockers(record))
+            row_blockers[key] = blockers
+            if blockers:
+                continue
+
+            _stream_add_ready_record(
+                record,
+                key,
+                metric_keys,
+                rank_records,
+                csv_rows,
+                metric_report_groups,
+            )
+
+    readiness = _stream_build_readiness(
+        manifest,
+        metric_keys,
+        expected_by_key,
+        seen_keys,
+        row_blockers,
+        index_blockers,
+        unexpected_keys,
+    )
+    ready = readiness["ready"]
+    metric_reports = _stream_finalize_metric_reports(
+        metric_report_groups,
+        metric_keys,
+        ready=ready,
+    )
+    if not ready:
+        rank_records = []
+        csv_rows = []
+
+    reduced = {
+        "integration_readiness": readiness,
+        "rank_records": rank_records,
+        "csv_rows": csv_rows,
+        "per_archetype_metric_reports": metric_reports,
+        "planner_order": _manifest_planner_order(manifest),
+        "normalized_cells": {
+            _normalized_cell_key(row)
+            for row in manifest.get("manifest_rows", [])
+            if isinstance(row, dict)
+        },
+        "record_count": record_count,
+        "streaming_stats": {
+            "processing_model": "sequential_streaming",
+            "max_live_raw_shards": 1 if record_count else 0,
+            "max_live_raw_records": 1 if record_count else 0,
+            "raw_shards_retained": 0,
+            "raw_records_retained": 0,
+            "raw_record_list_allocated": False,
+            "reduced_rank_record_count": len(rank_records),
+        },
+    }
+    identity = _portable_identity(
+        path,
+        argument=argument,
+        bundle_root=bundle_root,
+        size_bytes=size_bytes,
+        sha256=digest.hexdigest(),
+    )
+    return reduced, identity
+
+
 def _config_identity(manifest: dict[str, Any]) -> dict[str, Any] | None:
     raw_path = manifest.get("config_path")
     if not isinstance(raw_path, str) or not raw_path.strip():
@@ -590,11 +842,18 @@ def _verified_records_source(
     expected: dict[str, Any],
     source_roots: list[Path],
     manifest: dict[str, Any],
+    *,
+    processing_model: str = "sequential_streaming",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     for candidate in _candidate_paths(expected, source_roots):
         if not candidate.is_file():
             continue
-        reduced, actual = _load_reduce_records(
+        loader = (
+            _load_reduce_records
+            if processing_model == "sequential_whole_shard"
+            else _stream_load_reduce_records
+        )
+        reduced, actual = loader(
             candidate,
             argument=str(expected.get("argument", candidate)),
             bundle_root=candidate.parent,
@@ -631,7 +890,7 @@ def _read_receipt(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     )
 
 
-def _verify_receipt(  # noqa: C901
+def _verify_receipt(  # noqa: C901, PLR0912
     receipt_path: Path, source_roots: list[Path]
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     receipt, receipt_identity = _read_receipt(receipt_path)
@@ -660,8 +919,19 @@ def _verify_receipt(  # noqa: C901
     if not isinstance(receipt_builder_head, str) or not receipt_builder_head:
         raise ValueError(f"receipt {receipt_path} has no receipt builder head")
     manifest, actual_manifest = _verified_manifest_source(provenance["manifest"], source_roots)
+    receipt_streaming_stats = receipt.get("streaming_stats")
+    if not isinstance(receipt_streaming_stats, dict):
+        raise ValueError(f"receipt {receipt_path} has no streaming stats")
+    processing_model = str(
+        receipt_streaming_stats.get("processing_model", "sequential_whole_shard")
+    )
+    if processing_model not in {"sequential_streaming", "sequential_whole_shard"}:
+        raise ValueError(f"receipt {receipt_path} has unknown processing model")
     reduced, actual_records = _verified_records_source(
-        provenance["records"], source_roots, manifest
+        provenance["records"],
+        source_roots,
+        manifest,
+        processing_model=processing_model,
     )
     config_identity = provenance.get("config")
     if isinstance(config_identity, dict) and config_identity.get("available") is True:
@@ -754,6 +1024,9 @@ def _merge_reduced(
         for _, reduced, _ in ordered_shards
         for blocker in reduced["integration_readiness"]["blockers"]
     ]
+    processing_models = {
+        reduced["streaming_stats"]["processing_model"] for _, reduced, _ in ordered_shards
+    }
     return {
         "integration_readiness": combined_readiness,
         "rank_records": rank_records,
@@ -762,7 +1035,11 @@ def _merge_reduced(
         "planner_order": planner_order_list,
         "record_count": sum(reduced["record_count"] for _, reduced, _ in ordered_shards),
         "streaming_stats": {
-            "processing_model": "sequential_whole_shard",
+            "processing_model": (
+                "sequential_streaming"
+                if processing_models == {"sequential_streaming"}
+                else "sequential_whole_shard"
+            ),
             "shard_count": len(ordered_shards),
             "max_live_raw_shards": 1,
             "max_live_raw_records": max(
@@ -990,7 +1267,8 @@ def _direct_sources(
         bundle_root=bundle_root,
         label="manifest",
     )
-    reduced, records_identity = _load_reduce_records(
+    loader = _stream_load_reduce_records if args.mode == "shard" else _load_reduce_records
+    reduced, records_identity = loader(
         records_path,
         argument=args.records,
         bundle_root=bundle_root,

@@ -57,6 +57,7 @@ def test_run_research_campaign_manifest_writes_packet(tmp_path: Path) -> None:
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["campaign_id"] == "issue_3062_example_research_campaign"
     assert summary["final_decision"] == "diagnostic"
+    assert summary["answerability"]["state"] == "diagnostic_only"
     assert summary["row_status_summary"] == {"diagnostic_only": 4}
     assert summary["validation_results"][0]["executed"] is False
 
@@ -164,3 +165,27 @@ def test_run_research_campaign_manifest_treats_null_optional_commands_as_empty(
     assert completed.returncode == 0, completed.stderr
     summary = json.loads((tmp_path / "packet" / "summary.json").read_text(encoding="utf-8"))
     assert summary["validation_results"] == []
+
+
+def test_run_research_campaign_manifest_can_require_decision_capable_answerability(
+    tmp_path: Path,
+) -> None:
+    """The canonical runner can fail closed before a decision-capable launch."""
+    manifest_path = _copy_manifest(tmp_path)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(RUNNER),
+            str(manifest_path),
+            "--output-dir",
+            str(tmp_path / "packet"),
+            "--require-answerable",
+        ],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "answerability gate requires state=answerable" in completed.stderr

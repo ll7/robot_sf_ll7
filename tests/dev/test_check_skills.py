@@ -228,7 +228,7 @@ def test_goal_pr_review_snapshot_discovery_uses_the_active_cli_mode() -> None:
     skill_path = Path(__file__).parents[2] / ".agents/skills/goal-pr-review/SKILL.md"
     skill_text = skill_path.read_text(encoding="utf-8")
 
-    assert "uv run python scripts/dev/snapshot_pr_queue.py --active" in skill_text
+    assert "uv run python -m scripts.dev.snapshot_pr_queue --active" in skill_text
 
 
 # -- broken-path detection tests ------------------------------------------------

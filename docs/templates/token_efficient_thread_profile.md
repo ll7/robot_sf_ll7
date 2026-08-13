@@ -37,9 +37,9 @@ changes.
   `docs/context/issue_1512_issue_archetypes.md` for issue archetype language
   instead of redefining classes here.
 - `context_budget` defaults to compact helpers before broad reads:
-  `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees`,
-  `uv run python scripts/dev/snapshot_issue_batch.py --claimable --json`,
-  `uv run python scripts/dev/snapshot_pr_queue.py --active --json`, and
+  `uv run python -m scripts.dev.autopilot_state_snapshot --include-worktrees`,
+  `uv run python -m scripts.dev.snapshot_issue_batch --claimable --json`,
+  `uv run python -m scripts.dev.snapshot_pr_queue --active --json`, and
   `uv run python scripts/dev/run_compact_validation.py -- <command>`.
 - `resume_checkpoint` should be the first thing refreshed after compaction or
   automatic continuation. If it is fresh, do not reread full skills, broad

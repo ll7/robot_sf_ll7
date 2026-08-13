@@ -1,0 +1,343 @@
+"""Fail-closed answerability checks for research campaign contracts.
+
+The contract answers whether a planned campaign can resolve its declared
+question. It does not run a campaign, admit evidence, or replace the existing
+research-campaign manifest and figure-quality contracts.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+ANSWERABILITY_SCHEMA = "research_answerability.v1"
+ANSWERABILITY_STATES = (
+    "answerable",
+    "diagnostic_only",
+    "blocked_missing_producer",
+    "blocked_underpowered",
+    "blocked_analysis_contract",
+    "blocked_noncomparable_rows",
+    "blocked_artifact_plan",
+    "invalid_contract",
+)
+_DECISION_VOCABULARY = {"continue", "stop", "inconclusive", "invalid"}
+_REQUIRED_SECTIONS = ("question", "estimand", "producers", "analysis", "design", "artifacts")
+_REQUIRED_TEXT_FIELDS = {
+    "question": (
+        "research_question",
+        "bounded_claim",
+        "negative_result_meaning",
+    ),
+    "estimand": (
+        "primary",
+        "reference_or_null",
+        "decision_predicates",
+        "minimally_important_effect",
+    ),
+    "analysis": (
+        "analysis_unit",
+        "resampling_unit",
+        "command",
+        "multiplicity",
+        "sensitivity_plan",
+        "dry_run_status",
+        "comparability_status",
+    ),
+    "design": ("mode", "power_status", "budget", "sample_size"),
+    "artifacts": (
+        "raw_owner",
+        "durable_path",
+        "durability_status",
+        "incomplete_policy",
+    ),
+}
+_PRODUCER_TEXT_FIELDS = (
+    "field",
+    "producer",
+    "source",
+    "unit",
+    "direction",
+    "denominator",
+    "pairing_key",
+    "missingness_rule",
+    "status",
+    "execution_mode",
+)
+_VALID_EXECUTION_MODES = {"native", "adapter", "fallback", "degraded", "unavailable"}
+_VALID_PRODUCER_STATUSES = {"available", "unavailable", "missing", "blocked"}
+_VALID_DRY_RUN_STATUSES = {"passed", "not_required", "failed", "blocked", "unknown"}
+_VALID_COMPARABILITY_STATUSES = {
+    "passed",
+    "not_required",
+    "failed",
+    "blocked",
+    "unknown",
+    "mismatched",
+}
+
+
+class AnswerabilityContractError(ValueError):
+    """Raised when a research-answerability contract is structurally invalid."""
+
+
+@dataclass(frozen=True)
+class AnswerabilityResult:
+    """Machine-readable answerability state and conservative reasons."""
+
+    state: str
+    reasons: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe result payload."""
+        return {
+            "schema_version": ANSWERABILITY_SCHEMA,
+            "state": self.state,
+            "decision_capable": self.state == "answerable",
+            "reasons": list(self.reasons),
+            "warnings": list(self.warnings),
+        }
+
+
+def _mapping(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise AnswerabilityContractError(f"{field} must be a mapping")
+    return value
+
+
+def _text(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise AnswerabilityContractError(f"{field} must be a non-empty string")
+    return value.strip()
+
+
+def _list(value: Any, field: str) -> list[Any]:
+    if not isinstance(value, list) or not value:
+        raise AnswerabilityContractError(f"{field} must be a non-empty list")
+    return value
+
+
+def _validate_question(question: Mapping[str, Any]) -> None:
+    vocabulary = _list(
+        question.get("decision_vocabulary"),
+        "answerability.question.decision_vocabulary",
+    )
+    if not all(isinstance(item, str) and item.strip() for item in vocabulary):
+        raise AnswerabilityContractError(
+            "answerability.question.decision_vocabulary must contain only non-empty strings"
+        )
+    unknown_vocabulary = set(vocabulary) - _DECISION_VOCABULARY
+    if unknown_vocabulary:
+        raise AnswerabilityContractError(
+            "answerability.question.decision_vocabulary contains unsupported values: "
+            f"{sorted(unknown_vocabulary)}"
+        )
+    for field in _REQUIRED_TEXT_FIELDS["question"]:
+        _text(question.get(field), f"answerability.question.{field}")
+
+
+def _validate_estimand(estimand: Mapping[str, Any]) -> None:
+    for field in _REQUIRED_TEXT_FIELDS["estimand"]:
+        _text(estimand.get(field), f"answerability.estimand.{field}")
+
+
+def _validate_producers(producers: list[Any]) -> None:
+    for index, producer_value in enumerate(producers):
+        producer = _mapping(producer_value, f"answerability.producers[{index}]")
+        for field in _PRODUCER_TEXT_FIELDS:
+            _text(producer.get(field), f"answerability.producers[{index}].{field}")
+        if producer["status"] not in _VALID_PRODUCER_STATUSES:
+            raise AnswerabilityContractError(
+                f"answerability.producers[{index}].status must be one of "
+                f"{sorted(_VALID_PRODUCER_STATUSES)}"
+            )
+        if producer["execution_mode"] not in _VALID_EXECUTION_MODES:
+            raise AnswerabilityContractError(
+                f"answerability.producers[{index}].execution_mode must be one of "
+                f"{sorted(_VALID_EXECUTION_MODES)}"
+            )
+        if not isinstance(producer.get("required", True), bool):
+            raise AnswerabilityContractError(
+                f"answerability.producers[{index}].required must be a boolean"
+            )
+
+
+def _validate_analysis(analysis: Mapping[str, Any]) -> None:
+    for field in _REQUIRED_TEXT_FIELDS["analysis"]:
+        _text(analysis.get(field), f"answerability.analysis.{field}")
+    if analysis["dry_run_status"] not in _VALID_DRY_RUN_STATUSES:
+        raise AnswerabilityContractError(
+            "answerability.analysis.dry_run_status must be passed, not_required, failed, blocked, or unknown"
+        )
+    if analysis["comparability_status"] not in _VALID_COMPARABILITY_STATUSES:
+        raise AnswerabilityContractError(
+            "answerability.analysis.comparability_status must be passed, not_required, failed, blocked, unknown, or mismatched"
+        )
+
+
+def _validate_design(design: Mapping[str, Any]) -> None:
+    for field in _REQUIRED_TEXT_FIELDS["design"]:
+        _text(design.get(field), f"answerability.design.{field}")
+    if design["mode"] not in {"decision_capable", "diagnostic"}:
+        raise AnswerabilityContractError(
+            "answerability.design.mode must be decision_capable or diagnostic"
+        )
+    if design["power_status"] not in {"adequate", "not_required", "underpowered", "unknown"}:
+        raise AnswerabilityContractError(
+            "answerability.design.power_status must be adequate, not_required, underpowered, or unknown"
+        )
+
+
+def _validate_artifacts(artifacts: Mapping[str, Any]) -> None:
+    for field in _REQUIRED_TEXT_FIELDS["artifacts"]:
+        _text(artifacts.get(field), f"answerability.artifacts.{field}")
+    checksums = artifacts["checksums"]
+    if not isinstance(checksums, list) or not all(
+        isinstance(item, str) and item.strip() for item in checksums
+    ):
+        raise AnswerabilityContractError(
+            "answerability.artifacts.checksums must be a non-empty list of strings"
+        )
+    if artifacts["durability_status"] not in {"ready", "planned", "missing", "blocked"}:
+        raise AnswerabilityContractError(
+            "answerability.artifacts.durability_status must be ready, planned, missing, or blocked"
+        )
+
+
+def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
+    """Validate the structural contract without interpreting campaign results."""
+    if not isinstance(contract, Mapping):
+        raise AnswerabilityContractError("answerability must be a mapping")
+    if contract.get("schema_version") != ANSWERABILITY_SCHEMA:
+        raise AnswerabilityContractError(
+            f"answerability.schema_version must be {ANSWERABILITY_SCHEMA}"
+        )
+    for section in _REQUIRED_SECTIONS:
+        if section == "producers":
+            _validate_producers(_list(contract.get(section), f"answerability.{section}"))
+        else:
+            _mapping(contract.get(section), f"answerability.{section}")
+    _validate_question(_mapping(contract["question"], "answerability.question"))
+    _validate_estimand(_mapping(contract["estimand"], "answerability.estimand"))
+    _validate_analysis(_mapping(contract["analysis"], "answerability.analysis"))
+    _validate_design(_mapping(contract["design"], "answerability.design"))
+    _validate_artifacts(_mapping(contract["artifacts"], "answerability.artifacts"))
+
+
+def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult:
+    """Return the most conservative state supported by *contract*.
+
+    Structural defects return ``invalid_contract``. Semantic blockers are
+    ordered from missing producers through artifact durability. A diagnostic
+    design may be valid without being decision-capable; it returns
+    ``diagnostic_only`` and never ``answerable``.
+    """
+    try:
+        validate_answerability_contract(contract)
+    except AnswerabilityContractError as exc:
+        return AnswerabilityResult("invalid_contract", (str(exc),))
+
+    producers = [dict(_mapping(value, "producer")) for value in contract["producers"]]
+    required_producers = [producer for producer in producers if producer.get("required", True)]
+    missing_producers = [
+        producer["field"]
+        for producer in required_producers
+        if producer["status"] != "available"
+        or producer["execution_mode"] in {"fallback", "degraded", "unavailable"}
+    ]
+    optional_unavailable = [
+        producer["field"]
+        for producer in producers
+        if not producer.get("required", True) and producer["status"] == "unavailable"
+    ]
+    if missing_producers:
+        return AnswerabilityResult(
+            "blocked_missing_producer",
+            (
+                "required producers are missing, unavailable, blocked, or fallback/degraded: "
+                + ", ".join(sorted(missing_producers)),
+            ),
+        )
+
+    analysis = _mapping(contract["analysis"], "answerability.analysis")
+    if analysis["dry_run_status"] not in {"passed", "not_required"}:
+        return AnswerabilityResult(
+            "blocked_analysis_contract",
+            (f"analysis dry-run status is {analysis['dry_run_status']!r}",),
+        )
+    if analysis["comparability_status"] not in {"passed", "not_required"}:
+        return AnswerabilityResult(
+            "blocked_noncomparable_rows",
+            (f"row comparability status is {analysis['comparability_status']!r}",),
+        )
+
+    design = _mapping(contract["design"], "answerability.design")
+    if design["power_status"] == "underpowered":
+        return AnswerabilityResult(
+            "blocked_underpowered",
+            ("declared executable budget is underpowered for the minimally important effect",),
+        )
+    if design["power_status"] == "unknown":
+        return AnswerabilityResult(
+            "blocked_underpowered",
+            ("design power or diagnostic-budget classification is unknown",),
+        )
+
+    artifacts = _mapping(contract["artifacts"], "answerability.artifacts")
+    durability_status = artifacts["durability_status"]
+    if durability_status in {"missing", "blocked"}:
+        return AnswerabilityResult(
+            "blocked_artifact_plan",
+            (f"durable evidence plan is {durability_status}",),
+        )
+
+    warnings = ()
+    if optional_unavailable:
+        warnings = (
+            "optional unavailable producers remain explicit and cannot be interpreted as zero: "
+            + ", ".join(sorted(optional_unavailable)),
+        )
+    if design["mode"] == "diagnostic" or durability_status == "planned":
+        return AnswerabilityResult(
+            "diagnostic_only",
+            (
+                "contract is executable only as a bounded diagnostic, not a decision-capable campaign",
+            ),
+            warnings,
+        )
+    return AnswerabilityResult("answerable", (), warnings)
+
+
+def answerability_from_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Evaluate the optional answerability section of a campaign manifest.
+
+    Returns:
+        JSON-safe answerability state, reasons, and warnings.
+    """
+    contract = manifest.get("answerability")
+    if contract is None:
+        return {
+            "schema_version": ANSWERABILITY_SCHEMA,
+            "state": "not_declared",
+            "decision_capable": False,
+            "reasons": ["manifest does not declare answerability.v1"],
+            "warnings": [],
+        }
+    if not isinstance(contract, Mapping):
+        return AnswerabilityResult(
+            "invalid_contract", ("answerability must be a mapping",)
+        ).as_dict()
+    return evaluate_answerability(contract).as_dict()
+
+
+__all__ = [
+    "ANSWERABILITY_SCHEMA",
+    "ANSWERABILITY_STATES",
+    "AnswerabilityContractError",
+    "AnswerabilityResult",
+    "answerability_from_manifest",
+    "evaluate_answerability",
+    "validate_answerability_contract",
+]

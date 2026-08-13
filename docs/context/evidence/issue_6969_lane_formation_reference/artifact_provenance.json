@@ -1,0 +1,27 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "artifact_provenance_summary.v1",
+  "reference_commit_sha": "e298120d5ffd9782046c8401c8163877a1e245bc",
+  "stage_a_commit_sha": "8273fc384210a453b09e86d898141f7ae5d358c0",
+  "artifact_root": [
+    "output/diagnostics/issue_6969_lane_formation_reference",
+    "output/diagnostics/issue_6969_parameter_screen"
+  ],
+  "location": "worktree-local ignored output; no durable retrieval pointer",
+  "tracked_compact_evidence": [
+    "docs/context/evidence/issue_6969_lane_formation_reference/README.md",
+    "docs/context/evidence/issue_6969_lane_formation_reference/summary.json",
+    "docs/context/evidence/issue_6969_lane_formation_reference/artifact_provenance.json"
+  ],
+  "artifacts": [
+    {"path": "output/diagnostics/issue_6969_lane_formation_reference/manifest.json", "classification": "ignored-cache", "role": "reference provenance manifest", "sha256": "f999aba1e61641ed8195bd2a643718c9d2140c69d03ce0be51e262d300932e00"},
+    {"path": "output/diagnostics/issue_6969_lane_formation_reference/metric_audit.json", "classification": "ignored-cache", "role": "synthetic metric reference audit", "sha256": "33ab597db3aee67763b0d855b88a4307d70434b624f65c14a4fb1d38ee362630"},
+    {"path": "output/diagnostics/issue_6969_lane_formation_reference/summary.json", "classification": "ignored-cache", "role": "native reference summaries", "sha256": "72c3ec2ba9561c87a2fd500e3a50d82821d0a77a7822f9e01175e529e30f8929"},
+    {"path": "output/diagnostics/issue_6969_lane_formation_reference/rows.json", "classification": "ignored-cache", "role": "raw native reference rows", "sha256": "b6c98dccc74819709e83497c274df95697a1dab5d515974b677a84cb4a0837d6"},
+    {"path": "output/diagnostics/issue_6969_parameter_screen/manifest.json", "classification": "ignored-cache", "role": "Stage A provenance manifest", "sha256": "4e9cab921fd447644fdd94c28248a1079d3afdccfd6cada6cf0c15ce760de2b2"},
+    {"path": "output/diagnostics/issue_6969_parameter_screen/profiles.json", "classification": "ignored-cache", "role": "frozen Stage A profile table", "sha256": "e568777ea10c5c98952b7a89fea66cbb5102b857f15b08975c6526c54b26cfbb"},
+    {"path": "output/diagnostics/issue_6969_parameter_screen/summary.json", "classification": "ignored-cache", "role": "Stage A per-profile summaries", "sha256": "4f89316d4496a5d977c2de85bb6f7c0e0380201eb7b45b052d831e371ca07a7f"},
+    {"path": "output/diagnostics/issue_6969_parameter_screen/rows.json", "classification": "ignored-cache", "role": "raw Stage A native rows", "sha256": "65a8807af800ec39f84af3bd2e789c89dc61d0c8e3b4ece67576330b92f3161c"}
+  ],
+  "policy": "Do not cite or depend on ignored output bytes as durable evidence; use the tracked compact synthesis and exact commands, commits, profile seed, protocol, and hashes above."
+}

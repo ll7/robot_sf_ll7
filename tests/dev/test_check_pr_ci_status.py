@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev.check_pr_ci_status import (
     _fetch_ci_status,
     _format_human,
@@ -1045,6 +1048,225 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 QUOTA_STDERR = "GraphQL: API rate limit already exceeded."
 
 
+@pytest.fixture
+def isolated_workflow_id_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate process-level workflow identity state so fixtures can safely reuse run IDs."""
+    monkeypatch.setattr(ci_status, "_WORKFLOW_ID_BY_RUN_ID", {})
+
+
+def _rest_check_run(
+    *, run_id: int, job_id: int, status: str, conclusion: str | None, started_at: str
+) -> dict[str, object]:
+    """Build one production-shaped REST check run for workflow-identity regressions."""
+    return {
+        "name": "pr-body-contracts",
+        "status": status,
+        "conclusion": conclusion,
+        "started_at": started_at,
+        "details_url": f"https://github.com/ll7/robot_sf_ll7/actions/runs/{run_id}/job/{job_id}",
+    }
+
+
+def _enrich_rest_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    runs: list[dict[str, object]],
+    workflow_ids: dict[int, int],
+) -> list[dict[str, Any]]:
+    """Enrich fixture runs through the same authoritative Actions-run path as production."""
+
+    def _fake_rest(path: str) -> dict[str, object] | None:
+        match = re.fullmatch(r"actions/runs/([0-9]+)", path)
+        if match is None:
+            return None
+        run_id = int(match.group(1))
+        workflow_id = workflow_ids.get(run_id)
+        return {"id": run_id, "workflow_id": workflow_id} if workflow_id is not None else None
+
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", _fake_rest)
+    return ci_status._enrich_rest_check_runs(runs)
+
+
+@pytest.mark.parametrize(
+    (
+        "replacement",
+        "workflow_ids",
+        "expected_overall",
+        "expected_total",
+        "expected_superseded",
+    ),
+    [
+        pytest.param(
+            ("in_progress", None),
+            {101: 300804702, 102: 300804702},
+            "pending",
+            1,
+            1,
+            id="newer-pending-same-workflow",
+        ),
+        pytest.param(
+            ("completed", "success"),
+            {101: 300804702, 102: 300804702},
+            "success",
+            1,
+            1,
+            id="newer-success-same-workflow",
+        ),
+        pytest.param(
+            ("completed", "success"),
+            {101: 300804702, 102: 308507840},
+            "failure",
+            2,
+            0,
+            id="same-job-name-distinct-workflows",
+        ),
+        pytest.param(
+            None,
+            {101: 300804702},
+            "failure",
+            1,
+            0,
+            id="current-cancellation",
+        ),
+        pytest.param(
+            ("completed", "success"),
+            {},
+            "failure",
+            2,
+            0,
+            id="workflow-enrichment-unavailable",
+        ),
+    ],
+)
+def test_rest_workflow_identity_preserves_supersession_and_fail_closed_cases(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
+    replacement: tuple[str, str | None] | None,
+    workflow_ids: dict[int, int],
+    expected_overall: str,
+    expected_total: int,
+    expected_superseded: int,
+) -> None:
+    """REST workflow IDs must suppress only proven reruns and preserve every failure boundary."""
+    runs = [
+        _rest_check_run(
+            run_id=101,
+            job_id=1001,
+            status="completed",
+            conclusion="cancelled",
+            started_at="2026-08-13T06:23:14Z",
+        )
+    ]
+    if replacement is not None:
+        status, conclusion = replacement
+        runs.append(
+            _rest_check_run(
+                run_id=102,
+                job_id=1002,
+                status=status,
+                conclusion=conclusion,
+                started_at="2026-08-13T06:54:24Z",
+            )
+        )
+
+    enriched = _enrich_rest_runs(monkeypatch, runs, workflow_ids)
+    monkeypatch.setattr(ci_status, "_status_propagation_lag_evidence", lambda _url: None)
+    checks, superseded = _summarize_check_runs(enriched)
+
+    assert checks["overall"] == expected_overall
+    assert checks["total"] == expected_total
+    assert checks["superseded"] == expected_superseded
+    assert superseded == expected_superseded
+
+
+def test_rest_workflow_identity_cache_reuses_success_and_retries_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
+) -> None:
+    """Successful IDs persist across polls while a transient lookup failure is retried."""
+    calls: list[str] = []
+    transient_attempts = 0
+
+    def _fake_rest(path: str) -> dict[str, int] | None:
+        nonlocal transient_attempts
+        calls.append(path)
+        if path == "actions/runs/201":
+            return {"workflow_id": 9001}
+        if path == "actions/runs/202":
+            transient_attempts += 1
+            return {"workflow_id": 9002} if transient_attempts > 1 else None
+        return None
+
+    monkeypatch.setattr(ci_status, "_rest_api_get", _fake_rest)
+    runs = [
+        _rest_check_run(
+            run_id=201,
+            job_id=2001,
+            status="completed",
+            conclusion="success",
+            started_at="2026-08-13T06:23:14Z",
+        ),
+        _rest_check_run(
+            run_id=202,
+            job_id=2002,
+            status="in_progress",
+            conclusion=None,
+            started_at="2026-08-13T06:54:24Z",
+        ),
+    ]
+
+    first = ci_status._enrich_rest_check_runs(runs)
+    second = ci_status._enrich_rest_check_runs(runs)
+
+    assert first[0]["workflow_id"] == "9001"
+    assert "workflow_id" not in first[1]
+    assert second[0]["workflow_id"] == "9001"
+    assert second[1]["workflow_id"] == "9002"
+    assert calls == ["actions/runs/201", "actions/runs/202", "actions/runs/202"]
+
+
+def test_bounded_polling_continues_until_replacement_success(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Pending representative REST input keeps polling until replacement CI succeeds."""
+    pending = {
+        "status": "ok",
+        "pr": 6995,
+        "title": "metadata refresh",
+        "state": "open",
+        "mergeable": "CLEAN",
+        "branch": "evidence",
+        "head_sha": "abc123",
+        "checks": {"overall": "pending", "superseded": 1},
+        "reviews": {},
+        "data_source": "rest_fallback_graphql_quota",
+    }
+    success = {
+        **pending,
+        "checks": {"overall": "success", "superseded": 1},
+    }
+    fetch = MagicMock(side_effect=[pending, success])
+    monkeypatch.setattr(ci_status, "_fetch_ci_status", fetch)
+
+    rc = main(
+        [
+            "6995",
+            "--json",
+            "--expected-head-sha",
+            "abc123",
+            "--poll-attempts",
+            "2",
+            "--poll-interval",
+            "0",
+        ]
+    )
+
+    assert rc == 0
+    assert fetch.call_count == 2
+    payloads = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [payload["checks"]["overall"] for payload in payloads] == ["pending", "success"]
+
+
 def test_is_graphql_quota_error_detection() -> None:
     assert _is_graphql_quota_error(QUOTA_STDERR)
     assert _is_graphql_quota_error("API rate limit exceeded for GraphQL")
@@ -1106,6 +1328,7 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
             side_effect=[
                 pull,
                 check_runs,
+                {"id": 123, "workflow_id": 987654},
                 {"status": "completed", "conclusion": "success"},
                 {
                     "status": "in_progress",

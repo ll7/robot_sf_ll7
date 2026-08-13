@@ -98,7 +98,7 @@ In token-efficient mode:
   branch, issue/PR head SHA, and phase.
 - Prefer compact parent-thread snapshots before broad repository, GitHub,
   worktree, CI, or validation output.
-- For routine orientation, start with `scripts/dev/autopilot_state_snapshot.py`
+- For routine orientation, start with `uv run python -m scripts.dev.autopilot_state_snapshot`
   instead of repeated broad `gh issue list`, `gh pr view`, `git worktree list`,
   or claim-state calls. Read its `controller_checkpoint.token_efficiency`
   recommendations before deciding whether a broader command is still needed.
@@ -236,12 +236,12 @@ Before each phase, run a delegation checkpoint:
   queue scout, PR blocker reviewer, bounded editor, validation verifier, CI wait monitor, or
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
-  `uv run python scripts/dev/snapshot_issue_batch.py --claimable --limit <n> --json` for a
-  no-arg next-issue queue, `uv run python scripts/dev/snapshot_issue_batch.py <first> <last> --json`
-  for explicit issue batches, `uv run python scripts/dev/snapshot_pr_queue.py --active --limit <n>
-  --json` for the active PR queue, and `uv run python scripts/dev/snapshot_pr_queue.py --prs <pr>
+  `uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json` for a
+  no-arg next-issue queue, `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
+  for explicit issue batches, `uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n>
+  --json` for the active PR queue, and `uv run python -m scripts.dev.snapshot_pr_queue --prs <pr>
   [<pr> ...] --json` for explicit PR headline state. Apply
-  `uv run python scripts/dev/pr_loop_policy.py --snapshot <queue.json> --json` for
+  `uv run python -m scripts.dev.pr_loop_policy --snapshot <queue.json> --json` for
   machine-checkable state classification and next-action decisions under a loop budget. Use
   `--capsule-dir <private-artifact-dir>` when an implementation worker should receive a bounded
   issue context capsule instead of rediscovering files with broad search.
@@ -333,7 +333,7 @@ use targeted compact snapshots for specific needs:
 
 ```bash
 # Full orientation snapshot (worktrees, claims, issues, PRs)
-uv run python scripts/dev/autopilot_state_snapshot.py \
+uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
@@ -343,20 +343,20 @@ uv run python scripts/dev/autopilot_state_snapshot.py \
 uv run python scripts/dev/compact_worktree_snapshot.py --filter <issue-or-branch-slug> --json
 
 # Compact CI snapshot for PR queue (check rollup, optional drift sample)
-uv run python scripts/dev/compact_ci_snapshot.py <pr> [<pr> ...] \
+uv run python -m scripts.dev.compact_ci_snapshot <pr> [<pr> ...] \
   --expected-head-sha <sha> --json [--include-drift]
 
 # Compact no-arg next-issue queue and explicit issue batch snapshots
-uv run python scripts/dev/snapshot_issue_batch.py --claimable --limit <n> --json
-uv run python scripts/dev/snapshot_issue_batch.py <first> <last> \
+uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
+uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 
 # Compact active PR queue and explicit PR headline snapshots
-uv run python scripts/dev/snapshot_pr_queue.py --active --limit <n> --json
-uv run python scripts/dev/snapshot_pr_queue.py --prs <pr> [<pr> ...] --json
+uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n> --json
+uv run python -m scripts.dev.snapshot_pr_queue --prs <pr> [<pr> ...] --json
 
 # Machine-checkable PR loop policy (state + next action under budget)
-uv run python scripts/dev/pr_loop_policy.py --snapshot <queue-snapshot.json> --json
+uv run python -m scripts.dev.pr_loop_policy --snapshot <queue-snapshot.json> --json
 ```
 
 Use `compact_worktree_snapshot.py` before expensive commands to detect fresh worktrees that need

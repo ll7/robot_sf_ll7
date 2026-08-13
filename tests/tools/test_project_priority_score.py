@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from scripts.dev.github_quota import RateLimitSnapshot
+from scripts.tools import project_priority_score
 from scripts.tools.project_priority_score import (
     DEFAULT_ALPHA,
     DEFAULT_SUCCESS_PROBABILITY,
@@ -21,6 +23,7 @@ from scripts.tools.project_priority_score import (
     build_previews,
     compute_priority_score,
     field_keys,
+    load_project_cache,
     main,
     normalize_inputs,
     sync_scores,
@@ -29,6 +32,22 @@ from scripts.tools.project_priority_score import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.fixture(autouse=True)
+def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep score-sync unit tests off the live quota endpoint unless overridden."""
+    monkeypatch.setattr(
+        project_priority_score,
+        "read_rate_limit",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+    )
 
 
 class FakeGhProjectClient:
@@ -448,6 +467,56 @@ def test_write_summary_persists_machine_readable_payload(tmp_path: Path) -> None
     assert payload["items"][0]["inputs"]["improvement"] == 3
 
 
+def test_load_project_cache_accepts_matching_field_id_hints(tmp_path: Path) -> None:
+    """A matching local cache can support a no-write targeted read without Project metadata calls."""
+    cache = tmp_path / "project5.json"
+    fields = {
+        name: {"id": f"field-{name}", "type": "number"}
+        for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)
+    }
+    cache.write_text(
+        json.dumps(
+            {
+                "owner": "ll7",
+                "project_number": 5,
+                "project_id": "project-id",
+                "fields": fields,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = load_project_cache(cache, owner="ll7", project_number=5)
+
+    assert metadata is not None
+    assert metadata.project_id == "project-id"
+    assert metadata.fields[PRIORITY_SCORE_FIELD]["name"] == PRIORITY_SCORE_FIELD
+    assert load_project_cache(cache, owner="other", project_number=5) is None
+
+    client = FakeGhProjectClient(
+        fields=[],
+        items=[_item(42, improvement=3, **{lower_first_key(EFFORT_FIELD): 2})],
+    )
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=400,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=42,
+            dry_run=True,
+            skip_statuses={"Done"},
+            cache_file=cache,
+        ),
+    )
+    assert [preview.issue_number for preview in previews] == [42]
+    assert client.field_list_calls == 0
+    assert client.updated_numbers == []
+
+
 def lower_first_key(name: str) -> str:
     """Mirror the current gh item-list key shape for multi-word fields."""
 
@@ -583,6 +652,45 @@ def test_main_non_empty_scope_failure_remains_fail_closed(
 
     with pytest.raises(MissingProjectScopeError):
         main(["sync"])
+
+
+def test_main_quota_block_is_explicit_and_performs_no_project_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A low quota blocks before schema/item reads or score writes and can be resumed later."""
+    monkeypatch.setattr(
+        project_priority_score,
+        "read_rate_limit",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=3,
+            graphql_reset_at=1_800_000_123,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_456,
+        ),
+    )
+    project_reads: list[str] = []
+    monkeypatch.setattr(
+        GhProjectClient,
+        "field_list",
+        lambda self, **kwargs: project_reads.append("field-list") or [],
+    )
+
+    assert main(["sync", "--only-empty"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["status"] == "quota_blocked"
+    assert payload["writes_performed"] is False
+    assert payload["non_fatal"] is True
+    assert payload["resume_after"] == 1_800_000_123
+    assert project_reads == []
+
+    assert main(["sync"]) == 2
+    second_payload = json.loads(capsys.readouterr().out)
+    assert second_payload["status"] == "quota_blocked"
+    assert second_payload["non_fatal"] is False
+    assert project_reads == []
 
 
 def test_gh_project_client_retries_user_owned_project_commands_with_at_me(

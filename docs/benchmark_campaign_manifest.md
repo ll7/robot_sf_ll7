@@ -32,6 +32,47 @@ Do not use it to:
 - cite `output/` as durable proof;
 - claim a planner, metric, or paper result before the run artifacts exist.
 
+## Research Answerability Gate
+
+Campaigns that need to answer a declared research question may add an optional
+`answerability` block with schema `research_answerability.v1`. It binds the
+question, estimand, required producers, analysis dry run, design adequacy, and
+durable-artifact plan. The evaluator reports one explicit state:
+
+- `answerable` — the declared decision-capable chain is present;
+- `diagnostic_only` — a bounded mechanism or manifest check is valid, but it is
+  not decision-capable evidence;
+- `blocked_missing_producer`, `blocked_underpowered`,
+  `blocked_analysis_contract`, `blocked_noncomparable_rows`, or
+  `blocked_artifact_plan` — a named prerequisite is not satisfied;
+- `invalid_contract` — the answerability schema itself is malformed.
+
+The canonical runner includes the state in `summary.json` and `report.md`.
+Use `--require-answerable` when a launch path must reject every state other
+than `answerable`; the default packet path remains compatible with older
+manifests. Required fallback, degraded, unavailable, or missing producers are
+never answerable. Optional unavailable metrics remain explicit and are not
+imputed as zero.
+
+## Research-Yield Snapshot
+
+Repository throughput should be reported from a frozen
+`research_yield_snapshot.v1` JSON rather than inferred from issue closure or
+pull-request merge state. Generate a compact report with:
+
+```bash
+uv run python scripts/analysis/report_research_yield.py \
+  tests/fixtures/research_yield_snapshot.v1.json \
+  --output output/research_yield/report.json \
+  --markdown-output output/research_yield/report.md
+```
+
+The report keeps empirical answers, infrastructure/preflight throughput,
+explicit failure reasons, and lag fields separate. Its source snapshot digest
+and filter definitions remain in the JSON output so a later synthesis can
+reproduce the counts without treating implementation activity as scientific
+evidence.
+
 ## Required Fields
 
 The example manifest at

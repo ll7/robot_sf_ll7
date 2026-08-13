@@ -5,14 +5,177 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
+    _pr_payload_from_dict,
     main,
     snapshot_active_prs,
     snapshot_prs,
     write_raw_review_comments_artifact,
 )
+
+
+@pytest.fixture(autouse=True)
+def _default_fresh_base_freshness():  # type: ignore[no-untyped-def]
+    """Existing queue tests use a fresh PR base unless they override the freshness source."""
+    with (
+        patch("scripts.dev.snapshot_pr_queue._fetch_current_main_sha", return_value="main-sha"),
+        patch("scripts.dev.snapshot_pr_queue._fetch_pr_base_sha", return_value="main-sha"),
+    ):
+        yield
+
+
+def _base_freshness_pr(*, number: int = 7021) -> dict[str, object]:
+    return {
+        "number": number,
+        "title": "base freshness PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": f"https://github.test/pull/{number}",
+        "labels": [{"name": "merge-ready"}],
+        "headRefName": "feature",
+        "headRefOid": "head-sha",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
+        "reviews": [],
+        "comments": [],
+    }
+
+
+def test_base_freshness_fresh_preserves_merge_ready_action() -> None:
+    """A fresh PR base should expose provenance without changing merge-ready routing."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(),
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["base_freshness"] == {
+        "base_sha": "main-sha",
+        "current_main_sha": "main-sha",
+        "verdict": "fresh",
+        "action": "continue_queue_routing",
+        "reason": "PR base SHA matches current main",
+    }
+    assert pr["preflight"]["status"] == "healthy"
+    assert pr["next_action"] == "merge_readiness_local_check"
+
+
+def test_base_freshness_stale_blocks_merge_ready_action() -> None:
+    """A stale PR base must route to branch refresh before review or merge readiness."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(),
+        base_sha="old-base",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["base_freshness"]["base_sha"] == "old-base"
+    assert pr["base_freshness"]["current_main_sha"] == "main-sha"
+    assert pr["base_freshness"]["verdict"] == "stale"
+    assert pr["base_freshness"]["action"] == "refresh_pr_base_before_review_or_merge"
+    assert pr["preflight"]["status"] == "stale"
+    assert "base_sha_stale" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "refresh_pr_base_before_review_or_merge"
+
+
+def test_base_freshness_missing_base_blocks_merge_ready_action() -> None:
+    """Missing PR base provenance is unverifiable and must fail closed."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(),
+        base_sha="",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["base_freshness"]["base_sha"] is None
+    assert pr["base_freshness"]["current_main_sha"] == "main-sha"
+    assert pr["base_freshness"]["verdict"] == "missing-base"
+    assert pr["base_freshness"]["action"] == "verify_pr_base_before_queue_routing"
+    assert pr["preflight"]["status"] == "blocked"
+    assert "base_sha_missing" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "verify_pr_base_before_queue_routing"
+
+
+def test_base_freshness_unavailable_current_main_blocks_merge_ready_action() -> None:
+    """Unavailable current-main provenance is unverifiable and must fail closed."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(),
+        base_sha="base-sha",
+        current_main_sha="",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["base_freshness"]["base_sha"] == "base-sha"
+    assert pr["base_freshness"]["current_main_sha"] is None
+    assert pr["base_freshness"]["verdict"] == "unavailable-current-main"
+    assert pr["base_freshness"]["action"] == "refresh_current_main_before_queue_routing"
+    assert pr["preflight"]["status"] == "blocked"
+    assert "current_main_sha_unavailable" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "refresh_current_main_before_queue_routing"
+
+
+@pytest.mark.parametrize(
+    ("label", "next_owner_or_gate"),
+    [
+        ("blocked", "blocker_owner_or_maintainer"),
+        ("decision-required", "maintainer_decision_or_approval"),
+        ("evidence:blocked", "evidence_or_domain_approval"),
+        ("state:blocked", "blocker_owner_or_maintainer"),
+        ("state:blocked-external-input", "external_input_owner_or_staging_gate"),
+        ("state:hold", "maintainer_decision_or_approval"),
+    ],
+)
+def test_explicit_blocker_overrides_green_merge_ready_routing(
+    label: str, next_owner_or_gate: str
+) -> None:
+    """Explicit stop-state labels must wait for their owner or approval gate."""
+    pr_data = _base_freshness_pr()
+    pr_data["labels"] = [{"name": "merge-ready"}, {"name": label}]
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    blocked_state = pr["preflight"]["blocked_state"]
+    assert blocked_state["status"] == "blocked"
+    assert blocked_state["labels"] == [label]
+    assert blocked_state["reasons"] == [f"explicit_blocked:{label}"]
+    assert blocked_state["next_owner_or_gate"] == next_owner_or_gate
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["next_action"] == "await_blocker_owner_or_approval"
+    assert pr["attention"] == "blocked_attention"
+
+
+def test_explicit_blocker_precedes_stale_base_refresh_hint() -> None:
+    """A blocked PR remains owner-gated even when its base also needs refresh."""
+    pr_data = _base_freshness_pr()
+    pr_data["labels"] = [{"name": "state:blocked"}, {"name": "merge-ready"}]
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="old-base",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["preflight"]["status"] == "blocked"
+    assert "base_sha_stale" in pr["preflight"]["reasons"]
+    assert "explicit_blocked:state:blocked" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "await_blocker_owner_or_approval"
 
 
 def test_snapshot_prs_emits_headline_state() -> None:
@@ -50,7 +213,7 @@ def test_snapshot_prs_emits_headline_state() -> None:
         payload = snapshot_prs([2679], repo="ll7/robot_sf_ll7", expected_head_sha="abc123")
 
     pr = payload["prs"][0]
-    assert payload["schema"] == "pr_queue_snapshot.v1"
+    assert payload["schema"] == "pr_queue_snapshot.v2"
     assert payload["route_health_overview"]["healthy"] == 1
     assert pr["number"] == 2679
     assert pr["head_sha"] == "abc123"
@@ -821,6 +984,7 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
         "labels": [{"name": "merge-ready"}],
         "html_url": "https://x/42",
         "head": {"ref": "fix", "sha": "abc"},
+        "base": {"sha": "main-sha"},
         "mergeable_state": "clean",
     }
     reviews = [{"state": "APPROVED", "author_association": "OWNER", "body": "lgtm"}]
@@ -861,6 +1025,7 @@ def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
         "draft": False,
         "labels": [],
         "head": {"ref": "b", "sha": "resthead"},
+        "base": {"sha": "main-sha"},
         "mergeable_state": "clean",
     }
     with patch(

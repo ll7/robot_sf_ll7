@@ -357,11 +357,12 @@ def test_single_planner_shard_emits_non_comparative_receipt(
     assert provenance["command_identity"]["mode"] == "shard"
     assert provenance["command_identity"]["schema_version"] == receipt["schema_version"]
     assert receipt["streaming_stats"] == {
-        "processing_model": "sequential_whole_shard",
+        "processing_model": "sequential_streaming",
         "max_live_raw_shards": 1,
-        "max_live_raw_records": len(_fixture_records(manifest)),
+        "max_live_raw_records": 1,
         "raw_shards_retained": 0,
         "raw_records_retained": 0,
+        "raw_record_list_allocated": False,
         "reduced_rank_record_count": len(_fixture_records(manifest)),
     }
     assert (
@@ -376,6 +377,53 @@ def test_single_planner_shard_emits_non_comparative_receipt(
     assert not (shard_output_dir / "rank_sensitivity.json").exists()
     assert not (shard_output_dir / "analysis.md").exists()
     assert not (output_dir / "shard_receipt.json").exists()
+
+
+def test_streaming_shard_reduction_preserves_whole_shard_semantics(tmp_path: Path) -> None:
+    """Streaming shard reduction changes retention, not readiness or derived reports."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
+    manifest = _single_planner_manifest(
+        build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH)), "goal"
+    )
+    manifest_path = tmp_path / "manifest.json"
+    records_path = tmp_path / "episode_records.jsonl"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    records_path.write_text(
+        "".join(json.dumps(record) + "\n" for record in _fixture_records(manifest)),
+        encoding="utf-8",
+    )
+    module = _load_report_cli()
+    common = {
+        "argument": str(records_path),
+        "bundle_root": tmp_path,
+        "manifest": manifest,
+        "label": "test-records",
+    }
+    whole, whole_identity = module._load_reduce_records(records_path, **common)
+    streaming, streaming_identity = module._stream_load_reduce_records(records_path, **common)
+
+    for key in (
+        "integration_readiness",
+        "rank_records",
+        "csv_rows",
+        "per_archetype_metric_reports",
+        "planner_order",
+        "normalized_cells",
+        "record_count",
+    ):
+        assert streaming[key] == whole[key]
+    assert streaming_identity == whole_identity
+    assert streaming["streaming_stats"] == {
+        "processing_model": "sequential_streaming",
+        "max_live_raw_shards": 1,
+        "max_live_raw_records": 1,
+        "raw_shards_retained": 0,
+        "raw_records_retained": 0,
+        "raw_record_list_allocated": False,
+        "reduced_rank_record_count": len(_fixture_records(manifest)),
+    }
 
 
 def test_shard_preserves_established_blocked_manifest_readiness(tmp_path: Path) -> None:
@@ -567,7 +615,7 @@ def test_finalize_three_verified_shards_builds_existing_rank_report(tmp_path: Pa
     assert all(row["receipt_builder_head"] == _current_head() for row in finalization["receipts"])
     assert finalization["command_identity"]["mode"] == "finalize"
     assert finalization["command_identity"]["schema_version"] == finalization["schema_version"]
-    assert finalization["streaming_stats"]["processing_model"] == "sequential_whole_shard"
+    assert finalization["streaming_stats"]["processing_model"] == "sequential_streaming"
     assert finalization["streaming_stats"]["max_live_raw_shards"] == 1
     assert finalization["streaming_stats"]["raw_records_retained"] == 0
     assert finalization["streaming_stats"]["combined_raw_record_list_allocated"] is False

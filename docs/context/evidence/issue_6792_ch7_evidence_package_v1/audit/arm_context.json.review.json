@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1/audit/arm_context.json",
+  "artifact_sha256": "c4b25f01bef34250c0138f3b8e0108261819c68c478d79d71fe3116277e600b4",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

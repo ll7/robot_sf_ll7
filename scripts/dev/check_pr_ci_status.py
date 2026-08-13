@@ -28,6 +28,7 @@ _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
 )
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
+_WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -110,11 +111,13 @@ def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
     """
     if check.get("__typename") != "CheckRun":
         return None
+    workflow_id = str(check.get("workflowId") or "")
     workflow_name = str(check.get("workflowName") or "")
     started_at = str(check.get("startedAt") or "")
-    if not workflow_name or not started_at:
+    workflow_identity = f"id:{workflow_id}" if workflow_id else f"name:{workflow_name}"
+    if not (workflow_id or workflow_name) or not started_at:
         return None
-    return workflow_name, _rollup_name(check)
+    return workflow_identity, _rollup_name(check)
 
 
 def _latest_check_runs(rollup: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
@@ -192,6 +195,40 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
+    """Bind GitHub Actions check runs to their authoritative workflow IDs.
+
+    REST check-run payloads omit the GraphQL ``workflowName`` field used to collapse reruns on the
+    same commit. Their job URLs identify an Actions run, whose REST payload supplies the stable
+    ``workflow_id``. Successful lookups are cached across bounded polling attempts; failed lookups
+    are retried. Runs that cannot be enriched remain identity-less and independently fail-closed;
+    job names alone are never used for deduplication.
+    """
+    enriched_runs: list[dict[str, Any]] = []
+    for check_run in check_runs:
+        if not isinstance(check_run, dict):
+            continue
+        enriched = dict(check_run)
+        details_url = str(check_run.get("details_url", "") or "")
+        match = _ACTIONS_JOB_URL_RE.search(details_url)
+        if match is None:
+            enriched_runs.append(enriched)
+            continue
+
+        run_id = match.group("run_id")
+        workflow_id = _WORKFLOW_ID_BY_RUN_ID.get(run_id)
+        if workflow_id is None:
+            run = _rest_api_get(f"actions/runs/{run_id}")
+            raw_workflow_id = run.get("workflow_id") if isinstance(run, dict) else None
+            workflow_id = str(raw_workflow_id) if raw_workflow_id is not None else None
+            if workflow_id is not None:
+                _WORKFLOW_ID_BY_RUN_ID[run_id] = workflow_id
+        if workflow_id:
+            enriched["workflow_id"] = workflow_id
+        enriched_runs.append(enriched)
+    return enriched_runs
 
 
 def _stale_job_status(job: dict[str, Any]) -> str | None:
@@ -298,6 +335,7 @@ def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, A
             "conclusion": run.get("conclusion") or "",
             "detailsUrl": str(run.get("details_url", "") or ""),
             "startedAt": str(run.get("started_at", "") or ""),
+            "workflowId": str(run.get("workflow_id", "") or ""),
             "workflowName": str(
                 (run.get("workflow") or (run.get("check_suite") or {}).get("workflow") or "")
                 if isinstance(run, dict)
@@ -358,7 +396,8 @@ def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
     head_sha = str(head.get("sha", "") or "")
     checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs")
     check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
-    checks, _ = _summarize_check_runs(check_runs if isinstance(check_runs, list) else [])
+    raw_check_runs = check_runs if isinstance(check_runs, list) else []
+    checks, _ = _summarize_check_runs(_enrich_rest_check_runs(raw_check_runs))
     reviews_raw = _rest_api_get(f"pulls/{pr_number}/reviews")
     review_states: dict[str, int] = {}
     for review in reviews_raw if isinstance(reviews_raw, list) else []:

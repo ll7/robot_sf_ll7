@@ -185,7 +185,7 @@ Two regression fixtures are required:
 For token-efficient orientation, collect a compact snapshot before broad parent reads:
 
 ```bash
-uv run python scripts/dev/autopilot_state_snapshot.py \
+uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <issue-number>"

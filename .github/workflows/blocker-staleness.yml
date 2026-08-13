@@ -81,3 +81,54 @@ jobs:
           path: blocker_staleness.json
           retention-days: 90
           if-no-files-found: error
+
+      - name: Scan blocked queue triage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python scripts/dev/blocked_queue_triage.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --label state:blocked \
+            --report-only \
+            --output blocked_queue_triage.json > /dev/null
+
+      - name: Summarize blocked queue triage
+        env:
+          REPORT_PATH: blocked_queue_triage.json
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["REPORT_PATH"]).read_text())
+          counts = report["counts"]
+
+          print("## Blocked queue triage")
+          print()
+          print(f"Schema: `{report['schema']}`")
+          print(f"Open issues: `{report['source']['open_issue_count']}`")
+          print(f"Pagination complete: `{report['source']['pagination_complete']}`")
+          print()
+          print("| Dimension | Counts |")
+          print("| --- | --- |")
+          for name, values in (
+              ("Blocker class", counts["by_blocker_class"]),
+              ("Condition mode", counts["by_condition_mode"]),
+              ("Confidence", counts["by_confidence"]),
+              ("Progress age", counts["by_progress_age"]),
+          ):
+              rendered = ", ".join(f"{key}={value}" for key, value in sorted(values.items()))
+              print(f"| {name} | {rendered} |")
+          print()
+          print(f"Closure candidates: `{len(report['closure_candidates'])}` (none proposed by policy)")
+          print(f"Watcher: `{report['watcher_recommendation']['command']}`")
+          PY
+
+      - name: Upload blocked queue triage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blocked-queue-triage-report
+          path: blocked_queue_triage.json
+          retention-days: 90
+          if-no-files-found: error

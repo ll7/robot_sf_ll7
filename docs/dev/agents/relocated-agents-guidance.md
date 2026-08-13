@@ -148,10 +148,18 @@ view shows potentially durable files, redirect the full ignored-output listing t
 artifact and paste only the relevant path excerpts.
 For token-sensitive autonomous cleanup or repositories with many linked worktrees, start with the
 compact hygiene helper instead of printing the full worktree inventory in the parent thread:
-`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --json`. Add `--filter
-<branch-or-path-substring>` for a single branch cleanup, and read raw `git worktree list
---porcelain` only when the compact payload is insufficient or reports a stale administrative entry
-that needs manual inspection.
+`uv run python scripts/dev/worktree_hygiene_snapshot.py --repo-status --retirement-plan --json`.
+The retirement projection is read-only and never authorizes deletion by itself: `removable` means
+the local snapshot found no preservation signal, while `preserve` and `review` are fail-closed
+states for dirty content, ahead commits, detached or missing-upstream rows, active or unavailable
+claims, unavailable merge state, or ignored `output/` artifacts that look durable or need handoff.
+Add `--filter <branch-or-path-substring>` for a single branch cleanup, and read raw
+`git worktree list --porcelain` only when the compact payload is insufficient or reports a stale
+administrative entry that needs manual inspection.
+
+Use `--retirement-plan --include-all-worktrees --json` when a bounded report must decide whether a
+worktree is `preserve`, `review`, or `removeable`. Treat every unknown claim, PR, status, or ignored
+artifact classification as a blocker; the report is read-only and never grants deletion authority.
 
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an
@@ -380,18 +388,18 @@ resolving lint or test failures locally before requesting review.
   analysis, and why-report generation are research-facing examples that need first use or a
   concrete follow-up.
 - For delegated-worker routing, prefer a compact preflight ledger before implementation or review
-  dispatch: `gh auth status`, `scripts/dev/snapshot_pr_queue.py --prs <number> --expected-head-sha <sha> --json`,
+  dispatch: `gh auth status`, `uv run python -m scripts.dev.snapshot_pr_queue --prs <number> --expected-head-sha <sha> --json`,
   and `scripts/dev/check_pr_ci_status.py --expected-head-sha <sha>`.
 - Default claimable issue snapshots should keep blocked external-data issues out of agent routing;
-  use `scripts/dev/snapshot_issue_batch.py --blocked-external-report` for the parked human-action
+  use `uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report` for the parked human-action
   report, or `--include-blocked-external` only when explicitly auditing that queue.
-- Use `scripts/dev/snapshot_issue_batch.py --active-portfolio` when reviewing the broader open
+- Use `uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio` when reviewing the broader open
   issue portfolio for executable, human-decision, blocked-external, diagnostic-only, stale
   synthesis, and paper-critical routing recommendations without applying labels automatically.
 - Treat `preflight.status == "stale"` lanes as invalid until refreshed.
 - If review/comment data is needed, start from compact `review_snapshot`/`comment_snapshot`/`checks`
   output rather than raw `gh` payloads. For PR review threads, use
-  `scripts/dev/snapshot_pr_queue.py --prs <number> --review-threads --json`; it emits bounded
+  `uv run python -m scripts.dev.snapshot_pr_queue --prs <number> --review-threads --json`; it emits bounded
   comment excerpts, label names, and omits raw `diff_hunk` payloads. Fetch full review-comment
   bodies or hunks only with an explicit artifact path such as
   `--raw-review-comments-artifact "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/.../raw-review-comments.json"`
@@ -404,7 +412,7 @@ resolving lint or test failures locally before requesting review.
   the full log and `summary.json` under the common Git dir and prints only command, exit code,
   elapsed time, artifact paths, failing pytest node ids when present, and bounded excerpts.
 - Before broad status or inventory output, use
-  `uv run python scripts/dev/autopilot_state_snapshot.py --include-worktrees` or another compact
+  `uv run python -m scripts.dev.autopilot_state_snapshot --include-worktrees` or another compact
   helper so generated `.venv`, `.opencode`, `node_modules`, and `output` trees are summarized
   instead of dumped into agent context.
 - For repeated PR CI polling in the parent thread, prefer single snapshots or redirect multi-poll

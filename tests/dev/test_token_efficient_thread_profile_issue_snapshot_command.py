@@ -8,14 +8,34 @@ import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from scripts.dev import snapshot_issue_batch
+from scripts.dev.github_quota import RateLimitSnapshot
 from scripts.dev.snapshot_issue_batch import _parse_args, main
 
 DOC_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "templates" / "token_efficient_thread_profile.md"
 )
 SNAPSHOT_COMMAND_RE = re.compile(
-    r"`uv run python scripts/dev/snapshot_issue_batch\.py (?P<args>[^`]+)`"
+    r"`uv run python -m scripts\.dev\.snapshot_issue_batch (?P<args>[^`]+)`"
 )
+
+
+@pytest.fixture(autouse=True)
+def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep documented-command mocks on the healthy GraphQL path."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+    )
 
 
 def _snapshot_invocations(doc_text: str) -> list[str]:

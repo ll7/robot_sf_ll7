@@ -13,6 +13,13 @@ from typing import Any
 
 from scripts.dev import gh_issue_rest
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.github_quota import (
+    DEFAULT_CORE_SAFETY_THRESHOLD,
+    DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    RateLimitSnapshot,
+    graphql_budget_decision,
+    parse_rate_limit_payload,
+)
 from scripts.dev.issue_claim import short_claim_ref, status_issue
 
 BODY_EXCERPT_CHARS = 300
@@ -56,6 +63,350 @@ def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
         text=True,
         timeout=timeout,
         check=False,
+    )
+
+
+def _rate_limit_snapshot() -> RateLimitSnapshot:
+    """Read quota through REST without spending GraphQL budget."""
+    result = _gh(["api", "rate_limit"])
+    if result.returncode != 0:
+        return RateLimitSnapshot(
+            status="unavailable",
+            error=result.stderr.strip() or result.stdout.strip() or "rate_limit request failed",
+        )
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return RateLimitSnapshot(status="malformed", error=f"invalid rate_limit JSON: {exc}")
+    return parse_rate_limit_payload(payload)
+
+
+def _is_graphql_quota_error(message: str) -> bool:
+    """Return whether a GitHub error indicates GraphQL quota exhaustion."""
+    text = (message or "").lower()
+    if "rate limit" not in text:
+        return False
+    return "graphql" in text or "api rate limit" in text or "too many requests" in text
+
+
+def _repo_parts(repo: str) -> tuple[str, str] | None:
+    """Split a GitHub ``owner/name`` repository string for REST fallback."""
+    parts = repo.split("/")
+    if len(parts) != 2 or not all(parts):
+        return None
+    return parts[0], parts[1]
+
+
+def _rest_open_issue_page(
+    *, repo: str, page: int, per_page: int, label: str | None = None
+) -> tuple[list[dict[str, Any]] | None, str]:
+    """Read one bounded open-issue page through REST, excluding pull requests later."""
+    parts = _repo_parts(repo)
+    if parts is None:
+        return None, f"invalid repository name {repo!r}; expected owner/name"
+    owner, name = parts
+    args = [
+        "api",
+        f"repos/{owner}/{name}/issues",
+        "--method",
+        "GET",
+        "--field",
+        "state=open",
+        "--field",
+        f"per_page={per_page}",
+        "--field",
+        f"page={page}",
+    ]
+    if label:
+        args.extend(["--field", f"labels={label}"])
+    result = _gh(args)
+    if result.returncode != 0:
+        return None, result.stderr.strip() or result.stdout.strip() or "REST issue list failed"
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return None, f"invalid REST issue list JSON: {exc}"
+    if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
+        return None, "REST issue list response must be a JSON array of objects"
+    return payload, ""
+
+
+def _normalize_rest_issue(issue: dict[str, Any]) -> dict[str, Any] | None:
+    """Map one REST issue to the compact list shape, dropping pull requests."""
+    if issue.get("pull_request") is not None:
+        return None
+    number = issue.get("number")
+    if not isinstance(number, int) or number < 1:
+        return None
+    labels = issue.get("labels")
+    assignees = issue.get("assignees")
+    return {
+        "number": number,
+        "title": issue.get("title") if isinstance(issue.get("title"), str) else "",
+        "state": issue.get("state", "").upper() if isinstance(issue.get("state"), str) else "",
+        "url": issue.get("html_url") if isinstance(issue.get("html_url"), str) else "",
+        "labels": labels if isinstance(labels, list) else [],
+        "assignees": assignees if isinstance(assignees, list) else [],
+    }
+
+
+def _quota_blocked_after_graphql_error(decision: dict[str, Any], *, message: str) -> dict[str, Any]:
+    """Convert an unexpected mid-command GraphQL quota failure to a resumable decision."""
+    return {
+        **decision,
+        "status": "quota_blocked",
+        "reason": "graphql_quota_exhausted_during_lookup",
+        "message": message,
+        "resume_after": decision.get("graphql_reset_at"),
+    }
+
+
+def _listing_result(
+    *,
+    status: str,
+    listed: list[dict[str, Any]],
+    error: str,
+    data_source: str,
+    rate_limit: RateLimitSnapshot,
+    quota: dict[str, Any],
+    resume_cursor: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the shared bounded issue-list result shape."""
+    return {
+        "status": status,
+        "listed": listed,
+        "error": error,
+        "data_source": data_source,
+        "rate_limit": rate_limit.as_dict(),
+        "quota": quota,
+        "resume_cursor": resume_cursor,
+    }
+
+
+def _graphql_open_issue_list(*, repo: str, limit: int, label: str | None = None) -> dict[str, Any]:
+    """Run one bounded GraphQL-backed issue list and classify its failure."""
+    args = [
+        "issue",
+        "list",
+        "--repo",
+        repo,
+        "--state",
+        "open",
+    ]
+    if label:
+        args.extend(["--label", label])
+    args.extend(
+        [
+            "--limit",
+            str(limit),
+            "--json",
+            "number,title,state,labels,url,assignees",
+        ]
+    )
+    result = _gh(args)
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or "gh issue list failed"
+        return {
+            "status": "quota_blocked" if _is_graphql_quota_error(error) else "error",
+            "listed": [],
+            "error": error,
+        }
+    try:
+        listed = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        return {"status": "error", "listed": [], "error": f"invalid gh JSON: {exc}"}
+    if not isinstance(listed, list) or any(not isinstance(row, dict) for row in listed):
+        return {
+            "status": "error",
+            "listed": [],
+            "error": "expected gh issue list JSON array",
+        }
+    return {"status": "ok", "listed": listed, "error": ""}
+
+
+def _rest_open_issue_list(
+    *, repo: str, limit: int, page: int, label: str | None = None
+) -> dict[str, Any]:
+    """Run one bounded REST issue page and return a resumable cursor when capped."""
+    per_page = min(max(limit, 1), 100)
+    raw_page, error = _rest_open_issue_page(
+        repo=repo,
+        page=page,
+        per_page=per_page,
+        label=label,
+    )
+    if raw_page is None:
+        return {"status": "error", "listed": [], "error": error}
+    listed = [
+        normalized for issue in raw_page if (normalized := _normalize_rest_issue(issue)) is not None
+    ]
+    return {
+        "status": "ok",
+        "listed": listed[:limit],
+        "error": "",
+        "resume_cursor": (
+            {"source": "rest", "page": page + 1, "limit": limit}
+            if len(raw_page) >= per_page
+            else None
+        ),
+    }
+
+
+def _quota_blocked_listing(
+    *,
+    rate_limit: RateLimitSnapshot,
+    decision: dict[str, Any],
+    page: int,
+    limit: int,
+    error: str,
+) -> dict[str, Any]:
+    """Return an empty, resumable result when no safe issue source is available."""
+    return _listing_result(
+        status="quota_blocked",
+        listed=[],
+        error=error,
+        data_source="none",
+        rate_limit=rate_limit,
+        quota=decision,
+        resume_cursor={"source": "rest", "page": page, "limit": limit},
+    )
+
+
+def _rest_fallback_listing(
+    *,
+    repo: str,
+    limit: int,
+    resume_page: int,
+    label: str | None,
+    rate_limit: RateLimitSnapshot,
+    decision: dict[str, Any],
+) -> dict[str, Any]:
+    """Use one REST page when safe, or return a no-row quota handoff."""
+    core_is_blocked = (
+        rate_limit.core_remaining is not None
+        and rate_limit.core_remaining <= DEFAULT_CORE_SAFETY_THRESHOLD
+    )
+    if core_is_blocked:
+        decision = {
+            **decision,
+            "status": "quota_blocked",
+            "resource": "core",
+            "reason": "core_budget_below_safety_threshold",
+            "message": "REST fallback is also blocked by the configured core safety threshold",
+            "resume_after": rate_limit.core_reset_at,
+        }
+        return _quota_blocked_listing(
+            rate_limit=rate_limit,
+            decision=decision,
+            page=resume_page,
+            limit=limit,
+            error=decision["message"],
+        )
+
+    rest = _rest_open_issue_list(
+        repo=repo,
+        page=resume_page,
+        limit=limit,
+        label=label,
+    )
+    if rest["status"] == "ok":
+        return _listing_result(
+            status="ok",
+            listed=rest["listed"],
+            error="",
+            data_source="rest",
+            rate_limit=rate_limit,
+            quota=decision,
+            resume_cursor=rest["resume_cursor"],
+        )
+    rest_error = rest["error"]
+    if decision.get("status") != "quota_blocked" and _is_graphql_quota_error(rest_error):
+        decision = _quota_blocked_after_graphql_error(decision, message=rest_error)
+    if decision.get("status") == "quota_blocked":
+        return _quota_blocked_listing(
+            rate_limit=rate_limit,
+            decision=decision,
+            page=resume_page,
+            limit=limit,
+            error=rest_error,
+        )
+    return _listing_result(
+        status="error",
+        listed=[],
+        error=rest_error,
+        data_source="rest",
+        rate_limit=rate_limit,
+        quota=decision,
+        resume_cursor=None,
+    )
+
+
+def _list_open_issues(
+    *,
+    repo: str,
+    limit: int,
+    min_graphql_remaining: int,
+    resume_page: int = 1,
+    label: str | None = None,
+) -> dict[str, Any]:
+    """List open issues with a quota guard and a bounded REST resume path."""
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+    if resume_page <= 0:
+        raise ValueError("resume_page must be positive")
+
+    rate_limit = _rate_limit_snapshot()
+    decision = graphql_budget_decision(
+        rate_limit,
+        expected_graphql_requests=1,
+        min_graphql_remaining=min_graphql_remaining,
+        expected_core_requests=1,
+        min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
+    )
+    if rate_limit.status != "ok":
+        return _quota_blocked_listing(
+            rate_limit=rate_limit,
+            decision=decision,
+            page=resume_page,
+            limit=limit,
+            error=decision["message"],
+        )
+    force_rest = resume_page > 1
+    if decision["status"] == "ok" and not force_rest:
+        graphql = _graphql_open_issue_list(
+            repo=repo,
+            limit=limit,
+            label=label,
+        )
+        if graphql["status"] == "ok":
+            return _listing_result(
+                status="ok",
+                listed=graphql["listed"],
+                error="",
+                data_source="graphql",
+                rate_limit=rate_limit,
+                quota=decision,
+                resume_cursor=None,
+            )
+        if graphql["status"] == "error":
+            return _listing_result(
+                status="error",
+                listed=[],
+                error=graphql["error"],
+                data_source="graphql",
+                rate_limit=rate_limit,
+                quota=decision,
+                resume_cursor=None,
+            )
+        decision = _quota_blocked_after_graphql_error(decision, message=graphql["error"])
+
+    return _rest_fallback_listing(
+        repo=repo,
+        limit=limit,
+        resume_page=resume_page,
+        label=label,
+        rate_limit=rate_limit,
+        decision=decision,
     )
 
 
@@ -389,63 +740,45 @@ def snapshot_claimable_issues(
     body_limit: int,
     limit: int,
     include_blocked_external: bool = False,
+    min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    resume_page: int = 1,
 ) -> dict[str, Any]:
-    """Return a compact claimable/open issue snapshot."""
-    result = _gh(
-        [
-            "issue",
-            "list",
-            "--repo",
-            repo,
-            "--state",
-            "open",
-            "--limit",
-            str(limit),
-            "--json",
-            "number,title,state,labels,url,assignees",
-        ]
+    """Return a compact claimable/open issue snapshot.
+
+    GraphQL discovery is used only when the quota preflight leaves the configured safety margin.
+    Otherwise the bounded REST page is used, and a ``resume_cursor`` is returned when another page
+    exists. If neither source is safe or available, the result is ``quota_blocked`` with no issue
+    rows, so a caller cannot mistake a partial discovery for a complete queue.
+    """
+    body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
+    listing = _list_open_issues(
+        repo=repo,
+        limit=limit,
+        min_graphql_remaining=min_graphql_remaining,
+        resume_page=resume_page,
     )
-    if result.returncode != 0:
+    base = {
+        "schema": "issue_batch_snapshot.v1",
+        "repo": repo,
+        "body_excerpt_chars": body_limit,
+        "mode": "claimable",
+        "status": listing["status"],
+        "data_source": listing["data_source"],
+        "rate_limit": listing["rate_limit"],
+        "quota": listing["quota"],
+        "resume_cursor": listing["resume_cursor"],
+    }
+    if listing["status"] != "ok":
         return {
-            "schema": "issue_batch_snapshot.v1",
-            "repo": repo,
-            "body_excerpt_chars": body_limit,
-            "mode": "claimable",
+            **base,
             "issues": [
                 {
-                    "status": "error",
-                    "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                    "status": listing["status"],
+                    "error": listing["error"],
                 }
             ],
         }
-    try:
-        listed = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        return {
-            "schema": "issue_batch_snapshot.v1",
-            "repo": repo,
-            "body_excerpt_chars": body_limit,
-            "mode": "claimable",
-            "issues": [
-                {
-                    "status": "error",
-                    "error": f"invalid gh JSON: {exc}",
-                }
-            ],
-        }
-    if not isinstance(listed, list):
-        return {
-            "schema": "issue_batch_snapshot.v1",
-            "repo": repo,
-            "body_excerpt_chars": body_limit,
-            "mode": "claimable",
-            "issues": [
-                {
-                    "status": "error",
-                    "error": "expected gh issue list JSON array",
-                }
-            ],
-        }
+    listed = listing["listed"]
 
     issue_numbers = [
         int(issue["number"])
@@ -462,18 +795,13 @@ def snapshot_claimable_issues(
         for issue in snapshots
         if include_blocked_external or issue.get("classification") != "blocked_external"
     ]
-    if body_limit <= 0:
-        body_limit = BODY_EXCERPT_CHARS
-    truncated = is_likely_truncated(len(listed), limit=limit)
+    truncated = is_likely_truncated(len(listed), limit=limit) or bool(listing["resume_cursor"])
     return {
-        "schema": "issue_batch_snapshot.v1",
-        "repo": repo,
-        "body_excerpt_chars": body_limit,
-        "mode": "claimable",
+        **base,
         "truncated": truncated,
         "truncation_note": (
-            f"gh issue list may be capped: got {len(listed)} rows at --limit {limit}; "
-            "raise --limit or paginate"
+            f"issue discovery may be capped: got {len(listed)} rows at --limit {limit}; "
+            "resume with the returned cursor"
             if truncated
             else ""
         ),
@@ -551,51 +879,35 @@ def _markdown_cell(value: Any) -> str:
 
 
 def snapshot_blocked_external_issues(
-    *, repo: str, report_path: str = "", limit: int, now: datetime | None = None
+    *,
+    repo: str,
+    report_path: str = "",
+    limit: int,
+    now: datetime | None = None,
+    min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    resume_page: int = 1,
 ) -> dict[str, Any]:
     """Return a compact blocked external-assets report."""
-    result = _gh(
-        [
-            "issue",
-            "list",
-            "--repo",
-            repo,
-            "--state",
-            "open",
-            "--label",
-            EXTERNAL_RESOURCE_LABEL,
-            "--limit",
-            str(limit),
-            "--json",
-            "number,title,state,labels,url,assignees",
-        ]
+    listing = _list_open_issues(
+        repo=repo,
+        limit=limit,
+        min_graphql_remaining=min_graphql_remaining,
+        resume_page=resume_page,
+        label=EXTERNAL_RESOURCE_LABEL,
     )
-    if result.returncode != 0:
+    if listing["status"] != "ok":
         rows: list[dict[str, Any]] = []
         errors = [
             {
-                "status": "error",
-                "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                "status": listing["status"],
+                "error": listing["error"],
             }
         ]
     else:
         errors = []
-        try:
-            listed = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            listed = []
-            errors = [{"status": "error", "error": f"invalid gh JSON: {exc}"}]
-        if not errors and not isinstance(listed, list):
-            listed = []
-            errors = [
-                {
-                    "status": "error",
-                    "error": "expected gh issue list JSON array",
-                }
-            ]
         rows = [
             _blocked_external_row(issue, now=now)
-            for issue in listed
+            for issue in listing["listed"]
             if isinstance(issue, dict) and _is_blocked_external_issue(_labels(issue))
         ]
     markdown = _blocked_external_markdown(rows)
@@ -613,6 +925,11 @@ def snapshot_blocked_external_issues(
         "report_path": report_path,
         "markdown": markdown,
         "errors": errors,
+        "status": listing["status"],
+        "data_source": listing["data_source"],
+        "rate_limit": listing["rate_limit"],
+        "quota": listing["quota"],
+        "resume_cursor": listing["resume_cursor"],
     }
 
 
@@ -782,55 +1099,40 @@ def _active_portfolio_markdown(rows: list[dict[str, Any]]) -> str:
 
 
 def snapshot_active_issue_portfolio(
-    *, repo: str, remote: str, report_path: str = "", limit: int
+    *,
+    repo: str,
+    remote: str,
+    report_path: str = "",
+    limit: int,
+    min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    resume_page: int = 1,
 ) -> dict[str, Any]:
     """Return a compact active issue portfolio for routing and demotion review."""
-    result = _gh(
-        [
-            "issue",
-            "list",
-            "--repo",
-            repo,
-            "--state",
-            "open",
-            "--limit",
-            str(limit),
-            "--json",
-            "number,title,state,labels,url,assignees",
-        ]
+    listing = _list_open_issues(
+        repo=repo,
+        limit=limit,
+        min_graphql_remaining=min_graphql_remaining,
+        resume_page=resume_page,
     )
-    if result.returncode != 0:
+    if listing["status"] != "ok":
         rows: list[dict[str, Any]] = []
         errors = [
             {
-                "status": "error",
-                "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                "status": listing["status"],
+                "error": listing["error"],
             }
         ]
     else:
         errors = []
-        try:
-            listed = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            listed = []
-            errors = [{"status": "error", "error": f"invalid gh JSON: {exc}"}]
-        if not errors and not isinstance(listed, list):
-            listed = []
-            errors = [
-                {
-                    "status": "error",
-                    "error": "expected gh issue list JSON array",
-                }
-            ]
         issue_numbers = [
             int(issue["number"])
-            for issue in listed
+            for issue in listing["listed"]
             if isinstance(issue, dict) and str(issue.get("number", "")).isdigit()
         ]
         claim_statuses = _batch_claim_statuses(issue_numbers, remote=remote)
         rows = [
             _active_portfolio_row(issue, remote=remote, claim_statuses=claim_statuses)
-            for issue in listed
+            for issue in listing["listed"]
             if isinstance(issue, dict) and issue.get("number") is not None
         ]
     counts = dict.fromkeys(sorted(PORTFOLIO_CLASSIFICATIONS), 0)
@@ -853,6 +1155,11 @@ def snapshot_active_issue_portfolio(
         "report_path": report_path,
         "markdown": markdown,
         "errors": errors,
+        "status": listing["status"],
+        "data_source": listing["data_source"],
+        "rate_limit": listing["rate_limit"],
+        "quota": listing["quota"],
+        "resume_cursor": listing["resume_cursor"],
     }
 
 
@@ -946,7 +1253,19 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--limit",
         type=int,
         default=DEFAULT_CLAIMABLE_LIMIT,
-        help="Limit for --claimable discovery mode.",
+        help="Bounded issue-page size for discovery/report modes.",
+    )
+    parser.add_argument(
+        "--min-graphql-remaining",
+        type=int,
+        default=DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+        help="GraphQL quota safety margin retained after the estimated lookup request.",
+    )
+    parser.add_argument(
+        "--resume-page",
+        type=int,
+        default=1,
+        help="REST issue-list page to resume from after a quota-bounded snapshot.",
     )
     parser.add_argument(
         "--capsule-dir",
@@ -989,6 +1308,15 @@ def _validate_args(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if args.limit <= 0:
+        print("--limit must be positive", file=sys.stderr)
+        return 1
+    if args.min_graphql_remaining < 0:
+        print("--min-graphql-remaining must be non-negative", file=sys.stderr)
+        return 1
+    if args.resume_page <= 0:
+        print("--resume-page must be positive", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -999,21 +1327,27 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
             repo=args.repo,
             remote=args.remote,
             report_path=args.report_path,
-            limit=max(args.limit, 1),
+            limit=args.limit,
+            min_graphql_remaining=args.min_graphql_remaining,
+            resume_page=args.resume_page,
         )
     if args.blocked_external_report:
         return snapshot_blocked_external_issues(
             repo=args.repo,
             report_path=args.report_path,
-            limit=max(args.limit, 1),
+            limit=args.limit,
+            min_graphql_remaining=args.min_graphql_remaining,
+            resume_page=args.resume_page,
         )
     if args.claimable:
         return snapshot_claimable_issues(
             repo=args.repo,
             remote=args.remote,
             body_limit=max(args.body_chars, 0),
-            limit=max(args.limit, 1),
+            limit=args.limit,
             include_blocked_external=args.include_blocked_external,
+            min_graphql_remaining=args.min_graphql_remaining,
+            resume_page=args.resume_page,
         )
     return snapshot_issues(
         numbers,

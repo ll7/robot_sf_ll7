@@ -20,9 +20,29 @@ import json
 import logging
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev import closed_state_label_hygiene, compact_ci_snapshot, open_issue_closure_audit
 from scripts.dev import snapshot_issue_batch as batch
 from scripts.dev import watch_pr_ci_status as watch
+from scripts.dev.github_quota import RateLimitSnapshot
+
+
+@pytest.fixture(autouse=True)
+def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep truncation fixtures on the guarded GraphQL path unless a test overrides it."""
+    monkeypatch.setattr(
+        batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+    )
+
 
 # ---------------------------------------------------------------------------
 # snapshot_issue_batch.snapshot_claimable_issues (gh issue list)

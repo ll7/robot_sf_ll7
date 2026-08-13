@@ -1,5 +1,19 @@
 {
   "schema_version": "case-source-integrity-registry.v1",
-  "purpose": "Trusted exact-source approvals for evidence promotion; empty until #6792/#6814 restoration is reviewed.",
-  "approved_sources": []
+  "purpose": "Trusted exact-source approval for the author-admitted Chapter 7 release-cell package.",
+  "approved_sources": [
+    {
+      "approval_id": "issue6792-comment-5278040955",
+      "approval_url": "https://github.com/ll7/robot_sf_ll7/issues/6792#issuecomment-5278040955",
+      "status": "approved",
+      "source_package_sha256sums": "011c644bac469a1ce6255ddb8731c53c84bd310887759174f4c734b54d6bb543",
+      "source_package_complete_sha256": "1457877aca9e6ff892e4d82030d26a63f5fa9413b8eab57a5cc653328db0045b",
+      "release_archive_sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7",
+      "compact_packet_sha256": "44360d5da575233131ac8e93c25a0dd539d980a2c8a0146651017d686c45dadb",
+      "compact_sha256sums_sha256": "59ef90567c2eba5ef1f8431bc19e0962a9ddceec15ac81afce0b360c6ecac3b7",
+      "source_package_key": "issue-6792/source-package-6412",
+      "release_archive_key": "issue-6792/release-0.0.3",
+      "compact_packet_key": "issue-6792/compact-6814"
+    }
+  ]
 }

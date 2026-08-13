@@ -15,9 +15,10 @@ path and SHA-256 digest without copying raw episode data.
 ## Determinism
 
 All SHA-256 digests were computed with `sha256sum` against tracked repository
-files at the base commit.  Fixtures are single-line JSON for deterministic
-serialization.  No raw episode data is copied; only tracked paths and digests
-are bound.
+files at the base commit.  Each source records both the generation commit and
+the `tracked_commit` that contains the exact bytes behind the digest.  Fixtures
+are single-line JSON for deterministic serialization.  No raw episode data is
+copied; only tracked paths and digests are bound.
 
 ## Regeneration
 

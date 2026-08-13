@@ -19,6 +19,7 @@
       "sha256": "38318cea403fb564854c49940da3d5df559029317e79fe5f089b974a3eee06f8",
       "kind": "diagnostic_summary",
       "commit": "8f9438632e794f084db72bb016a14b539bbca648",
+      "tracked_commit": "f1b15fe7cc1234cc583cf612d916dfd1f75a7f0d",
       "command": "NUMBA_NUM_THREADS=1 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run python scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py --config configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml --output-dir output/benchmarks/issue_6944_controller_parity_20260812T101747Z",
       "description": "Smoke-diagnostic summary for BRNE candidate-transition investigation."
     },
@@ -28,6 +29,7 @@
       "sha256": "49b77879bd5e44aa0211f570d3f2f051146b6da5e115135df5e676cb8fc2b0cf",
       "kind": "review_sidecar",
       "commit": "8f9438632e794f084db72bb016a14b539bbca648",
+      "tracked_commit": "f1b15fe7cc1234cc583cf612d916dfd1f75a7f0d",
       "command": "evidence-review-marker.v1",
       "description": "Review marker sidecar for the diagnostic summary."
     }

@@ -69,17 +69,26 @@ The validator rejects at minimum:
 - Duplicate IDs across metrics, decisions, figures, and sources.
 - Unsupported decision vocabulary.
 - `support > denominator` violations.
+- Supported outcomes without a directed comparator, finite effect, declared
+  support threshold, or complete native/adapter-only execution population.
 - Population accounting errors (`included + excluded != total`).
 - Empty claim boundary lists.
 
 Source references are repository-relative durable files.  Each source must carry
-its SHA-256 digest, producing commit, and generation command; validation hashes
-the tracked bytes and fails closed on drift or missing files.  Execution-mode
-counts must reconcile exactly with the included population.  A reviewed packet
+its SHA-256 digest, generation commit, tracked commit, and generation command.
+The generation commit records how the source was produced; `tracked_commit`
+binds the digest to the exact repository bytes that are retained.  Validation
+hashes both the current file and the tracked bytes and fails closed on drift,
+missing files, or unavailable commits.  Rendered figure links are similarly
+required to resolve to durable repository files with matching digests.
+Execution-mode counts must reconcile exactly with the included population.  A reviewed packet
 must bind both `reviewed_packet_digest` and `post_review_digest`; the latter
 includes the reviewer identity and cannot be supplied as an arbitrary hex value.
 Packets also list `fail_closed_changes`, making the retained exclusions and
-claim refusals explicit in the review report.
+claim refusals explicit in the review report.  The top-level `forbidden_claims`
+mirror the claim-boundary refusal list, and a small high-risk phrase guard
+prevents supported decisions, allowed claims, findings, or observed captions
+from silently escalating beyond that boundary.
 
 ## Source fixtures
 

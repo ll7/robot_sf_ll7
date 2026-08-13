@@ -108,6 +108,7 @@ class TestFixturesValid:
     def test_source_refs_record_generation_provenance(self) -> None:
         for source in _VALID_6474["sources"] + _VALID_6944["sources"] + _VALID_CH7["sources"]:
             assert source["commit"]
+            assert source["tracked_commit"]
             assert source["command"]
 
     @pytest.mark.parametrize(
@@ -376,6 +377,31 @@ class TestFailClosedDigestDrift:
         errors = validate_packet(payload)
         assert any("digest mismatch" in e for e in errors)
 
+    def test_tracked_source_commit_mismatch_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["tracked_commit"] = payload["sources"][0]["commit"]
+        errors = validate_packet(payload)
+        assert any("tracked_commit" in e for e in errors)
+
+    def test_nonfinite_uncertainty_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["uncertainty"]["ci_low"] = float("nan")
+        errors = validate_packet(payload)
+        assert any("ci_low" in e and "finite" in e for e in errors)
+
+    def test_supported_fallback_rows_rejected_even_when_permitted(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["execution_mode"]["counts"] = {"native": 539, "fallback": 1}
+        payload["execution_mode"]["fallback_permitted"] = True
+        errors = validate_packet(payload)
+        assert any("fallback/degraded rows" in e for e in errors)
+
+    def test_supported_decision_below_threshold_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["support"] = 1
+        errors = validate_packet(payload)
+        assert any("below the declared support_threshold" in e for e in errors)
+
     def test_execution_count_drift_rejected(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["execution_mode"]["counts"]["adapter"] = 359
@@ -421,6 +447,14 @@ class TestFailClosedFigureEncoding:
         payload["figure_links"][0]["sha256"] = "0" * 64
         errors = validate_packet(payload)
         assert errors == [], f"unavailable encoding should allow any sha256: {errors}"
+
+    def test_rendered_figure_must_exist(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["figure_links"][0]["encoding"] = "png"
+        payload["figure_links"][0]["path"] = "tests/fixtures/does_not_exist.png"
+        payload["figure_links"][0]["sha256"] = "0" * 64
+        errors = validate_packet(payload)
+        assert any("file does not exist" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +512,18 @@ class TestFailClosedClaimBoundary:
         payload["claim_boundary"]["forbidden"] = []
         errors = validate_packet(payload)
         assert any("forbidden" in e for e in errors)
+
+    def test_top_level_forbidden_claims_must_match_boundary(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["forbidden_claims"] = payload["forbidden_claims"][:-1]
+        errors = validate_packet(payload)
+        assert any("must exactly match" in e for e in errors)
+
+    def test_allowed_claim_cannot_escalate_to_universal_superiority(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["claim_boundary"]["allowed"].append("The planner is universally superior.")
+        errors = validate_packet(payload)
+        assert any("universally superior" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

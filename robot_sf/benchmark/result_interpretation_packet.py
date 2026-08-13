@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
+import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -32,6 +34,18 @@ _SCHEMA_FILE = Path(__file__).with_name("schemas") / "result_interpretation_pack
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
+_ZERO_SHA256 = "0" * 64
+_CLAIM_ESCALATION_PHRASES = (
+    "universally superior",
+    "proves a causal",
+    "establishes a causal",
+    "supports a causal",
+    "causal effect",
+    "real-world superiority",
+    "real-world validity",
+    "paper-facing claim",
+    "dissertation-ready",
+)
 _VALID_DECISION_OUTCOMES = frozenset(
     {"supported", "not_supported", "inconclusive", "invalid", "unavailable"}
 )
@@ -88,6 +102,7 @@ class SourceRef:
     sha256: str
     kind: str
     commit: str
+    tracked_commit: str
     command: str
     description: str = ""
 
@@ -184,6 +199,7 @@ class MetricEntry:
     null_value: float | None = None
     multiplicity: Multiplicity | None = None
     sensitivity: list[str] | None = None
+    support_threshold: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +210,8 @@ class DecisionEntry:
     metric_id: str
     outcome: str
     rationale: str
+    comparator: Comparator | None = None
+    effect: float | None = None
     refusal_reason: str | None = None
 
 
@@ -397,14 +415,26 @@ def _validate_uncertainty(
         return
     if not uncertainty.method:
         errors.append(f"metric {metric_id!r}: uncertainty declared but method is null")
+    _validate_uncertainty_values(metric_id, uncertainty, errors)
     if uncertainty.ci_low is not None and uncertainty.ci_high is not None:
         if uncertainty.ci_low > uncertainty.ci_high:
             errors.append(f"metric {metric_id!r}: uncertainty ci_low exceeds ci_high")
+
+
+def _validate_uncertainty_values(
+    metric_id: str,
+    uncertainty: Uncertainty,
+    errors: list[str],
+) -> None:
     for value_name, value in (
+        ("ci_low", uncertainty.ci_low),
+        ("ci_high", uncertainty.ci_high),
         ("p_value_raw", uncertainty.p_value_raw),
         ("p_value_adjusted", uncertainty.p_value_adjusted),
     ):
-        if value is not None and not 0.0 <= value <= 1.0:
+        if value is not None and not math.isfinite(value):
+            errors.append(f"metric {metric_id!r}: {value_name} must be finite")
+        elif value is not None and value_name.startswith("p_") and not 0.0 <= value <= 1.0:
             errors.append(f"metric {metric_id!r}: {value_name} must be in [0, 1]")
 
 
@@ -421,7 +451,7 @@ def _validate_multiplicity(
         errors.append(f"metric {metric_id!r}: multiplicity declared but n_comparisons is null")
 
 
-def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
+def _validate_metric_accounting(m: MetricEntry, errors: list[str]) -> None:
     if m.denominator <= 0:
         errors.append(f"metric {m.metric_id!r}: denominator must be > 0")
     if m.support < 0:
@@ -430,6 +460,20 @@ def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
         errors.append(
             f"metric {m.metric_id!r}: support ({m.support}) > denominator ({m.denominator})"
         )
+    if m.support_threshold is not None:
+        if m.support_threshold < 1:
+            errors.append(f"metric {m.metric_id!r}: support_threshold must be >= 1")
+        if m.support_threshold > m.denominator:
+            errors.append(f"metric {m.metric_id!r}: support_threshold exceeds denominator")
+
+
+def _validate_metric_values(m: MetricEntry, errors: list[str]) -> None:
+    for value_name, value in (("effect", m.effect), ("null_value", m.null_value)):
+        if value is not None and not math.isfinite(value):
+            errors.append(f"metric {m.metric_id!r}: {value_name} must be finite")
+
+
+def _validate_metric_vocabulary(m: MetricEntry, errors: list[str]) -> None:
     if m.missingness not in _VALID_MISSINGNESS:
         errors.append(
             f"metric {m.metric_id!r}: missingness {m.missingness!r} not in "
@@ -445,8 +489,6 @@ def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
             f"metric {m.metric_id!r}: desirability {m.desirability!r} not in "
             f"{sorted(_VALID_DESIRABILITY)}"
         )
-    _validate_uncertainty(m.metric_id, m.uncertainty, errors)
-    _validate_multiplicity(m.metric_id, m.multiplicity, errors)
     if m.missingness == "not_imputed":
         errors.append(
             f"metric {m.metric_id!r}: missingness 'not_imputed' is not allowed; "
@@ -454,9 +496,64 @@ def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
         )
 
 
+def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
+    _validate_metric_accounting(m, errors)
+    _validate_metric_values(m, errors)
+    _validate_metric_vocabulary(m, errors)
+    _validate_uncertainty(m.metric_id, m.uncertainty, errors)
+    _validate_multiplicity(m.metric_id, m.multiplicity, errors)
+
+
+def _validate_supported_decision(
+    d: DecisionEntry,
+    metric: MetricEntry,
+    execution_mode: ExecutionMode,
+    errors: list[str],
+) -> None:
+    requirements = (
+        (
+            metric.unavailable_handling != "fail_closed",
+            f"decision {d.decision_id!r}: supported outcome requires fail_closed metric handling",
+        ),
+        (
+            metric.uncertainty is None or not metric.uncertainty.declared,
+            f"decision {d.decision_id!r}: supported outcome requires declared uncertainty",
+        ),
+        (
+            metric.multiplicity is None or not metric.multiplicity.declared,
+            f"decision {d.decision_id!r}: supported outcome requires declared multiplicity",
+        ),
+        (
+            d.comparator is None or d.comparator.direction == "not_applicable",
+            f"decision {d.decision_id!r}: supported outcome requires a directed comparator",
+        ),
+        (
+            d.effect is None,
+            f"decision {d.decision_id!r}: supported outcome requires an effect",
+        ),
+    )
+    for invalid, message in requirements:
+        if invalid:
+            errors.append(message)
+    if metric.support_threshold is None:
+        errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")
+    elif metric.support < metric.support_threshold:
+        errors.append(
+            f"decision {d.decision_id!r}: support is below the declared support_threshold"
+        )
+    if execution_mode.counts.get("fallback", 0) or execution_mode.counts.get("degraded", 0):
+        errors.append(
+            f"decision {d.decision_id!r}: fallback/degraded rows cannot support a success outcome"
+        )
+    if d.refusal_reason is not None:
+        errors.append(f"decision {d.decision_id!r}: supported outcome cannot have refusal_reason")
+    _validate_claim_escalation(d.decision_id, d.rationale, errors)
+
+
 def _validate_decision(
     d: DecisionEntry,
     metrics_by_id: dict[str, MetricEntry],
+    execution_mode: ExecutionMode,
     errors: list[str],
 ) -> None:
     if d.outcome not in _VALID_DECISION_OUTCOMES:
@@ -468,32 +565,38 @@ def _validate_decision(
     metric = metrics_by_id.get(d.metric_id)
     if metric is None:
         return
+    if d.effect is not None and not math.isfinite(d.effect):
+        errors.append(f"decision {d.decision_id!r}: effect must be finite")
     if d.outcome == "supported":
-        if metric.unavailable_handling != "fail_closed":
-            errors.append(
-                f"decision {d.decision_id!r}: supported outcome requires fail_closed metric handling"
-            )
-        if metric.uncertainty is None or not metric.uncertainty.declared:
-            errors.append(
-                f"decision {d.decision_id!r}: supported outcome requires declared uncertainty"
-            )
-        if metric.multiplicity is None or not metric.multiplicity.declared:
-            errors.append(
-                f"decision {d.decision_id!r}: supported outcome requires declared multiplicity"
-            )
-        if d.refusal_reason is not None:
-            errors.append(
-                f"decision {d.decision_id!r}: supported outcome cannot have refusal_reason"
-            )
+        _validate_supported_decision(d, metric, execution_mode, errors)
     elif not d.refusal_reason:
         errors.append(f"decision {d.decision_id!r}: non-supported outcome requires refusal_reason")
 
 
-def _validate_claim_boundary(cb: ClaimBoundary, errors: list[str]) -> None:
+def _validate_claim_boundary(
+    cb: ClaimBoundary,
+    forbidden_claims: list[str],
+    errors: list[str],
+) -> None:
     if not cb.allowed:
         errors.append("claim_boundary.allowed must have at least one entry")
     if not cb.forbidden:
         errors.append("claim_boundary.forbidden must have at least one entry")
+    if set(cb.allowed).intersection(cb.forbidden):
+        errors.append("claim_boundary.allowed and forbidden must be disjoint")
+    if forbidden_claims != cb.forbidden:
+        errors.append("forbidden_claims must exactly match claim_boundary.forbidden")
+    for index, claim in enumerate(cb.allowed):
+        _validate_claim_escalation(f"claim_boundary.allowed[{index}]", claim, errors)
+
+
+def _validate_claim_escalation(label: str, text: str, errors: list[str]) -> None:
+    """Reject a small, explicit set of positive high-risk claim phrases."""
+
+    lowered = text.casefold()
+    matches = [phrase for phrase in _CLAIM_ESCALATION_PHRASES if phrase in lowered]
+    if matches:
+        errors.append(f"{label}: forbidden positive claim phrase(s): {sorted(matches)}")
 
 
 def _validate_caption_assertions(
@@ -514,6 +617,10 @@ def _validate_caption_assertions(
                 f"caption assertion for {ca.figure_id!r}: 'inferred' status is "
                 "forbidden; use 'observed' or 'unavailable'"
             )
+        if ca.status == "observed":
+            _validate_claim_escalation(
+                f"caption assertion for {ca.figure_id!r}", ca.assertion_text, errors
+            )
 
 
 def _validate_figure_links(
@@ -530,9 +637,53 @@ def _validate_figure_links(
             errors.append(
                 f"figure {fl.figure_id!r}: sha256 must be 64-hex when encoding is not 'unavailable'"
             )
-        if fl.encoding != "unavailable" and fl.path.startswith(("output/", "/tmp/", "/home/")):
+        _validate_file_ref(
+            fl.path,
+            fl.sha256,
+            f"figure {fl.figure_id!r}",
+            errors,
+            require_exists=fl.encoding != "unavailable",
+            verify_digest=fl.encoding != "unavailable" and fl.sha256 != _ZERO_SHA256,
+        )
+        if fl.caption_file is not None:
+            _validate_file_ref(
+                fl.caption_file.path,
+                fl.caption_file.sha256,
+                f"figure {fl.figure_id!r} caption_file",
+                errors,
+                require_exists=True,
+                verify_digest=True,
+            )
+
+
+def _validate_file_ref(
+    path: str,
+    sha256: str,
+    label: str,
+    errors: list[str],
+    *,
+    require_exists: bool,
+    verify_digest: bool,
+) -> None:
+    """Validate durable path safety and, when available, its tracked bytes."""
+
+    file_path = Path(path)
+    if file_path.is_absolute() or ".." in file_path.parts:
+        errors.append(f"{label}: path must be repository-relative")
+        return
+    if file_path.parts and file_path.parts[0] in {"output", ".git", ".venv"}:
+        errors.append(f"{label}: path is local-only: {path}")
+        return
+    resolved = _REPO_ROOT / file_path
+    if not resolved.is_file():
+        if require_exists:
+            errors.append(f"{label}: file does not exist: {path}")
+        return
+    if verify_digest:
+        actual = _sha256_file(resolved)
+        if actual != sha256:
             errors.append(
-                f"figure {fl.figure_id!r}: durable figure path cannot be local-only: {fl.path}"
+                f"{label}: digest mismatch for {path} (declared {sha256}, actual {actual})"
             )
 
 
@@ -540,25 +691,68 @@ def _validate_source_refs(sources: list[SourceRef], errors: list[str]) -> None:
     """Verify that source refs are durable repository files with matching bytes."""
 
     for source in sources:
-        source_path = Path(source.path)
-        if source_path.is_absolute() or ".." in source_path.parts:
-            errors.append(f"source {source.source_id!r}: path must be repository-relative")
-            continue
-        if source_path.parts and source_path.parts[0] in {"output", ".git", ".venv"}:
-            errors.append(f"source {source.source_id!r}: path is local-only: {source.path}")
-            continue
-        resolved = _REPO_ROOT / source_path
-        if not resolved.is_file():
-            errors.append(f"source {source.source_id!r}: file does not exist: {source.path}")
-            continue
-        actual = _sha256_file(resolved)
-        if actual != source.sha256:
+        _validate_file_ref(
+            source.path,
+            source.sha256,
+            f"source {source.source_id!r}",
+            errors,
+            require_exists=True,
+            verify_digest=True,
+        )
+        for commit_label, commit in (
+            ("commit", source.commit),
+            ("tracked_commit", source.tracked_commit),
+        ):
+            if not _COMMIT_RE.match(commit):
+                errors.append(
+                    f"source {source.source_id!r}: {commit_label} is not a hexadecimal git revision"
+                )
+                continue
+            if not _git_commit_exists(commit):
+                errors.append(
+                    f"source {source.source_id!r}: {commit_label} is unavailable: {commit}"
+                )
+        tracked_digest = _git_file_sha256(source.tracked_commit, source.path)
+        if tracked_digest is None:
             errors.append(
-                f"source {source.source_id!r}: digest mismatch for {source.path} "
-                f"(declared {source.sha256}, actual {actual})"
+                f"source {source.source_id!r}: tracked_commit does not contain {source.path}"
             )
-        if not _COMMIT_RE.match(source.commit):
-            errors.append(f"source {source.source_id!r}: commit is not a hexadecimal git revision")
+        elif tracked_digest != source.sha256:
+            errors.append(
+                f"source {source.source_id!r}: tracked_commit bytes do not match {source.path} "
+                f"(declared {source.sha256}, tracked {tracked_digest})"
+            )
+
+
+def _git_commit_exists(commit: str) -> bool:
+    """Return whether a commit object is available in the repository."""
+
+    result = subprocess.run(
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _git_file_sha256(commit: str, path: str) -> str | None:
+    """Hash a repository file as stored at a tracked commit.
+
+    Returns:
+        The SHA-256 digest of the tracked bytes, or ``None`` when the commit
+        does not contain the path.
+    """
+
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=_REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def _validate_digest_field(value: str | None, field_name: str, errors: list[str]) -> None:
@@ -591,9 +785,11 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
 
     metrics_by_id = {m.metric_id: m for m in packet.metrics}
     for d in packet.decisions:
-        _validate_decision(d, metrics_by_id, errors)
+        _validate_decision(d, metrics_by_id, packet.execution_mode, errors)
 
-    _validate_claim_boundary(packet.claim_boundary, errors)
+    _validate_claim_boundary(packet.claim_boundary, packet.forbidden_claims, errors)
+    for index, finding in enumerate(packet.findings):
+        _validate_claim_escalation(f"findings[{index}]", finding, errors)
 
     figure_ids = {fl.figure_id for fl in packet.figure_links}
     _validate_caption_assertions(packet.caption_assertions, figure_ids, errors)
@@ -678,6 +874,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
             sha256=s["sha256"],
             kind=s["kind"],
             commit=s["commit"],
+            tracked_commit=s["tracked_commit"],
             command=s["command"],
             description=s.get("description", ""),
         )
@@ -760,6 +957,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
                 null_value=m.get("null_value"),
                 multiplicity=mult,
                 sensitivity=m.get("sensitivity"),
+                support_threshold=m.get("support_threshold"),
             )
         )
 
@@ -769,6 +967,16 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
             metric_id=dd["metric_id"],
             outcome=dd["outcome"],
             rationale=dd["rationale"],
+            comparator=(
+                Comparator(
+                    reference=dd["comparator"]["reference"],
+                    comparison=dd["comparator"]["comparison"],
+                    direction=dd["comparator"].get("direction", "not_applicable"),
+                )
+                if dd.get("comparator") is not None
+                else None
+            ),
+            effect=dd.get("effect"),
             refusal_reason=dd.get("refusal_reason"),
         )
         for dd in d["decisions"]
@@ -961,7 +1169,7 @@ def write_deterministic_json(payload: dict[str, Any], path: Path) -> None:
     """Write a packet dict as deterministic single-line JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        json.dumps(payload, allow_nan=False, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
     )
 

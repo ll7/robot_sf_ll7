@@ -21,7 +21,8 @@
     "producer",
     "findings",
     "limitations",
-    "fail_closed_changes"
+    "fail_closed_changes",
+    "forbidden_claims"
   ],
   "properties": {
     "schema_version": {
@@ -201,7 +202,15 @@
     "source_ref": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source_id", "path", "sha256", "kind", "commit", "command"],
+      "required": [
+        "source_id",
+        "path",
+        "sha256",
+        "kind",
+        "commit",
+        "tracked_commit",
+        "command"
+      ],
       "properties": {
         "source_id": {
           "type": "string",
@@ -221,6 +230,11 @@
           "minLength": 1
         },
         "commit": {
+          "type": "string",
+          "minLength": 7,
+          "pattern": "^[0-9a-f]{7,64}$"
+        },
+        "tracked_commit": {
           "type": "string",
           "minLength": 7,
           "pattern": "^[0-9a-f]{7,64}$"
@@ -412,6 +426,17 @@
           "type": "integer",
           "minimum": 0
         },
+        "support_threshold": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "missingness": {
           "type": "string",
           "enum": ["complete", "partial", "unavailable", "not_imputed"]
@@ -581,6 +606,26 @@
         "rationale": {
           "type": "string",
           "minLength": 1
+        },
+        "comparator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/comparator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effect": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "refusal_reason": {
           "anyOf": [

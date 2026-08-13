@@ -19,6 +19,7 @@
       "sha256": "3bef8de3a9f7cd399d7a17abb6e68dd9c2775d42ba847b92cdff459bd2a70f70",
       "kind": "interpretation_note",
       "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "tracked_commit": "8e6098e8c490b33ff21a2ceccd86a12fccee36e5",
       "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
       "description": "Nominal benchmark evidence interpretation for issue #6474 social-compliance campaign."
     },
@@ -28,6 +29,7 @@
       "sha256": "10c45f44ec5679144671c6247644a7e88b1444fdf9b25a7373b343bbf732e1bc",
       "kind": "campaign_manifest",
       "commit": "d0c8d3400f79c35b40062304b17f91598ccac98d",
+      "tracked_commit": "9efad2d46fec58052796a56d5ebd4c28e4a359e9",
       "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
       "description": "Campaign manifest recording 540 valid benchmark-capable rows."
     },
@@ -37,6 +39,7 @@
       "sha256": "8fdb9fbb62a20b4cda5d5e0d3df4c037be252610f01428d97ef18f83c12ef43f",
       "kind": "report_summary",
       "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "tracked_commit": "9efad2d46fec58052796a56d5ebd4c28e4a359e9",
       "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
       "description": "Aggregated summary JSON with paired mean differences and bootstrap CIs."
     },
@@ -46,6 +49,7 @@
       "sha256": "473e0801c0d581fbe70d45f65c3adedad843e8c7c3ac704f077464266ee65d57",
       "kind": "review_sidecar",
       "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
+      "tracked_commit": "8e6098e8c490b33ff21a2ceccd86a12fccee36e5",
       "command": "evidence-review-marker.v1",
       "description": "Review marker sidecar for the interpretation note."
     }
@@ -91,6 +95,7 @@
       "support": 540,
       "denominator": 540,
       "missingness": "complete",
+      "support_threshold": 540,
       "unavailable_handling": "fail_closed",
       "effect": -1.24056,
       "uncertainty": {
@@ -116,6 +121,12 @@
       "metric_id": "comfort_exposure_person_s",
       "outcome": "supported",
       "rationale": "3/3 comfort-exposure decisions reach the preregistered support threshold and reject at Holm-adjusted alpha=0.05.",
+      "comparator": {
+        "reference": "goal",
+        "comparison": "social_force",
+        "direction": "comparison_minus_reference"
+      },
+      "effect": -1.24056,
       "refusal_reason": null
     },
     {
@@ -123,6 +134,12 @@
       "metric_id": "comfort_exposure_person_s",
       "outcome": "supported",
       "rationale": "Goal vs orca: mean difference 2.76778 with CI95 [1.83771, 3.69947], Holm-adjusted p=0.007496.",
+      "comparator": {
+        "reference": "goal",
+        "comparison": "orca",
+        "direction": "comparison_minus_reference"
+      },
+      "effect": 2.76778,
       "refusal_reason": null
     },
     {
@@ -130,6 +147,12 @@
       "metric_id": "comfort_exposure_person_s",
       "outcome": "supported",
       "rationale": "Social_force vs orca: mean difference 4.00833 with CI95 [2.87981, 5.12642], Holm-adjusted p=0.007496.",
+      "comparator": {
+        "reference": "social_force",
+        "comparison": "orca",
+        "direction": "comparison_minus_reference"
+      },
+      "effect": 4.00833,
       "refusal_reason": null
     }
   ],

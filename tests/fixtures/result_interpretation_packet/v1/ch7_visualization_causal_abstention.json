@@ -19,6 +19,7 @@
       "sha256": "4538841ad66eb1f4807ccefcf35a2fa390b786e0cb7fc2259ea19efa29816881",
       "kind": "json_schema",
       "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "43140cccb7f89d28a74c4b52ef6045cc084e0e87",
       "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
       "description": "Chapter 7 worked-example portfolio schema."
     },
@@ -28,6 +29,7 @@
       "sha256": "817910224a4c86d5cca81c30288026a60b9c5927a738693e72657eef840ac4c2",
       "kind": "portfolio_manifest",
       "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "8489156f8be0ff32fe6afea2be6639a4b8dcbe9c",
       "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
       "description": "Ch7 case portfolio.v2 manifest (synthetic fixture)."
     },
@@ -37,6 +39,7 @@
       "sha256": "91f30c5c2555e06f8d0e76231caf840f1568cc4000288582ab14376a4b4641e5",
       "kind": "campaign_atlas",
       "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "8489156f8be0ff32fe6afea2be6639a4b8dcbe9c",
       "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
       "description": "Campaign atlas v2 (synthetic fixture) for cell context."
     }

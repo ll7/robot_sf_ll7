@@ -6,6 +6,10 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from scripts.dev import snapshot_issue_batch
+from scripts.dev.github_quota import RateLimitSnapshot
 from scripts.dev.snapshot_issue_batch import (
     _batch_claim_statuses,
     expand_issue_numbers,
@@ -15,6 +19,22 @@ from scripts.dev.snapshot_issue_batch import (
     snapshot_claimable_issues,
     snapshot_issues,
 )
+
+
+@pytest.fixture(autouse=True)
+def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep legacy list fixtures on the healthy GraphQL path unless a test overrides it."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+    )
 
 
 def _claim_status(number: int, *, claimed: bool = False, ok: bool = True, sha: str | None = None):
@@ -431,6 +451,140 @@ def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:
         "claim_ref": "agent-claims/issue-2668",
         "sha": "abc123",
     }
+
+
+def test_snapshot_claimable_issues_uses_bounded_rest_when_graphql_is_near_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Low GraphQL quota falls back to one REST page and returns a resume cursor."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=50,
+            graphql_reset_at=1_800_000_123,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_456,
+        ),
+    )
+    rest_rows = [
+        {
+            "number": 2701,
+            "title": "first issue",
+            "state": "open",
+            "html_url": "https://github.test/issues/2701",
+            "labels": [],
+            "assignees": [],
+        },
+        {
+            "number": 2702,
+            "title": "pull request is not an issue",
+            "state": "open",
+            "html_url": "https://github.test/pull/2702",
+            "labels": [],
+            "assignees": [],
+            "pull_request": {"url": "https://api.github.test/pulls/2702"},
+        },
+        {
+            "number": 2703,
+            "title": "second issue",
+            "state": "open",
+            "html_url": "https://github.test/issues/2703",
+            "labels": [],
+            "assignees": [],
+        },
+    ]
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(rest_rows), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2701: _claim_status(2701),
+                2703: _claim_status(2703),
+            }
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=2,
+            )
+
+    assert payload["status"] == "ok"
+    assert payload["data_source"] == "rest"
+    assert [issue["number"] for issue in payload["issues"]] == [2701, 2703]
+    assert payload["resume_cursor"] == {"source": "rest", "page": 2, "limit": 2}
+    assert mock_gh.call_args.args[0][:2] == ["api", "repos/ll7/robot_sf_ll7/issues"]
+    claim.assert_called_once_with([2701, 2703], remote="origin")
+
+
+def test_snapshot_claimable_issues_is_empty_and_resumable_when_all_sources_are_blocked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed low-quota fallback returns no partial queue and no claim reads."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=0,
+            graphql_reset_at=1_800_000_123,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_456,
+        ),
+    )
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="REST: API rate limit exceeded",
+        )
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=20,
+            )
+
+    assert payload["status"] == "quota_blocked"
+    assert payload["issues"] == [
+        {"status": "quota_blocked", "error": "REST: API rate limit exceeded"}
+    ]
+    assert payload["resume_cursor"] == {"source": "rest", "page": 1, "limit": 20}
+    claim.assert_not_called()
+
+
+def test_snapshot_claimable_issues_resumes_rest_page_even_with_healthy_quota(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A returned page cursor is honored without reopening an unbounded GraphQL scan."""
+    rest_rows = [
+        {
+            "number": 2710,
+            "title": "resumed issue",
+            "state": "open",
+            "html_url": "https://github.test/issues/2710",
+            "labels": [],
+            "assignees": [],
+        }
+    ]
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(rest_rows), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2710: _claim_status(2710)}
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=20,
+                resume_page=7,
+            )
+
+    assert payload["data_source"] == "rest"
+    assert payload["issues"][0]["number"] == 2710
+    assert mock_gh.call_args.args[0][0] == "api"
+    assert "--field" in mock_gh.call_args.args[0]
+    claim.assert_called_once_with([2710], remote="origin")
 
 
 def test_batch_claim_statuses_parses_claim_refs_once() -> None:

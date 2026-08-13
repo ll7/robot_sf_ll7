@@ -32,6 +32,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from scripts.dev._gh_pagination import assert_not_truncated
+from scripts.dev.github_quota import (
+    DEFAULT_CORE_SAFETY_THRESHOLD,
+    DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    RateLimitSnapshot,
+    graphql_budget_decision,
+    parse_rate_limit_payload,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -94,6 +101,14 @@ class MissingProjectScopeError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class CachedProjectMetadata:
+    """Validated local Project #5 identifiers used as read hints."""
+
+    project_id: str
+    fields: dict[str, dict[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
 class ScoreInputs:
     """Normalized score inputs for one project item."""
 
@@ -130,6 +145,103 @@ class SyncOptions:
     dry_run: bool
     skip_statuses: set[str]
     only_empty: bool = False
+    min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD
+    cache_file: Path | None = Path(".github/cache/project5.json")
+
+
+def read_rate_limit() -> RateLimitSnapshot:
+    """Read GitHub quota through the REST endpoint without spending GraphQL budget."""
+    try:
+        completed = subprocess.run(
+            ["gh", "api", "rate_limit"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return RateLimitSnapshot(status="unavailable", error=f"rate_limit request failed: {exc}")
+    if completed.returncode != 0:
+        return RateLimitSnapshot(
+            status="unavailable",
+            error=(
+                completed.stderr.strip() or completed.stdout.strip() or "rate_limit request failed"
+            ),
+        )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        return RateLimitSnapshot(status="malformed", error=f"invalid rate_limit JSON: {exc}")
+    return parse_rate_limit_payload(payload)
+
+
+def estimated_project_graphql_requests(options: SyncOptions) -> int:
+    """Estimate bounded Project #5 GraphQL requests before any project mutation."""
+    item_requests = (
+        1 if options.issue_number is not None else max(1, math.ceil(max(options.limit, 1) / 100))
+    )
+    schema_requests = len(REQUIRED_NUMBER_FIELDS) + 1 if options.ensure_fields else 0
+    return 2 + item_requests + schema_requests
+
+
+def project_quota_decision(options: SyncOptions) -> dict[str, Any]:
+    """Return the fail-closed quota decision for one score-sync invocation."""
+    if options.limit <= 0:
+        raise ValueError("limit must be positive")
+    if options.min_graphql_remaining < 0:
+        raise ValueError("min_graphql_remaining must be non-negative")
+    snapshot = read_rate_limit()
+    return graphql_budget_decision(
+        snapshot,
+        expected_graphql_requests=estimated_project_graphql_requests(options),
+        min_graphql_remaining=options.min_graphql_remaining,
+        expected_core_requests=1,
+        min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
+    )
+
+
+def _read_project_cache(path: Path) -> dict[str, Any] | None:
+    """Read one local cache object, treating filesystem and JSON errors as a miss."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _cache_fields(raw_fields: Any) -> dict[str, dict[str, Any]]:
+    """Normalize cached field entries and drop entries without usable IDs."""
+    if not isinstance(raw_fields, dict):
+        return {}
+    fields: dict[str, dict[str, Any]] = {}
+    for name, raw_field in raw_fields.items():
+        if not isinstance(name, str) or not isinstance(raw_field, dict):
+            continue
+        field_id = raw_field.get("id")
+        if isinstance(field_id, str) and field_id:
+            fields[name] = {**raw_field, "name": name, "id": field_id}
+    return fields
+
+
+def load_project_cache(
+    path: Path | None, *, owner: str, project_number: int
+) -> CachedProjectMetadata | None:
+    """Load a matching local Project #5 cache, treating stale or malformed data as a miss."""
+    if path is None or not path.is_file():
+        return None
+    payload = _read_project_cache(path)
+    if payload is None:
+        return None
+    if payload.get("owner") != owner or payload.get("project_number") != project_number:
+        return None
+    project_id = payload.get("project_id")
+    raw_fields = payload.get("fields")
+    if not isinstance(project_id, str) or not project_id:
+        return None
+    fields = _cache_fields(raw_fields)
+    if not fields:
+        return None
+    return CachedProjectMetadata(project_id=project_id, fields=fields)
 
 
 def clamp(value: float, *, lower: float, upper: float | None = None) -> float:
@@ -569,11 +681,18 @@ def write_summary(path: Path, previews: Sequence[SyncPreview]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def sync_scores(
-    client: GhProjectClient,
-    options: SyncOptions,
-) -> list[SyncPreview]:
-    """Compute and optionally write derived scores for project items."""
+def _project_metadata(
+    client: GhProjectClient, options: SyncOptions
+) -> tuple[dict[str, dict[str, Any]], str]:
+    """Resolve project metadata, using a local cache only for no-write reads."""
+    cached = load_project_cache(
+        options.cache_file,
+        owner=options.owner,
+        project_number=options.project_number,
+    )
+    required = {*REQUIRED_NUMBER_FIELDS, EFFORT_FIELD}
+    if options.dry_run and cached is not None and required.issubset(cached.fields):
+        return cached.fields, cached.project_id
 
     fields = (
         ensure_required_fields(
@@ -586,6 +705,17 @@ def sync_scores(
             client.field_list(owner=options.owner, project_number=options.project_number)
         )
     )
+    project_id = client.project_id(owner=options.owner, project_number=options.project_number)
+    return fields, project_id
+
+
+def sync_scores(
+    client: GhProjectClient,
+    options: SyncOptions,
+) -> list[SyncPreview]:
+    """Compute and optionally write derived scores for project items."""
+
+    fields, project_id = _project_metadata(client, options)
     missing = [name for name in (*REQUIRED_NUMBER_FIELDS, EFFORT_FIELD) if name not in fields]
     if missing:
         raise ValueError(
@@ -594,7 +724,6 @@ def sync_scores(
             + ". Re-run with --ensure-fields or create them manually."
         )
 
-    project_id = client.project_id(owner=options.owner, project_number=options.project_number)
     if options.issue_number is not None:
         # Targeted sync: locate the single issue-backed item without requiring a
         # full untruncated project page. Query before applying the cap, then verify
@@ -668,6 +797,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--project-number", type=int, default=5, help="Projects v2 number.")
     sync.add_argument("--limit", type=int, default=400, help="Maximum project items to inspect.")
     sync.add_argument(
+        "--min-graphql-remaining",
+        type=int,
+        default=DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+        help="GraphQL quota safety margin retained after the estimated sync budget.",
+    )
+    sync.add_argument(
         "--alpha", type=float, default=DEFAULT_ALPHA, help="Effort dampening exponent."
     )
     sync.add_argument(
@@ -685,6 +820,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--issue-number",
         type=int,
         help="Restrict sync to one issue-backed project item.",
+    )
+    sync.add_argument(
+        "--cache-file",
+        type=Path,
+        default=Path(".github/cache/project5.json"),
+        help=(
+            "Optional local Project #5 metadata cache; used for validated no-write reads and "
+            "ignored for score writes until live IDs are refreshed."
+        ),
     )
     sync.add_argument(
         "--dry-run",
@@ -737,6 +881,27 @@ def _blocked_project_scope_payload(
     }
 
 
+def _blocked_project_quota_payload(
+    *, owner: str, project_number: int, decision: dict[str, Any], non_fatal: bool
+) -> dict[str, Any]:
+    """Build a resumable no-write payload for a quota-blocked Project #5 pass."""
+    return {
+        "status": "quota_blocked",
+        "reason": decision.get("reason", "project_quota_blocked"),
+        "owner": owner,
+        "project_number": project_number,
+        "quota": decision,
+        "items": [],
+        "non_fatal": non_fatal,
+        "writes_performed": False,
+        "resume_after": decision.get("resume_after"),
+        "message": decision.get(
+            "message",
+            "Project #5 operation is blocked until the configured quota safety margin is available.",
+        ),
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
 
@@ -744,22 +909,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command != "sync":
         raise ValueError(f"unsupported command: {args.command}")
 
-    try:
-        previews = sync_scores(
-            GhProjectClient(),
-            SyncOptions(
-                owner=args.owner,
-                project_number=args.project_number,
-                ensure_fields=args.ensure_fields,
-                limit=args.limit,
-                alpha=args.alpha,
-                round_digits=args.round_digits,
-                issue_number=args.issue_number,
-                dry_run=args.dry_run,
-                skip_statuses=set(args.skip_status),
-                only_empty=args.only_empty,
-            ),
+    options = SyncOptions(
+        owner=args.owner,
+        project_number=args.project_number,
+        ensure_fields=args.ensure_fields,
+        limit=args.limit,
+        alpha=args.alpha,
+        round_digits=args.round_digits,
+        issue_number=args.issue_number,
+        dry_run=args.dry_run,
+        skip_statuses=set(args.skip_status),
+        only_empty=args.only_empty,
+        min_graphql_remaining=args.min_graphql_remaining,
+        cache_file=args.cache_file,
+    )
+    decision = project_quota_decision(options)
+    if decision["status"] != "ok":
+        payload = _blocked_project_quota_payload(
+            owner=args.owner,
+            project_number=args.project_number,
+            decision=decision,
+            non_fatal=args.only_empty,
         )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if args.only_empty else 2
+
+    try:
+        previews = sync_scores(GhProjectClient(), options)
     except MissingProjectScopeError as exc:
         if not args.only_empty:
             raise

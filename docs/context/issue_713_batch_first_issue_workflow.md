@@ -107,6 +107,46 @@ Rules:
 - It prevents non-project operations from burning the Projects v2 GraphQL budget.
 - It makes failed project writes easier to resume because the batch has known item and field IDs.
 
+## Quota-Bounded Discovery And Resume
+
+The broad issue-discovery and Project #5 score paths perform a REST-backed `rate_limit` preflight
+before spending GraphQL budget. The default guard retains 100 GraphQL requests and 10 REST requests
+after the estimated bounded operation. These margins can be changed explicitly for a controlled
+batch, but they must not be bypassed by retry loops.
+
+For claimable issue discovery, a healthy preflight uses the existing bounded `gh issue list` path.
+When GraphQL is near or below the margin, discovery uses one REST issue page instead, filters pull
+requests out of the REST response, and returns a `resume_cursor` when another page is available:
+
+```bash
+uv run python -m scripts.dev.snapshot_issue_batch \
+  --claimable --limit 20 --json
+
+# Continue a REST-backed page from the returned cursor.
+uv run python -m scripts.dev.snapshot_issue_batch \
+  --claimable --limit 20 --resume-page 2 --json
+```
+
+The snapshot includes `status`, `data_source`, `rate_limit`, `quota`, and `resume_cursor`. A
+`status: quota_blocked` result has no issue rows and must not be treated as an empty or claimable
+queue. It is a resumable handoff: inspect `quota.resume_after`, wait for the relevant reset, and
+rerun the bounded command. If the REST fallback is healthy, the result remains `status: ok` while
+reporting `data_source: rest`.
+
+Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,
+project, and item reads would cross the margin, it prints `status: quota_blocked`, performs no
+Project #5 writes, and returns a nonzero exit for ordinary sync. The autopilot's `--only-empty`
+mode reports the same blocker as a non-fatal result so label-based ordering can continue:
+
+```bash
+uv run python scripts/tools/project_priority_score.py sync \
+  --only-empty --min-graphql-remaining 100
+```
+
+Targeted `--issue-number N` score sync remains the preferred path for one newly created issue: it
+uses the server-side issue query and does not scan the full Project #5 item list. Full unscoped sync
+retains its truncation guard and must not be used as a targeted lookup substitute.
+
 ## Operational Notes
 
 - Check `gh api rate_limit` before a large GitHub batch and whenever GitHub calls start failing.

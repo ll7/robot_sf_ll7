@@ -1016,6 +1016,58 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["checks"]["overall"] == "success"
 
 
+def test_fetch_pr_rest_suppresses_duplicate_cancelled_run_with_actions_metadata() -> None:
+    """REST fallback should ignore a cancelled rerun once Actions identifies the workflow."""
+    pull = {
+        "number": 42,
+        "title": "duplicate rerun",
+        "state": "OPEN",
+        "draft": False,
+        "labels": [],
+        "html_url": "https://x/42",
+        "head": {"ref": "fix", "sha": "abc"},
+        "base": {"sha": "main-sha"},
+        "mergeable_state": "clean",
+    }
+    check_runs = {
+        "check_runs": [
+            {
+                "name": "pr-body-contracts",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "started_at": "2026-07-01T00:00:00Z",
+                "details_url": "https://x/actions/runs/101/job/1",
+            },
+            {
+                "name": "pr-body-contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "started_at": "2026-07-01T00:05:00Z",
+                "details_url": "https://x/actions/runs/102/job/2",
+            },
+        ]
+    }
+    actions_run = {"workflow_id": 300804702, "name": "PR body contracts"}
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            _resp(returncode=1, stderr=QUOTA_STDERR),  # gh pr view -> quota
+            _resp(stdout=json.dumps(pull)),  # REST pulls/42
+            _resp(stdout="[]"),  # REST pulls/42/reviews
+            _resp(stdout="[]"),  # REST issues/42/comments
+            _resp(stdout=json.dumps(check_runs)),  # REST commits/abc/check-runs
+            _resp(stdout=json.dumps(actions_run)),  # REST actions/runs/101
+            _resp(stdout=json.dumps(actions_run)),  # REST actions/runs/102
+        ],
+    ):
+        payload = fetch_pr(42, repo="ll7/robot_sf_ll7", expected_head_sha="abc")
+
+    assert payload["checks"]["overall"] == "success"
+    assert payload["checks"]["superseded"] == 1
+    assert payload["checks"]["total"] == 1
+    assert payload["checks"]["failed"] == []
+
+
 def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
     """The REST fallback binds checks to the REST head sha and reports a mismatch as stale."""
     pull = {

@@ -8,10 +8,22 @@ from typing import TYPE_CHECKING
 import yaml
 
 from robot_sf.benchmark.cli import cli_main
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario_schema import (
+    SCHEMA_FILE,
+    load_scenario_schema,
+    validate_scenario_list,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def test_scenario_schema_file_uses_canonical_schemas_directory():
+    """Protect the canonical plural schema directory for the scenario matrix schema."""
+    assert SCHEMA_FILE.as_posix().endswith("robot_sf/benchmark/schemas/scenarios.schema.json")
+    assert SCHEMA_FILE.exists()
+    assert not SCHEMA_FILE.parent.with_name("schema").joinpath("scenarios.schema.json").exists()
+    assert load_scenario_schema()["$id"] == "https://ll7.github.io/robot_sf/scenarios.schema.json"
 
 
 def test_validate_scenario_list_success():

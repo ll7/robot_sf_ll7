@@ -188,6 +188,37 @@ def test_research_yield_report_rejects_unknown_kind(tmp_path: Path) -> None:
         load_snapshot(path)
 
 
+def test_research_yield_report_rejects_duplicate_record_ids(tmp_path: Path) -> None:
+    """A frozen snapshot cannot count one work item twice under different rows."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["records"][1]["id"] = payload["records"][0]["id"]
+    path = tmp_path / "duplicate_record.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="id is duplicated"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_rejects_non_finite_lag(tmp_path: Path) -> None:
+    """NaN lag values cannot enter a reproducible JSON report."""
+    payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))
+    payload["records"][0]["approval_to_first_result_days"] = float("nan")
+    path = tmp_path / "non_finite_lag.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ResearchYieldError, match="non-negative numeric values"):
+        load_snapshot(path)
+
+
+def test_research_yield_report_validates_in_memory_snapshots() -> None:
+    """The public report builder must retain fail-closed validation without file loading."""
+    snapshot = load_snapshot(YIELD_FIXTURE)
+    del snapshot["dimensions"]["blocked_age_categories"]
+
+    with pytest.raises(ResearchYieldError, match="missing required names"):
+        build_research_yield_report(snapshot)
+
+
 def test_research_yield_report_rejects_unknown_dimension(tmp_path: Path) -> None:
     """Snapshot dimensions are explicit reporting queries, not an open-ended tag bag."""
     payload = json.loads(YIELD_FIXTURE.read_text(encoding="utf-8"))

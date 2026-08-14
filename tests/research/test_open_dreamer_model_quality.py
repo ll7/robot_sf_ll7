@@ -1,5 +1,7 @@
 """Tests for the fail-closed issue-6318 model-quality gate."""
 
+# evidence-writer-exempt: tests deliberately write isolated synthetic contract fixtures under pytest tmp_path.
+
 from __future__ import annotations
 
 import json

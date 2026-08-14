@@ -77,6 +77,10 @@ DEFAULT_SCENARIO_MATRIX_HASH = "c10df617a87c"
 DEFAULT_BOOTSTRAP_SAMPLES = 300
 DEFAULT_BOOTSTRAP_SEED = 123
 DEFAULT_CONFIDENCE = 0.95
+DEFAULT_CAMPAIGN_IDS = (
+    "issue5409_horizon_ablation_h500",
+    "issue5409_horizon_ablation_h600",
+)
 
 Key = tuple[str, str, int]
 
@@ -317,6 +321,33 @@ def _execution_mode(*payloads: dict[str, Any]) -> str:
     return ""
 
 
+def _checkpoint_gate_is_submit_safe(checkpoint: dict[str, Any]) -> bool:
+    """Accept the known submit-safe checkpoint receipt shapes.
+
+    Older campaign packets reported ``status=ok``.  The current enforced staging
+    gate reports ``mode=enforced_staged`` plus equal checked/resolved counts and
+    ``submit_safe=true`` instead.  Both shapes are accepted only when their
+    explicit submit-safe evidence is present.
+    """
+    if checkpoint.get("submit_safe") is not True:
+        return False
+    status = str(checkpoint.get("status") or "").strip().lower()
+    if status in {"ok", "staged"}:
+        return True
+    checked = checkpoint.get("checked")
+    resolved = checkpoint.get("resolved")
+    return (
+        checkpoint.get("mode") == "enforced_staged"
+        and checkpoint.get("stage") is True
+        and isinstance(checked, int)
+        and not isinstance(checked, bool)
+        and isinstance(resolved, int)
+        and not isinstance(resolved, bool)
+        and checked == resolved
+        and checked >= 0
+    )
+
+
 def _run_entry_index(campaign_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Index campaign summary run entries by planner key."""
     entries = campaign_summary.get("runs")
@@ -363,6 +394,7 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_seeds: tuple[int, ...],
     expected_scenario_count: int,
     expected_scenario_matrix_hash: str,
+    expected_campaign_id: str,
     config_payload: dict[str, Any] | None,
     config_path: Path | None,
     manifest: dict[str, Any],
@@ -376,7 +408,6 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
 ) -> dict[str, Any]:
     """Validate campaign-level identity and return compact provenance."""
     campaign_id = str(manifest.get("campaign_id") or "").strip()
-    expected_campaign_id = f"issue5409_horizon_ablation_{role}"
     if campaign_id != expected_campaign_id:
         blockers.append(f"{role}: campaign_id={campaign_id!r}, expected {expected_campaign_id!r}")
 
@@ -476,8 +507,8 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if amv_scenario_count is not None and amv_scenario_count != expected_scenario_count:
         blockers.append(f"{role}: AMV coverage scenario_count is not {expected_scenario_count}")
 
-    if checkpoint.get("status") != "ok" or checkpoint.get("submit_safe") is not True:
-        blockers.append(f"{role}: checkpoint staging receipt is not submit_safe")
+    if not _checkpoint_gate_is_submit_safe(checkpoint):
+        blockers.append(f"{role}: checkpoint staging receipt does not satisfy the submit-safe gate")
 
     horizon_from_config = _strict_seed(config_payload.get("horizon")) if config_payload else None
     if horizon_from_config is not None and horizon_from_config != expected_horizon:
@@ -545,6 +576,7 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_rows: int,
     expected_scenario_count: int,
     expected_scenario_matrix_hash: str,
+    expected_campaign_id: str,
     config_payload: dict[str, Any] | None,
     config_path: Path | None,
 ) -> ArmInspection:
@@ -579,6 +611,7 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_seeds=expected_seeds,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=expected_campaign_id,
         config_payload=config_payload,
         config_path=config_path,
         manifest=artifacts["campaign_manifest"],
@@ -965,6 +998,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_scenario_count: int = DEFAULT_SCENARIO_COUNT,
     expected_scenario_matrix_hash: str = DEFAULT_SCENARIO_MATRIX_HASH,
     expected_horizons: tuple[int, int] = (500, 600),
+    expected_campaign_ids: tuple[str, str] | None = None,
     confidence: float = DEFAULT_CONFIDENCE,
     bootstrap_samples: int = DEFAULT_BOOTSTRAP_SAMPLES,
     bootstrap_seed: int = DEFAULT_BOOTSTRAP_SEED,
@@ -972,6 +1006,9 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
 ) -> dict[str, Any]:
     """Build all three issue #5409 handoff artifacts and return their statuses."""
     seeds = tuple(int(seed) for seed in expected_seeds)
+    campaign_ids = tuple(expected_campaign_ids or DEFAULT_CAMPAIGN_IDS)
+    if len(campaign_ids) != 2:
+        raise ValueError("expected_campaign_ids must contain exactly two values: h500 and h600")
     scenario_ids = tuple(str(value) for value in expected_scenarios) if expected_scenarios else None
     config_payloads: list[dict[str, Any] | None] = []
     config_paths = [
@@ -1040,6 +1077,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_rows=expected_rows_per_arm,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=campaign_ids[0],
         config_payload=config_payloads[0],
         config_path=config_paths[0],
     )
@@ -1053,6 +1091,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_rows=expected_rows_per_arm,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=campaign_ids[1],
         config_payload=config_payloads[1],
         config_path=config_paths[1],
     )
@@ -1093,6 +1132,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "matched_key": ["planner_key", "scenario_id", "seed"],
             "scenario_matrix_hash": expected_scenario_matrix_hash,
             "horizons": {"h500": expected_horizons[0], "h600": expected_horizons[1]},
+            "campaign_ids": {"h500": campaign_ids[0], "h600": campaign_ids[1]},
         },
         "arms": {
             "h500": {
@@ -1240,6 +1280,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expected-scenario-matrix-hash",
         default=DEFAULT_SCENARIO_MATRIX_HASH,
     )
+    parser.add_argument(
+        "--expected-campaign-id",
+        nargs=2,
+        metavar=("H500_ID", "H600_ID"),
+        default=None,
+        dest="expected_campaign_ids",
+        help=(
+            "Expected campaign IDs for the h500 and h600 arms. Use this for a "
+            "reviewed rerun suffix without weakening other provenance checks."
+        ),
+    )
     parser.add_argument("--bootstrap-samples", type=int, default=DEFAULT_BOOTSTRAP_SAMPLES)
     parser.add_argument("--bootstrap-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE)
@@ -1261,6 +1312,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_rows_per_arm=args.expected_rows_per_arm,
         expected_scenario_count=args.expected_scenario_count,
         expected_scenario_matrix_hash=args.expected_scenario_matrix_hash,
+        expected_campaign_ids=tuple(args.expected_campaign_ids)
+        if args.expected_campaign_ids is not None
+        else None,
         confidence=args.confidence,
         bootstrap_samples=args.bootstrap_samples,
         bootstrap_seed=args.bootstrap_seed,

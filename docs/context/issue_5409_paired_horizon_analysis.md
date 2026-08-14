@@ -22,6 +22,17 @@ The command emits three compact JSON artifacts in `--output-dir`:
 - `paired_uncertainty_summary.json` reports deterministic 95% percentile-bootstrap
   intervals over seed-level means at planner and scenario-family level.
 
+Reviewed reruns may use explicit campaign IDs without weakening the rest of the
+provenance contract:
+
+```bash
+--expected-campaign-id <h500-campaign-id> <h600-campaign-id>
+```
+
+The handoff accepts both the legacy `status: ok` checkpoint receipt and the current
+enforced staging receipt when it reports `mode: enforced_staged`, `stage: true`,
+equal checked/resolved counts, and `submit_safe: true`.
+
 The handoff is fail-closed. It writes `status: blocked` and no numeric rows when a
 campaign is incomplete, a key is missing or duplicated, provenance drifts, checkpoint
 staging is not submit-safe, or any row is fallback, degraded, unavailable, failed,

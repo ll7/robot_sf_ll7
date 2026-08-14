@@ -169,7 +169,13 @@ def _fixture_pair(tmp_path: Path, **kwargs: object) -> tuple[Path, Path, Path]:
     return h500, h600, output
 
 
-def _analyze(h500: Path, h600: Path, output: Path) -> dict:
+def _analyze(
+    h500: Path,
+    h600: Path,
+    output: Path,
+    *,
+    expected_campaign_ids: tuple[str, str] | None = None,
+) -> dict:
     """Run the fixture analysis with a small declared denominator."""
     return analyze_pair(
         h500,
@@ -183,6 +189,7 @@ def _analyze(h500: Path, h600: Path, output: Path) -> dict:
         expected_rows_per_arm=8,
         expected_scenario_count=2,
         expected_scenario_matrix_hash="fixture-hash",
+        expected_campaign_ids=expected_campaign_ids,
         validate_config_pair=False,
         bootstrap_samples=100,
     )
@@ -205,6 +212,42 @@ def test_valid_pair_emits_deltas_and_seed_uncertainty(tmp_path: Path) -> None:
     assert len(uncertainty["scenario_family_rows"]) == 2
     assert deltas["rows"][0]["metrics"]["near_misses"]["delta_h600_minus_h500"] == 0.0
     assert uncertainty["planner_rows"][0]["metrics"]["snqi"]["seed_count"] == 2
+
+
+def test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported(
+    tmp_path: Path,
+) -> None:
+    """A reviewed rerun suffix and current staged gate remain provenance-safe."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    campaign_ids = (
+        "issue5409_horizon_ablation_rerun1_h500_20260814",
+        "issue5409_horizon_ablation_rerun1_h600_20260814",
+    )
+    for root, campaign_id in zip((h500, h600), campaign_ids, strict=True):
+        manifest_path = root / "campaign_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["campaign_id"] = campaign_id
+        _write_json(manifest_path, manifest)
+
+        summary_path = root / "reports" / "campaign_summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["campaign"]["campaign_id"] = campaign_id
+        _write_json(summary_path, summary)
+
+        checkpoint_path = root / "preflight" / "checkpoint_staging.json"
+        checkpoint = json.loads(checkpoint_path.read_text())
+        checkpoint.pop("status")
+        checkpoint.update({"mode": "enforced_staged", "stage": True})
+        _write_json(checkpoint_path, checkpoint)
+
+    result = _analyze(h500, h600, output, expected_campaign_ids=campaign_ids)
+
+    assert result["status"] == "ready"
+    completeness = json.loads((output / "matched_key_completeness.json").read_text())
+    assert completeness["expected"]["campaign_ids"] == {
+        "h500": campaign_ids[0],
+        "h600": campaign_ids[1],
+    }
 
 
 def test_missing_key_blocks_without_partial_numeric_output(tmp_path: Path) -> None:

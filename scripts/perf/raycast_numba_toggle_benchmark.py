@@ -356,22 +356,162 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     if args.output_dir is not None:
-        out_dir = args.output_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "raycast_numba_toggle_results.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        raw = {arm: arms[arm]["samples_us_per_repeat"] for arm in arms}
-        (out_dir / "raycast_numba_toggle_samples.json").write_text(
-            json.dumps(raw, indent=None, separators=(",", ":")) + "\n", encoding="utf-8"
-        )
-        print(f"wrote {out_dir}")
+        emit_bundle(args.output_dir, report, arms)
+        print(f"wrote bundle {args.output_dir}")
 
     print(json.dumps(report["speedup"], indent=2))
     if not outputs_match:
         print("WARNING: arms produced different scan outputs; timing is not comparable")
         return 1
     return 0
+
+
+def _readme(report: dict[str, Any]) -> str:
+    """Render the bundle README.
+
+    Args:
+        report: Assembled benchmark report.
+
+    Returns:
+        str: Markdown body (the review marker is prepended by the writer).
+    """
+    speedup = report["speedup"]
+    on_pool = report["results"]["on"]["pooled"]
+    off_pool = report["results"]["off"]["pooled"]
+    proto = report["protocol"]
+    work = report["workload"]
+    return f"""<!-- AI-GENERATED - NEEDS-REVIEW -->
+# Raycast numba on/off micro-benchmark
+
+Per-call wall time of `robot_sf.sensor.range_sensor.raycast` with numba JIT
+enabled versus `NUMBA_DISABLE_JIT=1`, on a fixed synthetic LiDAR workload.
+
+## Result
+
+| Arm | median | IQR | min | max | n |
+| --- | --- | --- | --- | --- | --- |
+| numba ON | {on_pool["median_us"]:.2f} us | {on_pool["iqr_us"]:.2f} us | \
+{on_pool["min_us"]:.2f} us | {on_pool["max_us"]:.2f} us | {on_pool["n"]} |
+| numba OFF | {off_pool["median_us"] / 1000:.3f} ms | {off_pool["iqr_us"] / 1000:.3f} ms | \
+{off_pool["min_us"] / 1000:.3f} ms | {off_pool["max_us"] / 1000:.3f} ms | {off_pool["n"]} |
+
+Median speedup: **{speedup["median_ratio"]:.1f}x**
+(per-repeat median ratios span {speedup["min_repeat_ratio"]:.1f}x to \
+{speedup["max_repeat_ratio"]:.1f}x).
+
+Both arms produced an identical scan output signature
+(`outputs_identical_across_arms = {report["outputs_identical_across_arms"]}`), so the
+comparison is between two implementations of the same computation.
+
+## Protocol
+
+* Workload: {work["num_rays"]} rays x {work["num_segments"]} obstacle segments x
+  {work["num_peds"]} pedestrians, seed {work["seed"]}, {work["max_scan_dist_m"]} m max scan
+  distance, {work["map_extent_m"]} m map extent.
+* {proto["warmup_calls"]} discarded warmup calls per arm, so JIT compilation is excluded and
+  the reported numbers are steady state.
+* {proto["repeats"]} independent repeat blocks of {proto["calls_per_repeat"]} timed calls per
+  arm; the full per-call distribution is retained, not a headline mean.
+* Each arm runs in its own subprocess because numba reads the JIT toggle once at import.
+* Timer: `{proto["timer"]}`.
+
+## Identity
+
+* Commit: `{report["commit"]}`
+* Hardware: {report["hardware"]["cpu"]} ({report["hardware"]["machine_model"]}),
+  {report["hardware"]["platform"]}
+* Environment: Python {report["environment"]["python"]}, numba {report["environment"]["numba"]},
+  numpy {report["environment"]["numpy"]}
+* Started / finished (UTC): {report["started_utc"]} / {report["finished_utc"]}
+
+## Boundary
+
+Diagnostic hot-path timing on one machine and one synthetic workload. It is **not** a
+whole-simulation speedup figure and **not** a cross-platform guarantee. Whole-simulation gain
+is workload-dependent and much smaller on near-empty scenes.
+
+## Reproduce
+
+```bash
+uv run python scripts/perf/raycast_numba_toggle_benchmark.py \\
+    --output-dir docs/context/evidence/{Path(report["_bundle_name"]).name}
+```
+
+## Files
+
+* `run_metadata.json` - commit, config, environment and hardware identity.
+* `raycast_numba_toggle_results.json` - full distribution summary for both arms.
+* `raycast_numba_toggle_samples.csv` - every timed call ({on_pool["n"] + off_pool["n"]} rows).
+* `SHA256SUMS` - integrity manifest over the files above.
+"""
+
+
+def emit_bundle(out_dir: Path, report: dict[str, Any], arms: dict[str, Any]) -> None:
+    """Write the checksummed evidence bundle for one benchmark run.
+
+    Args:
+        out_dir: Destination directory; created if absent.
+        report: Assembled benchmark report.
+        arms: Raw per-arm payloads carrying the per-call samples.
+    """
+    from robot_sf.evidence.writers import (
+        write_csv,
+        write_json,
+        write_sha256sums,
+        write_text,
+    )
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report = {**report, "_bundle_name": out_dir.name}
+
+    run_metadata = {
+        "schema_version": "raycast-numba-toggle-run.v1",
+        "benchmark": report["benchmark"],
+        "git_head": report["commit"],
+        "generated_at_utc": report["finished_utc"],
+        "started_at_utc": report["started_utc"],
+        "invoked_command": (
+            "uv run python scripts/perf/raycast_numba_toggle_benchmark.py "
+            f"--output-dir docs/context/evidence/{out_dir.name}"
+        ),
+        "harness_module": "scripts/perf/raycast_numba_toggle_benchmark.py",
+        "measured_symbol": "robot_sf.sensor.range_sensor.raycast",
+        "config": report["workload"],
+        "protocol": report["protocol"],
+        "arms": {
+            "on": {"numba_disable_jit": arms["on"]["numba_disable_jit"]},
+            "off": {"numba_disable_jit": arms["off"]["numba_disable_jit"]},
+        },
+        "execution_context": {
+            "cpu_model": report["hardware"]["cpu"],
+            "machine_model": report["hardware"]["machine_model"],
+            "platform": report["hardware"]["platform"],
+            "python_version": report["environment"]["python"],
+        },
+        "packages": {
+            "numba": report["environment"]["numba"],
+            "numpy": report["environment"]["numpy"],
+        },
+        "outputs_identical_across_arms": report["outputs_identical_across_arms"],
+        "output_signature": report["output_signature"],
+        "claim_boundary": ("diagnostic_hot_path_timing_single_machine_no_whole_simulation_claim"),
+        "evidence_tier": "diagnostic",
+    }
+
+    write_json(out_dir / "run_metadata.json", run_metadata)
+    write_json(
+        out_dir / "raycast_numba_toggle_results.json",
+        {k: v for k, v in report.items() if not k.startswith("_")},
+    )
+    rows = [
+        {"arm": arm, "repeat": rep_idx, "call_index": call_idx, "duration_us": duration}
+        for arm, payload in arms.items()
+        for rep_idx, rep in enumerate(payload["samples_us_per_repeat"])
+        for call_idx, duration in enumerate(rep)
+    ]
+    write_csv(out_dir / "raycast_numba_toggle_samples.csv", rows)
+    write_text(out_dir / "README.md", _readme(report))
+    write_sha256sums(out_dir)
 
 
 if __name__ == "__main__":

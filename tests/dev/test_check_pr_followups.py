@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from scripts.dev.check_pr_followups import (
+    DOMAIN_VALIDITY_LABELS,
     _read_event_title,
     analyze_body,
     analyze_body_quality,
@@ -515,6 +516,58 @@ def test_domain_approval_requires_validity_checklist_fields() -> None:
 
     assert report.status == "incomplete_domain_approval"
     assert "Comparator or split/evidence validity" in report.checklist_errors
+    assert "Use exact validity-checklist labels" in report.message
+
+
+def test_domain_approval_rejects_unlabeled_validity_prose_with_exact_label_remediation() -> None:
+    """Semantically present prose is not accepted unless the machine-detected labels are present."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes - evidence-validity-sensitive result classification
+- Domains reviewed: experimental comparison
+- Status: approved
+- Approver/review source or waiver: maintainer review
+- Validity checklist:
+  - The issue claim boundary stays diagnostic-only.
+  - Existing targeted smoke proof is the only comparator evidence.
+  - Fallback/degraded evidence remains excluded.
+  - This makes no paper-facing benchmark claim.
+  - Tests prove gate behavior, not result validity.
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "incomplete_domain_approval"
+    assert report.checklist_errors == DOMAIN_VALIDITY_LABELS
+    assert "Use exact validity-checklist labels" in report.message
+    for label in DOMAIN_VALIDITY_LABELS:
+        assert f"{label}:" in report.message
+
+
+def test_domain_approval_accepts_labeled_validity_fields() -> None:
+    """The same checklist content passes when each machine-detected label is filled."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes - evidence-validity-sensitive result classification
+- Domains reviewed: experimental comparison
+- Status: approved
+- Approver/review source or waiver: maintainer review
+- Validity checklist:
+  - Target claim/hypothesis: the issue claim boundary stays diagnostic-only
+  - Comparator or split/evidence validity: existing targeted smoke proof is the only comparator evidence
+  - Fallback/degraded exclusions: fallback/degraded evidence remains excluded
+  - Claim boundary: this makes no paper-facing benchmark claim
+  - Implementation integrity vs experimental validity: tests prove gate behavior, not result validity
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "ok"
+    assert report.checklist_errors == ()
 
 
 def test_domain_approval_rejects_not_required_for_sensitive_result() -> None:

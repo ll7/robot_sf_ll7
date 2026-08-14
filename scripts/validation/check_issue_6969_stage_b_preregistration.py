@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,13 @@ DEFAULT_CONFIG = REPO_ROOT / (
 )
 SCHEMA_VERSION = "issue_6969_lane_formation_stage_b_preregistration.v1"
 SOURCE_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+LOCAL_ONLY_ROOTS = frozenset({".git", ".venv", "output", "results"})
+EXPECTED_MISSINGNESS_POLICY = (
+    "Missing, non-finite, unavailable, fallback, degraded, or non-native rows remain visible "
+    "and invalidate the corresponding candidate comparison; never impute, drop, or replace a "
+    "row after seeing its outcome."
+)
 EXPECTED_FIDELITY_SURFACES = (
     "lane_formation",
     "exit_arching",
@@ -58,8 +66,38 @@ def _list(value: Any, path: str) -> list[Any]:
     return value
 
 
-def _relative_source_path(value: str) -> Path:
-    return (REPO_ROOT / value.split("::", maxsplit=1)[0]).resolve()
+def _relative_source_path(value: str, *, source_root: Path = REPO_ROOT) -> Path:
+    """Resolve a source path only when it stays inside the declared source root."""
+
+    raw_path = value.split("::", maxsplit=1)[0].strip()
+    candidate = Path(raw_path)
+    _require(
+        not candidate.is_absolute() and ".." not in candidate.parts,
+        f"source path must be repository-relative without traversal: {value}",
+    )
+    _require(
+        candidate.parts
+        and candidate.parts[0] not in LOCAL_ONLY_ROOTS
+        and ".worktrees" not in candidate.parts,
+        f"source path is local-only: {value}",
+    )
+    root = source_root.resolve()
+    unresolved = root / candidate
+    current = root
+    try:
+        for part in candidate.parts:
+            current /= part
+            _require(not current.is_symlink(), f"source path must not traverse a symlink: {value}")
+        resolved = unresolved.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise StageBPreregistrationError(f"source path cannot be resolved: {value}") from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise StageBPreregistrationError(
+            f"source path resolves outside the repository: {value}"
+        ) from exc
+    return resolved
 
 
 def _sha256(path: Path) -> str:
@@ -91,6 +129,7 @@ def validate_preregistration_config(
     payload: Mapping[str, Any],
     *,
     config_path: str | Path | None = DEFAULT_CONFIG,
+    source_root: str | Path = REPO_ROOT,
 ) -> dict[str, Any]:
     """Validate the frozen Stage B contract and return a normalized copy."""
     config = dict(payload)
@@ -124,9 +163,11 @@ def validate_preregistration_config(
     _require(approval.get("status") == "pending", "domain_approval.status must be pending")
     _list(approval.get("required_decisions"), "domain_approval.required_decisions")
 
-    _validate_sources(config, config_path=config_path)
+    source_root_path = Path(source_root)
+    _validate_sources(config, config_path=config_path, source_root=source_root_path)
+    _validate_implementation_commits(config)
     _validate_stage_a_snapshot(config)
-    _validate_stage_a_snapshot_matches_summary(config)
+    _validate_stage_a_snapshot_matches_summary(config, source_root=source_root_path)
     _validate_candidate_selection(config)
     _validate_held_out_plan(config)
     _validate_fidelity_surfaces(config)
@@ -187,7 +228,12 @@ def validate_preregistration_config(
     }
 
 
-def _validate_sources(config: Mapping[str, Any], *, config_path: str | Path | None) -> None:
+def _validate_sources(
+    config: Mapping[str, Any],
+    *,
+    config_path: str | Path | None,
+    source_root: Path,
+) -> None:
     sources = _mapping(config.get("source_contracts"), "source_contracts")
     required = (
         "stage_a_summary",
@@ -209,13 +255,14 @@ def _validate_sources(config: Mapping[str, Any], *, config_path: str | Path | No
         "stage_a_parameter_screen",
         "stage_a_reference_contract",
         "stage_a_runner",
+        "stage_a_tests",
     ):
         digest = digests.get(key)
         _require(
             isinstance(digest, str) and SOURCE_DIGEST_RE.fullmatch(digest),
             f"source_sha256.{key} must be a SHA-256 digest",
         )
-        source_path = _relative_source_path(str(sources[key]))
+        source_path = _relative_source_path(str(sources[key]), source_root=source_root)
         _require(source_path.is_file(), f"source path does not exist: {sources[key]}")
         _require(
             _sha256(source_path) == digest, f"source_sha256.{key} does not match {sources[key]}"
@@ -223,6 +270,42 @@ def _validate_sources(config: Mapping[str, Any], *, config_path: str | Path | No
 
     if config_path is not None:
         _require(Path(config_path).is_file(), f"config path does not exist: {config_path}")
+
+
+def _validate_implementation_commits(config: Mapping[str, Any]) -> None:
+    """Verify the implementation commits and source paths recorded by Stage A."""
+
+    commits = _mapping(
+        _mapping(config.get("stage_a_snapshot"), "stage_a_snapshot").get("implementation_commits"),
+        "stage_a_snapshot.implementation_commits",
+    )
+    paths = {
+        "reference": "robot_sf/research/lane_formation_reference.py",
+        "parameter_screen": "robot_sf/research/lane_formation_parameter_screen.py",
+    }
+    for key, source_path in paths.items():
+        commit = commits.get(key)
+        _require(
+            isinstance(commit, str) and COMMIT_RE.fullmatch(commit),
+            f"stage_a_snapshot.implementation_commits.{key} must be a git revision",
+        )
+        _require(
+            _git_object_exists(f"{commit}^{{commit}}"),
+            f"stage_a_snapshot.implementation_commits.{key} is unavailable: {commit}",
+        )
+        _require(
+            _git_object_exists(f"{commit}:{source_path}"),
+            f"stage_a_snapshot.implementation_commits.{key} does not contain {source_path}",
+        )
+
+
+def _git_object_exists(object_name: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "cat-file", "-e", object_name],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
 
 
 def _validate_stage_a_snapshot(config: Mapping[str, Any]) -> None:
@@ -254,7 +337,11 @@ def _validate_stage_a_snapshot(config: Mapping[str, Any]) -> None:
     )
 
 
-def _validate_stage_a_snapshot_matches_summary(config: Mapping[str, Any]) -> None:
+def _validate_stage_a_snapshot_matches_summary(
+    config: Mapping[str, Any],
+    *,
+    source_root: Path,
+) -> None:
     sources = _mapping(config.get("source_contracts"), "source_contracts")
     summary_source = sources.get("stage_a_summary")
     _require(
@@ -262,7 +349,8 @@ def _validate_stage_a_snapshot_matches_summary(config: Mapping[str, Any]) -> Non
         "source_contracts.stage_a_summary is required",
     )
     summary = _load_json_mapping(
-        _relative_source_path(summary_source), "source_contracts.stage_a_summary"
+        _relative_source_path(summary_source, source_root=source_root),
+        "source_contracts.stage_a_summary",
     )
     stage_a = _mapping(summary.get("stage_a"), "stage_a_summary.stage_a")
 
@@ -363,8 +451,16 @@ def _validate_candidate_selection(config: Mapping[str, Any]) -> None:
     )
     _require(selection.get("required_threshold") == 0.5, "candidate threshold must remain 0.5")
     _require(
+        selection.get("required_threshold_metric") == "lane_segregation_index",
+        "candidate threshold metric must remain lane_segregation_index",
+    )
+    _require(
         selection.get("no_response_dependent_ranking") is True,
         "candidate selection cannot rank by response",
+    )
+    _require(
+        selection.get("selection_order") == "profile_id_lexicographic_after_eligibility",
+        "candidate selection order must remain frozen",
     )
     _require(
         selection.get("no_candidate_action") == "blocked_no_stage_b_compute",
@@ -381,6 +477,15 @@ def _validate_candidate_selection(config: Mapping[str, Any]) -> None:
 
 def _validate_held_out_plan(config: Mapping[str, Any]) -> None:
     held_out = _mapping(config.get("held_out_plan"), "held_out_plan")
+    _require(
+        held_out.get("scenario_id") == "bidirectional_corridor",
+        "held-out scenario must remain bidirectional_corridor",
+    )
+    _require(
+        held_out.get("protocol_source")
+        == "robot_sf.research.lane_formation_reference.ReferenceProtocol",
+        "held-out protocol source must remain the Stage A ReferenceProtocol",
+    )
     seeds = held_out.get("seeds")
     _require(
         isinstance(seeds, list) and len(seeds) == 10,
@@ -398,8 +503,25 @@ def _validate_held_out_plan(config: Mapping[str, Any]) -> None:
         held_out.get("no_seed_substitution") is True, "held-out seed substitution must be forbidden"
     )
     _require(
+        held_out.get("same_protocol_as_stage_a") is True,
+        "held-out plan must use the Stage A protocol",
+    )
+    _require(
         held_out.get("paired_comparator") == "anchor_released_default",
         "released default must remain comparator",
+    )
+    _require(
+        held_out.get("planned_cells")
+        == "candidate_count_times_10_held_out_seeds_plus_10_released_default_rows",
+        "held-out planned cell formula drifted",
+    )
+    _require(
+        held_out.get("execution_mode") == "native_only",
+        "held-out execution mode must remain native_only",
+    )
+    _require(
+        held_out.get("missingness_policy") == EXPECTED_MISSINGNESS_POLICY,
+        "held-out missingness policy must remain fail-closed",
     )
     persistence = _mapping(held_out.get("persistence_rule"), "held_out_plan.persistence_rule")
     _require(
@@ -431,6 +553,14 @@ def _validate_fidelity_surfaces(config: Mapping[str, Any]) -> None:
         surfaces.get("decision_policy")
         == "report_tradeoffs; do not pre-authorize a recalibration or default change",
         "fidelity decision policy must remain report-only",
+    )
+    _require(
+        surfaces.get("report_effect_and_uncertainty") is True,
+        "fidelity surfaces must report effect and uncertainty",
+    )
+    _require(
+        surfaces.get("incomplete_surface_action") == "inconclusive_and_block_publication",
+        "incomplete fidelity surfaces must block publication",
     )
 
 

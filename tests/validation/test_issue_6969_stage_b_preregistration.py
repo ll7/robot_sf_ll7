@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,17 +35,33 @@ def _packet() -> dict[str, object]:
 
 def _mutated_summary_packet(
     tmp_path: Path, mutate: Callable[[dict[str, Any]], None]
-) -> dict[str, object]:
+) -> tuple[dict[str, object], Path]:
     packet = copy.deepcopy(_packet())
     summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
     mutate(summary)
-    summary_path = tmp_path / "summary.json"
+    source_root = tmp_path / "repo"
+    summary_relative = "docs/context/evidence/issue_6969_lane_formation_reference/summary.json"
+    summary_path = source_root / summary_relative
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    packet["source_contracts"]["stage_a_summary"] = str(summary_path)  # type: ignore[index]
+    source_contracts = packet["source_contracts"]  # type: ignore[index]
+    source_sha256 = packet["source_sha256"]  # type: ignore[index]
+    source_contracts["stage_a_summary"] = summary_relative
     packet["source_sha256"]["stage_a_summary"] = hashlib.sha256(  # type: ignore[index]
         summary_path.read_bytes()
     ).hexdigest()
-    return packet
+    for key in (
+        "stage_a_parameter_screen",
+        "stage_a_reference_contract",
+        "stage_a_runner",
+        "stage_a_tests",
+    ):
+        relative = source_contracts[key].split("::", maxsplit=1)[0]  # type: ignore[index]
+        destination = source_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(REPO_ROOT / relative, destination)
+        source_sha256[key] = hashlib.sha256(destination.read_bytes()).hexdigest()
+    return packet, source_root
 
 
 def _stage_a(summary: dict[str, Any]) -> dict[str, Any]:
@@ -111,6 +128,48 @@ def test_source_digest_drift_fails_closed() -> None:
         validate_preregistration_config(packet, config_path=PACKET)
 
 
+@pytest.mark.parametrize("source_path", [str(SUMMARY), "../summary.json"])
+def test_non_relative_source_path_fails_closed(source_path: str) -> None:
+    """The source contract cannot escape the repository-relative path boundary."""
+    packet = copy.deepcopy(_packet())
+    packet["source_contracts"]["stage_a_summary"] = source_path  # type: ignore[index]
+
+    with pytest.raises(StageBPreregistrationError, match="repository-relative"):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+def test_stage_a_test_digest_is_required() -> None:
+    """The Stage A test contract must be covered by the same byte pinning as the code."""
+    packet = copy.deepcopy(_packet())
+    del packet["source_sha256"]["stage_a_tests"]  # type: ignore[index]
+
+    with pytest.raises(StageBPreregistrationError, match="source_sha256.stage_a_tests"):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+def test_symlinked_source_path_fails_closed(tmp_path: Path) -> None:
+    """A source path cannot use a symlink hop to bypass the declared source root."""
+    packet, source_root = _mutated_summary_packet(tmp_path, lambda _summary: None)
+    summary_relative = "docs/context/evidence/issue_6969_lane_formation_reference/summary.json"
+    summary_path = source_root / summary_relative
+    summary_path.unlink()
+    summary_path.symlink_to(SUMMARY)
+
+    with pytest.raises(StageBPreregistrationError, match="must not traverse a symlink"):
+        validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
+
+
+def test_implementation_commit_must_exist_and_contain_source() -> None:
+    """Implementation provenance must resolve to a commit containing the claimed source."""
+    packet = copy.deepcopy(_packet())
+    packet["stage_a_snapshot"]["implementation_commits"]["reference"] = "0" * 40  # type: ignore[index]
+
+    with pytest.raises(
+        StageBPreregistrationError, match="implementation_commits.reference is unavailable"
+    ):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
 def test_stage_a_near_candidate_cannot_be_promoted() -> None:
     """The observed one-of-three hit remains ineligible for held-out execution."""
     packet = copy.deepcopy(_packet())
@@ -161,10 +220,10 @@ def test_stage_a_summary_semantic_drift_fails_closed(
     tmp_path: Path, mutate: Callable[[dict[str, Any]], None], match: str
 ) -> None:
     """The byte-pinned Stage A summary must agree with the preregistration snapshot."""
-    packet = _mutated_summary_packet(tmp_path, mutate)
+    packet, source_root = _mutated_summary_packet(tmp_path, mutate)
 
     with pytest.raises(StageBPreregistrationError, match=match):
-        validate_preregistration_config(packet, config_path=PACKET)
+        validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
 
 
 def test_held_out_seed_overlap_fails_closed() -> None:
@@ -182,6 +241,46 @@ def test_fidelity_surface_omission_fails_closed() -> None:
     packet["fidelity_cost_surfaces"]["outcomes"].pop()  # type: ignore[index]
 
     with pytest.raises(StageBPreregistrationError, match="fidelity surface set drifted"):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value", "match"),
+    [
+        (
+            "candidate_selection",
+            "required_threshold_metric",
+            "wrong_metric",
+            "candidate threshold metric",
+        ),
+        (
+            "held_out_plan",
+            "protocol_source",
+            "wrong.Protocol",
+            "protocol source",
+        ),
+        (
+            "held_out_plan",
+            "missingness_policy",
+            "drop missing rows",
+            "missingness policy",
+        ),
+        (
+            "fidelity_cost_surfaces",
+            "report_effect_and_uncertainty",
+            False,
+            "effect and uncertainty",
+        ),
+    ],
+)
+def test_frozen_research_contract_fields_fail_closed(
+    section: str, key: str, value: object, match: str
+) -> None:
+    """Frozen research design fields cannot drift without invalidating the packet."""
+    packet = copy.deepcopy(_packet())
+    packet[section][key] = value  # type: ignore[index]
+
+    with pytest.raises(StageBPreregistrationError, match=match):
         validate_preregistration_config(packet, config_path=PACKET)
 
 

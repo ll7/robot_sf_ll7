@@ -54,6 +54,7 @@ source_sha256:
   stage_a_parameter_screen: 0d7bac6cdf35c5a4d3c17f8f865426fd794dc036048f6a8cada7df8f8d253482
   stage_a_reference_contract: 28d81a4f820aceef8e0b8f388ad81ce06c260adb8ac9d838ccad2ae556f01e5c
   stage_a_runner: 52d7aee8833c56bb30b869edbd89d2b29b65927398d3e5f0af6818f0e8093768
+  stage_a_tests: 0484d1a7bacaed75c668c53f110c43c990690a040a18784a67dfa95be73c6f2f
 
 stage_a_snapshot:
   implementation_commits:

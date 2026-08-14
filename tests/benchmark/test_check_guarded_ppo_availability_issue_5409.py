@@ -218,6 +218,8 @@ class TestActualIssue5409Configs:
         assert verdict["present"] is True
         assert verdict["planner_key"] == "guarded_ppo"
         assert verdict["available"] is True
+        assert verdict["declared_availability_gate"] is None
+        assert verdict["declared_fail_closed_reason"] is None
         assert verdict["checkpoint"]["resolvable"] is True
         assert verdict["observation_contract"]["resolvable"] is True
 
@@ -227,6 +229,8 @@ class TestActualIssue5409Configs:
         verdict = check_guarded_ppo_availability(_H600_CONFIG)
         assert verdict["present"] is True
         assert verdict["available"] is True
+        assert verdict["declared_availability_gate"] is None
+        assert verdict["declared_fail_closed_reason"] is None
 
 
 class TestCliExitCodes:

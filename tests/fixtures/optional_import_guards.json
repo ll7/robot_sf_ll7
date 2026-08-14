@@ -198,7 +198,7 @@
       "blessed": true,
       "note": "Blessed broad catch: native-lib / filesystem load may raise OSError. campaign_runtime_preflight.py is a deliberate import PROBE (issue #5300): it exists to catch and report arm-dependency import failures with a remediation message, so try_import (which discards the exception) is the wrong tool there.",
       "samples": [
-        "robot_sf/benchmark/campaign_runtime_preflight.py:106",
+        "robot_sf/benchmark/campaign/campaign_runtime_preflight.py:106",
         "robot_sf/benchmark/cli.py:3356",
         "robot_sf/benchmark/cli.py:3390",
         "robot_sf/benchmark/full_classic/visual_deps.py:45",
@@ -212,7 +212,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
       "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:275"
+        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:279"
       ]
     },
     "ImportError+ParquetDependencyError": {

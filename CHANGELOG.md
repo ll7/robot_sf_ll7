@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #5409 horizon-ablation launch packet.** Added a machine-checkable launch
+  contract for the roster-matched, seed-matched h500-vs-h600 comparison, pinning the
+  per-horizon results directory, the pre-`sbatch` checkpoint-gate receipt path, the
+  frozen 12x48x3 matrix, and the measured environment identity (scenario-matrix,
+  comparability, and observation-noise hashes) for both arms. A fail-closed checker
+  rejects config drift, hash drift, a shared results directory, a missing gate receipt,
+  fallback rows counted as evidence, or any packet that self-authorizes compute. No
+  campaign is submitted and no horizon result is claimed.
+
 * **Issue #6646 held-out diagnosis comparison infrastructure.** Added a pinned
   learned-method manifest, exact case-alignment and fixture-review admission gates,
   non-deterministic learned-source projection, and a versioned diagnostic comparison
@@ -402,6 +411,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   standalone sampling without a pysf-version dependency.
 
 ### Changed
+
+* **Issue #7086 representative-run rule de-duplicated into one shared utility.** The rule that
+  decides which seed stands in for a whole campaign cell — majority-verdict pool, weaker-label
+  tie-break, median primary order parameter, lower seed on an exact tie — was implemented twice,
+  once in `robot_sf.research.emergent_phenomena_campaign` and once in
+  `scripts/validation/render_issue_5149_emergent_phenomena_videos.py`, together with two verbatim
+  copies of the verdict severity ordering and three of the per-scenario primary-order-parameter
+  map. It now lives once, in `robot_sf.research.representative_selection`, and the campaign
+  module, the video renderer, and the campaign bundle builder all call into it. The extraction is
+  behaviour-preserving: new regression tests re-derive the archived
+  `issue_5149_emergent_phenomena_multiseed_2026-08` bundle's four replay seeds and six majority
+  verdicts from its own `runs.jsonl` and require an exact match, so no archived artifact changes.
+  Two latent non-determinisms are fixed in passing: a tie between two unrecognized verdict labels
+  now resolves lexicographically instead of by input order, and an unknown scenario name now
+  fails closed with a named error instead of a bare `KeyError`.
 
 * **Single-source package version from the git tag (kills version drift).** `pyproject.toml` no longer hardcodes a version; the package version is derived automatically from the git tag/release line via `hatch-vcs` (release tags `X.Y.Z`, release-candidate tags `rcX.Y.Z`, PEP 440 dev fallback `0.0.3.dev0` for untagged builds). `robot_sf.__version__` now resolves from the build-time `_version.py` (or installed metadata). `CITATION.cff` is aligned to the latest full release tag (`0.0.2`). A new `scripts/dev/check_version_alignment.py` guards the three version axes; it runs gating on tag pushes (`release-functional-badge` workflow) and advisory on every CI run (`ci_driver.sh` lint phase). Previously the three axes had drifted: tag `rc0.0.3`, `pyproject` `2.0.0`, `CITATION` `benchmark-protocol-0.1.0`.
 

@@ -12,7 +12,7 @@ merged tools already expect:
   ``algorithm_metadata.planner_kinematics.execution_mode``). No mining
   threshold, gate, or semantic is touched here; this only *projects* fields
   that are already present in the row under a different path.
-- ``robot_sf/benchmark/campaign_atlas.py`` (issue #5616): needs a flat
+- ``robot_sf/benchmark/campaign/campaign_atlas.py`` (issue #5616): needs a flat
   ``planner`` / ``scenario_family`` / ``outcome`` string per episode. This
   bundle carries the planner under ``algo``, a real per-scenario archetype
   under ``scenario_params.metadata.archetype`` (used verbatim as

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from scripts.dev import issue_audit_core
 from scripts.dev.issue_audit_core import (
     _run_command,
     _run_gh,
@@ -20,6 +21,7 @@ from scripts.dev.issue_audit_core import (
     closure_evidence,
     compute_plan_digest,
     discover_issue_comments,
+    discover_issue_timeline_merged_prs,
     label_api_path,
     main,
     parse_decision_answer,
@@ -346,6 +348,210 @@ def test_comment_inventory_reports_degraded_reads_as_unavailable() -> None:
     assert metadata["available"] is False
     assert metadata["errors"]
     assert issues[0]["comments"] == []
+
+
+def test_issue_timeline_recovers_merged_cross_referenced_pr() -> None:
+    """A bounded issue timeline supplies merged-PR coverage beyond global history."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        assert args[0] == "api"
+        assert "issues/110/timeline" in args[1]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                [
+                    {
+                        "event": "cross-referenced",
+                        "created_at": "2026-08-14T10:00:00Z",
+                        "source": {
+                            "type": "issue",
+                            "issue": {
+                                "number": 901,
+                                "title": "Add audit coverage",
+                                "body": "Refs #110",
+                                "state": "closed",
+                                "html_url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+                                "pull_request": {
+                                    "merged_at": "2026-08-14T09:00:00Z",
+                                    "html_url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+                                },
+                            },
+                        },
+                    },
+                    {"event": "commented"},
+                ]
+            ),
+            "",
+        )
+
+    rows, metadata = discover_issue_timeline_merged_prs("ll7/robot_sf_ll7", [110], runner=runner)
+
+    assert [row["number"] for row in rows] == [901]
+    assert rows[0]["coverage_source"] == "targeted_issue_timeline"
+    assert rows[0]["timeline_issue"] == 110
+    assert rows[0]["linked_issue_numbers"] == [110]
+    assert metadata["available"] is True
+    assert metadata["event_count"] == 2
+    assert metadata["row_count"] == 1
+
+
+def test_issue_timeline_failure_is_explicitly_unavailable() -> None:
+    """Timeline/API failures never become an empty successful fallback."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 1, "", "timeline unavailable")
+
+    rows, metadata = discover_issue_timeline_merged_prs("ll7/robot_sf_ll7", [110], runner=runner)
+
+    assert rows == []
+    assert metadata["available"] is False
+    assert metadata["errors"]
+
+
+def test_inventory_uses_timeline_fallback_for_partial_closed_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Partial global history triggers targeted merged-PR coverage."""
+    issue = _issue(110)
+    timeline_row = {
+        "number": 901,
+        "title": "Add audit coverage",
+        "body": "Refs #110",
+        "state": "closed",
+        "url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+        "merged_at": "2026-08-14T09:00:00Z",
+        "head_ref": "",
+        "linked_issue_numbers": [110],
+        "coverage_source": "targeted_issue_timeline",
+    }
+
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([issue], {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_pull_requests",
+        lambda _repo, *, state, max_pages, runner: (
+            ([], {"truncated": False, "errors": []})
+            if state == "open"
+            else ([], {"truncated": True, "errors": []})
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_issue_timeline_merged_prs",
+        lambda *args, **kwargs: (
+            [timeline_row],
+            {"available": True, "truncated": False, "errors": [], "row_count": 1},
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7")
+
+    assert [row["number"] for row in inventory["merged_prs"]] == [901]
+    assert inventory["inventory"]["closure_coverage"]["mode"] == ("issue_timeline_fallback")
+    assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is True
+    assert inventory["inventory"]["closed_prs"]["truncated"] is True
+
+
+def test_closure_evidence_preserves_targeted_timeline_provenance() -> None:
+    """Closure evidence distinguishes targeted timeline coverage from global rows."""
+    issue = _issue(110, body="Completion condition: merged PR #901")
+    merged = [
+        {
+            "number": 901,
+            "title": "Add audit coverage",
+            "body": "",
+            "merged_at": "2026-08-14T09:00:00Z",
+            "linked_issue_numbers": [110],
+            "coverage_source": "targeted_issue_timeline",
+        }
+    ]
+
+    evidence = closure_evidence(issue, merged_prs=merged, open_issue_numbers={110})
+
+    assert evidence["eligible"] is True
+    assert evidence["merged_prs"] == [901]
+    assert evidence["coverage_sources"] == ["targeted_issue_timeline"]
+    assert evidence["targeted_merged_prs"] == [901]
+
+
+def test_targeted_coverage_does_not_hide_global_history_truncation() -> None:
+    """The plan exposes targeted coverage but apply remains fail-closed."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(110, body="Completion condition: merged PR #901")],
+            "open_prs": [],
+            "merged_prs": [
+                {
+                    "number": 901,
+                    "title": "Add audit coverage",
+                    "body": "",
+                    "merged_at": "2026-08-14T09:00:00Z",
+                    "linked_issue_numbers": [110],
+                    "coverage_source": "targeted_issue_timeline",
+                }
+            ],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": [],
+            "inventory": {
+                "closed_prs": {"truncated": True, "errors": []},
+                "issue_timeline_merged_prs": {
+                    "available": True,
+                    "truncated": False,
+                    "errors": [],
+                },
+                "closure_coverage": {
+                    "complete_for_open_issues": True,
+                    "mode": "issue_timeline_fallback",
+                },
+            },
+        }
+    )
+
+    assert plan["inventory_coverage"]["mode"] == "issue_timeline_fallback"
+    assert plan["issues"][0]["closure_evidence"]["targeted_merged_prs"] == [901]
+    assert "closed_prs" in plan["truncation_or_errors"]
+
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("truncated plan must not invoke mutation runner")
+
+    result = apply_mutations(plan, runner=runner)
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "closed_prs" in result["failures"]
+    assert calls == []
 
 
 def test_command_timeouts_return_failures_instead_of_raising(

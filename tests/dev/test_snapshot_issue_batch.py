@@ -12,6 +12,7 @@ from scripts.dev import snapshot_issue_batch
 from scripts.dev.github_quota import RateLimitSnapshot
 from scripts.dev.snapshot_issue_batch import (
     _batch_claim_statuses,
+    _issue_classification,
     expand_issue_numbers,
     main,
     snapshot_active_issue_portfolio,
@@ -51,6 +52,20 @@ def test_expand_issue_numbers_treats_two_values_as_range() -> None:
     """Two ascending values should support the concise batch command."""
     assert expand_issue_numbers([2665, 2667], expand_range=True) == [2665, 2666, 2667]
     assert expand_issue_numbers([2665, 2667], expand_range=False) == [2665, 2667]
+
+
+@pytest.mark.parametrize("label", ["blocked:needs-maintainer", "blocked:needs-campaign"])
+def test_explicit_blocker_labels_are_not_claimable(label: str) -> None:
+    """Every explicit blocked namespace label must fence autonomous dispatch."""
+    classification, reason = _issue_classification(
+        assignees=[],
+        claim={"ok": True, "claimed": False},
+        labels=[label],
+        state="OPEN",
+    )
+
+    assert classification == "blocked_label"
+    assert label in reason
 
 
 def test_snapshot_issues_emits_compact_fields() -> None:

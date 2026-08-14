@@ -153,7 +153,8 @@ def test_gate_matching_does_not_pair_unrelated_status_and_topic_lines() -> None:
     proven = classify_issue(
         _issue(
             112,
-            body="Rights: license missing pending permission review.\n"
+            body="Blocked-by: #900\n"
+            "Rights: license missing pending permission review.\n"
             "## Definition of Done\n- [ ] record the decision",
         ),
         available_labels={"state:blocked", "state:blocked-external-input"},
@@ -190,7 +191,7 @@ def test_gate_matching_ignores_aggregate_reports_and_conditional_rules() -> None
     current = classify_issue(
         _issue(
             115,
-            body="This issue is blocked until the required checkpoint is staged.",
+            body="Blocked-by: #901\nThis issue is blocked until the required checkpoint is staged.",
         ),
         available_labels={"state:blocked", "state:blocked-external-input"},
     )
@@ -254,7 +255,7 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
         _issue(
             118,
             labels=["state:running"],
-            body="This issue is blocked until the required dataset is staged.",
+            body="Blocked-by: #902\nThis issue is blocked until the required dataset is staged.",
         ),
         available_labels={
             "state:running",
@@ -268,6 +269,89 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
         ("remove_label", "state:running"),
         ("add_label", "state:blocked-external-input"),
     }
+    blocked_mutation = next(
+        mutation
+        for mutation in classification.mutations
+        if mutation["value"] == "state:blocked-external-input"
+    )
+    assert blocked_mutation["blocked_reason"] == ["Blocked-by reference present: Blocked-by: #902"]
+
+
+def test_blocker_without_reason_routes_to_needs_triage() -> None:
+    """A prose-only blocker cannot create a dispatch-suppressing state label."""
+    classification = classify_issue(
+        _issue(122, body="This issue is blocked until the required dataset is staged."),
+        available_labels={"state:blocked", "state:blocked-external-input", "needs-triage"},
+    )
+
+    assert classification.classification == "blocked"
+    assert classification.blocked_reason_evidence == ()
+    assert classification.blocked_label_decision == "declined-needs-triage"
+    assert not any(
+        mutation["operation"] == "add_label"
+        and mutation["value"] in issue_audit_core.BLOCKED_LABELS
+        for mutation in classification.mutations
+    )
+    assert {mutation["value"] for mutation in classification.mutations} == {"needs-triage"}
+    assert any("declined state:blocked" in finding for finding in classification.findings)
+
+
+def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:
+    """A complete blocked-triage block is accepted as explicit reason evidence."""
+    body = (
+        "<!-- blocked-triage-v1 tracking=7067 -->\n"
+        "```yaml\n"
+        "blocker_class: dependency\n"
+        "unblock_condition: '#902 is closed'\n"
+        "watcher: next queue pass\n"
+        "next_check_at: next queue pass\n"
+        "last_meaningful_progress_at: '2026-08-14'\n"
+        "```\n"
+        "This issue is blocked until the required dataset is staged."
+    )
+    classification = classify_issue(
+        _issue(125, body=body),
+        available_labels={"state:blocked", "state:blocked-external-input"},
+    )
+
+    assert classification.blocked_label_decision == "apply"
+    blocked_mutation = next(
+        mutation
+        for mutation in classification.mutations
+        if mutation["value"] == "state:blocked-external-input"
+    )
+    assert blocked_mutation["blocked_reason"] == ["blocked-triage-v1 reason block present"]
+
+
+def test_audit_plan_reports_blocked_label_decision() -> None:
+    """The plan exposes whether a blocked-label write was applied or declined."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(123, body="This issue is blocked until the dataset is staged.")],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:blocked", "state:blocked-external-input", "needs-triage"],
+            "inventory": {},
+        }
+    )
+
+    assert plan["blocked_label_report"] == [
+        {
+            "issue": 123,
+            "decision": "declined-needs-triage",
+            "blocker_evidence": [
+                {"kind": "external-input", "text": "dataset evidence includes explicit gate"},
+                {"kind": "blocked", "text": "explicit current blocker"},
+            ],
+            "reason_evidence": [],
+            "fallback_label": "needs-triage",
+        }
+    ]
+    assert plan["counts"]["blocked_label_decisions"] == 1
 
 
 def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
@@ -935,6 +1019,79 @@ def test_apply_rejects_stale_plan_digest_before_mutation() -> None:
     assert result["applied"] == []
     assert "stale" in result["reason"]
     assert calls == []
+
+
+def test_apply_rejects_unreasoned_blocked_label_before_mutation() -> None:
+    """A hand-edited plan cannot bypass the blocked-label reason guard."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        raise AssertionError("unreasoned blocked-label plan must be rejected before writes")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 124,
+                "value": "state:blocked",
+                "reason": "prose-only blocker",
+                "evidence": ["issue text says blocked"],
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "unreasoned blocked-label" in result["reason"]
+    assert calls == []
+
+
+def test_apply_accepts_reasoned_blocked_label() -> None:
+    """A planner-bound reason permits the blocked-label write and readback."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        if args[:3] == ["api", "-X", "POST"]:
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if args[:2] == ["api", "repos/ll7/robot_sf_ll7/issues/126"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps({"state": "open", "labels": [{"name": "state:blocked"}]}),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {args}")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 126,
+                "value": "state:blocked",
+                "reason": "record a proven blocker",
+                "evidence": ["blocked evidence"],
+                "blocked_reason": ["Blocked-by reference present: Blocked-by: #902"],
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is True
+    assert result["readback"][0]["verified"]["missing_additions"] == []
+    assert len(calls) == 2
 
 
 def test_pending_queue_can_record_readback_confirmed_safe_mutations() -> None:

@@ -858,6 +858,15 @@ referenced issues and pull requests in one GraphQL request, and classifies
 path, external, in-repository, malformed, or otherwise unsupported conditions
 as `unevaluatable`. API failures are errors, never clean/not-fired results.
 
+The shared issue-audit writer applies an additional fail-closed guard before
+adding `state:blocked` or `state:blocked-external-input`: the complete issue
+thread must already contain a `blocked-triage-v1` reason block or a
+`Blocked-by: #<number>` reference. A prose-only blocker is reported but does not
+receive a dispatch-suppressing label; the writer adds `needs-triage` when that
+existing label is available. The audit plan's `blocked_label_report` records
+the evidence and the applied or declined decision, and the REST apply path
+rejects a blocked-label mutation missing its reason evidence.
+
 After reviewing the report, an explicitly authorized routing pass may add only
 `needs-triage` to fired issues:
 

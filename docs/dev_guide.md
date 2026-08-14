@@ -442,15 +442,19 @@ was running. Use `scripts/dev/check_prepublication_state.py` around expensive pu
    evidence; run `sync --integrate` only from a clean worktree, resolve conflicts if needed, then
    rerun readiness and capture a new baseline.
 
-The gate records the exact before/after SHAs and any merged PR that explicitly closes the issue.
-Its integration path uses ordinary Git merges and never resets or deletes local worktrees.
+The gate records the exact before/after SHAs, any newly opened covering PR, and any merged PR that
+explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
+same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions and other repositories
+do not supersede the route. Its integration path uses ordinary Git merges and never resets or
+deletes local worktrees.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
-state and merged-closing-PR discovery to the bounded REST endpoints already used by the issue
-closure audit. The snapshot records `remote_state_sources` and any `remote_state_fallbacks`, so a
-REST-backed decision is auditable rather than silently presented as a native read. Authentication,
-authorization, repository-resolution, malformed-response, and truncated-inventory failures remain
-blocked; do not replace this gate with an ad-hoc manual state check.
+state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used
+by the issue closure audit. The snapshot records `remote_state_sources` and any
+`remote_state_fallbacks`, so a REST-backed decision is auditable rather than silently presented as
+a native read. Authentication, authorization, repository-resolution, malformed-response, and
+truncated-inventory failures remain blocked; do not replace this gate with an ad-hoc manual state
+check.
 
 **Rollback path.** Remove step 7 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`

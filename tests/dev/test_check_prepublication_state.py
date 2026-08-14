@@ -24,6 +24,7 @@ def _snapshot(**overrides: Any) -> dict[str, Any]:
         "issue_updated_at": "2026-08-12T10:00:00Z",
         "issue_closed_at": None,
         "closing_prs": [],
+        "open_covering_prs": [],
         "remote": "origin",
         "base_ref": "main",
         "base_sha": "base-a",
@@ -76,6 +77,26 @@ def test_newly_merged_closing_pr_supersedes_issue() -> None:
     assert result["decision"] == "superseded"
     assert result["reason"] == "merged_pr_closes_issue"
     assert result["new_closing_prs"][0]["number"] == 7001
+
+
+def test_newly_opened_covering_pr_supersedes_issue() -> None:
+    """A newly opened explicit covering PR must stop duplicate publication."""
+    baseline = _snapshot()
+    current = _snapshot(
+        open_covering_prs=[
+            {
+                "number": 7002,
+                "title": "fix: deliver the claimed issue",
+                "created_at": "2026-08-12T10:02:00Z",
+            }
+        ]
+    )
+
+    result = gate.evaluate_state(baseline, current)
+
+    assert result["decision"] == "superseded"
+    assert result["reason"] == "open_pr_closes_issue"
+    assert result["new_open_covering_prs"][0]["number"] == 7002
 
 
 def test_closed_issue_supersedes_even_without_pr_search_match() -> None:
@@ -199,13 +220,38 @@ def test_fetch_refs_uses_exact_remote_refs(monkeypatch) -> None:
 
 
 def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
-    """Live collection extracts an explicit closing reference from merged PR data."""
+    """Live collection extracts explicit references from merged and open PR data."""
     commands: list[list[str]] = []
 
     def fake_json(command: list[str]) -> Any:
         commands.append(command)
         if command[1] == "issue":
             return {"state": "OPEN", "updatedAt": "2026-08-12T10:00:00Z", "closedAt": None}
+        if command[command.index("--state") + 1] == "open":
+            return [
+                {
+                    "number": 7002,
+                    "title": "fix: unrelated issue",
+                    "body": "Closes otherorg/otherrepo#6916",
+                    "createdAt": "2026-08-12T10:04:00Z",
+                    "updatedAt": "2026-08-12T10:05:00Z",
+                    "isDraft": True,
+                    "headRefName": "fix/other",
+                    "headRefOid": "head-other",
+                    "baseRefName": "main",
+                },
+                {
+                    "number": 7003,
+                    "title": "fix: open covering PR",
+                    "body": "Closes https://github.com/ll7/robot_sf_ll7/issues/6916",
+                    "createdAt": "2026-08-12T10:06:00Z",
+                    "updatedAt": "2026-08-12T10:07:00Z",
+                    "isDraft": False,
+                    "headRefName": "fix/6916-open",
+                    "headRefOid": "head-open",
+                    "baseRefName": "main",
+                },
+            ]
         return [
             {
                 "number": 7000,
@@ -251,9 +297,25 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
             "base_ref": "main",
         }
     ]
-    assert result["remote_state_sources"] == {"issue": "graphql", "closing_prs": "graphql"}
+    assert result["open_covering_prs"] == [
+        {
+            "number": 7003,
+            "title": "fix: open covering PR",
+            "created_at": "2026-08-12T10:06:00Z",
+            "updated_at": "2026-08-12T10:07:00Z",
+            "is_draft": False,
+            "head_ref": "fix/6916-open",
+            "head_sha": "head-open",
+            "base_ref": "main",
+        }
+    ]
+    assert result["remote_state_sources"] == {
+        "issue": "graphql",
+        "closing_prs": "graphql",
+        "open_covering_prs": "graphql",
+    }
     assert result["remote_state_fallbacks"] == {}
-    assert [command[1] for command in commands] == ["issue", "pr"]
+    assert [command[1] for command in commands] == ["issue", "pr", "pr"]
 
 
 def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> None:
@@ -289,6 +351,17 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
             }
         ],
     )
+    monkeypatch.setattr(
+        gate,
+        "_open_covering_prs_rest",
+        lambda **_: [
+            {
+                "number": 7034,
+                "title": "fix: open REST fallback",
+                "created_at": "2026-08-13T07:02:00Z",
+            }
+        ],
+    )
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
     monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
@@ -301,12 +374,18 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
 
     assert result["issue_state"] == "OPEN"
     assert result["closing_prs"][0]["number"] == 7033
-    assert result["remote_state_sources"] == {"issue": "rest", "closing_prs": "rest"}
+    assert result["open_covering_prs"][0]["number"] == 7034
+    assert result["remote_state_sources"] == {
+        "issue": "rest",
+        "closing_prs": "rest",
+        "open_covering_prs": "rest",
+    }
     assert result["remote_state_fallbacks"] == {
         "issue": "GraphQL: API rate limit already exceeded",
         "closing_prs": "GraphQL: API rate limit already exceeded",
+        "open_covering_prs": "GraphQL: API rate limit already exceeded",
     }
-    assert [command[1] for command in commands] == ["issue", "pr"]
+    assert [command[1] for command in commands] == ["issue", "pr", "pr"]
 
 
 def test_collect_live_state_does_not_mask_graphql_auth_failure(monkeypatch) -> None:
@@ -386,6 +465,63 @@ def test_closing_prs_rest_fails_closed_when_inventory_is_truncated(monkeypatch) 
 
     with pytest.raises(gate.GateError, match="inventory is truncated"):
         gate._closing_prs_rest(repo="ll7/robot_sf_ll7", issue=7033)
+
+
+def test_open_covering_prs_rest_normalizes_and_filters_rows(monkeypatch) -> None:
+    """REST open-PR discovery keeps only same-repository explicit references."""
+    monkeypatch.setattr(
+        gate,
+        "fetch_open_pr_rows",
+        lambda **_: (
+            [
+                {
+                    "number": 7033,
+                    "title": "fix: open REST fallback",
+                    "body": "Closes https://github.com/ll7/robot_sf_ll7/issues/7033",
+                    "created_at": "2026-08-13T07:01:00Z",
+                    "updated_at": "2026-08-13T07:02:00Z",
+                    "draft": True,
+                    "head": {"ref": "fix/open-rest", "sha": "head-open-rest"},
+                    "base": {"ref": "main"},
+                },
+                {
+                    "number": 7034,
+                    "title": "fix unrelated issue",
+                    "body": "Closes other/repo#7033",
+                    "created_at": "2026-08-13T07:03:00Z",
+                },
+            ],
+            SimpleNamespace(truncated=False, row_count=2, pages_read=1, page_budget=20),
+        ),
+    )
+
+    assert gate._open_covering_prs_rest(repo="ll7/robot_sf_ll7", issue=7033) == [
+        {
+            "number": 7033,
+            "title": "fix: open REST fallback",
+            "created_at": "2026-08-13T07:01:00Z",
+            "updated_at": "2026-08-13T07:02:00Z",
+            "is_draft": True,
+            "head_ref": "fix/open-rest",
+            "head_sha": "head-open-rest",
+            "base_ref": "main",
+        }
+    ]
+
+
+def test_open_covering_prs_rest_fails_closed_when_inventory_is_truncated(monkeypatch) -> None:
+    """A partial open-PR inventory cannot authorize publication."""
+    monkeypatch.setattr(
+        gate,
+        "fetch_open_pr_rows",
+        lambda **_: (
+            [],
+            SimpleNamespace(truncated=True, row_count=2000, pages_read=20, page_budget=20),
+        ),
+    )
+
+    with pytest.raises(gate.GateError, match="open-PR inventory is truncated"):
+        gate._open_covering_prs_rest(repo="ll7/robot_sf_ll7", issue=7033)
 
 
 def test_non_fast_forward_integration_fails_closed_without_reset(monkeypatch) -> None:

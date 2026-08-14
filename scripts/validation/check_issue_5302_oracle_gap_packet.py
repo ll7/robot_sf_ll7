@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.campaign_arm_admission import (
+from robot_sf.benchmark.campaign.campaign_arm_admission import (
     CampaignArmAdmissionError,
     check_campaign_arm_admission,
 )

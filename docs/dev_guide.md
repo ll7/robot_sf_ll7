@@ -1006,6 +1006,9 @@ paper-critical rows with owner types and label-change recommendations.
 Issues carrying `routing:needs-compute` remain visible for audit but classify as `needs_compute` and
 are excluded from implementation dispatch until compute or private execution authorization is
 established.
+Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
+including the exact blocker label in its reason, and is excluded from autonomous implementation
+dispatch.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

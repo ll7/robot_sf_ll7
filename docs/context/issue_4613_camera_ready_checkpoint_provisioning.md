@@ -92,7 +92,7 @@ per-arm list (`planner_key`, `algo`, `kind`, `value`, `status`,
 
 ## Public surface added by #4613
 
-- `robot_sf/benchmark/campaign_checkpoint_preflight.py` — module + `submit_safe`.
+- `robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py` — module + `submit_safe`.
 - `robot_sf/benchmark/camera_ready/_preflight.py::prepare_campaign_preflight`
   — `checkpoint_preflight_mode`, `checkpoint_cache_dir`,
   `checkpoint_registry_path` parameters + persisted report JSON.

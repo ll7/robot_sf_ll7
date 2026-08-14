@@ -497,7 +497,7 @@ models:
   notes:
   - 'Checkpoint prefix: network_01900000 (see model/ga3c_cadrl/README.md).'
   - 'Source: gym-collision-avoidance (MIT ACL), GA3C_CADRL/checkpoints/IROS18.'
-  - 'Referenced as model_id ga3c_cadrl_iros18 by robot_sf/planner/socnav.py and robot_sf/benchmark/campaign_checkpoint_preflight.py.'
+  - 'Referenced as model_id ga3c_cadrl_iros18 by robot_sf/planner/socnav.py and robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py.'
   - >-
     Phase A of #6268: the .data/.index/.meta triplet is published as one coherent
     tar.gz bundle (asset ga3c_cadrl_iros18-network_01900000.tar.gz) for durable

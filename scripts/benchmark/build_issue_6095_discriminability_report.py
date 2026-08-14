@@ -1049,6 +1049,46 @@ def _fmt_interval(summary: dict[str, Any]) -> str:
     return f"{summary['mean']:.4f} [{summary['ci_low']:.4f}, {summary['ci_high']:.4f}]"
 
 
+def _provenance_limitation_lines(ppo_provenance: dict[str, Any]) -> list[str]:
+    """Render receipt-aware PPO provenance caveats without stale status claims."""
+    receipts = {
+        regime_name: ppo_provenance.get(regime_name) or {} for regime_name in ("nominal", "stress")
+    }
+    statuses = {name: str(receipt.get("status") or "unknown") for name, receipt in receipts.items()}
+    metadata_only = [name for name, status in statuses.items() if status == "metadata_only"]
+    if metadata_only:
+        regimes = ", ".join(metadata_only)
+        return [
+            f"- The {regimes} checkpoint receipt(s) are metadata-only; runtime checkpoint use "
+            "is not hash-verified, so the fail-closed provenance status blocks interpretive "
+            "promotion under the issue stop condition."
+        ]
+
+    staged_receipts = all(
+        receipt.get("status") == "staged_receipt"
+        and receipt.get("identity_matches_expected") is True
+        and receipt.get("hash_source") == "computed_file"
+        and receipt.get("submit_safe") is True
+        for receipt in receipts.values()
+    )
+    if staged_receipts:
+        load_statuses = ", ".join(
+            f"{name}={receipt.get('load_status') or 'unknown'}"
+            for name, receipt in receipts.items()
+        )
+        return [
+            "- Nominal and stress checkpoint preflight receipts are staged, identity-matched, "
+            "and checksum-verified from the computed file with submit-safe status.",
+            f"- Runtime checkpoint load status remains `{load_statuses}`; no runtime load or "
+            "runtime hash-verification claim is made.",
+        ]
+
+    receipt_statuses = ", ".join(f"{name}={status}" for name, status in statuses.items())
+    return [
+        f"- Checkpoint receipt statuses: `{receipt_statuses}`; interpretive promotion follows the fail-closed status above."
+    ]
+
+
 def _markdown_report(report: dict[str, Any]) -> str:
     """Render a compact human-readable report."""
     lines = [
@@ -1121,8 +1161,7 @@ def _markdown_report(report: dict[str, Any]) -> str:
             f"- Model ID: `{report['ppo_provenance']['model_id']}`",
             f"- Declared checkpoint SHA-256: `{report['ppo_provenance']['checkpoint_sha256']}`",
             f"- Provenance interpretation status: **{report['ppo_provenance']['interpretation_status']}**",
-            "- The stress artifact has a metadata-only checkpoint receipt and no runtime hash/load "
-            "receipt; this blocks the interpretive claim under the issue stop condition.",
+            *_provenance_limitation_lines(report["ppo_provenance"]),
             "- Raw episode modes are retained separately (`orca=adapter`, `ppo=native` in the "
             "validated campaign artifacts); adapter/native and observation-contract caveats prevent "
             "planner ranking claims.",

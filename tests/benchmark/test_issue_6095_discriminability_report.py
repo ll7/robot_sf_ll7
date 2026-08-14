@@ -10,6 +10,7 @@ from scripts.benchmark.build_issue_6095_discriminability_report import (
     EXPECTED_KINEMATICS,
     EpisodeRow,
     RegimeData,
+    _provenance_limitation_lines,
     bootstrap_mean_ci,
     classify_stress_floor,
 )
@@ -100,3 +101,21 @@ def test_classify_stress_floor_counts_both_zero_metric_discriminability() -> Non
     assert result["both_zero_distinguished_count"] == 2
     assert result["both_zero_distinguished_by_collision_count"] == 1
     assert result["both_zero_distinguished_by_near_miss_count"] == 1
+
+
+def test_provenance_markdown_tracks_staged_receipts() -> None:
+    """Human-readable provenance caveats must reflect staged receipt status."""
+    receipt = {
+        "status": "staged_receipt",
+        "identity_matches_expected": True,
+        "hash_source": "computed_file",
+        "submit_safe": True,
+        "load_status": "not_run",
+    }
+
+    lines = _provenance_limitation_lines({"nominal": receipt, "stress": receipt})
+
+    rendered = "\n".join(lines)
+    assert "staged" in rendered
+    assert "metadata-only" not in rendered
+    assert "nominal=not_run, stress=not_run" in rendered

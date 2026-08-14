@@ -344,6 +344,23 @@ def test_fetch_closed_pr_rows_uses_state_closed_single_pass(
     assert pr_path.startswith("repos/ll7/robot_sf_ll7/pulls?state=closed")
 
 
+def test_fetch_open_pr_rows_uses_state_open_single_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The concurrent-covering-PR inventory is one bounded ``pulls?state=open`` pass."""
+    fake = _page_factory([[_rest_pr(9, "fix #1", merged=False, state="open")]])
+    monkeypatch.setattr(open_issue_closure_audit.subprocess, "run", fake)
+    rows, meta = open_issue_closure_audit.fetch_open_pr_rows(
+        repo="ll7/robot_sf_ll7", max_pages=3, per_page=3
+    )
+
+    assert meta.pages_read == 1
+    assert meta.truncated is False
+    assert [row["number"] for row in rows] == [9]
+    pr_path = fake.captured[0][2]  # type: ignore[attr-defined]
+    assert pr_path.startswith("repos/ll7/robot_sf_ll7/pulls?state=open")
+
+
 # ---------------------------------------------------------------------------
 # Merged-only filtering + local title-to-issue index
 # ---------------------------------------------------------------------------

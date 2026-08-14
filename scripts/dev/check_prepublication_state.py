@@ -2,10 +2,10 @@
 """Fail-closed remote-state gate for issue-to-PR publication.
 
 The gate captures the issue, base, remote branch, and local HEAD before an
-expensive readiness run.  A later check detects a merged PR that superseded the
-issue, movement of the base or remote branch, and local HEAD changes.  The
-``sync`` command can safely integrate changed remote refs with ordinary Git
-merges; it never resets or deletes a worktree.
+expensive readiness run.  A later check detects a newly opened covering PR, a
+merged PR that superseded the issue, movement of the base or remote branch, and
+local HEAD changes.  The ``sync`` command can safely integrate changed remote
+refs with ordinary Git merges; it never resets or deletes a worktree.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
-from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows
+from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows, fetch_open_pr_rows
 
 SCHEMA = "prepublication_state.v1"
 DECISION_SCHEMA = "prepublication_decision.v1"
@@ -205,6 +205,22 @@ def _normalize_closing_pr_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_open_pr_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one open REST pull row to the covering-PR snapshot shape."""
+    head = row.get("head") if isinstance(row.get("head"), dict) else {}
+    base = row.get("base") if isinstance(row.get("base"), dict) else {}
+    return {
+        "number": row.get("number"),
+        "title": row.get("title"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "is_draft": bool(row.get("draft")),
+        "head_ref": head.get("ref"),
+        "head_sha": head.get("sha"),
+        "base_ref": base.get("ref"),
+    }
+
+
 def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
     """Return merged PRs whose body or title closes *issue* explicitly."""
     payload = _json_command(
@@ -246,6 +262,50 @@ def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
             }
         )
     return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
+
+
+def _open_covering_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
+    """Return open PRs whose body or title explicitly closes *issue*."""
+    payload = _json_command(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--search",
+            str(issue),
+            "--limit",
+            "100",
+            "--json",
+            "number,title,body,createdAt,updatedAt,isDraft,headRefName,headRefOid,baseRefName",
+        ]
+    )
+    if not isinstance(payload, list):
+        raise GateError("gh pr list returned a non-list payload")
+
+    matches: list[dict[str, Any]] = []
+    for pull_request in payload:
+        if not isinstance(pull_request, dict):
+            continue
+        searchable = "\n".join(str(pull_request.get(field) or "") for field in ("title", "body"))
+        if issue not in _closing_issue_numbers(searchable, repo=repo):
+            continue
+        matches.append(
+            {
+                "number": pull_request.get("number"),
+                "title": pull_request.get("title"),
+                "created_at": pull_request.get("createdAt"),
+                "updated_at": pull_request.get("updatedAt"),
+                "is_draft": bool(pull_request.get("isDraft")),
+                "head_ref": pull_request.get("headRefName"),
+                "head_sha": pull_request.get("headRefOid"),
+                "base_ref": pull_request.get("baseRefName"),
+            }
+        )
+    return sorted(matches, key=lambda item: str(item.get("created_at") or ""))
 
 
 def _rest_json(
@@ -311,6 +371,32 @@ def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
     return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
 
 
+def _open_covering_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+    """Find open PRs covering an issue through a bounded REST inventory."""
+    try:
+        rows, meta = fetch_open_pr_rows(
+            repo=repo,
+            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise GateError(f"GitHub REST open-PR fallback failed: {exc}") from exc
+    if meta.truncated:
+        raise GateError(
+            "GitHub REST open-PR inventory is truncated: "
+            f"read {meta.row_count} rows in {meta.pages_read}/{meta.page_budget} pages; "
+            "raise the REST page budget before publication"
+        )
+
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        searchable = "\n".join(str(row.get(field) or "") for field in ("title", "body"))
+        if issue in _closing_issue_numbers(searchable, repo=repo):
+            matches.append(_normalize_open_pr_row(row))
+    return sorted(matches, key=lambda item: str(item.get("created_at") or ""))
+
+
 def collect_live_state(
     *,
     repo: str,
@@ -320,7 +406,11 @@ def collect_live_state(
     remote: str = "origin",
 ) -> dict[str, Any]:
     """Fetch and assemble the live issue, ref, and local worktree state."""
-    remote_state_sources = {"issue": "graphql", "closing_prs": "graphql"}
+    remote_state_sources = {
+        "issue": "graphql",
+        "closing_prs": "graphql",
+        "open_covering_prs": "graphql",
+    }
     remote_state_fallbacks: dict[str, str] = {}
     try:
         issue_payload = _json_command(
@@ -361,6 +451,14 @@ def collect_live_state(
         closing_prs = _closing_prs_rest(repo=repo, issue=issue)
         remote_state_sources["closing_prs"] = "rest"
         remote_state_fallbacks["closing_prs"] = str(exc)
+    try:
+        open_covering_prs = _open_covering_prs(repo=repo, issue=issue)
+    except GateError as exc:
+        if not _is_graphql_fallback_error(exc):
+            raise
+        open_covering_prs = _open_covering_prs_rest(repo=repo, issue=issue)
+        remote_state_sources["open_covering_prs"] = "rest"
+        remote_state_fallbacks["open_covering_prs"] = str(exc)
 
     return {
         "schema": SCHEMA,
@@ -372,6 +470,7 @@ def collect_live_state(
         "issue_updated_at": issue_payload.get("updatedAt"),
         "issue_closed_at": issue_payload.get("closedAt"),
         "closing_prs": closing_prs,
+        "open_covering_prs": open_covering_prs,
         "remote_state_sources": remote_state_sources,
         "remote_state_fallbacks": remote_state_fallbacks,
         "remote": remote,
@@ -415,6 +514,22 @@ def _new_closing_prs(baseline: dict[str, Any], current: dict[str, Any]) -> list[
     ]
 
 
+def _new_open_covering_prs(
+    baseline: dict[str, Any], current: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Return open covering PRs observed after the baseline."""
+    baseline_prs = {
+        str(item.get("number"))
+        for item in baseline.get("open_covering_prs", [])
+        if isinstance(item, dict)
+    }
+    return [
+        item
+        for item in current.get("open_covering_prs", [])
+        if isinstance(item, dict) and str(item.get("number")) not in baseline_prs
+    ]
+
+
 def _sha_drift(
     baseline: dict[str, Any], current: dict[str, Any]
 ) -> dict[str, dict[str, str | None]]:
@@ -448,6 +563,16 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
             current,
             decision="blocked",
             reason="issue_state_unknown",
+        )
+
+    new_open_covering_prs = _new_open_covering_prs(baseline, current)
+    if new_open_covering_prs:
+        return _decision(
+            baseline,
+            current,
+            decision="superseded",
+            reason="open_pr_closes_issue",
+            extra={"new_open_covering_prs": new_open_covering_prs},
         )
 
     new_closing_prs = _new_closing_prs(baseline, current)

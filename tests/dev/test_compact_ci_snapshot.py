@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev import compact_ci_snapshot as snapshot
 
 
@@ -39,6 +41,7 @@ def test_build_check_summary_exposes_bounded_job_name_sets() -> None:
     )
 
     assert summary.overall == "failure"
+    assert summary.superseded == 0
     assert summary.failed_names == ["lint"]
     assert summary.pending_names == ["examples-smoke"]
     assert summary.success_names == ["fast-feedback"]
@@ -71,6 +74,66 @@ def test_fetch_pr_snapshot_reports_freshness_and_next_action() -> None:
     assert result.next_action == "review_merge_readiness"
     assert result.checks is not None
     assert result.checks.success_names == ["ci"]
+
+
+@pytest.mark.parametrize(
+    ("replacement_status", "replacement_conclusion", "expected_overall"),
+    [
+        ("completed", "success", "success"),
+        ("in_progress", "", "pending"),
+    ],
+)
+def test_build_check_summary_suppresses_superseded_cancelled_reruns(
+    replacement_status: str,
+    replacement_conclusion: str,
+    expected_overall: str,
+) -> None:
+    """A newer same-workflow run replaces an older cancellation in the compact view."""
+    summary = snapshot._build_check_summary(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-14T01:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": replacement_status,
+                "conclusion": replacement_conclusion,
+                "startedAt": "2026-08-14T01:05:00Z",
+            },
+        ]
+    )
+
+    assert summary.overall == expected_overall
+    assert summary.superseded == 1
+    assert summary.total == 1
+    assert summary.failed_names == []
+
+
+def test_build_check_summary_keeps_current_cancellation_fail_closed() -> None:
+    """A cancellation without a newer same-workflow replacement remains a failure."""
+    summary = snapshot._build_check_summary(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-14T01:00:00Z",
+            }
+        ]
+    )
+
+    assert summary.overall == "failure"
+    assert summary.superseded == 0
+    assert summary.failed_names == ["pr-body-contracts"]
 
 
 def test_fetch_pr_snapshot_marks_stale_expected_head() -> None:

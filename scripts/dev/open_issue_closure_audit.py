@@ -399,6 +399,17 @@ def fetch_closed_pr_rows(
     return _paginate_rest(path, max_pages=max_pages, per_page=per_page)
 
 
+def fetch_open_pr_rows(
+    *,
+    repo: str,
+    max_pages: int = DEFAULT_MAX_PR_PAGES,
+    per_page: int = PER_PAGE,
+) -> tuple[list[dict[str, object]], PaginationMeta]:
+    """Fetch open pull requests through a bounded paginated REST pass."""
+    path = f"repos/{repo}/pulls?state=open&sort=updated&direction=desc"
+    return _paginate_rest(path, max_pages=max_pages, per_page=per_page)
+
+
 def build_rest_truncations(
     *,
     issue_meta: PaginationMeta,

@@ -122,7 +122,9 @@
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "encoding": "unavailable",
       "visual_contract": {
+        "estimand_id": "ch7_matched_planner_process_contrast",
         "plot_type": "matched_start_process_trace",
+        "rationale": "The visual encodings preserve the matched-start process contrast without implying a causal effect.",
         "encodings": {
           "x": "recorded trace step",
           "y": "recorded position",

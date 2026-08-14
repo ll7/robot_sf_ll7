@@ -305,7 +305,9 @@ class ArtifactCatalogRef:
 class FigureVisualContract:
     """Explicit visual grammar for a figure or unavailable figure slot."""
 
+    estimand_id: str
     plot_type: str
+    rationale: str
     encodings: dict[str, str]
     transforms: list[str] = field(default_factory=list)
     limits: dict[str, str] = field(default_factory=dict)
@@ -768,6 +770,7 @@ def _validate_decision(
         return
     if d.effect is not None and not math.isfinite(d.effect):
         errors.append(f"decision {d.decision_id!r}: effect must be finite")
+    _validate_claim_escalation(f"decision {d.decision_id} rationale", d.rationale, errors)
     if d.outcome == "supported":
         _validate_supported_decision(d, metric, execution_mode, errors)
     elif not d.refusal_reason:
@@ -958,9 +961,15 @@ def _caption_field_ref_exists(field_ref: str, packet: ResultInterpretationPacket
 
 def _validate_figure_links(
     figures: list[FigureLink],
+    estimand_id: str,
     errors: list[str],
 ) -> None:
     for fl in figures:
+        if fl.visual_contract.estimand_id != estimand_id:
+            errors.append(
+                f"figure {fl.figure_id!r}: visual contract estimand_id "
+                f"{fl.visual_contract.estimand_id!r} does not match estimand {estimand_id!r}"
+            )
         if fl.encoding not in _VALID_FIGURE_ENCODINGS:
             errors.append(
                 f"figure {fl.figure_id!r}: encoding {fl.encoding!r} not in "
@@ -1177,10 +1186,18 @@ def _validate_file_ref(
     if file_path.is_absolute() or ".." in file_path.parts:
         errors.append(f"{label}: path must be repository-relative")
         return
-    if file_path.parts and file_path.parts[0] in {"output", ".git", ".venv"}:
+    if file_path.parts and (
+        file_path.parts[0] in {"output", "results", ".git", ".venv"}
+        or ".worktrees" in file_path.parts
+    ):
         errors.append(f"{label}: path is local-only: {path}")
         return
-    resolved = _REPO_ROOT / file_path
+    resolved = (_REPO_ROOT / file_path).resolve()
+    try:
+        resolved.relative_to(_REPO_ROOT.resolve())
+    except ValueError:
+        errors.append(f"{label}: path resolves outside the repository: {path}")
+        return
     if not resolved.is_file():
         if require_exists:
             errors.append(f"{label}: file does not exist: {path}")
@@ -1322,7 +1339,7 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
         _validate_claim_escalation(f"findings[{index}]", finding, errors)
 
     _validate_caption_assertions(packet.caption_assertions, packet, errors)
-    _validate_figure_links(packet.figure_links, errors)
+    _validate_figure_links(packet.figure_links, packet.estimand.estimand_id, errors)
     _validate_source_refs(packet.sources, errors)
 
     _check_id_uniqueness(packet.metrics, "metric_id", "metric", errors)
@@ -1562,7 +1579,9 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
             )
         vc = fl["visual_contract"]
         visual_contract = FigureVisualContract(
+            estimand_id=vc["estimand_id"],
             plot_type=vc["plot_type"],
+            rationale=vc["rationale"],
             encodings=vc["encodings"],
             transforms=vc.get("transforms", []),
             limits=vc.get("limits", {}),

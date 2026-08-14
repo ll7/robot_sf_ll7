@@ -175,9 +175,10 @@ digest = compute_packet_digest(packet)
   checksum- and commit-bound catalog entry without re-registering the artifact.
 - **`figure_qa.py`**: Caption assertions in the packet are compatible with
   the v2 figure semantics QA surface.
-- Figure links carry a visual contract covering plot type, encodings,
-  transforms, limits, reference lines, ordering, faceting, uncertainty,
-  sample-size display, legend identities, and accessibility.
+- Figure links carry a visual contract bound to the packet estimand, with an
+  explicit encoding rationale covering plot type, encodings, transforms,
+  limits, reference lines, ordering, faceting, uncertainty, sample-size
+  display, legend identities, and accessibility.
 - **`benchmark_claim.v1`**: A packet may be a component of a broader claim
   bundle but does not establish a claim on its own.
 - **`ch7_case_portfolio.v2`**: The Chapter 7 visualization fixture preserves

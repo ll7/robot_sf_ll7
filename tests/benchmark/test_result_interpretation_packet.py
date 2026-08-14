@@ -241,6 +241,12 @@ class TestFailClosedZeroImputation:
 
 
 class TestFailClosedComparatorDirection:
+    def test_missing_comparator_direction_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["estimand"]["comparator"].pop("direction")
+        errors = validate_packet(payload)
+        assert any("direction" in e and "required" in e for e in errors)
+
     def test_invalid_comparator_direction_rejected(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["estimand"]["comparator"]["direction"] = "bidirectional"
@@ -523,6 +529,18 @@ class TestFailClosedDigestDrift:
 
 
 class TestFailClosedFigureEncoding:
+    def test_visual_contract_must_bind_packet_estimand(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["figure_links"][0]["visual_contract"]["estimand_id"] = "other_estimand"
+        errors = validate_packet(payload)
+        assert any("estimand_id" in e and "does not match" in e for e in errors)
+
+    def test_visual_contract_requires_rationale(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["figure_links"][0]["visual_contract"].pop("rationale")
+        errors = validate_packet(payload)
+        assert errors
+
     def test_non_unavailable_figure_with_bad_sha256_rejected(self) -> None:
         payload = copy.deepcopy(_VALID_CH7)
         payload["figure_links"][0]["encoding"] = "png"
@@ -721,6 +739,12 @@ class TestFailClosedForbiddenClaimEscalation:
         errors = validate_packet(payload)
         assert any("supported outcome requires" in e for e in errors)
 
+    def test_non_supported_decision_rationale_cannot_escalate_claim(self) -> None:
+        payload = copy.deepcopy(_VALID_6944)
+        payload["decisions"][0]["rationale"] = "This proves a causal effect."
+        errors = validate_packet(payload)
+        assert any("decision" in e and "causal effect" in e for e in errors)
+
 
 # ---------------------------------------------------------------------------
 # Fail-closed: invalid desirability vocabulary
@@ -792,6 +816,12 @@ class TestMutationTests:
         payload["execution_mode"]["counts"]["hybrid"] = 1
         errors = validate_packet(payload)
         assert errors
+
+    def test_local_only_source_path_rejected(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["path"] = "results/derived.json"
+        errors = validate_packet(payload)
+        assert any("local-only" in e for e in errors)
 
     def test_mutate_actor_status_to_invalid(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
@@ -929,3 +959,4 @@ class TestScriptCLI:
         assert "admission=unavailable_causal_inference" in caption_file.read_text(encoding="utf-8")
         assert "packet.json" in checksum_file.read_text(encoding="utf-8")
         assert "source/portfolio_schema/" in checksum_file.read_text(encoding="utf-8")
+        assert "post_review_digest: unavailable" in result.stdout

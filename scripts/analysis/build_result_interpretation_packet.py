@@ -29,7 +29,6 @@ if str(_REPO_ROOT) not in sys.path:
 
 from robot_sf.benchmark.result_interpretation_packet import (  # noqa: E402
     compute_packet_digest,
-    compute_post_review_digest,
     load_result_interpretation_packet,
     write_caption,
     write_checksum_manifest,
@@ -117,10 +116,12 @@ def main(argv: list[str] | None = None) -> int:
         generated["review.json"] = args.review_output
     if args.checksum_output is not None:
         write_checksum_manifest(generated, args.checksum_output, packet=packet)
-    post_review = compute_post_review_digest(packet)
     print(f"written {output}")
     print(f"packet_digest: {digest}")
-    print(f"post_review_digest: {post_review}")
+    if packet.reviewer is not None and packet.post_review_digest is not None:
+        print(f"post_review_digest: {packet.post_review_digest}")
+    else:
+        print("post_review_digest: unavailable (independent reviewer binding required)")
     return 0
 
 

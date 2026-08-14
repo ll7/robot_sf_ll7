@@ -415,7 +415,7 @@
     "comparator": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reference", "comparison"],
+      "required": ["reference", "comparison", "direction"],
       "properties": {
         "reference": {
           "type": "string",
@@ -785,7 +785,9 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "estimand_id",
         "plot_type",
+        "rationale",
         "encodings",
         "transforms",
         "limits",
@@ -798,7 +800,15 @@
         "accessibility_contract"
       ],
       "properties": {
+        "estimand_id": {
+          "type": "string",
+          "minLength": 1
+        },
         "plot_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
           "type": "string",
           "minLength": 1
         },

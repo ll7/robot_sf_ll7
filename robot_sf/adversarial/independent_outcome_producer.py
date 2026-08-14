@@ -560,28 +560,38 @@ def _build_candidate_rows(  # noqa: C901
     return rows
 
 
+def _validated_row_map(rows: Any, *, packet_label: str) -> dict[str, dict[str, Any]]:
+    """Return a row map after validating the resumable packet row boundary."""
+    if not isinstance(rows, list):
+        raise ValueError(f"{packet_label} rows are malformed")
+    row_map: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError(f"{packet_label} contains a malformed row")
+        row_id = row.get("row_id")
+        if not isinstance(row_id, str) or not row_id.strip():
+            raise ValueError(f"{packet_label} contains a row with an invalid row_id")
+        if row_id in row_map:
+            raise ValueError(f"{packet_label} contains duplicate row {row_id}")
+        row_map[row_id] = row
+    return row_map
+
+
 def _merge_existing_packet(existing: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Merge an idempotent rerun without allowing row replacement."""
     if existing.get("schema_version") != OUTCOME_SCHEMA_VERSION:
         raise ValueError("existing output packet has an unsupported schema")
     if existing.get("producer_commit") != current.get("producer_commit"):
         raise ValueError("existing output packet producer_commit differs from current run")
-    old_rows = existing.get("rows")
-    new_rows = current.get("rows")
-    if not isinstance(old_rows, list) or not isinstance(new_rows, list):
-        raise ValueError("existing output packet rows are malformed")
-    by_id = {str(row.get("row_id")): row for row in old_rows if isinstance(row, dict)}
-    if len(by_id) != len(old_rows):
-        raise ValueError("existing output packet contains duplicate or malformed rows")
-    for row in new_rows:
-        if not isinstance(row, dict):
-            raise ValueError("current output packet contains a malformed row")
-        row_id = str(row.get("row_id"))
-        if row_id in by_id and by_id[row_id] != row:
+    existing_by_id = _validated_row_map(existing.get("rows"), packet_label="existing output packet")
+    current_by_id = _validated_row_map(current.get("rows"), packet_label="current output packet")
+    for row_id, row in existing_by_id.items():
+        if row_id not in current_by_id:
+            raise ValueError(f"existing output packet contains stale row {row_id}")
+        if row != current_by_id[row_id]:
             raise ValueError(f"row {row_id} changed during resumable producer rerun")
-        by_id[row_id] = row
     merged = dict(current)
-    merged["rows"] = [by_id[row_id] for row_id in sorted(by_id)]
+    merged["rows"] = [current_by_id[row_id] for row_id in sorted(current_by_id)]
     merged["resumed_from_existing"] = True
     return merged
 

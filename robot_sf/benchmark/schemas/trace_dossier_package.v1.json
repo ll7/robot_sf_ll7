@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_dossier_package.v1.json",
+  "title": "Robot SF Trace Dossier Package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_boundary",
+    "claim_boundary",
+    "composition",
+    "command",
+    "campaign_cell",
+    "selection",
+    "cell_binding",
+    "trace_export",
+    "render",
+    "artifacts",
+    "package_checksums",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "trace_dossier_package.v1"},
+    "evidence_boundary": {"const": "diagnostic_only"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "trace_dossier_package"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "command": {"type": "string", "minLength": 1},
+    "campaign_cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "cell_id", "scenario_id", "planner_id"],
+      "properties": {
+        "campaign_id": {"type": "string", "minLength": 1},
+        "cell_id": {"type": "string", "minLength": 1},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "release_arm_id": {"type": ["string", "null"]},
+        "scenario_family": {"type": ["string", "null"]}
+      }
+    },
+    "selection": {"type": "object", "minProperties": 1},
+    "cell_binding": {"type": "object", "minProperties": 1},
+    "trace_export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "trace", "checksums"],
+      "properties": {
+        "manifest": {"type": "string", "minLength": 1},
+        "trace": {"type": "string", "minLength": 1},
+        "checksums": {"type": "string", "minLength": 1}
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dossier", "manifest", "evidence_boundary"],
+      "properties": {
+        "dossier": {"type": "string", "minLength": 1},
+        "manifest": {"type": "string", "minLength": 1},
+        "evidence_boundary": {"const": "diagnostic_only"}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "package_checksums": {"const": "SHA256SUMS"},
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

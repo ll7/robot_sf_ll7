@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -22,6 +23,13 @@ from scripts.dev.check_pr_ci_status import (
     _summarize_check_runs,
     main,
 )
+
+
+def _check_pr_ci_status_script() -> Path:
+    """Return the repository script path under test."""
+    return (
+        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "check_pr_ci_status.py"
+    )
 
 
 def test_format_human_success() -> None:
@@ -907,11 +915,7 @@ def _run_script(
     responses: list[dict[str, object]],
 ) -> subprocess.CompletedProcess[str]:
     """Invoke the CI watcher via subprocess with a fake ``gh`` on PATH."""
-    import os
-
-    script = str(
-        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "check_pr_ci_status.py"
-    )
+    script = str(_check_pr_ci_status_script())
     state_path = tmp_path / "fake_gh_state.json"
     state_path.write_text(
         json.dumps({"calls": 0, "responses": responses}),
@@ -931,17 +935,29 @@ def _run_script(
     )
 
 
-def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
-    """python scripts/dev/check_pr_ci_status.py --help should work without PYTHONPATH."""
-    import os
-
-    script = str(
-        Path(__file__).resolve().parent.parent.parent / "scripts" / "dev" / "check_pr_ci_status.py"
-    )
+@pytest.mark.parametrize(
+    ("invocation", "expected_help_text"),
+    [
+        ("python", "python scripts/dev/check_pr_ci_status.py"),
+        ("direct", "scripts/dev/check_pr_ci_status.py"),
+    ],
+)
+def test_help_subprocess_invocation_succeeds_without_pythonpath(
+    invocation: str,
+    expected_help_text: str,
+) -> None:
+    """Both documented help entrypoints should work without PYTHONPATH."""
+    script = _check_pr_ci_status_script()
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
+    command = (
+        [sys.executable, str(script), "--help"]
+        if invocation == "python"
+        else [str(script), "--help"]
+    )
+
     result = subprocess.run(
-        [sys.executable, script, "--help"],
+        command,
         capture_output=True,
         text=True,
         timeout=15,
@@ -949,6 +965,7 @@ def test_direct_invocation_help_succeeds_without_pythonpath() -> None:
         env=env,
     )
     assert result.returncode == 0, f"stdout: {result.stdout}\nstderr: {result.stderr}"
+    assert expected_help_text in result.stdout
     assert "run_worktree_shared_venv.sh" in result.stdout
     assert "--pr" in result.stdout
     assert "--expected-head-sha" in result.stdout

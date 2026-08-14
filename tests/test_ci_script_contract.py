@@ -140,6 +140,20 @@ def test_run_tests_parallel_emits_duration_store_flags_for_sharded_runs() -> Non
     assert script_text.find(ci_gate) < script_text.find(clean_flag)
 
 
+def test_run_tests_parallel_allows_only_empty_fast_only_shards() -> None:
+    """A PR shard may contain only excluded slow tests, but real failures stay red."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    empty_shard_guard = (
+        'if [[ "$pytest_exit" -eq 5 && "$sharding_active" == "1" && '
+        '"$include_slow" == "0" ]]'
+    )
+    assert empty_shard_guard in script_text
+    assert 'grep -Fq "no tests ran" "$pytest_log"' in script_text
+    assert "fast-only shard collected no tests" in script_text
+
+
 def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     """Keep CI duration restore, per-shard upload, and aggregate-save wiring intact."""
 

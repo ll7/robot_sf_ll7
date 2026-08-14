@@ -22,9 +22,18 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-output/benchmarks/issue_3425_empirical_vertical_slic
 PACKET_DIR="${PACKET_DIR:-output/research_campaign_packets/issue_3425_empirical_vertical_slice}"
 
 echo "== [#3425] generate research campaign packet =="
-uv run python scripts/validation/run_research_campaign_manifest.py \
-  "$RESEARCH_MANIFEST" \
+MANIFEST_ARGS=(
+  "$RESEARCH_MANIFEST"
   --output-dir "$PACKET_DIR"
+)
+
+if [[ "${RUN_CAMPAIGN:-0}" == "1" ]]; then
+  echo "== [#3425] require decision-capable answerability before launch =="
+  MANIFEST_ARGS+=(--require-answerable)
+fi
+
+uv run python scripts/validation/run_research_campaign_manifest.py \
+  "${MANIFEST_ARGS[@]}"
 
 echo "== [#3425] camera-ready campaign preflight =="
 uv run python scripts/tools/run_camera_ready_benchmark.py \

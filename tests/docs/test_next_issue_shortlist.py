@@ -8,9 +8,13 @@ JSON/Markdown shape contracts.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import threading
 from pathlib import Path
 
+import pytest
 from pytest import MonkeyPatch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -410,6 +414,34 @@ class TestCandidateBuilders:
 
 class TestOpenIssueSnapshots:
     """Verify optional open-issue snapshots produce bounded candidates."""
+
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX named pipes")
+    def test_optional_snapshot_accepts_readable_stream_path(self, tmp_path: Path) -> None:
+        """Stream-backed snapshots must not be downgraded to missing inputs."""
+        import scripts.tools.generate_next_issue_shortlist as mod
+
+        fifo_path = tmp_path / "issues.json"
+        os.mkfifo(fifo_path)
+        payload = {"issues": [{"number": 2792, "title": "streamed issue"}]}
+        writer_errors: list[BaseException] = []
+
+        def write_snapshot() -> None:
+            try:
+                with fifo_path.open("w", encoding="utf-8") as stream:
+                    json.dump(payload, stream)
+            except BaseException as exc:  # pragma: no cover - assertion below reports it
+                writer_errors.append(exc)
+
+        writer = threading.Thread(target=write_snapshot, daemon=True)
+        writer.start()
+        try:
+            loaded = mod._load_optional_json(fifo_path)
+        finally:
+            writer.join(timeout=2)
+
+        assert not writer.is_alive(), "snapshot writer did not finish"
+        assert not writer_errors
+        assert loaded == payload
 
     def test_open_issue_candidate_shape(self) -> None:
         candidates = _candidates_from_open_issues(MINIMAL_OPEN_ISSUES)

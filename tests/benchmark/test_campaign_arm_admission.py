@@ -11,6 +11,9 @@ Each admission contract (readiness, checkpoint, config_load, fallback, evidence)
 isolation by constructing a minimal ``planner_roster`` packet around a real algorithm/model.
 """
 
+# evidence-writer-exempt: these tests write only pytest temporary YAML/text inputs; the
+# docs/context/evidence paths below are validation inputs, never generated evidence outputs.
+
 from __future__ import annotations
 
 from pathlib import Path

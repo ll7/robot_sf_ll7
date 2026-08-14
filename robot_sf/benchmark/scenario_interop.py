@@ -7,7 +7,7 @@ benchmark scenarios that downstream SocNavBench / HuNavSim adapters can build on
 Scope and claim boundary
 ------------------------
 - This is a **dry-run** converter. It reads an in-repo Robot SF scenario-matrix
-  entry (see ``robot_sf/benchmark/schema/scenarios.schema.json``) and emits a
+  entry (see ``robot_sf/benchmark/schemas/scenarios.schema.json``) and emits a
   target-neutral IR plus an explicit **unsupported-field report**.
 - It requires **no external assets** and emits **no** SocNavBench or HuNavSim file.
   It makes **no** cross-benchmark validity or score-parity claim. Producing actual

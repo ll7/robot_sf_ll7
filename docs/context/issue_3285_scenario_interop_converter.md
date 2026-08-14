@@ -11,7 +11,7 @@ Related:
 - GitHub issue: https://github.com/ll7/robot_sf_ll7/issues/3285
 - Conceptual mapping seed: [`issue_2928_socnavbench_hunavsim_metric_correspondence.md`](issue_2928_socnavbench_hunavsim_metric_correspondence.md)
 - Source-side contract: `robot_sf/benchmark/scenario_contract.py`,
-  `robot_sf/benchmark/schema/scenarios.schema.json`
+  `robot_sf/benchmark/schemas/scenarios.schema.json`
 - External-asset prerequisites block external run: #1456, #1498, #2414, #1134
 
 ## Slice Delivers

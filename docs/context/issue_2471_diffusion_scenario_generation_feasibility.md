@@ -7,7 +7,7 @@ Related surfaces:
 - Parent roadmap issue: https://github.com/ll7/robot_sf_ll7/issues/2469
 - Existing programmatic scenario generator: `robot_sf/benchmark/scenario_generator.py`
 - GeneratedScenario dataclass: `robot_sf/benchmark/scenario_generator.py:57` (`GeneratedScenario`)
-- Benchmark scenario JSON Schema: `robot_sf/benchmark/schema/scenarios.schema.json`
+- Benchmark scenario JSON Schema: `robot_sf/benchmark/schemas/scenarios.schema.json`
 - Scenario certification: `robot_sf/scenario_certification/v1.py`
 - Adversarial generation protocol: `docs/context/issue_1457_adversarial_generation_protocol.md`
 - Adversarial failure archive: `docs/context/issue_1237_adversarial_failure_archive.md`

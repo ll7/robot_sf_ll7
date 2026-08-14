@@ -25,7 +25,7 @@ _TRACE_FIXTURE = (
 _CLI = _ROOT / "scripts/tools/build_trace_dossier_package.py"
 
 
-def _write_source(tmp_path: Path) -> Path:
+def _write_source(tmp_path: Path, *, name: str = "fixture_episode_001.json") -> Path:
     payload = json.loads(_TRACE_FIXTURE.read_text(encoding="utf-8"))
     payload["source"].update(
         {
@@ -35,7 +35,7 @@ def _write_source(tmp_path: Path) -> Path:
             "episode_id": "fixture_episode_001",
         }
     )
-    source = tmp_path / "fixture_episode_001.json"
+    source = tmp_path / name
     source.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return source
 
@@ -166,25 +166,15 @@ def test_package_rejects_selected_source_checksum_mismatch(tmp_path: Path) -> No
         )
 
 
-def test_package_rejects_source_artifact_inside_output_dir(tmp_path: Path) -> None:
-    """Package composition must not overwrite a source artifact in its output tree."""
+def test_package_rejects_source_inside_output_before_writing(tmp_path: Path) -> None:
+    """A source named like a package file cannot be overwritten during composition."""
     output = tmp_path / "package"
-    source = output / "package_manifest.json"
-    payload = json.loads(_TRACE_FIXTURE.read_text(encoding="utf-8"))
-    payload["source"].update(
-        {
-            "scenario_id": "francis2023_blind_corner",
-            "seed": 111,
-            "planner_id": "goal",
-            "episode_id": "fixture_episode_001",
-        }
-    )
-    source.parent.mkdir(parents=True)
-    source.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    before = source.read_bytes()
+    output.mkdir()
+    source = _write_source(output, name="package_manifest.json")
     store = _write_store(tmp_path, source)
+    original_source = source.read_bytes()
 
-    with pytest.raises(TraceDossierPackageError, match="contain the existing source artifact"):
+    with pytest.raises(TraceDossierPackageError, match="source artifact.*inside package output"):
         build_trace_dossier_package(
             candidates=[_candidate(source)],
             release_manifest_path=_RELEASE,
@@ -192,7 +182,8 @@ def test_package_rejects_source_artifact_inside_output_dir(tmp_path: Path) -> No
             output_dir=output,
         )
 
-    assert source.read_bytes() == before
+    assert source.read_bytes() == original_source
+    assert sorted(path.name for path in output.iterdir()) == ["package_manifest.json"]
 
 
 def test_package_propagates_missing_source_as_blocked(tmp_path: Path) -> None:

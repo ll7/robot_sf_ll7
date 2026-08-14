@@ -72,17 +72,17 @@ def build_trace_dossier_package(
     rows = _normalize_candidates(candidates)
     selection = select_representative(rows)
     selected = _selected_row(rows, selection.selected_seed_id)
-    source_resolution = resolve_episode_source(
-        scenario_id=selected["scenario_id"],
-        planner_id=selected["planner_id"],
-        seed=selected["seed"],
-        campaign_store_dir=campaign_store_dir,
-        trace_search_roots=trace_search_roots,
+    _reject_output_overlap(output_dir, campaign_store_dir)
+    _reject_source_overlap(
+        output_dir,
+        resolve_episode_source(
+            scenario_id=selected["scenario_id"],
+            planner_id=selected["planner_id"],
+            seed=selected["seed"],
+            campaign_store_dir=campaign_store_dir,
+            trace_search_roots=trace_search_roots,
+        ),
     )
-    source_path = None
-    if source_resolution.get("resolution_status") == "resolved":
-        source_path = Path(str(source_resolution["source_path"]))
-    _reject_output_overlap(output_dir, campaign_store_dir, source_path=source_path)
     _prepare_output_dir(output_dir)
 
     export_dir = output_dir / "export"
@@ -345,12 +345,7 @@ def _prepare_output_dir(output_dir: Path) -> None:
             )
 
 
-def _reject_output_overlap(
-    output_dir: Path,
-    campaign_store_dir: Path,
-    *,
-    source_path: Path | None = None,
-) -> None:
+def _reject_output_overlap(output_dir: Path, campaign_store_dir: Path) -> None:
     output = output_dir.resolve()
     store = campaign_store_dir.resolve()
     try:
@@ -365,16 +360,22 @@ def _reject_output_overlap(
         pass
     else:
         raise TraceDossierPackageError("campaign store must not be inside package output directory")
-    if source_path is not None:
-        source = source_path.resolve()
-        try:
-            source.relative_to(output)
-        except ValueError:
-            pass
-        else:
-            raise TraceDossierPackageError(
-                "package output directory must not contain the existing source artifact"
-            )
+def _reject_source_overlap(output_dir: Path, resolution: Mapping[str, Any]) -> None:
+    """Reject a resolved source artifact inside the package output before writing any files."""
+    if resolution.get("resolution_status") != "resolved":
+        return
+    raw_source_path = resolution.get("source_path")
+    if not isinstance(raw_source_path, str) or not raw_source_path:
+        raise TraceDossierPackageError("resolved source artifact path is missing")
+    output = output_dir.resolve()
+    source = Path(raw_source_path).resolve()
+    try:
+        source.relative_to(output)
+    except ValueError:
+        return
+    raise TraceDossierPackageError(
+        f"source artifact must not be inside package output directory: {source}"
+    )
 
 
 def _write_package_checksums(output_dir: Path) -> None:

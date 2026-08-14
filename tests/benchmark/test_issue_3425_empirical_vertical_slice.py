@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,7 @@ RESEARCH_MANIFEST = (
     REPO_ROOT / "configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml"
 )
 PACKET_RUNNER = REPO_ROOT / "scripts/validation/run_research_campaign_manifest.py"
+ISSUE_3425_RUNNER = REPO_ROOT / "scripts/benchmark/run_issue_3425_empirical_vertical_slice.sh"
 
 
 def test_issue_3425_campaign_config_pins_small_baseline_safe_slice() -> None:
@@ -92,3 +94,74 @@ def test_issue_3425_research_manifest_records_metric_blockers_and_rows(
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["campaign_id"] == "issue_3425_empirical_vertical_slice_smoke"
     assert summary["row_status_summary"] == {"diagnostic_only": 27}
+
+
+def test_issue_3425_runner_preserves_diagnostic_preflight_without_answerability_gate(
+    tmp_path: Path,
+) -> None:
+    """Readiness-only mode should keep report/preflight generation available."""
+    log_path = tmp_path / "uv-calls.log"
+    fake_uv = tmp_path / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$UV_CALL_LOG"\nexit 0\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    completed = subprocess.run(
+        ["bash", str(ISSUE_3425_RUNNER)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "UV_CALL_LOG": str(log_path),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    calls = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    assert "run_research_campaign_manifest.py" in calls[0]
+    assert "--require-answerable" not in calls[0]
+    assert "run_camera_ready_benchmark.py" in calls[1]
+    assert "--mode preflight" in calls[1]
+
+
+def test_issue_3425_runner_requires_answerability_before_campaign_launch(tmp_path: Path) -> None:
+    """RUN_CAMPAIGN=1 must fail before camera-ready preflight or campaign execution."""
+    log_path = tmp_path / "uv-calls.log"
+    fake_uv = tmp_path / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf \'%s\\n\' "$*" >> "$UV_CALL_LOG"\n'
+        'if [[ "$*" == *"--require-answerable"* ]]; then\n'
+        "  exit 2\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    completed = subprocess.run(
+        ["bash", str(ISSUE_3425_RUNNER)],
+        cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+            "RUN_CAMPAIGN": "1",
+            "UV_CALL_LOG": str(log_path),
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    calls = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 1
+    assert "run_research_campaign_manifest.py" in calls[0]
+    assert "--require-answerable" in calls[0]
+    assert "run_camera_ready_benchmark.py" not in calls[0]

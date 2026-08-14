@@ -26,7 +26,7 @@ except ImportError as e:  # pragma: no cover - jsonschema is project dependency
     raise RuntimeError("jsonschema package is required for scenario validation") from e
 
 SCENARIO_MATRIX_SCHEMA_VERSION = "robot_sf.scenario_matrix.v1"
-SCHEMA_FILE = Path(__file__).with_name("schema").joinpath("scenarios.schema.json")
+SCHEMA_FILE = Path(__file__).with_name("schemas").joinpath("scenarios.schema.json")
 
 
 def load_scenario_schema() -> dict[str, Any]:

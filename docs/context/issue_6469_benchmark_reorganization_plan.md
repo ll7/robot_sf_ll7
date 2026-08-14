@@ -54,13 +54,13 @@ helpers, and schema/data directories. Existing subdirectories show that domain g
 | `identity/` | 2 | identity/equivalence checks |
 | `metrics/` | 2 | metric package |
 | `validation/` | 1 | validation helpers |
-| `schema/` | 0 | holds only `scenarios.schema.json` (data, not a package) |
+| `schema/` | 0 | retired; `scenarios.schema.json` now lives under `schemas/` |
 
 Two structural smells are already visible and should be resolved by the follow-up:
 
-- `schema/` (a single JSON data file) and `schemas/` (the versioned schema package) are a naming
-  collision. The follow-up should decide whether `schema/scenarios.schema.json` moves under
-  `schemas/` or a dedicated data directory.
+- `schema/` (a single JSON data file) and `schemas/` (the versioned schema package) were a naming
+  collision. Follow-up #7099 moved `scenarios.schema.json` under `schemas/` while preserving the
+  schema bytes and `$id`; no legacy file-path shim was added for the retired singular path.
 - `map_runner_policies/` exists as a subdirectory while 22 `map_runner*` modules remain top-level,
   splitting one domain across two locations.
 

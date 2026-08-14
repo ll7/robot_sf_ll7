@@ -18,8 +18,8 @@
 # Updated 2026-08-08 (#6528): the residual robot_env occupancy-grid call migrated
 # to structured placeholders by #6697; its orphaned allowlist row is removed
 # (269 unique identities representing 271 calls in 42 files).
-robot_sf/benchmark/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	b2a7f404625a3d8d	1
-robot_sf/benchmark/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	bba56173ab93e260	1
+robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	b2a7f404625a3d8d	1
+robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py	check_campaign_arm_checkpoints_preflight	info	bba56173ab93e260	1
 robot_sf/benchmark/episode_replay_figure.py	replay_episode_and_generate_figures	info	9b474727598124bb	1
 robot_sf/benchmark/episode_replay_figure.py	replay_episode_and_generate_figures	warning	f7e126df03bb2ab2	1
 robot_sf/benchmark/helper_catalog.py	load_trained_policy	debug	71b6381ce798786f	1

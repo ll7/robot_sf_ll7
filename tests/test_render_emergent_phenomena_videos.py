@@ -7,6 +7,9 @@ smoke render proving the GIF writer produces frames headlessly.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from robot_sf.research.emergent_phenomena import (
@@ -14,8 +17,8 @@ from robot_sf.research.emergent_phenomena import (
     ScenarioConfig,
     run_scenario,
 )
+from robot_sf.research.representative_selection import majority_verdict
 from scripts.validation.render_issue_5149_emergent_phenomena_videos import (
-    majority_verdict,
     render_replay_gif,
     select_representative_record,
 )
@@ -66,6 +69,41 @@ def test_select_representative_record_even_pool_takes_lower_median():
 def test_select_representative_record_missing_group_raises():
     with pytest.raises(ValueError, match="no run records"):
         select_representative_record([], "narrow_doorway", "released_default")
+
+
+# The committed campaign bundle names its rendered replay seeds in the GIF
+# filenames. Re-deriving those seeds from the archived runs.jsonl is the
+# regression that catches any drift in the shared selection rule, including a
+# drift introduced somewhere other than this script.
+_BUNDLE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08"
+)
+_ARCHIVED_REPRESENTATIVE_SEEDS = {
+    ("bidirectional_corridor", "released_default"): 5155,
+    ("bidirectional_corridor", "literature_typical"): 5157,
+    ("narrow_doorway", "released_default"): 5156,
+    ("narrow_doorway", "literature_typical"): 5153,
+}
+
+
+@pytest.mark.parametrize(
+    ("scenario", "calibration", "expected_seed"),
+    [(key[0], key[1], seed) for key, seed in _ARCHIVED_REPRESENTATIVE_SEEDS.items()],
+)
+def test_select_representative_record_reproduces_archived_bundle(
+    scenario: str, calibration: str, expected_seed: int
+):
+    runs_path = _BUNDLE_DIR / "runs.jsonl"
+    if not runs_path.is_file():
+        pytest.skip(f"campaign bundle not present at {runs_path}")
+    records = [
+        json.loads(line)
+        for line in runs_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    chosen = select_representative_record(records, scenario, calibration)
+    assert int(chosen["seed"]) == expected_seed
 
 
 def test_render_replay_gif_smoke(tmp_path):

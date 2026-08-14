@@ -39,6 +39,7 @@ from robot_sf.research.emergent_phenomena import (
     derive_phenomenon_verdict,
     run_scenario,
 )
+from robot_sf.research.representative_selection import VERDICT_SEVERITY, majority_verdict
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -65,11 +66,8 @@ DEFAULT_CAMPAIGN_SEEDS: tuple[int, ...] = tuple(range(5149, 5159))
 
 # Verdict labels ordered weakest-first; aggregation tie-breaks toward the
 # weaker verdict so the campaign never overclaims on a split seed population.
-VERDICT_SEVERITY: tuple[str, ...] = (
-    "absent_or_negligible",
-    "weak_partial",
-    "clearly_present",
-)
+# Canonically defined in ``robot_sf.research.representative_selection`` and
+# re-exported here for the module's existing public API.
 
 
 def result_to_run_record(result: ScenarioResult) -> dict[str, Any]:
@@ -156,23 +154,6 @@ def _order_parameter_stats(values: Sequence[float]) -> dict[str, float]:
     }
 
 
-def _majority_verdict(verdict_counts: Counter[str]) -> str:
-    """Pick the most common verdict, tie-breaking toward the weaker label.
-
-    Returns:
-        The majority verdict label.
-    """
-
-    def sort_key(item: tuple[str, int]) -> tuple[int, int]:
-        label, count = item
-        severity = (
-            VERDICT_SEVERITY.index(label) if label in VERDICT_SEVERITY else len(VERDICT_SEVERITY)
-        )
-        return (-count, severity)
-
-    return min(verdict_counts.items(), key=sort_key)[0]
-
-
 def aggregate_run_records(records: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     """Aggregate per-seed run records into scenario x calibration statistics.
 
@@ -210,7 +191,7 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> list[dict[str, A
                 "seeds": sorted(int(rec["seed"]) for rec in recs),
                 "order_parameter_stats": op_stats,
                 "verdict_counts": dict(sorted(verdict_counts.items())),
-                "majority_verdict": _majority_verdict(verdict_counts),
+                "majority_verdict": majority_verdict(verdict_counts),
             }
         )
     return aggregates

@@ -211,7 +211,8 @@ Treat worker exit success as route evidence only. Read raw logs only if artifact
 The parent must inspect route evidence and run targeted local checks.
 Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
 no broad rg -n ., and no full file reads.
-Start with snapshot_pr_queue.py, poll with watch_pr_ci_status.py, inspect status,conclusion,jobs.
+Start with scripts.dev.snapshot_pr_queue --active, poll with watch_pr_ci_status.py,
+inspect status,conclusion,jobs.
 Return bounded excerpts, and keep full logs in private artifacts.
 """
     errors = check_skills._validate_artifact_first_contract(
@@ -221,6 +222,57 @@ Return bounded excerpts, and keep full logs in private artifacts.
     )
 
     assert errors == []
+
+
+def test_goal_pr_review_contract_accepts_module_qualified_snapshot_command(
+    tmp_path: Path,
+) -> None:
+    """Goal PR review accepts canonical module-qualified snapshot command guidance."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing.
+The parent must inspect route evidence and run targeted local checks.
+Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
+no broad rg -n ., and no full file reads.
+Start with `uv run python -m scripts.dev.snapshot_pr_queue --active`, poll with
+watch_pr_ci_status.py, inspect status,conclusion,jobs, return bounded excerpts, and keep
+full logs in private artifacts.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-pr-review"},
+        body,
+    )
+
+    assert errors == []
+
+
+def test_goal_pr_review_contract_requires_snapshot_queue_reference(tmp_path: Path) -> None:
+    """Goal PR review should still require explicit snapshot queue command guidance."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
+    skill_path.parent.mkdir()
+    body = """
+Artifact-first delegated review requires result.json, RESULT.md, diffstat.txt, and validation.json.
+Treat worker exit success as route evidence only. Read raw logs only if artifacts are missing.
+The parent must inspect route evidence and run targeted local checks.
+Worker output uses rg -l, rg --files, bounded sed -n, a 200 lines cap, private artifacts,
+no broad rg -n ., and no full file reads.
+Poll with watch_pr_ci_status.py, inspect status,conclusion,jobs, return bounded excerpts,
+and keep full logs in private artifacts.
+"""
+    errors = check_skills._validate_artifact_first_contract(
+        skill_path,
+        {"name": "goal-pr-review"},
+        body,
+    )
+
+    assert any("one of" in error and "snapshot_pr_queue" in error for error in errors)
 
 
 def test_goal_pr_review_snapshot_discovery_uses_the_active_cli_mode() -> None:

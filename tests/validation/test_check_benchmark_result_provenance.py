@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -13,10 +13,17 @@ from robot_sf.benchmark.result_provenance import (
 )
 from scripts.validation import check_benchmark_result_provenance
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 def _write_valid_manifest(tmp_path: Path) -> Path:
     jsonl_path = tmp_path / "episodes.jsonl"
     jsonl_path.write_text('{"episode_id":"a--1","scenario_id":"a","seed":1}\n', encoding="utf-8")
+    schema_path = tmp_path / "schema.json"
+    schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("- id: a\n", encoding="utf-8")
     manifest = build_result_provenance_manifest(
         out_path=jsonl_path,
         episode_records=[
@@ -28,8 +35,8 @@ def _write_valid_manifest(tmp_path: Path) -> Path:
                 "git_hash": "def",
             },
         ],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
+        schema_path=schema_path,
+        scenario_path=scenario_path,
         scenarios=[{"name": "a"}],
         algo="goal",
         algo_config_path=None,

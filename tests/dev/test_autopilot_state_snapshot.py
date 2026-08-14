@@ -376,7 +376,59 @@ def test_checks_summary_ignores_malformed_rollup_entries() -> None:
     assert summary == {
         "overall": "success",
         "total": 1,
+        "superseded": 0,
         "by_conclusion": {"success": 1},
         "by_status": {"completed": 1},
         "names": ["ci"],
     }
+
+
+def test_checks_summary_suppresses_superseded_cancelled_rerun() -> None:
+    """Verify that a newer successful rerun prevents a superseded cancellation from creating a false failure."""
+    summary = snapshot._checks_summary(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-14T01:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": "completed",
+                "conclusion": "success",
+                "startedAt": "2026-08-14T01:05:00Z",
+            },
+        ]
+    )
+
+    assert summary["overall"] == "success"
+    assert summary["total"] == 1
+    assert summary["superseded"] == 1
+    assert summary["by_conclusion"] == {"success": 1}
+    assert summary["names"] == ["pr-body-contracts"]
+
+
+def test_checks_summary_keeps_unreplaced_cancellation_fail_closed() -> None:
+    """Verify that an unreplaced cancellation keeps the snapshot fail-closed."""
+    summary = snapshot._checks_summary(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-14T01:00:00Z",
+            }
+        ]
+    )
+
+    assert summary["overall"] == "failure"
+    assert summary["total"] == 1
+    assert summary["superseded"] == 0
+    assert summary["by_conclusion"] == {"cancelled": 1}

@@ -38,6 +38,7 @@ DEFAULT_REMOTE = "origin"
 PER_PAGE = 100
 DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_COMMENT_PAGES = 3
+DEFAULT_MAX_TIMELINE_PAGES = 3
 DEFAULT_MAX_MUTATIONS = 250
 PLAN_SCHEMA = "issue_audit_plan.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
@@ -412,6 +413,8 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
 def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Project a GitHub pull request row onto the stable correlation shape."""
     head = raw.get("head") if isinstance(raw.get("head"), Mapping) else {}
+    linked_issue_numbers = raw.get("linked_issue_numbers")
+    linked_issue_numbers = linked_issue_numbers if isinstance(linked_issue_numbers, list) else []
     return {
         "number": int(raw.get("number", 0)),
         "title": str(raw.get("title") or ""),
@@ -420,6 +423,9 @@ def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
         "url": str(raw.get("html_url") or raw.get("url") or ""),
         "merged_at": str(raw.get("merged_at") or ""),
         "head_ref": str(head.get("ref") or raw.get("head_ref") or ""),
+        "linked_issue_numbers": sorted(
+            {int(number) for number in linked_issue_numbers if isinstance(number, int)}
+        ),
     }
 
 
@@ -560,6 +566,105 @@ def discover_pull_requests(
     return sorted(prs, key=lambda item: item["number"]), {**meta, "row_count": len(prs)}
 
 
+def discover_issue_timeline_merged_prs(
+    repo: str,
+    issue_numbers: Iterable[int],
+    *,
+    max_pages: int = DEFAULT_MAX_TIMELINE_PAGES,
+    runner: Runner | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Recover merged PRs linked to issues from bounded timeline events.
+
+    A global ``pulls?state=closed`` scan is intentionally bounded.  When that
+    scan is partial, issue timelines provide a narrower, complete-for-the-open-
+    issue fallback without using GitHub search or guessing from issue numbers.
+    GitHub's ``cross-referenced`` timeline payload includes the linked PR body
+    and ``pull_request.merged_at`` fields needed for closure evidence.
+    """
+    numbers = sorted({int(number) for number in issue_numbers if int(number) > 0})
+    run = _runner_or_default(runner)
+    by_number: dict[int, dict[str, Any]] = {}
+    errors: list[str] = []
+    pages_read = 0
+    event_count = 0
+    truncated = False
+
+    for issue_number in numbers:
+        events, meta = paginate_rest(
+            f"repos/{repo}/issues/{issue_number}/timeline",
+            max_pages=max_pages,
+            runner=run,
+        )
+        pages_read += int(meta.get("pages_read", 0))
+        event_count += len(events)
+        truncated = bool(truncated or meta.get("truncated"))
+        errors.extend(f"issue {issue_number}: {error}" for error in meta.get("errors", []))
+        for event in events:
+            if str(event.get("event") or "") != "cross-referenced":
+                continue
+            source = event.get("source")
+            source_issue = source.get("issue") if isinstance(source, Mapping) else None
+            if not isinstance(source_issue, Mapping):
+                continue
+            pull_request = source_issue.get("pull_request")
+            if not isinstance(pull_request, Mapping) or not pull_request.get("merged_at"):
+                continue
+            raw_pr = dict(source_issue)
+            raw_pr["state"] = "closed"
+            raw_pr["merged_at"] = pull_request.get("merged_at")
+            raw_pr["html_url"] = source_issue.get("html_url") or pull_request.get("html_url")
+            raw_pr["linked_issue_numbers"] = [issue_number]
+            normalized = _normalize_pr(raw_pr)
+            normalized["coverage_source"] = "targeted_issue_timeline"
+            normalized["timeline_issue"] = issue_number
+            normalized["timeline_event_created_at"] = str(event.get("created_at") or "")
+            if not normalized["number"]:
+                continue
+            existing = by_number.get(normalized["number"])
+            if existing is None:
+                by_number[normalized["number"]] = normalized
+                continue
+            existing["linked_issue_numbers"] = sorted(
+                set(existing.get("linked_issue_numbers", []))
+                | set(normalized.get("linked_issue_numbers", []))
+            )
+
+    metadata = {
+        "available": not errors and not truncated,
+        "issue_count": len(numbers),
+        "pages_read": pages_read,
+        "page_budget": max_pages,
+        "event_count": event_count,
+        "row_count": len(by_number),
+        "truncated": truncated,
+        "errors": errors,
+    }
+    return sorted(by_number.values(), key=lambda item: item["number"]), metadata
+
+
+def _merge_merged_pr_rows(
+    *collections: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge global and targeted PR rows without losing linked issue evidence."""
+    merged: dict[int, dict[str, Any]] = {}
+    for collection in collections:
+        for row in collection:
+            number = int(row.get("number", 0))
+            if not number:
+                continue
+            normalized = dict(row)
+            linked = set(normalized.get("linked_issue_numbers", []))
+            existing = merged.get(number)
+            if existing is None:
+                normalized["linked_issue_numbers"] = sorted(linked)
+                merged[number] = normalized
+                continue
+            existing["linked_issue_numbers"] = sorted(
+                set(existing.get("linked_issue_numbers", [])) | linked
+            )
+    return sorted(merged.values(), key=lambda item: item["number"])
+
+
 def discover_repository_labels(
     repo: str = DEFAULT_REPO,
     *,
@@ -682,6 +787,41 @@ def discover_inventory(
     closed_prs, closed_pr_meta = discover_pull_requests(
         repo, state="closed", max_pages=max_pages, runner=runner
     )
+    merged_prs = [pr for pr in closed_prs if pr.get("merged_at")]
+    timeline_prs: list[dict[str, Any]] = []
+    timeline_meta: dict[str, Any] = {
+        "available": True,
+        "reason": "global closed-PR inventory complete",
+        "issue_count": len(issues),
+        "pages_read": 0,
+        "page_budget": max_pages,
+        "event_count": 0,
+        "row_count": 0,
+        "truncated": False,
+        "errors": [],
+    }
+    global_closed_prs_complete = not closed_pr_meta.get("truncated") and not closed_pr_meta.get(
+        "errors"
+    )
+    if not global_closed_prs_complete:
+        timeline_prs, timeline_meta = discover_issue_timeline_merged_prs(
+            repo,
+            [int(issue["number"]) for issue in issues],
+            max_pages=min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
+            runner=runner,
+        )
+        timeline_meta["reason"] = "global closed-PR inventory partial"
+        merged_prs = _merge_merged_pr_rows(merged_prs, timeline_prs)
+    closure_coverage = {
+        "complete_for_open_issues": bool(
+            global_closed_prs_complete or timeline_meta.get("available")
+        ),
+        "mode": ("global_closed_prs" if global_closed_prs_complete else "issue_timeline_fallback"),
+        "global_closed_prs_complete": global_closed_prs_complete,
+        "global_closed_prs_truncated": bool(closed_pr_meta.get("truncated")),
+        "global_closed_prs_errors": list(closed_pr_meta.get("errors", [])),
+        "timeline": timeline_meta,
+    }
     labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=runner)
     claims, claim_meta = discover_claims(remote, command_runner=command_runner)
     worktrees, worktree_meta = discover_worktrees(command_runner=command_runner)
@@ -691,7 +831,7 @@ def discover_inventory(
         "remote": remote,
         "issues": issues,
         "open_prs": open_prs,
-        "merged_prs": [pr for pr in closed_prs if pr.get("merged_at")],
+        "merged_prs": merged_prs,
         "labels": sorted(labels),
         "claims": claims,
         "worktrees": worktrees,
@@ -701,6 +841,8 @@ def discover_inventory(
             "comments": comment_meta,
             "open_prs": open_pr_meta,
             "closed_prs": closed_pr_meta,
+            "issue_timeline_merged_prs": timeline_meta,
+            "closure_coverage": closure_coverage,
             "labels": label_meta,
             "claims": claim_meta,
             "worktrees": worktree_meta,
@@ -911,7 +1053,8 @@ def _merged_records(
     return [
         dict(pr)
         for pr in merged_prs
-        if issue_number in _issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref"))
+        if issue_number in set(pr.get("linked_issue_numbers", []))
+        or issue_number in _issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref"))
     ]
 
 
@@ -925,14 +1068,30 @@ def closure_evidence(
     body = str(issue.get("body") or "")
     number = int(issue.get("number", 0))
     linked = _merged_records(number, merged_prs)
+    coverage = {
+        "coverage_sources": sorted(
+            {str(pr.get("coverage_source") or "global_closed_prs") for pr in linked}
+        ),
+        "targeted_merged_prs": sorted(
+            int(pr["number"])
+            for pr in linked
+            if pr.get("coverage_source") == "targeted_issue_timeline"
+        ),
+    }
     if not linked:
-        return {"eligible": False, "reason": "no merged issue-linked PR", "merged_prs": []}
+        return {
+            "eligible": False,
+            "reason": "no merged issue-linked PR",
+            "merged_prs": [],
+            **coverage,
+        }
     if PARENT_TITLE_PATTERN.search(str(issue.get("title") or "")):
         if not PARENT_CLOSE_PATTERN.search(body):
             return {
                 "eligible": False,
                 "reason": "parent issue lacks documented all-children close condition",
                 "merged_prs": [pr.get("number") for pr in linked],
+                **coverage,
             }
         child_numbers = _issue_ref_numbers(body)
         child_numbers.discard(number)
@@ -942,12 +1101,14 @@ def closure_evidence(
                 "reason": "documented parent close condition is not proven by the open inventory",
                 "merged_prs": [pr.get("number") for pr in linked],
                 "child_issues": sorted(child_numbers),
+                **coverage,
             }
         return {
             "eligible": True,
             "reason": "documented parent close condition and no referenced child remains open",
             "merged_prs": [pr.get("number") for pr in linked],
             "child_issues": sorted(child_numbers),
+            **coverage,
         }
     explicit = bool(EXPLICIT_MERGED_CLOSE_PATTERN.search(body))
     checked = bool(CHECKBOX_PATTERN.search(body)) and not bool(
@@ -963,11 +1124,13 @@ def closure_evidence(
             "eligible": True,
             "reason": reason,
             "merged_prs": [pr.get("number") for pr in linked],
+            **coverage,
         }
     return {
         "eligible": False,
         "reason": "merged work exists but completion condition is not documented",
         "merged_prs": [pr.get("number") for pr in linked],
+        **coverage,
     }
 
 
@@ -1432,6 +1595,11 @@ def build_audit_plan(
             "preserve_state_qualifiers": True,
         },
         "inventory": inventory.get("inventory", {}),
+        "inventory_coverage": (
+            dict(inventory_meta.get("closure_coverage"))
+            if isinstance(inventory_meta.get("closure_coverage"), Mapping)
+            else {}
+        ),
         "inventory_uncertainties": sorted(set(inventory_uncertainties)),
         "issues": classifications,
         "mutations": mutations,

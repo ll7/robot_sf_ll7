@@ -69,7 +69,7 @@ def test_targeted_lookup_finds_issue_beyond_cap(monkeypatch: pytest.MonkeyPatch)
 
     Issue #5870: a project with more items than the default cap must not force a
     full untruncated page for a targeted ``--issue-number`` lookup. The helper
-    uses the bounded project query surface and verifies the exact issue number.
+    uses a portable bounded project list and verifies the exact issue number.
     """
 
     calls: list[list[str]] = []
@@ -89,8 +89,7 @@ def test_targeted_lookup_finds_issue_beyond_cap(monkeypatch: pytest.MonkeyPatch)
     assert len(found) == 1
     assert found[0]["content"]["number"] == 250
     assert len(calls) == 1
-    assert "--query" in calls[0]
-    assert calls[0][calls[0].index("--query") + 1] == "250"
+    assert "--query" not in calls[0]
     assert calls[0][calls[0].index("--limit") + 1] == "25"
 
 

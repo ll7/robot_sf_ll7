@@ -70,6 +70,7 @@ from robot_sf.research.emergent_phenomena_campaign import (
     result_to_run_record,
     run_multiseed_campaign,
 )
+from robot_sf.research.representative_selection import primary_order_parameter
 
 # evidence-writer-exempt: runs.jsonl is an intentionally immutable JSONL artifact; the shared
 # write_json helper cannot preserve one sorted JSON document per line, so the artifact carries
@@ -83,12 +84,6 @@ GENERATION_COMMAND = (
     "uv run python scripts/validation/build_issue_5149_emergent_phenomena_campaign.py"
 )
 
-# Primary order parameter per scenario for the by-seed figures.
-PRIMARY_ORDER_PARAMETER = {
-    "bidirectional_corridor": "lane_segregation_index",
-    "narrow_doorway": "oscillation_flips",
-    "high_density_exit": "exit_density_ratio",
-}
 # Threshold reference lines drawn on the by-seed figures.
 THRESHOLD_LINES = {
     "bidirectional_corridor": [
@@ -143,7 +138,7 @@ def _by_seed_plot(
     scenario_name: str, records: list[dict[str, Any]], seeds: list[int], out_path: Path
 ) -> None:
     """Render the primary order parameter per seed for both calibrations."""
-    param = PRIMARY_ORDER_PARAMETER[scenario_name]
+    param = primary_order_parameter(scenario_name)
     calibrations = ["released_default", "literature_typical"]
     fig, ax = plt.subplots(figsize=(7, 4.5))
     n_seeds = max(1, len(seeds))
@@ -247,7 +242,7 @@ def _write_readme(
     )
     lines.append("| --- | --- | --- | --- | --- |")
     for agg in aggregates:
-        param = PRIMARY_ORDER_PARAMETER[agg["scenario"]]
+        param = primary_order_parameter(agg["scenario"])
         stats = agg["order_parameter_stats"][param]
         verdicts = ", ".join(f"{k}: {v}" for k, v in agg["verdict_counts"].items())
         lines.append(

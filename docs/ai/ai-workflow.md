@@ -343,13 +343,14 @@ uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project
 
 `check_prepublication_state.py` is the remote-state companion to local readiness stamps. It
 refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD SHAs, and checks
-that the claimed issue remains open and has not gained a merged closing PR. A `ready` result is
-the only publication-permitting result; `superseded` and `blocked` stop the route, while
-`refresh-required` requires `sync --integrate` (or an explicit manual merge), a fresh readiness
-run, and a new snapshot. The integration path uses ordinary Git merges and never resets or
-deletes the worktree. Under exhausted GraphQL quota, the gate may record an auditable REST source
-for issue state or closing-PR discovery in `remote_state_sources`; auth, malformed-response, and
-truncated-inventory failures still block publication.
+that the claimed issue remains open and has not gained a new explicit same-repository covering PR
+or merged closing PR. A `ready` result is the only publication-permitting result; `superseded` and
+`blocked` stop the route, while `refresh-required` requires `sync --integrate` (or an explicit
+manual merge), a fresh readiness run, and a new snapshot. The integration path uses ordinary Git
+merges and never resets or deletes the worktree. Under exhausted GraphQL quota, the gate may record
+an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
+`remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
+publication.
 
 ## What This Note Does Not Replace
 

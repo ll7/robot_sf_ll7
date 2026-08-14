@@ -217,6 +217,8 @@ result_contract:
     Any axis with a rank_flip_count greater than zero must be reported as a validity-boundary
     caveat and calibration candidate before paper-facing benchmark use.
 
+retained_metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+
 # Metric whose ranking defines the paper-facing planner comparison.
 primary_metric: snqi
 higher_is_better: true

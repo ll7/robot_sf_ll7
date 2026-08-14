@@ -135,6 +135,8 @@ result_contract:
     Any axis with rank_flip_count greater than zero must be reported as a
     validity-boundary caveat and calibration candidate before paper-facing use.
 
+retained_metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+
 # Deprecated compatibility alias. Validation fails unless it agrees with the
 # authoritative ranking.primary_metric above.
 primary_metric: snqi

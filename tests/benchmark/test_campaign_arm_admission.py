@@ -1,6 +1,6 @@
 """Focused unit tests for the generalized campaign-arm admission check (issue #5961).
 
-These exercise :mod:`robot_sf.benchmark.campaign_arm_admission` -- the fail-closed packet-admission
+These exercise :mod:`robot_sf.benchmark.campaign.campaign_arm_admission` -- the fail-closed packet-admission
 gate that resolves every declared arm through the REAL loaders
 (``algorithm_readiness``, ``_ppo_paper_gate_status``, the model registry, the real algo-config
 YAML) so a packet whose declared roster cannot instantiate is rejected at admission time. The
@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.campaign_arm_admission import (
+from robot_sf.benchmark.campaign.campaign_arm_admission import (
     CampaignArmAdmissionError,
     check_campaign_arm_admission,
 )

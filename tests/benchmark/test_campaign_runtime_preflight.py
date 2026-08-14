@@ -9,7 +9,7 @@ import pytest
 import robot_sf.benchmark.camera_ready._preflight as preflight_module
 from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
-from robot_sf.benchmark.campaign_runtime_preflight import (
+from robot_sf.benchmark.campaign.campaign_runtime_preflight import (
     CampaignPolicyDependencyPreflightError,
     CampaignScenarioMapPreflightError,
     check_campaign_arm_policy_dependencies_preflight,

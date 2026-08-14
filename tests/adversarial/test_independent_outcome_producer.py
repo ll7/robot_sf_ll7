@@ -63,13 +63,21 @@ def _contract_and_binding(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _episode_record(
-    *, seed: int, failure: bool, producer_commit: str = PRODUCER_COMMIT
+    *,
+    candidate_id: str,
+    scenario_seed: int,
+    seed: int,
+    failure: bool,
+    producer_commit: str = PRODUCER_COMMIT,
 ) -> dict[str, Any]:
     """Build a minimal benchmark-shaped record with canonical adapter metadata."""
     return {
         "version": "v1",
         "scenario_id": "classic_cross_trap_medium",
-        "scenario_params": {"candidate_manifest_id": "fixture"},
+        "scenario_params": {
+            "candidate_manifest_id": candidate_id,
+            "scenario_seed": scenario_seed,
+        },
         "seed": seed,
         "algorithm_metadata": {
             "canonical_algorithm": "social_force",
@@ -123,7 +131,12 @@ def _envelope(
         "execution_seed": execution_seed,
         "execution_command": ["uv", "run", "robot_sf_bench", "run"],
         "execution_config_lineage": lineage,
-        "episode_record": _episode_record(seed=record_seed, failure=failure),
+        "episode_record": _episode_record(
+            candidate_id=candidate_id,
+            scenario_seed=scenario_seed,
+            seed=record_seed,
+            failure=failure,
+        ),
     }
     if stage == "replay":
         signature = _sha256(f"replay:{candidate_id}")
@@ -323,6 +336,39 @@ def test_producer_rejects_episode_record_provenance_drift(tmp_path: Path) -> Non
                 binding_path=binding_path,
                 producer_commit=PRODUCER_COMMIT,
             )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_fragment"),
+    [
+        ("scenario_id", "other_scenario", "scenario_id does not match scenario family"),
+        (
+            "candidate_manifest_id",
+            "other_candidate",
+            "candidate_manifest_id does not match selected candidate",
+        ),
+        ("scenario_seed", 999, "scenario_seed does not match selected scenario"),
+    ],
+)
+def test_producer_rejects_selected_candidate_scenario_drift(
+    tmp_path: Path, field: str, value: Any, expected_fragment: str
+) -> None:
+    """Episode records must bind to the selected candidate and frozen scenario."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    episode = records[0]["episode_record"]
+    if field == "scenario_id":
+        episode[field] = value
+    else:
+        episode["scenario_params"][field] = value
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
 
 
 def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> None:

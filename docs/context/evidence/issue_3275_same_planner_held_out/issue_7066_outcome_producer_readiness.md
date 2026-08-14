@@ -24,7 +24,12 @@ the canonical `SocialForcePlannerAdapter` identity:
 The historical planner/reference commit remains the `execution_commit` in
 each row. The merged code that produces the packet is recorded separately as
 `producer_commit`. Every episode record must also carry the same producer
-commit and a content hash.
+commit and a content hash. Its scenario provenance must bind to the selected
+candidate: `scenario_id` must equal the frozen scenario family, while
+`scenario_params.candidate_manifest_id` and `scenario_params.scenario_seed`
+must equal the envelope's selected manifest and the external binding's frozen
+scenario seed. A record from another candidate or scenario is rejected even if
+its adapter metadata and execution seed otherwise look valid.
 
 ## Producer command
 

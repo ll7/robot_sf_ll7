@@ -8,10 +8,13 @@ JSON/Markdown shape contracts.
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import threading
 from pathlib import Path
 
-from pytest import MonkeyPatch
+from pytest import MonkeyPatch, raises, skip
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -421,8 +424,6 @@ class TestOpenIssueSnapshots:
         assert candidate["evidence_tier"] == "analysis-only"
 
     def test_generate_shortlist_uses_open_issue_snapshot(self, tmp_path: Path) -> None:
-        import json
-
         issue_snapshot = tmp_path / "issues.json"
         issue_snapshot.write_text(json.dumps(MINIMAL_OPEN_ISSUES), encoding="utf-8")
         pr_snapshot = tmp_path / "prs.json"
@@ -439,3 +440,34 @@ class TestOpenIssueSnapshots:
         assert report["sources_status"]["open_issues_snapshot"]["available"] is True
         assert report["sources_status"]["recent_prs_snapshot"]["available"] is True
         assert any(c["id"] == "open-issue-2792" for c in report["candidates"])
+
+    def test_generate_shortlist_reads_named_pipe_snapshot(self, tmp_path: Path) -> None:
+        if not hasattr(os, "mkfifo"):
+            skip("named-pipe regression requires os.mkfifo")
+
+        issue_snapshot = tmp_path / "issues.pipe"
+        os.mkfifo(issue_snapshot)
+        writer_errors: list[OSError] = []
+
+        def write_snapshot() -> None:
+            try:
+                issue_snapshot.write_text(json.dumps(MINIMAL_OPEN_ISSUES), encoding="utf-8")
+            except OSError as exc:
+                writer_errors.append(exc)
+
+        writer = threading.Thread(target=write_snapshot, daemon=True)
+        writer.start()
+        report, _ = generate_shortlist(open_issues_snapshot_path=issue_snapshot)
+        writer.join(timeout=1)
+
+        assert not writer.is_alive(), "named-pipe writer did not complete"
+        assert not writer_errors
+        assert report["sources_status"]["open_issues_snapshot"]["available"] is True
+        assert any(c["id"] == "open-issue-2792" for c in report["candidates"])
+
+    def test_malformed_optional_snapshot_remains_an_error(self, tmp_path: Path) -> None:
+        issue_snapshot = tmp_path / "malformed.json"
+        issue_snapshot.write_text("{not valid json", encoding="utf-8")
+
+        with raises(json.JSONDecodeError):
+            generate_shortlist(open_issues_snapshot_path=issue_snapshot)

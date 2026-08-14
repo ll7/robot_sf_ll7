@@ -73,10 +73,20 @@ CLAIM_BOUNDARIES = [
 
 
 def _load_optional_json(path: Path | None) -> dict[str, Any] | list[Any] | None:
-    """Load optional JSON snapshot; return None if no path or missing."""
-    if path is None or not path.is_file():
+    """Load optional JSON snapshot, including readable stream-backed paths.
+
+    Missing or unreadable optional inputs are explicit degradation. Malformed JSON
+    remains an error so a supplied snapshot cannot silently change the shortlist.
+    """
+    if path is None:
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        if not path.exists():
+            return None
+        contents = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return json.loads(contents)
 
 
 def _snapshot_items(snapshot: dict[str, Any] | list[Any] | None, key: str) -> list[dict[str, Any]]:

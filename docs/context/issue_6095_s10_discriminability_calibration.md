@@ -1,7 +1,43 @@
 # Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration
 
-**Status**: proposal-phase preflight complete; full execution requires SLURM and is not benchmark
-evidence.
+**Status**: the frozen S10 nominal and stress campaigns completed on 2026-08-14. The campaign
+execution receipts are valid, but the combined interpretation is **blocked** because the retained
+stress campaign has only a metadata-only PPO checkpoint receipt and no runtime checkpoint
+hash/load receipt. The result is diagnostic-only until that provenance gap is resolved.
+
+[The report builder](../../scripts/benchmark/build_issue_6095_discriminability_report.py) fails
+closed on matrix, row-identity, runtime-contract, fallback/degraded, or PPO-provenance violations
+and writes a machine-readable JSON report plus a compact Markdown handoff.
+
+## Execution result (2026-08-14)
+
+Both campaigns used commit `fcc495b955c9eab00bc60842b5cae63f74cf2e2c`, seeds 111--120, horizon
+100, `dt=0.1`, and differential-drive kinematics. The nominal campaign was job 14408 with 80
+episodes; the previously completed stress campaign was job 14083 with 960 episodes. Both campaign
+receipts report valid execution with zero fallback/degraded, unavailable, or failed rows.
+
+The raw episode contract is homogeneous within each arm: ORCA is `adapter`, PPO is `native`, and
+both records expose `tracked_agents_no_noise`. The campaign summaries still carry fairness mismatch
+warnings (including an obsolete `ppo=mixed` description), so this report does not rank planners or
+interpret the result as an algorithm comparison.
+
+The combined report observed higher nominal success for both planners in S10 and in the first-three-
+seed S3 subset:
+
+| seed schedule | nominal ORCA | stress ORCA | nominal PPO | stress PPO |
+|---|---:|---:|---:|---:|
+| S3 | 0.2500 | 0.0556 | 0.3333 | 0.1528 |
+| S10 | 0.2500 | 0.0771 | 0.4000 | 0.1729 |
+
+The stress floor classified 7 scenarios as both-planners-some-success, 6 as exactly-one-planner-
+some-success, and 35 as both-planners-zero-success. Of the both-zero scenarios, 23 had a
+non-equal observed collision or near-miss outcome (13 collision-discriminated; 20 near-miss-
+discriminated). These are descriptive configured-matrix observations, not accepted planner or
+safety claims.
+
+The compact handoff, including all 48 stress scenario classifications and artifact checksums, is
+under `docs/context/evidence/issue_6095_s10_discriminability_2026-08-14/`. The raw episodes remain
+in the private operations retrieval roots pending durable artifact promotion.
 
 ## Summary
 
@@ -25,7 +61,7 @@ reviewed caveats for intentionally tight route geometry. ORCA uses
 `socnav_missing_prereq_policy: fail-fast`: a missing native prerequisite ends
 the campaign preflight rather than creating a fallback result row.
 
-## Preflight Results
+## Proposal-stage preflight record (2026-07-22)
 
 Both configs passed metadata-only preflight together on rebased source revision
 `d791c08f70b9af20f93babd5f1f17b06d581a185`. The packet records each
@@ -78,11 +114,27 @@ The tracked packet keeps provenance paths repository-relative and uses LF line
 endings for CSV artifacts. It is a portable config/preflight record, not raw
 campaign evidence.
 
+The 2026-08-14 execution handoff is archived at:
+`docs/context/evidence/issue_6095_s10_discriminability_2026-08-14/`.
+It records both campaign IDs, job IDs, report checksums, the complete stress
+floor classification, and the unresolved PPO provenance blocker. The raw JSONL
+episodes are not tracked in Git.
+
+Rebuild the report from retrieved campaign roots with:
+
+```bash
+uv run python scripts/benchmark/build_issue_6095_discriminability_report.py \
+  --nominal-root <retrieved-nominal-root> \
+  --stress-root <retrieved-stress-root> \
+  --output-dir <report-output-dir>
+```
+
 ## Execution Requirements
 
-Full benchmark execution requires SLURM. The PPO checkpoint
-(`ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417`)
-is stageable-remote and must be staged before execution.
+The governed SLURM execution is complete for the frozen 80-row nominal and
+960-row stress matrices. A future promotion requires a runtime PPO checkpoint
+load/hash receipt for the stress artifact; the metadata-only receipt currently
+keeps the combined interpretation fail-closed.
 
 ## PPO Model Provenance
 
@@ -111,11 +163,20 @@ matrix) and `atomic_navigation_minimal_full_v1.yaml`. This means:
 
 ## Claims and Limitations
 
-This is proposal-phase preflight evidence. No benchmark results or
-discriminability conclusion exist because execution requires SLURM
-(`compute_submit` is not authorized in this lane). Native ORCA/PPO execution
-must complete without fallback or degraded rows before any result is promoted.
-See issue #6095 for the full analysis contract.
+The campaigns are valid execution evidence: all planned rows completed with no
+fallback/degraded rows, and the report verifies raw planner/scenario/seed
+identity, commit, horizon, time step, kinematics, and model identity. The
+combined analysis is nevertheless **diagnostic-only** because the stress PPO
+checkpoint receipt is metadata-only and does not prove that the declared hash
+was the file loaded at runtime.
+
+Conditional observations support the configured-matrix stress-floor hypothesis:
+both planners have higher nominal success in S3 and S10, and 23 of 35
+both-zero stress scenarios have non-equal collision or near-miss outcomes.
+These observations must not be promoted to a planner-family ranking, safety,
+transfer, unseen-scenario generalization, or paper-facing claim. The campaign
+summary also carries fairness mismatch warnings; the report preserves them and
+does not rank ORCA against PPO. See issue #6095 for the full analysis contract.
 
 ## References
 

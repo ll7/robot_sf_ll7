@@ -59,7 +59,7 @@
     "terminal_verdict_counts": {
       "type": "object",
       "minProperties": 1,
-      "propertyNames": {"pattern": ".*\\S.*"},
+      "propertyNames": {"type": "string", "pattern": ".*\\S.*"},
       "additionalProperties": {"type": "integer", "minimum": 0}
     },
     "cell_episode_count": {"type": "integer", "minimum": 1},

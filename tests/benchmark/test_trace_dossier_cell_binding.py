@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 from jsonschema import Draft202012Validator, ValidationError
 
@@ -127,6 +126,7 @@ def test_binding_schema_accepts_serialized_contract() -> None:
 def test_text_and_seed_inputs_are_normalized() -> None:
     """Whitespace is trimmed and integral scalar seeds become plain integers."""
 
+    np = pytest.importorskip("numpy")
     cell = _cell()
     cell["cell_id"] = "  classic-crossing::orca::nominal  "
     cell["release_arm_id"] = " nominal "
@@ -160,7 +160,8 @@ def test_normalized_duplicate_verdict_labels_fail_closed() -> None:
         )
 
 
-def test_binding_schema_rejects_blank_verdict_label() -> None:
+@pytest.mark.parametrize("label", ["", " "])
+def test_binding_schema_rejects_blank_verdict_label(label: str) -> None:
     """The JSON schema rejects blank and whitespace-only verdict keys."""
 
     schema = json.loads(_SCHEMA.read_text(encoding="utf-8"))
@@ -183,7 +184,7 @@ def test_binding_schema_rejects_blank_verdict_label() -> None:
                     "trace_sha256": _TRACE_SHA256,
                     "terminal_verdict": "success",
                 },
-                "terminal_verdict_counts": {" ": 1},
+                "terminal_verdict_counts": {label: 1},
                 "cell_episode_count": 1,
                 "selected_verdict_count": 1,
                 "evidence_boundary": (

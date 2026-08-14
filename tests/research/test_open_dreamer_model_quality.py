@@ -15,6 +15,7 @@ from robot_sf.benchmark.rl_trajectory_dataset import (
 )
 from robot_sf.research.open_dreamer_model_quality import (
     ModelQualityConfig,
+    _gate_metrics,
     evaluate_model_quality,
 )
 
@@ -139,8 +140,47 @@ def test_quality_gate_reports_deterministic_metrics_for_sufficient_fixture(tmp_p
         "reward_mae",
         "continuation_brier",
     }
+    assert first["model"]["fitted"] is True
+    assert first["model"]["fit_method"] == "ridge_closed_form"
+    assert "trained" not in first["model"]
+    assert set(first["gate"]["per_baseline"]["persistence"]["comparisons"]) == {
+        "one_step.next_observation_rmse",
+        "one_step.reward_mae",
+        "one_step.continuation_brier",
+        "multi_step.next_observation_rmse",
+        "multi_step.reward_mae",
+        "multi_step.continuation_brier",
+    }
     assert "quality_train_scenario" in first["split_summary"]["train"]["scenario_ids"]
     assert "quality_holdout_scenario" in first["split_summary"]["test"]["scenario_ids"]
+
+
+def test_quality_gate_rejects_multi_step_head_regression() -> None:
+    config = _config(Path("quality_fixture.jsonl"))
+    metric_names = ("next_observation_rmse", "reward_mae", "continuation_brier")
+    one_step = {
+        "model": dict.fromkeys(metric_names, 0.1),
+        "persistence": dict.fromkeys(metric_names, 0.2),
+        "mlp": dict.fromkeys(metric_names, 0.2),
+    }
+    multi_step = {
+        "model": {
+            "next_observation_rmse": 0.1,
+            "reward_mae": 0.3,
+            "continuation_brier": 0.3,
+        },
+        "persistence": dict.fromkeys(metric_names, 0.2),
+        "mlp": dict.fromkeys(metric_names, 0.2),
+    }
+
+    gate = _gate_metrics(config, one_step, multi_step)
+
+    assert gate["passed"] is False
+    for baseline in ("persistence", "mlp"):
+        comparisons = gate["per_baseline"][baseline]["comparisons"]
+        assert comparisons["multi_step.next_observation_rmse"]["passed"] is True
+        assert comparisons["multi_step.reward_mae"]["passed"] is False
+        assert comparisons["multi_step.continuation_brier"]["passed"] is False
 
 
 def test_quality_gate_blocks_tiny_committed_preview() -> None:

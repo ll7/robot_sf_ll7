@@ -14,8 +14,9 @@ held-out metrics.
 
 The references are a persistence predictor and a deterministic random-feature multilayer perceptron
 (MLP). The MLP is a diagnostic comparator, not a claim about the best predictor. A fitted model
-passes only when it strictly improves every required metric against every configured reference;
-otherwise the gate stops as `failed_model_quality`.
+passes only when it strictly improves every required one-step and multi-step metric against every
+configured reference; observation, reward, and continuation errors cannot be omitted from the gate.
+Otherwise the gate stops as `failed_model_quality`.
 
 The gate returns `blocked_insufficient_data` when the dataset does not contain the configured
 minimum training and holdout episodes/transitions. It returns `blocked_contract` when the dataset,

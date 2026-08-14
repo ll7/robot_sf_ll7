@@ -600,7 +600,8 @@ def _evaluate_sufficient_dataset(
         },
         "model": {
             "architecture": "clean-room action-conditioned latent transition",
-            "trained": True,
+            "fitted": True,
+            "fit_method": "ridge_closed_form",
             "route": "clean_room",
             "evidence_boundary": EVIDENCE_BOUNDARY,
             "obs_dim": obs_dim,
@@ -1014,35 +1015,35 @@ def _gate_metrics(
     multi_step: Mapping[str, Mapping[str, float]],
 ) -> dict[str, Any]:
     metric_names = tuple(one_step["model"])
+    multi_step_metric_names = tuple(multi_step["model"])
+    if set(metric_names) != set(multi_step_metric_names):
+        raise OpenDreamerQualityError(
+            "one-step and multi-step metric names must match before quality gating"
+        )
     results: dict[str, Any] = {}
     all_passed = True
     for baseline in config.required_baselines:
         comparisons = {}
         baseline_passed = True
-        for name in metric_names:
-            model_value = one_step["model"][name]
-            baseline_value = one_step[baseline][name]
-            passed = _strictly_better(model_value, baseline_value)
-            comparisons[f"one_step.{name}"] = {
-                "model": model_value,
-                "baseline": baseline_value,
-                "passed": passed,
-            }
-            baseline_passed = baseline_passed and passed
-        model_multi = multi_step["model"]["next_observation_rmse"]
-        baseline_multi = multi_step[baseline]["next_observation_rmse"]
-        multi_passed = _strictly_better(model_multi, baseline_multi)
-        comparisons["multi_step.next_observation_rmse"] = {
-            "model": model_multi,
-            "baseline": baseline_multi,
-            "passed": multi_passed,
-        }
-        baseline_passed = baseline_passed and multi_passed
+        for horizon, metrics in (("one_step", one_step), ("multi_step", multi_step)):
+            for name in metric_names:
+                model_value = metrics["model"][name]
+                baseline_value = metrics[baseline][name]
+                passed = _strictly_better(model_value, baseline_value)
+                comparisons[f"{horizon}.{name}"] = {
+                    "model": model_value,
+                    "baseline": baseline_value,
+                    "passed": passed,
+                }
+                baseline_passed = baseline_passed and passed
         results[baseline] = {"passed": baseline_passed, "comparisons": comparisons}
         all_passed = all_passed and baseline_passed
     return {
         "required_baselines": list(config.required_baselines),
-        "comparison_rule": "model must strictly improve every reported required metric",
+        "comparison_rule": (
+            "model must strictly improve every reported required metric at one-step and "
+            "multi-step horizons"
+        ),
         "per_baseline": results,
         "passed": all_passed,
     }

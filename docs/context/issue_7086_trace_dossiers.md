@@ -21,14 +21,16 @@ required fields:
 
 The deterministic selection order is:
 
-1. retain the unique majority-verdict pool;
-2. retain the weakest-label candidates (smallest `label_strength`);
+1. retain the highest-count verdict pool; if verdict counts tie, retain the
+   uniquely weaker label by smallest `label_strength`;
+2. retain the weakest-label candidates within that verdict (smallest
+   `label_strength`);
 3. choose the candidate closest to the median `primary_order`;
 4. resolve an exact numeric tie by lexicographically smallest `seed_id`.
 
-An input with no unique majority verdict, mixed cells, duplicate seed
-identities, missing fields, blank identities, or non-finite numbers fails
-closed. The returned `SelectionManifest` uses schema version
+An input with no unique weaker label for a tied verdict count, mixed cells,
+duplicate seed identities, missing fields, blank identities, or non-finite
+numbers fails closed. The returned `SelectionManifest` uses schema version
 `trace_dossier_selector.v1`, contains no wall-clock fields, and records the
 selection reason.
 

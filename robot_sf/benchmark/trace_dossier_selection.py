@@ -19,6 +19,7 @@ TRACE_DOSSIER_SELECTOR_SCHEMA_VERSION = "trace_dossier_selector.v1"
 SelectionReason: TypeAlias = Literal[  # noqa: UP040
     "single_candidate",
     "majority_verdict",
+    "weaker_verdict",
     "weakest_label",
     "median_primary_order",
     "seed_identity",
@@ -78,11 +79,11 @@ CandidateInput: TypeAlias = TraceDossierCandidate | Mapping[str, Any]  # noqa: U
 def select_representative(candidates: Sequence[CandidateInput]) -> SelectionManifest:
     """Select one deterministic representative from one campaign cell.
 
-    The selection order is: unique majority verdict, weakest label strength
-    (the smallest numeric value), closest primary-order parameter to the
-    median, then lexicographically smallest seed identity.  A tied verdict
-    count is not a majority and fails closed rather than using an arbitrary
-    label ordering.
+    The selection order is: majority verdict, weaker label strength (the
+    smallest numeric value) for tied verdict counts and within the selected
+    verdict pool, closest primary-order parameter to the median, then
+    lexicographically smallest seed identity. A tied verdict count with no
+    unique weakest label fails closed rather than using an arbitrary ordering.
 
     Raises:
         TraceDossierSelectionError: If inputs are empty, malformed, mixed-cell,
@@ -106,15 +107,8 @@ def select_representative(candidates: Sequence[CandidateInput]) -> SelectionMani
         raise TraceDossierSelectionError("seed_id values must be unique")
 
     verdict_counts = Counter(candidate.verdict for candidate in normalized)
-    highest_count = max(verdict_counts.values())
-    majority_verdicts = sorted(
-        verdict for verdict, count in verdict_counts.items() if count == highest_count
-    )
-    if len(majority_verdicts) != 1:
-        raise TraceDossierSelectionError(
-            "selection has no unique majority verdict; refusing arbitrary tie-break"
-        )
-    majority_verdict = majority_verdicts[0]
+    majority_verdict, tied_majority = _select_majority_verdict(normalized, verdict_counts)
+    highest_count = verdict_counts[majority_verdict]
     majority_pool = tuple(
         candidate for candidate in normalized if candidate.verdict == majority_verdict
     )
@@ -136,6 +130,8 @@ def select_representative(candidates: Sequence[CandidateInput]) -> SelectionMani
 
     if len(normalized) == 1:
         reason: SelectionReason = "single_candidate"
+    elif tied_majority:
+        reason = "weaker_verdict"
     elif len(majority_pool) < len(normalized):
         reason = "majority_verdict"
     elif len(weakest_pool) < len(majority_pool):
@@ -157,6 +153,39 @@ def select_representative(candidates: Sequence[CandidateInput]) -> SelectionMani
         majority_count=highest_count,
         selection_reason=reason,
     )
+
+
+def _select_majority_verdict(
+    candidates: Sequence[TraceDossierCandidate], verdict_counts: Counter[str]
+) -> tuple[str, bool]:
+    """Select the highest-count verdict and resolve ties by weaker label.
+
+    Returns:
+        The selected verdict and whether a tied count required weaker-label resolution.
+    """
+
+    highest_count = max(verdict_counts.values())
+    majority_verdicts = sorted(
+        verdict for verdict, count in verdict_counts.items() if count == highest_count
+    )
+    if len(majority_verdicts) == 1:
+        return majority_verdicts[0], False
+
+    verdict_strengths = {
+        verdict: min(
+            candidate.label_strength for candidate in candidates if candidate.verdict == verdict
+        )
+        for verdict in majority_verdicts
+    }
+    weakest_strength = min(verdict_strengths.values())
+    weakest_verdicts = sorted(
+        verdict for verdict, strength in verdict_strengths.items() if strength == weakest_strength
+    )
+    if len(weakest_verdicts) != 1:
+        raise TraceDossierSelectionError(
+            "tied majority verdicts have no unique weaker label; refusing arbitrary tie-break"
+        )
+    return weakest_verdicts[0], True
 
 
 def _normalize_candidate(candidate: CandidateInput, index: int) -> TraceDossierCandidate:

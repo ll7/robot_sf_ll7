@@ -93,6 +93,21 @@ def test_seed_identity_breaks_exact_median_tie() -> None:
     assert result.selection_reason == "seed_identity"
 
 
+def test_tied_verdicts_choose_the_unique_weaker_label() -> None:
+    """Equal verdict counts use explicit weakest-label semantics."""
+
+    result = select_representative(
+        [
+            _candidate(verdict="clearly_present", label_strength=2.0, seed_id="seed-strong"),
+            _candidate(verdict="absent_or_negligible", label_strength=0.5, seed_id="seed-weak"),
+        ]
+    )
+
+    assert result.selected_verdict == "absent_or_negligible"
+    assert result.selected_seed_id == "seed-weak"
+    assert result.selection_reason == "weaker_verdict"
+
+
 def test_single_candidate_is_valid() -> None:
     """A one-row cell remains explicit and deterministic."""
 
@@ -148,13 +163,13 @@ def test_duplicate_seed_identity_fails_closed() -> None:
 
 
 def test_tied_verdicts_fail_closed() -> None:
-    """Lexical label order is not a substitute for a majority verdict."""
+    """Equal-strength tied labels cannot be resolved lexically."""
 
-    with pytest.raises(TraceDossierSelectionError, match="unique majority verdict"):
+    with pytest.raises(TraceDossierSelectionError, match="unique weaker label"):
         select_representative(
             [
-                _candidate(verdict="collision", seed_id="seed-c"),
-                _candidate(verdict="success", seed_id="seed-s"),
+                _candidate(verdict="collision", label_strength=1.0, seed_id="seed-c"),
+                _candidate(verdict="success", label_strength=1.0, seed_id="seed-s"),
             ]
         )
 

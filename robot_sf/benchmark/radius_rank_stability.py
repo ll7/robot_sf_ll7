@@ -64,8 +64,8 @@ if TYPE_CHECKING:
 
 RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v1"
 RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v1"
-PAIRED_INFERENCE_CONTRACT_SCHEMA = "radius_paired_bootstrap_inference_contract.v1"
-PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA = "radius_paired_support_diagnostics.v1"
+PAIRED_INFERENCE_CONTRACT_SCHEMA = "radius_paired_bootstrap_inference_contract.v2"
+PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA = "radius_paired_support_diagnostics.v2"
 SWEEP_SUMMARY_SCHEMA = "issue_6642_radius_sweep_summary.v1"
 
 # Preregistered scientific verdicts (exactly one is emitted once the gate passes).
@@ -124,6 +124,10 @@ PAIRED_INTERVAL_INDEX_CONVENTION = (
     "sorted_means[min(int((1-alpha/2)*n_resamples),n_resamples)-1]"
 )
 PAIRED_RNG_ALGORITHM = "python_random.Random_mt19937"
+PAIRED_DELTA_QUANTIZATION = 1e-12
+PAIRED_DELTA_DISTINCTNESS_RULE = "round_to_nearest_1e-12"
+PAIRED_DELTA_BASIS_PAIRED = "paired_finite_mean"
+PAIRED_DELTA_BASIS_AGGREGATE = "aggregate_table_difference"
 
 # Fail-closed row-exclusion reasons. Any such row is removed from evidence and, when it
 # breaks the matched design or its accounting, forces the invalid-evidence verdict.
@@ -1083,6 +1087,7 @@ class PairedInferenceContract:
     requested_resamples: int
     rng_algorithm: str
     seed: int
+    delta_distinctness_rule: str
     digest: str
 
     def to_dict(self) -> dict[str, object]:
@@ -1099,6 +1104,7 @@ class PairedInferenceContract:
             "requested_resamples": self.requested_resamples,
             "rng_algorithm": self.rng_algorithm,
             "seed": self.seed,
+            "delta_distinctness_rule": self.delta_distinctness_rule,
             "digest": self.digest,
         }
 
@@ -1131,6 +1137,7 @@ def _paired_inference_contract_payload(
         "requested_resamples": n_resamples,
         "rng_algorithm": PAIRED_RNG_ALGORITHM,
         "seed": seed,
+        "delta_distinctness_rule": PAIRED_DELTA_DISTINCTNESS_RULE,
     }
 
 
@@ -1171,6 +1178,7 @@ class PairedSupportDiagnostics:
     distinct_finite_deltas: int
     status: str
     reason: str
+    delta_basis: str
     schema_version: str = PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA
 
     def to_dict(self) -> dict[str, object]:
@@ -1185,6 +1193,7 @@ class PairedSupportDiagnostics:
             "distinct_finite_deltas": self.distinct_finite_deltas,
             "status": self.status,
             "reason": self.reason,
+            "delta_basis": self.delta_basis,
         }
 
 
@@ -1260,27 +1269,67 @@ def _paired_bootstrap_ci(
     return point, means[low_index], means[high_index], len(deltas)
 
 
-def _raw_seed_keyed_values(container: object) -> dict[int, float] | None:
-    """Return seed-keyed numeric observations, preserving non-finite values for audit."""
-    if not isinstance(container, Mapping):
+class _MalformedPairedObservations:
+    """Sentinel for a structurally malformed paired-observation mapping."""
+
+
+_MALFORMED_PAIRED_OBSERVATIONS = _MalformedPairedObservations()
+
+
+def _raw_seed_keyed_values(
+    container: object,
+) -> dict[int, float] | _MalformedPairedObservations | None:
+    """Return seed-keyed observations, distinguishing absent from malformed input."""
+    if container is None:
         return None
+    if not isinstance(container, Mapping):
+        return _MALFORMED_PAIRED_OBSERVATIONS
     observations: dict[int, float] = {}
     for raw_seed, raw_value in container.items():
         if isinstance(raw_seed, bool):
-            return None
+            return _MALFORMED_PAIRED_OBSERVATIONS
         try:
             seed = int(raw_seed)
         except (TypeError, ValueError):
-            return None
+            return _MALFORMED_PAIRED_OBSERVATIONS
         if str(seed) != str(raw_seed):
-            return None
+            return _MALFORMED_PAIRED_OBSERVATIONS
         if seed in observations or isinstance(raw_value, bool):
-            return None
+            return _MALFORMED_PAIRED_OBSERVATIONS
         try:
             observations[seed] = float(raw_value)
         except (TypeError, ValueError):
-            return None
+            return _MALFORMED_PAIRED_OBSERVATIONS
     return observations
+
+
+def _quantized_delta(delta: float) -> int:
+    """Return the deterministic bucket used for practical delta distinctness."""
+    return round(delta / PAIRED_DELTA_QUANTIZATION)
+
+
+def _support_without_paired_data(
+    *,
+    baseline_seed_count: int,
+    radius_seed_count: int,
+    reason: str,
+) -> PairedSupportDiagnostics:
+    """Build an insufficient-support diagnostic for absent or malformed observations.
+
+    Returns:
+        An aggregate-difference diagnostic without an inferential interval.
+    """
+    return PairedSupportDiagnostics(
+        baseline_seed_count=baseline_seed_count,
+        radius_seed_count=radius_seed_count,
+        overlapping_seed_count=0,
+        finite_pair_count=0,
+        dropped_nonfinite_pair_count=0,
+        distinct_finite_deltas=0,
+        status="insufficient_support",
+        reason=reason,
+        delta_basis=PAIRED_DELTA_BASIS_AGGREGATE,
+    )
 
 
 def _paired_support_diagnostics(
@@ -1289,15 +1338,10 @@ def _paired_support_diagnostics(
 ) -> tuple[PairedSupportDiagnostics, list[float], list[float], list[float]]:
     """Return support diagnostics plus finite paired observations and deltas."""
     if baseline_observations is None or radius_observations is None:
-        support = PairedSupportDiagnostics(
+        support = _support_without_paired_data(
             baseline_seed_count=0 if baseline_observations is None else len(baseline_observations),
             radius_seed_count=0 if radius_observations is None else len(radius_observations),
-            overlapping_seed_count=0,
-            finite_pair_count=0,
-            dropped_nonfinite_pair_count=0,
-            distinct_finite_deltas=0,
-            status="insufficient_support",
-            reason="malformed_paired_observations",
+            reason="missing_paired_observations",
         )
         return support, [], [], []
 
@@ -1316,7 +1360,7 @@ def _paired_support_diagnostics(
         else:
             dropped_nonfinite += 1
 
-    distinct_deltas = len(set(deltas))
+    distinct_deltas = len({_quantized_delta(delta) for delta in deltas})
     if len(deltas) < 2:
         status = "insufficient_support"
         reason = "insufficient_finite_paired_observations"
@@ -1335,6 +1379,11 @@ def _paired_support_diagnostics(
         distinct_finite_deltas=distinct_deltas,
         status=status,
         reason=reason,
+        delta_basis=(
+            PAIRED_DELTA_BASIS_PAIRED
+            if status in {"ok", "degenerate_support"}
+            else PAIRED_DELTA_BASIS_AGGREGATE
+        ),
     )
     return support, paired_base, paired_radius, deltas
 
@@ -1348,6 +1397,7 @@ def compute_paired_changes(
     n_resamples: int = 1000,
     seed: int = 123,
     alpha: float = 0.05,
+    inference_contract: PairedInferenceContract | None = None,
 ) -> dict[float, list[PairedChange]]:
     """Compute per-planner paired metric changes versus the baseline radius.
 
@@ -1358,7 +1408,20 @@ def compute_paired_changes(
     Returns:
         Mapping of radius to the list of per-planner paired changes versus baseline.
     """
-    build_paired_inference_contract(n_resamples=n_resamples, seed=seed, alpha=alpha)
+    contract = inference_contract or build_paired_inference_contract(
+        n_resamples=n_resamples,
+        seed=seed,
+        alpha=alpha,
+    )
+    if (
+        contract.requested_resamples != n_resamples
+        or contract.seed != seed
+        or contract.alpha != float(alpha)
+    ):
+        raise ValueError("inference_contract parameters do not match paired-change parameters")
+    n_resamples = contract.requested_resamples
+    seed = contract.seed
+    alpha = contract.alpha
     tables = _metric_tables_by_radius(sweep_summary)
     baseline_table = tables.get(float(baseline_radius), {})
     paired_by_radius = _float_keyed(sweep_summary.get("paired_observations"))
@@ -1377,32 +1440,46 @@ def compute_paired_changes(
             base_value = _finite_metric_value(baseline_table.get(planner, {}), metric)
             radius_value = _finite_metric_value(table.get(planner, {}), metric)
             base_planner_pairs = baseline_pairs.get(planner)
-            base_planner_pairs = (
-                base_planner_pairs if isinstance(base_planner_pairs, Mapping) else {}
-            )
             radius_planner_pairs = radius_pairs.get(planner)
-            radius_planner_pairs = (
-                radius_planner_pairs if isinstance(radius_planner_pairs, Mapping) else {}
+            base_obs = _raw_seed_keyed_values(
+                None
+                if planner not in baseline_pairs
+                else base_planner_pairs.get(metric)
+                if isinstance(base_planner_pairs, Mapping)
+                else _MALFORMED_PAIRED_OBSERVATIONS
             )
-            base_obs = _raw_seed_keyed_values(base_planner_pairs.get(metric))
-            radius_obs = _raw_seed_keyed_values(radius_planner_pairs.get(metric))
+            radius_obs = _raw_seed_keyed_values(
+                None
+                if planner not in radius_pairs
+                else radius_planner_pairs.get(metric)
+                if isinstance(radius_planner_pairs, Mapping)
+                else _MALFORMED_PAIRED_OBSERVATIONS
+            )
             if base_obs is None and radius_obs is None:
-                support = PairedSupportDiagnostics(
+                support = _support_without_paired_data(
                     baseline_seed_count=0,
                     radius_seed_count=0,
-                    overlapping_seed_count=0,
-                    finite_pair_count=0,
-                    dropped_nonfinite_pair_count=0,
-                    distinct_finite_deltas=0,
-                    status="insufficient_support",
                     reason="no_paired_observations",
                 )
                 paired_base: list[float] = []
                 paired_radius: list[float] = []
                 deltas: list[float] = []
+            elif isinstance(base_obs, _MalformedPairedObservations) or isinstance(
+                radius_obs, _MalformedPairedObservations
+            ):
+                support = _support_without_paired_data(
+                    baseline_seed_count=len(base_obs) if isinstance(base_obs, dict) else 0,
+                    radius_seed_count=len(radius_obs) if isinstance(radius_obs, dict) else 0,
+                    reason="malformed_paired_observations",
+                )
+                paired_base = []
+                paired_radius = []
+                deltas = []
             else:
+                base_observations = base_obs if isinstance(base_obs, dict) else None
+                radius_observations = radius_obs if isinstance(radius_obs, dict) else None
                 support, paired_base, paired_radius, deltas = _paired_support_diagnostics(
-                    base_obs, radius_obs
+                    base_observations, radius_observations
                 )
             if support.status == "ok":
                 point, low, high, n_pairs = _paired_bootstrap_ci(
@@ -1826,6 +1903,7 @@ def analyze_radius_sensitivity(
                 n_resamples=n_resamples,
                 seed=seed,
                 alpha=alpha,
+                inference_contract=paired_inference_contract,
             )
         family_transitions = compute_family_transitions(
             summary, baseline_radius=baseline_radius, radii=radii

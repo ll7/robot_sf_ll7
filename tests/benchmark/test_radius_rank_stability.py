@@ -513,6 +513,7 @@ def test_paired_changes_with_observations_are_deterministic() -> None:
     assert orca_first.support.overlapping_seed_count == 5
     assert orca_first.support.finite_pair_count == 5
     assert orca_first.support.distinct_finite_deltas > 1
+    assert orca_first.support.delta_basis == "paired_finite_mean"
 
 
 def test_paired_changes_zero_width_support_is_degenerate() -> None:
@@ -535,6 +536,47 @@ def test_paired_changes_zero_width_support_is_degenerate() -> None:
     assert orca.reason == "single_distinct_finite_delta"
     assert orca.support.status == "degenerate_support"
     assert orca.support.distinct_finite_deltas == 1
+    assert orca.support.delta_basis == "paired_finite_mean"
+
+
+def test_paired_changes_quantizes_practically_identical_deltas() -> None:
+    """Tiny binary-float differences do not create a spurious support interval."""
+    paired = {
+        "1.0": {"orca": {"success": {"111": 0.8, "112": 0.85}}},
+        "0.5": {"orca": {"success": {"111": 0.7, "112": 0.7500000000004}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+
+    assert orca.support.status == "degenerate_support"
+    assert orca.support.distinct_finite_deltas == 1
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+    assert orca.support.delta_basis == "paired_finite_mean"
+
+
+def test_paired_changes_report_malformed_observations_separately_from_missing() -> None:
+    """Malformed metric mappings are not mislabeled as absent paired data."""
+    paired = {
+        "1.0": {"orca": {"success": ["not-a-seed-map"]}},
+        "0.5": {"orca": {"success": {}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+
+    assert orca.support.status == "insufficient_support"
+    assert orca.reason == "malformed_paired_observations"
+    assert orca.support.delta_basis == "aggregate_table_difference"
 
 
 def test_paired_changes_preserve_seed_alignment_when_values_are_nonfinite() -> None:
@@ -581,7 +623,7 @@ def test_paired_changes_report_nonfinite_support_without_interval() -> None:
     assert orca.n_pairs == 2
     assert orca.reason == "single_distinct_finite_delta"
     assert orca.support.to_dict() == {
-        "schema_version": "radius_paired_support_diagnostics.v1",
+        "schema_version": "radius_paired_support_diagnostics.v2",
         "baseline_seed_count": 3,
         "radius_seed_count": 3,
         "overlapping_seed_count": 3,
@@ -590,6 +632,7 @@ def test_paired_changes_report_nonfinite_support_without_interval() -> None:
         "distinct_finite_deltas": 1,
         "status": "degenerate_support",
         "reason": "single_distinct_finite_delta",
+        "delta_basis": "paired_finite_mean",
     }
 
 
@@ -611,6 +654,7 @@ def test_paired_changes_insufficient_support_has_no_inferential_interval() -> No
     assert orca.ci_high is None
     assert orca.support.status == "insufficient_support"
     assert orca.support.reason == "insufficient_finite_paired_observations"
+    assert orca.support.delta_basis == "aggregate_table_difference"
 
 
 def test_radius_report_serializes_reproducible_paired_inference_contract() -> None:
@@ -640,14 +684,11 @@ def test_radius_report_serializes_reproducible_paired_inference_contract() -> No
     assert contract["requested_resamples"] == 257
     assert contract["rng_algorithm"] == "python_random.Random_mt19937"
     assert contract["seed"] == 456
+    assert contract["delta_distinctness_rule"] == "round_to_nearest_1e-12"
     assert len(str(contract["digest"])) == 64
 
     paired_change = payload["paired_changes"]["success"]["0.5"][0]
-    assert paired_change["support"]["status"] in {
-        "ok",
-        "insufficient_support",
-        "degenerate_support",
-    }
+    assert paired_change["support"]["status"] == "degenerate_support"
 
 
 def test_paired_inference_contract_digest_tracks_reproducibility_parameters() -> None:

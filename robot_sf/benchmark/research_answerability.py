@@ -242,9 +242,11 @@ def _validate_design(design: Mapping[str, Any]) -> None:
 def _validate_artifacts(artifacts: Mapping[str, Any]) -> None:
     for field in _REQUIRED_TEXT_FIELDS["artifacts"]:
         _text(artifacts.get(field), f"answerability.artifacts.{field}")
-    checksums = artifacts["checksums"]
-    if not isinstance(checksums, list) or not all(
-        isinstance(item, str) and item.strip() for item in checksums
+    checksums = artifacts.get("checksums")
+    if (
+        not isinstance(checksums, list)
+        or not checksums
+        or not all(isinstance(item, str) and item.strip() for item in checksums)
     ):
         raise AnswerabilityContractError(
             "answerability.artifacts.checksums must be a non-empty list of strings"

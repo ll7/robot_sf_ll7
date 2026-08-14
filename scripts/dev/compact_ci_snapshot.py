@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.check_pr_ci_status import _latest_check_runs
 
 SCHEMA_VERSION = "compact_ci_snapshot.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -43,6 +44,7 @@ class CheckSummary:
 
     overall: str
     total: int
+    superseded: int
     by_conclusion: dict[str, int]
     by_status: dict[str, int]
     names: list[str]
@@ -150,8 +152,9 @@ def _check_name(check: dict[str, Any]) -> str:
 
 
 def _build_check_summary(rollup: list[dict[str, Any]]) -> CheckSummary:
-    """Build compact check summary from rollup."""
+    """Build compact check summary after removing proven superseded reruns."""
     valid_checks = [c for c in rollup if isinstance(c, dict)]
+    effective_checks, superseded_count = _latest_check_runs(valid_checks)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
     names: set[str] = set()
@@ -159,7 +162,7 @@ def _build_check_summary(rollup: list[dict[str, Any]]) -> CheckSummary:
     pending_names: set[str] = set()
     success_names: set[str] = set()
 
-    for check in valid_checks:
+    for check in effective_checks:
         conclusion = _rollup_conclusion(check)
         status = _rollup_status(check)
         name = _check_name(check)
@@ -178,14 +181,15 @@ def _build_check_summary(rollup: list[dict[str, Any]]) -> CheckSummary:
 
     if failure_count:
         overall = "failure"
-    elif pending_count or not valid_checks:
+    elif pending_count or not effective_checks:
         overall = "pending"
     else:
         overall = "success"
 
     return CheckSummary(
         overall=overall,
-        total=len(valid_checks),
+        total=len(effective_checks),
+        superseded=superseded_count,
         by_conclusion=dict(sorted(conclusions.items())),
         by_status=dict(sorted(statuses.items())),
         names=sorted(names),
@@ -451,6 +455,7 @@ def format_human(result: SnapshotResult) -> str:
             lines.append(
                 f"        checks: {pr.checks.total} total, "
                 f"conclusions={pr.checks.by_conclusion}, "
+                f"superseded={pr.checks.superseded}, "
                 f"status={pr.checks.by_status}"
             )
             if pr.checks.failed_names:

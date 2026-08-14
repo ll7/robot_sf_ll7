@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.check_pr_ci_status import _latest_check_runs
 
 FAILURE_CONCLUSIONS = {
     "action_required",
@@ -604,11 +605,12 @@ def _check_name(check: dict[str, Any]) -> str:
 
 
 def _checks_summary(rollup: list[dict[str, Any]]) -> dict[str, Any]:
-    """Summarize a PR statusCheckRollup payload."""
+    """Summarize a PR statusCheckRollup payload after reconciling duplicate reruns."""
     valid_checks = [check for check in rollup if isinstance(check, dict)]
+    effective_checks, superseded_count = _latest_check_runs(valid_checks)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
-    for check in valid_checks:
+    for check in effective_checks:
         conclusion = _rollup_conclusion(check)
         status = _rollup_status(check)
         conclusions[conclusion] = conclusions.get(conclusion, 0) + 1
@@ -617,16 +619,17 @@ def _checks_summary(rollup: list[dict[str, Any]]) -> dict[str, Any]:
     pending_count = sum(statuses.get(status, 0) for status in PENDING_STATUSES)
     if failure_count:
         overall = "failure"
-    elif pending_count or not valid_checks:
+    elif pending_count or not effective_checks:
         overall = "pending"
     else:
         overall = "success"
     return {
         "overall": overall,
-        "total": len(valid_checks),
+        "total": len(effective_checks),
+        "superseded": superseded_count,
         "by_conclusion": conclusions,
         "by_status": statuses,
-        "names": sorted({_check_name(check) for check in valid_checks}),
+        "names": sorted({_check_name(check) for check in effective_checks}),
     }
 
 

@@ -74,6 +74,11 @@ DOMAIN_VALIDITY_LABELS = (
     "Claim boundary",
     "Implementation integrity vs experimental validity",
 )
+DOMAIN_VALIDITY_LABEL_REMEDIATION = (
+    "Use exact validity-checklist labels under `Validity checklist`: "
+    + "; ".join(f"{label}:" for label in DOMAIN_VALIDITY_LABELS)
+    + "."
+)
 FREEFORM_DOMAIN_TRIGGER_RE = re.compile(
     r"\b("
     r"evidence[_ -]?tier\s*:|claim[_ -]?boundary\s*:|diagnostic[- ]only|"
@@ -790,7 +795,7 @@ def analyze_domain_approval(
             checklist_errors=checklist_errors,
             message=(
                 "Domain-aware approval requires completed validity-checklist fields: "
-                f"{', '.join(checklist_errors)}."
+                f"{', '.join(checklist_errors)}. {DOMAIN_VALIDITY_LABEL_REMEDIATION}"
             ),
         )
     status_report = _domain_status_report(

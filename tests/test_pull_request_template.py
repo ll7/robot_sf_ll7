@@ -37,6 +37,11 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     assert "Required for this PR:" in text
     assert "Domains reviewed:" in text
     assert "Approver/review source or waiver:" in text
+    assert "Keep these machine-detected labels unchanged:" in text
+    assert "Target claim/hypothesis:" in text
+    assert "Comparator or split/evidence validity:" in text
+    assert "Fallback/degraded exclusions:" in text
+    assert "Claim boundary:" in text
     assert "Implementation integrity vs experimental validity:" in text
     assert "Deferred work:" in text
     assert "Issues opened for follow-up:" in text

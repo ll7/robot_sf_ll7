@@ -140,6 +140,131 @@ def test_run_tests_parallel_emits_duration_store_flags_for_sharded_runs() -> Non
     assert script_text.find(ci_gate) < script_text.find(clean_flag)
 
 
+def test_run_tests_parallel_allows_only_empty_fast_only_shards() -> None:
+    """A PR shard may contain only excluded slow tests, but real failures stay red."""
+
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    empty_shard_guard = (
+        'if [[ "$pytest_exit" -eq 5 && "$sharding_active" == "1" && "$include_slow" == "0" ]]'
+    )
+    assert empty_shard_guard in script_text
+    assert 'grep -Fq "no tests ran" "$pytest_log"' in script_text
+    assert "fast-only shard collected no tests" in script_text
+
+
+def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_path: Path) -> None:
+    """Exercise the exit-5 guard and prove rejected cases clean up their logs."""
+
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    (repo / "tests" / "support").mkdir(parents=True)
+    (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text("", encoding="utf-8")
+    for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "user.name=Test",
+            "-C",
+            str(repo),
+            "add",
+            ".",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=test@example.invalid",
+            "-c",
+            "user.name=Test",
+            "-C",
+            str(repo),
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        check=True,
+    )
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ "$1" == run && "$2" == python ]]; then\n'
+        '  case "$3" in\n'
+        "    *resolve_pytest_workers.py) printf '1\\n' ;;\n"
+        "    *diagnose_xdist_crash.py) exit 0 ;;\n"
+        '    *) echo "unexpected helper: $*" >&2; exit 99 ;;\n'
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "$1" == run && "$2" == pytest ]]; then\n'
+        '  cat "$FIXTURE_OUTPUT"\n'
+        '  exit "$FIXTURE_EXIT"\n'
+        "fi\n"
+        'echo "unexpected uv invocation: $*" >&2\n'
+        "exit 99\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+    temp_root = tmp_path / "tmp space"
+    temp_root.mkdir()
+    output = tmp_path / "pytest-output.txt"
+
+    cases = (
+        ("empty-fast-shard", 5, "no tests ran\n", 2, 1, 0),
+        ("ordinary-exit-5", 5, "collected 1 item\n", 2, 1, 0),
+        ("test-failure", 1, "no tests ran\n", 2, 1, 0),
+        ("collection-error", 2, "ERROR collecting test_bad.py\n", 2, 1, 0),
+        ("full-suite-empty", 5, "no tests ran\n", 2, 1, 1),
+        ("unsharded-empty", 5, "no tests ran\n", 1, 1, 0),
+    )
+    for name, pytest_exit, pytest_output, shard_count, shard_index, include_slow in cases:
+        output.write_text(pytest_output, encoding="utf-8")
+        env = {
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_FAST_FAIL": "0",
+            "PYTEST_ORDER_MODE": "none",
+            "PYTEST_SHARD_COUNT": str(shard_count),
+            "PYTEST_SHARD_INDEX": str(shard_index),
+            "ROBOT_SF_SHARD_INCLUDE_SLOW": str(include_slow),
+            "PR_READY_SKIP_PREFLIGHT": "1",
+            "PYTEST_DEBUG_TEMPROOT": "fixture",
+            "TMPDIR": str(temp_root),
+            "FIXTURE_OUTPUT": str(output),
+            "FIXTURE_EXIT": str(pytest_exit),
+        }
+        result = subprocess.run(
+            [str(script_dir / "run_tests_parallel.sh")],
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        expected = 0 if name == "empty-fast-shard" else pytest_exit
+        assert result.returncode == expected, (name, result.stdout, result.stderr)
+        assert not list(temp_root.glob("pytest_run.*.log")), name
+        assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+
 def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     """Keep CI duration restore, per-shard upload, and aggregate-save wiring intact."""
 

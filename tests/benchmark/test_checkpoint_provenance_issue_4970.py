@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 import robot_sf.benchmark.camera_ready._preflight as preflight_module
-import robot_sf.benchmark.campaign_checkpoint_preflight as checkpoint_module
+import robot_sf.benchmark.campaign.campaign_checkpoint_preflight as checkpoint_module
 from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.camera_ready._config import _validate_campaign_config
 from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
@@ -16,7 +16,7 @@ from robot_sf.benchmark.camera_ready.campaign import (
     _checkpoint_fallback_detected,
     _finalize_checkpoint_provenance,
 )
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )

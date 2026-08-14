@@ -120,7 +120,7 @@ class TestBenchmarkIndividualFileExceptions:
         _assert_triple_catch(BenchmarkProtocolError, ValueError)
 
     def test_campaign_checkpoint_preflight_error(self) -> None:
-        from robot_sf.benchmark.campaign_checkpoint_preflight import (
+        from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
             CampaignCheckpointPreflightError,
         )
 
@@ -227,7 +227,7 @@ class TestBenchmarkIndividualFileExceptions:
             raise NearMissTtcInputError("bad input")
 
     def test_benchmark_runtime_errors_legacy_catch_preserved(self) -> None:
-        from robot_sf.benchmark.campaign_checkpoint_preflight import (
+        from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
             CampaignCheckpointPreflightError,
         )
 

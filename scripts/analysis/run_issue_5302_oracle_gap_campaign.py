@@ -7,7 +7,7 @@ The frozen analysis packet at ``configs/analysis/issue_5302_oracle_gap_packet.ya
 already fixes the six-arm roster, the family-disjoint split, the four ceilings, and
 the report contract. The packet checker
 (:mod:`scripts.validation.check_issue_5302_oracle_gap_packet`) and the arm-admission
-gate (:mod:`robot_sf.benchmark.campaign_arm_admission`) verify that *contract* and
+gate (:mod:`robot_sf.benchmark.campaign.campaign_arm_admission`) verify that *contract* and
 that each arm instantiates. They do not, however, *materialize* the campaign: they do
 not resolve the family-disjoint episode matrix, the per-cell seed schedule, the
 campaign denominator, or a one-cell canary.
@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from robot_sf.benchmark.campaign_arm_admission import (
+from robot_sf.benchmark.campaign.campaign_arm_admission import (
     CampaignArmAdmissionError,
     check_campaign_arm_admission,
 )
@@ -246,7 +246,7 @@ def _resolve_algo(planner_id: str, config: dict[str, Any] | None) -> str:
 def _iter_model_ids(config: dict[str, Any]) -> list[str]:
     """Return every checkpoint ``model_id``-style reference declared in a config.
 
-    Mirrors :func:`robot_sf.benchmark.campaign_arm_admission._iter_model_ids` so a
+    Mirrors :func:`robot_sf.benchmark.campaign.campaign_arm_admission._iter_model_ids` so a
     nested predictive checkpoint is still resolved.
     """
     id_keys = ("model_id", "sacadrl_model_id", "predictive_model_id")
@@ -302,7 +302,7 @@ def resolve_arms(
     """Resolve every frozen-roster arm through the real loaders and provenance hashes.
 
     This first runs the real-loader admission gate
-    (:func:`robot_sf.benchmark.campaign_arm_admission.check_campaign_arm_admission`) so a
+    (:func:`robot_sf.benchmark.campaign.campaign_arm_admission.check_campaign_arm_admission`) so a
     declared arm that cannot instantiate as declared fails closed. It then loads each
     arm's config (real YAML loader), resolves its canonical algorithm, computes a config
     hash, and records each checkpoint's registry provenance pin.

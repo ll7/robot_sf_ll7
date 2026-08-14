@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 import yaml
 
-from robot_sf.benchmark.campaign_arm_admission import (
+from robot_sf.benchmark.campaign.campaign_arm_admission import (
     ArmAdmissionFinding,
     CampaignArmAdmissionError,
     check_campaign_arm_admission,

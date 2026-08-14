@@ -17,8 +17,8 @@ from robot_sf.benchmark.full_classic import encode as encode_mod
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_ASSERT_COUNTS = {
-    "robot_sf/benchmark/campaign_arm_admission.py": 0,
-    "robot_sf/benchmark/campaign_atlas.py": 0,
+    "robot_sf/benchmark/campaign/campaign_arm_admission.py": 0,
+    "robot_sf/benchmark/campaign/campaign_atlas.py": 0,
     "robot_sf/benchmark/candidate_trace_resolution.py": 0,
     "robot_sf/benchmark/false_positive_injection_readiness.py": 0,
     "robot_sf/benchmark/figure_qa.py": 0,

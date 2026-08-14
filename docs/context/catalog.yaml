@@ -5264,6 +5264,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence

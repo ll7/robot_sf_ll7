@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #5409 horizon-ablation launch packet.** Added a machine-checkable launch
+  contract for the roster-matched, seed-matched h500-vs-h600 comparison, pinning the
+  per-horizon results directory, the pre-`sbatch` checkpoint-gate receipt path, the
+  frozen 12x48x3 matrix, and the measured environment identity (scenario-matrix,
+  comparability, and observation-noise hashes) for both arms. A fail-closed checker
+  rejects config drift, hash drift, a shared results directory, a missing gate receipt,
+  fallback rows counted as evidence, or any packet that self-authorizes compute. No
+  campaign is submitted and no horizon result is claimed.
+
 * **Issue #6646 held-out diagnosis comparison infrastructure.** Added a pinned
   learned-method manifest, exact case-alignment and fixture-review admission gates,
   non-deterministic learned-source projection, and a versioned diagnostic comparison

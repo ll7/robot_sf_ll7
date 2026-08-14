@@ -60,7 +60,7 @@ uv run pytest tests/analysis/test_run_issue_5302_oracle_gap_campaign.py -q
 
 This materialization reuses — and does not modify — the frozen packet, the packet checker
 (`scripts/validation/check_issue_5302_oracle_gap_packet.py`), the arm-admission gate
-(`robot_sf/benchmark/campaign_arm_admission.py`), and the partition manifest. The native
+(`robot_sf/benchmark/campaign/campaign_arm_admission.py`), and the partition manifest. The native
 campaign execution itself (running episodes) is out of scope for this PR and routes through
 the ops queue in a separate, compute-authorized follow-up under parent issue #5302.
 

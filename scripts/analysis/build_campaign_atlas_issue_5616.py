@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.campaign_atlas import (
+from robot_sf.benchmark.campaign.campaign_atlas import (
     AtlasConfig,
     EpisodeInventoryRow,
     PredicateInterval,

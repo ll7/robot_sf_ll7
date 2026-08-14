@@ -1,4 +1,4 @@
-"""Focused unit coverage for ``robot_sf/benchmark/campaign_logging.py``.
+"""Focused unit coverage for ``robot_sf/benchmark/campaign/campaign_logging.py``.
 
 This module exercises the campaign logging public API directly (rather than through
 the campaign CLI entry points) and prioritizes the branches that

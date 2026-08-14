@@ -45,10 +45,10 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     check_campaign_arm_checkpoints_preflight,
 )
-from robot_sf.benchmark.campaign_runtime_preflight import (
+from robot_sf.benchmark.campaign.campaign_runtime_preflight import (
     check_campaign_arm_policy_dependencies_preflight,
     check_campaign_scenario_maps_preflight,
 )

@@ -20,7 +20,7 @@ from robot_sf.benchmark.camera_ready._config_types import (
     SeedPolicy,
 )
 from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
     iter_campaign_arm_checkpoint_references,

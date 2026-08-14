@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import pytest
 
-from robot_sf.benchmark.campaign_atlas import (
+from robot_sf.benchmark.campaign.campaign_atlas import (
     AtlasConfig,
     CampaignAtlasError,
     EpisodeInventoryRow,

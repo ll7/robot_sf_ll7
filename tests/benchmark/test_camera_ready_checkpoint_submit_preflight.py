@@ -17,7 +17,7 @@ import pytest
 import yaml
 
 import robot_sf.benchmark.camera_ready._preflight as preflight_module
-import robot_sf.benchmark.campaign_checkpoint_preflight as ckpt_module
+import robot_sf.benchmark.campaign.campaign_checkpoint_preflight as ckpt_module
 from robot_sf.benchmark.camera_ready._config_types import (
     CampaignConfig,
     PlannerSpec,
@@ -27,7 +27,7 @@ from robot_sf.benchmark.camera_ready._preflight import (
     _CHECKPOINT_PREFLIGHT_REPORT_NAME,
     prepare_campaign_preflight,
 )
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )

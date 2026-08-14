@@ -18,6 +18,7 @@ import hashlib
 import json
 import math
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
@@ -1263,6 +1264,28 @@ def _validate_generation_command(source: SourceRef, errors: list[str]) -> None:
             f"source {source.source_id!r}: command must name a tracked Python script or review marker"
         )
         return
+    try:
+        command_tokens = shlex.split(source.command)
+    except ValueError as exc:
+        errors.append(f"source {source.source_id!r}: command is not shell-parseable: {exc}")
+        return
+    non_assignment_tokens = [token for token in command_tokens if "=" not in token.split("/", 1)[0]]
+    python_names = {"python", "python3", "pypy", "pypy3"}
+    invoked_script_paths = {
+        token.removeprefix("./")
+        for index, token in enumerate(command_tokens)
+        if token.removeprefix("./") in script_paths
+        and (
+            (index > 0 and Path(command_tokens[index - 1]).name.casefold() in python_names)
+            or (non_assignment_tokens and token == non_assignment_tokens[0])
+        )
+    }
+    missing_invocations = sorted(set(script_paths).difference(invoked_script_paths))
+    if missing_invocations:
+        errors.append(
+            f"source {source.source_id!r}: command must invoke each named Python script, "
+            f"not merely mention it: {missing_invocations}"
+        )
     for script_path in script_paths:
         if _git_file_sha256(source.commit, script_path) is None:
             errors.append(

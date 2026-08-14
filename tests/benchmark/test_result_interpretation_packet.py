@@ -791,6 +791,14 @@ class TestMutationTests:
         errors = validate_packet(payload)
         assert any("command must name a tracked Python script" in e for e in errors)
 
+    def test_generation_command_must_invoke_script_not_mention_it(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["command"] = (
+            "echo scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py"
+        )
+        errors = validate_packet(payload)
+        assert any("must invoke each named Python script" in e for e in errors)
+
     def test_generation_commit_must_contain_command_script(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["sources"][0]["command"] = (

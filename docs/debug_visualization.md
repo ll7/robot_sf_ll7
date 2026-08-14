@@ -65,10 +65,12 @@ uv run python scripts/tools/render_trace_dossier.py \
 ```
 
 The dossier contains trajectory, speed profile, clearance-over-time, and event timeline panels.
-It only uses `simulation_trace_export.v1` frame fields. When actor radii are absent, the clearance
-panel reports center-to-center distance and records that limitation in `trace_dossier_manifest.v1`;
-mixed radius metadata or missing planner events fail closed instead of inventing body-edge
-clearance or event annotations. The renderer is diagnostic/tooling-only and does not acquire traces,
+It only uses `simulation_trace_export.v1` frame fields. The manifest records the canonical
+`distance_convention` (`center_center` or `surface_clearance`) from the metrics specification.
+When actor radii are absent, the clearance panel reports center-to-center distance and records that
+limitation in `trace_dossier_manifest.v1`; mixed radius metadata or missing planner events fail
+closed instead of inventing body-edge clearance or event annotations. The renderer is
+diagnostic/tooling-only and does not acquire traces,
 run simulation, or admit benchmark or paper-facing evidence.
 
 To generate reusable static trajectory panels and failure mosaics from the same trace-export

@@ -71,11 +71,9 @@
     "clearance_semantics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "units", "minimum_clearance"],
+      "required": ["distance_convention", "units", "minimum_clearance"],
       "properties": {
-        "mode": {
-          "enum": ["center_distance_m", "edge_distance_m"]
-        },
+        "distance_convention": {"enum": ["center_center", "surface_clearance"]},
         "units": {"const": "m"},
         "minimum_clearance": {
           "type": "object",

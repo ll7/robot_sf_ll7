@@ -50,7 +50,7 @@ class ClearancePoint:
     time_s: float
     pedestrian_id: str
     value_m: float
-    mode: str
+    distance_convention: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +155,7 @@ def _validate_renderable_trace(trace: SimulationTraceExport) -> None:
             "event timeline requires planner.event on every frame; missing steps: "
             + ", ".join(str(step) for step in missing_event_steps)
         )
-    _radius_mode(trace)
+    _distance_convention(trace)
 
 
 def _render_png(
@@ -262,9 +262,13 @@ def _plot_clearance(clearance_points: list[ClearancePoint], ax: Any) -> None:
     times = [point.time_s for point in clearance_points]
     values = [point.value_m for point in clearance_points]
     labels = [point.pedestrian_id for point in clearance_points]
-    mode = clearance_points[0].mode
+    distance_convention = clearance_points[0].distance_convention
     title = "Clearance Over Time"
-    ylabel = "edge clearance (m)" if mode == "edge_distance_m" else "center distance (m)"
+    ylabel = (
+        "surface clearance (m)"
+        if distance_convention == "surface_clearance"
+        else "center distance (m)"
+    )
     ax.plot(times, values, color="#9467bd", marker="o")
     minimum = min(clearance_points, key=lambda point: (point.value_m, point.time_s, point.step))
     ax.scatter([minimum.time_s], [minimum.value_m], color="#d62728", s=42, zorder=4)
@@ -309,7 +313,7 @@ def _plot_event_timeline(trace: SimulationTraceExport, ax: Any) -> None:
 
 
 def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
-    mode = _radius_mode(trace)
+    distance_convention = _distance_convention(trace)
     points: list[ClearancePoint] = []
     for frame_index, frame in enumerate(trace.frames):
         if not frame.pedestrians:
@@ -320,7 +324,7 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
         )
         robot_radius = (
             _radius(frame.robot, context=f"/frames/{frame_index}/robot/radius")
-            if mode == "edge_distance_m"
+            if distance_convention == "surface_clearance"
             else 0.0
         )
         candidates: list[ClearancePoint] = []
@@ -331,7 +335,7 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
             )
             distance = math.dist(robot_position, ped_position)
             value = distance
-            if mode == "edge_distance_m":
+            if distance_convention == "surface_clearance":
                 value = (
                     distance
                     - robot_radius
@@ -350,7 +354,7 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
                     time_s=time_s,
                     pedestrian_id=str(pedestrian["id"]),
                     value_m=value,
-                    mode=mode,
+                    distance_convention=distance_convention,
                 )
             )
         points.append(min(candidates, key=lambda point: (point.value_m, point.pedestrian_id)))
@@ -361,7 +365,7 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
     return points
 
 
-def _radius_mode(trace: SimulationTraceExport) -> str:
+def _distance_convention(trace: SimulationTraceExport) -> str:
     present = 0
     missing = 0
     for frame in trace.frames:
@@ -376,7 +380,7 @@ def _radius_mode(trace: SimulationTraceExport) -> str:
         raise TraceDossierRenderError(
             "clearance-over-time cannot mix actor radius metadata with missing radii"
         )
-    return "edge_distance_m" if present else "center_distance_m"
+    return "surface_clearance" if present else "center_center"
 
 
 def _manifest_payload(
@@ -415,7 +419,7 @@ def _manifest_payload(
             "event_timeline",
         ],
         "clearance_semantics": {
-            "mode": clearance_points[0].mode,
+            "distance_convention": clearance_points[0].distance_convention,
             "units": "m",
             "minimum_clearance": {
                 "time_s": minimum.time_s,
@@ -424,16 +428,16 @@ def _manifest_payload(
                 "value_m": minimum.value_m,
             },
         },
-        "limitations": _limitations(clearance_points[0].mode),
+        "limitations": _limitations(clearance_points[0].distance_convention),
     }
 
 
-def _limitations(clearance_mode: str) -> list[str]:
+def _limitations(distance_convention: str) -> list[str]:
     limitations = [
         "diagnostic-only renderer; does not run simulation or admit benchmark evidence",
         "events are rendered only from planner.event and optional planner.event_id fields present in each frame",
     ]
-    if clearance_mode == "center_distance_m":
+    if distance_convention == "center_center":
         limitations.append(
             "actor radii are absent, so clearance panel reports center-to-center distance, not body-edge clearance"
         )

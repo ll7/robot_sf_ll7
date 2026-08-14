@@ -55,7 +55,7 @@ def test_trace_dossier_renderer_writes_four_panel_png_and_manifest(tmp_path: Pat
         "clearance_over_time",
         "event_timeline",
     ]
-    assert manifest["clearance_semantics"]["mode"] == "center_distance_m"
+    assert manifest["clearance_semantics"]["distance_convention"] == "center_center"
     assert manifest["clearance_semantics"]["minimum_clearance"]["pedestrian_id"] == "ped_1"
     assert manifest["evidence_boundary"] == "diagnostic_only"
     assert "not body-edge clearance" in " ".join(manifest["limitations"])
@@ -88,6 +88,28 @@ def test_trace_dossier_renderer_repeat_is_byte_deterministic(tmp_path: Path) -> 
     first_payload["outputs"]["png"]["path"] = "<normalized>"
     second_payload["outputs"]["png"]["path"] = "<normalized>"
     assert first_payload == second_payload
+
+
+def test_trace_dossier_renderer_records_surface_clearance_convention(tmp_path: Path) -> None:
+    """Complete actor radii select the canonical surface-clearance convention."""
+
+    payload = _fixture_payload()
+    for frame in payload["frames"]:
+        frame["robot"]["radius"] = 0.2
+        for pedestrian in frame["pedestrians"]:
+            pedestrian["radius"] = 0.3
+    trace_path = tmp_path / "surface_clearance.json"
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = render_trace_dossier(
+        trace_path,
+        output_png=tmp_path / "out.png",
+        manifest_path=tmp_path / "manifest.json",
+        command="pytest fixture",
+    )
+
+    assert result.manifest["clearance_semantics"]["distance_convention"] == "surface_clearance"
+    assert "body-edge distance" in " ".join(result.manifest["limitations"])
 
 
 def test_trace_dossier_renderer_fails_closed_without_events(tmp_path: Path) -> None:
@@ -219,7 +241,7 @@ def test_trace_dossier_manifest_schema_rejects_benchmark_boundary() -> None:
             "event_timeline",
         ],
         "clearance_semantics": {
-            "mode": "center_distance_m",
+            "distance_convention": "center_center",
             "units": "m",
             "minimum_clearance": {
                 "time_s": 0.0,

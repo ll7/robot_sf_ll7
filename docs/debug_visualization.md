@@ -86,9 +86,11 @@ uv run python scripts/tools/build_trace_dossier_package.py \
 ```
 
 The package composes the deterministic representative selection, existing-trace export, cell
-binding, four-panel render, and recursive `SHA256SUMS` manifest. Missing or mismatched source
-identity/checksums fail closed. It is diagnostic-only metadata and does not acquire traces, run
-simulation, submit compute, or admit benchmark evidence.
+binding, four-panel render, and recursive `SHA256SUMS` manifest. The candidate campaign identity
+must agree with the campaign-store study identity; missing or mismatched source identity/checksums
+fail closed. Candidate cell and verdict metadata remain supplied metadata rather than inferred
+outcomes. It is diagnostic-only metadata and does not acquire traces, run simulation, submit
+compute, or admit benchmark evidence.
 
 To generate reusable static trajectory panels and failure mosaics from the same trace-export
 format, run:

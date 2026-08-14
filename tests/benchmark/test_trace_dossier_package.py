@@ -6,13 +6,16 @@ import hashlib
 import json
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark import trace_dossier_package as package_module
 from robot_sf.benchmark.trace_dossier_package import (
     TraceDossierPackageError,
     build_trace_dossier_package,
+    validate_trace_dossier_package_manifest,
 )
 from scripts.tools.campaign_result_store import write_result_store
 from scripts.tools.export_trace_dossier import TraceDossierExportError
@@ -66,7 +69,7 @@ def _write_store(tmp_path: Path, source: Path) -> Path:
 
 def _candidate(source: Path, **overrides: object) -> dict[str, object]:
     candidate: dict[str, object] = {
-        "campaign_id": "campaign-fixture",
+        "campaign_id": "trace-dossier-fixture",
         "cell_id": "cell-fixture",
         "scenario_id": "francis2023_blind_corner",
         "scenario_family": "classic",
@@ -141,10 +144,10 @@ def test_package_is_byte_deterministic_for_same_inputs(tmp_path: Path) -> None:
 
 
 def test_package_rejects_export_identity_mismatch(tmp_path: Path) -> None:
-    """A cell row cannot relabel the episode selected by the pinned exporter."""
+    """A cell row cannot relabel the episode selected by the campaign result store."""
     source = _write_source(tmp_path)
     store = _write_store(tmp_path, source)
-    with pytest.raises(TraceDossierPackageError, match="export identity mismatch"):
+    with pytest.raises(TraceDossierPackageError, match="authoritative campaign row"):
         build_trace_dossier_package(
             candidates=[_candidate(source, episode_id="wrong-episode")],
             release_manifest_path=_RELEASE,
@@ -160,6 +163,19 @@ def test_package_rejects_selected_source_checksum_mismatch(tmp_path: Path) -> No
     with pytest.raises(TraceDossierPackageError, match="source artifact SHA-256"):
         build_trace_dossier_package(
             candidates=[_candidate(source, trace_sha256="0" * 64)],
+            release_manifest_path=_RELEASE,
+            campaign_store_dir=store,
+            output_dir=tmp_path / "package",
+        )
+
+
+def test_package_rejects_candidate_campaign_id_not_in_store(tmp_path: Path) -> None:
+    """A candidate cannot relabel the authoritative campaign result store."""
+    source = _write_source(tmp_path)
+    store = _write_store(tmp_path, source)
+    with pytest.raises(TraceDossierPackageError, match="campaign result store study_id"):
+        build_trace_dossier_package(
+            candidates=[_candidate(source, campaign_id="campaign-fixture")],
             release_manifest_path=_RELEASE,
             campaign_store_dir=store,
             output_dir=tmp_path / "package",
@@ -184,6 +200,54 @@ def test_package_rejects_source_inside_output_before_writing(tmp_path: Path) -> 
 
     assert source.read_bytes() == original_source
     assert sorted(path.name for path in output.iterdir()) == ["package_manifest.json"]
+
+
+def test_package_schema_validates_nested_selection_and_binding(tmp_path: Path) -> None:
+    """The package schema must validate the nested versioned metadata blocks."""
+    source = _write_source(tmp_path)
+    store = _write_store(tmp_path, source)
+    result = build_trace_dossier_package(
+        candidates=[_candidate(source)],
+        release_manifest_path=_RELEASE,
+        campaign_store_dir=store,
+        output_dir=tmp_path / "package",
+    )
+
+    invalid_selection = deepcopy(result.manifest)
+    invalid_selection["selection"].pop("selected_seed_id")
+    with pytest.raises(TraceDossierPackageError, match="selection"):
+        validate_trace_dossier_package_manifest(invalid_selection)
+
+    invalid_binding = deepcopy(result.manifest)
+    invalid_binding["cell_binding"]["selected_trace"].pop("trace_sha256")
+    with pytest.raises(TraceDossierPackageError, match="cell_binding"):
+        validate_trace_dossier_package_manifest(invalid_binding)
+
+
+def test_package_rejects_malformed_renderer_manifest_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed renderer metadata becomes a package error instead of a raw lookup error."""
+    source = _write_source(tmp_path)
+    store = _write_store(tmp_path, source)
+
+    def write_malformed_manifest(*args: object, **kwargs: object) -> None:
+        output_png = kwargs["output_png"]
+        manifest_path = kwargs["manifest_path"]
+        assert isinstance(output_png, Path)
+        assert isinstance(manifest_path, Path)
+        output_png.parent.mkdir(parents=True, exist_ok=True)
+        output_png.write_bytes(b"not-a-real-png")
+        manifest_path.write_text("{}\n", encoding="utf-8")
+
+    monkeypatch.setattr(package_module, "render_trace_dossier", write_malformed_manifest)
+    with pytest.raises(TraceDossierPackageError, match="renderer manifest cannot be normalized"):
+        build_trace_dossier_package(
+            candidates=[_candidate(source)],
+            release_manifest_path=_RELEASE,
+            campaign_store_dir=store,
+            output_dir=tmp_path / "package",
+        )
 
 
 def test_package_propagates_missing_source_as_blocked(tmp_path: Path) -> None:

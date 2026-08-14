@@ -73,16 +73,15 @@ def build_trace_dossier_package(
     selection = select_representative(rows)
     selected = _selected_row(rows, selection.selected_seed_id)
     _reject_output_overlap(output_dir, campaign_store_dir)
-    _reject_source_overlap(
-        output_dir,
-        resolve_episode_source(
-            scenario_id=selected["scenario_id"],
-            planner_id=selected["planner_id"],
-            seed=selected["seed"],
-            campaign_store_dir=campaign_store_dir,
-            trace_search_roots=trace_search_roots,
-        ),
+    resolution = resolve_episode_source(
+        scenario_id=selected["scenario_id"],
+        planner_id=selected["planner_id"],
+        seed=selected["seed"],
+        campaign_store_dir=campaign_store_dir,
+        trace_search_roots=trace_search_roots,
     )
+    _validate_campaign_resolution(resolution, selected)
+    _reject_source_overlap(output_dir, resolution)
     _prepare_output_dir(output_dir)
 
     export_dir = output_dir / "export"
@@ -175,7 +174,7 @@ def build_trace_dossier_package(
         "limitations": [
             "existing-artifact composition only; no simulation or new trace acquisition",
             "diagnostic-only renderer output is not benchmark or paper-facing evidence",
-            "cell binding records supplied verdict counts and does not infer a verdict",
+            "candidate cell identity and verdict counts are supplied metadata; the campaign store validates the study identity, tuple, episode, and artifact provenance",
         ],
     }
     validate_trace_dossier_package_manifest(manifest)
@@ -301,6 +300,43 @@ def _validate_export_identity(
         raise TraceDossierPackageError("export source artifact SHA-256 does not match candidate")
 
 
+def _validate_campaign_resolution(
+    resolution: Mapping[str, Any], selected: Mapping[str, Any]
+) -> None:
+    """Require candidate identity to agree with the authoritative campaign row."""
+
+    if resolution.get("resolution_status") != "resolved":
+        return
+    observed_campaign_id = resolution.get("campaign_id")
+    if not isinstance(observed_campaign_id, str) or not observed_campaign_id.strip():
+        raise TraceDossierPackageError(
+            "resolved campaign row is missing an authoritative campaign_id"
+        )
+    if selected["campaign_id"] != observed_campaign_id:
+        raise TraceDossierPackageError(
+            "candidate campaign_id does not match campaign result store study_id: "
+            f"expected {observed_campaign_id!r}, observed {selected['campaign_id']!r}"
+        )
+    for field in ("scenario_id", "planner_id", "seed", "episode_id"):
+        observed = resolution.get(field)
+        if observed != selected[field]:
+            raise TraceDossierPackageError(
+                f"candidate {field} does not match authoritative campaign row: "
+                f"expected {observed!r}, observed {selected[field]!r}"
+            )
+    observed_family = resolution.get("scenario_family")
+    selected_family = selected.get("scenario_family")
+    if (
+        selected_family is not None
+        and observed_family is not None
+        and selected_family != observed_family
+    ):
+        raise TraceDossierPackageError(
+            "candidate scenario_family does not match authoritative campaign row: "
+            f"expected {observed_family!r}, observed {selected_family!r}"
+        )
+
+
 def _normalize_render_manifest(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -308,11 +344,20 @@ def _normalize_render_manifest(path: Path) -> dict[str, Any]:
         raise TraceDossierPackageError(f"renderer manifest is unreadable: {exc}") from exc
     if not isinstance(payload, dict):
         raise TraceDossierPackageError("renderer manifest must be a JSON object")
-    payload["source_trace"]["path"] = "export/trace.json"
-    payload["outputs"]["png"]["path"] = "render/dossier.png"
     try:
+        source_trace = payload["source_trace"]
+        outputs = payload["outputs"]
+        if not isinstance(source_trace, dict) or not isinstance(outputs, dict):
+            raise TraceDossierPackageError(
+                "renderer manifest source_trace and outputs must be JSON objects"
+            )
+        png_output = outputs["png"]
+        if not isinstance(png_output, dict):
+            raise TraceDossierPackageError("renderer manifest outputs.png must be a JSON object")
+        source_trace["path"] = "export/trace.json"
+        png_output["path"] = "render/dossier.png"
         validate_trace_dossier_manifest(payload)
-    except (KeyError, TraceDossierRenderError) as exc:
+    except (KeyError, TypeError, TraceDossierRenderError, TraceDossierPackageError) as exc:
         raise TraceDossierPackageError(f"renderer manifest cannot be normalized: {exc}") from exc
     _write_canonical_json(path, payload)
     return payload

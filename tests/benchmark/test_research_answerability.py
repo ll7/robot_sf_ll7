@@ -153,6 +153,21 @@ def test_malformed_contract_is_invalid() -> None:
     assert "primary" in result.reasons[0]
 
 
+@pytest.mark.parametrize("checksums", [None, [], ["  "], ["summary.json", 1]])
+def test_invalid_checksum_declarations_are_fail_closed(checksums: object) -> None:
+    """Artifact provenance requires a non-empty list of non-empty checksum names."""
+    contract = _example_contract()
+    if checksums is None:
+        del contract["artifacts"]["checksums"]
+    else:
+        contract["artifacts"]["checksums"] = checksums
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert "checksums" in result.reasons[0]
+
+
 @pytest.mark.parametrize(
     ("case_id", "mutator", "expected"),
     [

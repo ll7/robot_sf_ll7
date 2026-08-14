@@ -226,6 +226,25 @@ def test_stage_a_summary_semantic_drift_fails_closed(
         validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
 
 
+def test_hidden_stage_a_space_filling_candidate_fails_closed(tmp_path: Path) -> None:
+    """Every space-filling profile is recomputed against the frozen all-seed rule."""
+
+    def promote_lhs_06(summary: dict[str, Any]) -> None:
+        profiles = _stage_a(summary)["profile_summaries"]
+        assert isinstance(profiles, list)
+        for profile in profiles:
+            if isinstance(profile, dict) and profile.get("profile_id") == "lhs_06":
+                profile["clear_lsi_hits"] = 3
+                profile["clear_lsi_total"] = 3
+                return
+        raise AssertionError("lhs_06 profile missing from Stage A summary")
+
+    packet, source_root = _mutated_summary_packet(tmp_path, promote_lhs_06)
+
+    with pytest.raises(StageBPreregistrationError, match="computed Stage A eligible profile IDs"):
+        validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
+
+
 def test_held_out_seed_overlap_fails_closed() -> None:
     """Held-out rows cannot reuse a Stage A seed."""
     packet = copy.deepcopy(_packet())
@@ -241,6 +260,16 @@ def test_fidelity_surface_omission_fails_closed() -> None:
     packet["fidelity_cost_surfaces"]["outcomes"].pop()  # type: ignore[index]
 
     with pytest.raises(StageBPreregistrationError, match="fidelity surface set drifted"):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+def test_duplicate_fidelity_surface_id_fails_closed() -> None:
+    """A duplicate surface row cannot be hidden by dict collapse before completeness checks."""
+    packet = copy.deepcopy(_packet())
+    surfaces = packet["fidelity_cost_surfaces"]["outcomes"]  # type: ignore[index]
+    surfaces.append(copy.deepcopy(surfaces[0]))
+
+    with pytest.raises(StageBPreregistrationError, match="duplicate fidelity surface_id"):
         validate_preregistration_config(packet, config_path=PACKET)
 
 

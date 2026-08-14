@@ -386,23 +386,104 @@ def _validate_stage_a_snapshot_matches_summary(
         "Stage A summary clear threshold disagrees with preregistration snapshot",
     )
 
-    decision = _mapping(stage_a.get("decision"), "stage_a_summary.stage_a.decision")
-    observed = _mapping(snapshot.get("observed_decision"), "stage_a_snapshot.observed_decision")
-    _require(
-        decision.get("robust_clear_profile_found") is False
-        and observed.get("robust_candidate_count") == 0,
-        "Stage A summary robust candidate decision disagrees with preregistration snapshot",
-    )
-
     profile_summaries = _list(
         stage_a.get("profile_summaries"), "stage_a_summary.stage_a.profile_summaries"
     )
-    lhs_05_rows = [
-        _mapping(profile, "stage_a_summary.stage_a.profile_summaries[]")
-        for profile in profile_summaries
-        if _mapping(profile, "stage_a_summary.stage_a.profile_summaries[]").get("profile_id")
-        == "lhs_05"
-    ]
+    selection = _mapping(config.get("candidate_selection"), "candidate_selection")
+    required_hit_count = selection.get("required_clear_hit_count")
+    required_seed_count = selection.get("required_clear_seed_count")
+    _require(
+        isinstance(required_hit_count, int)
+        and not isinstance(required_hit_count, bool)
+        and isinstance(required_seed_count, int)
+        and not isinstance(required_seed_count, bool),
+        "candidate hit-count rule must be integer-valued",
+    )
+
+    expected_space_filling_ids = _list(
+        profiles.get("profile_ids"), "stage_a_snapshot.profiles.profile_ids"
+    )
+    _require(
+        all(
+            isinstance(profile_id, str) and profile_id.strip()
+            for profile_id in expected_space_filling_ids
+        ),
+        "Stage A space-filling profile IDs must be non-empty strings",
+    )
+    _require(
+        len(set(expected_space_filling_ids)) == len(expected_space_filling_ids),
+        "Stage A space-filling profile IDs must be unique",
+    )
+    fixed_anchors = _list(profiles.get("fixed_anchors"), "stage_a_snapshot.profiles.fixed_anchors")
+    _require(
+        all(isinstance(profile_id, str) and profile_id.strip() for profile_id in fixed_anchors),
+        "Stage A fixed-anchor profile IDs must be non-empty strings",
+    )
+    expected_profile_ids = set(expected_space_filling_ids) | set(fixed_anchors)
+    _require(
+        len(expected_profile_ids) == len(expected_space_filling_ids) + len(fixed_anchors),
+        "Stage A profile IDs must be unique across space-filling and fixed-anchor rows",
+    )
+
+    rows_by_id: dict[str, Mapping[str, Any]] = {}
+    computed_eligible_ids: list[str] = []
+    for raw_profile in profile_summaries:
+        profile = _mapping(raw_profile, "stage_a_summary.stage_a.profile_summaries[]")
+        profile_id = profile.get("profile_id")
+        _require(
+            isinstance(profile_id, str) and profile_id.strip(),
+            "Stage A profile summary must contain a non-empty profile_id",
+        )
+        _require(
+            profile_id not in rows_by_id,
+            f"Stage A profile summary has duplicate profile_id: {profile_id}",
+        )
+        rows_by_id[profile_id] = profile
+        clear_hits = profile.get("clear_lsi_hits")
+        clear_total = profile.get("clear_lsi_total")
+        _require(
+            isinstance(clear_hits, int)
+            and not isinstance(clear_hits, bool)
+            and isinstance(clear_total, int)
+            and not isinstance(clear_total, bool)
+            and 0 <= clear_hits <= clear_total,
+            f"Stage A profile {profile_id} has malformed clear hit counts",
+        )
+        _require(
+            clear_total == required_seed_count,
+            f"Stage A profile {profile_id} clear total disagrees with frozen seed count",
+        )
+        if profile_id in expected_space_filling_ids and clear_hits == required_hit_count:
+            computed_eligible_ids.append(profile_id)
+
+    _require(
+        set(rows_by_id) == expected_profile_ids,
+        "Stage A profile summary identity set disagrees with preregistration snapshot",
+    )
+    computed_eligible_ids = sorted(computed_eligible_ids)
+    frozen_selection = selection.get("current_selection")
+    _require(
+        isinstance(frozen_selection, list)
+        and all(isinstance(profile_id, str) for profile_id in frozen_selection),
+        "candidate_selection.current_selection must be a list of profile IDs",
+    )
+    _require(
+        computed_eligible_ids == frozen_selection,
+        "computed Stage A eligible profile IDs disagree with frozen current selection",
+    )
+
+    decision = _mapping(stage_a.get("decision"), "stage_a_summary.stage_a.decision")
+    observed = _mapping(snapshot.get("observed_decision"), "stage_a_snapshot.observed_decision")
+    _require(
+        observed.get("robust_candidate_count") == len(computed_eligible_ids),
+        "computed Stage A eligible profile count disagrees with preregistration decision",
+    )
+    _require(
+        decision.get("robust_clear_profile_found") is bool(computed_eligible_ids),
+        "Stage A summary robust candidate decision disagrees with computed eligibility",
+    )
+
+    lhs_05_rows = [rows_by_id["lhs_05"]] if "lhs_05" in rows_by_id else []
     _require(
         len(lhs_05_rows) == 1,
         "Stage A summary must contain exactly one lhs_05 profile summary",
@@ -542,7 +623,19 @@ def _validate_fidelity_surfaces(config: Mapping[str, Any]) -> None:
         "fidelity pairing key drifted",
     )
     entries = _list(surfaces.get("outcomes"), "fidelity_cost_surfaces.outcomes")
-    by_id = {str(_mapping(entry, "fidelity outcome").get("surface_id")): entry for entry in entries}
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for entry in entries:
+        surface = _mapping(entry, "fidelity outcome")
+        surface_id = surface.get("surface_id")
+        _require(
+            isinstance(surface_id, str) and surface_id.strip(),
+            "fidelity surface must contain a non-empty surface_id",
+        )
+        _require(
+            surface_id not in by_id,
+            f"duplicate fidelity surface_id: {surface_id}",
+        )
+        by_id[surface_id] = surface
     _require(set(by_id) == set(EXPECTED_FIDELITY_SURFACES), "fidelity surface set drifted")
     for surface_id in EXPECTED_FIDELITY_SURFACES:
         entry = _mapping(by_id[surface_id], f"fidelity_cost_surfaces.{surface_id}")

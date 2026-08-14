@@ -90,19 +90,24 @@ def test_required_proof_status_blocks_decision_capable_answerability(status: str
     assert "analysis" in result.reasons[0]
 
 
-def test_optional_unavailable_proof_is_a_warning() -> None:
-    """Optional unavailable proof remains visible without blocking admission."""
+@pytest.mark.parametrize("status", ["unavailable", "failed", "not_run"])
+def test_optional_nonpassed_proof_is_a_warning(status: str) -> None:
+    """Optional non-passed proof remains visible without blocking admission."""
     contract = _proof_contract()
     contract["proof_surfaces"]["result_packet"] = {
-        "status": "unavailable",
+        "status": status,
         "required": False,
-        "unavailable_reason": "packet export is not needed for this local comparison",
+        **(
+            {"unavailable_reason": "packet export is not available for this local comparison"}
+            if status == "unavailable"
+            else {}
+        ),
     }
 
     result = evaluate_answerability(contract)
 
     assert result.state == "answerable"
-    assert any("result_packet" in warning for warning in result.warnings)
+    assert any("result_packet" in warning and status in warning for warning in result.warnings)
 
 
 def test_all_required_proof_surfaces_pass() -> None:

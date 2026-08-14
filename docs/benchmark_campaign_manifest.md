@@ -53,7 +53,9 @@ Use `--require-answerable` when a launch path must reject every state other
 than `answerable`; the default packet path remains compatible with older
 manifests. Required fallback, degraded, unavailable, or missing producers are
 never answerable. Optional unavailable metrics remain explicit and are not
-imputed as zero.
+imputed as zero. Caveated, fallback, degraded, diagnostic-only, unavailable,
+failed, blocked, and not-run row statuses are rejected if a manifest tries to
+declare them as success values.
 
 ### Executable proof surfaces
 
@@ -63,7 +65,8 @@ entries: `producer`, `preregistration`, `evidence_contract`, `analysis`,
 `unavailable`, `failed`, or `not_run`) and whether the surface is `required`.
 An unavailable surface must include `unavailable_reason`; required surfaces
 must be `passed` before admission. Optional unavailable surfaces remain visible
-warnings and do not become zero-valued evidence.
+warnings and do not become zero-valued evidence. Optional failed and not-run
+surfaces are warnings as well.
 
 The runner can execute typed checks from
 `validation.answerability_proof` when `--execute-validation` or

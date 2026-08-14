@@ -693,7 +693,9 @@ resume artifact after compaction or automatic continuation: it should name the a
 known generated paths, stale claims, check state, and next action without reopening raw logs,
 issue queues, worktree inventories, or skill files. Compact status omits generated untracked trees
 such as `.venv`, `.opencode`, `node_modules`, and `output`, reporting only the generated
-roots that are present. Run fresh focused `gh`/`git` checks before
+roots that are present. Check summaries reconcile duplicate timestamped runs from the same
+workflow/job and expose the discarded count as `superseded`; an older cancelled run is not treated
+as current failure when a newer replacement is present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.
@@ -1006,6 +1008,9 @@ paper-critical rows with owner types and label-change recommendations.
 Issues carrying `routing:needs-compute` remain visible for audit but classify as `needs_compute` and
 are excluded from implementation dispatch until compute or private execution authorization is
 established.
+Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
+including the exact blocker label in its reason, and is excluded from autonomous implementation
+dispatch.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

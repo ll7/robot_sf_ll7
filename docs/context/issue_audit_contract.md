@@ -57,6 +57,16 @@ resource:slurm issue, or failed readback is an uncertainty. The plan records it
 and the apply path fails closed. A partial inventory is never evidence that an
 issue is ready or complete.
 
+When the bounded global closed-PR history is partial, the core may also read
+each currently open issue's bounded REST timeline. A `cross-referenced` event
+whose source contains a merged pull request contributes targeted closure
+evidence with `coverage_source: targeted_issue_timeline`. The plan exposes this
+under `inventory_coverage` and keeps the original global `closed_prs` truncation
+metadata visible. Timeline coverage narrows the evidence for the currently open
+issues; it does not make the repository-wide closed-PR history complete, and
+mutation application remains fail-closed while any global or targeted source is
+partial or unavailable.
+
 Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
@@ -146,6 +156,7 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "inventory": {},
       "issues": [],
       "mutations": [],
+      "inventory_coverage": {},
       "pending_decisions": [],
       "truncation_or_errors": [],
       "counts": {}

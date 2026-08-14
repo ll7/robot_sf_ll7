@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.campaign_logging import (
+from robot_sf.benchmark.campaign.campaign_logging import (
     add_campaign_logging_argument,
     configure_campaign_logging,
 )

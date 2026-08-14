@@ -38,7 +38,7 @@ episode evidence.
 - Resolver: `robot_sf/benchmark/candidate_trace_resolution.py` /
   `scripts/analysis/resolve_candidate_traces_issue_5615.py`
   (`candidate_trace_resolution.v1`, PR #5624, merge `b9ea59c82335e30dab65247f006fd7356c012a6f`)
-- Atlas: `robot_sf/benchmark/campaign_atlas.py` /
+- Atlas: `robot_sf/benchmark/campaign/campaign_atlas.py` /
   `scripts/analysis/build_campaign_atlas_issue_5616.py`
   (`campaign_atlas.v1`, PR #5637, merge `b9b7138aba730171c104a1c98c83c29faa986d32`)
 - New adapter (thin reshaping only, no mining/resolution/rendering semantics

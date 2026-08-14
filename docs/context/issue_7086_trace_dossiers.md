@@ -35,6 +35,44 @@ closed rather than raising during normalization. The returned `SelectionManifest
 `trace_dossier_selector.v1`, contains no wall-clock fields, and records the
 selection reason.
 
+## Shared campaign representative-run rule
+
+`robot_sf.research.representative_selection` is the single source of truth for
+the *campaign-side* version of the same guarantee, used wherever one seed has
+to stand in for a whole cell:
+
+- `VERDICT_SEVERITY` — verdict labels ordered weakest-first;
+- `verdict_label_strength(label)` — the label-to-number mapping that turns this
+  verdict vocabulary into the `label_strength` the selector contract above
+  expects;
+- `majority_verdict(verdicts_or_counts)` — most common verdict, tie-breaking
+  toward the weaker label (and, between two unrecognized labels, toward the
+  lexicographically smaller one so the result never depends on input order);
+- `RepresentativeCandidate` / `select_representative_index(candidates)` —
+  majority-verdict pool, median primary order parameter, lower seed on an exact
+  tie;
+- `PRIMARY_ORDER_PARAMETER` / `primary_order_parameter(scenario)` — the order
+  parameter that defines "median run" per scenario.
+
+`robot_sf.research.emergent_phenomena_campaign`,
+`scripts/validation/render_issue_5149_emergent_phenomena_videos.py`, and
+`scripts/validation/build_issue_5149_emergent_phenomena_campaign.py` all call
+into this module instead of carrying their own copies. The extraction is
+behaviour-preserving: `tests/test_render_emergent_phenomena_videos.py` and
+`tests/test_emergent_phenomena_campaign.py` re-derive the archived
+`issue_5149_emergent_phenomena_multiseed_2026-08` bundle's four replay seeds
+and six majority verdicts from its own `runs.jsonl` and require an exact match.
+
+### Known divergence from `trace_dossier_selector.v1`
+
+The two selectors agree on odd-sized pools and differ on even-sized pools:
+`select_representative_index` takes the lower of the two middle runs *by rank*,
+while `select_representative` takes whichever middle run is closest to the
+interpolated median *value* and breaks the resulting tie on seed identity.
+Reconciling them changes which run the archived exhibits point at, so it is a
+domain decision rather than a refactor and is tracked separately. Do not
+silently align one with the other.
+
 ## Evidence boundary
 
 The selector chooses a representative for a future trace export or dossier
@@ -45,12 +83,7 @@ and checksum before downstream provenance or publication review.
 
 ## Deferred work
 
-The remaining #7086 slices are intentionally separate:
-
-- trace-capable export from an actual scenario/seed/planner/release pin;
-- deterministic cell-binding metadata and verdict counts;
-- the multi-panel trajectory, speed, clearance, and event-timeline renderer;
-- compute routing and artifact admission for any newly materialized traces.
-
-Those slices require their own runtime/provenance proof and do not follow from
-this selector-only implementation.
+The remaining #7086 slice is intentionally separate: acquiring trace-capable
+runs for campaign cells that have no trace yet. That slice needs its own
+compute routing, authorization, and artifact-admission proof, and does not
+follow from any of the tooling described here.

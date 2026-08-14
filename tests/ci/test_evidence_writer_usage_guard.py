@@ -11,7 +11,9 @@ import sys
 from pathlib import Path
 
 from scripts.ci.check_evidence_writer_usage import (
+    EvidenceWriterInventoryFinding,
     _is_inventory_path,
+    _run_inventory,
     check_changed_files,
     check_file,
     inventory_file,
@@ -579,6 +581,68 @@ OUTPUT.write_text("{}", encoding="utf-8")
     assert findings[0].exemption_status == "invalid"
     assert "empty evidence-writer exemption reason" in findings[0].exemption_reason
     assert check_file(path)
+
+
+def test_inventory_file_preserves_contiguous_exemption_reason(tmp_path: Path) -> None:
+    """Inventory mode joins top-level continuation comments into the reason."""
+    path = _write_fixture(
+        tmp_path,
+        """
+# evidence-writer-exempt: first line of the immutable byte-contract reason
+# second line explains why the shared marker cannot be added
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+OUTPUT.write_text("{}", encoding="utf-8")
+""",
+    )
+
+    findings = inventory_file(path, tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].exemption_reason == (
+        "first line of the immutable byte-contract reason "
+        "second line explains why the shared marker cannot be added"
+    )
+
+
+def test_inventory_file_reports_malformed_python_as_controlled_finding(tmp_path: Path) -> None:
+    """Malformed tracked Python produces a deterministic error finding, not a traceback."""
+    path = _write_fixture(tmp_path, "def broken(:\n    pass\n")
+
+    findings = inventory_file(path, tmp_path)
+
+    assert findings == [
+        EvidenceWriterInventoryFinding(
+            path="fixture.py",
+            line=1,
+            operation="parse",
+            kind="error",
+            exemption_status="invalid",
+            exemption_reason="cannot parse source: invalid syntax",
+        )
+    ]
+
+
+def test_inventory_json_returns_nonzero_for_scan_errors(monkeypatch, capsys) -> None:
+    """Inventory JSON remains parseable and returns nonzero for scan errors."""
+    error = EvidenceWriterInventoryFinding(
+        path="broken.py",
+        line=1,
+        operation="parse",
+        kind="error",
+        exemption_status="invalid",
+        exemption_reason="cannot parse source: invalid syntax",
+    )
+    monkeypatch.setattr(
+        "scripts.ci.check_evidence_writer_usage.inventory_tracked_files",
+        lambda: ([error], 1),
+    )
+
+    assert _run_inventory(json_output=True) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["count"] == 1
+    assert payload["findings"][0]["kind"] == "error"
 
 
 def test_inventory_path_filter_excludes_benchmark_owned_paths() -> None:

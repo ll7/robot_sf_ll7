@@ -433,7 +433,19 @@ def _exemption_status(source: str) -> tuple[str, str | None, str | None]:
                     None,
                     f"line {token.start[0]} has an empty evidence-writer exemption reason",
                 )
-            return "valid", reason, None
+            reason_parts = [reason]
+            source_lines = source.splitlines()
+            next_line_index = token.start[0]
+            while next_line_index < len(source_lines):
+                continuation = source_lines[next_line_index]
+                if not continuation.startswith("#"):
+                    break
+                continuation_text = continuation[1:].strip()
+                if not continuation_text or EXEMPTION_PATTERN.match(continuation):
+                    break
+                reason_parts.append(continuation_text)
+                next_line_index += 1
+            return "valid", " ".join(reason_parts), None
     except (IndentationError, tokenize.TokenError):
         # Let ast.parse below report malformed source as a fail-closed blocker.
         return "none", None, None
@@ -493,20 +505,46 @@ def inventory_file(
         return []
     if repo_root is None:
         repo_root = _repo_root()
-    source = source_path.read_text(encoding="utf-8")
+    relative_path = _repo_relative_path(source_path, repo_root)
+    try:
+        source = source_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return [
+            EvidenceWriterInventoryFinding(
+                path=relative_path,
+                line=1,
+                operation="read",
+                kind="error",
+                exemption_status="invalid",
+                exemption_reason=f"cannot read source: {exc}",
+            )
+        ]
     exemption_status, exemption_reason, exemption_error = _exemption_status(source)
     if exemption_error is not None:
         exemption_reason = exemption_error
+    try:
+        violations = _violation_tuples(source_path, source)
+    except SyntaxError as exc:
+        return [
+            EvidenceWriterInventoryFinding(
+                path=relative_path,
+                line=exc.lineno or 1,
+                operation="parse",
+                kind="error",
+                exemption_status="invalid",
+                exemption_reason=f"cannot parse source: {exc.msg}",
+            )
+        ]
     return [
         EvidenceWriterInventoryFinding(
-            path=_repo_relative_path(source_path, repo_root),
+            path=relative_path,
             line=line,
             operation=operation,
             kind=kind,
             exemption_status=exemption_status,
             exemption_reason=exemption_reason,
         )
-        for line, operation, kind in _violation_tuples(source_path, source)
+        for line, operation, kind in violations
     ]
 
 
@@ -613,6 +651,7 @@ def _print_json(payload: dict[str, object]) -> None:
 def _run_inventory(*, json_output: bool) -> int:
     """Run the read-only tracked-file inventory mode."""
     findings, scanned_paths = inventory_tracked_files()
+    scan_errors = any(finding.kind == "error" for finding in findings)
     if json_output:
         _print_json(
             {
@@ -624,14 +663,14 @@ def _run_inventory(*, json_output: bool) -> int:
                 "findings": [asdict(finding) for finding in findings],
             }
         )
-        return 0
+        return 1 if scan_errors else 0
     for finding in findings:
         print(
             f"{finding.path}:{finding.line}: operation={finding.operation} "
             f"kind={finding.kind} exemption_status={finding.exemption_status}"
         )
     print(f"Inventory findings: {len(findings)} across {scanned_paths} tracked Python files")
-    return 0
+    return 1 if scan_errors else 0
 
 
 def main() -> int:

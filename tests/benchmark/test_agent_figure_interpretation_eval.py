@@ -363,6 +363,25 @@ def test_reviewer_disagreement_requires_exact_adjudication() -> None:
         evaluate_packet(packet)
 
 
+@pytest.mark.parametrize("invalid_score", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_reviewer_scores_fail_closed(invalid_score: float) -> None:
+    packet = _clean_packet()
+    packet["reference_metadata"] = {
+        "reviewed": True,
+        "blinded": True,
+        "reviewers": [
+            {
+                "reviewer_id": "reviewer-a",
+                "scores": {**_review_scores(), "claim_boundary": invalid_score},
+            },
+            {"reviewer_id": "reviewer-b", "scores": _review_scores()},
+        ],
+    }
+
+    with pytest.raises(AgentFigureEvalError, match=r"number in \[0, 1\]"):
+        evaluate_packet(packet)
+
+
 def test_correction_priority_ranking_is_deterministic_and_critical_first() -> None:
     packet = _clean_packet()
     observed = copy.deepcopy(packet["reference"])

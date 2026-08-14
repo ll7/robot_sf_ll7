@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -482,7 +483,13 @@ def _adjudicated_dimensions(
 
 
 def _review_score(value: Any, reviewer_id: str, dimension: str) -> float:
-    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0 or value > 1:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or value < 0
+        or value > 1
+        or (isinstance(value, float) and not math.isfinite(value))
+    ):
         raise AgentFigureEvalError(
             f"review score for {reviewer_id}.{dimension} must be a number in [0, 1]"
         )

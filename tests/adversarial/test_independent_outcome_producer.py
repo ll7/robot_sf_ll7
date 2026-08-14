@@ -470,3 +470,13 @@ def test_resumable_merge_is_idempotent_and_rejects_row_replacement(tmp_path: Pat
     changed["rows"][0]["producer_commit"] = "b" * 40
     with pytest.raises(ValueError, match="changed during resumable"):
         _merge_existing_packet(packet, changed)
+
+    malformed = json.loads(json.dumps(packet))
+    malformed["rows"][0]["row_id"] = None
+    with pytest.raises(ValueError, match="invalid row_id"):
+        _merge_existing_packet(malformed, packet)
+
+    stale = json.loads(json.dumps(packet))
+    stale["rows"].append({"row_id": "stale-row"})
+    with pytest.raises(ValueError, match="stale row"):
+        _merge_existing_packet(stale, packet)

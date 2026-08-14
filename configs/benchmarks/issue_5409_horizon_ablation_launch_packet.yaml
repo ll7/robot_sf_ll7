@@ -1,0 +1,194 @@
+schema_version: issue-5409-horizon-ablation-launch-packet.v1
+parent_issue: 5409
+campaign_family: issue_5409_horizon_ablation
+generating_commit: d7b5ddfca43aaa39664abf36223324054b6032be
+
+# Machine-checkable launch contract for the roster-matched, seed-matched h500-vs-h600
+# horizon ablation of issue #5409.
+#
+# Plain-language summary: the two campaign configs already exist and are already proven
+# to differ only in the horizon. What was still missing was a single place that pins the
+# *submission coordinate*: which results directory each arm writes to, which checkpoint
+# gate receipt must exist before sbatch, and which environment identity the run is
+# reconstructable from. This packet is that coordinate.
+#
+# This packet does NOT submit SLURM, does not run a campaign, does not stage checkpoints,
+# and establishes no benchmark, paper, or manuscript claim. It is a contract an operator
+# executes against; every field below is verified by
+# scripts/validation/check_issue_5409_horizon_ablation_launch_packet.py.
+evidence_status: launch-packet-only
+no_benchmark_result_claim: true
+claim_boundary: >
+  Launch-readiness packet only. Authoring this packet establishes no horizon finding.
+  It performs no SLURM/GPU submission, runs no episodes, and stages no checkpoints.
+  The paired horizon result does not exist until both campaigns complete on the cluster
+  with 1728 valid rows each and the paired matched-key comparison is computed.
+  Fallback, degraded, unavailable, failed, partial, or provenance-invalid rows never
+  count as success evidence.
+
+# --- The frozen comparison matrix. Every number here is measured from the mode=preflight
+# artifacts of both configs at generating_commit, not asserted by hand.
+matrix:
+  planner_count: 12
+  scenario_count: 48
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+  resolved_seeds: [111, 112, 113]
+  seed_count: 3
+  rows_per_horizon: 1728
+  rows_total: 3456
+  varying_field: horizon
+  kinematics: differential_drive
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  expected_scenario_matrix_hash: c10df617a87c
+
+# --- Pair identity. The existing fail-closed pair validator is the authority on
+# "everything except the horizon is identical"; this packet records that it passes.
+pair_validation:
+  validator: scripts/benchmark/validate_horizon_ablation_pair.py
+  validated_at_commit: d7b5ddfca43aaa39664abf36223324054b6032be
+  is_valid: true
+  mismatch_count: 0
+  command: >
+    uv run python scripts/benchmark/validate_horizon_ablation_pair.py
+    configs/benchmarks/issue_5409_horizon_ablation_h500.yaml
+    configs/benchmarks/issue_5409_horizon_ablation_h600.yaml --json
+
+# --- The two arms. `results_dir_template` is the value the submit wrapper must export as
+# CAMERA_READY_RESULTS_DIR; `{submit_worktree}` is the operator's dedicated public
+# worktree root on the submit host and is the only free variable.
+arms:
+  - role: h500
+    horizon: 500
+    config: configs/benchmarks/issue_5409_horizon_ablation_h500.yaml
+    config_sha256: 03f521356391e0ec9473073a92d8274aa8f4b6cb9afd31d11f3a63d20d3e14cb
+    campaign_id: issue5409_horizon_ablation_h500
+    output_root: output/benchmarks/camera_ready
+    results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h500"
+    checkpoint_gate_report_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h500/preflight/checkpoint_staging.json"
+  - role: h600
+    horizon: 600
+    config: configs/benchmarks/issue_5409_horizon_ablation_h600.yaml
+    config_sha256: 792d5295ba183760cd3fce4d800c5dcabbe9da6ee2ab2e40809c12bf1d3dbcec
+    campaign_id: issue5409_horizon_ablation_h600
+    output_root: output/benchmarks/camera_ready
+    results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h600"
+    checkpoint_gate_report_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h600/preflight/checkpoint_staging.json"
+
+# --- Environment identity: what makes a completed run reconstructable from commit +
+# config + manifest + environment. The measured block is the fingerprint both arms
+# produced under mode=preflight at generating_commit; the shared values must stay
+# identical across the pair or the comparison is invalid.
+environment_identity:
+  entry_point: scripts/tools/run_camera_ready_benchmark.py
+  interpreter: uv run python
+  dependency_sync: uv sync --all-extras
+  required_extras_reason: >
+    The 12-arm roster needs rvo2 (ORCA arms) and stable_baselines3 (ppo, guarded_ppo).
+    Without --all-extras the preflight aborts fail-closed before any episode runs.
+  arm_isolation: subprocess
+  manifest_schema_version: benchmark-camera-ready-campaign.v1
+  preflight_mode: preflight
+  preflight_command_template: >
+    uv run python scripts/tools/run_camera_ready_benchmark.py
+    --config {config} --mode preflight --campaign-id {campaign_id}
+    --output-root output/benchmarks/camera_ready
+    --checkpoint-preflight-mode enforced_staged --skip-publication-bundle
+  measured:
+    scenario_matrix_hash: c10df617a87c
+    comparability_mapping_hash: 2321f90648b9
+    observation_noise_hash: 0a5609f0b2b1
+    h500_config_hash: b0a854ccc80eb90c
+    h600_config_hash: 3a2cc681aa617f9e
+  shared_across_pair:
+    - scenario_matrix_hash
+    - comparability_mapping_hash
+    - observation_noise_hash
+
+# --- Pre-sbatch checkpoint provisioning gate (#4613/#4663). This is a submit-node
+# command, not a compute job: it materializes and checksum-verifies every arm checkpoint
+# in seconds and fails closed before sbatch. It must run on the submit host, because the
+# receipt binds that host's durable model cache. It has not been run yet.
+checkpoint_gate:
+  script: scripts/benchmark/submit_camera_ready_checkpoint_gate.sh
+  equivalent_python: scripts/benchmark/preflight_campaign_checkpoints.py --stage --json
+  mode: enforced_staged
+  runs_on: submit_node
+  submits_slurm: false
+  runs_episodes: false
+  submit_safe_required: true
+  receipt_filename: checkpoint_staging.json
+  status: pending_submit_node_execution
+  local_resolvability_check:
+    # Resolvability-only probe at generating_commit; passes but is explicitly NOT submit-safe.
+    references_checked: 4
+    result: resolvable_not_submit_safe
+    reason: >
+      Registry-backed arms report status=stageable_remote. Resolvability is an audit
+      signal; only a staged, checksum-verified receipt on the submit host is submit-safe.
+  command_template: >
+    scripts/benchmark/submit_camera_ready_checkpoint_gate.sh
+    --config {config} --report-path {checkpoint_gate_report}
+
+# --- Per-arm and paired artifact manifest. These are the files that must exist for a
+# horizon arm to count, and for the pair to be comparable.
+artifact_manifest:
+  per_arm_required:
+    - campaign_manifest.json
+    - preflight/validate_config.json
+    - preflight/checkpoint_staging.json
+    - reports/matrix_summary.json
+    - reports/comparability_matrix.json
+    - reports/amv_coverage_summary.json
+    - reports/campaign_table.csv
+  per_arm_required_provenance:
+    - generating_commit
+    - config_sha256
+    - scenario_matrix_hash
+    - resolved_seeds
+    - invoked_command
+  paired_required:
+    - matched_key_completeness.json
+    - paired_horizon_deltas.json
+    - paired_uncertainty_summary.json
+  matched_key: [planner_key, scenario_id, seed]
+  raw_episode_jsonl_in_git: false
+  checkpoints_in_git: false
+  videos_in_git: false
+
+# --- Durable preservation. Raw rows stay external; only compact reviewed summaries are
+# promoted into the repository.
+preservation:
+  durable_destination: wandb
+  raw_artifacts_external: true
+  promoted_summary_dir: docs/context/evidence/issue_5409_horizon_ablation_<run-date>/
+  required_before_closeout:
+    - checksums
+    - durable_result_uri
+
+# --- Fail-closed row policy (#691). Unchanged from the repository contract.
+fail_closed_policy:
+  valid_row_statuses: [native, adapter]
+  fail_closed_statuses: [fallback, degraded, unavailable, failed, partial, not_available,
+                         diagnostic_only]
+  hash_drift_blocks_comparison: true
+  missing_paired_row_blocks_comparison: true
+
+# --- Acceptance mapping for issue #5409, each verified post-run and not in this lane.
+acceptance:
+  paired_row_completeness: each horizon yields exactly 1728 rows on matched planner/scenario/seed keys
+  hash_binding: c10df617a87c present in both campaign manifests and both comparability reports
+  gate_receipts: both checkpoint_staging.json receipts exist and report submit-safe=true
+  paired_analysis: paired_horizon_deltas.json plus uncertainty at planner and scenario-family level
+  evidence_tier: nominal benchmark evidence for this fixed ablation only; not paper-grade
+
+# --- Author-reserved boundary. This packet cannot self-authorize compute.
+execution_boundary:
+  full_campaign_in_this_packet: false
+  submit_slurm_from_this_packet: false
+  compute_submit_authorized: false
+  authorization_owner: repository_owner
+  status_until_run: ready_pending_gate_receipts_and_compute_authorization
+
+validation_command: >
+  uv run python scripts/validation/check_issue_5409_horizon_ablation_launch_packet.py --json

@@ -29,6 +29,7 @@ DEFAULT_REMOTE = "origin"
 BLOCKED_EXTERNAL_INPUT_LABEL = "state:blocked-external-input"
 EXTERNAL_RESOURCE_LABEL = "resource:external-data"
 COMPUTE_ROUTING_LABEL = "routing:needs-compute"
+BLOCKED_LABEL_PREFIX = "blocked:"
 EXTERNAL_BLOCKER_LABELS = {
     BLOCKED_EXTERNAL_INPUT_LABEL,
     "blocked",
@@ -452,6 +453,11 @@ def _non_open_state_classification(state: str) -> tuple[str, str] | None:
     return None
 
 
+def _explicit_blocker_label(labels: list[str]) -> str | None:
+    """Return the deterministic explicit blocker label, when one is present."""
+    return next((label for label in labels if label.startswith(BLOCKED_LABEL_PREFIX)), None)
+
+
 def _issue_classification(
     *,
     assignees: list[str],
@@ -470,6 +476,11 @@ def _issue_classification(
         return (
             "needs_compute",
             "compute or private execution authorization required; skip implementation dispatch",
+        )
+    if blocker_label := _explicit_blocker_label(labels):
+        return (
+            "blocked_label",
+            f"explicit blocker label {blocker_label}; skip autonomous claim",
         )
     if any(label in UNCLAIMABLE_LABELS for label in labels):
         return "blocked_label", "label suggests skip in autonomous claim mode"

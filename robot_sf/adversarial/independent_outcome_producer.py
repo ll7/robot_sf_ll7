@@ -373,14 +373,26 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
         raise ValueError(f"episode record {manifest_id} producer commit mismatch")
     if record.get("scenario_id") is None or record.get("scenario_params") is None:
         raise ValueError(f"episode record {manifest_id} is missing scenario provenance")
+    scenario_family = contract_data["contract"]["evaluation"]["scenario_family"]
+    if record.get("scenario_id") != scenario_family:
+        raise ValueError(f"episode record {manifest_id} scenario_id does not match scenario family")
+    scenario_params = record.get("scenario_params")
+    if not isinstance(scenario_params, dict):
+        raise ValueError(f"episode record {manifest_id} scenario_params must be an object")
+    if scenario_params.get("candidate_manifest_id") != manifest_id:
+        raise ValueError(
+            f"episode record {manifest_id} candidate_manifest_id does not match selected candidate"
+        )
+    expected_scenario_seed = binding["scenario_seed_by_manifest_id"][manifest_id]
+    if scenario_params.get("scenario_seed") != expected_scenario_seed:
+        raise ValueError(
+            f"episode record {manifest_id} scenario_seed does not match selected scenario"
+        )
     if not isinstance(record.get("outcome"), dict) or not isinstance(
         record.get("termination_reason"), str
     ):
         raise ValueError(f"episode record {manifest_id} is missing outcome provenance")
-    if (
-        envelope.get("scenario_family")
-        != contract_data["contract"]["evaluation"]["scenario_family"]
-    ):
+    if envelope.get("scenario_family") != scenario_family:
         raise ValueError(f"execution envelope {manifest_id} scenario family mismatch")
     if envelope.get("scenario_certification_status") != "passed":
         raise ValueError(f"execution envelope {manifest_id} scenario certification is not passed")

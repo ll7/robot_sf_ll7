@@ -35,10 +35,20 @@ DEFAULT_MODEL_SHA256 = "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f9
 DEFAULT_SEEDS = tuple(range(111, 121))
 DEFAULT_S3_SEEDS = (111, 112, 113)
 EXPECTED_PLANNERS = ("orca", "ppo")
+EXPECTED_EXECUTION_MODES = {"orca": "adapter", "ppo": "native"}
+EXPECTED_OBSERVATION_LEVEL = "tracked_agents_no_noise"
 EXPECTED_KINEMATICS = "differential_drive"
 EXPECTED_HORIZON = 100
 EXPECTED_DT = 0.1
 BOOTSTRAP_SAMPLES = 2_000
+VALID_TERMINATION_REASONS = {
+    "success",
+    "collision",
+    "terminated",
+    "truncated",
+    "max_steps",
+    "error",
+}
 
 
 class ReportContractError(ValueError):
@@ -208,6 +218,11 @@ def _episode_row(record: dict[str, Any], *, planner_key: str, source: Path) -> E
     scenario_id = str(record.get("scenario_id") or "").strip()
     if not scenario_id:
         raise ReportContractError(f"Missing scenario_id in {source}")
+    termination_reason = str(record.get("termination_reason") or "").strip().lower()
+    if termination_reason not in VALID_TERMINATION_REASONS:
+        raise ReportContractError(
+            f"Missing or unsupported termination_reason for {scenario_id} in {source}"
+        )
     try:
         seed = int(record["seed"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -535,6 +550,17 @@ def _validate_episode_row(
         blockers.append(f"{name}: episode identity outside frozen matrix: {key!r}")
     if row.execution_mode not in {"native", "adapter"}:
         blockers.append(f"{name}: unsupported execution mode {row.execution_mode!r} at {key!r}")
+    expected_execution_mode = EXPECTED_EXECUTION_MODES[planner_key]
+    if row.execution_mode != expected_execution_mode:
+        blockers.append(
+            f"{name}: {planner_key} execution mode is {row.execution_mode!r}; "
+            f"expected {expected_execution_mode!r} at {key!r}"
+        )
+    if row.observation_level != EXPECTED_OBSERVATION_LEVEL:
+        blockers.append(
+            f"{name}: observation level is {row.observation_level!r}; "
+            f"expected {EXPECTED_OBSERVATION_LEVEL!r} at {key!r}"
+        )
     if row.horizon != EXPECTED_HORIZON:
         blockers.append(f"{name}: horizon mismatch at {key!r}: {row.horizon!r}")
     if row.dt is None or not math.isclose(row.dt, EXPECTED_DT, abs_tol=1e-12):

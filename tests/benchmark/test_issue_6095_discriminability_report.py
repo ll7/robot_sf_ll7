@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from scripts.benchmark.build_issue_6095_discriminability_report import (
     EXPECTED_KINEMATICS,
     EpisodeRow,
     RegimeData,
+    ReportContractError,
+    _episode_row,
     _provenance_limitation_lines,
+    _validate_episode_row,
     bootstrap_mean_ci,
     classify_stress_floor,
 )
@@ -119,3 +124,42 @@ def test_provenance_markdown_tracks_staged_receipts() -> None:
     assert "staged" in rendered
     assert "metadata-only" not in rendered
     assert "nominal=not_run, stress=not_run" in rendered
+
+
+def test_episode_row_rejects_missing_or_unknown_termination_reason(tmp_path: Path) -> None:
+    """Malformed terminal metadata must not silently become a zero outcome."""
+    record = {
+        "scenario_id": "scenario",
+        "seed": 111,
+        "metrics": {"near_misses": 0.0},
+    }
+
+    with pytest.raises(ReportContractError, match="termination_reason"):
+        _episode_row(record, planner_key="orca", source=tmp_path / "episodes.jsonl")
+
+    record["termination_reason"] = "unknown"
+    with pytest.raises(ReportContractError, match="termination_reason"):
+        _episode_row(record, planner_key="orca", source=tmp_path / "episodes.jsonl")
+
+
+def test_episode_row_validates_planner_execution_and_observation_contract() -> None:
+    """The report must reject rows that do not match the frozen runtime contract."""
+    row = _episode(
+        "orca",
+        "scenario",
+        111,
+        success=0.0,
+    )
+    blockers = _validate_episode_row(
+        name="nominal",
+        key=("orca", "scenario", 111),
+        record={},
+        row=replace(row, execution_mode="native", observation_level="oracle_full_state"),
+        scenario_ids=("scenario",),
+        expected_seeds=(111,),
+        expected_commit="fixture",
+        expected_model_id="model",
+    )
+
+    assert any("execution mode" in blocker for blocker in blockers)
+    assert any("observation level" in blocker for blocker in blockers)

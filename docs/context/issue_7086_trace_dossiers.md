@@ -30,7 +30,8 @@ The deterministic selection order is:
 
 An input with no unique weaker label for a tied verdict count, mixed cells,
 duplicate seed identities, missing fields, blank identities, or non-finite
-numbers fails closed. The returned `SelectionManifest` uses schema version
+numbers fails closed. Finite values outside the supported float range also fail
+closed rather than raising during normalization. The returned `SelectionManifest` uses schema version
 `trace_dossier_selector.v1`, contains no wall-clock fields, and records the
 selection reason.
 

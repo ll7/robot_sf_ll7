@@ -80,6 +80,23 @@ def test_median_primary_order_is_used_after_label_tie() -> None:
     assert result.selection_reason == "median_primary_order"
 
 
+def test_large_even_primary_orders_use_numeric_median_without_overflow() -> None:
+    """Large finite orders retain numeric proximity when the pool size is even."""
+
+    result = select_representative(
+        [
+            _candidate(primary_order=1.0e308, seed_id="seed-100"),
+            _candidate(primary_order=1.2e308, seed_id="seed-120"),
+            _candidate(primary_order=1.7e308, seed_id="seed-170"),
+            _candidate(primary_order=1.79e308, seed_id="seed-179"),
+        ]
+    )
+
+    assert result.selected_seed_id == "seed-120"
+    assert result.selected_primary_order == 1.2e308
+    assert result.selection_reason == "seed_identity"
+
+
 def test_seed_identity_breaks_exact_median_tie() -> None:
     """Equal numeric candidates resolve by stable identity, never input order."""
 
@@ -152,6 +169,11 @@ def test_non_mapping_candidate_fails_closed() -> None:
         ("label_strength", float("nan")),
         ("primary_order", float("inf")),
         ("label_strength", True),
+        pytest.param(
+            "label_strength",
+            10**10000,
+            id="oversized-finite-integer",
+        ),
     ],
 )
 def test_invalid_required_fields_fail_closed(field: str, value: object) -> None:

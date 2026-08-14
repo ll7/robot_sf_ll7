@@ -12,7 +12,6 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from numbers import Real
-from statistics import median
 from typing import Any, Literal, TypeAlias
 
 TRACE_DOSSIER_SELECTOR_SCHEMA_VERSION = "trace_dossier_selector.v1"
@@ -118,7 +117,7 @@ def select_representative(candidates: Sequence[CandidateInput]) -> SelectionMani
         candidate for candidate in majority_pool if candidate.label_strength == weakest_strength
     )
 
-    median_order = float(median(candidate.primary_order for candidate in weakest_pool))
+    median_order = _median_primary_order(weakest_pool)
     distances = {
         candidate.seed_id: abs(candidate.primary_order - median_order) for candidate in weakest_pool
     }
@@ -251,7 +250,20 @@ def _finite_number(value: object, field: str, index: int) -> float:
 
     if isinstance(value, bool) or not isinstance(value, Real):
         raise TraceDossierSelectionError(f"candidate {index} has invalid {field}")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as error:
+        raise TraceDossierSelectionError(f"candidate {index} has out-of-range {field}") from error
     if not math.isfinite(number):
         raise TraceDossierSelectionError(f"candidate {index} has non-finite {field}")
     return number
+
+
+def _median_primary_order(candidates: Sequence[TraceDossierCandidate]) -> float:
+    """Return a finite-safe median for already validated primary-order values."""
+
+    orders = sorted(candidate.primary_order for candidate in candidates)
+    middle = len(orders) // 2
+    if len(orders) % 2:
+        return orders[middle]
+    return orders[middle - 1] / 2 + orders[middle] / 2

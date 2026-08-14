@@ -799,6 +799,22 @@ class TestMutationTests:
         errors = validate_packet(payload)
         assert any("must invoke each named Python script" in e for e in errors)
 
+    def test_generation_command_cannot_echo_python_script_invocation(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["command"] = (
+            "echo python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py"
+        )
+        errors = validate_packet(payload)
+        assert any("must invoke each named Python script" in e for e in errors)
+
+    def test_generation_command_accepts_python_flags_and_relative_script(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["sources"][0]["command"] = (
+            "python -u ./scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py"
+        )
+        errors = validate_packet(payload)
+        assert errors == [], f"valid Python invocation should pass: {errors}"
+
     def test_generation_commit_must_contain_command_script(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["sources"][0]["command"] = (

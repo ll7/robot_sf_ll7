@@ -114,7 +114,10 @@ _VALID_CAPTION_DYNAMIC_FIELDS = {
     "figure": frozenset({"artifact_id", "visual_contract", "encoding"}),
     "source": frozenset({"sha256", "commit", "tracked_commit", "kind"}),
 }
-_SCRIPT_PATH_RE = re.compile(r"(?P<path>(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.py)(?:$|\s)")
+_SCRIPT_PATH_RE = re.compile(r"^(?:\./)?(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.py$")
+_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
+_SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
+_SHELL_WRAPPERS = frozenset({"command", "env", "exec"})
 _CAPTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
@@ -1258,28 +1261,24 @@ def _validate_generation_command(source: SourceRef, errors: list[str]) -> None:
                 f"source {source.source_id!r}: review marker command requires a review source kind"
             )
         return
-    script_paths = [match.group("path") for match in _SCRIPT_PATH_RE.finditer(source.command)]
-    if not script_paths:
-        errors.append(
-            f"source {source.source_id!r}: command must name a tracked Python script or review marker"
-        )
-        return
     try:
         command_tokens = shlex.split(source.command)
     except ValueError as exc:
         errors.append(f"source {source.source_id!r}: command is not shell-parseable: {exc}")
         return
-    non_assignment_tokens = [token for token in command_tokens if "=" not in token.split("/", 1)[0]]
-    python_names = {"python", "python3", "pypy", "pypy3"}
-    invoked_script_paths = {
-        token.removeprefix("./")
-        for index, token in enumerate(command_tokens)
-        if token.removeprefix("./") in script_paths
-        and (
-            (index > 0 and Path(command_tokens[index - 1]).name.casefold() in python_names)
-            or (non_assignment_tokens and token == non_assignment_tokens[0])
+    script_paths = sorted(
+        {
+            normalized
+            for token in command_tokens
+            if (normalized := _normalise_script_path(token)) is not None
+        }
+    )
+    if not script_paths:
+        errors.append(
+            f"source {source.source_id!r}: command must name a tracked Python script or review marker"
         )
-    }
+        return
+    invoked_script_paths = _invoked_script_paths(command_tokens)
     missing_invocations = sorted(set(script_paths).difference(invoked_script_paths))
     if missing_invocations:
         errors.append(
@@ -1292,6 +1291,95 @@ def _validate_generation_command(source: SourceRef, errors: list[str]) -> None:
                 f"source {source.source_id!r}: generation commit {source.commit} does not contain "
                 f"command script {script_path}"
             )
+
+
+def _normalise_script_path(token: str) -> str | None:
+    """Return a normalized script path when a shell token names a Python file."""
+    normalized = token.removeprefix("./")
+    return normalized if _SCRIPT_PATH_RE.fullmatch(token) else None
+
+
+def _invoked_script_paths(tokens: list[str]) -> set[str]:
+    """Return Python scripts that appear in executable shell command positions."""
+    invoked: set[str] = set()
+    segment: list[str] = []
+    for token in tokens:
+        if token in _SHELL_COMMAND_SEPARATORS:
+            invoked.update(_invoked_script_paths_in_segment(segment))
+            segment = []
+        else:
+            segment.append(token)
+    invoked.update(_invoked_script_paths_in_segment(segment))
+    return invoked
+
+
+def _invoked_script_paths_in_segment(tokens: list[str]) -> set[str]:
+    """Return scripts invoked by one shell command segment."""
+    tokens = _strip_leading_assignments(tokens)
+    if not tokens:
+        return set()
+    direct_script = _normalise_script_path(tokens[0])
+    if direct_script is not None:
+        return {direct_script}
+
+    executable = Path(tokens[0]).name.casefold()
+    if executable in {"python", "python3", "pypy", "pypy3"}:
+        return _python_script_argument(tokens[1:])
+    if executable == "uv":
+        try:
+            run_index = tokens.index("run", 1)
+        except ValueError:
+            return set()
+        return _invoked_script_paths_in_segment(tokens[run_index + 1 :])
+    if executable in _SHELL_WRAPPERS:
+        wrapped = tokens[1:]
+        if executable == "env":
+            wrapped = _strip_env_options_and_assignments(wrapped)
+        return _invoked_script_paths_in_segment(wrapped)
+    return set()
+
+
+def _python_script_argument(tokens: list[str]) -> set[str]:
+    """Return a script passed as the executable Python positional argument."""
+    for token in tokens:
+        if token == "--":
+            continue
+        if token.startswith("-"):
+            # ``-c`` and ``-m`` execute code/module names rather than a script path.
+            if token in {"-c", "--command", "-m", "--module"}:
+                return set()
+            continue
+        script = _normalise_script_path(token)
+        return {script} if script is not None else set()
+    return set()
+
+
+def _strip_leading_assignments(tokens: list[str]) -> list[str]:
+    """Remove shell variable assignments that precede a command.
+
+    Returns:
+        The command tokens after leading assignments.
+    """
+    index = 0
+    while index < len(tokens) and _ASSIGNMENT_RE.fullmatch(tokens[index]):
+        index += 1
+    return tokens[index:]
+
+
+def _strip_env_options_and_assignments(tokens: list[str]) -> list[str]:
+    """Remove the bounded ``env`` options supported by command provenance.
+
+    Returns:
+        The wrapped command tokens after supported ``env`` prefixes.
+    """
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if _ASSIGNMENT_RE.fullmatch(token) or token in {"-i", "--ignore-environment"}:
+            index += 1
+            continue
+        break
+    return tokens[index:]
 
 
 def _git_commit_exists(commit: str) -> bool:

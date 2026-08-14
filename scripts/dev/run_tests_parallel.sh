@@ -486,6 +486,16 @@ set +e
 "${cmd[@]}" >"$pytest_log" 2>&1
 pytest_exit=$?
 set -e
+if [[ "$pytest_exit" -eq 5 && "$sharding_active" == "1" && "$include_slow" == "0" ]] \
+  && grep -Fq "no tests ran" "$pytest_log"; then
+  # PR shards intentionally exclude slow tests.  pytest-split can assign a
+  # shard only slow tests, leaving that fast-only shard empty.  Exit 5 is
+  # pytest's no-tests status, not a collection/test failure; other non-zero
+  # statuses remain fail-closed below.
+  echo "[pytest-split] fast-only shard collected no tests; treating it as empty." >&2
+  rm -f "$pytest_log"
+  exit 0
+fi
 if [[ "$pytest_exit" -ne 0 ]]; then
   cat "$pytest_log" >&2
   # Classify the captured failure. The diagnostic is fail-closed: it only

@@ -354,6 +354,36 @@ def test_cross_host_comparison_reports_thread_context_drift(manifest):
     assert comparison["summary"]["all_cells_bitwise_identical"] is False
 
 
+def test_cross_host_comparison_reports_multiple_context_mismatches(manifest):
+    """Multiple canonical context drifts remain visible in the incompatible verdict."""
+    first = verify_host_report(manifest, _host_report(manifest, "host-a"))
+    second = verify_host_report(manifest, _host_report(manifest, "host-b"))
+    thread_env = copy.deepcopy(second["environment"]["execution_context"]["thread_env"])
+    thread_env["OMP_NUM_THREADS"] = "8"
+    _update_context(second, cpu_model="different CPU", thread_env=thread_env)
+
+    comparison = compare_verified_hosts(manifest, first, second)
+
+    assert comparison["context_comparison"] == CONTEXT_INCOMPATIBLE
+    assert comparison["provenance_match"] is False
+    assert comparison["context_mismatches"]["cpu_model"] == {
+        "first": first["environment"]["execution_context"]["cpu_model"],
+        "second": "different CPU",
+    }
+    assert comparison["context_mismatches"]["thread_env.OMP_NUM_THREADS"] == {
+        "first": first["environment"]["execution_context"]["thread_env"]["OMP_NUM_THREADS"],
+        "second": "8",
+    }
+    assert (
+        comparison["provenance_mismatches"]["cpu_model"]
+        == comparison["context_mismatches"]["cpu_model"]
+    )
+    assert (
+        comparison["provenance_mismatches"]["thread_env.OMP_NUM_THREADS"]
+        == comparison["context_mismatches"]["thread_env.OMP_NUM_THREADS"]
+    )
+
+
 def test_host_verifier_rejects_legacy_report_without_execution_context(manifest):
     """Legacy host reports cannot be promoted without the canonical context block."""
     report = _host_report(manifest, "host-a")

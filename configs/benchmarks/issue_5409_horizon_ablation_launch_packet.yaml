@@ -1,7 +1,7 @@
 schema_version: issue-5409-horizon-ablation-launch-packet.v1
 parent_issue: 5409
 campaign_family: issue_5409_horizon_ablation
-generating_commit: d7b5ddfca43aaa39664abf36223324054b6032be
+generating_commit: 96d8a8a5ab75ec7bfd86d130f8b2a919dcd957e6
 
 # Machine-checkable launch contract for the roster-matched, seed-matched h500-vs-h600
 # horizon ablation of issue #5409.
@@ -46,7 +46,7 @@ matrix:
 # "everything except the horizon is identical"; this packet records that it passes.
 pair_validation:
   validator: scripts/benchmark/validate_horizon_ablation_pair.py
-  validated_at_commit: d7b5ddfca43aaa39664abf36223324054b6032be
+  validated_at_commit: 96d8a8a5ab75ec7bfd86d130f8b2a919dcd957e6
   is_valid: true
   mismatch_count: 0
   command: >
@@ -61,7 +61,7 @@ arms:
   - role: h500
     horizon: 500
     config: configs/benchmarks/issue_5409_horizon_ablation_h500.yaml
-    config_sha256: 03f521356391e0ec9473073a92d8274aa8f4b6cb9afd31d11f3a63d20d3e14cb
+    config_sha256: b0e7ff12bd7f23add6fca3d9cf6c2a0f735cb11dfc81db5512c036608a3b411e
     campaign_id: issue5409_horizon_ablation_h500
     output_root: output/benchmarks/camera_ready
     results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h500"
@@ -69,7 +69,7 @@ arms:
   - role: h600
     horizon: 600
     config: configs/benchmarks/issue_5409_horizon_ablation_h600.yaml
-    config_sha256: 792d5295ba183760cd3fce4d800c5dcabbe9da6ee2ab2e40809c12bf1d3dbcec
+    config_sha256: 3fc6aa58cdf7dc99e8e610244acfe59f97328862a3dc0a542f6c0aad121e4844
     campaign_id: issue5409_horizon_ablation_h600
     output_root: output/benchmarks/camera_ready
     results_dir_template: "{submit_worktree}/output/benchmarks/camera_ready/issue5409_horizon_ablation_h600"
@@ -98,8 +98,8 @@ environment_identity:
     scenario_matrix_hash: c10df617a87c
     comparability_mapping_hash: 2321f90648b9
     observation_noise_hash: 0a5609f0b2b1
-    h500_config_hash: b0a854ccc80eb90c
-    h600_config_hash: 3a2cc681aa617f9e
+    h500_config_hash: 79e00786ccce3e45
+    h600_config_hash: b43b66900a3006f0
   shared_across_pair:
     - scenario_matrix_hash
     - comparability_mapping_hash

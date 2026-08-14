@@ -40,6 +40,10 @@
       ],
       "linked_issues": [6944, 6949],
       "mechanism_boundary": {
+        "boundary_labels": [
+          "candidate_or_action_distribution_collapse",
+          "mechanism_not_activated"
+        ],
         "condition_that_would_change": "A frozen-matrix intervention that changes progress while preserving source pin, native mode, and trace fields.",
         "confidence": 0.9,
         "evidence_boundary": "Trace summaries and review markers are tracked; raw episode archives remain ignored output and are not used.",
@@ -123,6 +127,10 @@
       ],
       "linked_issues": [6951, 7019],
       "mechanism_boundary": {
+        "boundary_labels": [
+          "mechanism_active_no_endpoint_benefit",
+          "design_underpowered"
+        ],
         "condition_that_would_change": "A sized paired campaign with durable raw dataset/checkpoints and non-collision-dominated completion.",
         "confidence": 0.99,
         "evidence_boundary": "Tracked compact summary only; raw dataset, checkpoints, and logs are ignored local output with no durable retrieval pointer.",
@@ -199,6 +207,7 @@
       ],
       "linked_issues": [5149, 6952, 6962, 6969],
       "mechanism_boundary": {
+        "boundary_labels": ["scenario_or_threshold_dependence"],
         "condition_that_would_change": "Stable clear segregation under calibrated thresholds or independent reference parity for the lane-formation configuration.",
         "confidence": 0.9,
         "evidence_boundary": "Historical #5149 artifacts and #6962 compact summaries are tracked; raw #6962 rows are ignored output.",
@@ -286,6 +295,10 @@
       ],
       "linked_issues": [6942, 6943, 6966],
       "mechanism_boundary": {
+        "boundary_labels": [
+          "missing_required_producer",
+          "artifact_not_durable"
+        ],
         "condition_that_would_change": "Tracked projection packet with durable digests and explicit source-linkage review.",
         "confidence": 1.0,
         "evidence_boundary": "No tracked source file matching issues #6942, #6943, or #6966 was found under docs/context/evidence in this worktree.",
@@ -357,6 +370,10 @@
       ],
       "linked_issues": [3275, 6849],
       "mechanism_boundary": {
+        "boundary_labels": [
+          "design_underpowered",
+          "missing_required_producer"
+        ],
         "condition_that_would_change": "A genuinely disjoint rerun archive and native independent outcomes matching the predeclared bindings.",
         "confidence": 1.0,
         "evidence_boundary": "Preflight manifests are tracked; closure packet records overlap and missing certification blockers.",
@@ -445,6 +462,7 @@
       ],
       "linked_issues": [6967, 6977, 6979, 6987, 6990],
       "mechanism_boundary": {
+        "boundary_labels": ["measurement_instability"],
         "condition_that_would_change": "A retained, preregistered multi-hardware matrix with explicit trace artifacts and source-admission review.",
         "confidence": 0.95,
         "evidence_boundary": "Receipts and review markers are tracked; trace artifacts are fixture diagnostics and not benchmark campaign payloads.",

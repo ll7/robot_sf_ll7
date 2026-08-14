@@ -16,7 +16,9 @@ Each card keeps the question and hypothesis, code/config identity, mechanism act
 observed result, scope and estimand, contradicted versus still-viable hypotheses, and dissertation
 admission status explicit. Result state uses the issue-controlled vocabulary (`supported_positive`,
 `supported_negative`, `not_supported`, `inconclusive`, `invalid_evidence_contract`, or
-`unavailable`) and is validated separately from the mechanism/evidence-boundary dimension.
+`unavailable`) and is validated separately from the mechanism/evidence-boundary dimension. Each
+card also carries one or more exact #7032 `boundary_labels`; labels may be combined when a case
+has both a mechanism and an evidence-durability boundary.
 
 Visual rendering, PDF/PNG production, packet-backed captions, and dissertation-facing admission are
 deferred or blocked in the generated cards.

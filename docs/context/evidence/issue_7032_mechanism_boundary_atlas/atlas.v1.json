@@ -41,6 +41,10 @@
       ],
       "mechanism_activation_evidence": "Candidate-transition telemetry is present in all three native rows; weights remain uniform, the upstream activation gate is false, and applied environment actions are recorded separately.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "candidate_or_action_distribution_collapse",
+          "mechanism_not_activated"
+        ],
         "condition_that_would_change": "A frozen-matrix intervention that changes progress while preserving source pin, native mode, and trace fields.",
         "confidence": 0.9,
         "evidence_boundary": "Trace summaries and review markers are tracked; raw episode archives remain ignored output and are not used.",
@@ -133,6 +137,10 @@
       ],
       "mechanism_activation_evidence": "Arm B uses progress lambda 0.5 with weight bounds [0.5, 2.0]; both arms use the same smoke dataset and cover nine evaluation cells.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "mechanism_active_no_endpoint_benefit",
+          "design_underpowered"
+        ],
         "condition_that_would_change": "A sized paired campaign with durable raw dataset/checkpoints and non-collision-dominated completion.",
         "confidence": 0.99,
         "evidence_boundary": "Tracked compact summary only; raw dataset, checkpoints, and logs are ignored local output with no durable retrieval pointer.",
@@ -218,6 +226,9 @@
       ],
       "mechanism_activation_evidence": "The tracked #5149 bundle covers ten seeds per calibration and records order parameters; the #6962 screen records a declared lane-formation calibration sensitivity matrix.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "scenario_or_threshold_dependence"
+        ],
         "condition_that_would_change": "Stable clear segregation under calibrated thresholds or independent reference parity for the lane-formation configuration.",
         "confidence": 0.9,
         "evidence_boundary": "Historical #5149 artifacts and #6962 compact summaries are tracked; raw #6962 rows are ignored output.",
@@ -317,6 +328,10 @@
       ],
       "mechanism_activation_evidence": "No durable source packet is available in this slice, so synthetic projection behavior cannot be linked to an admitted native outcome.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "missing_required_producer",
+          "artifact_not_durable"
+        ],
         "condition_that_would_change": "Tracked projection packet with durable digests and explicit source-linkage review.",
         "confidence": 1.0,
         "evidence_boundary": "No tracked source file matching issues #6942, #6943, or #6966 was found under docs/context/evidence in this worktree.",
@@ -393,6 +408,10 @@
       ],
       "mechanism_activation_evidence": "Tracked preflight manifests record disjoint candidate assignment and binding checks, but no authoritative independent-outcome producer is present.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "design_underpowered",
+          "missing_required_producer"
+        ],
         "condition_that_would_change": "A genuinely disjoint rerun archive and native independent outcomes matching the predeclared bindings.",
         "confidence": 1.0,
         "evidence_boundary": "Preflight manifests are tracked; closure packet records overlap and missing certification blockers.",
@@ -495,6 +514,9 @@
       ],
       "mechanism_activation_evidence": "The v1 and v2 receipts record trace-on versus trace-off runtime, payload, and stable metric or outcome digest fields.",
       "mechanism_boundary": {
+        "boundary_labels": [
+          "measurement_instability"
+        ],
         "condition_that_would_change": "A retained, preregistered multi-hardware matrix with explicit trace artifacts and source-admission review.",
         "confidence": 0.95,
         "evidence_boundary": "Receipts and review markers are tracked; trace artifacts are fixture diagnostics and not benchmark campaign payloads.",

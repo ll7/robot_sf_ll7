@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.mechanism_boundary_atlas import (
+    BOUNDARY_LABELS,
     CONTROLLED_STATES,
     MechanismBoundaryAtlasError,
     build_atlas,
@@ -47,6 +48,10 @@ def test_builds_typed_schema_validated_six_card_atlas(tmp_path: Path) -> None:
         "invalid_evidence_contract",
         "unavailable",
     } <= {card.result_state.controlled_state for card in loaded.cards}
+    assert all(card.mechanism_boundary.boundary_labels for card in loaded.cards)
+    assert all(
+        set(card.mechanism_boundary.boundary_labels) <= BOUNDARY_LABELS for card in loaded.cards
+    )
 
 
 def test_cards_preserve_the_full_issue_interpretation_contract() -> None:
@@ -102,6 +107,18 @@ def test_source_paths_reject_absolute_and_traversal(bad_path: str) -> None:
     assert any("repository-root relative" in issue.message for issue in issues)
 
 
+@pytest.mark.parametrize(
+    "local_path", ["output/derived.json", "results/derived.json", ".venv/cache.json"]
+)
+def test_source_paths_reject_local_only_roots(local_path: str) -> None:
+    payload = _payload()
+    payload["cards"][0]["source_refs"][0]["path"] = local_path
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT)
+
+    assert any("resolve inside the repository" in issue.message for issue in issues)
+
+
 def test_missing_available_source_fails_closed() -> None:
     payload = _payload()
     payload["cards"][0]["source_refs"][0]["path"] = "docs/context/evidence/missing.json"
@@ -135,6 +152,26 @@ def test_symlink_escape_fails_closed(tmp_path: Path) -> None:
     )
 
 
+def test_in_repository_symlink_fails_closed(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    (repo_root / "target.json").write_text("inside\n", encoding="utf-8")
+    (repo_root / "source.json").symlink_to(repo_root / "target.json")
+
+    payload = _payload()
+    payload["cards"][0]["source_refs"][0].update(
+        path="source.json",
+        sha256="0" * 64,
+    )
+
+    issues = validate_atlas_payload(payload, repo_root=repo_root)
+
+    assert any(
+        issue.path.endswith("/path") and "resolve inside the repository" in issue.message
+        for issue in issues
+    )
+
+
 def test_result_state_and_mechanism_boundary_are_separate_dimensions() -> None:
     payload = _payload()
     payload["cards"][0]["mechanism_boundary"]["status"] = payload["cards"][0]["result_state"][
@@ -144,6 +181,21 @@ def test_result_state_and_mechanism_boundary_are_separate_dimensions() -> None:
     issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
 
     assert any("must not be reused as mechanism status" in issue.message for issue in issues)
+
+
+def test_boundary_labels_use_controlled_vocabulary() -> None:
+    payload = _payload()
+    payload["cards"][0]["mechanism_boundary"]["boundary_labels"] = ["free_form_label"]
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any("controlled vocabulary" in issue.message for issue in issues)
+
+
+def test_boundary_labels_preserve_multi_label_cases() -> None:
+    atlas = build_atlas(INPUT, repo_root=REPO_ROOT)
+
+    assert any(len(card.mechanism_boundary.boundary_labels) > 1 for card in atlas.cards)
 
 
 def test_replacement_result_state_vocabulary_is_rejected() -> None:

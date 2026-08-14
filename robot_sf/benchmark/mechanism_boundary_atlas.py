@@ -41,6 +41,22 @@ CONTROLLED_STATES = frozenset(
         "unavailable",
     }
 )
+BOUNDARY_LABELS = frozenset(
+    {
+        "mechanism_not_activated",
+        "mechanism_active_no_endpoint_benefit",
+        "candidate_or_action_distribution_collapse",
+        "adapter_or_representation_mismatch",
+        "objective_or_information_insufficiency",
+        "scenario_or_threshold_dependence",
+        "design_underpowered",
+        "missing_required_producer",
+        "noncomparable_rows",
+        "measurement_instability",
+        "artifact_not_durable",
+    }
+)
+LOCAL_ONLY_ROOTS = frozenset({".git", ".venv", "output", "results"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +93,7 @@ class ResultState:
 class MechanismBoundary:
     """Mechanism/evidence-boundary dimension for the case."""
 
+    boundary_labels: list[str]
     mechanism_dimension: str
     status: str
     evidence_boundary: str
@@ -358,6 +375,7 @@ def _semantic_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]: 
                     )
                 )
         if isinstance(result_state, Mapping) and isinstance(mechanism_boundary, Mapping):
+            issues.extend(_boundary_label_issues(mechanism_boundary, prefix))
             if result_state.get("controlled_state") == mechanism_boundary.get("status"):
                 issues.append(
                     AtlasValidationIssue(
@@ -381,6 +399,36 @@ def _semantic_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]: 
             )
     if len(cards) < 6:
         issues.append(AtlasValidationIssue("/cards", "atlas requires at least six case cards"))
+    return issues
+
+
+def _boundary_label_issues(
+    mechanism_boundary: Mapping[str, Any],
+    card_prefix: str,
+) -> list[AtlasValidationIssue]:
+    """Validate the issue-controlled mechanism/evidence boundary labels.
+
+    Returns:
+        Validation issues for unknown or duplicate labels.
+    """
+
+    labels = mechanism_boundary.get("boundary_labels")
+    if not isinstance(labels, list):
+        return []
+    issues: list[AtlasValidationIssue] = []
+    unknown_labels = set(labels).difference(BOUNDARY_LABELS)
+    label_path = f"{card_prefix}/mechanism_boundary/boundary_labels"
+    if unknown_labels:
+        issues.append(
+            AtlasValidationIssue(
+                label_path,
+                f"boundary_labels must use #7032 controlled vocabulary: {sorted(unknown_labels)}",
+            )
+        )
+    if len(labels) != len(set(labels)):
+        issues.append(
+            AtlasValidationIssue(label_path, "boundary_labels must not contain duplicates")
+        )
     return issues
 
 
@@ -523,8 +571,17 @@ def _safe_source_path(repo_root: Path, path: object) -> Path | None:
     try:
         if _is_absolute_or_traversal(path):
             return None
+        parts = Path(path).parts
+        if not parts or parts[0] in LOCAL_ONLY_ROOTS or ".worktrees" in parts:
+            return None
         repository = repo_root.resolve()
-        candidate = (repository / path).resolve(strict=False)
+        unresolved = repository / path
+        current = repository
+        for part in parts:
+            current /= part
+            if current.is_symlink():
+                return None
+        candidate = unresolved.resolve(strict=False)
     except (OSError, RuntimeError, ValueError):
         return None
     try:

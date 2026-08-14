@@ -150,6 +150,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "boundary_labels",
         "mechanism_dimension",
         "status",
         "evidence_boundary",
@@ -157,6 +158,26 @@
         "condition_that_would_change"
       ],
       "properties": {
+        "boundary_labels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mechanism_not_activated",
+              "mechanism_active_no_endpoint_benefit",
+              "candidate_or_action_distribution_collapse",
+              "adapter_or_representation_mismatch",
+              "objective_or_information_insufficiency",
+              "scenario_or_threshold_dependence",
+              "design_underpowered",
+              "missing_required_producer",
+              "noncomparable_rows",
+              "measurement_instability",
+              "artifact_not_durable"
+            ]
+          }
+        },
         "mechanism_dimension": {"type": "string", "minLength": 1},
         "status": {
           "enum": [

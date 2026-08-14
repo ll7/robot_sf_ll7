@@ -120,6 +120,8 @@ knowledge, not every transient iteration detail.
 * Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
 * Issue #6103 / Issue #3275 same-planner held-out contract:
   [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md)
+* Issue #6318 Open Dreamer model-quality gate:
+  [issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md)
 * Issue #4932 data-driven scenario generation:
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:

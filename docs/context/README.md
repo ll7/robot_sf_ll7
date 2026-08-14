@@ -7,6 +7,10 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The trace dossier cell-binding metadata contract is documented in
+[issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md); it remains
+metadata-only until trace export and renderer provenance are reviewed.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

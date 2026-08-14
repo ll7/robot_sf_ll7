@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_dossier_manifest.v1.json",
+  "title": "Robot SF Trace Dossier Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trace_schema_version",
+    "trace_id",
+    "source_trace",
+    "evidence_boundary",
+    "renderer",
+    "outputs",
+    "panels",
+    "clearance_semantics",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "trace_dossier_manifest.v1"},
+    "trace_schema_version": {"const": "simulation_trace_export.v1"},
+    "trace_id": {"type": "string", "minLength": 1},
+    "source_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "evidence_boundary": {"const": "diagnostic_only"},
+    "renderer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "command"],
+      "properties": {
+        "name": {"const": "trace_dossier_renderer"},
+        "version": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1}
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["png"],
+      "properties": {
+        "png": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      }
+    },
+    "panels": {
+      "type": "array",
+      "prefixItems": [
+        {"const": "trajectory"},
+        {"const": "speed_profile"},
+        {"const": "clearance_over_time"},
+        {"const": "event_timeline"}
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "clearance_semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distance_convention", "units", "minimum_clearance"],
+      "properties": {
+        "distance_convention": {"enum": ["center_center", "surface_clearance"]},
+        "units": {"const": "m"},
+        "minimum_clearance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["time_s", "step", "pedestrian_id", "value_m"],
+          "properties": {
+            "time_s": {"type": "number", "minimum": 0},
+            "step": {"type": "integer", "minimum": 0},
+            "pedestrian_id": {"type": "string", "minLength": 1},
+            "value_m": {"type": "number"}
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

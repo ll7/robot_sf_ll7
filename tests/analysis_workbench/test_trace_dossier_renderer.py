@@ -142,6 +142,60 @@ def test_trace_dossier_renderer_rejects_mixed_radius_metadata(tmp_path: Path) ->
         )
 
 
+def test_trace_dossier_renderer_rejects_out_of_range_numeric_value(tmp_path: Path) -> None:
+    """Oversized finite JSON numbers fail closed instead of escaping as OverflowError."""
+
+    payload = _fixture_payload()
+    payload["frames"][0]["robot"]["position"][0] = 10**3000
+    trace_path = tmp_path / "out_of_range.json"
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(TraceDossierRenderError, match="finite number|float range"):
+        render_trace_dossier(
+            trace_path,
+            output_png=tmp_path / "out.png",
+            manifest_path=tmp_path / "manifest.json",
+            command="pytest fixture",
+        )
+
+
+def test_trace_dossier_renderer_rejects_out_of_range_selected_action(tmp_path: Path) -> None:
+    """Oversized selected-action values fail closed during speed-panel preparation."""
+
+    payload = _fixture_payload()
+    payload["frames"][0]["planner"]["selected_action"]["linear_velocity"] = 10**3000
+    trace_path = tmp_path / "out_of_range_action.json"
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(TraceDossierRenderError, match="finite number|float range"):
+        render_trace_dossier(
+            trace_path,
+            output_png=tmp_path / "out.png",
+            manifest_path=tmp_path / "manifest.json",
+            command="pytest fixture",
+        )
+
+
+def test_trace_dossier_renderer_rejects_overflowed_edge_clearance(tmp_path: Path) -> None:
+    """Overflowed radius subtraction cannot become a non-finite manifest value."""
+
+    payload = _fixture_payload()
+    for frame in payload["frames"]:
+        frame["robot"]["radius"] = 1.0e308
+        for pedestrian in frame["pedestrians"]:
+            pedestrian["radius"] = 1.0e308
+    trace_path = tmp_path / "overflowed_clearance.json"
+    trace_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(TraceDossierRenderError, match="non-finite value"):
+        render_trace_dossier(
+            trace_path,
+            output_png=tmp_path / "out.png",
+            manifest_path=tmp_path / "manifest.json",
+            command="pytest fixture",
+        )
+
+
 def test_trace_dossier_manifest_schema_rejects_benchmark_boundary() -> None:
     """The manifest schema should preserve the diagnostic-only boundary."""
 

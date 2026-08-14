@@ -75,7 +75,12 @@ def render_trace_dossier(
         Paths and manifest payload for the generated diagnostic artifact.
     """
 
-    trace = load_simulation_trace_export(trace_path)
+    try:
+        trace = load_simulation_trace_export(trace_path)
+    except OverflowError as error:
+        raise TraceDossierRenderError(
+            "trace contains a numeric value outside the supported float range"
+        ) from error
     _validate_renderable_trace(trace)
     clearance_points = _clearance_points(trace)
 
@@ -229,13 +234,20 @@ def _plot_trajectory(trace: SimulationTraceExport, ax: Any) -> None:
 
 
 def _plot_speed_profile(trace: SimulationTraceExport, ax: Any) -> None:
-    times = [frame.time_s for frame in trace.frames]
     speeds = [
         _speed(frame.robot["velocity"], context=f"/frames/{index}/robot/velocity")
         for index, frame in enumerate(trace.frames)
     ]
     selected = [
-        float(frame.planner["selected_action"]["linear_velocity"]) for frame in trace.frames
+        _finite_number(
+            frame.planner["selected_action"]["linear_velocity"],
+            context=f"/frames/{index}/planner/selected_action/linear_velocity",
+        )
+        for index, frame in enumerate(trace.frames)
+    ]
+    times = [
+        _finite_number(frame.time_s, context=f"/frames/{index}/time_s")
+        for index, frame in enumerate(trace.frames)
     ]
     ax.plot(times, speeds, color="#1f77b4", marker="o", label="robot speed")
     ax.plot(times, selected, color="#ff7f0e", marker=".", linestyle="--", label="selected linear")
@@ -302,6 +314,7 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
     for frame_index, frame in enumerate(trace.frames):
         if not frame.pedestrians:
             continue
+        time_s = _finite_number(frame.time_s, context=f"/frames/{frame_index}/time_s")
         robot_position = _xy(
             frame.robot["position"], context=f"/frames/{frame_index}/robot/position"
         )
@@ -327,10 +340,14 @@ def _clearance_points(trace: SimulationTraceExport) -> list[ClearancePoint]:
                         context=f"/frames/{frame_index}/pedestrians/{ped_index}/radius",
                     )
                 )
+            if not math.isfinite(value):
+                raise TraceDossierRenderError(
+                    f"/frames/{frame_index}: clearance arithmetic produced a non-finite value"
+                )
             candidates.append(
                 ClearancePoint(
                     step=frame.step,
-                    time_s=frame.time_s,
+                    time_s=time_s,
                     pedestrian_id=str(pedestrian["id"]),
                     value_m=value,
                     mode=mode,
@@ -456,7 +473,10 @@ def _radius(actor: dict[str, Any], *, context: str) -> float:
 def _finite_number(value: Any, *, context: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise TraceDossierRenderError(f"{context}: expected finite number")
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError as error:
+        raise TraceDossierRenderError(f"{context}: number is outside the float range") from error
     if not math.isfinite(number):
         raise TraceDossierRenderError(f"{context}: expected finite number")
     return number

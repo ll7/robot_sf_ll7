@@ -63,6 +63,11 @@ from robot_sf.research.emergent_phenomena import (
     released_default_config,
     run_scenario,
 )
+from robot_sf.research.representative_selection import (
+    RepresentativeCandidate,
+    primary_order_parameter,
+    select_representative_index,
+)
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -82,22 +87,10 @@ PHENOMENON_BY_SCENARIO = {
     "bidirectional_corridor": "lane_formation",
     "narrow_doorway": "doorway_oscillation",
 }
-# Mirrors PRIMARY_ORDER_PARAMETER in build_issue_5149_emergent_phenomena_campaign.py
-# for the two video scenarios.
-PRIMARY_ORDER_PARAMETER = {
-    "bidirectional_corridor": "lane_segregation_index",
-    "narrow_doorway": "oscillation_flips",
-}
 CALIBRATIONS = {
     "released_default": RELEASED_DEFAULT_CALIBRATION,
     "literature_typical": LITERATURE_CALIBRATION,
 }
-# Verdict labels ordered weakest-first (matches emergent_phenomena_campaign).
-VERDICT_SEVERITY: tuple[str, ...] = (
-    "absent_or_negligible",
-    "weak_partial",
-    "clearly_present",
-)
 
 DEFAULT_FRAME_STRIDE = 2  # render every 2nd step (dt=0.1 s -> 0.2 s per frame)
 DEFAULT_FPS = 10  # 2x real time at the default stride
@@ -125,35 +118,15 @@ def load_run_records(bundle_dir: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
-def majority_verdict(verdicts: list[str]) -> str:
-    """Most common verdict, tie-breaking toward the weaker label.
-
-    Returns:
-        The majority verdict label.
-    """
-    counts: dict[str, int] = {}
-    for v in verdicts:
-        counts[v] = counts.get(v, 0) + 1
-
-    def sort_key(item: tuple[str, int]) -> tuple[int, int]:
-        label, count = item
-        severity = (
-            VERDICT_SEVERITY.index(label) if label in VERDICT_SEVERITY else len(VERDICT_SEVERITY)
-        )
-        return (-count, severity)
-
-    return min(counts.items(), key=sort_key)[0]
-
-
 def select_representative_record(
     records: list[dict[str, Any]], scenario: str, calibration: str
 ) -> dict[str, Any]:
     """Pick the representative run record for one scenario x calibration group.
 
-    Rule: restrict to records whose verdict equals the group's majority
-    verdict (weaker-verdict tie-break), then take the record with the median
-    primary order parameter; ties break toward the lower seed. Deterministic
-    given ``runs.jsonl``.
+    The rule itself lives in
+    :mod:`robot_sf.research.representative_selection`; this wrapper only maps
+    the campaign's ``runs.jsonl`` record shape onto it, so the rendered replay
+    and the campaign's reported majority verdict cannot drift apart.
 
     Args:
         records: All campaign run records.
@@ -169,11 +142,16 @@ def select_representative_record(
     group = [r for r in records if r["scenario"] == scenario and r["calibration"] == calibration]
     if not group:
         raise ValueError(f"no run records for {scenario} x {calibration}")
-    majority = majority_verdict([r["phenomenon_verdict"] for r in group])
-    pool = [r for r in group if r["phenomenon_verdict"] == majority]
-    param = PRIMARY_ORDER_PARAMETER[scenario]
-    ordered = sorted(pool, key=lambda r: (float(r["order_parameters"][param]), int(r["seed"])))
-    return ordered[(len(ordered) - 1) // 2]
+    param = primary_order_parameter(scenario)
+    candidates = [
+        RepresentativeCandidate(
+            verdict=r["phenomenon_verdict"],
+            primary_order=float(r["order_parameters"][param]),
+            seed=int(r["seed"]),
+        )
+        for r in group
+    ]
+    return group[select_representative_index(candidates)]
 
 
 def _draw_static_geometry(ax: Axes, result: ScenarioResult) -> None:
@@ -242,7 +220,7 @@ class _ReplayPanel:
 
 def _panel_label(result: ScenarioResult, record: dict[str, Any]) -> str:
     """Build the per-panel provenance label from a run record."""
-    param = PRIMARY_ORDER_PARAMETER[result.scenario.name]
+    param = primary_order_parameter(result.scenario.name)
     value = float(record["order_parameters"][param])
     return (
         f"{result.scenario.name} | {result.calibration.name} | seed {result.scenario.seed} | "
@@ -360,9 +338,9 @@ def build_videos(
                     "seed_selection": "median primary order parameter among majority-verdict "
                     "seeds (lower seed on ties)",
                     "phenomenon_verdict": record["phenomenon_verdict"],
-                    "primary_order_parameter": PRIMARY_ORDER_PARAMETER[scenario_name],
+                    "primary_order_parameter": primary_order_parameter(scenario_name),
                     "primary_order_parameter_value": float(
-                        record["order_parameters"][PRIMARY_ORDER_PARAMETER[scenario_name]]
+                        record["order_parameters"][primary_order_parameter(scenario_name)]
                     ),
                     "source_commit": commit,
                     "n_frames": n_frames,

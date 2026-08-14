@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from robot_sf._execution_context import (
+    build_execution_context,
+    execution_context_digest,
+    public_machine_id,
+)
 from robot_sf.benchmark.exact_repeat_campaign import (
+    CONTEXT_APPROVED_NEAR_MISS,
+    CONTEXT_EXACT_MATCH,
+    CONTEXT_INCOMPATIBLE,
     HOST_REPORT_SCHEMA_VERSION,
     MIXED_DISPOSITION,
     UNRUNNABLE_DISPOSITION,
@@ -50,23 +59,40 @@ def manifest() -> dict[str, Any]:
 
 def _host_report(manifest: dict[str, Any], machine_id: str) -> dict[str, Any]:
     repeats = [{"outcome": 1, "trajectory_sha256": "a" * 64, "near_misses": 0} for _ in range(3)]
+    context = build_execution_context(numpy_version="2.3.5", numba_version="0.65.1")
     return {
         "schema_version": HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
         "environment": {
             "machine_id": machine_id,
+            "machine_id_sha256": hashlib.sha256(machine_id.encode("utf-8")).hexdigest(),
+            "public_machine_id": public_machine_id(machine_id),
             "cpu_only": True,
             "workers": 1,
             "numpy_version": "2.3.5",
             "numba_version": "0.65.1",
-            "python_version": "3.13.14",
+            "python_version": context["python_version"],
             "git_commit": manifest["targets"][0]["source_git_hash"],
             "lockfile_sha256": "b" * 64,
+            "execution_context": context,
+            "execution_context_sha256": execution_context_digest(context),
         },
         "results": [
             {**target, "repeats": copy.deepcopy(repeats)} for target in manifest["targets"]
         ],
     }
+
+
+def _update_context(report: dict[str, Any], **updates: Any) -> None:
+    """Update a host context and all mirrored fields used by the contract."""
+    environment = report["environment"]
+    context = copy.deepcopy(environment["execution_context"])
+    context.update(updates)
+    environment["execution_context"] = context
+    environment["execution_context_sha256"] = execution_context_digest(context)
+    for field in ("numpy_version", "numba_version", "python_version", "cpu_only", "workers"):
+        if field in updates:
+            environment[field] = updates[field]
 
 
 def test_manifest_pins_all_seven_knife_edge_cells_and_their_420_runs(manifest):
@@ -185,6 +211,7 @@ def test_host_verifier_marks_all_unrunnable_reports_non_identical(manifest):
         "n_runnable_cells": 0,
         "n_unrunnable_cells": 7,
         "n_mixed_cells": 0,
+        "context_comparison": CONTEXT_EXACT_MATCH,
         "all_cells_bitwise_identical": False,
     }
 
@@ -268,11 +295,14 @@ def test_cross_host_comparison_requires_pinned_versions_and_exact_fingerprints(m
     comparison = compare_verified_hosts(manifest, first, second)
     assert comparison["summary"]["all_cells_bitwise_identical"] is True
     assert comparison["provenance_match"] is True
+    assert comparison["context_comparison"] == CONTEXT_EXACT_MATCH
+    assert comparison["hosts"] == [public_machine_id("host-a"), public_machine_id("host-b")]
     assert comparison["provenance_mismatches"] == {}
 
-    second["environment"]["numba_version"] = "different"
+    _update_context(second, numba_version="different")
     comparison = compare_verified_hosts(manifest, first, second)
     assert comparison["pinned_runtime_versions_match"] is False
+    assert comparison["context_comparison"] == CONTEXT_APPROVED_NEAR_MISS
     assert comparison["provenance_match"] is False
     assert comparison["provenance_mismatches"]["numba_version"] == {
         "first": "0.65.1",
@@ -288,11 +318,15 @@ def test_cross_host_comparison_rejects_provenance_drift_as_identical(manifest, f
     second = verify_host_report(manifest, _host_report(manifest, "host-b"))
     if field not in second["environment"]:
         raise KeyError(f"Key '{field}' not found in environment")
-    second["environment"][field] = "drifted"
+    if field == "python_version":
+        _update_context(second, python_version="drifted")
+    else:
+        second["environment"][field] = "drifted"
 
     comparison = compare_verified_hosts(manifest, first, second)
 
     assert comparison["pinned_runtime_versions_match"] is True
+    assert comparison["context_comparison"] == CONTEXT_INCOMPATIBLE
     assert comparison["provenance_match"] is False
     assert comparison["provenance_mismatches"][field] == {
         "first": first["environment"][field],
@@ -300,6 +334,61 @@ def test_cross_host_comparison_rejects_provenance_drift_as_identical(manifest, f
     }
     assert all(row["comparison_status"] == "divergent" for row in comparison["matrix"])
     assert comparison["summary"]["all_cells_bitwise_identical"] is False
+
+
+def test_cross_host_comparison_reports_thread_context_drift(manifest):
+    """A numerical thread-variable mismatch is explicit and incompatible."""
+    first = verify_host_report(manifest, _host_report(manifest, "host-a"))
+    second = verify_host_report(manifest, _host_report(manifest, "host-b"))
+    thread_env = copy.deepcopy(second["environment"]["execution_context"]["thread_env"])
+    thread_env["OMP_NUM_THREADS"] = "8"
+    _update_context(second, thread_env=thread_env)
+
+    comparison = compare_verified_hosts(manifest, first, second)
+
+    assert comparison["context_comparison"] == CONTEXT_INCOMPATIBLE
+    assert comparison["context_mismatches"]["thread_env.OMP_NUM_THREADS"] == {
+        "first": first["environment"]["execution_context"]["thread_env"]["OMP_NUM_THREADS"],
+        "second": "8",
+    }
+    assert comparison["summary"]["all_cells_bitwise_identical"] is False
+
+
+def test_host_verifier_rejects_legacy_report_without_execution_context(manifest):
+    """Legacy host reports cannot be promoted without the canonical context block."""
+    report = _host_report(manifest, "host-a")
+    report["environment"].pop("execution_context")
+    report["environment"].pop("execution_context_sha256")
+
+    with pytest.raises(ValueError, match="execution_context"):
+        verify_host_report(manifest, report)
+
+
+def test_host_verifier_rejects_context_digest_drift(manifest):
+    """A changed context cannot retain the old context digest."""
+    report = _host_report(manifest, "host-a")
+    report["environment"]["execution_context"]["cpu_model"] = "different CPU"
+
+    with pytest.raises(ValueError, match="execution_context_sha256"):
+        verify_host_report(manifest, report)
+
+
+def test_host_verifier_rejects_unsupported_context_field(manifest):
+    """Unknown context fields do not silently enter the equivalence contract."""
+    report = _host_report(manifest, "host-a")
+    report["environment"]["execution_context"]["unexpected"] = "unsupported"
+
+    with pytest.raises(ValueError, match="unsupported fields"):
+        verify_host_report(manifest, report)
+
+
+def test_execution_context_digest_is_byte_stable(manifest):
+    """Equal contexts have stable digests independent of host identity."""
+    first = _host_report(manifest, "host-a")["environment"]
+    second = _host_report(manifest, "host-b")["environment"]
+
+    assert first["execution_context"] == second["execution_context"]
+    assert first["execution_context_sha256"] == second["execution_context_sha256"]
 
 
 def test_manifest_fails_closed_when_a_source_seed_is_missing():

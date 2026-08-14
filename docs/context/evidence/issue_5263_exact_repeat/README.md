@@ -52,14 +52,15 @@ uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py compare-ho
 `resolved_definitions.json` contains 80 deduplicated seed-specific scenario definitions, the three
 planner definitions (`goal`, `orca`, and `ppo`), and 140 target references with matching retained
 and computed hashes. `verify-host` rejects missing targets, a Git revision or per-target
-horizon/config hash that does
-not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba versions,
-absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
-repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
-host report must state the first differing repeat and field. `compare-hosts` accepts only distinct
-machine identifiers and marks a cell `divergent` unless the hosts have matching NumPy, Numba,
-Python, source-commit, and `uv.lock` identities as well as matching repeat fingerprints. Runtime
-or provenance drift is recorded in `provenance_mismatches`; it cannot become an `identical` row.
+horizon/config hash that does not match the manifest, non-CPU or multi-worker metadata, absent or
+malformed canonical execution-context fields, missing context or host-identity digests, absent
+`uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded
+divergences. A repeat is identical only when its binary outcome and SHA-256 trajectory hash agree.
+Otherwise the host report must state the first differing repeat and field. `compare-hosts` accepts
+only distinct machine identities and emits public-safe host labels. It distinguishes an
+`exact_context_match`, the predeclared `approved_numpy_numba_near_miss`, and
+`incompatible_context`; CPU model, platform, Python, and every numerical thread-variable mismatch
+is explicit. Context and provenance drift cannot become an `identical` row.
 
 ## Evidence status and remaining action
 

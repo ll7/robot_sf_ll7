@@ -517,6 +517,39 @@ def test_domain_approval_requires_validity_checklist_fields() -> None:
     assert "Comparator or split/evidence validity" in report.checklist_errors
 
 
+def test_domain_approval_exposes_exact_labels_for_unlabeled_checklist_prose() -> None:
+    """Semantically similar prose fails closed with copyable label remediation."""
+    report = analyze_domain_approval(
+        _domain_body(
+            domain_section="""## Domain-Aware Approval
+- Required for this PR: yes - evidence-validity-sensitive result classification
+- Domains reviewed: experimental comparison
+- Status: approved
+- Approver/review source or waiver: maintainer review
+- Validity checklist:
+  - Hypothesis: issue claim boundary stays diagnostic-only
+  - Comparator: existing targeted smoke proof only
+  - Fallback behavior: fallback/degraded evidence remains excluded
+  - Scope of claim: no paper-facing benchmark claim
+  - Code versus experiment: tests prove gate behavior, not result validity
+"""
+        ),
+        source="fixture",
+    )
+
+    assert report.status == "incomplete_domain_approval"
+    assert set(report.checklist_errors) == {
+        "Target claim/hypothesis",
+        "Comparator or split/evidence validity",
+        "Fallback/degraded exclusions",
+        "Claim boundary",
+        "Implementation integrity vs experimental validity",
+    }
+    assert "copy verbatim" in report.message
+    for label in report.checklist_errors:
+        assert label in report.message
+
+
 def test_domain_approval_rejects_not_required_for_sensitive_result() -> None:
     """Non-NA evidence fields cannot be paired with a not-required approval claim."""
     report = analyze_domain_approval(

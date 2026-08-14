@@ -51,6 +51,9 @@ not fill a concrete `Evidence tier`/`Result classification`) may opt out with
 - Domains reviewed: evidence classification / experimental comparison / figure eligibility / benchmark interpretation / paper-facing claims / NA
 - Status: approved / waived / pending / blocked / not required
 - Approver/review source or waiver:
+Copy the five validity-checklist labels below verbatim; the readiness checker matches these labels
+literally and does not infer synonyms.
+
 - Validity checklist:
   - Target claim/hypothesis:
   - Comparator or split/evidence validity:

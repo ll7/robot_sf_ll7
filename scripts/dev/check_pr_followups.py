@@ -790,7 +790,9 @@ def analyze_domain_approval(
             checklist_errors=checklist_errors,
             message=(
                 "Domain-aware approval requires completed validity-checklist fields: "
-                f"{', '.join(checklist_errors)}."
+                f"{', '.join(checklist_errors)}. Add each missing field using the exact "
+                "label text (copy verbatim; synonyms are not inferred): "
+                f"{'; '.join(DOMAIN_VALIDITY_LABELS)}."
             ),
         )
     status_report = _domain_status_report(

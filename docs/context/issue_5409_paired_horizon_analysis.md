@@ -33,3 +33,10 @@ The default contract is the launch packet's 12 planners, 48 scenarios, seeds
 `[111, 112, 113]`, 1,728 rows per arm, and scenario-matrix hash `c10df617a87c`.
 Use the CLI options only for small fixture or contract-specific validation, not to
 relax the issue #5409 acceptance boundary.
+
+Before a rerun, execute the issue-specific guarded-PPO availability preflight on the
+same public commit and environment. It must resolve both the staged checkpoint and
+the registry observation contract. The h500/h600 configs keep `guarded_ppo` in the
+full roster without a static dependency gate because that preflight now resolves
+`available`; if it fails, the campaign remains blocked and the paired handoff must
+emit no numeric evidence.

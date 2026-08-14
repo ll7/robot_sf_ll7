@@ -109,8 +109,8 @@ planners:
     planner_group: experimental
     algo_config: configs/algos/orca_prior_guarded_ppo_v1.yaml
     benchmark_profile: experimental
-    availability_gate: dependency_gated
-    fail_closed_reason: guarded_ppo_checkpoint_observation_contract_missing
+    # The promoted checkpoint and registry observation contract now resolve in the
+    # issue-specific availability preflight; keep this arm in the 12-planner matrix.
 
   - key: prediction_planner
     algo: prediction_planner

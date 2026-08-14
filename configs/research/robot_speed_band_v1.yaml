@@ -170,6 +170,8 @@ result_contract:
     drive model, peak forward speed, and #4976 actuation envelope per variant so
     per-band metric shifts are attributable to the speed band.
 
+retained_metric_contract: configs/benchmarks/paired_effect_metric_contract_v1.yaml
+
 primary_metric: snqi
 higher_is_better: true
 

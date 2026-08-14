@@ -1,9 +1,10 @@
 # Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration
 
-**Status**: the frozen S10 nominal and stress campaigns completed on 2026-08-14. The campaign
-execution receipts are valid, but the combined interpretation is **blocked** because the retained
-stress campaign has only a metadata-only PPO checkpoint receipt and no runtime checkpoint
-hash/load receipt. The result is diagnostic-only until that provenance gap is resolved.
+**Status**: the frozen S10 nominal and stress campaigns completed on 2026-08-14. The current
+paired report is **diagnostic_ready_for_domain_review** with interpretation allowed for the
+configured nominal-versus-stress diagnostic. Both arms have staged, identity-matched,
+computed-file checkpoint receipts; runtime checkpoint load status remains `not_run`, so this is
+not runtime hash/load or paper-facing evidence.
 
 [The report builder](../../scripts/benchmark/build_issue_6095_discriminability_report.py) fails
 closed on matrix, row-identity, runtime-contract, fallback/degraded, or PPO-provenance violations
@@ -13,16 +14,18 @@ and writes a machine-readable JSON report plus a compact Markdown handoff.
 
 Both campaigns used commit `fcc495b955c9eab00bc60842b5cae63f74cf2e2c`, seeds 111--120, horizon
 100, `dt=0.1`, and differential-drive kinematics. The nominal campaign was job 14408 with 80
-episodes; the previously completed stress campaign was job 14083 with 960 episodes. Both campaign
-receipts report valid execution with zero fallback/degraded, unavailable, or failed rows.
+episodes; the provenance-only stress rerun was job 14411 with 960 episodes. Both campaign
+receipts report valid execution with zero fallback/degraded, unavailable, or failed rows. The
+earlier stress job 14083 remains historical context only; the current paired report uses job
+14411.
 
 The raw episode contract is homogeneous within each arm: ORCA is `adapter`, PPO is `native`, and
 both records expose `tracked_agents_no_noise`. The campaign summaries still carry fairness mismatch
 warnings (including an obsolete `ppo=mixed` description), so this report does not rank planners or
 interpret the result as an algorithm comparison.
 
-The combined report observed higher nominal success for both planners in S10 and in the first-three-
-seed S3 subset:
+The rebuilt report is `diagnostic_ready_for_domain_review` with no blockers. It observed higher
+nominal success for both planners in S10 and in the first-three-seed S3 subset:
 
 | seed schedule | nominal ORCA | stress ORCA | nominal PPO | stress PPO |
 |---|---:|---:|---:|---:|
@@ -117,8 +120,8 @@ campaign evidence.
 The 2026-08-14 execution handoff is archived at:
 `docs/context/evidence/issue_6095_s10_discriminability_2026-08-14/`.
 It records both campaign IDs, job IDs, report checksums, the complete stress
-floor classification, and the unresolved PPO provenance blocker. The raw JSONL
-episodes are not tracked in Git.
+floor classification, and staged checkpoint receipts with the explicit runtime-load caveat.
+The raw JSONL episodes are not tracked in Git.
 
 Rebuild the report from retrieved campaign roots with:
 
@@ -132,9 +135,10 @@ uv run python scripts/benchmark/build_issue_6095_discriminability_report.py \
 ## Execution Requirements
 
 The governed SLURM execution is complete for the frozen 80-row nominal and
-960-row stress matrices. A future promotion requires a runtime PPO checkpoint
-load/hash receipt for the stress artifact; the metadata-only receipt currently
-keeps the combined interpretation fail-closed.
+960-row stress matrices. The current bounded diagnostic may proceed to domain review because
+the rerun replaced the metadata-only stress receipt with a staged, checksum-verified receipt.
+Runtime load status is still `not_run`; any stronger runtime, planner-ranking, safety, or
+paper-facing claim requires additional proof and resolution of the fairness and overlap caveats.
 
 ## PPO Model Provenance
 
@@ -166,9 +170,8 @@ matrix) and `atomic_navigation_minimal_full_v1.yaml`. This means:
 The campaigns are valid execution evidence: all planned rows completed with no
 fallback/degraded rows, and the report verifies raw planner/scenario/seed
 identity, commit, horizon, time step, kinematics, and model identity. The
-combined analysis is nevertheless **diagnostic-only** because the stress PPO
-checkpoint receipt is metadata-only and does not prove that the declared hash
-was the file loaded at runtime.
+combined analysis is **diagnostic-only** because the checkpoint receipts prove staged,
+identity-matched files but do not prove that the declared hash was the file loaded at runtime.
 
 Conditional observations support the configured-matrix stress-floor hypothesis:
 both planners have higher nominal success in S3 and S10, and 23 of 35

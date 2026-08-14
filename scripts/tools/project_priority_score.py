@@ -525,9 +525,10 @@ class GhProjectClient:
     ) -> list[dict[str, Any]]:
         """Return one issue-backed item through the project query surface.
 
-        The numeric query narrows discovery before ``gh`` applies ``--limit``;
-        the exact-number check then rejects textual false positives. If the
-        bounded query reaches its cap without finding the issue, fail closed
+        Older GitHub CLI versions reject the Projects ``--query`` flag even
+        though newer versions advertise it. Use the portable bounded list
+        surface instead, then exact-match the issue number locally. If the
+        bounded result reaches its cap without finding the issue, fail closed
         because the exact match may have been truncated.
         """
 
@@ -538,8 +539,6 @@ class GhProjectClient:
             owner=owner,
             project_number=project_number,
             extra_args=(
-                "--query",
-                str(issue_number),
                 "--limit",
                 str(limit),
             ),
@@ -555,7 +554,7 @@ class GhProjectClient:
         assert_not_truncated(
             items,
             limit=limit,
-            context=f"gh project item-list query for issue #{issue_number}",
+            context=f"gh project item-list bounded lookup for issue #{issue_number}",
         )
         return []
 

@@ -693,7 +693,9 @@ resume artifact after compaction or automatic continuation: it should name the a
 known generated paths, stale claims, check state, and next action without reopening raw logs,
 issue queues, worktree inventories, or skill files. Compact status omits generated untracked trees
 such as `.venv`, `.opencode`, `node_modules`, and `output`, reporting only the generated
-roots that are present. Run fresh focused `gh`/`git` checks before
+roots that are present. Check summaries reconcile duplicate timestamped runs from the same
+workflow/job and expose the discarded count as `superseded`; an older cancelled run is not treated
+as current failure when a newer replacement is present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.

@@ -1,0 +1,89 @@
+{
+  "benchmark": "raycast_numba_toggle",
+  "commit": "389b603658dce9beae98b63394dda218bf57d8bb",
+  "description": "Per-call wall time of robot_sf.sensor.range_sensor.raycast with numba JIT enabled vs NUMBA_DISABLE_JIT=1, on a fixed synthetic LiDAR workload.",
+  "environment": {
+    "numba": "0.66.0",
+    "numpy": "2.4.6",
+    "python": "3.13.1"
+  },
+  "finished_utc": "2026-08-14T15:43:14Z",
+  "hardware": {
+    "cpu": "Apple M4 Pro",
+    "machine_model": "Mac16,8",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O"
+  },
+  "output_signature": {
+    "min_finite": 0.993193517,
+    "num_finite": 240,
+    "num_rays": 272,
+    "sum_finite": 1411.314822103
+  },
+  "outputs_identical_across_arms": true,
+  "protocol": {
+    "calls_per_repeat": 2000,
+    "repeats": 3,
+    "timer": "time.perf_counter_ns",
+    "warmup_calls": 50
+  },
+  "results": {
+    "off": {
+      "per_repeat_median_us": [
+        16598.354,
+        16620.917,
+        16551.0625
+      ],
+      "pooled": {
+        "iqr_us": 393.0107500000013,
+        "max_us": 50155.667,
+        "mean_us": 16643.336306666668,
+        "median_us": 16587.396,
+        "min_us": 15332.792,
+        "n": 6000,
+        "p25_us": 16386.2915,
+        "p75_us": 16779.30225,
+        "p95_us": 17222.209,
+        "p99_us": 18008.875,
+        "stdev_us": 887.4409070330702
+      }
+    },
+    "on": {
+      "per_repeat_median_us": [
+        26.25,
+        25.792,
+        25.0
+      ],
+      "pooled": {
+        "iqr_us": 1.1670000000000016,
+        "max_us": 604.208,
+        "mean_us": 27.112618666666666,
+        "median_us": 25.792,
+        "min_us": 24.416,
+        "n": 6000,
+        "p25_us": 25.083,
+        "p75_us": 26.25,
+        "p95_us": 27.958,
+        "p99_us": 65.333,
+        "stdev_us": 14.902059199105578
+      }
+    }
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "speedup": {
+    "max_repeat_ratio": 664.83668,
+    "median_ratio": 643.1217431761786,
+    "min_repeat_ratio": 630.5166666666667,
+    "off_median_us": 16587.396,
+    "on_median_us": 25.792
+  },
+  "started_utc": "2026-08-14T15:41:29Z",
+  "workload": {
+    "map_extent_m": 20.0,
+    "max_scan_dist_m": 10.0,
+    "num_peds": 30,
+    "num_rays": 272,
+    "num_segments": 60,
+    "ped_radius_m": 0.4,
+    "seed": 101
+  }
+}

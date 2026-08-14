@@ -7,6 +7,9 @@ conservative (weaker-verdict) tie-breaking.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from robot_sf.research.emergent_phenomena import (
@@ -152,3 +155,33 @@ def test_aggregate_run_records_groups_by_scenario_and_calibration():
     keys = [(a["scenario"], a["calibration"]) for a in aggregates]
     assert keys == sorted(keys)
     assert len(aggregates) == 3
+
+
+# Aggregation now shares its majority-verdict rule with the replay-video
+# selector, so the archived bundle doubles as a regression fixture: re-deriving
+# its reported verdicts from its own runs.jsonl must reproduce them exactly.
+_BUNDLE_DIR = (
+    Path(__file__).resolve().parents[1]
+    / "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08"
+)
+
+
+def test_aggregate_run_records_reproduces_archived_bundle_verdicts():
+    runs_path = _BUNDLE_DIR / "runs.jsonl"
+    summary_path = _BUNDLE_DIR / "summary.json"
+    if not (runs_path.is_file() and summary_path.is_file()):
+        pytest.skip(f"campaign bundle not present at {_BUNDLE_DIR}")
+    records = [
+        json.loads(line)
+        for line in runs_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    archived = {
+        (agg["scenario"], agg["calibration"]): agg["majority_verdict"]
+        for agg in json.loads(summary_path.read_text(encoding="utf-8"))["aggregates"]
+    }
+    recomputed = {
+        (agg["scenario"], agg["calibration"]): agg["majority_verdict"]
+        for agg in aggregate_run_records(records)
+    }
+    assert recomputed == archived

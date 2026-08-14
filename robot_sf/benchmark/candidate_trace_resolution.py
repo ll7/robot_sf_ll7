@@ -236,6 +236,10 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
         ):
             continue
         key = _episode_key(scenario_id, planner, seed, episode_id)
+        if key in by_key:
+            raise CandidateTraceResolutionError(
+                f"campaign result store has duplicate episode identity: {key}"
+            )
         by_key[key] = {
             "run_id": run_id,
             "episode_id": episode_id,
@@ -470,6 +474,158 @@ def resolve_trace_artifact(
             "reason_code": "trace_artifact_not_found",
         }
     return _validate_trace_file(trace_path)
+
+
+def resolve_episode_source(  # noqa: C901 - fail-closed status branches are the contract
+    *,
+    scenario_id: str,
+    planner_id: str,
+    seed: int,
+    campaign_store_dir: Path,
+    trace_search_roots: Sequence[Path] | None = None,
+) -> dict[str, Any]:
+    """Resolve one campaign tuple to its existing source artifact.
+
+    This is the tuple-shaped entry point for consumers that do not yet know an
+    episode identifier.  It deliberately stops at the campaign row and its
+    byte-addressed artifact: callers that need a ``simulation_trace_export.v1``
+    payload must validate or convert the source through the canonical trace
+    builder.  In particular, JSONL recording sources are not misclassified as
+    schema-mismatched traces here.
+
+    Returns:
+        A provenance mapping with ``resolution_status``.  Successful results
+        include the selected row, local ``source_path``, and its verified
+        ``source_sha256``.  Ambiguous or incomplete row provenance is reported
+        as ``provenance-incomplete``; a missing local artifact is
+        ``trace-missing``.
+    """
+    try:
+        store = load_campaign_result_store(campaign_store_dir)
+    except CandidateTraceResolutionError as exc:
+        return {
+            "campaign_id": None,
+            "campaign_row_reference": None,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": f"campaign_store_unreadable:{exc}",
+        }
+
+    normalized_scenario = _coerce_optional_text(scenario_id)
+    normalized_planner = _coerce_optional_text(planner_id)
+    normalized_seed = coerce_optional_id(seed)
+    if normalized_scenario is None or normalized_planner is None or normalized_seed is None:
+        return {
+            "campaign_id": store.study_id,
+            "campaign_row_reference": None,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "invalid_requested_tuple",
+        }
+
+    matches = [
+        row
+        for row in store.episodes.values()
+        if row.get("scenario_id") == normalized_scenario
+        and row.get("planner") == normalized_planner
+        and row.get("seed") == normalized_seed
+    ]
+    if not matches:
+        return {
+            "campaign_id": store.study_id,
+            "campaign_row_reference": None,
+            "scenario_id": normalized_scenario,
+            "planner_id": normalized_planner,
+            "seed": normalized_seed,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "campaign_row_not_found",
+        }
+    if len(matches) > 1:
+        episode_ids = sorted(str(row.get("episode_id")) for row in matches)
+        return {
+            "campaign_id": store.study_id,
+            "campaign_row_reference": None,
+            "scenario_id": normalized_scenario,
+            "planner_id": normalized_planner,
+            "seed": normalized_seed,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "ambiguous_campaign_tuple:" + ",".join(episode_ids),
+        }
+
+    row = matches[0]
+    base = {
+        "campaign_id": store.study_id,
+        "campaign_row_reference": str(row.get("run_id")),
+        "scenario_id": normalized_scenario,
+        "planner_id": normalized_planner,
+        "seed": normalized_seed,
+        "episode_id": row.get("episode_id"),
+        "artifact_uri": row.get("artifact_uri"),
+        "artifact_sha256": row.get("artifact_sha256"),
+        "row_status": row.get("row_status"),
+        "scenario_family": row.get("scenario_family"),
+    }
+    artifact_uri = _coerce_optional_text(row.get("artifact_uri"))
+    artifact_sha256 = _coerce_optional_text(row.get("artifact_sha256"))
+    row_status = _coerce_optional_text(row.get("row_status"))
+    if artifact_uri is None or artifact_sha256 is None or row_status is None:
+        return {
+            **base,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "campaign_row_missing_artifact_provenance",
+        }
+    if row_status in {"fallback", "degraded", "unavailable", "failed"}:
+        return {
+            **base,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": f"unsupported_campaign_row_status:{row_status}",
+        }
+    if not _is_sha256(artifact_sha256):
+        return {
+            **base,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "campaign_row_invalid_artifact_sha256",
+        }
+
+    try:
+        source_path = _locate_trace_path(row, trace_search_roots=trace_search_roots)
+    except CandidateTraceResolutionError as exc:
+        return {
+            **base,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": f"ambiguous_trace_artifact:{exc}",
+        }
+    if source_path is None:
+        return {
+            **base,
+            "resolution_status": "trace-missing",
+            "reason_code": "trace_artifact_not_found",
+        }
+    try:
+        source_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    except (OSError, ValueError) as exc:
+        return {
+            **base,
+            "source_path": str(source_path),
+            "resolution_status": "trace-missing",
+            "reason_code": f"trace_artifact_unreadable:{exc}",
+        }
+    if source_sha256 != artifact_sha256.lower():
+        return {
+            **base,
+            "source_path": str(source_path),
+            "source_sha256": source_sha256,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": (
+                "campaign_row_artifact_sha256_mismatch:"
+                f"expected={artifact_sha256.lower()},observed={source_sha256}"
+            ),
+        }
+    return {
+        **base,
+        "source_path": str(source_path),
+        "source_sha256": source_sha256,
+        "resolution_status": "resolved",
+        "reason_code": "campaign_tuple_and_artifact_resolved",
+    }
 
 
 def resolve_trace_signals(
@@ -1377,6 +1533,7 @@ __all__ = [
     "resolve_candidate_to_episode",
     "resolve_candidate_trace_resolution",
     "resolve_episode_requests",
+    "resolve_episode_source",
     "resolve_trace_artifact",
     "resolve_trace_signals",
     "validate_candidate_trace_resolution",

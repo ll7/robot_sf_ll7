@@ -55,6 +55,24 @@ uv run python scripts/tools/render_trace_report.py \
   --output output/debug/trace_report/report.md
 ```
 
+To render one deterministic, diagnostic-only four-panel trace dossier from the same trace contract:
+
+```bash
+uv run python scripts/tools/render_trace_dossier.py \
+  --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
+  --output output/debug/trace_dossier/dossier.png \
+  --manifest output/debug/trace_dossier/trace_dossier_manifest.json
+```
+
+The dossier contains trajectory, speed profile, clearance-over-time, and event timeline panels.
+It only uses `simulation_trace_export.v1` frame fields. The manifest records the canonical
+`distance_convention` (`center_center` or `surface_clearance`) from the metrics specification.
+When actor radii are absent, the clearance panel reports center-to-center distance and records that
+limitation in `trace_dossier_manifest.v1`; mixed radius metadata or missing planner events fail
+closed instead of inventing body-edge clearance or event annotations. The renderer is
+diagnostic/tooling-only and does not acquire traces,
+run simulation, or admit benchmark or paper-facing evidence.
+
 To generate reusable static trajectory panels and failure mosaics from the same trace-export
 format, run:
 

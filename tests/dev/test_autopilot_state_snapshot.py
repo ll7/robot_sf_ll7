@@ -384,7 +384,7 @@ def test_checks_summary_ignores_malformed_rollup_entries() -> None:
 
 
 def test_checks_summary_suppresses_superseded_cancelled_rerun() -> None:
-    """A newer same-workflow run replaces an older cancellation in the route snapshot."""
+    """Verify that a newer successful rerun prevents a superseded cancellation from creating a false failure."""
     summary = snapshot._checks_summary(
         [
             {
@@ -414,7 +414,7 @@ def test_checks_summary_suppresses_superseded_cancelled_rerun() -> None:
 
 
 def test_checks_summary_keeps_unreplaced_cancellation_fail_closed() -> None:
-    """A cancellation without a newer same-workflow run remains a failure."""
+    """Verify that an unreplaced cancellation keeps the snapshot fail-closed."""
     summary = snapshot._checks_summary(
         [
             {

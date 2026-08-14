@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from numbers import Integral
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -155,9 +156,10 @@ def _normalize_trace(
         {"cell_id", "episode_id", "seed", "trace_artifact_uri", "trace_sha256", "terminal_verdict"},
         "selected_trace",
     )
-    seed = values.get("seed")
-    if type(seed) is not int or seed < 0:
+    raw_seed = values.get("seed")
+    if isinstance(raw_seed, bool) or not isinstance(raw_seed, Integral) or raw_seed < 0:
         raise TraceDossierCellBindingError("selected_trace.seed must be a non-negative integer")
+    seed = int(raw_seed)
     trace_sha256 = _required_text(values.get("trace_sha256"), "selected_trace.trace_sha256")
     if _SHA256_RE.fullmatch(trace_sha256) is None:
         raise TraceDossierCellBindingError(
@@ -193,6 +195,10 @@ def _normalize_counts(raw_counts: Mapping[str, Any]) -> dict[str, int]:
             raise TraceDossierCellBindingError(
                 f"terminal_verdict_counts[{label!r}] must be a non-negative integer"
             )
+        if label in counts:
+            raise TraceDossierCellBindingError(
+                f"terminal_verdict_counts contains duplicate label after normalization: {label!r}"
+            )
         counts[label] = raw_count
     if sum(counts.values()) <= 0:
         raise TraceDossierCellBindingError("terminal_verdict_counts total must be positive")
@@ -204,7 +210,7 @@ def _required_text(value: Any, field: str) -> str:
 
     if not isinstance(value, str) or not value.strip():
         raise TraceDossierCellBindingError(f"{field} must be non-empty text")
-    return value
+    return value.strip()
 
 
 def _reject_unknown_keys(values: Mapping[str, Any], allowed: set[str], field: str) -> None:
@@ -222,4 +228,4 @@ def _optional_text(value: Any, field: str) -> str | None:
         return None
     if not isinstance(value, str) or not value.strip():
         raise TraceDossierCellBindingError(f"{field} must be non-empty text when provided")
-    return value
+    return value.strip()

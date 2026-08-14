@@ -20,12 +20,20 @@
       "additionalProperties": false,
       "required": ["campaign_id", "cell_id", "scenario_id", "planner_id"],
       "properties": {
-        "campaign_id": {"type": "string", "minLength": 1},
-        "cell_id": {"type": "string", "minLength": 1},
-        "scenario_id": {"type": "string", "minLength": 1},
-        "planner_id": {"type": "string", "minLength": 1},
-        "release_arm_id": {"type": ["string", "null"], "minLength": 1},
-        "scenario_family": {"type": ["string", "null"], "minLength": 1}
+        "campaign_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "cell_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "scenario_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "planner_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "release_arm_id": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "pattern": ".*\\S.*"
+        },
+        "scenario_family": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "pattern": ".*\\S.*"
+        }
       }
     },
     "selected_trace": {
@@ -40,17 +48,18 @@
         "terminal_verdict"
       ],
       "properties": {
-        "cell_id": {"type": "string", "minLength": 1},
-        "episode_id": {"type": "string", "minLength": 1},
+        "cell_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "episode_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
         "seed": {"type": "integer", "minimum": 0},
-        "trace_artifact_uri": {"type": "string", "minLength": 1},
+        "trace_artifact_uri": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
         "trace_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "terminal_verdict": {"type": "string", "minLength": 1}
+        "terminal_verdict": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"}
       }
     },
     "terminal_verdict_counts": {
       "type": "object",
       "minProperties": 1,
+      "propertyNames": {"pattern": ".*\\S.*"},
       "additionalProperties": {"type": "integer", "minimum": 0}
     },
     "cell_episode_count": {"type": "integer", "minimum": 1},

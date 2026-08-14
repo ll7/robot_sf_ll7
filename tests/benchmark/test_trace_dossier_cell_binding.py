@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from robot_sf.benchmark.trace_dossier_cell_binding import (
     TRACE_DOSSIER_CELL_BINDING_SCHEMA_VERSION,
@@ -121,6 +122,75 @@ def test_binding_schema_accepts_serialized_contract() -> None:
     )
 
     Draft202012Validator(schema).validate(binding.to_dict())
+
+
+def test_text_and_seed_inputs_are_normalized() -> None:
+    """Whitespace is trimmed and integral scalar seeds become plain integers."""
+
+    cell = _cell()
+    cell["cell_id"] = "  classic-crossing::orca::nominal  "
+    cell["release_arm_id"] = " nominal "
+    selected_trace = _selected_trace()
+    selected_trace["cell_id"] = "classic-crossing::orca::nominal"
+    selected_trace["seed"] = np.int64(7)
+    selected_trace["terminal_verdict"] = " success "
+
+    binding = build_trace_dossier_cell_binding(
+        cell=cell,
+        selected_trace=selected_trace,
+        terminal_verdict_counts={" success ": 30},
+    )
+
+    assert binding.cell.cell_id == "classic-crossing::orca::nominal"
+    assert binding.cell.release_arm_id == "nominal"
+    assert binding.selected_trace.seed == 7
+    assert type(binding.selected_trace.seed) is int
+    assert binding.selected_trace.terminal_verdict == "success"
+    assert binding.terminal_verdict_counts == {"success": 30}
+
+
+def test_normalized_duplicate_verdict_labels_fail_closed() -> None:
+    """Distinct raw labels cannot collapse into one normalized verdict silently."""
+
+    with pytest.raises(TraceDossierCellBindingError, match="duplicate label"):
+        build_trace_dossier_cell_binding(
+            cell=_cell(),
+            selected_trace=_selected_trace(),
+            terminal_verdict_counts={"success": 15, " success ": 15},
+        )
+
+
+def test_binding_schema_rejects_blank_verdict_label() -> None:
+    """The JSON schema rejects blank and whitespace-only verdict keys."""
+
+    schema = json.loads(_SCHEMA.read_text(encoding="utf-8"))
+
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(
+            {
+                "schema_version": TRACE_DOSSIER_CELL_BINDING_SCHEMA_VERSION,
+                "cell": {
+                    "campaign_id": "campaign",
+                    "cell_id": "cell",
+                    "scenario_id": "scenario",
+                    "planner_id": "planner",
+                },
+                "selected_trace": {
+                    "cell_id": "cell",
+                    "episode_id": "episode",
+                    "seed": 1,
+                    "trace_artifact_uri": "trace.json",
+                    "trace_sha256": _TRACE_SHA256,
+                    "terminal_verdict": "success",
+                },
+                "terminal_verdict_counts": {" ": 1},
+                "cell_episode_count": 1,
+                "selected_verdict_count": 1,
+                "evidence_boundary": (
+                    "metadata_only_not_benchmark_evidence_until_trace_export_and_renderer_provenance_pass"
+                ),
+            }
+        )
 
 
 def test_selected_verdict_must_be_present_in_cell_counts() -> None:

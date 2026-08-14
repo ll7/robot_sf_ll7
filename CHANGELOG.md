@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #7086 trace-dossier cell-binding metadata.** Added the versioned
+  `trace_dossier_cell_binding.v1` contract and deterministic, fail-closed builder
+  for naming a campaign cell, selected trace, verdict counts, and checksum metadata.
+  This is implementation metadata only; it does not read traces or establish
+  benchmark or paper-facing evidence.
+
 * **Issue #6646 held-out diagnosis comparison infrastructure.** Added a pinned
   learned-method manifest, exact case-alignment and fixture-review admission gates,
   non-deterministic learned-source projection, and a versioned diagnostic comparison

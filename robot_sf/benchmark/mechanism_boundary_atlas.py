@@ -416,8 +416,16 @@ def _boundary_label_issues(
     if not isinstance(labels, list):
         return []
     issues: list[AtlasValidationIssue] = []
-    unknown_labels = set(labels).difference(BOUNDARY_LABELS)
     label_path = f"{card_prefix}/mechanism_boundary/boundary_labels"
+    if not all(isinstance(label, str) for label in labels):
+        issues.append(
+            AtlasValidationIssue(
+                label_path,
+                "boundary_labels must contain only strings from #7032 controlled vocabulary",
+            )
+        )
+        return issues
+    unknown_labels = set(labels).difference(BOUNDARY_LABELS)
     if unknown_labels:
         issues.append(
             AtlasValidationIssue(

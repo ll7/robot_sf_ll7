@@ -192,6 +192,15 @@ def test_boundary_labels_use_controlled_vocabulary() -> None:
     assert any("controlled vocabulary" in issue.message for issue in issues)
 
 
+def test_boundary_labels_reject_non_string_values_without_raising() -> None:
+    payload = _payload()
+    payload["cards"][0]["mechanism_boundary"]["boundary_labels"] = [{}]
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any("only strings" in issue.message for issue in issues)
+
+
 def test_boundary_labels_preserve_multi_label_cases() -> None:
     atlas = build_atlas(INPUT, repo_root=REPO_ROOT)
 

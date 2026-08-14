@@ -94,6 +94,30 @@ def _finite_float(value: Any, name: str) -> float:
     return result
 
 
+def _config_int(value: Any, name: str) -> int:
+    """Coerce one config integer without allowing booleans or fractional truncation.
+
+    Returns:
+        The parsed integer.
+    """
+    if isinstance(value, bool):
+        raise OpenDreamerQualityError(f"{name} must be an integer, got {value!r}")
+    try:
+        result = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise OpenDreamerQualityError(f"{name} must be an integer, got {value!r}") from exc
+    if isinstance(value, float) and not value.is_integer():
+        raise OpenDreamerQualityError(f"{name} must be an integer, got {value!r}")
+    return result
+
+
+def _config_string(value: Any, name: str) -> str:
+    """Return one non-empty string config value without stringifying malformed YAML."""
+    if not isinstance(value, str) or not value:
+        raise OpenDreamerQualityError(f"{name} must be a non-empty string, got {value!r}")
+    return value
+
+
 def _validate_quality_paths(config: ModelQualityConfig) -> None:
     if not isinstance(config.dataset_path, Path):
         raise OpenDreamerQualityError("dataset_path must be a pathlib.Path")
@@ -206,20 +230,36 @@ class ModelQualityConfig:
             raise OpenDreamerQualityError("required_baselines must be a sequence")
         return cls(
             dataset_path=dataset_path,
-            train_split=str(payload.get("train_split", "train")),
-            holdout_split=str(payload.get("holdout_split", "test")),
-            max_linear_speed=float(actions.get("max_linear_speed", 1.0)),
-            max_angular_speed=float(actions.get("max_angular_speed", 1.0)),
-            min_linear_speed=float(actions.get("min_linear_speed", 0.0)),
-            latent_dim=int(payload.get("latent_dim", 5)),
-            seed=int(payload.get("seed", 6318)),
-            min_train_episodes=int(payload.get("min_train_episodes", 2)),
-            min_holdout_episodes=int(payload.get("min_holdout_episodes", 2)),
-            min_train_transitions=int(payload.get("min_train_transitions", 8)),
-            min_holdout_transitions=int(payload.get("min_holdout_transitions", 4)),
-            multi_step_horizon=int(payload.get("multi_step_horizon", 3)),
-            mlp_hidden_dim=int(payload.get("mlp_hidden_dim", 16)),
-            ridge_alpha=float(payload.get("ridge_alpha", 1.0e-4)),
+            train_split=_config_string(payload.get("train_split", "train"), "train_split"),
+            holdout_split=_config_string(payload.get("holdout_split", "test"), "holdout_split"),
+            max_linear_speed=_finite_float(
+                actions.get("max_linear_speed", 1.0), "max_linear_speed"
+            ),
+            max_angular_speed=_finite_float(
+                actions.get("max_angular_speed", 1.0), "max_angular_speed"
+            ),
+            min_linear_speed=_finite_float(
+                actions.get("min_linear_speed", 0.0), "min_linear_speed"
+            ),
+            latent_dim=_config_int(payload.get("latent_dim", 5), "latent_dim"),
+            seed=_config_int(payload.get("seed", 6318), "seed"),
+            min_train_episodes=_config_int(
+                payload.get("min_train_episodes", 2), "min_train_episodes"
+            ),
+            min_holdout_episodes=_config_int(
+                payload.get("min_holdout_episodes", 2), "min_holdout_episodes"
+            ),
+            min_train_transitions=_config_int(
+                payload.get("min_train_transitions", 8), "min_train_transitions"
+            ),
+            min_holdout_transitions=_config_int(
+                payload.get("min_holdout_transitions", 4), "min_holdout_transitions"
+            ),
+            multi_step_horizon=_config_int(
+                payload.get("multi_step_horizon", 3), "multi_step_horizon"
+            ),
+            mlp_hidden_dim=_config_int(payload.get("mlp_hidden_dim", 16), "mlp_hidden_dim"),
+            ridge_alpha=_finite_float(payload.get("ridge_alpha", 1.0e-4), "ridge_alpha"),
             required_baselines=tuple(str(value) for value in baselines),  # type: ignore[arg-type]
         )
 

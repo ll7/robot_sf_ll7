@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 from robot_sf.research.open_dreamer_model_quality import (
     ModelQualityConfig,
+    ModelQualityReport,
+    OpenDreamerQualityError,
     evaluate_model_quality,
     write_model_quality_report,
 )
@@ -36,14 +38,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Evaluate the configured quality gate and return a fail-closed status code."""
-    args = build_arg_parser().parse_args(argv)
-    config = ModelQualityConfig.from_yaml(args.config)
-    if args.dataset_path is not None:
-        config = replace(config, dataset_path=args.dataset_path.resolve())
-    report = evaluate_model_quality(config)
-    output_dir = args.output_dir.resolve()
+def _emit_report(report: ModelQualityReport, output_dir: Path) -> int:
+    """Write and summarize one report, returning the fail-closed process status."""
+    output_dir = output_dir.resolve()
     report_path = output_dir / "open_dreamer_model_quality.v1.json"
     write_model_quality_report(report, report_path)
     payload = report.to_dict()
@@ -60,6 +57,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
     return 0 if payload["status"] == "passed" else 2
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Evaluate the configured quality gate and return a fail-closed status code."""
+    args = build_arg_parser().parse_args(argv)
+    try:
+        config = ModelQualityConfig.from_yaml(args.config)
+    except OpenDreamerQualityError as exc:
+        report = ModelQualityReport(
+            status="blocked_contract",
+            reason=f"quality config invalid: {exc}",
+            payload={"config_path": str(args.config.resolve())},
+        )
+        return _emit_report(report, args.output_dir)
+    if args.dataset_path is not None:
+        config = replace(config, dataset_path=args.dataset_path.resolve())
+    report = evaluate_model_quality(config)
+    return _emit_report(report, args.output_dir)
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI guard

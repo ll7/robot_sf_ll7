@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.rl_trajectory_dataset import (
     RLTrajectoryEpisode,
     assign_deterministic_split,
@@ -15,9 +17,11 @@ from robot_sf.benchmark.rl_trajectory_dataset import (
 )
 from robot_sf.research.open_dreamer_model_quality import (
     ModelQualityConfig,
+    OpenDreamerQualityError,
     _gate_metrics,
     evaluate_model_quality,
 )
+from scripts.validation.run_open_dreamer_model_quality import main as run_quality_main
 
 
 def _seed_for(scenario_id: str, split: str, *, start: int) -> int:
@@ -246,3 +250,49 @@ def test_quality_config_resolves_dataset_relative_to_config(tmp_path: Path) -> N
 
     assert config.dataset_path == (tmp_path / "fixture.jsonl").resolve()
     assert config.required_baselines == ("persistence", "mlp")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("latent_dim", "not-an-int"),
+        ("min_train_episodes", True),
+        ("ridge_alpha", "not-a-float"),
+    ],
+)
+def test_quality_config_rejects_malformed_mapping_values(field: str, value: object) -> None:
+    payload = {
+        "schema_version": "open_dreamer_model_quality.v1",
+        "dataset_path": "fixture.jsonl",
+        field: value,
+    }
+
+    with pytest.raises(OpenDreamerQualityError, match=field):
+        ModelQualityConfig.from_mapping(payload, base_dir=Path("."))
+
+
+def test_quality_cli_writes_blocked_contract_for_invalid_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config_path = tmp_path / "invalid_quality.yaml"
+    config_path.write_text(
+        "schema_version: open_dreamer_model_quality.v1\n"
+        "dataset_path: fixture.jsonl\n"
+        "latent_dim: not-an-int\n",
+        encoding="utf-8",
+    )
+
+    exit_code = run_quality_main(
+        ["--config", str(config_path), "--output-dir", str(tmp_path / "report")]
+    )
+
+    assert exit_code == 2
+    report_path = tmp_path / "report/open_dreamer_model_quality.v1.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["status"] == "blocked_contract"
+    assert (
+        report["reason"]
+        == "quality config invalid: latent_dim must be an integer, got 'not-an-int'"
+    )
+    assert report["config_path"] == str(config_path.resolve())
+    assert '"status": "blocked_contract"' in capsys.readouterr().out

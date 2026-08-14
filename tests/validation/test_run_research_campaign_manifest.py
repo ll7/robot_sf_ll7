@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -136,6 +137,36 @@ def test_run_research_campaign_manifest_requires_mapping_sections(tmp_path: Path
 
     assert completed.returncode == 2
     assert "metrics must be a mapping" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "diagnostic_only",
+        "fallback",
+        "degraded",
+        "not_available",
+        "unavailable",
+        "not_run",
+        "failed",
+        "blocked",
+    ],
+)
+def test_run_research_campaign_manifest_rejects_caveated_success_status(
+    tmp_path: Path, status: str
+) -> None:
+    """Caveated or non-executed rows cannot be declared success by manifest authors."""
+    manifest_path = _copy_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if status not in manifest["row_status_policy"]["allowed_values"]:
+        manifest["row_status_policy"]["allowed_values"].append(status)
+    manifest["row_status_policy"]["success_values"] = [status]
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    completed = _run_manifest(manifest_path, tmp_path / "packet")
+
+    assert completed.returncode == 2
+    assert "Fail-closed row statuses cannot be success values" in completed.stderr
 
 
 def test_run_research_campaign_manifest_requires_planner_row_mappings(tmp_path: Path) -> None:

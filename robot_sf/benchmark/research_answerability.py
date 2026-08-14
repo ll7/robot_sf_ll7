@@ -293,12 +293,12 @@ def _proof_findings(
         for name, proof in proof_surfaces.items()
         if proof.required and proof.status != "passed"
     ]
-    optional_unavailable = [
-        name
+    optional_not_passed = [
+        f"{name}={proof.status}"
         for name, proof in proof_surfaces.items()
-        if not proof.required and proof.status == "unavailable"
+        if not proof.required and proof.status != "passed"
     ]
-    return missing, optional_unavailable
+    return missing, optional_not_passed
 
 
 def validate_answerability_contract(contract: Mapping[str, Any]) -> None:
@@ -389,7 +389,7 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult: 
             (f"durable evidence plan is {durability_status}",),
         )
 
-    missing_proof, optional_unavailable_proof = _proof_findings(contract)
+    missing_proof, optional_not_passed_proof = _proof_findings(contract)
 
     warnings_list = []
     if optional_unavailable:
@@ -397,10 +397,10 @@ def evaluate_answerability(contract: Mapping[str, Any]) -> AnswerabilityResult: 
             "optional unavailable producers remain explicit and cannot be interpreted as zero: "
             + ", ".join(sorted(optional_unavailable))
         )
-    if optional_unavailable_proof:
+    if optional_not_passed_proof:
         warnings_list.append(
-            "optional proof surfaces are unavailable and cannot support admission: "
-            + ", ".join(sorted(optional_unavailable_proof))
+            "optional proof surfaces are not passed and cannot support admission: "
+            + ", ".join(sorted(optional_not_passed_proof))
         )
     warnings = tuple(warnings_list)
     if design["mode"] == "diagnostic" or durability_status == "planned":

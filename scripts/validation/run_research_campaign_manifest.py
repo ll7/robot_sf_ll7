@@ -37,7 +37,16 @@ REQUIRED_SECTIONS = (
     "durable_evidence",
     "validation",
 )
-FAIL_CLOSED_ROW_STATUSES = {"not_available", "failed", "blocked"}
+FAIL_CLOSED_ROW_STATUSES = {
+    "not_available",
+    "unavailable",
+    "not_run",
+    "failed",
+    "blocked",
+    "fallback",
+    "degraded",
+    "diagnostic_only",
+}
 
 
 class ManifestError(ValueError):

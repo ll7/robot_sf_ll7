@@ -6,6 +6,11 @@ one campaign cell, preserves terminal-verdict denominators, and remains
 metadata-only until trace export and renderer provenance are reviewed:
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md).
 
+Issue #7086 trace dossier representative selection: deterministic majority,
+weaker-label, median-order, and seed-identity selection for one campaign cell,
+without trace execution or evidence admission:
+[issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
+
 Issue #6792 Chapter 7 evidence admission packet: immutable `ch7-evidence-package.v1` payload,
 trusted source-registry approval, and the separate `ch7-evidence-admission.v1` receipt. The
 package remains blocked until the author approves the exact digest; no trajectory or causal claim

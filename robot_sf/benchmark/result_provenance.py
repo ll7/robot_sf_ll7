@@ -5,7 +5,8 @@ This module emits a structured JSON provenance manifest alongside
 scenario ID, seed, repo commit, simulator settings, raw artifact paths,
 and post-processing steps.
 
-Schema version: ``benchmark_result_provenance.v1``
+Schema version: ``benchmark_result_provenance.v1``. Strengthened input binding is
+opted into explicitly with ``input_binding_schema_version``.
 """
 
 from __future__ import annotations
@@ -29,13 +30,23 @@ if TYPE_CHECKING:
 from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "benchmark_result_provenance.v1"
+INPUT_BINDING_SCHEMA_VERSION = "benchmark_result_provenance.input_binding.v2"
 ROW_SCHEMA_VERSION = "benchmark_row_provenance.v1"
 
 # Fields whose absence triggers a validation error.
 _REQUIRED_TOP_LEVEL = ("schema_version", "run", "inputs", "campaign_identity", "completeness")
 _REQUIRED_RUN = ("run_id", "repo_commit", "runner")
-_REQUIRED_CAMPAIGN = ("scenario_matrix_hash", "total_jobs", "written")
+_REQUIRED_CAMPAIGN = (
+    "scenario_matrix_hash",
+    "input_bundle_sha256",
+    "algorithm",
+    "total_jobs",
+    "written",
+)
+_STRENGTHENED_REQUIRED_TOP_LEVEL = _REQUIRED_TOP_LEVEL + ("input_binding_schema_version",)
 _REQUIRED_ROW = ("episode_id", "scenario_id", "seed", "config_hash", "repo_commit")
+_INPUT_ROLES = ("schema_path", "scenario_matrix", "algo_config")
+_SHA256_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
 
 
 class ProvenanceValidationError(RobotSfError, ValueError):
@@ -69,6 +80,83 @@ def _sha256_of_file(path: str | Path) -> str | None:
         return sha256(Path(path).read_bytes()).hexdigest()
     except (OSError, FileNotFoundError):
         return None
+
+
+def _is_valid_sha256_hex(value: Any) -> bool:
+    """Return whether ``value`` is a full SHA-256 hex digest."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in _SHA256_HEX_CHARS for char in value)
+    )
+
+
+def _scenario_matrix_entry(
+    scenario_path: Path,
+    *,
+    has_inline_scenarios: bool,
+) -> dict[str, Any]:
+    """Build the scenario input entry.
+
+    A concrete scenario matrix/definition file is byte-bound when present. The
+    only supported non-file case is an inline/generated scenario input, recorded
+    as ``not_applicable`` with no path or digest. A directory or missing path is
+    ``missing`` unless the caller supplied in-memory scenarios explicitly.
+
+    Returns:
+        Scenario matrix input entry.
+    """
+    if scenario_path.is_file():
+        return {
+            "path": str(scenario_path),
+            "sha256": _sha256_of_file(scenario_path),
+            "artifact_status": "available",
+        }
+    if has_inline_scenarios and not scenario_path.exists():
+        return {
+            "path": None,
+            "sha256": None,
+            "artifact_status": "not_applicable",
+            "reason": "inline_or_generated_scenarios",
+        }
+    return {
+        "path": str(scenario_path),
+        "sha256": None,
+        "artifact_status": "missing",
+    }
+
+
+def _canonical_input_bundle_sha256(
+    *,
+    inputs: Mapping[str, Any],
+    algo: str,
+    protocol_version: str,
+    suite_key: str,
+) -> str:
+    """Return the byte-bound digest for benchmark inputs and suite identity."""
+    roles: list[dict[str, Any]] = []
+    for role in _INPUT_ROLES:
+        raw_entry = inputs.get(role, {})
+        entry = raw_entry if isinstance(raw_entry, Mapping) else {}
+        status = entry.get("artifact_status")
+        digest = (
+            str(entry.get("sha256")).lower() if _is_valid_sha256_hex(entry.get("sha256")) else None
+        )
+        roles.append(
+            {
+                "role": role,
+                "artifact_status": status,
+                "sha256": digest if status == "available" else None,
+            }
+        )
+    payload = {
+        "algorithm": str(algo),
+        "input_roles": roles,
+        "protocol_version": str(protocol_version),
+        "suite_key": str(suite_key),
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 def _thread_env_snapshot() -> dict[str, str | None]:
@@ -291,21 +379,31 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     invocation = shlex.join(sys.argv) if hasattr(sys, "argv") and sys.argv else ""
 
     # Input entries.
+    schema_path_obj = Path(schema_path)
     schema_entry: dict[str, Any] = {
-        "path": str(schema_path),
-        "sha256": _sha256_of_file(schema_path),
-        "artifact_status": "available",
+        "path": str(schema_path_obj),
+        "sha256": _sha256_of_file(schema_path_obj) if schema_path_obj.is_file() else None,
+        "artifact_status": "available" if schema_path_obj.is_file() else "missing",
     }
-    scenario_matrix_path = str(scenario_path)
-    scenario_matrix_entry: dict[str, Any] = {
-        "path": scenario_matrix_path,
-        "sha256": _sha256_of_file(scenario_path) if Path(scenario_path).is_file() else None,
-        "artifact_status": "available" if Path(scenario_path).is_file() else "not_applicable",
-    }
+    scenario_matrix_entry = _scenario_matrix_entry(
+        Path(scenario_path),
+        has_inline_scenarios=bool(scenarios),
+    )
     algo_config_entry = _algo_config_entry(algo_config_path)
+    inputs: dict[str, Any] = {
+        "schema_path": schema_entry,
+        "scenario_matrix": scenario_matrix_entry,
+        "algo_config": algo_config_entry,
+    }
 
     # Campaign identity.
     scenario_matrix_hash = _config_hash(scenarios)
+    input_bundle_sha256 = _canonical_input_bundle_sha256(
+        inputs=inputs,
+        algo=algo,
+        protocol_version=BENCHMARK_PROTOCOL_VERSION,
+        suite_key=suite_key,
+    )
 
     # Raw artifacts.
     raw_artifacts: list[dict[str, Any]] = []
@@ -346,7 +444,12 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     if is_complete:
         completeness = {
             "status": "complete",
-            "required_fields_checked": sorted(_REQUIRED_TOP_LEVEL + _REQUIRED_RUN + _REQUIRED_ROW),
+            "required_fields_checked": sorted(
+                _STRENGTHENED_REQUIRED_TOP_LEVEL
+                + _REQUIRED_RUN
+                + _REQUIRED_CAMPAIGN
+                + _REQUIRED_ROW
+            ),
         }
     else:
         completeness = {
@@ -356,6 +459,7 @@ def build_result_provenance_manifest(  # noqa: PLR0913
 
     manifest: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
+        "input_binding_schema_version": INPUT_BINDING_SCHEMA_VERSION,
         "run": {
             "run_id": run_id,
             "repo_commit": repo_commit,
@@ -366,13 +470,11 @@ def build_result_provenance_manifest(  # noqa: PLR0913
             "protocol_version": BENCHMARK_PROTOCOL_VERSION,
             "execution_context": build_execution_context_provenance(),
         },
-        "inputs": {
-            "schema_path": schema_entry,
-            "scenario_matrix": scenario_matrix_entry,
-            "algo_config": algo_config_entry,
-        },
+        "inputs": inputs,
         "campaign_identity": {
             "scenario_matrix_hash": scenario_matrix_hash,
+            "input_bundle_sha256": input_bundle_sha256,
+            "algorithm": str(algo),
             "config_hash": _config_hash(
                 {
                     "schema_path": str(schema_path),
@@ -392,6 +494,106 @@ def build_result_provenance_manifest(  # noqa: PLR0913
     return manifest
 
 
+def _validate_input_artifact_entry(
+    *,
+    inputs: Mapping[str, Any],
+    role: str,
+    optional: bool = False,
+    allow_not_applicable: bool = False,
+) -> None:
+    """Validate one manifest input artifact entry."""
+    raw_entry = inputs.get(role)
+    _require(isinstance(raw_entry, Mapping), f"inputs.{role} must be a dict")
+    entry = raw_entry
+    status = entry.get("artifact_status")
+    path = entry.get("path")
+    digest = entry.get("sha256")
+
+    if status == "available":
+        _require(isinstance(path, str) and bool(path.strip()), f"inputs.{role}.path is missing")
+        _require(
+            _is_valid_sha256_hex(digest),
+            f"inputs.{role}.sha256 must be a 64-character SHA-256 hex digest",
+        )
+        resolved_path = Path(path)
+        if resolved_path.exists():
+            _require(resolved_path.is_file(), f"inputs.{role}.path must be a file")
+        observed = _sha256_of_file(resolved_path)
+        if observed is not None:
+            _require(
+                observed == str(digest).lower(),
+                f"inputs.{role}.sha256 does not match current local file bytes",
+            )
+        return
+
+    if status == "not_provided":
+        _require(optional, f"inputs.{role} cannot be not_provided")
+        _require(path is None, f"inputs.{role}.path must be null when not_provided")
+        _require(digest is None, f"inputs.{role}.sha256 must be null when not_provided")
+        return
+
+    if status == "not_applicable":
+        _require(allow_not_applicable, f"inputs.{role} cannot be not_applicable")
+        _require(path is None, f"inputs.{role}.path must be null when not_applicable")
+        _require(digest is None, f"inputs.{role}.sha256 must be null when not_applicable")
+        _require(
+            entry.get("reason") == "inline_or_generated_scenarios",
+            f"inputs.{role}.reason must document inline/generated scenario input",
+        )
+        return
+
+    if status == "missing":
+        raise ProvenanceArtifactError(f"inputs.{role} is missing and cannot be complete evidence")
+
+    raise ProvenanceArtifactError(f"inputs.{role}.artifact_status is invalid: {status!r}")
+
+
+def _validate_campaign_identity(
+    *,
+    campaign: Mapping[str, Any],
+    inputs: Mapping[str, Any],
+    run: Mapping[str, Any],
+    strengthened: bool,
+) -> None:
+    """Validate campaign identity fields and the strengthened input bundle."""
+    if not strengthened:
+        if "input_bundle_sha256" in campaign or "algorithm" in campaign:
+            raise ProvenanceValidationError(
+                f"schema_version {SCHEMA_VERSION!r} without "
+                f"{INPUT_BINDING_SCHEMA_VERSION!r} cannot claim strengthened input-bundle fields"
+            )
+        required_campaign = ("scenario_matrix_hash", "total_jobs", "written")
+    else:
+        required_campaign = _REQUIRED_CAMPAIGN
+
+    for field in required_campaign:
+        _require(
+            field in campaign,
+            f"campaign_identity.{field} is missing",
+        )
+    if not strengthened:
+        return
+
+    _require(bool(campaign.get("algorithm")), "campaign_identity.algorithm is missing or empty")
+    _require(bool(campaign.get("suite_key")), "campaign_identity.suite_key is missing or empty")
+    _require(bool(run.get("protocol_version")), "run.protocol_version is missing or empty")
+    _require(
+        _is_valid_sha256_hex(campaign.get("input_bundle_sha256")),
+        "campaign_identity.input_bundle_sha256 must be a 64-character SHA-256 hex digest",
+    )
+    expected_input_bundle = _canonical_input_bundle_sha256(
+        inputs=inputs,
+        algo=str(campaign.get("algorithm")),
+        protocol_version=str(run.get("protocol_version")),
+        suite_key=str(campaign.get("suite_key", "")),
+    )
+    _require(
+        str(campaign.get("input_bundle_sha256")).lower() == expected_input_bundle,
+        "campaign_identity.input_bundle_sha256 does not match inputs, algorithm identity, "
+        "protocol version, and suite identity",
+    )
+
+
 def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
     """Validate a provenance manifest.
 
@@ -400,8 +602,9 @@ def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
         ProvenanceArtifactError: An available artifact has no SHA256.
         ProvenanceRowLinkError: A row does not properly link to its raw artifact.
     """
+    schema_version = payload.get("schema_version")
     _require(
-        payload.get("schema_version") == SCHEMA_VERSION,
+        schema_version == SCHEMA_VERSION,
         f"schema_version must be {SCHEMA_VERSION!r}",
     )
 
@@ -416,18 +619,42 @@ def validate_result_provenance_manifest(payload: Mapping[str, Any]) -> None:
         )
 
     inputs = payload.get("inputs", {})
-    schema_input = inputs.get("schema_path", {})
-    _require(
-        bool(schema_input.get("path")),
-        "inputs.schema_path.path is missing or empty",
-    )
+    _require(isinstance(inputs, Mapping), "inputs must be dict")
 
     campaign = payload.get("campaign_identity", {})
-    for field in _REQUIRED_CAMPAIGN:
+    _require(isinstance(campaign, Mapping), "campaign_identity must be dict")
+    binding_declared = "input_binding_schema_version" in payload
+    binding_version = payload.get("input_binding_schema_version")
+    strengthened = binding_declared
+    if strengthened:
         _require(
-            field in campaign,
-            f"campaign_identity.{field} is missing",
+            binding_version == INPUT_BINDING_SCHEMA_VERSION,
+            f"input_binding_schema_version must be {INPUT_BINDING_SCHEMA_VERSION!r}",
         )
+        _validate_input_artifact_entry(inputs=inputs, role="schema_path")
+        _validate_input_artifact_entry(
+            inputs=inputs,
+            role="scenario_matrix",
+            allow_not_applicable=True,
+        )
+        _validate_input_artifact_entry(
+            inputs=inputs,
+            role="algo_config",
+            optional=True,
+        )
+    else:
+        schema_input = inputs.get("schema_path", {})
+        _require(isinstance(schema_input, Mapping), "inputs.schema_path must be a dict")
+        _require(
+            bool(schema_input.get("path")),
+            "inputs.schema_path.path is missing or empty",
+        )
+    _validate_campaign_identity(
+        campaign=campaign,
+        inputs=inputs,
+        run=run,
+        strengthened=strengthened,
+    )
 
     completeness = payload.get("completeness", {})
     _require(
@@ -524,6 +751,7 @@ def load_result_provenance_manifest(path: str | Path) -> dict[str, Any]:
 
 
 __all__ = [
+    "INPUT_BINDING_SCHEMA_VERSION",
     "ROW_SCHEMA_VERSION",
     "SCHEMA_VERSION",
     "ProvenanceArtifactError",

@@ -52,14 +52,22 @@ uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py compare-ho
 `resolved_definitions.json` contains 80 deduplicated seed-specific scenario definitions, the three
 planner definitions (`goal`, `orca`, and `ppo`), and 140 target references with matching retained
 and computed hashes. `verify-host` rejects missing targets, a Git revision or per-target
-horizon/config hash that does
-not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba versions,
-absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
-repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
-host report must state the first differing repeat and field. `compare-hosts` accepts only distinct
-machine identifiers and marks a cell `divergent` unless the hosts have matching NumPy, Numba,
-Python, source-commit, and `uv.lock` identities as well as matching repeat fingerprints. Runtime
-or provenance drift is recorded in `provenance_mismatches`; it cannot become an `identical` row.
+horizon/config hash that does not match the manifest, non-CPU or multi-worker metadata, absent
+NumPy/Numba versions, absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed
+trajectory hashes, unrecorded divergences, and missing or tampered execution context. A repeat is
+identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the host
+report must state the first differing repeat and field. Current host reports also require the
+schema-versioned `execution_context` block and its canonical SHA-256 digest. That block records the
+CPU model, Python version, platform, and the pinned numerical thread variables; host identity is an
+opaque digest and is kept separate from numerical compatibility. Legacy host reports without this
+context are rejected rather than upgraded by inference.
+
+`compare-hosts` accepts only distinct public-safe host identities. It reports one of
+`exact_context_match`, `approved_numpy_numba_near_miss`, or `incompatible_context`; CPU, platform,
+Python, and thread-environment drift remains visible in the machine-readable mismatch fields.
+NumPy/Numba near-misses are explicitly labeled and cannot become an unqualified `identical` row.
+Runtime, context, or provenance drift is recorded in `provenance_mismatches`; it cannot become an
+`identical` row.
 
 ## Evidence status and remaining action
 
@@ -71,7 +79,7 @@ The runnable-definition and executor blockers are resolved.
 The predeclared 420 CPU-only repeats (140 targets, 3 repeats each, single worker) were executed on
 one host and the verified report is registered under this directory:
 
-- `issue_5498_host_result.json` — raw `scenario_exact_repeat_host_result.v1` payload (machine id redacted).
+- `issue_5498_host_result.json` — historical raw `scenario_exact_repeat_host_result.v1` payload (machine id redacted).
 - `issue_5498_verified_host_result.json` — `scenario_exact_repeat_verified_host_result.v1` after `verify-host`.
 - `issue_5498_provenance.json` — reproducible command, manifest/git revision, and artifact SHA-256.
 
@@ -95,7 +103,7 @@ disposition regression in #5790; PPO now runs natively through the `run_episode`
 The PPO cells (60 targets across 3 cells) were re-executed natively on the **primary host**, closing
 the degraded-PPO gap left by #5499. Artifacts registered under this directory:
 
-- `issue_5498_native_ppo_host_result.json` — raw `scenario_exact_repeat_host_result.v1` payload
+- `issue_5498_native_ppo_host_result.json` — historical raw `scenario_exact_repeat_host_result.v1` payload
   (PPO-only bundle, 60 targets x 3 repeats, single worker, CPU-only).
 - `issue_5498_native_ppo_verified_host_result.json` — `scenario_exact_repeat_verified_host_result.v1`
   after `verify-host` against the re-hashed PPO-only manifest slice.
@@ -119,6 +127,9 @@ Issue #5778 cross-host provenance matcher.
 The predeclared **second-host near-miss comparison** is not yet run. It requires a second
 distinct host with matching pinned NumPy/Numba versions; register `cross_host_matrix.json` via
 `compare-hosts` once that run exists. `compare-hosts` hard-raises when both inputs share a
-`machine_id` (`exact_repeat_campaign.py`), so the cross-host matrix is structurally impossible on a
-single machine and is reserved for a two-host campaign owner. The native-PPO primary-host artifact
+public-safe `host_identity` (`exact_repeat_campaign.py`), so the cross-host matrix is structurally
+impossible on a single machine and is reserved for a two-host campaign owner. The retained v1
+artifacts above are historical inputs and must be re-executed/re-exported with the #7128 context
+contract before they can participate in a new cross-host comparison. No historical metric or
+determinism claim is changed by that compatibility boundary. The native-PPO primary-host artifact
 registered above is the input the second-host run will be compared against.

@@ -6,6 +6,7 @@ import copy
 import json
 import multiprocessing
 import os
+import platform
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +15,12 @@ import pytest
 
 from robot_sf.baselines import is_runnable_algo
 from robot_sf.benchmark.exact_repeat_campaign import (
+    EXECUTION_CONTEXT_SCHEMA_VERSION,
     HOST_REPORT_SCHEMA_VERSION,
     PROCESS_ISOLATION_DISPOSITION,
     RESOLVED_DEFINITIONS_SCHEMA_VERSION,
     UNRUNNABLE_DISPOSITION,
+    _cached_result_if_compatible,
     _check_manifest_from_bundle,
     _classify_repeat_failure,
     _compute_trajectory_hash,
@@ -25,6 +28,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     _record_is_degraded,
     _record_is_isolation_failure,
     _safe_json_value,
+    _write_target_cache,
     canonical_sha256,
     execute_campaign,
     resolve_runnable_definitions,
@@ -172,6 +176,7 @@ def test_environment_fingerprint_has_required_fields():
     env = _get_environment_fingerprint()
     for field in (
         "machine_id",
+        "host_identity",
         "cpu_only",
         "workers",
         "numpy_version",
@@ -179,11 +184,44 @@ def test_environment_fingerprint_has_required_fields():
         "python_version",
         "git_commit",
         "lockfile_sha256",
+        "execution_context",
+        "execution_context_sha256",
     ):
         assert field in env, f"missing environment field: {field}"
     assert env["cpu_only"] is True
     assert env["workers"] == 1
     assert len(env["lockfile_sha256"]) == 64
+    assert env["machine_id"] == env["host_identity"]
+    assert env["host_identity"].startswith("exact-repeat-host-")
+    if platform.node():
+        assert platform.node() not in env["host_identity"]
+    context = env["execution_context"]
+    assert context["schema_version"] == EXECUTION_CONTEXT_SCHEMA_VERSION
+    assert context["cpu_model"]
+    assert context["platform"]
+    assert isinstance(context["thread_env"], dict)
+    assert env["execution_context_sha256"] == canonical_sha256(context)
+
+
+def test_target_cache_requires_the_full_execution_identity(tmp_path):
+    """Resume caches cannot cross a changed host or numerical execution context."""
+    environment = {
+        "machine_id": "exact-repeat-host-" + "a" * 16,
+        "host_identity": "exact-repeat-host-" + "a" * 16,
+        "numpy_version": "2.4.6",
+        "numba_version": "0.66.0",
+        "python_version": "3.13.13",
+        "git_commit": "a" * 40,
+        "lockfile_sha256": "b" * 64,
+        "execution_context_sha256": "c" * 64,
+    }
+    cache_file = tmp_path / "target.json"
+    result = {"scenario_id": "scenario", "seed": 1}
+    _write_target_cache(cache_file, environment, result)
+
+    assert _cached_result_if_compatible(cache_file, environment) == result
+    changed_context = {**environment, "execution_context_sha256": "d" * 64}
+    assert _cached_result_if_compatible(cache_file, changed_context) is None
 
 
 # --- _check_manifest_from_bundle --------------------------------------------

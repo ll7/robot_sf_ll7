@@ -31,7 +31,9 @@ import numba
 import numpy as np
 import yaml
 
+from robot_sf._numerical_thread_env import THREAD_ENV_VARS
 from robot_sf.benchmark.map_runner_identity import _scenario_with_episode_seed_defaults
+from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -44,15 +46,30 @@ HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_host_result.v1"
 VERIFIED_HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_verified_host_result.v1"
 CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
 RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
+EXECUTION_CONTEXT_SCHEMA_VERSION = "scenario_exact_repeat_execution_context.v1"
+PUBLIC_HOST_IDENTITY_PREFIX = "exact-repeat-host-"
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
-_CROSS_HOST_PROVENANCE_FIELDS = (
+_CACHE_ENVIRONMENT_FIELDS = (
+    "machine_id",
+    "host_identity",
     "numpy_version",
     "numba_version",
     "python_version",
     "git_commit",
     "lockfile_sha256",
+    "execution_context_sha256",
 )
+_CROSS_HOST_RUNTIME_FIELDS = ("numpy_version", "numba_version")
+_CROSS_HOST_PROVENANCE_FIELDS = ("python_version", "git_commit", "lockfile_sha256")
+_CONTEXT_MISMATCH_FIELDS = ("cpu_model", "python_version", "platform", "thread_env")
+_EXECUTION_CONTEXT_FIELDS = {
+    "schema_version",
+    "cpu_model",
+    "python_version",
+    "platform",
+    "thread_env",
+}
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
 # cannot construct on current main (for example, a planner registered only in a
@@ -225,6 +242,106 @@ def _require_sha256(value: Any, label: str) -> str:
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest.lower()):
         raise ValueError(f"{label} must be a lowercase-or-uppercase SHA-256 digest")
     return digest.lower()
+
+
+def _canonical_execution_context_from_provenance(
+    provenance: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Extract the public-safe exact-repeat execution context fields.
+
+    Returns:
+        Canonical exact-repeat execution-context mapping.
+    """
+    thread_env = _require_mapping(provenance.get("thread_env"), "execution_context thread_env")
+    expected_thread_env = set(THREAD_ENV_VARS)
+    observed_thread_env = set(thread_env)
+    missing_thread_env = sorted(expected_thread_env - observed_thread_env)
+    extra_thread_env = sorted(observed_thread_env - expected_thread_env)
+    if missing_thread_env or extra_thread_env:
+        raise ValueError(
+            "execution_context thread_env must contain exactly "
+            f"{list(THREAD_ENV_VARS)!r}; missing={missing_thread_env!r}, "
+            f"unsupported={extra_thread_env!r}"
+        )
+    normalized_thread_env: dict[str, str | None] = {}
+    for name in THREAD_ENV_VARS:
+        value = thread_env[name]
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"execution_context thread_env {name} must be a string or null")
+        normalized_thread_env[name] = value
+    return {
+        "schema_version": EXECUTION_CONTEXT_SCHEMA_VERSION,
+        "cpu_model": _require_text(provenance.get("cpu_model"), "execution_context cpu_model"),
+        "python_version": _require_text(
+            provenance.get("python_version"), "execution_context python_version"
+        ),
+        "platform": _require_text(provenance.get("platform"), "execution_context platform"),
+        "thread_env": normalized_thread_env,
+    }
+
+
+def build_exact_repeat_execution_context() -> dict[str, Any]:
+    """Build the canonical exact-repeat execution context without raw hostname identity.
+
+    Returns:
+        Canonical exact-repeat execution-context mapping.
+    """
+    return _canonical_execution_context_from_provenance(build_execution_context_provenance())
+
+
+def _validate_execution_context(context: Any, digest: Any, label: str) -> dict[str, Any]:
+    """Validate a schema-versioned execution context and its deterministic digest.
+
+    Returns:
+        Canonical exact-repeat execution-context mapping.
+    """
+    context_mapping = _require_mapping(context, f"{label} execution_context")
+    if context_mapping.get("schema_version") != EXECUTION_CONTEXT_SCHEMA_VERSION:
+        raise ValueError(f"{label} execution_context has an unsupported schema_version")
+    unsupported_fields = sorted(set(context_mapping) - _EXECUTION_CONTEXT_FIELDS)
+    if unsupported_fields:
+        raise ValueError(
+            f"{label} execution_context has unsupported fields: {unsupported_fields!r}"
+        )
+    canonical = _canonical_execution_context_from_provenance(context_mapping)
+    expected_digest = _require_sha256(digest, f"{label} execution_context_sha256")
+    computed_digest = canonical_sha256(canonical)
+    if expected_digest != computed_digest:
+        raise ValueError(f"{label} execution_context_sha256 does not match execution_context")
+    return canonical
+
+
+def _public_host_identity(hostname: str) -> str:
+    """Return an opaque, stable host label that does not expose the hostname."""
+    return PUBLIC_HOST_IDENTITY_PREFIX + hashlib.sha256(hostname.encode("utf-8")).hexdigest()[:16]
+
+
+def _require_public_host_identity(value: Any, label: str) -> str:
+    """Validate the opaque host identity representation used by new reports.
+
+    Returns:
+        The validated public-safe host identity.
+    """
+    identity = _require_text(value, label)
+    digest = identity.removeprefix(PUBLIC_HOST_IDENTITY_PREFIX)
+    if (
+        not identity.startswith(PUBLIC_HOST_IDENTITY_PREFIX)
+        or len(digest) != 16
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise ValueError(f"{label} must be an opaque {PUBLIC_HOST_IDENTITY_PREFIX}<16-hex> label")
+    return identity
+
+
+def _execution_context_mismatches(
+    first_context: Mapping[str, Any], second_context: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Return visible execution-context field mismatches."""
+    return {
+        field: {"first": first_context.get(field), "second": second_context.get(field)}
+        for field in _CONTEXT_MISMATCH_FIELDS
+        if first_context.get(field) != second_context.get(field)
+    }
 
 
 def _planner(record: Mapping[str, Any]) -> str:
@@ -648,9 +765,26 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
     if host_report.get("manifest_sha256") != manifest["manifest_sha256"]:
         raise ValueError("host report was not produced for this manifest")
     environment = _require_mapping(host_report.get("environment"), "host report environment")
-    for field in ("machine_id", "numpy_version", "numba_version", "python_version", "git_commit"):
+    machine_id = _require_public_host_identity(
+        environment.get("machine_id"), "host environment machine_id"
+    )
+    host_identity = _require_public_host_identity(
+        environment.get("host_identity"), "host environment host_identity"
+    )
+    if machine_id != host_identity:
+        raise ValueError("host environment machine_id and host_identity must match")
+    for field in ("numpy_version", "numba_version", "python_version", "git_commit"):
         _require_text(environment.get(field), f"host environment {field}")
     _require_sha256(environment.get("lockfile_sha256"), "host environment lockfile_sha256")
+    execution_context = _validate_execution_context(
+        environment.get("execution_context"),
+        environment.get("execution_context_sha256"),
+        "host environment",
+    )
+    if environment["python_version"] != execution_context["python_version"]:
+        raise ValueError(
+            "host environment python_version does not match execution_context python_version"
+        )
     if environment.get("cpu_only") is not True or environment.get("workers") != 1:
         raise ValueError("host report must record CPU-only single-worker execution")
     expected_commits = {target["source_git_hash"] for target in targets.values()}
@@ -807,7 +941,11 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
     verified = {
         "schema_version": VERIFIED_HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
-        "environment": dict(environment),
+        "environment": {
+            **dict(environment),
+            "execution_context": execution_context,
+            "execution_context_sha256": canonical_sha256(execution_context),
+        },
         "targets": verified_targets,
         "cells": cells,
         "summary": {
@@ -827,7 +965,7 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
     return verified
 
 
-def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs a specific branch.
+def compare_verified_hosts(  # noqa: C901, PLR0915 - each rejected cross-host state needs a specific branch.
     manifest: Mapping[str, Any], first: Mapping[str, Any], second: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Build the fail-closed two-host exact-repeat comparison matrix.
@@ -845,19 +983,64 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             raise ValueError("cross-host input belongs to a different manifest")
     first_env = _require_mapping(first.get("environment"), "first host environment")
     second_env = _require_mapping(second.get("environment"), "second host environment")
-    first_machine = _require_text(first_env.get("machine_id"), "first machine_id")
-    second_machine = _require_text(second_env.get("machine_id"), "second machine_id")
-    if first_machine == second_machine:
-        raise ValueError("cross-host comparison requires two distinct machine_id values")
+    first_machine = _require_public_host_identity(first_env.get("machine_id"), "first machine_id")
+    second_machine = _require_public_host_identity(
+        second_env.get("machine_id"), "second machine_id"
+    )
+    first_host = _require_public_host_identity(
+        first_env.get("host_identity"), "first host_identity"
+    )
+    second_host = _require_public_host_identity(
+        second_env.get("host_identity"), "second host_identity"
+    )
+    if first_host == second_host:
+        raise ValueError("cross-host comparison requires two distinct host_identity values")
+    if first_machine != first_host or second_machine != second_host:
+        raise ValueError("verified host machine_id and host_identity must match")
+    first_context = _validate_execution_context(
+        first_env.get("execution_context"),
+        first_env.get("execution_context_sha256"),
+        "first host environment",
+    )
+    second_context = _validate_execution_context(
+        second_env.get("execution_context"),
+        second_env.get("execution_context_sha256"),
+        "second host environment",
+    )
+    context_mismatches = _execution_context_mismatches(first_context, second_context)
+    execution_context_match = not context_mismatches and first_env.get(
+        "execution_context_sha256"
+    ) == second_env.get("execution_context_sha256")
     version_match = all(
         first_env.get(key) == second_env.get(key) for key in ("numpy_version", "numba_version")
     )
+    runtime_mismatches = {
+        key: {"first": first_env.get(key), "second": second_env.get(key)}
+        for key in _CROSS_HOST_RUNTIME_FIELDS
+        if first_env.get(key) != second_env.get(key)
+    }
     provenance_mismatches = {
         key: {"first": first_env.get(key), "second": second_env.get(key)}
         for key in _CROSS_HOST_PROVENANCE_FIELDS
         if first_env.get(key) != second_env.get(key)
     }
+    if runtime_mismatches:
+        provenance_mismatches.update(runtime_mismatches)
+    if context_mismatches:
+        provenance_mismatches["execution_context_sha256"] = {
+            "first": first_env.get("execution_context_sha256"),
+            "second": second_env.get("execution_context_sha256"),
+        }
+        provenance_mismatches["execution_context"] = context_mismatches
     provenance_match = not provenance_mismatches
+    if context_mismatches or any(
+        key in provenance_mismatches for key in ("python_version", "git_commit", "lockfile_sha256")
+    ):
+        context_verdict = "incompatible_context"
+    elif runtime_mismatches:
+        context_verdict = "approved_numpy_numba_near_miss"
+    else:
+        context_verdict = "exact_context_match"
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
         """Index a verified host report's targets by ``(scenario_id, planner, seed)`` key.
@@ -929,8 +1112,12 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     return {
         "schema_version": CROSS_HOST_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
-        "hosts": [first_machine, second_machine],
+        "hosts": [first_host, second_host],
         "pinned_runtime_versions_match": version_match,
+        "runtime_version_mismatches": runtime_mismatches,
+        "execution_context_match": execution_context_match,
+        "context_verdict": context_verdict,
+        "context_mismatches": context_mismatches,
         "provenance_match": provenance_match,
         "provenance_mismatches": provenance_mismatches,
         "matrix": matrix,
@@ -1016,17 +1203,22 @@ def _get_environment_fingerprint() -> dict[str, Any]:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         git_commit = "unknown"
 
+    execution_context = build_exact_repeat_execution_context()
+    execution_context_sha256 = canonical_sha256(execution_context)
+    lockfile_sha256 = hashlib.sha256((get_repository_root() / "uv.lock").read_bytes()).hexdigest()
+    host_identity = _public_host_identity(platform.node())
     return {
-        "machine_id": platform.node(),
+        "machine_id": host_identity,
+        "host_identity": host_identity,
         "cpu_only": True,
         "workers": 1,
         "numpy_version": np.__version__,
         "numba_version": str(numba.__version__),
         "python_version": platform.python_version(),
         "git_commit": git_commit,
-        "lockfile_sha256": hashlib.sha256(
-            (get_repository_root() / "uv.lock").read_bytes()
-        ).hexdigest(),
+        "lockfile_sha256": lockfile_sha256,
+        "execution_context": execution_context,
+        "execution_context_sha256": execution_context_sha256,
     }
 
 
@@ -1048,10 +1240,11 @@ def _cached_result_if_compatible(
     if not isinstance(cached, Mapping):
         return None
     result = cached.get("_result")
-    if (
-        cached.get("_env_numpy_version") != env_fingerprint["numpy_version"]
-        or cached.get("_env_numba_version") != env_fingerprint["numba_version"]
-        or not isinstance(result, Mapping)
+    if not isinstance(result, Mapping):
+        return None
+    if any(
+        cached.get(f"_env_{field}") != env_fingerprint.get(field)
+        for field in _CACHE_ENVIRONMENT_FIELDS
     ):
         return None
     return dict(result)
@@ -1440,8 +1633,7 @@ def _write_target_cache(
 ) -> None:
     """Persist a target result to the resume cache."""
     cache_data = {
-        "_env_numpy_version": env_fingerprint["numpy_version"],
-        "_env_numba_version": env_fingerprint["numba_version"],
+        **{f"_env_{field}": env_fingerprint[field] for field in _CACHE_ENVIRONMENT_FIELDS},
         "_result": result_entry,
     }
     cache_file.write_text(json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8")

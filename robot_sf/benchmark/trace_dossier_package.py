@@ -360,6 +360,8 @@ def _reject_output_overlap(output_dir: Path, campaign_store_dir: Path) -> None:
         pass
     else:
         raise TraceDossierPackageError("campaign store must not be inside package output directory")
+
+
 def _reject_source_overlap(output_dir: Path, resolution: Mapping[str, Any]) -> None:
     """Reject a resolved source artifact inside the package output before writing any files."""
     if resolution.get("resolution_status") != "resolved":

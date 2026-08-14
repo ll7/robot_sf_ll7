@@ -41,6 +41,7 @@ import random
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -63,6 +64,8 @@ if TYPE_CHECKING:
 
 RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v1"
 RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v1"
+PAIRED_INFERENCE_CONTRACT_SCHEMA = "radius_paired_bootstrap_inference_contract.v1"
+PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA = "radius_paired_support_diagnostics.v1"
 SWEEP_SUMMARY_SCHEMA = "issue_6642_radius_sweep_summary.v1"
 
 # Preregistered scientific verdicts (exactly one is emitted once the gate passes).
@@ -109,6 +112,18 @@ EXPECTED_PLANNER_ROSTER: tuple[str, ...] = (
 )
 # Success and SNQI are higher-is-better; typed collisions are lower-is-better.
 LOWER_IS_BETTER_METRICS = frozenset({RANK_METRIC_TYPED_COLLISIONS})
+
+# Paired-bootstrap inference contract vocabulary. These values are serialized so
+# retained reports can be regenerated without reading source defaults.
+PAIRED_ESTIMATOR = "mean_paired_delta"
+PAIRED_CONTRAST = "radius_metric_minus_baseline_metric_by_planner"
+PAIRED_RESAMPLING_UNIT = "paired_seed"
+PAIRED_INTERVAL_METHOD = "percentile_bootstrap"
+PAIRED_INTERVAL_INDEX_CONVENTION = (
+    "sorted_means[int(alpha/2*n_resamples)]_and_"
+    "sorted_means[min(int((1-alpha/2)*n_resamples),n_resamples)-1]"
+)
+PAIRED_RNG_ALGORITHM = "python_random.Random_mt19937"
 
 # Fail-closed row-exclusion reasons. Any such row is removed from evidence and, when it
 # breaks the matched design or its accounting, forces the invalid-evidence verdict.
@@ -1054,6 +1069,126 @@ def analyze_metric_rank_stability(
 
 
 @dataclass(frozen=True)
+class PairedInferenceContract:
+    """Versioned parameters required to reproduce paired-bootstrap intervals."""
+
+    schema_version: str
+    estimator: str
+    contrast: str
+    resampling_unit: str
+    interval_method: str
+    interval_index_convention: str
+    alpha: float
+    confidence_level: float
+    requested_resamples: int
+    rng_algorithm: str
+    seed: int
+    digest: str
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe representation."""
+        return {
+            "schema_version": self.schema_version,
+            "estimator": self.estimator,
+            "contrast": self.contrast,
+            "resampling_unit": self.resampling_unit,
+            "interval_method": self.interval_method,
+            "interval_index_convention": self.interval_index_convention,
+            "alpha": self.alpha,
+            "confidence_level": self.confidence_level,
+            "requested_resamples": self.requested_resamples,
+            "rng_algorithm": self.rng_algorithm,
+            "seed": self.seed,
+            "digest": self.digest,
+        }
+
+
+def _paired_inference_contract_payload(
+    *,
+    n_resamples: int,
+    seed: int,
+    alpha: float,
+    interval_method: str = PAIRED_INTERVAL_METHOD,
+) -> dict[str, object]:
+    """Return the digest input for the paired-bootstrap inference contract."""
+    if isinstance(n_resamples, bool) or not isinstance(n_resamples, int) or n_resamples < 1:
+        raise ValueError("n_resamples must be a positive integer")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+    if not math.isfinite(float(alpha)) or not 0.0 < float(alpha) < 1.0:
+        raise ValueError("alpha must be finite and between 0 and 1")
+    if not isinstance(interval_method, str) or not interval_method:
+        raise ValueError("interval_method must be a non-empty string")
+    return {
+        "schema_version": PAIRED_INFERENCE_CONTRACT_SCHEMA,
+        "estimator": PAIRED_ESTIMATOR,
+        "contrast": PAIRED_CONTRAST,
+        "resampling_unit": PAIRED_RESAMPLING_UNIT,
+        "interval_method": interval_method,
+        "interval_index_convention": PAIRED_INTERVAL_INDEX_CONVENTION,
+        "alpha": float(alpha),
+        "confidence_level": 1.0 - float(alpha),
+        "requested_resamples": n_resamples,
+        "rng_algorithm": PAIRED_RNG_ALGORITHM,
+        "seed": seed,
+    }
+
+
+def build_paired_inference_contract(
+    *,
+    n_resamples: int,
+    seed: int,
+    alpha: float = 0.05,
+    interval_method: str = PAIRED_INTERVAL_METHOD,
+) -> PairedInferenceContract:
+    """Build the versioned, deterministic paired-bootstrap inference contract.
+
+    Returns:
+        The JSON-serializable contract with its deterministic digest.
+    """
+    payload = _paired_inference_contract_payload(
+        n_resamples=n_resamples,
+        seed=seed,
+        alpha=alpha,
+        interval_method=interval_method,
+    )
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return PairedInferenceContract(
+        **payload,
+        digest=sha256(encoded).hexdigest(),
+    )
+
+
+@dataclass(frozen=True)
+class PairedSupportDiagnostics:
+    """Auditable support accounting for one paired radius contrast."""
+
+    baseline_seed_count: int
+    radius_seed_count: int
+    overlapping_seed_count: int
+    finite_pair_count: int
+    dropped_nonfinite_pair_count: int
+    distinct_finite_deltas: int
+    status: str
+    reason: str
+    schema_version: str = PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe support diagnostics."""
+        return {
+            "schema_version": self.schema_version,
+            "baseline_seed_count": self.baseline_seed_count,
+            "radius_seed_count": self.radius_seed_count,
+            "overlapping_seed_count": self.overlapping_seed_count,
+            "finite_pair_count": self.finite_pair_count,
+            "dropped_nonfinite_pair_count": self.dropped_nonfinite_pair_count,
+            "distinct_finite_deltas": self.distinct_finite_deltas,
+            "status": self.status,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class PairedChange:
     """Per-planner paired metric change for one radius versus the baseline."""
 
@@ -1067,12 +1202,14 @@ class PairedChange:
     ci_high: float | None
     n_pairs: int
     reason: str | None
+    support: PairedSupportDiagnostics
 
     def to_dict(self) -> dict[str, object]:
         """Return JSON-safe representation.
 
         Returns:
-            Mapping of planner, metric, radius, point delta, and confidence interval.
+            Mapping of planner, metric, radius, point delta, confidence interval,
+            and support diagnostics.
         """
         return {
             "planner": self.planner,
@@ -1085,6 +1222,7 @@ class PairedChange:
             "ci_high": self.ci_high,
             "n_pairs": self.n_pairs,
             "reason": self.reason,
+            "support": self.support.to_dict(),
         }
 
 
@@ -1122,6 +1260,85 @@ def _paired_bootstrap_ci(
     return point, means[low_index], means[high_index], len(deltas)
 
 
+def _raw_seed_keyed_values(container: object) -> dict[int, float] | None:
+    """Return seed-keyed numeric observations, preserving non-finite values for audit."""
+    if not isinstance(container, Mapping):
+        return None
+    observations: dict[int, float] = {}
+    for raw_seed, raw_value in container.items():
+        if isinstance(raw_seed, bool):
+            return None
+        try:
+            seed = int(raw_seed)
+        except (TypeError, ValueError):
+            return None
+        if str(seed) != str(raw_seed):
+            return None
+        if seed in observations or isinstance(raw_value, bool):
+            return None
+        try:
+            observations[seed] = float(raw_value)
+        except (TypeError, ValueError):
+            return None
+    return observations
+
+
+def _paired_support_diagnostics(
+    baseline_observations: dict[int, float] | None,
+    radius_observations: dict[int, float] | None,
+) -> tuple[PairedSupportDiagnostics, list[float], list[float], list[float]]:
+    """Return support diagnostics plus finite paired observations and deltas."""
+    if baseline_observations is None or radius_observations is None:
+        support = PairedSupportDiagnostics(
+            baseline_seed_count=0 if baseline_observations is None else len(baseline_observations),
+            radius_seed_count=0 if radius_observations is None else len(radius_observations),
+            overlapping_seed_count=0,
+            finite_pair_count=0,
+            dropped_nonfinite_pair_count=0,
+            distinct_finite_deltas=0,
+            status="insufficient_support",
+            reason="malformed_paired_observations",
+        )
+        return support, [], [], []
+
+    paired_base: list[float] = []
+    paired_radius: list[float] = []
+    deltas: list[float] = []
+    overlapping_seeds = sorted(set(baseline_observations) & set(radius_observations))
+    dropped_nonfinite = 0
+    for paired_seed in overlapping_seeds:
+        base = baseline_observations[paired_seed]
+        current = radius_observations[paired_seed]
+        if math.isfinite(base) and math.isfinite(current):
+            paired_base.append(base)
+            paired_radius.append(current)
+            deltas.append(current - base)
+        else:
+            dropped_nonfinite += 1
+
+    distinct_deltas = len(set(deltas))
+    if len(deltas) < 2:
+        status = "insufficient_support"
+        reason = "insufficient_finite_paired_observations"
+    elif distinct_deltas < 2:
+        status = "degenerate_support"
+        reason = "single_distinct_finite_delta"
+    else:
+        status = "ok"
+        reason = "finite_paired_support"
+    support = PairedSupportDiagnostics(
+        baseline_seed_count=len(baseline_observations),
+        radius_seed_count=len(radius_observations),
+        overlapping_seed_count=len(overlapping_seeds),
+        finite_pair_count=len(deltas),
+        dropped_nonfinite_pair_count=dropped_nonfinite,
+        distinct_finite_deltas=distinct_deltas,
+        status=status,
+        reason=reason,
+    )
+    return support, paired_base, paired_radius, deltas
+
+
 def compute_paired_changes(
     sweep_summary: Mapping[str, object],
     metric: str,
@@ -1130,6 +1347,7 @@ def compute_paired_changes(
     radii: Iterable[float],
     n_resamples: int = 1000,
     seed: int = 123,
+    alpha: float = 0.05,
 ) -> dict[float, list[PairedChange]]:
     """Compute per-planner paired metric changes versus the baseline radius.
 
@@ -1140,6 +1358,7 @@ def compute_paired_changes(
     Returns:
         Mapping of radius to the list of per-planner paired changes versus baseline.
     """
+    build_paired_inference_contract(n_resamples=n_resamples, seed=seed, alpha=alpha)
     tables = _metric_tables_by_radius(sweep_summary)
     baseline_table = tables.get(float(baseline_radius), {})
     paired_by_radius = _float_keyed(sweep_summary.get("paired_observations"))
@@ -1165,20 +1384,33 @@ def compute_paired_changes(
             radius_planner_pairs = (
                 radius_planner_pairs if isinstance(radius_planner_pairs, Mapping) else {}
             )
-            base_obs = _seed_keyed_observations(base_planner_pairs.get(metric))
-            radius_obs = _seed_keyed_observations(radius_planner_pairs.get(metric))
-            paired_base: list[float] = []
-            paired_radius: list[float] = []
-            if base_obs and radius_obs:
-                for paired_seed in sorted(set(base_obs) & set(radius_obs)):
-                    paired_base.append(base_obs[paired_seed])
-                    paired_radius.append(radius_obs[paired_seed])
-            if len(paired_base) >= 2:
+            base_obs = _raw_seed_keyed_values(base_planner_pairs.get(metric))
+            radius_obs = _raw_seed_keyed_values(radius_planner_pairs.get(metric))
+            if base_obs is None and radius_obs is None:
+                support = PairedSupportDiagnostics(
+                    baseline_seed_count=0,
+                    radius_seed_count=0,
+                    overlapping_seed_count=0,
+                    finite_pair_count=0,
+                    dropped_nonfinite_pair_count=0,
+                    distinct_finite_deltas=0,
+                    status="insufficient_support",
+                    reason="no_paired_observations",
+                )
+                paired_base: list[float] = []
+                paired_radius: list[float] = []
+                deltas: list[float] = []
+            else:
+                support, paired_base, paired_radius, deltas = _paired_support_diagnostics(
+                    base_obs, radius_obs
+                )
+            if support.status == "ok":
                 point, low, high, n_pairs = _paired_bootstrap_ci(
                     paired_base,
                     paired_radius,
                     n_resamples=n_resamples,
                     seed=seed,
+                    alpha=alpha,
                 )
                 radius_changes.append(
                     PairedChange(
@@ -1192,11 +1424,14 @@ def compute_paired_changes(
                         ci_high=high,
                         n_pairs=n_pairs,
                         reason=None,
+                        support=support,
                     )
                 )
             else:
                 delta = (
-                    radius_value - base_value
+                    sum(deltas) / len(deltas)
+                    if support.status == "degenerate_support" and deltas
+                    else radius_value - base_value
                     if base_value is not None and radius_value is not None
                     else None
                 )
@@ -1210,12 +1445,9 @@ def compute_paired_changes(
                         delta=delta,
                         ci_low=None,
                         ci_high=None,
-                        n_pairs=0,
-                        reason=(
-                            "insufficient_paired_observations"
-                            if base_obs or radius_obs
-                            else "no_paired_observations"
-                        ),
+                        n_pairs=support.finite_pair_count,
+                        reason=support.reason,
+                        support=support,
                     )
                 )
         changes[float(radius)] = radius_changes
@@ -1441,6 +1673,7 @@ class RadiusSensitivityReport:
     sweep_available: bool
     missingness: MissingnessLedger | None
     metric_stability: tuple[MetricRankStability, ...]
+    paired_inference_contract: PairedInferenceContract
     paired_changes: dict[str, dict[float, list[PairedChange]]]
     family_transitions: tuple[FamilyTransition, ...]
     verdict: VerdictDecision
@@ -1463,6 +1696,7 @@ class RadiusSensitivityReport:
             "sweep_available": self.sweep_available,
             "missingness": self.missingness.to_dict() if self.missingness is not None else None,
             "metric_stability": [entry.to_dict() for entry in self.metric_stability],
+            "paired_inference_contract": self.paired_inference_contract.to_dict(),
             "paired_changes": {
                 metric: {
                     _radius_key(radius): [change.to_dict() for change in changes]
@@ -1536,6 +1770,7 @@ def analyze_radius_sensitivity(
     rank_metrics: Iterable[str] | None = None,
     n_resamples: int = 1000,
     seed: int = 123,
+    alpha: float = 0.05,
 ) -> RadiusSensitivityReport:
     """Run the full Gate 3 radius rank-stability analysis on a Gate 2 sweep summary.
 
@@ -1566,6 +1801,11 @@ def analyze_radius_sensitivity(
 
     missingness: MissingnessLedger | None = None
     metric_stability: list[MetricRankStability] = []
+    paired_inference_contract = build_paired_inference_contract(
+        n_resamples=n_resamples,
+        seed=seed,
+        alpha=alpha,
+    )
     paired_changes: dict[str, dict[float, list[PairedChange]]] = {}
     family_transitions: list[FamilyTransition] = []
 
@@ -1585,6 +1825,7 @@ def analyze_radius_sensitivity(
                 radii=radii,
                 n_resamples=n_resamples,
                 seed=seed,
+                alpha=alpha,
             )
         family_transitions = compute_family_transitions(
             summary, baseline_radius=baseline_radius, radii=radii
@@ -1606,6 +1847,7 @@ def analyze_radius_sensitivity(
         sweep_available=sweep_available,
         missingness=missingness,
         metric_stability=tuple(metric_stability),
+        paired_inference_contract=paired_inference_contract,
         paired_changes=paired_changes,
         family_transitions=tuple(family_transitions),
         verdict=verdict,

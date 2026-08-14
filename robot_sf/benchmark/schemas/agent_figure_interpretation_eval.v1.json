@@ -72,12 +72,97 @@
             "type": "array",
             "minItems": 8,
             "maxItems": 8,
+            "allOf": [
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "source_denominator"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "estimand_unit"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "stats_multiplicity"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "visual_semantics"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "caption_accuracy"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "evidence_tier_availability"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "claim_boundary"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              },
+              {
+                "contains": {
+                  "type": "object",
+                  "properties": {"dimension": {"const": "correction_usefulness"}},
+                  "required": ["dimension"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              }
+            ],
             "items": {
               "type": "object",
               "additionalProperties": false,
               "required": ["dimension", "score", "passed", "expected", "observed"],
               "properties": {
-                "dimension": {"type": "string", "minLength": 1},
+                "dimension": {
+                  "enum": [
+                    "source_denominator",
+                    "estimand_unit",
+                    "stats_multiplicity",
+                    "visual_semantics",
+                    "caption_accuracy",
+                    "evidence_tier_availability",
+                    "claim_boundary",
+                    "correction_usefulness"
+                  ]
+                },
                 "score": {"type": "number", "minimum": 0, "maximum": 1},
                 "passed": {"type": "boolean"},
                 "expected": {},

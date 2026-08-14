@@ -50,6 +50,14 @@ def _review_scores(value: float = 1.0) -> dict[str, float]:
     return dict.fromkeys(DIMENSIONS, value)
 
 
+def _result_schema() -> dict[str, object]:
+    return json.loads(
+        Path("robot_sf/benchmark/schemas/agent_figure_interpretation_eval.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
 def test_clean_output_has_all_dimension_scores_and_no_critical_errors() -> None:
     result = evaluate_manifest(MANIFEST)
     cases = _case_by_id(result)
@@ -85,6 +93,31 @@ def test_each_critical_mutation_is_flagged(packet_id: str, critical_kind: str) -
     assert case["critical_errors"][critical_kind] is True
     for other_kind in set(CRITICAL_ERROR_KINDS) - {critical_kind}:
         assert case["critical_errors"][other_kind] is False
+
+
+@pytest.mark.parametrize(
+    "evidence_tier",
+    [
+        "smoke",
+        "smoke evidence",
+        "benchmark",
+        "nominal benchmark evidence",
+        "paper_facing",
+        "paper-grade",
+        "paper-grade evidence",
+    ],
+)
+def test_fallback_degraded_promotion_recognizes_supported_evidence_tiers(
+    evidence_tier: str,
+) -> None:
+    packet = json.loads(
+        (FIXTURE_DIR / "fallback_degraded_promotion.json").read_text(encoding="utf-8")
+    )
+    packet["interpretation"]["evidence_tier_availability"]["evidence_tier"] = evidence_tier  # type: ignore[index]
+
+    result = evaluate_packet(packet).to_dict()
+
+    assert result["critical_errors"]["fallback_degraded_promotion"] is True
 
 
 def test_stale_bytes_digest_drift_fails_closed() -> None:
@@ -378,14 +411,34 @@ def test_extended_evaluation_output_matches_schema() -> None:
         "critical_error_counts": dict.fromkeys(CRITICAL_ERROR_KINDS, 0),
         "cases": [case],
     }
-    schema = json.loads(
-        (Path("robot_sf/benchmark/schemas/agent_figure_interpretation_eval.v1.json")).read_text(
-            encoding="utf-8"
-        )
-    )
+    schema = _result_schema()
 
     jsonschema.Draft202012Validator.check_schema(schema)
     jsonschema.validate(report, schema)
+
+
+@pytest.mark.parametrize(
+    ("duplicate_dimension", "missing_dimension"),
+    [
+        ("source_denominator", "claim_boundary"),
+        ("evidence_tier_availability", "stats_multiplicity"),
+    ],
+)
+def test_schema_rejects_duplicate_or_missing_score_dimensions(
+    duplicate_dimension: str,
+    missing_dimension: str,
+) -> None:
+    report = evaluate_manifest(MANIFEST)
+    scores = report["cases"][0]["scores"]  # type: ignore[index]
+    duplicate_score = next(score for score in scores if score["dimension"] == duplicate_dimension)
+    for index, score in enumerate(scores):
+        if score["dimension"] == missing_dimension:
+            scores[index] = copy.deepcopy(duplicate_score)
+            break
+
+    jsonschema.Draft202012Validator.check_schema(_result_schema())
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(report, _result_schema())
 
 
 def test_cli_help_and_fixture_only_replay() -> None:

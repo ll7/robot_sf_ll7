@@ -52,7 +52,15 @@ CRITICAL_ERROR_DIMENSIONS = {
     "unsupported_ranking": "visual_semantics",
     "null_overclaim": "claim_boundary",
 }
-_HIGHER_THAN_DIAGNOSTIC = {"smoke", "benchmark", "paper_facing", "paper-grade"}
+_HIGHER_THAN_DIAGNOSTIC = {
+    "smoke",
+    "smoke evidence",
+    "benchmark",
+    "nominal benchmark evidence",
+    "paper_facing",
+    "paper-grade",
+    "paper-grade evidence",
+}
 
 
 class AgentFigureEvalError(ValueError):

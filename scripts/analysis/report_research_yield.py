@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import statistics
 from collections import Counter
 from collections.abc import Mapping
@@ -82,6 +83,15 @@ def _non_negative_int(value: Any, field: str) -> int:
     return value
 
 
+def _non_negative_number(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ResearchYieldError(f"{field} must contain non-negative numeric values")
+    numeric_value = float(value)
+    if not math.isfinite(numeric_value) or numeric_value < 0:
+        raise ResearchYieldError(f"{field} must contain non-negative numeric values")
+    return numeric_value
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -96,23 +106,41 @@ def load_snapshot(path: Path) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ResearchYieldError(f"cannot load snapshot {path}: {exc}") from exc
-    if not isinstance(payload, dict) or payload.get("schema_version") != SNAPSHOT_SCHEMA:
+    return _validate_snapshot(payload)
+
+
+def _validate_snapshot(value: Any) -> dict[str, Any]:
+    """Validate a snapshot for both file-backed and in-memory report callers.
+
+    Returns:
+        The validated snapshot as a mutable dictionary copy.
+    """
+
+    if not isinstance(value, Mapping) or value.get("schema_version") != SNAPSHOT_SCHEMA:
         raise ResearchYieldError(f"snapshot must declare {SNAPSHOT_SCHEMA}")
+    payload = dict(value)
     window = _mapping(payload.get("window"), "window")
     _text(window.get("start"), "window.start")
     _text(window.get("end"), "window.end")
     records = payload.get("records")
     if not isinstance(records, list):
         raise ResearchYieldError("records must be a list")
+    record_ids: set[str] = set()
     for index, record_value in enumerate(records):
         record = _mapping(record_value, f"records[{index}]")
-        _text(record.get("id"), f"records[{index}].id")
+        record_id = _text(record.get("id"), f"records[{index}].id")
+        if record_id in record_ids:
+            raise ResearchYieldError(f"records[{index}].id is duplicated: {record_id}")
+        record_ids.add(record_id)
         kind = _text(record.get("kind"), f"records[{index}].kind")
         status = _text(record.get("status"), f"records[{index}].status")
         if kind not in _KINDS:
             raise ResearchYieldError(f"records[{index}].kind is unsupported: {kind}")
         if status not in _STATUSES:
             raise ResearchYieldError(f"records[{index}].status is unsupported: {status}")
+        for field in ("approval_to_first_result_days", "result_to_package_days"):
+            if record.get(field) is not None:
+                _non_negative_number(record[field], field)
     _validate_dimensions(payload.get("dimensions"))
     return payload
 
@@ -167,9 +195,7 @@ def _lag_summary(records: list[Mapping[str, Any]], field: str) -> dict[str, Any]
         value = record.get(field)
         if value is None:
             continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
-            raise ResearchYieldError(f"{field} must contain non-negative numeric values")
-        values.append(float(value))
+        values.append(_non_negative_number(value, field))
     return {
         "n": len(values),
         "median_days": statistics.median(values) if values else None,
@@ -181,9 +207,7 @@ def build_research_yield_report(
     snapshot: Mapping[str, Any], *, source_path: Path | None = None
 ) -> dict[str, Any]:
     """Aggregate a validated snapshot without collapsing distinct yield dimensions."""
-    payload = dict(snapshot)
-    if payload.get("schema_version") != SNAPSHOT_SCHEMA:
-        raise ResearchYieldError(f"snapshot must declare {SNAPSHOT_SCHEMA}")
+    payload = _validate_snapshot(snapshot)
     records = [_mapping(record, "record") for record in payload.get("records", [])]
     window = _mapping(payload.get("window"), "window")
     _validate_dimensions(payload.get("dimensions"))

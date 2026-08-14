@@ -166,6 +166,35 @@ def test_package_rejects_selected_source_checksum_mismatch(tmp_path: Path) -> No
         )
 
 
+def test_package_rejects_source_artifact_inside_output_dir(tmp_path: Path) -> None:
+    """Package composition must not overwrite a source artifact in its output tree."""
+    output = tmp_path / "package"
+    source = output / "package_manifest.json"
+    payload = json.loads(_TRACE_FIXTURE.read_text(encoding="utf-8"))
+    payload["source"].update(
+        {
+            "scenario_id": "francis2023_blind_corner",
+            "seed": 111,
+            "planner_id": "goal",
+            "episode_id": "fixture_episode_001",
+        }
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    before = source.read_bytes()
+    store = _write_store(tmp_path, source)
+
+    with pytest.raises(TraceDossierPackageError, match="contain the existing source artifact"):
+        build_trace_dossier_package(
+            candidates=[_candidate(source)],
+            release_manifest_path=_RELEASE,
+            campaign_store_dir=store,
+            output_dir=output,
+        )
+
+    assert source.read_bytes() == before
+
+
 def test_package_propagates_missing_source_as_blocked(tmp_path: Path) -> None:
     """Missing source artifacts never degrade into a fixture or diagnostic substitute."""
     source = _write_source(tmp_path)

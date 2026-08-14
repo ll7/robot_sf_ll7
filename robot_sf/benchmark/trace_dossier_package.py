@@ -24,6 +24,7 @@ from robot_sf.analysis_workbench.trace_dossier_renderer import (
     render_trace_dossier,
     validate_trace_dossier_manifest,
 )
+from robot_sf.benchmark.candidate_trace_resolution import resolve_episode_source
 from robot_sf.benchmark.trace_dossier_cell_binding import build_trace_dossier_cell_binding
 from robot_sf.benchmark.trace_dossier_selection import select_representative
 from scripts.tools.export_trace_dossier import export_trace_dossier
@@ -71,7 +72,17 @@ def build_trace_dossier_package(
     rows = _normalize_candidates(candidates)
     selection = select_representative(rows)
     selected = _selected_row(rows, selection.selected_seed_id)
-    _reject_output_overlap(output_dir, campaign_store_dir)
+    source_resolution = resolve_episode_source(
+        scenario_id=selected["scenario_id"],
+        planner_id=selected["planner_id"],
+        seed=selected["seed"],
+        campaign_store_dir=campaign_store_dir,
+        trace_search_roots=trace_search_roots,
+    )
+    source_path = None
+    if source_resolution.get("resolution_status") == "resolved":
+        source_path = Path(str(source_resolution["source_path"]))
+    _reject_output_overlap(output_dir, campaign_store_dir, source_path=source_path)
     _prepare_output_dir(output_dir)
 
     export_dir = output_dir / "export"
@@ -334,7 +345,12 @@ def _prepare_output_dir(output_dir: Path) -> None:
             )
 
 
-def _reject_output_overlap(output_dir: Path, campaign_store_dir: Path) -> None:
+def _reject_output_overlap(
+    output_dir: Path,
+    campaign_store_dir: Path,
+    *,
+    source_path: Path | None = None,
+) -> None:
     output = output_dir.resolve()
     store = campaign_store_dir.resolve()
     try:
@@ -349,6 +365,16 @@ def _reject_output_overlap(output_dir: Path, campaign_store_dir: Path) -> None:
         pass
     else:
         raise TraceDossierPackageError("campaign store must not be inside package output directory")
+    if source_path is not None:
+        source = source_path.resolve()
+        try:
+            source.relative_to(output)
+        except ValueError:
+            pass
+        else:
+            raise TraceDossierPackageError(
+                "package output directory must not contain the existing source artifact"
+            )
 
 
 def _write_package_checksums(output_dir: Path) -> None:

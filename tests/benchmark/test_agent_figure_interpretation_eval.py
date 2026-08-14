@@ -92,6 +92,12 @@ def test_stale_bytes_digest_drift_fails_closed() -> None:
         load_verified_packets(FIXTURE_DIR / "stale_bytes_manifest.json")
 
 
+def test_missing_manifest_fails_closed(tmp_path: Path) -> None:
+    """A missing manifest is reported as an evaluator error, not a traceback."""
+    with pytest.raises(AgentFigureEvalError, match="unreadable JSON"):
+        load_verified_packets(tmp_path / "missing.json")
+
+
 def test_changed_fixture_bytes_fail_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
     clean = root / "clean.json"
@@ -122,6 +128,92 @@ def test_missing_packet_schema_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(AgentFigureEvalError, match="expected_packet_schema"):
         load_verified_packets(root / "manifest.json")
+
+
+@pytest.mark.parametrize("path", ["../clean.json", "/tmp/clean.json"])
+def test_manifest_path_escape_fails_closed(tmp_path: Path, path: str) -> None:
+    """Manifest entries cannot escape the versioned fixture root."""
+    root = _copy_fixture_tree(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["path"] = path
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="repository-relative"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_manifest_symlink_escape_fails_closed(tmp_path: Path) -> None:
+    """Manifest entries cannot follow a symlink outside the fixture root."""
+    root = _copy_fixture_tree(tmp_path)
+    clean = root / "clean.json"
+    clean.unlink()
+    clean.symlink_to(FIXTURE_DIR / "clean.json")
+
+    with pytest.raises(AgentFigureEvalError, match="must not traverse a symlink"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_manifest_artifact_identity_fails_closed(tmp_path: Path) -> None:
+    """Packet identities must agree with the manifest identity."""
+    root = _copy_fixture_tree(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["id"] = "renamed-clean"
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="packet_id must match"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_manifest_status_drift_fails_closed(tmp_path: Path) -> None:
+    """A manifest cannot relabel fixture replay as a stronger evidence tier."""
+    root = _copy_fixture_tree(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["status"] = "benchmark_evidence"
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="manifest status"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_source_identity_drift_fails_closed(tmp_path: Path) -> None:
+    """A digest-valid source fixture must still belong to the manifest packet."""
+    root = _copy_fixture_tree(tmp_path)
+    source = root / "sources" / "clean.source.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["packet_id"] = "different-packet"
+    source.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["source_sha256"] = eval_mod.sha256_file(source)
+    packet = root / "clean.json"
+    packet_payload = json.loads(packet.read_text(encoding="utf-8"))
+    packet_payload["source"]["packet_id"] = "different-packet"  # type: ignore[index]
+    packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
+    manifest["artifacts"][0]["sha256"] = eval_mod.sha256_file(packet)
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="source packet_id must match"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_duplicate_manifest_identity_fails_closed(tmp_path: Path) -> None:
+    """A manifest cannot count the same packet identity twice."""
+    root = _copy_fixture_tree(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["artifacts"][1]["id"] = manifest["artifacts"][0]["id"]
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="duplicate id"):
+        load_verified_packets(root / "manifest.json")
+
+
+@pytest.mark.parametrize("section", ["reference", "interpretation"])
+def test_missing_scoring_dimension_fails_closed(section: str) -> None:
+    """Missing dimensions cannot compare as equal null values."""
+    packet = _clean_packet()
+    del packet[section]["source_denominator"]  # type: ignore[index]
+
+    with pytest.raises(AgentFigureEvalError, match="source_denominator"):
+        evaluate_packet(packet)
 
 
 def test_packet_schema_mismatch_fails_closed(tmp_path: Path) -> None:

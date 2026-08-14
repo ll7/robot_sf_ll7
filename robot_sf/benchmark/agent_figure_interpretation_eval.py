@@ -11,15 +11,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 EVAL_SCHEMA_VERSION = "agent_figure_interpretation_eval.v1"
 MANIFEST_SCHEMA_VERSION = "agent_figure_interpretation_eval_manifest.v1"
 EXPECTED_PACKET_SCHEMA = "result_interpretation_packet.v1"
+EXPECTED_MANIFEST_STATUS = "evaluation_artifacts_only"
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+LOCAL_ONLY_MANIFEST_PARTS = frozenset({".git", ".venv", ".worktrees", "output", "results"})
 DIMENSIONS = (
     "source_denominator",
     "estimand_unit",
@@ -122,8 +124,8 @@ def load_json(path: Path) -> dict[str, Any]:
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise AgentFigureEvalError(f"{path}: invalid JSON: {exc}") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AgentFigureEvalError(f"{path}: unreadable JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise AgentFigureEvalError(f"{path}: expected a JSON object")
     return data
@@ -144,6 +146,10 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
     manifest = load_json(manifest_path)
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise AgentFigureEvalError("manifest schema_version mismatch")
+    if manifest.get("status") != EXPECTED_MANIFEST_STATUS:
+        raise AgentFigureEvalError(f"manifest status must be {EXPECTED_MANIFEST_STATUS!r}")
+    if not isinstance(manifest.get("claim_boundary"), str) or not manifest["claim_boundary"]:
+        raise AgentFigureEvalError("manifest claim_boundary must be a non-empty string")
     expected_schema = manifest.get("expected_packet_schema")
     if expected_schema != EXPECTED_PACKET_SCHEMA:
         raise AgentFigureEvalError(
@@ -154,15 +160,26 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
     if not isinstance(artifacts, list) or not artifacts:
         raise AgentFigureEvalError("manifest artifacts must be a non-empty list")
 
-    return [
-        _load_verified_packet(
-            manifest_path=manifest_path,
-            artifact=artifact,
-            index=index,
-            expected_schema=expected_schema,
+    packets: list[tuple[Path, dict[str, Any]]] = []
+    artifact_ids: set[str] = set()
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            raise AgentFigureEvalError(f"manifest artifact {index}: expected object")
+        artifact_id = artifact.get("id")
+        if not isinstance(artifact_id, str) or not artifact_id:
+            raise AgentFigureEvalError(f"manifest artifact {index}: id must be a non-empty string")
+        if artifact_id in artifact_ids:
+            raise AgentFigureEvalError(f"manifest artifact {index}: duplicate id {artifact_id!r}")
+        artifact_ids.add(artifact_id)
+        packets.append(
+            _load_verified_packet(
+                manifest_path=manifest_path,
+                artifact=artifact,
+                index=index,
+                expected_schema=expected_schema,
+            )
         )
-        for index, artifact in enumerate(artifacts)
-    ]
+    return packets
 
 
 def evaluate_manifest(manifest_path: Path) -> dict[str, Any]:
@@ -199,6 +216,10 @@ def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
         Per-case evaluation with dimension scores and critical flags.
     """
 
+    if packet.get("schema_version") != EXPECTED_PACKET_SCHEMA:
+        raise AgentFigureEvalError(f"packet schema_version must be {EXPECTED_PACKET_SCHEMA!r}")
+    if packet.get("artifact_kind") != "evaluation_artifact":
+        raise AgentFigureEvalError("packet artifact_kind must be evaluation_artifact")
     packet_id = _required_text(packet, "packet_id")
     reference = _required_mapping(packet, "reference")
     observed = _required_mapping(packet, "interpretation")
@@ -224,29 +245,49 @@ def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
 
 
 def _dimension_scores(reference: dict[str, Any], observed: dict[str, Any]) -> list[DimensionScore]:
+    reference_dimensions = _required_dimension_mappings(reference, "reference")
+    observed_dimensions = _required_dimension_mappings(observed, "interpretation")
     return [
         DimensionScore(
             dimension=dimension,
-            score=1.0 if reference.get(dimension) == observed.get(dimension) else 0.0,
-            passed=reference.get(dimension) == observed.get(dimension),
-            expected=reference.get(dimension),
-            observed=observed.get(dimension),
+            score=1.0 if reference_dimensions[dimension] == observed_dimensions[dimension] else 0.0,
+            passed=reference_dimensions[dimension] == observed_dimensions[dimension],
+            expected=reference_dimensions[dimension],
+            observed=observed_dimensions[dimension],
         )
         for dimension in DIMENSIONS
     ]
 
 
 def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dict[str, bool]:
-    ref_evidence = _mapping(reference.get("evidence_tier_availability"))
-    obs_evidence = _mapping(observed.get("evidence_tier_availability"))
-    ref_stats = _mapping(reference.get("stats_multiplicity"))
-    obs_stats = _mapping(observed.get("stats_multiplicity"))
-    ref_source = _mapping(reference.get("source_denominator"))
-    obs_source = _mapping(observed.get("source_denominator"))
-    ref_boundary = _mapping(reference.get("claim_boundary"))
-    obs_boundary = _mapping(observed.get("claim_boundary"))
-    ref_visual = _mapping(reference.get("visual_semantics"))
-    obs_visual = _mapping(observed.get("visual_semantics"))
+    ref_evidence = _required_mapping(
+        reference, "evidence_tier_availability", label="reference.evidence_tier_availability"
+    )
+    obs_evidence = _required_mapping(
+        observed, "evidence_tier_availability", label="interpretation.evidence_tier_availability"
+    )
+    ref_stats = _required_mapping(
+        reference, "stats_multiplicity", label="reference.stats_multiplicity"
+    )
+    obs_stats = _required_mapping(
+        observed, "stats_multiplicity", label="interpretation.stats_multiplicity"
+    )
+    ref_source = _required_mapping(
+        reference, "source_denominator", label="reference.source_denominator"
+    )
+    obs_source = _required_mapping(
+        observed, "source_denominator", label="interpretation.source_denominator"
+    )
+    ref_boundary = _required_mapping(reference, "claim_boundary", label="reference.claim_boundary")
+    obs_boundary = _required_mapping(
+        observed, "claim_boundary", label="interpretation.claim_boundary"
+    )
+    ref_visual = _required_mapping(
+        reference, "visual_semantics", label="reference.visual_semantics"
+    )
+    obs_visual = _required_mapping(
+        observed, "visual_semantics", label="interpretation.visual_semantics"
+    )
 
     return {
         "unavailable_to_zero": (
@@ -545,6 +586,11 @@ def _load_verified_packet(
         raise AgentFigureEvalError(
             f"{artifact['path']}: fixture must be labeled evaluation_artifact"
         )
+    artifact_id = artifact.get("id")
+    if packet.get("packet_id") != artifact_id:
+        raise AgentFigureEvalError(
+            f"{artifact['path']}: packet_id must match manifest artifact id {artifact_id!r}"
+        )
     source = load_json(source_path)
     reference = load_json(reference_path)
     if packet.get("source") != source:
@@ -554,6 +600,10 @@ def _load_verified_packet(
     if packet.get("reference") != reference:
         raise AgentFigureEvalError(
             f"{artifact['path']}: reference fixture does not match packet reference"
+        )
+    if source.get("packet_id") != artifact_id:
+        raise AgentFigureEvalError(
+            f"{artifact['path']}: source packet_id must match manifest artifact id {artifact_id!r}"
         )
     return path, packet
 
@@ -576,10 +626,15 @@ def _verified_manifest_file(
     expected_sha = artifact.get(sha_key)
     if not isinstance(rel_path, str) or not rel_path:
         raise AgentFigureEvalError(f"manifest artifact {index}: missing {path_key}")
-    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+    if not isinstance(expected_sha, str) or not DIGEST_RE.fullmatch(expected_sha):
         raise AgentFigureEvalError(f"manifest artifact {index}: missing {sha_key}")
 
-    path = (manifest_path.parent / rel_path).resolve()
+    path = _resolve_manifest_path(
+        manifest_path=manifest_path,
+        rel_path=rel_path,
+        index=index,
+        path_key=path_key,
+    )
     if not path.is_file():
         raise AgentFigureEvalError(f"manifest artifact {index}: missing file {rel_path}")
     observed_sha = sha256_file(path)
@@ -591,11 +646,68 @@ def _verified_manifest_file(
     return path
 
 
-def _required_mapping(data: dict[str, Any], key: str) -> dict[str, Any]:
-    value = data.get(key)
+def _resolve_manifest_path(
+    *, manifest_path: Path, rel_path: str, index: int, path_key: str
+) -> Path:
+    """Resolve one manifest path within its fixture root without symlink hops.
+
+    Returns:
+        Resolved path within the manifest directory.
+    """
+
+    candidate = Path(rel_path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise AgentFigureEvalError(
+            f"manifest artifact {index}: {path_key} must be repository-relative without traversal"
+        )
+    if any(part in LOCAL_ONLY_MANIFEST_PARTS for part in candidate.parts):
+        raise AgentFigureEvalError(
+            f"manifest artifact {index}: {path_key} points to a local-only path"
+        )
+    root = manifest_path.parent.resolve()
+    unresolved = root / candidate
+    current = root
+    try:
+        for part in candidate.parts:
+            current /= part
+            if current.is_symlink():
+                raise AgentFigureEvalError(
+                    f"manifest artifact {index}: {path_key} must not traverse a symlink"
+                )
+        path = unresolved.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise AgentFigureEvalError(
+            f"manifest artifact {index}: {path_key} cannot be resolved"
+        ) from exc
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise AgentFigureEvalError(
+            f"manifest artifact {index}: {path_key} resolves outside the manifest root"
+        ) from exc
+    return path
+
+
+def _required_mapping(
+    data: dict[str, Any], key: str, *, label: str | None = None
+) -> dict[str, Any]:
+    value = data.get(key) if isinstance(data, dict) else None
     if not isinstance(value, dict):
-        raise AgentFigureEvalError(f"packet missing object field {key!r}")
+        raise AgentFigureEvalError(f"packet missing object field {label or key!r}")
     return value
+
+
+def _required_dimension_mappings(data: dict[str, Any], label: str) -> dict[str, dict[str, Any]]:
+    """Require every declared scoring dimension before comparing fixture fields.
+
+    Returns:
+        Mapping from each declared dimension to its validated object value.
+    """
+
+    return {
+        dimension: _required_mapping(data, dimension, label=f"{label}.{dimension}")
+        for dimension in DIMENSIONS
+    }
 
 
 def _required_text(data: dict[str, Any], key: str) -> str:
@@ -603,10 +715,6 @@ def _required_text(data: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value:
         raise AgentFigureEvalError(f"packet missing string field {key!r}")
     return value
-
-
-def _mapping(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
 
 
 __all__ = [

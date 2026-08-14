@@ -9,6 +9,7 @@ import pytest
 from robot_sf.benchmark.trace_dossier_selection import (
     TRACE_DOSSIER_SELECTOR_SCHEMA_VERSION,
     SelectionManifest,
+    TraceDossierCandidate,
     TraceDossierSelectionError,
     select_representative,
 )
@@ -115,6 +116,31 @@ def test_single_candidate_is_valid() -> None:
 
     assert result.selection_reason == "single_candidate"
     assert result.selected_seed_id == "seed-1"
+
+
+def test_validated_dataclass_candidate_is_accepted() -> None:
+    """Validated candidate dataclasses are accepted alongside mappings."""
+
+    result = select_representative(
+        [
+            TraceDossierCandidate(
+                cell_id="cell-a",
+                verdict="success",
+                label_strength=1.0,
+                primary_order=2.0,
+                seed_id="seed-dataclass",
+            )
+        ]
+    )
+
+    assert result.selected_seed_id == "seed-dataclass"
+
+
+def test_non_mapping_candidate_fails_closed() -> None:
+    """Unsupported candidate shapes cannot enter the selector."""
+
+    with pytest.raises(TraceDossierSelectionError, match="not a TraceDossierCandidate"):
+        select_representative([object()])  # type: ignore[list-item]
 
 
 @pytest.mark.parametrize(

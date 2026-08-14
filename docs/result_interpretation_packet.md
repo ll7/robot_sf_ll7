@@ -68,6 +68,9 @@ The validator rejects at minimum:
 - Caption assertions without controlled `bound_to_packet_fields` references.
 - Forbidden claim escalation via decision outcome.
 - Duplicate IDs across metrics, decisions, figures, and sources.
+- Supported decisions without a decision-level `contrast_result` binding their
+  comparator, effect, support denominator/threshold, null, uncertainty, and
+  multiplicity.
 - Unsupported decision vocabulary.
 - `support > denominator` violations.
 - Supported outcomes without a directed comparator, finite effect, declared
@@ -108,6 +111,11 @@ from silently escalating beyond that boundary.
 
 Supported decisions additionally require complete metric data, a declared null
 value, at least one observed interval or p-value, and no fallback/degraded rows.
+Each supported pairwise decision must carry its own structured `contrast_result`
+with comparator-matched effect, support accounting, null value, uncertainty, and
+multiplicity; shared metric summaries cannot substitute for decision-specific
+statistics. Population attrition records both `invalid` and `rejected` rows
+explicitly.
 Checksum manifests include generated outputs plus every source and available
 rendered-figure/caption file referenced by the packet.
 

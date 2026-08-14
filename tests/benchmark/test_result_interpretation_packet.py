@@ -48,6 +48,46 @@ _VALID_CH7 = json.loads(
 )
 
 
+def _available_ch7_payload() -> dict:
+    """Return the Chapter 7 packet with the committed catalog figure substituted."""
+    payload = copy.deepcopy(_VALID_CH7)
+    figure = payload["figure_links"][0]
+    figure_path = Path("tests/fixtures/artifact_catalog/v1/fig_benchmark_outcome_matrix.svg")
+    caption_path = Path("tests/fixtures/artifact_catalog/v1/captions.md")
+    catalog_path = Path("tests/fixtures/artifact_catalog/v1/valid_catalog.yaml")
+    figure.update(
+        {
+            "artifact_id": "fig_benchmark_outcome_matrix",
+            "path": str(figure_path),
+            "sha256": hashlib.sha256(figure_path.read_bytes()).hexdigest(),
+            "encoding": "svg",
+            "caption_file": {
+                "path": str(caption_path),
+                "sha256": hashlib.sha256(caption_path.read_bytes()).hexdigest(),
+            },
+            "artifact_catalog": {
+                "catalog_id": "fixture_camera_ready_artifacts",
+                "path": str(catalog_path),
+                "sha256": hashlib.sha256(catalog_path.read_bytes()).hexdigest(),
+                "commit": subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                ).stdout.strip(),
+            },
+        }
+    )
+    assertion = payload["caption_assertions"][0]
+    assertion["template_id"] = "observed_visualization.v1"
+    assertion["assertion_text"] = (
+        "Observed figure 'ch7_matched_start_process_contrast' for estimand "
+        "'ch7_matched_planner_process_contrast' with direction 'not_applicable'."
+    )
+    assertion["status"] = "observed"
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Schema tests
 # ---------------------------------------------------------------------------
@@ -265,8 +305,7 @@ class TestFailClosedCaptionAssertion:
         assert any("inferred" in e for e in errors)
 
     def test_observed_caption_status_accepted(self) -> None:
-        payload = copy.deepcopy(_VALID_CH7)
-        payload["caption_assertions"][0]["status"] = "observed"
+        payload = _available_ch7_payload()
         errors = validate_packet(payload)
         assert errors == [], f"observed should be valid: {errors}"
 
@@ -275,6 +314,17 @@ class TestFailClosedCaptionAssertion:
         payload["caption_assertions"][0]["status"] = "unavailable"
         errors = validate_packet(payload)
         assert errors == [], f"unavailable should be valid: {errors}"
+
+    def test_unavailable_figure_cannot_have_observed_caption(self) -> None:
+        payload = copy.deepcopy(_VALID_CH7)
+        payload["caption_assertions"][0]["template_id"] = "observed_visualization.v1"
+        payload["caption_assertions"][0]["assertion_text"] = (
+            "Observed figure 'ch7_matched_start_process_contrast' for estimand "
+            "'ch7_matched_planner_process_contrast' with direction 'not_applicable'."
+        )
+        payload["caption_assertions"][0]["status"] = "observed"
+        errors = validate_packet(payload)
+        assert any("unavailable figure" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +473,24 @@ class TestFailClosedDigestDrift:
         errors = validate_packet(payload)
         assert any("observed uncertainty values" in e for e in errors)
 
+    def test_supported_decision_requires_structured_contrast_result(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["decisions"][0].pop("contrast_result")
+        errors = validate_packet(payload)
+        assert any("decision-level contrast_result" in e for e in errors)
+
+    def test_supported_decision_effect_must_match_structured_result(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["decisions"][0]["effect"] = 999999.0
+        errors = validate_packet(payload)
+        assert any("effect must match contrast_result.effect" in e for e in errors)
+
+    def test_supported_decision_comparator_must_match_structured_result(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["decisions"][0]["comparator"]["comparison"] = "unrelated"
+        errors = validate_packet(payload)
+        assert any("comparator must match contrast_result.comparator" in e for e in errors)
+
     def test_execution_count_drift_rejected(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["execution_mode"]["counts"]["adapter"] = 359
@@ -490,34 +558,7 @@ class TestFailClosedFigureEncoding:
         assert any("artifact_catalog" in e for e in errors)
 
     def test_available_figure_must_match_catalog_entry(self) -> None:
-        payload = copy.deepcopy(_VALID_CH7)
-        figure = payload["figure_links"][0]
-        figure_path = Path("tests/fixtures/artifact_catalog/v1/fig_benchmark_outcome_matrix.svg")
-        caption_path = Path("tests/fixtures/artifact_catalog/v1/captions.md")
-        catalog_path = Path("tests/fixtures/artifact_catalog/v1/valid_catalog.yaml")
-        figure.update(
-            {
-                "artifact_id": "fig_benchmark_outcome_matrix",
-                "path": str(figure_path),
-                "sha256": hashlib.sha256(figure_path.read_bytes()).hexdigest(),
-                "encoding": "svg",
-                "caption_file": {
-                    "path": str(caption_path),
-                    "sha256": hashlib.sha256(caption_path.read_bytes()).hexdigest(),
-                },
-                "artifact_catalog": {
-                    "catalog_id": "fixture_camera_ready_artifacts",
-                    "path": str(catalog_path),
-                    "sha256": hashlib.sha256(catalog_path.read_bytes()).hexdigest(),
-                    "commit": subprocess.run(
-                        ["git", "rev-parse", "HEAD"],
-                        capture_output=True,
-                        check=True,
-                        text=True,
-                    ).stdout.strip(),
-                },
-            }
-        )
+        payload = _available_ch7_payload()
         errors = validate_packet(payload)
         assert errors == [], f"catalog-bound fixture should validate: {errors}"
 
@@ -605,7 +646,7 @@ class TestFailClosedCaptionBinding:
         assert any("unknown packet field" in e for e in errors)
 
     def test_caption_text_must_match_controlled_template(self) -> None:
-        payload = copy.deepcopy(_VALID_CH7)
+        payload = _available_ch7_payload()
         payload["caption_assertions"][0]["assertion_text"] = (
             "PPO dominates every planner in every scenario and should be deployed."
         )

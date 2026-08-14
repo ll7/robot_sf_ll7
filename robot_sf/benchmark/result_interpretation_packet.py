@@ -71,7 +71,7 @@ _VALID_DESIRABILITY = frozenset(
 _VALID_MISSINGNESS = frozenset({"complete", "partial", "unavailable", "not_imputed"})
 _VALID_UNAVAILABLE_HANDLING = frozenset({"fail_closed", "diagnostic_only", "excluded"})
 _VALID_EXECUTION_MODES = frozenset(
-    {"native", "adapter", "fallback", "degraded", "unavailable", "invalid"}
+    {"native", "adapter", "fallback", "degraded", "unavailable", "invalid", "rejected"}
 )
 _VALID_ACTOR_STATUSES = frozenset({"draft", "reviewed", "final"})
 _VALID_CAPTION_STATUSES = frozenset({"observed", "inferred", "unavailable"})
@@ -169,6 +169,7 @@ class PopulationAttrition:
     degraded: int
     unavailable: int
     invalid: int
+    rejected: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,8 +264,23 @@ class DecisionEntry:
     outcome: str
     rationale: str
     comparator: Comparator | None = None
+    contrast_result: ContrastResult | None = None
     effect: float | None = None
     refusal_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ContrastResult:
+    """Decision-specific statistical result bound to one comparator."""
+
+    comparator: Comparator
+    effect: float
+    support: int
+    denominator: int
+    support_threshold: int
+    null_value: float
+    uncertainty: Uncertainty
+    multiplicity: Multiplicity
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,7 +442,9 @@ def _validate_population(p: Population, errors: list[str]) -> None:
             f"population included ({p.included}) + excluded ({p.excluded}) != total ({p.total})"
         )
     a = p.attrition
-    mode_sum = a.native + a.adapter + a.fallback + a.degraded + a.unavailable + a.invalid
+    mode_sum = (
+        a.native + a.adapter + a.fallback + a.degraded + a.unavailable + a.invalid + a.rejected
+    )
     if mode_sum != p.excluded:
         errors.append(f"attrition sum ({mode_sum}) != excluded ({p.excluded})")
 
@@ -466,7 +484,7 @@ def _validate_execution_mode(mode: ExecutionMode, errors: list[str]) -> None:
         errors.append("execution_mode fallback rows require fallback_permitted=true")
     if mode.counts.get("degraded", 0) > 0 and not mode.degraded_permitted:
         errors.append("execution_mode degraded rows require degraded_permitted=true")
-    for excluded_mode in ("unavailable", "invalid"):
+    for excluded_mode in ("unavailable", "invalid", "rejected"):
         if mode.counts.get(excluded_mode, 0) > 0:
             errors.append(f"execution_mode {excluded_mode} rows cannot be included")
 
@@ -587,6 +605,7 @@ def _validate_supported_decision(
     execution_mode: ExecutionMode,
     errors: list[str],
 ) -> None:
+    contrast = _validate_supported_contrast(d, errors)
     requirements = (
         (
             metric.unavailable_handling != "fail_closed",
@@ -633,6 +652,11 @@ def _validate_supported_decision(
             errors.append(
                 f"decision {d.decision_id!r}: supported outcome requires observed uncertainty values"
             )
+    if contrast is not None and contrast.support < contrast.support_threshold:
+        errors.append(
+            f"decision {d.decision_id!r}: contrast_result support is below the declared "
+            "support_threshold"
+        )
     if metric.support_threshold is None:
         errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")
     elif metric.support < metric.support_threshold:
@@ -646,6 +670,85 @@ def _validate_supported_decision(
     if d.refusal_reason is not None:
         errors.append(f"decision {d.decision_id!r}: supported outcome cannot have refusal_reason")
     _validate_claim_escalation(d.decision_id, d.rationale, errors)
+
+
+def _validate_supported_contrast(
+    decision: DecisionEntry,
+    errors: list[str],
+) -> ContrastResult | None:
+    """Validate and return the decision-specific contrast binding.
+
+    Returns:
+        The validated contrast result, or ``None`` when the binding is absent.
+    """
+
+    contrast = decision.contrast_result
+    if contrast is None:
+        errors.append(
+            f"decision {decision.decision_id!r}: supported outcome requires "
+            "decision-level contrast_result"
+        )
+        return None
+    _validate_contrast_result(decision.decision_id, contrast, errors)
+    if decision.comparator != contrast.comparator:
+        errors.append(
+            f"decision {decision.decision_id!r}: comparator must match contrast_result.comparator"
+        )
+    if decision.effect != contrast.effect:
+        errors.append(
+            f"decision {decision.decision_id!r}: effect must match contrast_result.effect"
+        )
+    if not contrast.uncertainty.declared or not any(
+        value is not None
+        for value in (
+            contrast.uncertainty.ci_low,
+            contrast.uncertainty.ci_high,
+            contrast.uncertainty.p_value_raw,
+            contrast.uncertainty.p_value_adjusted,
+        )
+    ):
+        errors.append(
+            f"decision {decision.decision_id!r}: contrast_result requires "
+            "observed uncertainty values"
+        )
+    if not contrast.multiplicity.declared:
+        errors.append(
+            f"decision {decision.decision_id!r}: contrast_result requires declared multiplicity"
+        )
+    return contrast
+
+
+def _validate_contrast_result(
+    decision_id: str,
+    contrast: ContrastResult,
+    errors: list[str],
+) -> None:
+    """Validate decision-specific result accounting and inferential fields."""
+
+    if contrast.comparator.direction not in _VALID_COMPARATOR_DIRECTIONS:
+        errors.append(
+            f"decision {decision_id!r}: contrast comparator direction "
+            f"{contrast.comparator.direction!r} is unsupported"
+        )
+    if contrast.denominator <= 0:
+        errors.append(f"decision {decision_id!r}: contrast denominator must be > 0")
+    if contrast.support < 0:
+        errors.append(f"decision {decision_id!r}: contrast support must be >= 0")
+    if contrast.support > contrast.denominator:
+        errors.append(
+            f"decision {decision_id!r}: contrast support ({contrast.support}) > "
+            f"denominator ({contrast.denominator})"
+        )
+    if contrast.support_threshold < 1:
+        errors.append(f"decision {decision_id!r}: contrast support_threshold must be >= 1")
+    if contrast.support_threshold > contrast.denominator:
+        errors.append(f"decision {decision_id!r}: contrast support_threshold exceeds denominator")
+    if not math.isfinite(contrast.effect):
+        errors.append(f"decision {decision_id!r}: contrast effect must be finite")
+    if not math.isfinite(contrast.null_value):
+        errors.append(f"decision {decision_id!r}: contrast null_value must be finite")
+    _validate_uncertainty(decision_id, contrast.uncertainty, errors)
+    _validate_multiplicity(decision_id, contrast.multiplicity, errors)
 
 
 def _validate_decision(
@@ -703,6 +806,7 @@ def _validate_caption_assertions(  # noqa: C901
     errors: list[str],
 ) -> None:
     figure_ids = {fl.figure_id for fl in packet.figure_links}
+    figures_by_id = {fl.figure_id: fl for fl in packet.figure_links}
     for ca in captions:
         if ca.figure_id not in figure_ids:
             errors.append(f"caption assertion for {ca.figure_id!r} references an undeclared figure")
@@ -721,6 +825,23 @@ def _validate_caption_assertions(  # noqa: C901
                 f"caption assertion for {ca.figure_id!r}: 'inferred' status is "
                 "forbidden; use 'observed' or 'unavailable'"
             )
+        figure = figures_by_id.get(ca.figure_id)
+        if figure is not None:
+            if figure.encoding == "unavailable" and (
+                ca.template_id != "unavailable_visualization.v1" or ca.status != "unavailable"
+            ):
+                errors.append(
+                    f"caption assertion for unavailable figure {ca.figure_id!r} must use "
+                    "unavailable_visualization.v1 with status 'unavailable'"
+                )
+            if (
+                figure.encoding != "unavailable"
+                and ca.template_id == "unavailable_visualization.v1"
+            ):
+                errors.append(
+                    f"caption assertion for available figure {ca.figure_id!r} cannot use "
+                    "unavailable_visualization.v1"
+                )
         if not ca.bound_to_packet_fields:
             errors.append(
                 f"caption assertion for {ca.figure_id!r}: bound_to_packet_fields is required"
@@ -759,6 +880,12 @@ def _render_caption_assertion(
     """
 
     if assertion.template_id == "observed_visualization.v1":
+        figure = next(
+            (item for item in packet.figure_links if item.figure_id == assertion.figure_id),
+            None,
+        )
+        if figure is None or figure.encoding == "unavailable" or assertion.status != "observed":
+            return None
         required_fields = {
             "estimand_id",
             "comparison.direction",
@@ -776,7 +903,11 @@ def _render_caption_assertion(
             f"'{packet.estimand.estimand_id}' with direction '{direction}'."
         )
     if assertion.template_id == "unavailable_visualization.v1":
-        if assertion.status != "unavailable":
+        figure = next(
+            (item for item in packet.figure_links if item.figure_id == assertion.figure_id),
+            None,
+        )
+        if figure is None or figure.encoding != "unavailable" or assertion.status != "unavailable":
             return None
         return (
             f"Figure '{assertion.figure_id}' is unavailable under admission state "
@@ -1286,6 +1417,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         degraded=pop["attrition"]["degraded"],
         unavailable=pop["attrition"]["unavailable"],
         invalid=pop["attrition"]["invalid"],
+        rejected=pop["attrition"]["rejected"],
     )
     population = Population(
         total=pop["total"],
@@ -1372,6 +1504,39 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
                     direction=dd["comparator"].get("direction", "not_applicable"),
                 )
                 if dd.get("comparator") is not None
+                else None
+            ),
+            contrast_result=(
+                ContrastResult(
+                    comparator=Comparator(
+                        reference=dd["contrast_result"]["comparator"]["reference"],
+                        comparison=dd["contrast_result"]["comparator"]["comparison"],
+                        direction=dd["contrast_result"]["comparator"].get(
+                            "direction", "not_applicable"
+                        ),
+                    ),
+                    effect=dd["contrast_result"]["effect"],
+                    support=dd["contrast_result"]["support"],
+                    denominator=dd["contrast_result"]["denominator"],
+                    support_threshold=dd["contrast_result"]["support_threshold"],
+                    null_value=dd["contrast_result"]["null_value"],
+                    uncertainty=Uncertainty(
+                        declared=dd["contrast_result"]["uncertainty"]["declared"],
+                        method=dd["contrast_result"]["uncertainty"].get("method"),
+                        ci_low=dd["contrast_result"]["uncertainty"].get("ci_low"),
+                        ci_high=dd["contrast_result"]["uncertainty"].get("ci_high"),
+                        p_value_raw=dd["contrast_result"]["uncertainty"].get("p_value_raw"),
+                        p_value_adjusted=dd["contrast_result"]["uncertainty"].get(
+                            "p_value_adjusted"
+                        ),
+                    ),
+                    multiplicity=Multiplicity(
+                        declared=dd["contrast_result"]["multiplicity"]["declared"],
+                        method=dd["contrast_result"]["multiplicity"].get("method"),
+                        n_comparisons=dd["contrast_result"]["multiplicity"].get("n_comparisons"),
+                    ),
+                )
+                if dd.get("contrast_result") is not None
                 else None
             ),
             effect=dd.get("effect"),

@@ -54,7 +54,8 @@
       "fallback": 0,
       "degraded": 0,
       "unavailable": 0,
-      "invalid": 0
+      "invalid": 0,
+      "rejected": 0
     },
     "exclusion_reasons": []
   },
@@ -143,9 +144,9 @@
   "caption_assertions": [
     {
       "figure_id": "ch7_matched_start_process_contrast",
-      "template_id": "observed_visualization.v1",
-      "assertion_text": "Observed figure 'ch7_matched_start_process_contrast' for estimand 'ch7_matched_planner_process_contrast' with direction 'not_applicable'.",
-      "status": "observed",
+      "template_id": "unavailable_visualization.v1",
+      "assertion_text": "Figure 'ch7_matched_start_process_contrast' is unavailable under admission state 'unavailable_causal_inference'.",
+      "status": "unavailable",
       "bound_to_packet_fields": ["estimand_id", "comparison.direction", "claim_boundary.allowed"]
     }
   ],

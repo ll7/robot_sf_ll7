@@ -279,7 +279,15 @@
         "attrition": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["native", "adapter", "fallback", "degraded", "unavailable", "invalid"],
+          "required": [
+            "native",
+            "adapter",
+            "fallback",
+            "degraded",
+            "unavailable",
+            "invalid",
+            "rejected"
+          ],
           "properties": {
             "native": {
               "type": "integer",
@@ -302,6 +310,10 @@
               "minimum": 0
             },
             "invalid": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rejected": {
               "type": "integer",
               "minimum": 0
             }
@@ -329,7 +341,15 @@
             "minimum": 0
           },
           "propertyNames": {
-            "enum": ["native", "adapter", "fallback", "degraded", "unavailable", "invalid"]
+            "enum": [
+              "native",
+              "adapter",
+              "fallback",
+              "degraded",
+              "unavailable",
+              "invalid",
+              "rejected"
+            ]
           }
         },
         "fallback_permitted": {
@@ -627,6 +647,16 @@
             }
           ]
         },
+        "contrast_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/contrast_result"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "effect": {
           "anyOf": [
             {
@@ -647,6 +677,49 @@
               "type": "null"
             }
           ]
+        }
+      }
+    },
+    "contrast_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparator",
+        "effect",
+        "support",
+        "denominator",
+        "support_threshold",
+        "null_value",
+        "uncertainty",
+        "multiplicity"
+      ],
+      "properties": {
+        "comparator": {
+          "$ref": "#/$defs/comparator"
+        },
+        "effect": {
+          "type": "number"
+        },
+        "support": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "support_threshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "null_value": {
+          "type": "number"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/uncertainty"
+        },
+        "multiplicity": {
+          "$ref": "#/$defs/multiplicity"
         }
       }
     },

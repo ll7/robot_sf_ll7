@@ -64,7 +64,8 @@
       "fallback": 0,
       "degraded": 0,
       "unavailable": 0,
-      "invalid": 0
+      "invalid": 0,
+      "rejected": 0
     },
     "exclusion_reasons": []
   },
@@ -126,6 +127,31 @@
         "comparison": "social_force",
         "direction": "comparison_minus_reference"
       },
+      "contrast_result": {
+        "comparator": {
+          "reference": "goal",
+          "comparison": "social_force",
+          "direction": "comparison_minus_reference"
+        },
+        "effect": -1.24056,
+        "support": 540,
+        "denominator": 540,
+        "support_threshold": 540,
+        "null_value": 0.0,
+        "uncertainty": {
+          "declared": true,
+          "method": "percentile_bootstrap_95_ci",
+          "ci_low": -1.93667,
+          "ci_high": -0.471569,
+          "p_value_raw": 0.001999,
+          "p_value_adjusted": 0.025987
+        },
+        "multiplicity": {
+          "declared": true,
+          "method": "holm_stepdown",
+          "n_comparisons": 15
+        }
+      },
       "effect": -1.24056,
       "refusal_reason": null
     },
@@ -139,6 +165,31 @@
         "comparison": "orca",
         "direction": "comparison_minus_reference"
       },
+      "contrast_result": {
+        "comparator": {
+          "reference": "goal",
+          "comparison": "orca",
+          "direction": "comparison_minus_reference"
+        },
+        "effect": 2.76778,
+        "support": 540,
+        "denominator": 540,
+        "support_threshold": 540,
+        "null_value": 0.0,
+        "uncertainty": {
+          "declared": true,
+          "method": "percentile_bootstrap_95_ci",
+          "ci_low": 1.83771,
+          "ci_high": 3.69947,
+          "p_value_raw": 0.001999,
+          "p_value_adjusted": 0.007496
+        },
+        "multiplicity": {
+          "declared": true,
+          "method": "holm_stepdown",
+          "n_comparisons": 15
+        }
+      },
       "effect": 2.76778,
       "refusal_reason": null
     },
@@ -151,6 +202,31 @@
         "reference": "social_force",
         "comparison": "orca",
         "direction": "comparison_minus_reference"
+      },
+      "contrast_result": {
+        "comparator": {
+          "reference": "social_force",
+          "comparison": "orca",
+          "direction": "comparison_minus_reference"
+        },
+        "effect": 4.00833,
+        "support": 540,
+        "denominator": 540,
+        "support_threshold": 540,
+        "null_value": 0.0,
+        "uncertainty": {
+          "declared": true,
+          "method": "percentile_bootstrap_95_ci",
+          "ci_low": 2.87981,
+          "ci_high": 5.12642,
+          "p_value_raw": 0.001999,
+          "p_value_adjusted": 0.007496
+        },
+        "multiplicity": {
+          "declared": true,
+          "method": "holm_stepdown",
+          "n_comparisons": 15
+        }
       },
       "effect": 4.00833,
       "refusal_reason": null

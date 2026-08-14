@@ -44,7 +44,8 @@
       "fallback": 0,
       "degraded": 0,
       "unavailable": 0,
-      "invalid": 0
+      "invalid": 0,
+      "rejected": 0
     },
     "exclusion_reasons": []
   },

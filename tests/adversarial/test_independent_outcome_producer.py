@@ -91,10 +91,10 @@ def _episode_record(
         "result_provenance": {"repo_commit": producer_commit},
         "outcome": {
             "route_complete": not failure,
-            "collision": failure,
-            "timeout": False,
+            "collision_event": failure,
+            "timeout_event": False,
         },
-        "termination_reason": "collision" if failure else "goal_reached",
+        "termination_reason": "collision" if failure else "success",
     }
 
 
@@ -308,8 +308,8 @@ def test_producer_rejects_episode_record_provenance_drift(tmp_path: Path) -> Non
         ("canonical_algorithm", "other", "canonical_algorithm is not social_force"),
         ("planner_kinematics", None, "missing planner_kinematics"),
         ("scenario_id", None, "missing scenario provenance"),
-        ("outcome", None, "missing outcome provenance"),
-        ("termination_reason", None, "missing outcome provenance"),
+        ("outcome", None, "outcome must use exactly the canonical fields"),
+        ("termination_reason", None, "termination_reason is not canonical"),
     )
     for field, value, expected_fragment in mutations:
         case_dir = tmp_path / field
@@ -357,6 +357,53 @@ def test_producer_rejects_selected_candidate_scenario_drift(
         episode[field] = value
     else:
         episode["scenario_params"][field] = value
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
+def test_producer_rejects_legacy_outcome_aliases(tmp_path: Path) -> None:
+    """Legacy outcome aliases cannot bypass the canonical episode contract."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    records[0]["episode_record"]["outcome"]["collision"] = True
+
+    with pytest.raises(ValueError, match="outcome must use exactly the canonical fields"):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_fragment"),
+    [
+        ({"route_complete": "false"}, "outcome fields must be boolean"),
+        ({"collision_event": 1}, "outcome fields must be boolean"),
+        ({"timeout_event": None}, "outcome fields must be boolean"),
+        ({"termination_reason": "goal_reached"}, "termination_reason is not canonical"),
+        ({"termination_reason": "error"}, "runtime error is not an outcome"),
+    ],
+)
+def test_producer_rejects_noncanonical_outcome_values(
+    tmp_path: Path, mutation: dict[str, Any], expected_fragment: str
+) -> None:
+    """Non-boolean flags and legacy termination labels fail closed."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    episode = records[0]["episode_record"]
+    if "termination_reason" in mutation:
+        episode["termination_reason"] = mutation["termination_reason"]
+    else:
+        field, value = next(iter(mutation.items()))
+        episode["outcome"][field] = value
 
     with pytest.raises(ValueError, match=expected_fragment):
         build_outcome_packet(

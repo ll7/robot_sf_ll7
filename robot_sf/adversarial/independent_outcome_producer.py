@@ -36,10 +36,12 @@ from robot_sf.adversarial.independent_outcomes import (
     payload_sha256,
 )
 from robot_sf.adversarial.proposal_model import load_issue_3275_contract
+from robot_sf.benchmark.termination_reason import TERMINATION_REASONS
 
 EXECUTION_RECORD_SCHEMA_VERSION = "issue_7066_execution_record.v1"
 _ARMS = ("proposal", "random")
 _SHA1_LENGTH = 40
+_CANONICAL_OUTCOME_FIELDS = frozenset({"route_complete", "collision_event", "timeout_event"})
 
 
 def _is_sha256(value: Any) -> bool:
@@ -277,6 +279,62 @@ def _record_producer_commit(record: dict[str, Any]) -> str:
     return str(commits[0])
 
 
+def _validate_episode_outcome(record: dict[str, Any], *, manifest_id: str) -> None:
+    """Require the episode's canonical outcome and termination semantics.
+
+    The shared episode schema deliberately does not accept legacy ``collision``
+    or ``timeout`` aliases in the outcome object.  Enforcing that boundary here
+    is important because :func:`attribution_from_episode_record` supports those
+    aliases for older diagnostic callers and uses Python truthiness.  Without
+    this check, strings such as ``"false"`` could become empirical failures.
+    """
+    outcome = record.get("outcome")
+    if not isinstance(outcome, dict) or set(outcome) != _CANONICAL_OUTCOME_FIELDS:
+        observed = sorted(outcome) if isinstance(outcome, dict) else []
+        missing = sorted(_CANONICAL_OUTCOME_FIELDS - set(observed))
+        extra = sorted(set(observed) - _CANONICAL_OUTCOME_FIELDS)
+        raise ValueError(
+            f"episode record {manifest_id} outcome must use exactly the canonical fields; "
+            f"missing={missing} extra={extra}"
+        )
+    invalid_fields = [
+        field for field in sorted(_CANONICAL_OUTCOME_FIELDS) if not isinstance(outcome[field], bool)
+    ]
+    if invalid_fields:
+        raise ValueError(
+            f"episode record {manifest_id} outcome fields must be boolean: {invalid_fields}"
+        )
+
+    termination_reason = record.get("termination_reason")
+    if termination_reason not in TERMINATION_REASONS:
+        raise ValueError(
+            f"episode record {manifest_id} termination_reason is not canonical: "
+            f"{termination_reason!r}"
+        )
+    if termination_reason == "error":
+        raise ValueError(f"episode record {manifest_id} runtime error is not an outcome")
+
+    route_complete = outcome["route_complete"]
+    collision = outcome["collision_event"]
+    timeout = outcome["timeout_event"]
+    if sum((route_complete, collision, timeout)) > 1:
+        raise ValueError(
+            f"episode record {manifest_id} outcome contains contradictory terminal flags"
+        )
+    if route_complete != (termination_reason == "success"):
+        raise ValueError(
+            f"episode record {manifest_id} route_complete disagrees with termination_reason"
+        )
+    if collision != (termination_reason == "collision"):
+        raise ValueError(
+            f"episode record {manifest_id} collision_event disagrees with termination_reason"
+        )
+    if timeout != (termination_reason in {"truncated", "max_steps"}):
+        raise ValueError(
+            f"episode record {manifest_id} timeout_event disagrees with termination_reason"
+        )
+
+
 def _validate_replay_lineage(value: Any) -> dict[str, Any]:
     """Validate the deterministic replay signature block supplied by the runner."""
     if not isinstance(value, dict):
@@ -363,10 +421,7 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
         raise ValueError(
             f"episode record {manifest_id} scenario_seed does not match selected scenario"
         )
-    if not isinstance(record.get("outcome"), dict) or not isinstance(
-        record.get("termination_reason"), str
-    ):
-        raise ValueError(f"episode record {manifest_id} is missing outcome provenance")
+    _validate_episode_outcome(record, manifest_id=manifest_id)
     if envelope.get("scenario_family") != scenario_family:
         raise ValueError(f"execution envelope {manifest_id} scenario family mismatch")
     if envelope.get("scenario_certification_status") != "passed":

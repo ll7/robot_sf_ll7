@@ -8,28 +8,25 @@ historical producer-blocker wording in `step3_decision_packet.json`; that JSON
 still preserves the pre-#7066 decision and must not be treated as a current
 campaign result.
 
-## Admitted execution identity
+## Native execution gate
 
-The producer does not create a new native Social Force runtime and does not
-relabel arbitrary rows as native. The amended frozen contract admits exactly
-the canonical `SocialForcePlannerAdapter` identity:
+The frozen #6105 contract admits only explicit native `social_force`
+execution. The producer does not create a native runtime or relabel an adapter
+record as native: `execution_mode` must be `native`, `adapter_active` must not
+be true, and the shared v2 evaluator must accept the resulting row. Adapter,
+fallback, degraded, mixed, unavailable, and identity-mismatched records fail
+closed before admission. The current standard Social Force benchmark metadata
+uses the adapter path, so a normal adapter record is expected to be rejected
+until a separately reviewed native runtime path is available.
 
-- planner identifier: `social_force`
-- policy semantics: `social_force_adapter`
-- adapter: `SocialForcePlannerAdapter`
-- upstream command space: `velocity_vector_xy`
-- benchmark command space: `unicycle_vw`
-- projection: `heading_safe_velocity_to_unicycle_vw`
-
-The historical planner/reference commit remains the `execution_commit` in
-each row. The merged code that produces the packet is recorded separately as
-`producer_commit`. Every episode record must also carry the same producer
-commit and a content hash. Its scenario provenance must bind to the selected
-candidate: `scenario_id` must equal the frozen scenario family, while
-`scenario_params.candidate_manifest_id` and `scenario_params.scenario_seed`
-must equal the envelope's selected manifest and the external binding's frozen
-scenario seed. A record from another candidate or scenario is rejected even if
-its adapter metadata and execution seed otherwise look valid.
+The historical planner/reference commit remains the `execution_commit` in each
+row. The merged code that produces the packet is recorded separately as
+`producer_commit`, and each episode record is content-hashed. Scenario
+provenance binds to the selected candidate: `scenario_id` must equal the frozen
+scenario family, while `scenario_params.candidate_manifest_id` and
+`scenario_params.scenario_seed` must equal the envelope's selected manifest and
+the external binding's frozen scenario seed. A record from another candidate
+or scenario is rejected even if its execution seed otherwise looks valid.
 
 ## Producer command
 
@@ -46,9 +43,9 @@ uv run python scripts/adversarial/materialize_issue_6105_outcomes.py \
 ```
 
 The bridge is resumable and idempotent. It fails closed on missing or
-duplicate selected candidates, seeds, replay signatures, canonical adapter
-metadata, configuration lineage, episode provenance, or confirmation rows.
-It validates the emitted packet with the shared v2 admission contract before
+duplicate selected candidates, seeds, replay signatures, native execution
+metadata, configuration lineage, episode provenance, or confirmation rows. It
+validates the emitted packet with the shared v2 admission contract before
 writing it atomically.
 
 ## Evidence boundary

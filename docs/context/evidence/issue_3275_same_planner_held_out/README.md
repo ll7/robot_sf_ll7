@@ -8,12 +8,12 @@ preflight_evidence_only: this packet proves deterministic manifest construction,
 
 ## Provenance
 
-- Contract: `configs/adversarial/issue_3275_same_planner_contract.json` (SHA-256 `46fd57a985debdf918954ca993ca7d7ea2f0b9e5a5b5cde1d8320cd02dddf974`).
+- Contract: `configs/adversarial/issue_3275_same_planner_contract.json` (SHA-256 `2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8`).
 - Archive: `docs/context/evidence/issue_5305_certified_archive/archive.json` (pre-correction SHA-256 `79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445`).
 - Target planner: `social_force` (config SHA-256 `dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735`).
 - Candidate pool seed `42`, pool size 64, budget 12 per arm.
 - Execution-seed domain base 8100000, disjoint from every archive-certification seed (max 2000364).
-- Code revision: `40db0c19648e268d367c9426f81a21ba295f188a`.
+- Code revision: `2d6f6093c01f876f8185107a4fdcdcd9b1464fd6`.
 
 ## Duplicate and overlap accounting
 

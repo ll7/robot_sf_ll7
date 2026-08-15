@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.scenario_coverage import (
+from robot_sf.benchmark.scenario.scenario_coverage import (
     build_scenario_coverage_report,
     scenario_coverage_report_markdown,
     write_scenario_coverage_report,
 )
 from scripts.tools.scenario_coverage_entropy import load_scenario_matrix
+
+
+def test_scenario_coverage_legacy_import_preserves_module_identity() -> None:
+    """The historical top-level import must alias the canonical scenario module."""
+    canonical = importlib.import_module("robot_sf.benchmark.scenario.scenario_coverage")
+    legacy = importlib.import_module("robot_sf.benchmark.scenario_coverage")
+
+    assert legacy is canonical
+    assert legacy.__name__ == "robot_sf.benchmark.scenario.scenario_coverage"
 
 
 def _scenario(

@@ -18,6 +18,15 @@ def test_legacy_scenario_staging_path_reuses_canonical_module() -> None:
     assert legacy is canonical
 
 
+def test_scenario_package_rejects_unknown_submodule() -> None:
+    """The package boundary fails closed for undeclared helper names."""
+    from robot_sf.benchmark import scenario
+
+    missing_name = "not_a_helper"
+    with pytest.raises(AttributeError, match="no attribute 'not_a_helper'"):
+        getattr(scenario, missing_name)
+
+
 def test_select_unique_scenario_returns_the_exact_match() -> None:
     """An exact unique name must resolve without changing the scenario row."""
     expected = {"name": "classic_head_on_corridor_medium", "seeds": [1, 2]}

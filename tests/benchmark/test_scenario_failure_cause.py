@@ -24,6 +24,14 @@ from robot_sf.scenario_certification.failure_cause import (
 )
 
 
+def test_legacy_failure_cause_path_reuses_canonical_module() -> None:
+    """The historical top-level path remains an identity-preserving compatibility alias."""
+    from robot_sf.benchmark import scenario_failure_cause as legacy
+    from robot_sf.benchmark.scenario import scenario_failure_cause as canonical
+
+    assert legacy is canonical
+
+
 def test_benchmark_imports_use_canonical_schema_and_verdicts() -> None:
     """Benchmark compatibility names must not create a divergent schema."""
 

@@ -37,7 +37,6 @@ _RECERT = (
     / "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json"
 )
 _ARCHIVE = _REPO_ROOT / "docs/context/evidence/issue_5305_certified_archive/archive.json"
-_PRODUCER_COMMIT = "a" * 40
 
 
 def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:
@@ -791,11 +790,10 @@ def _v2_row(
     rank: int,
     failure: bool,
     seed_offset: int = 0,
-    execution_mode: str = "native",
 ) -> dict[str, Any]:
     """Build one admissible v2 outcome row."""
     replay_signature = hashlib.sha256(f"replay-{manifest_id}".encode()).hexdigest()
-    row = {
+    return {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
         "candidate_manifest_sha256": hashlib.sha256(f"manifest-{manifest_id}".encode()).hexdigest(),
@@ -810,14 +808,8 @@ def _v2_row(
         "execution_seed": 70_001 + rank * 10 + seed_offset,
         "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
-        "execution_config_lineage": {
-            "config": "eval.yaml",
-            "target_planner_config_sha256": (
-                "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
-            ),
-            "planner_reference_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
-        },
-        "execution_mode": execution_mode,
+        "execution_config_lineage": {"config": "eval.yaml"},
+        "execution_mode": "native",
         "primary_failure": "collision" if failure else "none",
         "termination_reason": "collision" if failure else "goal_reached",
         "independent_failure_outcome": failure,
@@ -837,20 +829,6 @@ def _v2_row(
         "admission_status": "admitted",
         "exclusion_reason": None,
     }
-    if execution_mode == "adapter":
-        row["execution_config_lineage"]["producer_commit"] = _PRODUCER_COMMIT
-        row["execution_identity"] = {
-            "policy_semantics": "social_force_adapter",
-            "adapter_name": "SocialForcePlannerAdapter",
-            "upstream_command_space": "velocity_vector_xy",
-            "benchmark_command_space": "unicycle_vw",
-            "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        }
-        row["producer_commit"] = _PRODUCER_COMMIT
-        row["episode_record_sha256"] = hashlib.sha256(
-            f"episode-{manifest_id}-{seed_offset}".encode()
-        ).hexdigest()
-    return row
 
 
 def _contract_v2_outcome_packet(
@@ -878,7 +856,6 @@ def _contract_v2_outcome_packet(
                     rank=rank,
                     failure=arm == "proposal",
                     seed_offset=seed,
-                    execution_mode="adapter",
                 )
                 row["candidate_pool_seed"] = candidate_pool_seed
                 row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))

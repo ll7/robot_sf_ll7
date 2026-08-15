@@ -99,7 +99,6 @@ class _RecordContext:
     eligibility: dict[str, Any]
     manifest_sha256: str
     execution_commit: str
-    execution_identity: dict[str, str]
     target_planner_id: str
     target_planner_config_sha256: str
     scenario_family: str
@@ -341,7 +340,6 @@ def _build_candidate_record(ctx: _RecordContext) -> dict[str, Any]:
         "scenario_family": ctx.scenario_family,
         "scenario_seed": scenario_seed,
         "execution_commit": ctx.execution_commit,
-        "execution_identity": dict(ctx.execution_identity),
     }
     return {
         "candidate_manifest_id": ctx.candidate_id,
@@ -349,7 +347,6 @@ def _build_candidate_record(ctx: _RecordContext) -> dict[str, Any]:
         "scenario_family": ctx.scenario_family,
         "target_planner_id": ctx.target_planner_id,
         "target_planner_config_sha256": ctx.target_planner_config_sha256,
-        "execution_identity": dict(ctx.execution_identity),
         "candidate_controls": ctx.candidate.to_json(),
         "scenario_seed": scenario_seed,
         "normalized_control_hash": ctx.eligibility["normalized_control_hash"],
@@ -383,7 +380,6 @@ def _step3_run_plan(
     contract_raw_sha: str,
     target_planner_id: str,
     execution_commit: str,
-    execution_identity: dict[str, str],
     budget_per_arm: int,
 ) -> dict[str, Any]:
     """Return the frozen step-3 execution plan (declaration only, no execution)."""
@@ -402,8 +398,8 @@ def _step3_run_plan(
             "--evaluation-outcomes <step3 independent-outcomes packet path>"
         ),
         "resource_class": (
-            "local single-CPU worker; canonical SocialForcePlannerAdapter execution only "
-            "(no fallback/degraded); no GPU/SLURM requirement declared."
+            "local single-CPU worker; native execution mode only (no fallback/degraded); "
+            "no GPU/SLURM requirement declared for the social_force planner."
         ),
         "estimated_run_count": 2 * budget_per_arm * 6,
         "estimated_run_count_note": (
@@ -420,8 +416,7 @@ def _step3_run_plan(
             "adversarial_independent_outcomes.v2 row contract; every admitted row must "
             "match the external v2 binding (exact arm membership, candidate manifest "
             "SHA-256, pool index, scenario seed, execution seeds, pool seed, record "
-            "SHA-256), exact canonical adapter identity, and the producer commit captured "
-            "separately from the historical planner reference commit."
+            "SHA-256) and native-only execution mode."
         ),
         "decision_rule": {
             "vocabulary": ["continue", "stop", "inconclusive"],
@@ -439,7 +434,6 @@ def _step3_run_plan(
         "target_planner_id": target_planner_id,
         "execution_commit": execution_commit,
         "execution_commit_role": "historical_planner_reference_lineage",
-        "execution_identity": dict(execution_identity),
         "producer_commit": "recorded_by_producer_after_merge",
         "producer_command": (
             "uv run python scripts/adversarial/materialize_issue_6105_outcomes.py "
@@ -622,7 +616,6 @@ def build_held_out_preflight(
     target_planner_config_sha256 = planner_cfg["config_sha256"]
     scenario_family = eval_cfg["scenario_family"]
     execution_commit = planner_cfg["execution_commit"]
-    execution_identity = dict(planner_cfg["execution_identity"])
 
     pool = generate_candidate_pool(search_space, pool_size=pool_size, pool_seed=pool_seed)
     pool_ids = [candidate_pool_id(index) for index in range(len(pool))]
@@ -661,7 +654,6 @@ def build_held_out_preflight(
         candidate_manifest_sha256_by_id,
         pool_seed=pool_seed,
         execution_commit=execution_commit,
-        execution_identity=execution_identity,
         target_planner_id=target_planner_id,
         target_planner_config_sha256=target_planner_config_sha256,
         scenario_family=scenario_family,
@@ -686,7 +678,6 @@ def build_held_out_preflight(
             "id": target_planner_id,
             "config_sha256": target_planner_config_sha256,
             "execution_commit": execution_commit,
-            "execution_identity": execution_identity,
         },
         "candidate_pool_seed": pool_seed,
         "candidate_pool_size": pool_size,
@@ -750,7 +741,6 @@ def build_held_out_preflight(
             "id": target_planner_id,
             "config_sha256": target_planner_config_sha256,
             "execution_commit": execution_commit,
-            "execution_identity": execution_identity,
         },
         "candidate_pool": {
             "size": pool_size,
@@ -856,7 +846,6 @@ def _build_records(  # noqa: PLR0913
     *,
     pool_seed: int,
     execution_commit: str,
-    execution_identity: dict[str, str],
     target_planner_id: str,
     target_planner_config_sha256: str,
     scenario_family: str,
@@ -877,7 +866,6 @@ def _build_records(  # noqa: PLR0913
                 eligibility=eligibility_by_id[candidate_id],
                 manifest_sha256=candidate_manifest_sha256_by_id[candidate_id],
                 execution_commit=execution_commit,
-                execution_identity=execution_identity,
                 target_planner_id=target_planner_id,
                 target_planner_config_sha256=target_planner_config_sha256,
                 scenario_family=scenario_family,
@@ -923,7 +911,6 @@ def compose_preflight_packet_files(
         contract_raw_sha=raw_sha256(contract_path),
         target_planner_id=pool_manifest["target_planner"]["id"],
         execution_commit=pool_manifest["target_planner"]["execution_commit"],
-        execution_identity=pool_manifest["target_planner"]["execution_identity"],
         budget_per_arm=pool_manifest["budget_per_arm"],
     )
     bindings = _bindings_payload(

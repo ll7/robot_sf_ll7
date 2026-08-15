@@ -1,4 +1,4 @@
-"""Tests for the issue #7066 adapter execution-to-v2 outcome bridge."""
+"""Tests for the issue #7066 native execution-to-v2 outcome bridge."""
 
 from __future__ import annotations
 
@@ -70,7 +70,7 @@ def _episode_record(
     failure: bool,
     producer_commit: str = PRODUCER_COMMIT,
 ) -> dict[str, Any]:
-    """Build a minimal benchmark-shaped record with canonical adapter metadata."""
+    """Build a minimal benchmark-shaped record with explicit native metadata."""
     return {
         "version": "v1",
         "scenario_id": "classic_cross_trap_medium",
@@ -83,11 +83,8 @@ def _episode_record(
             "canonical_algorithm": "social_force",
             "policy_semantics": "social_force_adapter",
             "planner_kinematics": {
-                "execution_mode": "adapter",
-                "adapter_name": "SocialForcePlannerAdapter",
-                "upstream_command_space": "velocity_vector_xy",
-                "benchmark_command_space": "unicycle_vw",
-                "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+                "execution_mode": "native",
+                "adapter_active": False,
             },
         },
         "provenance": {"git_hash": producer_commit},
@@ -181,8 +178,8 @@ def _execution_records(contract_path: Path, binding_path: Path) -> list[dict[str
     return records
 
 
-def test_producer_emits_complete_adapter_packet_with_separate_commits(tmp_path: Path) -> None:
-    """Valid adapter records pass the shared v2 admission evaluator."""
+def test_producer_emits_complete_native_packet_with_separate_commits(tmp_path: Path) -> None:
+    """Valid native records pass the shared v2 admission evaluator."""
     contract_path, binding_path = _contract_and_binding(tmp_path)
     packet = build_outcome_packet(
         _execution_records(contract_path, binding_path),
@@ -195,7 +192,7 @@ def test_producer_emits_complete_adapter_packet_with_separate_commits(tmp_path: 
     assert len(packet["rows"]) == 10
     assert packet["execution_commit"] == REFERENCE_COMMIT
     assert packet["producer_commit"] == PRODUCER_COMMIT
-    assert all(row["execution_mode"] == "adapter" for row in packet["rows"])
+    assert all(row["execution_mode"] == "native" for row in packet["rows"])
     assert all(row["execution_commit"] != row["producer_commit"] for row in packet["rows"])
 
 
@@ -309,7 +306,6 @@ def test_producer_rejects_episode_record_provenance_drift(tmp_path: Path) -> Non
     mutations = (
         ("algorithm_metadata", None, "missing algorithm_metadata"),
         ("canonical_algorithm", "other", "canonical_algorithm is not social_force"),
-        ("policy_semantics", "other", "policy_semantics does not match"),
         ("planner_kinematics", None, "missing planner_kinematics"),
         ("scenario_id", None, "missing scenario provenance"),
         ("outcome", None, "missing outcome provenance"),
@@ -406,15 +402,15 @@ def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     ("metadata_change", "expected_fragment"),
     [
-        ({"execution_mode": "native"}, "execution_mode is not adapter"),
-        ({"execution_mode": "fallback"}, "execution_mode is not adapter"),
-        ({"adapter_name": "OtherAdapter"}, "canonical adapter identity mismatch"),
+        ({"execution_mode": "adapter"}, "execution_mode is not native"),
+        ({"execution_mode": "fallback"}, "execution_mode is not native"),
+        ({"adapter_active": True}, "active adapter execution"),
     ],
 )
 def test_producer_rejects_noncanonical_execution(
-    tmp_path: Path, metadata_change: dict[str, str], expected_fragment: str
+    tmp_path: Path, metadata_change: dict[str, Any], expected_fragment: str
 ) -> None:
-    """Native aliases, fallback, and identity drift never enter the adapter packet."""
+    """Adapter, fallback, and active-adapter rows never enter the native packet."""
     contract_path, binding_path = _contract_and_binding(tmp_path)
     records = _execution_records(contract_path, binding_path)
     kinematics = records[1]["episode_record"]["algorithm_metadata"]["planner_kinematics"]

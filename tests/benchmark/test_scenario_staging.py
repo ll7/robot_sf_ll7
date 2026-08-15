@@ -4,7 +4,39 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.scenario_staging import ScenarioStagingError, select_unique_scenario
+from robot_sf.benchmark.scenario.scenario_staging import (
+    ScenarioStagingError,
+    select_unique_scenario,
+)
+
+
+def test_legacy_scenario_staging_path_reuses_canonical_module() -> None:
+    """The retired top-level path remains an identity-preserving compatibility alias."""
+    from robot_sf.benchmark import scenario_staging as legacy
+    from robot_sf.benchmark.scenario import scenario_staging as canonical
+
+    assert legacy is canonical
+
+
+def test_scenario_package_rejects_unknown_submodule() -> None:
+    """The package boundary fails closed for undeclared helper names."""
+    from robot_sf.benchmark import scenario
+
+    missing_name = "not_a_helper"
+    with pytest.raises(AttributeError, match="no attribute 'not_a_helper'"):
+        getattr(scenario, missing_name)
+
+
+def test_scenario_package_lazy_loader_resolves_declared_submodules() -> None:
+    """Declared helpers resolve through the package's lazy loader contract."""
+    from robot_sf.benchmark import scenario
+
+    assert scenario.__getattr__("scenario_failure_cause").__name__ == (
+        "robot_sf.benchmark.scenario.scenario_failure_cause"
+    )
+    assert scenario.__getattr__("scenario_staging").__name__ == (
+        "robot_sf.benchmark.scenario.scenario_staging"
+    )
 
 
 def test_select_unique_scenario_returns_the_exact_match() -> None:

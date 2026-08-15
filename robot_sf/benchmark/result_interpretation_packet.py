@@ -728,6 +728,7 @@ def _validate_supported_decision(  # noqa: C901
                 f"decision {d.decision_id!r}: metric support_threshold must match "
                 "contrast_result.support_threshold for a supported outcome"
             )
+        _validate_supported_metric_contrast_binding(d, metric, contrast, errors)
         _validate_supported_source_binding(d, metric, contrast, sources, errors)
     if metric.support_threshold is None:
         errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")
@@ -766,6 +767,260 @@ def _close_to_source(value: object, expected: object) -> bool:
     )
 
 
+def _load_json_source(
+    source: SourceRef,
+    label: str,
+    decision_id: str,
+    errors: list[str],
+) -> dict[str, Any] | None:
+    """Load one checksum-bound JSON source for semantic validation.
+
+    Returns:
+        The decoded object, or ``None`` after recording a validation error.
+    """
+
+    try:
+        payload = json.loads((_REPO_ROOT / source.path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        errors.append(
+            f"decision {decision_id!r}: cannot read {label} source "
+            f"{source.source_id!r}: {exc}"
+        )
+        return None
+    if not isinstance(payload, dict):
+        errors.append(f"decision {decision_id!r}: {label} source must be an object")
+        return None
+    return payload
+
+
+def _validate_supported_metric_contrast_binding(
+    decision: DecisionEntry,
+    metric: MetricEntry,
+    contrast: ContrastResult,
+    errors: list[str],
+) -> None:
+    """Keep shared metric metadata equal to the decision-specific result."""
+
+    if metric.effect != contrast.effect:
+        errors.append(
+            f"decision {decision.decision_id!r}: metric effect must match "
+            "contrast_result.effect for a supported outcome"
+        )
+    if metric.null_value != contrast.null_value:
+        errors.append(
+            f"decision {decision.decision_id!r}: metric null_value must match "
+            "contrast_result.null_value for a supported outcome"
+        )
+    if metric.uncertainty is not None:
+        for field_name in (
+            "declared",
+            "method",
+            "ci_low",
+            "ci_high",
+            "p_value_raw",
+            "p_value_adjusted",
+        ):
+            if getattr(metric.uncertainty, field_name) != getattr(contrast.uncertainty, field_name):
+                errors.append(
+                    f"decision {decision.decision_id!r}: metric uncertainty.{field_name} "
+                    "must match contrast_result for a supported outcome"
+                )
+    if metric.multiplicity is not None:
+        for field_name in ("declared", "method", "n_comparisons"):
+            if getattr(metric.multiplicity, field_name) != getattr(
+                contrast.multiplicity, field_name
+            ):
+                errors.append(
+                    f"decision {decision.decision_id!r}: metric multiplicity.{field_name} "
+                    "must match contrast_result for a supported outcome"
+                )
+
+
+def _full_paired_support_threshold(
+    preregistration: Mapping[str, Any],
+    metric_contract: Mapping[str, Any],
+    decision_id: str,
+    errors: list[str],
+) -> int | None:
+    """Resolve the preregistered full paired support threshold.
+
+    Returns:
+        The expected paired support count, or ``None`` after recording an error.
+    """
+
+    support_rule = metric_contract.get("support_threshold")
+    if not isinstance(support_rule, Mapping) or support_rule.get("kind") != (
+        "full_paired_seed_scenario_count"
+    ):
+        errors.append(
+            f"decision {decision_id!r}: preregistration support_threshold must use "
+            "full_paired_seed_scenario_count"
+        )
+        return None
+    design = preregistration.get("design")
+    if not isinstance(design, Mapping):
+        errors.append(f"decision {decision_id!r}: preregistration design is required")
+        return None
+    seeds = design.get("seeds")
+    scenarios = design.get("scenarios")
+    planners = design.get("planners")
+    expected_cells = design.get("expected_cell_count")
+    if not all(isinstance(value, list) and value for value in (seeds, scenarios, planners)):
+        errors.append(
+            f"decision {decision_id!r}: preregistration design must declare non-empty "
+            "seeds, scenarios, and planners"
+        )
+        return None
+    expected_threshold = len(seeds) * len(scenarios)
+    if expected_cells != len(planners) * expected_threshold:
+        errors.append(
+            f"decision {decision_id!r}: preregistration expected_cell_count does not "
+            "match its design dimensions"
+        )
+    return expected_threshold
+
+
+def _validate_supported_preregistration_binding(  # noqa: C901, PLR0912
+    decision: DecisionEntry,
+    metric: MetricEntry,
+    contrast: ContrastResult,
+    source_refs: list[SourceRef],
+    source_row: Mapping[str, Any],
+    errors: list[str],
+) -> None:
+    """Bind supported metadata and thresholds to a machine-readable preregistration."""
+
+    prereg_refs = [source for source in source_refs if source.kind == "preregistration"]
+    if len(prereg_refs) != 1:
+        errors.append(
+            f"decision {decision.decision_id!r}: supported outcome requires exactly one "
+            "registered preregistration source"
+        )
+        return
+    preregistration = _load_json_source(
+        prereg_refs[0], "preregistration", decision.decision_id, errors
+    )
+    if preregistration is None:
+        return
+    contract = preregistration.get("result_interpretation_contract")
+    if not isinstance(contract, Mapping):
+        errors.append(
+            f"decision {decision.decision_id!r}: preregistration must declare "
+            "result_interpretation_contract"
+        )
+        return
+    metrics_contract = contract.get("metrics")
+    metric_contract = metrics_contract.get(metric.metric_id) if isinstance(metrics_contract, Mapping) else None
+    if not isinstance(metric_contract, Mapping):
+        errors.append(
+            f"decision {decision.decision_id!r}: preregistration has no result contract "
+            f"for metric {metric.metric_id!r}"
+        )
+        return
+
+    expected_unit = metric_contract.get("unit")
+    expected_denominator = metric_contract.get("denominator")
+    expected_null = metric_contract.get("null_value")
+    if metric.unit != expected_unit:
+        errors.append(
+            f"decision {decision.decision_id!r}: metric unit is not bound to "
+            "preregistration"
+        )
+    if source_row.get("units") != expected_unit:
+        errors.append(
+            f"decision {decision.decision_id!r}: report_summary units are not bound to "
+            "preregistration"
+        )
+    if source_row.get("denominator") != expected_denominator:
+        errors.append(
+            f"decision {decision.decision_id!r}: report_summary denominator is not bound to "
+            "preregistration"
+        )
+    if metric.null_value != expected_null or contrast.null_value != expected_null:
+        errors.append(
+            f"decision {decision.decision_id!r}: null_value is not bound to preregistration"
+        )
+
+    expected_threshold = _full_paired_support_threshold(
+        preregistration, metric_contract, decision.decision_id, errors
+    )
+    if expected_threshold is not None:
+        if metric.support_threshold != expected_threshold:
+            errors.append(
+                f"decision {decision.decision_id!r}: metric support_threshold is not bound "
+                "to preregistration"
+            )
+        if contrast.support_threshold != expected_threshold:
+            errors.append(
+                f"decision {decision.decision_id!r}: contrast support_threshold is not bound "
+                "to preregistration"
+            )
+        if source_row.get("n_paired") != expected_threshold:
+            errors.append(
+                f"decision {decision.decision_id!r}: report_summary support is not bound "
+                "to preregistration"
+            )
+
+    uncertainty_contract = contract.get("uncertainty")
+    expected_uncertainty_method = (
+        uncertainty_contract.get("method")
+        if isinstance(uncertainty_contract, Mapping)
+        else None
+    )
+    if metric.uncertainty is None or metric.uncertainty.method != expected_uncertainty_method:
+        errors.append(
+            f"decision {decision.decision_id!r}: uncertainty method is not bound to "
+            "preregistration"
+        )
+    if contrast.uncertainty.method != expected_uncertainty_method:
+        errors.append(
+            f"decision {decision.decision_id!r}: contrast uncertainty method is not bound "
+            "to preregistration"
+        )
+
+    multiplicity_contract = contract.get("multiplicity")
+    expected_multiplicity_method = (
+        multiplicity_contract.get("method")
+        if isinstance(multiplicity_contract, Mapping)
+        else None
+    )
+    expected_comparisons = (
+        multiplicity_contract.get("n_comparisons")
+        if isinstance(multiplicity_contract, Mapping)
+        else None
+    )
+    for label, multiplicity in (
+        ("metric", metric.multiplicity),
+        ("contrast", contrast.multiplicity),
+    ):
+        if (
+            multiplicity is None
+            or multiplicity.method != expected_multiplicity_method
+            or multiplicity.n_comparisons != expected_comparisons
+        ):
+            errors.append(
+                f"decision {decision.decision_id!r}: {label} multiplicity is not bound to "
+                "preregistration"
+            )
+    expected_direction = contract.get("comparator_direction")
+    if decision.comparator is None or decision.comparator.direction != expected_direction:
+        errors.append(
+            f"decision {decision.decision_id!r}: comparator direction is not bound to "
+            "preregistration"
+        )
+    if contrast.comparator.direction != expected_direction:
+        errors.append(
+            f"decision {decision.decision_id!r}: contrast direction is not bound to "
+            "preregistration"
+        )
+    design = preregistration.get("design")
+    if isinstance(design, Mapping) and metric.desirability != design.get("metric_direction"):
+        errors.append(
+            f"decision {decision.decision_id!r}: metric desirability is not bound to "
+            "preregistration"
+        )
+
+
 def _validate_supported_source_binding(  # noqa: C901
     decision: DecisionEntry,
     metric: MetricEntry,
@@ -791,17 +1046,8 @@ def _validate_supported_source_binding(  # noqa: C901
         )
         return
     source = report_refs[0]
-    path = _REPO_ROOT / source.path
-    try:
-        report = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        errors.append(
-            f"decision {decision.decision_id!r}: cannot read report_summary source "
-            f"{source.source_id!r}: {exc}"
-        )
-        return
-    if not isinstance(report, dict):
-        errors.append(f"decision {decision.decision_id!r}: report_summary source must be an object")
+    report = _load_json_source(source, "report_summary", decision.decision_id, errors)
+    if report is None:
         return
     rows = report.get("decisions")
     if not isinstance(rows, list):
@@ -840,6 +1086,9 @@ def _validate_supported_source_binding(  # noqa: C901
             f"{comparator.direction!r} is not bound to report_summary direction "
             f"{source_direction!r}"
         )
+    _validate_supported_preregistration_binding(
+        decision, metric, contrast, source_refs, row, errors
+    )
     checks = (
         ("n_paired", contrast.support, "contrast support"),
         ("n_paired", contrast.denominator, "contrast denominator"),
@@ -894,6 +1143,143 @@ def _validate_supported_source_binding(  # noqa: C901
         errors.append(
             f"decision {decision.decision_id!r}: packet adjusted p-value does not "
             "satisfy the source decision rule"
+        )
+
+
+def _validate_supported_population_source_binding(  # noqa: C901, PLR0912, PLR0915
+    packet: ResultInterpretationPacket,
+    errors: list[str],
+) -> None:
+    """Bind packet population and execution modes to report validation counts."""
+
+    metrics_by_id = {metric.metric_id: metric for metric in packet.metrics}
+    report_sources: dict[str, SourceRef] = {}
+    prereg_sources: dict[str, SourceRef] = {}
+    for decision in packet.decisions:
+        if decision.outcome != "supported":
+            continue
+        metric = metrics_by_id.get(decision.metric_id)
+        if metric is None:
+            continue
+        for source in packet.sources:
+            if source.source_id not in metric.source_ids:
+                continue
+            if source.kind == "report_summary":
+                report_sources[source.source_id] = source
+            elif source.kind == "preregistration":
+                prereg_sources[source.source_id] = source
+    if not report_sources:
+        return
+
+    expected_population: dict[str, Any] | None = None
+    for source in report_sources.values():
+        report = _load_json_source(source, "report_summary", "population", errors)
+        if report is None:
+            continue
+        validation = report.get("validation")
+        if not isinstance(validation, Mapping):
+            errors.append("supported population requires report_summary.validation")
+            continue
+        row_count = validation.get("row_count")
+        valid_row_count = validation.get("valid_row_count")
+        source_modes = validation.get("execution_mode_counts")
+        if not isinstance(row_count, int) or isinstance(row_count, bool):
+            errors.append("report_summary population total is not machine-readable")
+        elif packet.population.total != row_count:
+            errors.append(
+                "supported population total is not bound to report_summary validation"
+            )
+        if not isinstance(valid_row_count, int) or isinstance(valid_row_count, bool):
+            errors.append("report_summary population included is not machine-readable")
+        elif packet.population.included != valid_row_count:
+            errors.append(
+                "supported population included is not bound to report_summary validation"
+            )
+        if isinstance(row_count, int) and isinstance(valid_row_count, int):
+            expected_excluded = row_count - valid_row_count
+            if packet.population.excluded != expected_excluded:
+                errors.append(
+                    "supported population excluded is not bound to report_summary validation"
+                )
+        if not isinstance(source_modes, Mapping) or not all(
+            isinstance(count, int) and not isinstance(count, bool)
+            for count in source_modes.values()
+        ):
+            errors.append("report_summary execution_mode_counts are not machine-readable")
+        else:
+            packet_modes = {
+                mode: count for mode, count in packet.execution_mode.counts.items() if count
+            }
+            if dict(source_modes) != packet_modes:
+                errors.append(
+                    "supported execution_mode counts are not bound to report_summary validation"
+                )
+        if expected_population is None and isinstance(validation, Mapping):
+            expected_population = {
+                "total": row_count,
+                "included": valid_row_count,
+                "execution_mode_counts": source_modes,
+            }
+
+    for source in prereg_sources.values():
+        preregistration = _load_json_source(source, "preregistration", "population", errors)
+        if preregistration is None:
+            continue
+        contract = preregistration.get("result_interpretation_contract")
+        contract_population = contract.get("population") if isinstance(contract, Mapping) else None
+        if not isinstance(contract_population, Mapping):
+            errors.append("supported population requires preregistration population contract")
+            continue
+        for field_name in ("total", "included"):
+            expected = contract_population.get(field_name)
+            observed = getattr(packet.population, field_name)
+            if observed != expected:
+                errors.append(
+                    f"supported population {field_name} is not bound to preregistration"
+                )
+        expected_modes = contract_population.get("execution_mode_counts")
+        if isinstance(expected_modes, Mapping):
+            packet_modes = {
+                mode: count for mode, count in packet.execution_mode.counts.items() if count
+            }
+            if dict(expected_modes) != packet_modes:
+                errors.append(
+                    "supported execution_mode counts are not bound to preregistration"
+                )
+        if expected_population is not None:
+            for field_name in ("total", "included", "execution_mode_counts"):
+                if expected_population.get(field_name) != contract_population.get(field_name):
+                    errors.append(
+                        f"report_summary {field_name} does not match preregistration population"
+                    )
+
+
+def _validate_supported_estimand_binding(
+    packet: ResultInterpretationPacket,
+    errors: list[str],
+) -> None:
+    """Bind the packet-level comparator used by captions to a supported decision."""
+
+    supported_comparators = {
+        (
+            decision.comparator.reference,
+            decision.comparator.comparison,
+            decision.comparator.direction,
+        )
+        for decision in packet.decisions
+        if decision.outcome == "supported" and decision.comparator is not None
+    }
+    if not supported_comparators:
+        return
+    comparator = packet.estimand.comparator
+    observed = (
+        (comparator.reference, comparator.comparison, comparator.direction)
+        if comparator is not None
+        else None
+    )
+    if observed not in supported_comparators:
+        errors.append(
+            "estimand.comparator must match a supported decision comparator and direction"
         )
 
 
@@ -1708,6 +2094,8 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
     metrics_by_id = {m.metric_id: m for m in packet.metrics}
     for d in packet.decisions:
         _validate_decision(d, metrics_by_id, packet.execution_mode, packet.sources, errors)
+    _validate_supported_population_source_binding(packet, errors)
+    _validate_supported_estimand_binding(packet, errors)
 
     _validate_claim_boundary(packet.claim_boundary, packet.forbidden_claims, errors)
     for index, finding in enumerate(packet.findings):

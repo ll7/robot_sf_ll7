@@ -862,6 +862,64 @@ class TestFailClosedSupportedSourceStatistics:
         assert any("metric denominator must match" in error for error in errors)
         assert any("metric support_threshold must match" in error for error in errors)
 
+    def test_supported_threshold_must_match_preregistered_support_contract(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["support_threshold"] = 1
+        for decision in payload["decisions"]:
+            decision["contrast_result"]["support_threshold"] = 1
+
+        errors = validate_packet(payload)
+
+        assert any("support_threshold" in error and "preregistration" in error for error in errors)
+
+    def test_supported_metric_metadata_must_match_source_contract(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        metric = payload["metrics"][0]
+        metric["unit"] = "meters"
+        metric["null_value"] = 999.0
+        metric["uncertainty"]["method"] = "unadjusted"
+        metric["multiplicity"]["method"] = "none"
+        metric["multiplicity"]["n_comparisons"] = 1
+        for decision in payload["decisions"]:
+            contrast = decision["contrast_result"]
+            contrast["null_value"] = 999.0
+            contrast["uncertainty"]["method"] = "unadjusted"
+            contrast["multiplicity"]["method"] = "none"
+            contrast["multiplicity"]["n_comparisons"] = 1
+
+        errors = validate_packet(payload)
+
+        assert any("unit" in error and "preregistration" in error for error in errors)
+        assert any("null_value" in error and "preregistration" in error for error in errors)
+        assert any("uncertainty method" in error and "preregistration" in error for error in errors)
+        assert any("multiplicity" in error and "preregistration" in error for error in errors)
+
+    def test_supported_population_and_execution_counts_must_match_report(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["population"]["total"] = 1
+        payload["population"]["included"] = 1
+        payload["population"]["attrition"]["native"] = 1
+        payload["population"]["attrition"]["adapter"] = 0
+        payload["execution_mode"]["counts"] = {"native": 1}
+
+        errors = validate_packet(payload)
+
+        assert any("population total" in error and "report_summary" in error for error in errors)
+        assert any("population included" in error and "report_summary" in error for error in errors)
+        assert any("execution_mode counts" in error and "report_summary" in error for error in errors)
+
+    def test_top_level_estimator_comparator_must_match_supported_decision(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["estimand"]["comparator"] = {
+            "reference": "unrelated_reference",
+            "comparison": "unrelated_comparison",
+            "direction": "reference_minus_comparison",
+        }
+
+        errors = validate_packet(payload)
+
+        assert any("estimand.comparator" in error and "supported decision" in error for error in errors)
+
 
 # ---------------------------------------------------------------------------
 # Fail-closed: support > denominator

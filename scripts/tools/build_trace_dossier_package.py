@@ -9,11 +9,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.trace_dossier_package import (
-    TraceDossierPackageError,
-    build_trace_dossier_package,
-)
-
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -34,11 +29,11 @@ def _load_candidates(path: Path) -> list[dict[str, Any]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise TraceDossierPackageError(f"candidate JSON is unreadable: {exc}") from exc
+        raise ValueError(f"candidate JSON is unreadable: {exc}") from exc
     if isinstance(payload, dict):
         payload = payload.get("candidates")
     if not isinstance(payload, list):
-        raise TraceDossierPackageError("candidate JSON must be a list or an object with candidates")
+        raise ValueError("candidate JSON must be a list or an object with candidates")
     return payload
 
 
@@ -46,6 +41,11 @@ def main(argv: list[str] | None = None) -> int:
     """Run the trace dossier package CLI."""
 
     args = _parser().parse_args(argv)
+    from robot_sf.benchmark.trace_dossier_package import (
+        TraceDossierPackageError,
+        build_trace_dossier_package,
+    )
+
     try:
         result = build_trace_dossier_package(
             candidates=_load_candidates(args.candidates),

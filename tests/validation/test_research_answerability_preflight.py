@@ -135,6 +135,22 @@ def test_apply_proof_results_replaces_declarative_statuses() -> None:
     )
 
 
+def test_apply_proof_results_fails_closed_when_collector_omits_surfaces() -> None:
+    """A missing collector report cannot preserve stale passed declarations."""
+    manifest = _manifest()
+    contract = copy.deepcopy(manifest["answerability"])
+    contract["design"]["mode"] = "decision_capable"
+    contract["artifacts"]["durability_status"] = "ready"
+    for surface in PROOF_SURFACES:
+        contract["proof_surfaces"][surface] = {"status": "passed", "required": True}
+
+    updated = apply_proof_results(contract, {"surfaces": {}})
+
+    assert all(
+        updated["proof_surfaces"][surface]["status"] == "not_run" for surface in PROOF_SURFACES
+    )
+
+
 def test_require_answerable_runs_proof_and_fails_closed_without_decision_design(
     tmp_path: Path,
 ) -> None:

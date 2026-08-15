@@ -64,6 +64,12 @@ Two structural smells are already visible and should be resolved by the follow-u
 - `map_runner_policies/` exists as a subdirectory while 22 `map_runner*` modules remain top-level,
   splitting one domain across two locations.
 
+The first scenario-boundary child, #7155, moves the small failure-cause and staging helpers under
+`robot_sf/benchmark/scenario/`. Their historical top-level module paths remain identity-preserving
+compatibility shims because `scenario_failure_cause.py` is an established benchmark-facing import
+surface; the package paths are canonical for new callers. Larger scenario analysis and scenario
+generation clusters remain separate migration work.
+
 ## Proposed Domain Subdirectory Groupings
 
 The grouping below is illustrative and conservative. Counts are filename-prefix counts over the
@@ -82,7 +88,7 @@ serve rather than to an `issue_*` directory, so the namespace stays domain-orien
 | `benchmark/safety/` | `safety_*`, `cbf_safety_*` | 7 | `safety_wrapper_runtime.py`, `cbf_safety_filter_runtime.py` |
 | `benchmark/latency/` | `*latency*` | 5 | `control_action_latency_snqi.py`, `latency_stress.py` |
 | `benchmark/map_runner/` | `map_runner*` | 22 | `map_runner.py`, `map_runner_batch_runner.py` (merge with `map_runner_policies/`) |
-| `benchmark/scenario/` | `scenario_*` | 16 | `scenario_contract.py`, `scenario_coverage.py` (relate to `scenario_generation/`) |
+| `benchmark/scenario/` | `scenario_*` (including the #7155 boundary helpers) | 16 | `scenario_contract.py`, `scenario_coverage.py`, `scenario/scenario_failure_cause.py` |
 | `benchmark/campaign/` | `campaign_*`, `camera_ready*` | 7 | `campaign_runtime_preflight.py` (relate to `camera_ready/`) |
 | `benchmark/constraint/` | `issue_4142_dpcbf_*` | 3 | `issue_4142_dpcbf_dense_runner.py` |
 

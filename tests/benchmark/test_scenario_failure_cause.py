@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.scenario_failure_cause import (
+from robot_sf.benchmark.scenario.scenario_failure_cause import (
     SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION,
     VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
     VERDICT_INDETERMINATE,

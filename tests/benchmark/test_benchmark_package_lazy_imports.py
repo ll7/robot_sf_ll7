@@ -90,8 +90,11 @@ def test_scenario_failure_cause_shim_is_quiet_when_invoked() -> None:
 
             from robot_sf.benchmark import scenario_failure_cause
 
+            from robot_sf.benchmark.scenario import scenario_failure_cause as canonical
+
+            assert scenario_failure_cause is canonical
             assert scenario_failure_cause.__name__ == (
-                "robot_sf.benchmark.scenario_failure_cause"
+                "robot_sf.benchmark.scenario.scenario_failure_cause"
             )
             verdict = scenario_failure_cause.classify_scenario_failure_cause(
                 {

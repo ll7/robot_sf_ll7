@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.scenario_staging import ScenarioStagingError, select_unique_scenario
+from robot_sf.benchmark.scenario.scenario_staging import (
+    ScenarioStagingError,
+    select_unique_scenario,
+)
+
+
+def test_legacy_scenario_staging_path_reuses_canonical_module() -> None:
+    """The retired top-level path remains an identity-preserving compatibility alias."""
+    from robot_sf.benchmark import scenario_staging as legacy
+    from robot_sf.benchmark.scenario import scenario_staging as canonical
+
+    assert legacy is canonical
 
 
 def test_select_unique_scenario_returns_the_exact_match() -> None:

@@ -56,7 +56,7 @@ def test_expand_issue_numbers_treats_two_values_as_range() -> None:
 
 @pytest.mark.parametrize(
     "label",
-    ["blocked:needs-maintainer", "blocked:needs-campaign", "state:review"],
+    ["blocked:needs-maintainer", "blocked:needs-campaign", "state:review", "needs-triage"],
 )
 def test_explicit_dispatch_stop_labels_are_not_claimable(label: str) -> None:
     """Every explicit dispatch-stop label must fence autonomous claim dispatch."""
@@ -71,15 +71,18 @@ def test_explicit_dispatch_stop_labels_are_not_claimable(label: str) -> None:
     assert label in reason
 
 
-def test_snapshot_claimable_issues_excludes_review_state_from_dispatch() -> None:
-    """Claimable snapshots must retain review-state rows as non-claimable audit entries."""
+@pytest.mark.parametrize("dispatch_stop_label", ["state:review", "needs-triage"])
+def test_snapshot_claimable_issues_excludes_dispatch_stop_labels_from_dispatch(
+    dispatch_stop_label: str,
+) -> None:
+    """Claimable snapshots must retain dispatch-stop rows as non-claimable audit entries."""
     issue_list = [
         {
             "number": 2710,
-            "title": "review-pending issue",
+            "title": f"{dispatch_stop_label} issue",
             "state": "OPEN",
             "url": "https://github.test/issues/2710",
-            "labels": [{"name": "state:review"}],
+            "labels": [{"name": dispatch_stop_label}],
             "assignees": [],
         }
     ]
@@ -97,7 +100,9 @@ def test_snapshot_claimable_issues_excludes_review_state_from_dispatch() -> None
 
     row = payload["issues"][0]
     assert row["classification"] == "blocked_label"
-    assert row["reason"] == ("explicit dispatch-stop label state:review; skip autonomous claim")
+    assert row["reason"] == (
+        f"explicit dispatch-stop label {dispatch_stop_label}; skip autonomous claim"
+    )
 
 
 @pytest.mark.parametrize("label", ["blocked:needs-maintainer", "blocked:needs-campaign"])

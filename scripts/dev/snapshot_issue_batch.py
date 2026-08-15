@@ -49,6 +49,7 @@ UNCLAIMABLE_LABELS = {
     "decision-required",
     "duplicate",
     "invalid",
+    "needs-triage",
     "state:blocked",
     "state:hold",
     "state:review",

@@ -133,9 +133,9 @@ queue. It is a resumable handoff: inspect `quota.resume_after`, wait for the rel
 rerun the bounded command. If the REST fallback is healthy, the result remains `status: ok` while
 reporting `data_source: rest`.
 
-Issues carrying explicit `state:review` remain visible for audit, but the snapshot must classify
-them as non-claimable until the review gate is cleared. A review-pending issue must not be
-reselected as an autonomous implementation target.
+Issues carrying explicit `state:review` or `needs-triage` remain visible for audit, but the
+snapshot must classify them as non-claimable until the corresponding human gate is cleared. A
+review- or triage-pending issue must not be reselected as an autonomous implementation target.
 
 Project #5 score synchronization uses the same fail-closed preflight. If its estimated field,
 project, and item reads would cross the margin, it prints `status: quota_blocked`, performs no

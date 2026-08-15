@@ -106,6 +106,97 @@ def test_stale_running_state_is_preserved_and_not_promoted_to_ready() -> None:
     assert any("state:running" in finding for finding in classification.findings)
 
 
+def test_terminal_review_status_replaces_stale_dispatch_state() -> None:
+    """A terminal report routes completed execution to review instead of dispatch."""
+    issue = _issue(124, labels=["state:ready"])
+    issue["comments"] = [
+        {
+            "body": (
+                "Report status: diagnostic_ready_for_domain_review; benchmark_success_allowed=true."
+            ),
+            "created_at": "2026-08-15T10:00:00Z",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "state:review", "decision-required"},
+    )
+
+    assert classification.classification == "decision-required"
+    assert classification.terminal_review_evidence
+    assert {
+        (mutation["operation"], mutation["value"]) for mutation in classification.mutations
+    } == {
+        ("remove_label", "state:ready"),
+        ("add_label", "state:review"),
+        ("add_label", "decision-required"),
+    }
+
+
+def test_terminal_review_status_does_not_hide_active_execution() -> None:
+    """A visible active job keeps terminal-status evidence fail-closed."""
+    issue = _issue(125, labels=["state:ready"])
+    issue["comments"] = [{"body": "Report status: diagnostic_ready_for_domain_review"}]
+
+    classification = classify_issue(
+        issue,
+        jobs=[{"name": "issue-125-campaign", "job_name": "issue-125-campaign"}],
+        available_labels={"state:ready", "state:running", "state:review", "decision-required"},
+    )
+
+    assert classification.classification == "decision-required"
+    assert {mutation["value"] for mutation in classification.mutations} == {
+        "state:ready",
+        "state:running",
+        "decision-required",
+    }
+    assert not any(mutation["value"] == "state:review" for mutation in classification.mutations)
+
+
+def test_terminal_review_status_supersedes_open_report_pr_for_dispatch() -> None:
+    """An open report PR is not treated as active campaign execution."""
+    issue = _issue(126, labels=["state:ready"])
+    issue["comments"] = [{"body": "Report status: diagnostic_ready_for_domain_review"}]
+
+    classification = classify_issue(
+        issue,
+        open_prs=[
+            {
+                "number": 902,
+                "title": "Report repair for #126",
+                "head_ref": "issue-126-report-repair",
+            }
+        ],
+        available_labels={"state:ready", "state:running", "state:review", "decision-required"},
+    )
+
+    assert {mutation["value"] for mutation in classification.mutations} == {
+        "state:ready",
+        "state:review",
+        "decision-required",
+    }
+    assert not any(mutation["value"] == "state:running" for mutation in classification.mutations)
+
+
+def test_future_terminal_review_rule_is_not_current_status_evidence() -> None:
+    """Acceptance prose about a future terminal run cannot suppress dispatch."""
+    classification = classify_issue(
+        _issue(
+            127,
+            labels=["state:ready"],
+            body=(
+                "If the campaign reaches a terminal state, review the report before "
+                "interpreting it."
+            ),
+        ),
+        available_labels={"state:ready", "state:review", "decision-required"},
+    )
+
+    assert classification.terminal_review_evidence == ()
+    assert classification.mutations == ()
+
+
 def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None:
     """Composable state qualifiers survive cleanup of mutually exclusive states."""
     classification = classify_issue(

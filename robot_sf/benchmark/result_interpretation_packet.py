@@ -177,6 +177,14 @@ class PopulationAttrition:
 
 
 @dataclass(frozen=True, slots=True)
+class RejectedRow:
+    """One explicitly identified row rejected before interpretation."""
+
+    row_id: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class Population:
     """Population accounting for the interpretation."""
 
@@ -184,6 +192,7 @@ class Population:
     included: int
     excluded: int
     attrition: PopulationAttrition
+    rejected_rows: list[RejectedRow] = field(default_factory=list)
     exclusion_reasons: list[str] = field(default_factory=list)
 
 
@@ -454,6 +463,22 @@ def _validate_population(p: Population, errors: list[str]) -> None:
     )
     if mode_sum != p.excluded:
         errors.append(f"attrition sum ({mode_sum}) != excluded ({p.excluded})")
+    if len(p.rejected_rows) != a.rejected:
+        errors.append(
+            f"rejected-row ledger length ({len(p.rejected_rows)}) != "
+            f"attrition.rejected ({a.rejected})"
+        )
+    rejected_ids = [row.row_id for row in p.rejected_rows]
+    if len(rejected_ids) != len(set(rejected_ids)):
+        errors.append("rejected-row ledger contains duplicate row_id values")
+    undeclared_reasons = {
+        row.reason for row in p.rejected_rows if row.reason not in p.exclusion_reasons
+    }
+    if undeclared_reasons:
+        errors.append(
+            "rejected-row ledger reasons must be declared in population.exclusion_reasons: "
+            f"{sorted(undeclared_reasons)}"
+        )
 
 
 def _validate_evidence(evidence: Evidence, errors: list[str]) -> None:
@@ -713,15 +738,6 @@ def _validate_supported_contrast(
             "decision-level contrast_result"
         )
         return None
-    _validate_contrast_result(decision.decision_id, contrast, errors)
-    if decision.comparator != contrast.comparator:
-        errors.append(
-            f"decision {decision.decision_id!r}: comparator must match contrast_result.comparator"
-        )
-    if decision.effect != contrast.effect:
-        errors.append(
-            f"decision {decision.decision_id!r}: effect must match contrast_result.effect"
-        )
     if not contrast.uncertainty.declared or not any(
         value is not None
         for value in (
@@ -740,6 +756,26 @@ def _validate_supported_contrast(
             f"decision {decision.decision_id!r}: contrast_result requires declared multiplicity"
         )
     return contrast
+
+
+def _validate_supplied_contrast(
+    decision: DecisionEntry,
+    errors: list[str],
+) -> None:
+    """Validate any supplied contrast, regardless of the decision outcome."""
+
+    contrast = decision.contrast_result
+    if contrast is None:
+        return
+    _validate_contrast_result(decision.decision_id, contrast, errors)
+    if decision.comparator != contrast.comparator:
+        errors.append(
+            f"decision {decision.decision_id!r}: comparator must match contrast_result.comparator"
+        )
+    if decision.effect != contrast.effect:
+        errors.append(
+            f"decision {decision.decision_id!r}: effect must match contrast_result.effect"
+        )
 
 
 def _validate_contrast_result(
@@ -792,6 +828,7 @@ def _validate_decision(
         return
     if d.effect is not None and not math.isfinite(d.effect):
         errors.append(f"decision {d.decision_id!r}: effect must be finite")
+    _validate_supplied_contrast(d, errors)
     _validate_claim_escalation(f"decision {d.decision_id} rationale", d.rationale, errors)
     if d.outcome == "supported":
         _validate_supported_decision(d, metric, execution_mode, errors)
@@ -825,13 +862,19 @@ def _validate_claim_escalation(label: str, text: str, errors: list[str]) -> None
         errors.append(f"{label}: forbidden positive claim phrase(s): {sorted(matches)}")
 
 
-def _validate_caption_assertions(  # noqa: C901
+def _validate_caption_assertions(  # noqa: C901, PLR0912
     captions: list[CaptionAssertion],
     packet: ResultInterpretationPacket,
     errors: list[str],
 ) -> None:
     figure_ids = {fl.figure_id for fl in packet.figure_links}
     figures_by_id = {fl.figure_id: fl for fl in packet.figure_links}
+    asserted_figure_ids = {caption.figure_id for caption in captions}
+    for figure in packet.figure_links:
+        if figure.caption_file is not None and figure.figure_id not in asserted_figure_ids:
+            errors.append(
+                f"figure {figure.figure_id!r}: caption_file requires a controlled caption assertion"
+            )
     for ca in captions:
         if ca.figure_id not in figure_ids:
             errors.append(f"caption assertion for {ca.figure_id!r} references an undeclared figure")
@@ -979,6 +1022,30 @@ def _caption_field_ref_exists(field_ref: str, packet: ResultInterpretationPacket
         "source": {source.source_id for source in packet.sources},
     }
     return parts[1] in identifiers[parts[0]]
+
+
+def _validate_caption_content_bindings(
+    packet: ResultInterpretationPacket,
+    errors: list[str],
+) -> None:
+    """Bind every declared caption file to the packet's controlled renderer."""
+
+    expected = render_caption(packet)
+    for figure in packet.figure_links:
+        if figure.caption_file is None:
+            continue
+        path = _REPO_ROOT / figure.caption_file.path
+        if not path.is_file():
+            continue
+        try:
+            actual = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if actual != expected:
+            errors.append(
+                f"figure {figure.figure_id!r}: caption_file content must equal "
+                "render_caption(packet)"
+            )
 
 
 def _validate_figure_links(
@@ -1471,6 +1538,7 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
 
     _validate_caption_assertions(packet.caption_assertions, packet, errors)
     _validate_figure_links(packet.figure_links, packet.estimand.estimand_id, errors)
+    _validate_caption_content_bindings(packet, errors)
     _validate_source_refs(packet.sources, errors)
 
     _check_id_uniqueness(packet.metrics, "metric_id", "metric", errors)
@@ -1572,6 +1640,9 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         included=pop["included"],
         excluded=pop["excluded"],
         attrition=attrition,
+        rejected_rows=[
+            RejectedRow(row_id=row["row_id"], reason=row["reason"]) for row in pop["rejected_rows"]
+        ],
         exclusion_reasons=pop.get("exclusion_reasons", []),
     )
     em = d["execution_mode"]

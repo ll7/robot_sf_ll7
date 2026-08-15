@@ -262,7 +262,7 @@
     "population": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["total", "included", "excluded", "attrition"],
+      "required": ["total", "included", "excluded", "attrition", "rejected_rows"],
       "properties": {
         "total": {
           "type": "integer",
@@ -316,6 +316,24 @@
             "rejected": {
               "type": "integer",
               "minimum": 0
+            }
+          }
+        },
+        "rejected_rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["row_id", "reason"],
+            "properties": {
+              "row_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         },

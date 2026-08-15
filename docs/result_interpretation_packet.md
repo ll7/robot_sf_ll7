@@ -66,6 +66,7 @@ The validator rejects at minimum:
 - Source/packet/figure/caption/review digest drift after review.
 - Caption assertion text/status mismatch or `inferred` status.
 - Caption assertions without controlled `bound_to_packet_fields` references.
+- Caption-file bytes that differ from the deterministic `render_caption(packet)` output.
 - Forbidden claim escalation via decision outcome.
 - Duplicate IDs across metrics, decisions, figures, and sources.
 - Supported decisions without a decision-level `contrast_result` binding their
@@ -76,6 +77,7 @@ The validator rejects at minimum:
 - Supported outcomes without a directed comparator, finite effect, declared
   support threshold, or complete native/adapter-only execution population.
 - Population accounting errors (`included + excluded != total`).
+- Missing, duplicate, or under-counted rejected-row ledger entries.
 - Empty claim boundary lists.
 
 Evidence tiers are controlled (`smoke_diagnostic`, `visualization_fixture`,
@@ -87,9 +89,10 @@ serve as its own reviewer.
 Caption assertions carry a controlled template ID. Available figure links must
 also carry a checksum-bound `artifact_catalog` reference; the validator loads
 the existing catalog, checks the catalog commit, output identity, caption
-identity, and PNG/PDF/SVG signature. An unavailable figure remains explicit and
-does not require rendered bytes. This packet contract does not replace or
-re-register the repository's artifact catalog.
+identity, PNG/PDF/SVG signature, and exact caption bytes against the packet's
+controlled renderer. An unavailable figure remains explicit and does not require
+rendered bytes. This packet contract does not replace or re-register the
+repository's artifact catalog.
 
 Source references are repository-relative durable files.  Each source must carry
 its SHA-256 digest, generation commit, tracked commit, and generation command.
@@ -118,8 +121,10 @@ value, at least one observed interval or p-value, and no fallback/degraded rows.
 Each supported pairwise decision must carry its own structured `contrast_result`
 with comparator-matched effect, support accounting, null value, uncertainty, and
 multiplicity; shared metric summaries cannot substitute for decision-specific
-statistics. Population attrition records both `invalid` and `rejected` rows
-explicitly.
+statistics. Any supplied `contrast_result` is validated even when the outcome is
+`not_supported`, `inconclusive`, `invalid`, or `unavailable`. Population attrition
+records both `invalid` and `rejected` rows explicitly, and every rejected row must
+have a unique `row_id` and declared reason in the complete `rejected_rows` ledger.
 Checksum manifests include generated outputs plus every source and available
 rendered-figure/caption file referenced by the packet.
 
@@ -135,7 +140,12 @@ Three compact, deterministic fixtures reference tracked repository evidence:
 
 Fixtures bind source paths and SHA-256 digests, contain structured caption
 assertions generated from packet fields, and represent figure availability
-explicitly without inventing rendered results.
+explicitly without inventing rendered results. The #6474 fixture takes each
+pairwise support, denominator, and raw p-value directly from its checksum-bound
+report (`n_paired=180` per comfort-exposure contrast). Artifact-catalog test
+entries use `source_kind: fixture_construction` and a `fixture-construction:`
+provenance marker so committed literal fixture bytes are not misrepresented as
+outputs of the catalog validator.
 
 ## Usage
 

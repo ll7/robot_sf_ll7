@@ -22,6 +22,7 @@ from robot_sf.benchmark.result_interpretation_packet import (
     compute_post_review_digest,
     load_result_interpretation_packet,
     load_schema,
+    render_caption,
     validate_packet,
     validate_schema_is_valid,
     write_deterministic_json,
@@ -159,6 +160,28 @@ class TestFixturesValid:
         for metric in packet_dict["metrics"]:
             assert metric["source_ids"]
             assert set(metric["source_ids"]).issubset(source_ids)
+
+    def test_issue_6474_pairwise_results_match_checksum_bound_report(self) -> None:
+        report_ref = next(
+            source for source in _VALID_6474["sources"] if source["source_id"] == "report_summary"
+        )
+        report_path = Path(__file__).resolve().parents[2] / report_ref["path"]
+        assert hashlib.sha256(report_path.read_bytes()).hexdigest() == report_ref["sha256"]
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report_by_pair = {
+            (row["reference_planner"], row["comparison_planner"]): row
+            for row in report["decisions"]
+            if row["metric_id"] == "comfort_exposure_person_s"
+        }
+
+        assert len(report_by_pair) == len(_VALID_6474["decisions"]) == 3
+        for decision in _VALID_6474["decisions"]:
+            contrast = decision["contrast_result"]
+            comparator = contrast["comparator"]
+            source_row = report_by_pair[(comparator["reference"], comparator["comparison"])]
+            assert contrast["support"] == source_row["n_paired"] == 180
+            assert contrast["denominator"] == source_row["n_paired"]
+            assert contrast["uncertainty"]["p_value_raw"] == source_row["raw_p_value"]
 
     @pytest.mark.parametrize(
         "fixture_name",
@@ -625,6 +648,42 @@ class TestFailClosedPopulation:
         errors = validate_packet(payload)
         assert any("attrition sum" in e for e in errors)
 
+    def test_rejected_rows_require_complete_ledger(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["population"]["total"] = 541
+        payload["population"]["excluded"] = 1
+        payload["population"]["attrition"]["rejected"] = 1
+
+        errors = validate_packet(payload)
+
+        assert any("rejected-row ledger length" in e for e in errors)
+
+    def test_rejected_row_ids_must_be_unique(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["population"]["total"] = 542
+        payload["population"]["excluded"] = 2
+        payload["population"]["attrition"]["rejected"] = 2
+        payload["population"]["exclusion_reasons"] = ["malformed_row"]
+        payload["population"]["rejected_rows"] = [
+            {"row_id": "row-1", "reason": "malformed_row"},
+            {"row_id": "row-1", "reason": "malformed_row"},
+        ]
+
+        errors = validate_packet(payload)
+
+        assert any("duplicate row_id" in e for e in errors)
+
+    def test_rejected_row_reason_must_be_declared(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["population"]["total"] = 541
+        payload["population"]["excluded"] = 1
+        payload["population"]["attrition"]["rejected"] = 1
+        payload["population"]["rejected_rows"] = [{"row_id": "row-1", "reason": "malformed_row"}]
+
+        errors = validate_packet(payload)
+
+        assert any("reasons must be declared" in e for e in errors)
+
 
 # ---------------------------------------------------------------------------
 # Fail-closed: claim boundary
@@ -677,6 +736,19 @@ class TestFailClosedCaptionBinding:
         )
         errors = validate_packet(payload)
         assert any("generated observed_visualization.v1" in e for e in errors)
+
+    def test_caption_file_bytes_must_match_rendered_packet_caption(self) -> None:
+        payload = _available_ch7_payload()
+        packet = build_and_validate_packet(payload)
+        caption_path = (
+            Path(__file__).resolve().parents[2] / payload["figure_links"][0]["caption_file"]["path"]
+        )
+
+        assert caption_path.read_text(encoding="utf-8") == render_caption(packet)
+
+        payload["question"]["text"] = "A different question with unchanged caption bytes?"
+        errors = validate_packet(payload)
+        assert any("caption_file content must equal render_caption(packet)" in e for e in errors)
 
 
 class TestFailClosedAdmission:
@@ -765,6 +837,17 @@ class TestFailClosedForbiddenClaimEscalation:
         payload["decisions"][0]["rationale"] = "This proves a causal effect."
         errors = validate_packet(payload)
         assert any("decision" in e and "causal effect" in e for e in errors)
+
+    def test_non_supported_supplied_contrast_must_remain_consistent(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        decision = payload["decisions"][0]
+        decision["outcome"] = "not_supported"
+        decision["refusal_reason"] = "Threshold was not reached."
+        decision["effect"] = 999999.0
+
+        errors = validate_packet(payload)
+
+        assert any("effect must match contrast_result.effect" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

@@ -67,6 +67,7 @@
       "invalid": 0,
       "rejected": 0
     },
+    "rejected_rows": [],
     "exclusion_reasons": []
   },
   "execution_mode": {
@@ -96,10 +97,10 @@
       ],
       "unit": "person-seconds",
       "desirability": "lower_is_better",
-      "support": 540,
-      "denominator": 540,
+      "support": 180,
+      "denominator": 180,
       "missingness": "complete",
-      "support_threshold": 540,
+      "support_threshold": 180,
       "unavailable_handling": "fail_closed",
       "effect": -1.24056,
       "uncertainty": {
@@ -107,7 +108,7 @@
         "method": "percentile_bootstrap_95_ci",
         "ci_low": -1.93667,
         "ci_high": -0.471569,
-        "p_value_raw": 0.001999,
+        "p_value_raw": 0.001999000499750125,
         "p_value_adjusted": 0.025987
       },
       "null_value": 0.0,
@@ -137,16 +138,16 @@
           "direction": "comparison_minus_reference"
         },
         "effect": -1.24056,
-        "support": 540,
-        "denominator": 540,
-        "support_threshold": 540,
+        "support": 180,
+        "denominator": 180,
+        "support_threshold": 180,
         "null_value": 0.0,
         "uncertainty": {
           "declared": true,
           "method": "percentile_bootstrap_95_ci",
           "ci_low": -1.93667,
           "ci_high": -0.471569,
-          "p_value_raw": 0.001999,
+          "p_value_raw": 0.001999000499750125,
           "p_value_adjusted": 0.025987
         },
         "multiplicity": {
@@ -175,16 +176,16 @@
           "direction": "comparison_minus_reference"
         },
         "effect": 2.76778,
-        "support": 540,
-        "denominator": 540,
-        "support_threshold": 540,
+        "support": 180,
+        "denominator": 180,
+        "support_threshold": 180,
         "null_value": 0.0,
         "uncertainty": {
           "declared": true,
           "method": "percentile_bootstrap_95_ci",
           "ci_low": 1.83771,
           "ci_high": 3.69947,
-          "p_value_raw": 0.001999,
+          "p_value_raw": 0.0004997501249375312,
           "p_value_adjusted": 0.007496
         },
         "multiplicity": {
@@ -213,16 +214,16 @@
           "direction": "comparison_minus_reference"
         },
         "effect": 4.00833,
-        "support": 540,
-        "denominator": 540,
-        "support_threshold": 540,
+        "support": 180,
+        "denominator": 180,
+        "support_threshold": 180,
         "null_value": 0.0,
         "uncertainty": {
           "declared": true,
           "method": "percentile_bootstrap_95_ci",
           "ci_low": 2.87981,
           "ci_high": 5.12642,
-          "p_value_raw": 0.001999,
+          "p_value_raw": 0.0004997501249375312,
           "p_value_adjusted": 0.007496
         },
         "multiplicity": {

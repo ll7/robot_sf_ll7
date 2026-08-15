@@ -57,6 +57,7 @@
       "invalid": 0,
       "rejected": 0
     },
+    "rejected_rows": [],
     "exclusion_reasons": []
   },
   "execution_mode": {

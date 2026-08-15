@@ -978,6 +978,7 @@ def _portfolio_classification(
         return "blocked_external_asset", "external asset, data, license, or staging input required"
     if (
         "blocked" in label_set
+        or any(label.startswith(BLOCKED_LABEL_PREFIX) for label in label_set)
         or "decision-required" in label_set
         or "state:blocked" in label_set
         or "state:hold" in label_set

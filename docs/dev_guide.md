@@ -446,7 +446,8 @@ The gate records the exact before/after SHAs, any newly opened covering PR, and 
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
 same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions and other repositories
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
-deletes local worktrees.
+deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
+the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
 state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used
@@ -857,6 +858,15 @@ The default is report-only. The tier-1 issue-graph evaluator resolves all
 referenced issues and pull requests in one GraphQL request, and classifies
 path, external, in-repository, malformed, or otherwise unsupported conditions
 as `unevaluatable`. API failures are errors, never clean/not-fired results.
+
+The shared issue-audit writer applies an additional fail-closed guard before
+adding `state:blocked` or `state:blocked-external-input`: the complete issue
+thread must already contain a `blocked-triage-v1` reason block or a
+`Blocked-by: #<number>` reference. A prose-only blocker is reported but does not
+receive a dispatch-suppressing label; the writer adds `needs-triage` when that
+existing label is available. The audit plan's `blocked_label_report` records
+the evidence and the applied or declined decision, and the REST apply path
+rejects a blocked-label mutation missing its reason evidence.
 
 After reviewing the report, an explicitly authorized routing pass may add only
 `needs-triage` to fired issues:

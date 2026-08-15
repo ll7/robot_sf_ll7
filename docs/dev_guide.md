@@ -446,7 +446,8 @@ The gate records the exact before/after SHAs, any newly opened covering PR, and 
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
 same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions and other repositories
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
-deletes local worktrees.
+deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
+the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
 state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used

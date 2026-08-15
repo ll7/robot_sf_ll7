@@ -713,14 +713,14 @@ OUTPUT.write_text("{}", encoding="utf-8")
 
 
 def test_cli_inventory_json_smoke_current_checkout() -> None:
-    """Inventory CLI emits deterministic JSON for the current tracked checkout."""
+    """Inventory CLI emits deterministic JSON from a nested checkout directory."""
     repo_root = Path(__file__).resolve().parents[2]
     script = repo_root / "scripts" / "ci" / "check_evidence_writer_usage.py"
 
     result = subprocess.run(
         [sys.executable, str(script), "--inventory", "--json"],
         check=True,
-        cwd=repo_root,
+        cwd=repo_root / "robot_sf",
         capture_output=True,
         text=True,
     )

@@ -628,7 +628,7 @@ def inventory_tracked_files() -> tuple[list[EvidenceWriterInventoryFinding], int
     """Scan tracked non-benchmark Python files for raw evidence-writer bypasses."""
     repo_root = _repo_root()
     result = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.py"],
+        ["git", "-C", str(repo_root), "ls-files", "-z", "--full-name", "--", "*.py"],
         check=True,
         capture_output=True,
     )

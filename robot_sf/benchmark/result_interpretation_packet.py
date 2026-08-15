@@ -245,6 +245,7 @@ class MetricEntry:
     """One metric with support, effect, uncertainty, and multiplicity."""
 
     metric_id: str
+    source_ids: list[str]
     unit: str
     desirability: str
     support: int
@@ -603,6 +604,23 @@ def _validate_metric(m: MetricEntry, errors: list[str]) -> None:
     _validate_metric_vocabulary(m, errors)
     _validate_uncertainty(m.metric_id, m.uncertainty, errors)
     _validate_multiplicity(m.metric_id, m.multiplicity, errors)
+
+
+def _validate_metric_source_bindings(
+    metric: MetricEntry,
+    source_ids: set[str],
+    errors: list[str],
+) -> None:
+    """Require every metric to identify the retained source artifact(s)."""
+
+    if not metric.source_ids:
+        errors.append(f"metric {metric.metric_id!r}: source_ids must not be empty")
+        return
+    unknown = sorted(set(metric.source_ids).difference(source_ids))
+    if unknown:
+        errors.append(
+            f"metric {metric.metric_id!r}: source_ids reference undeclared sources: {unknown}"
+        )
 
 
 def _validate_supported_decision(
@@ -1438,8 +1456,10 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
     _validate_execution_mode(packet.execution_mode, errors)
     _validate_estimator(packet.estimand, errors)
 
+    declared_source_ids = {source.source_id for source in packet.sources}
     for m in packet.metrics:
         _validate_metric(m, errors)
+        _validate_metric_source_bindings(m, declared_source_ids, errors)
 
     metrics_by_id = {m.metric_id: m for m in packet.metrics}
     for d in packet.decisions:
@@ -1604,6 +1624,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         metrics.append(
             MetricEntry(
                 metric_id=m["metric_id"],
+                source_ids=m["source_ids"],
                 unit=m["unit"],
                 desirability=m["desirability"],
                 support=m["support"],

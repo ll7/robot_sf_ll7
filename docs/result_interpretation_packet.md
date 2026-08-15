@@ -103,6 +103,10 @@ required to resolve to durable repository files with matching digests.
 Execution-mode counts must reconcile exactly with the included population.  A reviewed packet
 must bind both `reviewed_packet_digest` and `post_review_digest`; the latter
 includes the reviewer identity and cannot be supplied as an arbitrary hex value.
+Every metric also names one or more declared `source_ids`, so a reviewer can
+start from the metric's retained source or aggregate artifact when reproducing
+its support, denominator, effect, uncertainty, and null values. Unknown or empty
+metric source bindings fail closed.
 Packets also list `fail_closed_changes`, making the retained exclusions and
 claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard

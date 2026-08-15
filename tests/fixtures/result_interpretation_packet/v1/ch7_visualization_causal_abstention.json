@@ -81,6 +81,9 @@
   "metrics": [
     {
       "metric_id": "path_length_m",
+      "source_ids": [
+        "portfolio_fixture"
+      ],
       "unit": "metres",
       "desirability": "lower_is_better",
       "support": 2,

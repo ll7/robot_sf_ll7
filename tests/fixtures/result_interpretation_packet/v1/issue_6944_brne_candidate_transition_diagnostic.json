@@ -66,6 +66,9 @@
   "metrics": [
     {
       "metric_id": "first_to_second_candidate_mean_v_mps",
+      "source_ids": [
+        "transition_summary"
+      ],
       "unit": "m/s",
       "desirability": "not_applicable",
       "support": 3,
@@ -91,6 +94,9 @@
     },
     {
       "metric_id": "first_to_second_weight_mean",
+      "source_ids": [
+        "transition_summary"
+      ],
       "unit": "dimensionless",
       "desirability": "not_applicable",
       "support": 3,

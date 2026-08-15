@@ -153,6 +153,13 @@ class TestFixturesValid:
             assert source["tracked_commit"]
             assert source["command"]
 
+    @pytest.mark.parametrize("packet_dict", [_VALID_6474, _VALID_6944, _VALID_CH7])
+    def test_metrics_bind_to_declared_source_artifacts(self, packet_dict: dict) -> None:
+        source_ids = {source["source_id"] for source in packet_dict["sources"]}
+        for metric in packet_dict["metrics"]:
+            assert metric["source_ids"]
+            assert set(metric["source_ids"]).issubset(source_ids)
+
     @pytest.mark.parametrize(
         "fixture_name",
         [
@@ -709,6 +716,20 @@ class TestFailClosedUndeclaredMetric:
         payload["decisions"][0]["metric_id"] = "nonexistent_metric"
         errors = validate_packet(payload)
         assert any("undeclared metric" in e for e in errors)
+
+
+class TestFailClosedMetricSourceBinding:
+    def test_metric_source_binding_rejects_undeclared_source(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["source_ids"] = ["missing_source"]
+        errors = validate_packet(payload)
+        assert any("source_ids" in e and "undeclared" in e for e in errors)
+
+    def test_metric_source_binding_is_required(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0].pop("source_ids")
+        errors = validate_packet(payload)
+        assert any("source_ids" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

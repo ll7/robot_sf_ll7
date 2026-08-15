@@ -91,6 +91,9 @@
   "metrics": [
     {
       "metric_id": "comfort_exposure_person_s",
+      "source_ids": [
+        "report_summary"
+      ],
       "unit": "person-seconds",
       "desirability": "lower_is_better",
       "support": 540,

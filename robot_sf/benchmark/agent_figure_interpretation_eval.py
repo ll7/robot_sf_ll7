@@ -21,6 +21,15 @@ EVAL_SCHEMA_VERSION = "agent_figure_interpretation_eval.v1"
 MANIFEST_SCHEMA_VERSION = "agent_figure_interpretation_eval_manifest.v1"
 EXPECTED_PACKET_SCHEMA = "result_interpretation_packet.v1"
 EXPECTED_MANIFEST_STATUS = "evaluation_artifacts_only"
+EXPECTED_MANIFEST_CLAIM_BOUNDARY = (
+    "frozen fixture replay only; no external model calls, no benchmark claims, "
+    "no generated evidence promotion"
+)
+EXPECTED_PACKET_CLAIM_BOUNDARY = "fixture replay only; not benchmark evidence"
+EXPECTED_REPORT_CLAIM_BOUNDARY = (
+    "fixture replay only; no external model calls, no benchmark claims, "
+    "and no generated evidence promotion"
+)
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 LOCAL_ONLY_MANIFEST_PARTS = frozenset({".git", ".venv", ".worktrees", "output", "results"})
 DIMENSIONS = (
@@ -157,8 +166,6 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
         raise AgentFigureEvalError("manifest schema_version mismatch")
     if manifest.get("status") != EXPECTED_MANIFEST_STATUS:
         raise AgentFigureEvalError(f"manifest status must be {EXPECTED_MANIFEST_STATUS!r}")
-    if not isinstance(manifest.get("claim_boundary"), str) or not manifest["claim_boundary"]:
-        raise AgentFigureEvalError("manifest claim_boundary must be a non-empty string")
     expected_schema = manifest.get("expected_packet_schema")
     if expected_schema != EXPECTED_PACKET_SCHEMA:
         raise AgentFigureEvalError(
@@ -188,6 +195,10 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
                 expected_schema=expected_schema,
             )
         )
+    if manifest.get("claim_boundary") != EXPECTED_MANIFEST_CLAIM_BOUNDARY:
+        raise AgentFigureEvalError(
+            "manifest claim_boundary must preserve the evaluation-artifacts-only boundary"
+        )
     return packets
 
 
@@ -208,10 +219,7 @@ def evaluate_manifest(manifest_path: Path) -> dict[str, Any]:
     return {
         "schema_version": EVAL_SCHEMA_VERSION,
         "status": "evaluation_artifacts_only",
-        "claim_boundary": (
-            "fixture replay only; no external model calls, no benchmark claims, "
-            "and no generated evidence promotion"
-        ),
+        "claim_boundary": EXPECTED_REPORT_CLAIM_BOUNDARY,
         "case_count": len(case_results),
         "critical_error_counts": critical_counts,
         "cases": case_results,
@@ -230,6 +238,11 @@ def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
     if packet.get("artifact_kind") != "evaluation_artifact":
         raise AgentFigureEvalError("packet artifact_kind must be evaluation_artifact")
     packet_id = _required_text(packet, "packet_id")
+    claim_boundary = _required_text(packet, "claim_boundary")
+    if claim_boundary != EXPECTED_PACKET_CLAIM_BOUNDARY:
+        raise AgentFigureEvalError(
+            "packet claim_boundary must preserve the evaluation-artifacts-only boundary"
+        )
     reference = _required_mapping(packet, "reference")
     observed = _required_mapping(packet, "interpretation")
     scores = _dimension_scores(reference, observed)
@@ -246,7 +259,7 @@ def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
         scores=scores,
         critical_errors=critical_errors,
         aggregate_score=aggregate_score,
-        claim_boundary=_required_text(packet, "claim_boundary"),
+        claim_boundary=claim_boundary,
         interpretation_variant_comparison=variant_comparison,
         reviewer_accounting=reviewer_accounting,
         correction_priority_ranking=correction_ranking,

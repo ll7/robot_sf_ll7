@@ -208,6 +208,26 @@ def test_manifest_status_drift_fails_closed(tmp_path: Path) -> None:
         load_verified_packets(root / "manifest.json")
 
 
+def test_manifest_claim_boundary_drift_fails_closed(tmp_path: Path) -> None:
+    """A manifest cannot relabel fixture replay through its claim boundary."""
+    root = _copy_fixture_tree(tmp_path)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest["claim_boundary"] = "nominal benchmark evidence"
+    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="claim_boundary"):
+        load_verified_packets(root / "manifest.json")
+
+
+def test_packet_claim_boundary_drift_fails_closed() -> None:
+    """A packet cannot relabel its evaluation artifact as benchmark evidence."""
+    packet = _clean_packet()
+    packet["claim_boundary"] = "nominal benchmark evidence"
+
+    with pytest.raises(AgentFigureEvalError, match="claim_boundary"):
+        evaluate_packet(packet)
+
+
 def test_source_identity_drift_fails_closed(tmp_path: Path) -> None:
     """A digest-valid source fixture must still belong to the manifest packet."""
     root = _copy_fixture_tree(tmp_path)

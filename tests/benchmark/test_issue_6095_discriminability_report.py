@@ -13,6 +13,7 @@ from scripts.benchmark.build_issue_6095_discriminability_report import (
     EpisodeRow,
     RegimeData,
     ReportContractError,
+    _checkpoint_receipt,
     _episode_row,
     _provenance_limitation_lines,
     _validate_campaign_receipts,
@@ -125,6 +126,27 @@ def test_provenance_markdown_tracks_staged_receipts() -> None:
     assert "staged" in rendered
     assert "metadata-only" not in rendered
     assert "nominal=not_run, stress=not_run" in rendered
+
+
+def test_checkpoint_receipt_requires_computed_file_hash_source(tmp_path: Path) -> None:
+    """A staged identity receipt without a computed-file hash remains unresolved."""
+    preflight = tmp_path / "preflight"
+    preflight.mkdir()
+    (preflight / "checkpoint_staging.json").write_text(
+        '{"mode":"staged","stage":true,"submit_safe":true,'
+        '"arms":[{"planner_key":"ppo","model_id":"model",'
+        '"checkpoint_sha256":"sha","status":"staged",'
+        '"hash_source":"declared","load_status":"not_run"}]}\n',
+        encoding="utf-8",
+    )
+
+    receipt = _checkpoint_receipt(
+        tmp_path,
+        expected_model_id="model",
+        expected_sha256="sha",
+    )
+
+    assert receipt["status"] == "unresolved"
 
 
 def test_episode_row_rejects_missing_or_unknown_termination_reason(tmp_path: Path) -> None:

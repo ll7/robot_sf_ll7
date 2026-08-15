@@ -313,7 +313,11 @@ def _checkpoint_receipt(
     sha256 = str(arm.get("checkpoint_sha256") or "").strip()
     identity_matches = model_id == expected_model_id and sha256 == expected_sha256
     mode = str(payload.get("mode") or "").strip()
-    staged = bool(payload.get("stage")) and _as_bool(payload.get("submit_safe"))
+    staged = (
+        bool(payload.get("stage"))
+        and _as_bool(payload.get("submit_safe"))
+        and str(arm.get("hash_source") or "").strip() == "computed_file"
+    )
     if not identity_matches:
         status = "identity_mismatch"
     elif staged and str(arm.get("status") or "") == "staged":

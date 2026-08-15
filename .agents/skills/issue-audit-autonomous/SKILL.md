@@ -71,8 +71,11 @@ issue_audit_plan.v1.
 - Add or remove only labels that already exist in the repository.
 - Mirror a complete, valid issue Archetype Metadata block to one existing type
   label when no competing type label exists.
-- Add an existing blocker label when provenance, rights, compute, or required
-  external-input evidence proves the gate.
+- Add an existing blocker label only when provenance, rights, compute, or
+  required external-input evidence proves the gate and the issue body or
+  complete comment inventory records a `blocked-triage-v1` reason block or a
+  `Blocked-by: #<number>` reference. Otherwise, decline the dispatch-suppressing
+  label and route to the existing `needs-triage` label when available.
 - Add state:ready only with concrete acceptance or validation evidence and no
   active or unresolved gate.
 - Close only with a merged issue-linked PR plus the documented completion

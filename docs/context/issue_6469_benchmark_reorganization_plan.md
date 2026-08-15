@@ -88,7 +88,7 @@ serve rather than to an `issue_*` directory, so the namespace stays domain-orien
 | `benchmark/safety/` | `safety_*`, `cbf_safety_*` | 7 | `safety_wrapper_runtime.py`, `cbf_safety_filter_runtime.py` |
 | `benchmark/latency/` | `*latency*` | 5 | `control_action_latency_snqi.py`, `latency_stress.py` |
 | `benchmark/map_runner/` | `map_runner*` | 22 | `map_runner.py`, `map_runner_batch_runner.py` (merge with `map_runner_policies/`) |
-| `benchmark/scenario/` | `scenario_*` (including the #7155 boundary helpers) | 16 | `scenario_contract.py`, `scenario_coverage.py`, `scenario/scenario_failure_cause.py` |
+| `benchmark/scenario/` | `scenario_*` (including the #7155 boundary helpers and #7157 coverage analyzer) | 16 | `scenario_contract.py`, `scenario/scenario_coverage.py`, `scenario/scenario_failure_cause.py` |
 | `benchmark/campaign/` | `campaign_*`, `camera_ready*` | 7 | `campaign_runtime_preflight.py` (relate to `camera_ready/`) |
 | `benchmark/constraint/` | `issue_4142_dpcbf_*` | 3 | `issue_4142_dpcbf_dense_runner.py` |
 
@@ -96,6 +96,11 @@ Modules that do not match a domain prefix (shared runners, preflight/readiness h
 builders, schema loaders, metric layers) stay top-level or move into the existing `metrics/`,
 `schemas/`, or `validation/` packages during the follow-up. The goal is to shrink the flat
 top-level set substantially, not to force every file into a domain.
+
+The scenario cluster is intentionally being decomposed into small import-contract slices. Merged
+PR #7156 moved the failure-cause and staging boundary helpers; child issue #7157 covers the
+config-only `scenario_coverage.py` analyzer and its compatibility boundary. The remaining scenario
+modules remain separate until their ownership and validation surfaces are audited.
 
 ## Migration Contract (for the follow-up, not this issue)
 

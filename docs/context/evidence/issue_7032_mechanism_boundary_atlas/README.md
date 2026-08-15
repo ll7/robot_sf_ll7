@@ -12,9 +12,11 @@ does not infer evidence from issue prose, filenames, plots, or ignored `output/`
 references are either tracked repository files with verified SHA-256 digests or explicit
 `blocked`/`unavailable` placeholders.
 
-Each card keeps the question and hypothesis, code/config identity, mechanism activation evidence,
-observed result, scope and estimand, contradicted versus still-viable hypotheses, and dissertation
-admission status explicit. Result state uses the issue-controlled vocabulary (`supported_positive`,
+Each card keeps the question and hypothesis, structured code/config identity, mechanism activation
+evidence, observed result, scope and estimand, contradicted versus still-viable hypotheses, and
+dissertation admission status explicit. Path identities carry repository-relative SHA-256 records;
+commit identities carry full commit IDs and repository scope; non-file digests must be present in a
+verified source manifest. Result state uses the issue-controlled vocabulary (`supported_positive`,
 `supported_negative`, `not_supported`, `inconclusive`, `invalid_evidence_contract`, or
 `unavailable`) and is validated separately from the mechanism/evidence-boundary dimension. Each
 card also carries one or more exact #7032 `boundary_labels`; labels may be combined when a case

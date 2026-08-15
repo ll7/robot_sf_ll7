@@ -45,7 +45,6 @@ def test_builds_typed_schema_validated_six_card_atlas(tmp_path: Path) -> None:
     assert {
         "supported_negative",
         "inconclusive",
-        "invalid_evidence_contract",
         "unavailable",
     } <= {card.result_state.controlled_state for card in loaded.cards}
     assert all(card.mechanism_boundary.boundary_labels for card in loaded.cards)
@@ -84,6 +83,89 @@ def test_source_linkage_digests_are_verified() -> None:
     assert available_sources
     assert all(source.digest_verified is True for source in available_sources)
     assert all(source.tracked is True for source in available_sources)
+
+
+def test_code_config_identities_are_structured_and_bound() -> None:
+    atlas = build_atlas(INPUT, repo_root=REPO_ROOT)
+
+    identities = [identity for card in atlas.cards for identity in card.code_or_config_identity]
+    assert identities
+    assert {identity.kind for identity in identities} == {"path", "commit", "digest"}
+    assert all(identity.label for identity in identities)
+
+
+def test_code_config_identity_rejects_unstructured_text() -> None:
+    payload = _payload()
+    payload["cards"][0]["code_or_config_identity"][0] = "free-form identity"
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any(
+        issue.path.endswith("/code_or_config_identity/0") and "object" in issue.message
+        for issue in issues
+    )
+
+
+def test_supported_result_requires_available_source() -> None:
+    payload = _payload()
+    card = payload["cards"][0]
+    for source in card["source_refs"]:
+        source.update(status="blocked", unavailable_reason="source withheld for test")
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any(
+        issue.path.endswith("/source_refs")
+        and "requires at least one available source" in issue.message
+        for issue in issues
+    )
+
+
+def test_code_config_identity_rejects_missing_path() -> None:
+    payload = _payload()
+    identity = payload["cards"][0]["code_or_config_identity"][0]
+    identity["path"] = "configs/does-not-exist.yaml"
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT)
+
+    assert any(
+        issue.path.endswith("/path") and "identity path is missing" in issue.message
+        for issue in issues
+    )
+
+
+def test_code_config_identity_rejects_unknown_local_commit() -> None:
+    payload = _payload()
+    identity = payload["cards"][1]["code_or_config_identity"][2]
+    identity["commit"] = "0" * 40
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT)
+
+    assert any(
+        issue.path.endswith("/commit") and "not present in the repository" in issue.message
+        for issue in issues
+    )
+
+
+def test_code_config_identity_rejects_digest_drift() -> None:
+    payload = _payload()
+    identity = payload["cards"][2]["code_or_config_identity"][0]
+    identity["sha256"] = "0" * 64
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT)
+
+    assert any(
+        issue.path.endswith("/sha256") and "identity checksum mismatch" in issue.message
+        for issue in issues
+    )
+
+
+def test_held_out_missing_outcomes_are_inconclusive() -> None:
+    atlas = build_atlas(INPUT, repo_root=REPO_ROOT)
+
+    card = next(card for card in atlas.cards if card.case_id == "held_out_proposal_boundary")
+    assert card.result_state.controlled_state == "inconclusive"
+    assert card.mechanism_boundary.status == "blocked_by_missing_outcomes"
 
 
 def test_digest_mismatch_fails_closed() -> None:

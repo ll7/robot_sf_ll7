@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json",
-  "artifact_sha256": "7f78c6fa547c77dccc3d7150801d54d1ff285f2315085990d3830746874055ef",
+  "artifact_sha256": "fce30ce13bfbb9e5a93c340af1221baf6de4f161ccd478a83deade487b9a44a0",
   "claim_boundary": "diagnostic planning atlas sidecar only; not benchmark, paper, or dissertation evidence admission",
   "dissertation_admission_status": "not_admitted",
   "domain_approval_status": "not_granted",

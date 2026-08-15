@@ -17,9 +17,24 @@
         "smallest_next_proof_or_stop": "Run one frozen-matrix parity intervention at a time, or stop same-scope reruns until such an intervention is defined."
       },
       "code_or_config_identity": [
-        "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",
-        "run implementation commit 8f9438632e794f084db72bb016a14b539bbca648",
-        "upstream BRNE source commit 633a5cdcb39ab27f18b596cb8cb1968644f82391"
+        {
+          "kind": "path",
+          "label": "benchmark configuration",
+          "path": "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",
+          "sha256": "ea23800a353fd5e42662a46c612c216aff35d6208ebbb7fa974aa4aa9889bcc1"
+        },
+        {
+          "commit": "8f9438632e794f084db72bb016a14b539bbca648",
+          "kind": "commit",
+          "label": "run implementation",
+          "repository": "this_repository"
+        },
+        {
+          "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+          "kind": "commit",
+          "label": "upstream BRNE source",
+          "repository": "upstream_brne"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering deferred",
@@ -113,9 +128,30 @@
         "smallest_next_proof_or_stop": "Require a provenance-pinned paired campaign with nonzero completion before any broader policy claim; otherwise stop smoke-only promotion."
       },
       "code_or_config_identity": [
-        "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml",
-        "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml",
-        "implementation commit 28b5e1939; dataset digest aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09"
+        {
+          "kind": "path",
+          "label": "uniform behavior-cloning configuration",
+          "path": "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml",
+          "sha256": "f3ea13574cc6a232dd20a7dbe882d40847a58fdbcd7ee452833b27b9fd419672"
+        },
+        {
+          "kind": "path",
+          "label": "progress-weighted behavior-cloning configuration",
+          "path": "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml",
+          "sha256": "675caa9a547b027b866e7ff297137c578b7ae574a5e3ff7e9779eff384ff5e73"
+        },
+        {
+          "commit": "28b5e1939cd569f40af9db5d471e087a0a9efc7f",
+          "kind": "commit",
+          "label": "implementation",
+          "repository": "this_repository"
+        },
+        {
+          "kind": "digest",
+          "label": "diagnostic dataset",
+          "repository": "worktree-local-output",
+          "sha256": "aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering deferred",
@@ -201,8 +237,18 @@
         "smallest_next_proof_or_stop": "Either add a threshold-calibrated reference configuration with warm-up and inflow controls, or stop using lane formation as a broad emergent-phenomena success example."
       },
       "code_or_config_identity": [
-        "scripts/validation/build_issue_5149_emergent_phenomena_campaign.py",
-        "scripts/validation/run_issue_6962_lane_formation_sensitivity.py"
+        {
+          "kind": "path",
+          "label": "emergent-phenomena campaign builder",
+          "path": "scripts/validation/build_issue_5149_emergent_phenomena_campaign.py",
+          "sha256": "db3a45256f7267a595b2cd4d59996f7cebdb8533bbda90af92d18c05eab27268"
+        },
+        {
+          "kind": "path",
+          "label": "lane-formation sensitivity runner",
+          "path": "scripts/validation/run_issue_6962_lane_formation_sensitivity.py",
+          "sha256": "45bb23b80614e9ee0ee6160f567dd66877f8f9dcbed338f969047beedf6ce3b6"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering deferred",
@@ -305,8 +351,18 @@
         "smallest_next_proof_or_stop": "Add a tracked ORCA projection evidence packet with source paths and SHA-256 digests, then rebuild; otherwise keep this case blocked."
       },
       "code_or_config_identity": [
-        "scripts/validation/check_issue_6942_orca_adapter_preregistration.py",
-        "docs/context/issue_6942_orca_adapter_hedge_preregistration.md"
+        {
+          "kind": "path",
+          "label": "ORCA adapter preregistration checker",
+          "path": "scripts/validation/check_issue_6942_orca_adapter_preregistration.py",
+          "sha256": "738f1b2f4c30d0e8a18ee8b37769916e3b608047793607b22918d33bd7e5bf1a"
+        },
+        {
+          "kind": "path",
+          "label": "ORCA adapter preregistration",
+          "path": "docs/context/issue_6942_orca_adapter_hedge_preregistration.md",
+          "sha256": "6faa54d45c326cebd632cea1a68e9d66fea5a39101e74809c2783d784759d628"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering blocked",
@@ -384,9 +440,24 @@
         "smallest_next_proof_or_stop": "Provide disjoint native independent outcomes with matching bindings and no overlap blockers, or keep the held-out claim blocked."
       },
       "code_or_config_identity": [
-        "docs/context/issue_3275_same_planner_contract.md",
-        "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
-        "docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json"
+        {
+          "kind": "path",
+          "label": "same-planner held-out contract",
+          "path": "docs/context/issue_3275_same_planner_contract.md",
+          "sha256": "f4deb9fb1eda2e609fdb6234498b6af0fc6ba304417d66f6fa1f0064786edcac"
+        },
+        {
+          "kind": "path",
+          "label": "held-out step-three run plan",
+          "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
+          "sha256": "d4fb43f5986c4ad1c142251a9bd1380a0d3173954737885aa3f2740ba22841e7"
+        },
+        {
+          "kind": "path",
+          "label": "rerun closure packet",
+          "path": "docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json",
+          "sha256": "02178686db4736637d54c48c4bccf260bf8d5eb254a01a40e3a2bf5bd57fa626"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering deferred",
@@ -421,9 +492,9 @@
       "observed_result": "The tracked surfaces establish preflight and fail-closed blockers only; no held-out planner outcome or yield effect is admitted.",
       "question_and_hypothesis": "Does held-out proposal selection improve planner outcomes under disjoint native evaluation?",
       "result_state": {
-        "controlled_state": "invalid_evidence_contract",
+        "controlled_state": "inconclusive",
         "evidence_tier": "preflight_only",
-        "state_reason": "The tracked packets prove manifest construction and blockers, but the missing authoritative outcome producer prevents a valid held-out effect interpretation."
+        "state_reason": "Independent outcomes are unavailable and the frozen contract defines this disposition as inconclusive; the missing producer remains a mechanism boundary."
       },
       "scope_boundary": {
         "estimand": "Readiness, leakage, binding, and independent-outcome availability for the held-out proposal test.",
@@ -488,8 +559,18 @@
         "smallest_next_proof_or_stop": "For publication use, add a preregistered hardware/runtime matrix with retained trace artifacts; otherwise keep as a software-fixture diagnostic."
       },
       "code_or_config_identity": [
-        "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
-        "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json"
+        {
+          "kind": "path",
+          "label": "trace-overhead v1 receipt",
+          "path": "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
+          "sha256": "fce625b30f16c056c1d7fdde6568c011046f02c654172a82131074819fb6f309"
+        },
+        {
+          "kind": "path",
+          "label": "trace-overhead v2 stable-run receipt",
+          "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json",
+          "sha256": "6a403daf23cdd7a6dcf135b99ad18175c66583343176bdee33048a78354674ab"
+        }
       ],
       "deferred_or_blocked_outputs": [
         "visual rendering deferred",

@@ -64,7 +64,7 @@
         "code_or_config_identity": {
           "type": "array",
           "minItems": 1,
-          "items": {"type": "string", "minLength": 1}
+          "items": {"$ref": "#/$defs/codeConfigIdentity"}
         },
         "source_refs": {
           "type": "array",
@@ -122,6 +122,40 @@
         {
           "if": {"properties": {"status": {"enum": ["unavailable", "blocked"]}}},
           "then": {"required": ["unavailable_reason"]}
+        }
+      ]
+    },
+    "codeConfigIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label"],
+      "properties": {
+        "kind": {"enum": ["path", "commit", "digest"]},
+        "label": {"type": "string", "minLength": 1},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "not": {"anyOf": [{"pattern": "^/"}, {"pattern": "(^|/)\\.\\.(/|$)"}]}
+        },
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "repository": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {
+          "properties": {"kind": {"const": "path"}},
+          "required": ["path", "sha256"],
+          "not": {"anyOf": [{"required": ["commit"]}, {"required": ["repository"]}]}
+        },
+        {
+          "properties": {"kind": {"const": "commit"}},
+          "required": ["commit", "repository"],
+          "not": {"anyOf": [{"required": ["path"]}, {"required": ["sha256"]}]}
+        },
+        {
+          "properties": {"kind": {"const": "digest"}},
+          "required": ["sha256", "repository"],
+          "not": {"anyOf": [{"required": ["path"]}, {"required": ["commit"]}]}
         }
       ]
     },

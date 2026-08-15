@@ -57,6 +57,10 @@ BOUNDARY_LABELS = frozenset(
     }
 )
 LOCAL_ONLY_ROOTS = frozenset({".git", ".venv", "output", "results"})
+CODE_CONFIG_IDENTITY_KINDS = frozenset({"path", "commit", "digest"})
+SUPPORTED_SOURCE_RESULT_STATES = frozenset(
+    {"supported_positive", "supported_negative", "not_supported"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +82,18 @@ class SourceRef:
     unavailable_reason: str | None = None
     digest_verified: bool | None = None
     tracked: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CodeConfigIdentity:
+    """Structured code, configuration, commit, or dataset identity record."""
+
+    kind: str
+    label: str
+    path: str | None = None
+    commit: str | None = None
+    sha256: str | None = None
+    repository: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +144,7 @@ class MechanismCaseCard:
     title: str
     question_and_hypothesis: str
     linked_issues: list[int]
-    code_or_config_identity: list[str]
+    code_or_config_identity: list[CodeConfigIdentity]
     source_refs: list[SourceRef]
     result_state: ResultState
     mechanism_boundary: MechanismBoundary
@@ -225,7 +241,9 @@ def atlas_from_payload(payload: Mapping[str, Any]) -> MechanismBoundaryAtlas:
                 title=card["title"],
                 question_and_hypothesis=card["question_and_hypothesis"],
                 linked_issues=list(card["linked_issues"]),
-                code_or_config_identity=list(card["code_or_config_identity"]),
+                code_or_config_identity=[
+                    CodeConfigIdentity(**identity) for identity in card["code_or_config_identity"]
+                ],
                 source_refs=[SourceRef(**source) for source in card["source_refs"]],
                 result_state=ResultState(**card["result_state"]),
                 mechanism_boundary=MechanismBoundary(**card["mechanism_boundary"]),
@@ -263,6 +281,7 @@ def validate_atlas_payload(
 
     issues = _schema_issues(payload)
     issues.extend(_semantic_issues(payload))
+    issues.extend(_identity_issues(payload, repo_root=repo_root, verify_sources=verify_sources))
     if verify_sources:
         issues.extend(_source_issues(payload, repo_root=repo_root))
     return issues
@@ -397,6 +416,21 @@ def _semantic_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]: 
                     "result_state and mechanism_boundary must remain separate dimensions",
                 )
             )
+        if (
+            isinstance(result_state, Mapping)
+            and result_state.get("controlled_state") in SUPPORTED_SOURCE_RESULT_STATES
+        ):
+            source_refs = card.get("source_refs")
+            if not isinstance(source_refs, list) or not any(
+                isinstance(source, Mapping) and source.get("status") == "available"
+                for source in source_refs
+            ):
+                issues.append(
+                    AtlasValidationIssue(
+                        f"{prefix}/source_refs",
+                        "supported or not-supported result requires at least one available source",
+                    )
+                )
     if len(cards) < 6:
         issues.append(AtlasValidationIssue("/cards", "atlas requires at least six case cards"))
     return issues
@@ -512,6 +546,167 @@ def _strings_in(value: object) -> list[str]:
             result.extend(_strings_in(nested))
         return result
     return []
+
+
+def _identity_issues(
+    payload: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    verify_sources: bool,
+) -> list[AtlasValidationIssue]:
+    """Validate that code/config identities are bound to inspectable records.
+
+    Returns:
+        Validation issues for unbound or drifted identity records.
+    """
+
+    issues: list[AtlasValidationIssue] = []
+    for card_index, card in enumerate(payload.get("cards", [])):
+        if not isinstance(card, Mapping):
+            continue
+        identities = card.get("code_or_config_identity")
+        if not isinstance(identities, list):
+            continue
+        for identity_index, identity in enumerate(identities):
+            if not isinstance(identity, Mapping):
+                continue
+            prefix = f"/cards/{card_index}/code_or_config_identity/{identity_index}"
+            kind = identity.get("kind")
+            if kind not in CODE_CONFIG_IDENTITY_KINDS:
+                continue
+            if kind == "path":
+                issues.extend(_path_identity_issues(identity, prefix, repo_root))
+            elif kind == "commit":
+                issues.extend(_commit_identity_issues(identity, prefix, repo_root))
+            elif kind == "digest" and verify_sources:
+                issues.extend(_digest_identity_issues(identity, prefix, card, repo_root))
+    return issues
+
+
+def _path_identity_issues(
+    identity: Mapping[str, Any],
+    prefix: str,
+    repo_root: Path,
+) -> list[AtlasValidationIssue]:
+    """Validate a repository path identity and its content digest.
+
+    Returns:
+        Validation issues for the path or digest.
+    """
+
+    path_value = identity.get("path")
+    if not isinstance(path_value, str):
+        return []
+    identity_path = _safe_source_path(repo_root, path_value)
+    if identity_path is None:
+        return [
+            AtlasValidationIssue(
+                f"{prefix}/path",
+                "identity path must be repository-root relative and resolve inside the repository",
+            )
+        ]
+    if not identity_path.is_file():
+        return [
+            AtlasValidationIssue(f"{prefix}/path", "identity path is missing or not a regular file")
+        ]
+
+    issues: list[AtlasValidationIssue] = []
+    if not _is_tracked(repo_root, path_value):
+        issues.append(AtlasValidationIssue(f"{prefix}/path", "identity path is not tracked"))
+    expected_sha = identity.get("sha256")
+    if isinstance(expected_sha, str):
+        actual_sha = sha256_file(identity_path)
+        if actual_sha != expected_sha:
+            issues.append(
+                AtlasValidationIssue(
+                    f"{prefix}/sha256",
+                    f"identity checksum mismatch: expected {expected_sha}, got {actual_sha}",
+                )
+            )
+    return issues
+
+
+def _commit_identity_issues(
+    identity: Mapping[str, Any],
+    prefix: str,
+    repo_root: Path,
+) -> list[AtlasValidationIssue]:
+    """Validate a local commit identity when it claims this repository.
+
+    Returns:
+        Validation issues for an unknown local commit.
+    """
+
+    commit = identity.get("commit")
+    if identity.get("repository") != "this_repository" or not isinstance(commit, str):
+        return []
+    completed = subprocess.run(
+        ["git", "-C", str(repo_root), "cat-file", "-e", f"{commit}^{{commit}}"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if completed.returncode == 0:
+        return []
+    return [
+        AtlasValidationIssue(
+            f"{prefix}/commit",
+            "this_repository commit identity is not present in the repository",
+        )
+    ]
+
+
+def _digest_identity_issues(
+    identity: Mapping[str, Any],
+    prefix: str,
+    card: Mapping[str, Any],
+    repo_root: Path,
+) -> list[AtlasValidationIssue]:
+    """Validate that a non-file digest is recorded by a verified source.
+
+    Returns:
+        Validation issues for an unbound digest.
+    """
+
+    digest = identity.get("sha256")
+    if isinstance(digest, str) and _digest_is_bound_to_source(digest, card, repo_root):
+        return []
+    return [
+        AtlasValidationIssue(
+            f"{prefix}/sha256",
+            "digest identity must occur in a verified available source record",
+        )
+    ]
+
+
+def _digest_is_bound_to_source(
+    digest: str,
+    card: Mapping[str, Any],
+    repo_root: Path,
+) -> bool:
+    """Return whether a digest is recorded by a verified source manifest."""
+
+    for source in card.get("source_refs", []):
+        if not isinstance(source, Mapping) or source.get("status") != "available":
+            continue
+        path_value = source.get("path")
+        source_path = _safe_source_path(repo_root, path_value)
+        expected_sha = source.get("sha256")
+        if (
+            source_path is None
+            or not source_path.is_file()
+            or not isinstance(path_value, str)
+            or not _is_tracked(repo_root, path_value)
+            or not isinstance(expected_sha, str)
+            or sha256_file(source_path) != expected_sha
+        ):
+            continue
+        try:
+            if digest.encode("ascii") in source_path.read_bytes():
+                return True
+        except (OSError, UnicodeEncodeError):
+            continue
+    return False
 
 
 def _source_issues(  # noqa: C901

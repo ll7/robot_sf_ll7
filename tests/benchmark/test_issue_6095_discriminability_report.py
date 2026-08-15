@@ -165,6 +165,37 @@ def test_episode_row_rejects_missing_or_unknown_termination_reason(tmp_path: Pat
         _episode_row(record, planner_key="orca", source=tmp_path / "episodes.jsonl")
 
 
+def test_episode_row_rejects_missing_canonical_outcome_payload(tmp_path: Path) -> None:
+    """Schema-required outcome flags must not be inferred from termination metadata."""
+    record = {
+        "scenario_id": "scenario",
+        "seed": 111,
+        "termination_reason": "success",
+        "metrics": {"near_misses": 0.0},
+    }
+
+    with pytest.raises(ReportContractError, match="canonical outcome payload"):
+        _episode_row(record, planner_key="orca", source=tmp_path / "episodes.jsonl")
+
+
+def test_episode_row_rejects_outcome_metric_contradiction(tmp_path: Path) -> None:
+    """Contradictory collision metrics must not be normalized into a zero collision."""
+    record = {
+        "scenario_id": "scenario",
+        "seed": 111,
+        "termination_reason": "success",
+        "metrics": {"collisions": 1.0, "near_misses": 0.0},
+        "outcome": {
+            "route_complete": True,
+            "collision_event": False,
+            "timeout_event": False,
+        },
+    }
+
+    with pytest.raises(ReportContractError, match="integrity contradiction"):
+        _episode_row(record, planner_key="orca", source=tmp_path / "episodes.jsonl")
+
+
 def test_episode_row_validates_planner_execution_and_observation_contract() -> None:
     """The report must reject rows that do not match the frozen runtime contract."""
     row = _episode(

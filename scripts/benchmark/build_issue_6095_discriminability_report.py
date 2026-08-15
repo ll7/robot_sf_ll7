@@ -24,6 +24,7 @@ from robot_sf.benchmark.utils import (
     episode_collision_value,
     episode_metric_value,
     episode_success_value,
+    validate_episode_success_integrity,
 )
 
 if TYPE_CHECKING:
@@ -227,6 +228,21 @@ def _episode_row(record: dict[str, Any], *, planner_key: str, source: Path) -> E
         seed = int(record["seed"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ReportContractError(f"Missing integer seed for {scenario_id} in {source}") from exc
+
+    outcome = record.get("outcome")
+    required_outcome_fields = ("route_complete", "collision_event", "timeout_event")
+    if not isinstance(outcome, dict) or any(
+        not isinstance(outcome.get(field), bool) for field in required_outcome_fields
+    ):
+        raise ReportContractError(
+            f"Missing or invalid canonical outcome payload for {scenario_id} seed {seed} in {source}"
+        )
+    integrity_violations = validate_episode_success_integrity(record)
+    if integrity_violations:
+        raise ReportContractError(
+            f"Episode integrity contradiction for {scenario_id} seed {seed} in {source}: "
+            + "; ".join(integrity_violations)
+        )
 
     near_misses = episode_metric_value(record, "near_misses")
     if near_misses is None or not math.isfinite(near_misses) or near_misses < 0.0:

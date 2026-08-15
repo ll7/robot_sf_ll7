@@ -1,6 +1,6 @@
-# Shared base for the issue-791 asymmetric-critic promotion short-budget variants.
-# Each variant overrides policy_id, total_timesteps, evaluation.step_schedule,
-# tracking.wandb.job_type, and tracking.wandb.tags.
+# Shared base for issue-791 asymmetric-critic promotion variants.
+# Each variant keeps launch identity explicit and overrides policy_id, num_envs when needed,
+# total_timesteps, evaluation.step_schedule, tracking.wandb.job_type, and tracking.wandb.tags.
 # Launch a variant file, not this base config.
 scenario_config: ../../../scenarios/classic_interactions_francis2023.yaml
 num_envs: 2

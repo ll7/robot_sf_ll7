@@ -1020,7 +1020,9 @@ are excluded from implementation dispatch until compute or private execution aut
 established.
 Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
 including the exact blocker label in its reason, and is excluded from autonomous implementation
-dispatch.
+dispatch. Explicit `state:review` rows are also retained for audit but classify as
+`blocked_label` and remain outside autonomous implementation dispatch until the review gate is
+cleared.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

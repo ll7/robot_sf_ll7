@@ -54,9 +54,12 @@ def test_expand_issue_numbers_treats_two_values_as_range() -> None:
     assert expand_issue_numbers([2665, 2667], expand_range=False) == [2665, 2667]
 
 
-@pytest.mark.parametrize("label", ["blocked:needs-maintainer", "blocked:needs-campaign"])
-def test_explicit_blocker_labels_are_not_claimable(label: str) -> None:
-    """Every explicit blocked namespace label must fence autonomous dispatch."""
+@pytest.mark.parametrize(
+    "label",
+    ["blocked:needs-maintainer", "blocked:needs-campaign", "state:review", "needs-triage"],
+)
+def test_explicit_dispatch_stop_labels_are_not_claimable(label: str) -> None:
+    """Every explicit dispatch-stop label must fence autonomous claim dispatch."""
     classification, reason = _issue_classification(
         assignees=[],
         claim={"ok": True, "claimed": False},
@@ -66,6 +69,54 @@ def test_explicit_blocker_labels_are_not_claimable(label: str) -> None:
 
     assert classification == "blocked_label"
     assert label in reason
+
+
+@pytest.mark.parametrize("dispatch_stop_label", ["state:review", "needs-triage"])
+def test_snapshot_claimable_issues_excludes_dispatch_stop_labels_from_dispatch(
+    dispatch_stop_label: str,
+) -> None:
+    """Claimable snapshots must retain dispatch-stop rows as non-claimable audit entries."""
+    issue_list = [
+        {
+            "number": 2710,
+            "title": f"{dispatch_stop_label} issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2710",
+            "labels": [{"name": dispatch_stop_label}],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2710: _claim_status(2710)}
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=1,
+            )
+
+    row = payload["issues"][0]
+    assert row["classification"] == "blocked_label"
+    assert row["reason"] == (
+        f"explicit dispatch-stop label {dispatch_stop_label}; skip autonomous claim"
+    )
+
+
+@pytest.mark.parametrize("label", ["blocked:needs-maintainer", "blocked:needs-campaign"])
+def test_active_portfolio_explicit_blockers_are_not_executable(label: str) -> None:
+    """Active-portfolio routing must honor the same explicit blocker namespace."""
+    classification, reason = snapshot_issue_batch._portfolio_classification(
+        labels=[label],
+        title="workflow issue",
+        assignees=[],
+        claim=_claim_status(1),
+    )
+
+    assert classification == "needs_human_decision"
+    assert reason == "maintainer decision label blocks autonomous execution"
 
 
 def test_snapshot_issues_emits_compact_fields() -> None:

@@ -1017,10 +1017,12 @@ that classifies executable, human-decision, blocked-external, diagnostic-only, s
 paper-critical rows with owner types and label-change recommendations.
 Issues carrying `routing:needs-compute` remain visible for audit but classify as `needs_compute` and
 are excluded from implementation dispatch until compute or private execution authorization is
-established.
+established. Issues carrying `needs-triage` likewise remain visible for audit but are excluded
+from autonomous implementation dispatch until human routing review clears the label.
 Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
 including the exact blocker label in its reason, and is excluded from autonomous implementation
-dispatch.
+dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
+and remain outside autonomous implementation dispatch until the review gate is cleared.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

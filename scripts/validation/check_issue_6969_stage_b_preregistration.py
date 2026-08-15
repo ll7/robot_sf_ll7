@@ -136,6 +136,35 @@ def _require(condition: bool, message: str) -> None:
         raise StageBPreregistrationError(message)
 
 
+def _strict_equal(actual: Any, expected: Any) -> bool:
+    """Compare YAML values without allowing Python's bool/int equality aliasing."""
+
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, Mapping):
+        return set(actual) == set(expected) and all(
+            _strict_equal(actual[key], expected[key]) for key in expected
+        )
+    if isinstance(expected, (list, tuple)):
+        return len(actual) == len(expected) and all(
+            _strict_equal(actual_item, expected_item)
+            for actual_item, expected_item in zip(actual, expected, strict=True)
+        )
+    return actual == expected
+
+
+def _strict_string_members_match(actual: Any, expected: tuple[str, ...]) -> bool:
+    """Require the exact string members of a semantic list, independent of order."""
+
+    return (
+        isinstance(actual, list)
+        and all(type(item) is str for item in actual)
+        and len(actual) == len(expected)
+        and len(set(actual)) == len(actual)
+        and set(actual) == set(expected)
+    )
+
+
 def _mapping(value: Any, path: str) -> Mapping[str, Any]:
     _require(isinstance(value, Mapping), f"{path} must be a mapping")
     return value
@@ -270,20 +299,20 @@ def validate_preregistration_config(
         packet.get("required_fields"), "result_packet_skeleton.required_fields"
     )
     _require(
-        required_packet_fields == list(EXPECTED_RESULT_PACKET_FIELDS),
+        _strict_string_members_match(required_packet_fields, EXPECTED_RESULT_PACKET_FIELDS),
         "result_packet_skeleton.required_fields drifted",
     )
     forbidden_packet_fields = _list(
         packet.get("forbidden_until_reviewed"), "result_packet_skeleton.forbidden_until_reviewed"
     )
     _require(
-        forbidden_packet_fields == list(EXPECTED_FORBIDDEN_RESULT_FIELDS),
+        _strict_string_members_match(forbidden_packet_fields, EXPECTED_FORBIDDEN_RESULT_FIELDS),
         "result_packet_skeleton.forbidden_until_reviewed drifted",
     )
 
     stop_rules = _list(config.get("stop_rules"), "stop_rules")
     _require(len(stop_rules) >= 5, "stop_rules must retain the full fail-closed stop contract")
-    _require(stop_rules == list(EXPECTED_STOP_RULES), "stop_rules drifted")
+    _require(_strict_string_members_match(stop_rules, EXPECTED_STOP_RULES), "stop_rules drifted")
 
     readiness = _mapping(config.get("readiness_decision"), "readiness_decision")
     _require(
@@ -706,7 +735,7 @@ def _validate_held_out_plan(config: Mapping[str, Any]) -> None:
     persistence = _mapping(held_out.get("persistence_rule"), "held_out_plan.persistence_rule")
     for key, expected in EXPECTED_PERSISTENCE_RULE.items():
         _require(
-            persistence.get(key) == expected,
+            _strict_equal(persistence.get(key), expected),
             f"held_out_plan.persistence_rule.{key} drifted",
         )
 
@@ -740,7 +769,7 @@ def _validate_fidelity_surfaces(config: Mapping[str, Any]) -> None:
         entry = _mapping(by_id[surface_id], f"fidelity_cost_surfaces.{surface_id}")
         for key, expected in EXPECTED_FIDELITY_SURFACE_FIELDS[surface_id].items():
             _require(
-                entry.get(key) == expected,
+                _strict_equal(entry.get(key), expected),
                 f"fidelity surface {surface_id}.{key} drifted",
             )
     _require(

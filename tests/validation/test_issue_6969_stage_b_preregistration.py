@@ -298,14 +298,43 @@ def test_duplicate_fidelity_surface_id_fails_closed() -> None:
         validate_preregistration_config(packet, config_path=PACKET)
 
 
+def test_semantic_list_order_remains_v1_compatible() -> None:
+    """Reordering equivalent semantic lists must not invalidate the v1 contract."""
+    packet = copy.deepcopy(_packet())
+    packet["result_packet_skeleton"]["required_fields"].reverse()  # type: ignore[index]
+    packet["result_packet_skeleton"]["forbidden_until_reviewed"].reverse()  # type: ignore[index]
+    packet["stop_rules"].reverse()  # type: ignore[index]
+
+    assert validate_preregistration_config(packet, config_path=PACKET)["status"] == "ok"
+
+
 @pytest.mark.parametrize(
     ("mutate", "match"),
     [
         (
             lambda packet: packet["held_out_plan"]["persistence_rule"].__setitem__(
+                "steady_state_window", "a different observation window"
+            ),
+            "persistence_rule.steady_state_window",
+        ),
+        (
+            lambda packet: packet["held_out_plan"]["persistence_rule"].__setitem__(
                 "per_seed_clear_condition", "lane_segregation_index >= 0.4 for one step"
             ),
             "persistence_rule.per_seed_clear_condition",
+        ),
+        (
+            lambda packet: packet["held_out_plan"]["persistence_rule"].__setitem__(
+                "confirmation_rule",
+                "at least 7 of 10 held-out seeds satisfy per_seed_clear_condition",
+            ),
+            "persistence_rule.confirmation_rule",
+        ),
+        (
+            lambda packet: packet["held_out_plan"]["persistence_rule"].__setitem__(
+                "report_all_seed_values", 1
+            ),
+            "persistence_rule.report_all_seed_values",
         ),
         (
             lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][0].__setitem__(
@@ -320,14 +349,42 @@ def test_duplicate_fidelity_surface_id_fails_closed() -> None:
             "fidelity surface exit_arching.direction",
         ),
         (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][0].__setitem__(
+                "unit", [False, 1.0]
+            ),
+            "fidelity surface lane_formation.unit",
+        ),
+        (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][0].__setitem__(
+                "role", "wrong_role"
+            ),
+            "fidelity surface lane_formation.role",
+        ),
+        (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][0].__setitem__(
+                "source_contract", "wrong_source"
+            ),
+            "fidelity surface lane_formation.source_contract",
+        ),
+        (
             lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][2].__setitem__(
                 "scenario_source", "unreviewed_source"
             ),
             "fidelity surface doorway_oscillation.scenario_source",
         ),
         (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][5].__setitem__(
+                "metric", ["completion_rate", 1]
+            ),
+            "fidelity surface planner_facing_interaction.metric",
+        ),
+        (
             lambda packet: packet["result_packet_skeleton"]["required_fields"].pop(),
             "result_packet_skeleton.required_fields drifted",
+        ),
+        (
+            lambda packet: packet["result_packet_skeleton"]["forbidden_until_reviewed"].pop(),
+            "result_packet_skeleton.forbidden_until_reviewed drifted",
         ),
         (
             lambda packet: packet["stop_rules"].pop(),

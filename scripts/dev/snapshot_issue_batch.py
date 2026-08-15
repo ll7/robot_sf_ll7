@@ -49,8 +49,10 @@ UNCLAIMABLE_LABELS = {
     "decision-required",
     "duplicate",
     "invalid",
+    "needs-triage",
     "state:blocked",
     "state:hold",
+    "state:review",
     "state:running",
     "wontfix",
 }
@@ -482,8 +484,13 @@ def _issue_classification(
             "blocked_label",
             f"explicit blocker label {blocker_label}; skip autonomous claim",
         )
-    if any(label in UNCLAIMABLE_LABELS for label in labels):
-        return "blocked_label", "label suggests skip in autonomous claim mode"
+    if dispatch_stop_label := next(
+        (label for label in labels if label in UNCLAIMABLE_LABELS), None
+    ):
+        return (
+            "blocked_label",
+            f"explicit dispatch-stop label {dispatch_stop_label}; skip autonomous claim",
+        )
     if claim.get("ok") is False:
         return "claim_unknown", "unable to read claim state"
     if claim.get("claimed"):

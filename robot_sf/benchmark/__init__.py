@@ -112,7 +112,7 @@ if TYPE_CHECKING:  # pragma: no cover - static type information only
         MetricLayerDefinition,
         build_metric_layer_summary,
     )
-    from robot_sf.benchmark.scenario_failure_cause import (
+    from robot_sf.benchmark.scenario.scenario_failure_cause import (
         SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION,
         VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
         VERDICT_INDETERMINATE,
@@ -213,17 +213,17 @@ _LAZY: dict[str, str] = {
     "MetricLayerDefinition": "metric_layers",
     "build_metric_layer_summary": "metric_layers",
     # scenario_failure_cause
-    "SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION": "scenario_failure_cause",
-    "VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK": "scenario_failure_cause",
-    "VERDICT_INDETERMINATE": "scenario_failure_cause",
-    "VERDICT_INFEASIBLE_ROUTE": "scenario_failure_cause",
-    "VERDICT_PLANNER_LIMITED": "scenario_failure_cause",
-    "VERDICT_TIME_LIMITED": "scenario_failure_cause",
-    "VERDICT_VEHICLE_INFEASIBLE": "scenario_failure_cause",
-    "ScenarioFailureCause": "scenario_failure_cause",
-    "ScenarioFailureDiagnostics": "scenario_failure_cause",
-    "classify_scenario_failure_cause": "scenario_failure_cause",
-    "diagnostics_from_mapping": "scenario_failure_cause",
+    "SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION": "scenario.scenario_failure_cause",
+    "VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK": "scenario.scenario_failure_cause",
+    "VERDICT_INDETERMINATE": "scenario.scenario_failure_cause",
+    "VERDICT_INFEASIBLE_ROUTE": "scenario.scenario_failure_cause",
+    "VERDICT_PLANNER_LIMITED": "scenario.scenario_failure_cause",
+    "VERDICT_TIME_LIMITED": "scenario.scenario_failure_cause",
+    "VERDICT_VEHICLE_INFEASIBLE": "scenario.scenario_failure_cause",
+    "ScenarioFailureCause": "scenario.scenario_failure_cause",
+    "ScenarioFailureDiagnostics": "scenario.scenario_failure_cause",
+    "classify_scenario_failure_cause": "scenario.scenario_failure_cause",
+    "diagnostics_from_mapping": "scenario.scenario_failure_cause",
 }
 
 __all__ = [

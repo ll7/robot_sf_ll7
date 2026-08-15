@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.scenario_failure_cause import (
+from robot_sf.benchmark.scenario.scenario_failure_cause import (
     SCENARIO_FAILURE_CAUSE_SCHEMA_VERSION,
     VERDICT_DYNAMIC_BLOCKING_OR_DEADLOCK,
     VERDICT_INDETERMINATE,
@@ -22,6 +22,14 @@ from robot_sf.scenario_certification.failure_cause import (
     FamilyDiagnostics,
     classify_failure_cause,
 )
+
+
+def test_legacy_failure_cause_path_reuses_canonical_module() -> None:
+    """The historical top-level path remains an identity-preserving compatibility alias."""
+    from robot_sf.benchmark import scenario_failure_cause as legacy
+    from robot_sf.benchmark.scenario import scenario_failure_cause as canonical
+
+    assert legacy is canonical
 
 
 def test_benchmark_imports_use_canonical_schema_and_verdicts() -> None:

@@ -27,6 +27,18 @@ def test_scenario_package_rejects_unknown_submodule() -> None:
         getattr(scenario, missing_name)
 
 
+def test_scenario_package_lazy_loader_resolves_declared_submodules() -> None:
+    """Declared helpers resolve through the package's lazy loader contract."""
+    from robot_sf.benchmark import scenario
+
+    assert scenario.__getattr__("scenario_failure_cause").__name__ == (
+        "robot_sf.benchmark.scenario.scenario_failure_cause"
+    )
+    assert scenario.__getattr__("scenario_staging").__name__ == (
+        "robot_sf.benchmark.scenario.scenario_staging"
+    )
+
+
 def test_select_unique_scenario_returns_the_exact_match() -> None:
     """An exact unique name must resolve without changing the scenario row."""
     expected = {"name": "classic_head_on_corridor_medium", "seeds": [1, 2]}

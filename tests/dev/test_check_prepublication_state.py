@@ -219,6 +219,36 @@ def test_fetch_refs_uses_exact_remote_refs(monkeypatch) -> None:
     ] in commands
 
 
+def test_fetch_refs_normalizes_remote_qualified_base_ref(monkeypatch) -> None:
+    """A remote-qualified base ref must fetch the underlying branch name."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        if command[:2] == ["git", "ls-remote"]:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                "branch-a\trefs/heads/feature/fresh-state\n",
+                "",
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "base-a")
+
+    assert gate._fetch_refs(
+        remote="origin", base_ref="origin/main", branch="feature/fresh-state"
+    ) == ("base-a", "branch-a")
+    assert [
+        "git",
+        "fetch",
+        "--no-tags",
+        "origin",
+        "refs/heads/main:refs/remotes/origin/main",
+    ] in commands
+
+
 def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
     """Live collection extracts explicit references from merged and open PR data."""
     commands: list[list[str]] = []
@@ -284,8 +314,10 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
         repo="ll7/robot_sf_ll7",
         issue=6916,
         branch="feature/fresh-state",
+        base_ref="origin/main",
     )
 
+    assert result["base_ref"] == "main"
     assert result["closing_prs"] == [
         {
             "number": 7001,

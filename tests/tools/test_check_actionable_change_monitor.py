@@ -88,6 +88,100 @@ def test_duplicate_check_run_names_have_unique_ids_and_stable_fingerprint() -> N
     assert monitor.compute_fingerprint(findings) == monitor.compute_fingerprint(reversed_findings)
 
 
+def test_effective_check_runs_drops_older_same_workflow_rerun(monkeypatch) -> None:
+    """A cancelled older rerun is not an alert when a newer same-workflow run exists."""
+    runs = [
+        {
+            "id": 401,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-08-15T10:00:00Z",
+            "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/100/job/401",
+        },
+        {
+            "id": 402,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-15T10:01:00Z",
+            "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/101/job/402",
+        },
+    ]
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        assert path in {
+            "repos/ll7/robot_sf_ll7/actions/runs/100",
+            "repos/ll7/robot_sf_ll7/actions/runs/101",
+        }
+        return {"workflow_id": 77, "name": "CI"}
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    effective = monitor._effective_check_runs(runs, repo=monitor.DEFAULT_REPO)
+    assert [run["id"] for run in effective] == [402]
+    assert monitor._check_findings(_pull_request(4), effective) == []
+
+
+def test_effective_check_runs_preserves_distinct_workflows_with_same_name(monkeypatch) -> None:
+    """Same-named checks from distinct workflows remain independently classified."""
+    runs = [
+        {
+            "id": 501,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-08-15T10:00:00Z",
+            "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/200/job/501",
+        },
+        {
+            "id": 502,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-15T10:01:00Z",
+            "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/201/job/502",
+        },
+    ]
+
+    def fake_gh_json(path: str, **kwargs: object) -> object:
+        del kwargs
+        run_id = path.rsplit("/", 1)[-1]
+        return {"workflow_id": 200 if run_id == "200" else 201, "name": "CI"}
+
+    monkeypatch.setattr(monitor, "_gh_json", fake_gh_json)
+
+    effective = monitor._effective_check_runs(runs, repo=monitor.DEFAULT_REPO)
+    assert [run["id"] for run in effective] == [501, 502]
+    findings = monitor._check_findings(_pull_request(5), effective)
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "check_failed"
+
+
+def test_effective_check_runs_preserves_runs_without_workflow_identity() -> None:
+    """Missing workflow provenance keeps duplicate runs fail-closed."""
+    runs = [
+        {
+            "id": 601,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "started_at": "2026-08-15T10:00:00Z",
+        },
+        {
+            "id": 602,
+            "name": "pr-contract-check",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-08-15T10:01:00Z",
+        },
+    ]
+
+    effective = monitor._effective_check_runs(runs, repo=monitor.DEFAULT_REPO)
+    assert [run["id"] for run in effective] == [601, 602]
+
+
 def test_build_findings_covers_legacy_commit_statuses() -> None:
     findings = monitor.build_findings(
         [_pull_request(3)],

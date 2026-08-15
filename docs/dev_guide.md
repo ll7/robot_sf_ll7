@@ -446,7 +446,8 @@ The gate records the exact before/after SHAs, any newly opened covering PR, and 
 explicitly closes the issue. An open PR is matched only when its title or body contains an explicit
 same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions and other repositories
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
-deletes local worktrees.
+deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
+the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
 state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used
@@ -693,7 +694,9 @@ resume artifact after compaction or automatic continuation: it should name the a
 known generated paths, stale claims, check state, and next action without reopening raw logs,
 issue queues, worktree inventories, or skill files. Compact status omits generated untracked trees
 such as `.venv`, `.opencode`, `node_modules`, and `output`, reporting only the generated
-roots that are present. Run fresh focused `gh`/`git` checks before
+roots that are present. Check summaries reconcile duplicate timestamped runs from the same
+workflow/job and expose the discarded count as `superseded`; an older cancelled run is not treated
+as current failure when a newer replacement is present. Run fresh focused `gh`/`git` checks before
 claim, push, PR, label, merge, or publication decisions. Raw logs and broad CLI output are
 appropriate when the snapshot reports `ok: false`, stale claims, missing state, or insufficient
 fields.
@@ -856,6 +859,15 @@ referenced issues and pull requests in one GraphQL request, and classifies
 path, external, in-repository, malformed, or otherwise unsupported conditions
 as `unevaluatable`. API failures are errors, never clean/not-fired results.
 
+The shared issue-audit writer applies an additional fail-closed guard before
+adding `state:blocked` or `state:blocked-external-input`: the complete issue
+thread must already contain a `blocked-triage-v1` reason block or a
+`Blocked-by: #<number>` reference. A prose-only blocker is reported but does not
+receive a dispatch-suppressing label; the writer adds `needs-triage` when that
+existing label is available. The audit plan's `blocked_label_report` records
+the evidence and the applied or declined decision, and the REST apply path
+rejects a blocked-label mutation missing its reason evidence.
+
 After reviewing the report, an explicitly authorized routing pass may add only
 `needs-triage` to fired issues:
 
@@ -1006,6 +1018,9 @@ paper-critical rows with owner types and label-change recommendations.
 Issues carrying `routing:needs-compute` remain visible for audit but classify as `needs_compute` and
 are excluded from implementation dispatch until compute or private execution authorization is
 established.
+Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
+including the exact blocker label in its reason, and is excluded from autonomous implementation
+dispatch.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

@@ -38,6 +38,7 @@ DEFAULT_REMOTE = "origin"
 PER_PAGE = 100
 DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_COMMENT_PAGES = 3
+DEFAULT_MAX_TIMELINE_PAGES = 3
 DEFAULT_MAX_MUTATIONS = 250
 PLAN_SCHEMA = "issue_audit_plan.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
@@ -48,6 +49,15 @@ RESOURCE_PREFIX = "resource:"
 TYPE_PREFIX = "type:"
 EVIDENCE_PREFIX = "evidence:"
 DECISION_LABEL = "decision-required"
+TRIAGE_LABEL = "needs-triage"
+BLOCKED_LABELS = frozenset({"state:blocked", "state:blocked-external-input"})
+BLOCKED_TRIAGE_BLOCK_RE = re.compile(
+    r"<!--\s*blocked-triage-v1\b[^>]*-->.*?```(?:yaml|yml)\s*\n.*?```",
+    re.IGNORECASE | re.DOTALL,
+)
+BLOCKED_BY_REFERENCE_RE = re.compile(
+    r"(?im)^\s*(?:#{1,6}\s*)?blocked\s*-?\s*by\s*:\s*#[1-9][0-9]*\b"
+)
 
 # Canonical execution states are mutually exclusive.  The repository also has
 # composable ``state:*`` qualifiers such as ``state:review`` and
@@ -412,6 +422,8 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
 def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Project a GitHub pull request row onto the stable correlation shape."""
     head = raw.get("head") if isinstance(raw.get("head"), Mapping) else {}
+    linked_issue_numbers = raw.get("linked_issue_numbers")
+    linked_issue_numbers = linked_issue_numbers if isinstance(linked_issue_numbers, list) else []
     return {
         "number": int(raw.get("number", 0)),
         "title": str(raw.get("title") or ""),
@@ -420,6 +432,9 @@ def _normalize_pr(raw: Mapping[str, Any]) -> dict[str, Any]:
         "url": str(raw.get("html_url") or raw.get("url") or ""),
         "merged_at": str(raw.get("merged_at") or ""),
         "head_ref": str(head.get("ref") or raw.get("head_ref") or ""),
+        "linked_issue_numbers": sorted(
+            {int(number) for number in linked_issue_numbers if isinstance(number, int)}
+        ),
     }
 
 
@@ -560,6 +575,105 @@ def discover_pull_requests(
     return sorted(prs, key=lambda item: item["number"]), {**meta, "row_count": len(prs)}
 
 
+def discover_issue_timeline_merged_prs(
+    repo: str,
+    issue_numbers: Iterable[int],
+    *,
+    max_pages: int = DEFAULT_MAX_TIMELINE_PAGES,
+    runner: Runner | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Recover merged PRs linked to issues from bounded timeline events.
+
+    A global ``pulls?state=closed`` scan is intentionally bounded.  When that
+    scan is partial, issue timelines provide a narrower, complete-for-the-open-
+    issue fallback without using GitHub search or guessing from issue numbers.
+    GitHub's ``cross-referenced`` timeline payload includes the linked PR body
+    and ``pull_request.merged_at`` fields needed for closure evidence.
+    """
+    numbers = sorted({int(number) for number in issue_numbers if int(number) > 0})
+    run = _runner_or_default(runner)
+    by_number: dict[int, dict[str, Any]] = {}
+    errors: list[str] = []
+    pages_read = 0
+    event_count = 0
+    truncated = False
+
+    for issue_number in numbers:
+        events, meta = paginate_rest(
+            f"repos/{repo}/issues/{issue_number}/timeline",
+            max_pages=max_pages,
+            runner=run,
+        )
+        pages_read += int(meta.get("pages_read", 0))
+        event_count += len(events)
+        truncated = bool(truncated or meta.get("truncated"))
+        errors.extend(f"issue {issue_number}: {error}" for error in meta.get("errors", []))
+        for event in events:
+            if str(event.get("event") or "") != "cross-referenced":
+                continue
+            source = event.get("source")
+            source_issue = source.get("issue") if isinstance(source, Mapping) else None
+            if not isinstance(source_issue, Mapping):
+                continue
+            pull_request = source_issue.get("pull_request")
+            if not isinstance(pull_request, Mapping) or not pull_request.get("merged_at"):
+                continue
+            raw_pr = dict(source_issue)
+            raw_pr["state"] = "closed"
+            raw_pr["merged_at"] = pull_request.get("merged_at")
+            raw_pr["html_url"] = source_issue.get("html_url") or pull_request.get("html_url")
+            raw_pr["linked_issue_numbers"] = [issue_number]
+            normalized = _normalize_pr(raw_pr)
+            normalized["coverage_source"] = "targeted_issue_timeline"
+            normalized["timeline_issue"] = issue_number
+            normalized["timeline_event_created_at"] = str(event.get("created_at") or "")
+            if not normalized["number"]:
+                continue
+            existing = by_number.get(normalized["number"])
+            if existing is None:
+                by_number[normalized["number"]] = normalized
+                continue
+            existing["linked_issue_numbers"] = sorted(
+                set(existing.get("linked_issue_numbers", []))
+                | set(normalized.get("linked_issue_numbers", []))
+            )
+
+    metadata = {
+        "available": not errors and not truncated,
+        "issue_count": len(numbers),
+        "pages_read": pages_read,
+        "page_budget": max_pages,
+        "event_count": event_count,
+        "row_count": len(by_number),
+        "truncated": truncated,
+        "errors": errors,
+    }
+    return sorted(by_number.values(), key=lambda item: item["number"]), metadata
+
+
+def _merge_merged_pr_rows(
+    *collections: Iterable[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge global and targeted PR rows without losing linked issue evidence."""
+    merged: dict[int, dict[str, Any]] = {}
+    for collection in collections:
+        for row in collection:
+            number = int(row.get("number", 0))
+            if not number:
+                continue
+            normalized = dict(row)
+            linked = set(normalized.get("linked_issue_numbers", []))
+            existing = merged.get(number)
+            if existing is None:
+                normalized["linked_issue_numbers"] = sorted(linked)
+                merged[number] = normalized
+                continue
+            existing["linked_issue_numbers"] = sorted(
+                set(existing.get("linked_issue_numbers", [])) | linked
+            )
+    return sorted(merged.values(), key=lambda item: item["number"])
+
+
 def discover_repository_labels(
     repo: str = DEFAULT_REPO,
     *,
@@ -682,6 +796,41 @@ def discover_inventory(
     closed_prs, closed_pr_meta = discover_pull_requests(
         repo, state="closed", max_pages=max_pages, runner=runner
     )
+    merged_prs = [pr for pr in closed_prs if pr.get("merged_at")]
+    timeline_prs: list[dict[str, Any]] = []
+    timeline_meta: dict[str, Any] = {
+        "available": True,
+        "reason": "global closed-PR inventory complete",
+        "issue_count": len(issues),
+        "pages_read": 0,
+        "page_budget": max_pages,
+        "event_count": 0,
+        "row_count": 0,
+        "truncated": False,
+        "errors": [],
+    }
+    global_closed_prs_complete = not closed_pr_meta.get("truncated") and not closed_pr_meta.get(
+        "errors"
+    )
+    if not global_closed_prs_complete:
+        timeline_prs, timeline_meta = discover_issue_timeline_merged_prs(
+            repo,
+            [int(issue["number"]) for issue in issues],
+            max_pages=min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
+            runner=runner,
+        )
+        timeline_meta["reason"] = "global closed-PR inventory partial"
+        merged_prs = _merge_merged_pr_rows(merged_prs, timeline_prs)
+    closure_coverage = {
+        "complete_for_open_issues": bool(
+            global_closed_prs_complete or timeline_meta.get("available")
+        ),
+        "mode": ("global_closed_prs" if global_closed_prs_complete else "issue_timeline_fallback"),
+        "global_closed_prs_complete": global_closed_prs_complete,
+        "global_closed_prs_truncated": bool(closed_pr_meta.get("truncated")),
+        "global_closed_prs_errors": list(closed_pr_meta.get("errors", [])),
+        "timeline": timeline_meta,
+    }
     labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=runner)
     claims, claim_meta = discover_claims(remote, command_runner=command_runner)
     worktrees, worktree_meta = discover_worktrees(command_runner=command_runner)
@@ -691,7 +840,7 @@ def discover_inventory(
         "remote": remote,
         "issues": issues,
         "open_prs": open_prs,
-        "merged_prs": [pr for pr in closed_prs if pr.get("merged_at")],
+        "merged_prs": merged_prs,
         "labels": sorted(labels),
         "claims": claims,
         "worktrees": worktrees,
@@ -701,6 +850,8 @@ def discover_inventory(
             "comments": comment_meta,
             "open_prs": open_pr_meta,
             "closed_prs": closed_pr_meta,
+            "issue_timeline_merged_prs": timeline_meta,
+            "closure_coverage": closure_coverage,
             "labels": label_meta,
             "claims": claim_meta,
             "worktrees": worktree_meta,
@@ -822,6 +973,17 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
     return evidence
 
 
+def _blocked_reason_evidence(text: str) -> list[str]:
+    """Return explicit machine-readable evidence that justifies a blocked label."""
+    evidence: list[str] = []
+    if BLOCKED_TRIAGE_BLOCK_RE.search(text):
+        evidence.append("blocked-triage-v1 reason block present")
+    blocked_by = BLOCKED_BY_REFERENCE_RE.findall(text)
+    if blocked_by:
+        evidence.append(f"Blocked-by reference present: {blocked_by[0].strip()}")
+    return evidence
+
+
 def _decision_evidence(text: str, labels: set[str]) -> list[str]:
     """Return decision-gate evidence from explicit labels or issue text."""
     evidence = ["decision-required label present"] if DECISION_LABEL in labels else []
@@ -911,7 +1073,8 @@ def _merged_records(
     return [
         dict(pr)
         for pr in merged_prs
-        if issue_number in _issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref"))
+        if issue_number in set(pr.get("linked_issue_numbers", []))
+        or issue_number in _issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref"))
     ]
 
 
@@ -925,14 +1088,30 @@ def closure_evidence(
     body = str(issue.get("body") or "")
     number = int(issue.get("number", 0))
     linked = _merged_records(number, merged_prs)
+    coverage = {
+        "coverage_sources": sorted(
+            {str(pr.get("coverage_source") or "global_closed_prs") for pr in linked}
+        ),
+        "targeted_merged_prs": sorted(
+            int(pr["number"])
+            for pr in linked
+            if pr.get("coverage_source") == "targeted_issue_timeline"
+        ),
+    }
     if not linked:
-        return {"eligible": False, "reason": "no merged issue-linked PR", "merged_prs": []}
+        return {
+            "eligible": False,
+            "reason": "no merged issue-linked PR",
+            "merged_prs": [],
+            **coverage,
+        }
     if PARENT_TITLE_PATTERN.search(str(issue.get("title") or "")):
         if not PARENT_CLOSE_PATTERN.search(body):
             return {
                 "eligible": False,
                 "reason": "parent issue lacks documented all-children close condition",
                 "merged_prs": [pr.get("number") for pr in linked],
+                **coverage,
             }
         child_numbers = _issue_ref_numbers(body)
         child_numbers.discard(number)
@@ -942,12 +1121,14 @@ def closure_evidence(
                 "reason": "documented parent close condition is not proven by the open inventory",
                 "merged_prs": [pr.get("number") for pr in linked],
                 "child_issues": sorted(child_numbers),
+                **coverage,
             }
         return {
             "eligible": True,
             "reason": "documented parent close condition and no referenced child remains open",
             "merged_prs": [pr.get("number") for pr in linked],
             "child_issues": sorted(child_numbers),
+            **coverage,
         }
     explicit = bool(EXPLICIT_MERGED_CLOSE_PATTERN.search(body))
     checked = bool(CHECKBOX_PATTERN.search(body)) and not bool(
@@ -963,11 +1144,13 @@ def closure_evidence(
             "eligible": True,
             "reason": reason,
             "merged_prs": [pr.get("number") for pr in linked],
+            **coverage,
         }
     return {
         "eligible": False,
         "reason": "merged work exists but completion condition is not documented",
         "merged_prs": [pr.get("number") for pr in linked],
+        **coverage,
     }
 
 
@@ -983,15 +1166,20 @@ def _mutation(
     value: str | None,
     reason: str,
     evidence: Iterable[str] = (),
+    blocked_reason: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Build a stable mutation row."""
-    return {
+    mutation = {
         "operation": operation,
         "issue": issue_number,
         "value": value,
         "reason": reason,
         "evidence": list(evidence),
     }
+    reason_evidence = [item for item in blocked_reason if item]
+    if reason_evidence:
+        mutation["blocked_reason"] = reason_evidence
+    return mutation
 
 
 def _state_winner(
@@ -1027,6 +1215,8 @@ class Classification:
     evidence_labels: tuple[str, ...]
     active: dict[str, list[dict[str, Any]]]
     blocker_evidence: tuple[dict[str, str], ...]
+    blocked_reason_evidence: tuple[str, ...]
+    blocked_label_decision: str
     decision_required: bool
     decision_evidence: tuple[str, ...]
     readiness_evidence: tuple[str, ...]
@@ -1047,6 +1237,8 @@ class Classification:
             "evidence_labels": list(self.evidence_labels),
             "active_evidence": self.active,
             "blocker_evidence": list(self.blocker_evidence),
+            "blocked_reason_evidence": list(self.blocked_reason_evidence),
+            "blocked_label_decision": self.blocked_label_decision,
             "decision_required": self.decision_required,
             "decision_evidence": list(self.decision_evidence),
             "readiness_evidence": list(self.readiness_evidence),
@@ -1092,6 +1284,7 @@ def classify_issue(
     )
     active_now = any(active.values())
     blocker_evidence = _gate_evidence(text)
+    blocked_reason_evidence = _blocked_reason_evidence(text)
     if "state:blocked-external-input" in labels:
         blocker_evidence.append(
             {"kind": "external-input", "text": "state:blocked-external-input label"}
@@ -1130,9 +1323,10 @@ def classify_issue(
     state_set = execution_state_set
     ready = ready and not stale_running
     external_blocker = any(item["kind"] == "external-input" for item in blocker_evidence)
+    blocked_label_decision = "not-applicable"
     winner = _state_winner(
         state_set,
-        blocker=gate_blocked,
+        blocker=gate_blocked and bool(blocked_reason_evidence),
         external_blocker=external_blocker,
         active=active_now,
         ready=ready,
@@ -1191,6 +1385,7 @@ def classify_issue(
                     *readiness_evidence,
                     "active PR/claim/worktree/job evidence" if active_now else "",
                 ],
+                blocked_reason=(blocked_reason_evidence if winner in BLOCKED_LABELS else ()),
             )
         )
     elif winner and winner not in state_set:
@@ -1243,17 +1438,58 @@ def classify_issue(
             else "state:blocked"
         )
         if _available(target, available_labels):
-            mutations.append(
-                _mutation(
-                    "add_label",
-                    number,
-                    value=target,
-                    reason="record a proven provenance, rights, compute, or external-input gate",
-                    evidence=[item["text"] for item in blocker_evidence],
+            if blocked_reason_evidence:
+                blocked_label_decision = "apply"
+                mutations.append(
+                    _mutation(
+                        "add_label",
+                        number,
+                        value=target,
+                        reason="record a proven provenance, rights, compute, or external-input gate",
+                        evidence=[item["text"] for item in blocker_evidence],
+                        blocked_reason=blocked_reason_evidence,
+                    )
                 )
-            )
+            else:
+                blocked_label_decision = "declined-needs-triage"
+                findings.append(
+                    "declined state:blocked label because no blocked-triage-v1 or "
+                    "Blocked-by reference is present"
+                )
+                if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+                    mutations.append(
+                        _mutation(
+                            "add_label",
+                            number,
+                            value=TRIAGE_LABEL,
+                            reason=(
+                                "do not apply a blocked state without an explicit triage reason; "
+                                "route the issue for triage"
+                            ),
+                            evidence=[item["text"] for item in blocker_evidence],
+                        )
+                    )
         else:
             findings.append(f"cannot add unavailable blocker label {target}")
+    elif gate_blocked:
+        blocked_label_decision = (
+            "already-present" if blocked_reason_evidence else "existing-unexplained"
+        )
+        if not blocked_reason_evidence:
+            if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+                mutations.append(
+                    _mutation(
+                        "add_label",
+                        number,
+                        value=TRIAGE_LABEL,
+                        reason=(
+                            "surface an existing blocked label without an explicit triage reason "
+                            "for maintainer review"
+                        ),
+                        evidence=[item["text"] for item in blocker_evidence],
+                    )
+                )
+            findings.append("existing blocked state lacks a blocked-triage-v1 or Blocked-by reason")
 
     # Never promote an issue to ready while any active execution record or
     # unresolved decision exists.  This guard is intentionally redundant with
@@ -1325,6 +1561,8 @@ def classify_issue(
         evidence_labels=evidence_labels,
         active=active,
         blocker_evidence=tuple(blocker_evidence),
+        blocked_reason_evidence=tuple(blocked_reason_evidence),
+        blocked_label_decision=blocked_label_decision,
         decision_required=decision_required,
         decision_evidence=tuple(decision_evidence),
         readiness_evidence=tuple(readiness_evidence),
@@ -1356,6 +1594,7 @@ def build_audit_plan(
     classifications: list[dict[str, Any]] = []
     mutations: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
+    blocked_label_report: list[dict[str, Any]] = []
     for issue in sorted(issues, key=lambda item: int(item.get("number", 0))):
         classified = classify_issue(
             issue,
@@ -1384,6 +1623,20 @@ def build_audit_plan(
         classifications.append(row)
         issue_mutations = list(classified.mutations)
         mutations.extend(issue_mutations)
+        if classified.blocked_label_decision != "not-applicable":
+            blocked_label_report.append(
+                {
+                    "issue": classified.issue,
+                    "decision": classified.blocked_label_decision,
+                    "blocker_evidence": list(classified.blocker_evidence),
+                    "reason_evidence": list(classified.blocked_reason_evidence),
+                    "fallback_label": (
+                        TRIAGE_LABEL
+                        if classified.blocked_label_decision == "declined-needs-triage"
+                        else None
+                    ),
+                }
+            )
         if classified.decision_required:
             pending.append(
                 {
@@ -1432,14 +1685,21 @@ def build_audit_plan(
             "preserve_state_qualifiers": True,
         },
         "inventory": inventory.get("inventory", {}),
+        "inventory_coverage": (
+            dict(inventory_meta.get("closure_coverage"))
+            if isinstance(inventory_meta.get("closure_coverage"), Mapping)
+            else {}
+        ),
         "inventory_uncertainties": sorted(set(inventory_uncertainties)),
         "issues": classifications,
         "mutations": mutations,
+        "blocked_label_report": blocked_label_report,
         "pending_decisions": pending,
         "truncation_or_errors": sorted(set(truncated)),
         "counts": {
             "open_issues": len(classifications),
             "mutations": len(mutations),
+            "blocked_label_decisions": len(blocked_label_report),
             "pending_decisions": len(pending),
             "truncated_or_error_sources": len(set(truncated)),
         },
@@ -1451,6 +1711,32 @@ def build_audit_plan(
 def label_api_path(repo: str, issue_number: int, label: str) -> str:
     """Return the REST label endpoint with every label character URI-escaped."""
     return f"repos/{repo}/issues/{issue_number}/labels/{quote(label, safe='')}"
+
+
+def _blocked_label_plan_errors(mutations: Sequence[object]) -> list[dict[str, Any]]:
+    """Reject blocked-label writes that are not bound to explicit reason evidence."""
+    errors: list[dict[str, Any]] = []
+    for index, mutation in enumerate(mutations):
+        if not isinstance(mutation, Mapping):
+            continue
+        if mutation.get("operation") != "add_label" or mutation.get("value") not in BLOCKED_LABELS:
+            continue
+        reason_evidence = mutation.get("blocked_reason")
+        valid = isinstance(reason_evidence, list) and any(
+            isinstance(item, str) and item.strip() for item in reason_evidence
+        )
+        if not valid:
+            errors.append(
+                {
+                    "index": index,
+                    "mutation": dict(mutation),
+                    "error": (
+                        "blocked label mutation requires blocked_reason evidence from "
+                        "blocked-triage-v1 or a Blocked-by reference"
+                    ),
+                }
+            )
+    return errors
 
 
 def apply_mutations(
@@ -1511,6 +1797,16 @@ def apply_mutations(
         raise ValueError("plan mutations must be a list")
     if len(mutations) > max_mutations:
         raise ValueError("plan exceeds mutation budget")
+    blocked_label_errors = _blocked_label_plan_errors(mutations)
+    if blocked_label_errors:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": "plan contains an unreasoned blocked-label mutation",
+            "applied": [],
+            "failures": blocked_label_errors,
+            "readback": [],
+        }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []

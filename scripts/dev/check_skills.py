@@ -75,8 +75,11 @@ WORKER_OUTPUT_REQUIRED_PHRASES = (
     "rg -n .",
     "full file reads",
 )
-GOAL_PR_REVIEW_REQUIRED_PHRASES = (
+GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS = (
     "snapshot_pr_queue.py",
+    "scripts.dev.snapshot_pr_queue",
+)
+GOAL_PR_REVIEW_REQUIRED_PHRASES = (
     "watch_pr_ci_status.py",
     "status,conclusion,jobs",
     "bounded excerpts",
@@ -368,6 +371,11 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
                 errors.append(f"{rel}: missing Spark sidecar routing requirement {phrase!r}")
 
     if metadata.get("name") == "goal-pr-review":
+        if not any(token in lower for token in GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS):
+            errors.append(
+                f"{rel}: missing PR-review compact CI requirement one of "
+                f"{GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS!r}"
+            )
         for phrase in GOAL_PR_REVIEW_REQUIRED_PHRASES:
             if phrase not in lower:
                 errors.append(f"{rel}: missing PR-review compact CI requirement {phrase!r}")

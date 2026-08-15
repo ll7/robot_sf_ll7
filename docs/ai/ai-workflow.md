@@ -335,6 +335,7 @@ uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main
 # Capture before expensive readiness, then check immediately before publication.
 uv run python scripts/dev/check_prepublication_state.py capture \
   --repo ll7/robot_sf_ll7 --issue <number> --branch <head-branch> \
+  --base-ref origin/main \
   --snapshot-path output/validation/prepublication/<head-branch>.json
 uv run python scripts/dev/check_prepublication_state.py check \
   --snapshot-path output/validation/prepublication/<head-branch>.json

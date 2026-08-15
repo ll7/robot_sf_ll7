@@ -57,6 +57,16 @@ resource:slurm issue, or failed readback is an uncertainty. The plan records it
 and the apply path fails closed. A partial inventory is never evidence that an
 issue is ready or complete.
 
+When the bounded global closed-PR history is partial, the core may also read
+each currently open issue's bounded REST timeline. A `cross-referenced` event
+whose source contains a merged pull request contributes targeted closure
+evidence with `coverage_source: targeted_issue_timeline`. The plan exposes this
+under `inventory_coverage` and keeps the original global `closed_prs` truncation
+metadata visible. Timeline coverage narrows the evidence for the currently open
+issues; it does not make the repository-wide closed-PR history complete, and
+mutation application remains fail-closed while any global or targeted source is
+partial or unavailable.
+
 Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
@@ -77,6 +87,20 @@ selects a winner:
    observed; and
 5. state:ready when explicit acceptance or validation evidence exists and no
    gate or active record remains.
+
+Before the autonomous core adds either dispatch-suppressing blocker label
+(`state:blocked` or `state:blocked-external-input`), the issue body or complete
+comment inventory must contain an explicit `blocked-triage-v1` reason block or
+a `Blocked-by: #<issue-or-pr-number>` reference. The reason evidence is bound
+into the planned mutation and the apply path rejects a blocked-label mutation
+that omits it. Prose that merely looks like a blocker is not enough: when the
+blocker is otherwise detectable but its reason is not recorded, the core
+declines the blocked-label write and adds the existing `needs-triage` label
+when available. The plan's `blocked_label_report` records the blocker evidence,
+reason evidence, and whether the write was applied, declined, or already
+present. An existing unexplained blocker label is reported for repair review;
+absence of a reason is not treated as proof that the underlying blocker has
+resolved.
 
 A stale state:running label is preserved when no active record is observable;
 absence of evidence is not evidence of completion. Multiple states without a
@@ -146,6 +170,7 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "inventory": {},
       "issues": [],
       "mutations": [],
+      "inventory_coverage": {},
       "pending_decisions": [],
       "truncation_or_errors": [],
       "counts": {}

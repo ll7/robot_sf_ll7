@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.campaign_atlas import (
+from robot_sf.benchmark.campaign.campaign_atlas import (
     CAMPAIGN_ATLAS_SCHEMA_VERSION,
     AtlasConfig,
     AtlasParityError,

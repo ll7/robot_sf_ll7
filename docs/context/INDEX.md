@@ -8,7 +8,10 @@ metadata-only until trace export and renderer provenance are reviewed:
 
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
-without trace execution or evidence admission:
+plus the shared `robot_sf.research.representative_selection` rule that the
+emergent-phenomena campaign, its figures, and its replay videos all call
+instead of carrying private copies, without trace execution or evidence
+admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
 Issue #6792 Chapter 7 evidence admission packet: immutable `ch7-evidence-package.v1` payload,

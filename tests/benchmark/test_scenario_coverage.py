@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.scenario_coverage import (
+from robot_sf.benchmark.scenario.scenario_coverage import (
     build_scenario_coverage_report,
     scenario_coverage_report_markdown,
     write_scenario_coverage_report,

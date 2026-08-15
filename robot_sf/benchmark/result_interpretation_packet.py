@@ -726,6 +726,7 @@ def _validate_supported_decision(  # noqa: C901
 
 
 _SOURCE_ROUNDED_TOLERANCE = 5e-5
+_SOURCE_CONTRAST_DIRECTION = "comparison_minus_reference"
 
 
 def _close_to_source(value: object, expected: object) -> bool:
@@ -803,6 +804,13 @@ def _validate_supported_source_binding(  # noqa: C901
         )
         return
     row = matches[0]
+    source_direction = row.get("direction", _SOURCE_CONTRAST_DIRECTION)
+    if comparator.direction != source_direction:
+        errors.append(
+            f"decision {decision.decision_id!r}: contrast direction "
+            f"{comparator.direction!r} is not bound to report_summary direction "
+            f"{source_direction!r}"
+        )
     checks = (
         ("n_paired", contrast.support, "contrast support"),
         ("n_paired", contrast.denominator, "contrast denominator"),

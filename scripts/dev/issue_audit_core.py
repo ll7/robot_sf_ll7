@@ -49,6 +49,15 @@ RESOURCE_PREFIX = "resource:"
 TYPE_PREFIX = "type:"
 EVIDENCE_PREFIX = "evidence:"
 DECISION_LABEL = "decision-required"
+TRIAGE_LABEL = "needs-triage"
+BLOCKED_LABELS = frozenset({"state:blocked", "state:blocked-external-input"})
+BLOCKED_TRIAGE_BLOCK_RE = re.compile(
+    r"<!--\s*blocked-triage-v1\b[^>]*-->.*?```(?:yaml|yml)\s*\n.*?```",
+    re.IGNORECASE | re.DOTALL,
+)
+BLOCKED_BY_REFERENCE_RE = re.compile(
+    r"(?im)^\s*(?:#{1,6}\s*)?blocked\s*-?\s*by\s*:\s*#[1-9][0-9]*\b"
+)
 
 # Canonical execution states are mutually exclusive.  The repository also has
 # composable ``state:*`` qualifiers such as ``state:review`` and
@@ -964,6 +973,17 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
     return evidence
 
 
+def _blocked_reason_evidence(text: str) -> list[str]:
+    """Return explicit machine-readable evidence that justifies a blocked label."""
+    evidence: list[str] = []
+    if BLOCKED_TRIAGE_BLOCK_RE.search(text):
+        evidence.append("blocked-triage-v1 reason block present")
+    blocked_by = BLOCKED_BY_REFERENCE_RE.findall(text)
+    if blocked_by:
+        evidence.append(f"Blocked-by reference present: {blocked_by[0].strip()}")
+    return evidence
+
+
 def _decision_evidence(text: str, labels: set[str]) -> list[str]:
     """Return decision-gate evidence from explicit labels or issue text."""
     evidence = ["decision-required label present"] if DECISION_LABEL in labels else []
@@ -1146,15 +1166,20 @@ def _mutation(
     value: str | None,
     reason: str,
     evidence: Iterable[str] = (),
+    blocked_reason: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Build a stable mutation row."""
-    return {
+    mutation = {
         "operation": operation,
         "issue": issue_number,
         "value": value,
         "reason": reason,
         "evidence": list(evidence),
     }
+    reason_evidence = [item for item in blocked_reason if item]
+    if reason_evidence:
+        mutation["blocked_reason"] = reason_evidence
+    return mutation
 
 
 def _state_winner(
@@ -1190,6 +1215,8 @@ class Classification:
     evidence_labels: tuple[str, ...]
     active: dict[str, list[dict[str, Any]]]
     blocker_evidence: tuple[dict[str, str], ...]
+    blocked_reason_evidence: tuple[str, ...]
+    blocked_label_decision: str
     decision_required: bool
     decision_evidence: tuple[str, ...]
     readiness_evidence: tuple[str, ...]
@@ -1210,6 +1237,8 @@ class Classification:
             "evidence_labels": list(self.evidence_labels),
             "active_evidence": self.active,
             "blocker_evidence": list(self.blocker_evidence),
+            "blocked_reason_evidence": list(self.blocked_reason_evidence),
+            "blocked_label_decision": self.blocked_label_decision,
             "decision_required": self.decision_required,
             "decision_evidence": list(self.decision_evidence),
             "readiness_evidence": list(self.readiness_evidence),
@@ -1255,6 +1284,7 @@ def classify_issue(
     )
     active_now = any(active.values())
     blocker_evidence = _gate_evidence(text)
+    blocked_reason_evidence = _blocked_reason_evidence(text)
     if "state:blocked-external-input" in labels:
         blocker_evidence.append(
             {"kind": "external-input", "text": "state:blocked-external-input label"}
@@ -1293,9 +1323,10 @@ def classify_issue(
     state_set = execution_state_set
     ready = ready and not stale_running
     external_blocker = any(item["kind"] == "external-input" for item in blocker_evidence)
+    blocked_label_decision = "not-applicable"
     winner = _state_winner(
         state_set,
-        blocker=gate_blocked,
+        blocker=gate_blocked and bool(blocked_reason_evidence),
         external_blocker=external_blocker,
         active=active_now,
         ready=ready,
@@ -1354,6 +1385,7 @@ def classify_issue(
                     *readiness_evidence,
                     "active PR/claim/worktree/job evidence" if active_now else "",
                 ],
+                blocked_reason=(blocked_reason_evidence if winner in BLOCKED_LABELS else ()),
             )
         )
     elif winner and winner not in state_set:
@@ -1406,17 +1438,58 @@ def classify_issue(
             else "state:blocked"
         )
         if _available(target, available_labels):
-            mutations.append(
-                _mutation(
-                    "add_label",
-                    number,
-                    value=target,
-                    reason="record a proven provenance, rights, compute, or external-input gate",
-                    evidence=[item["text"] for item in blocker_evidence],
+            if blocked_reason_evidence:
+                blocked_label_decision = "apply"
+                mutations.append(
+                    _mutation(
+                        "add_label",
+                        number,
+                        value=target,
+                        reason="record a proven provenance, rights, compute, or external-input gate",
+                        evidence=[item["text"] for item in blocker_evidence],
+                        blocked_reason=blocked_reason_evidence,
+                    )
                 )
-            )
+            else:
+                blocked_label_decision = "declined-needs-triage"
+                findings.append(
+                    "declined state:blocked label because no blocked-triage-v1 or "
+                    "Blocked-by reference is present"
+                )
+                if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+                    mutations.append(
+                        _mutation(
+                            "add_label",
+                            number,
+                            value=TRIAGE_LABEL,
+                            reason=(
+                                "do not apply a blocked state without an explicit triage reason; "
+                                "route the issue for triage"
+                            ),
+                            evidence=[item["text"] for item in blocker_evidence],
+                        )
+                    )
         else:
             findings.append(f"cannot add unavailable blocker label {target}")
+    elif gate_blocked:
+        blocked_label_decision = (
+            "already-present" if blocked_reason_evidence else "existing-unexplained"
+        )
+        if not blocked_reason_evidence:
+            if TRIAGE_LABEL not in labels and _available(TRIAGE_LABEL, available_labels):
+                mutations.append(
+                    _mutation(
+                        "add_label",
+                        number,
+                        value=TRIAGE_LABEL,
+                        reason=(
+                            "surface an existing blocked label without an explicit triage reason "
+                            "for maintainer review"
+                        ),
+                        evidence=[item["text"] for item in blocker_evidence],
+                    )
+                )
+            findings.append("existing blocked state lacks a blocked-triage-v1 or Blocked-by reason")
 
     # Never promote an issue to ready while any active execution record or
     # unresolved decision exists.  This guard is intentionally redundant with
@@ -1488,6 +1561,8 @@ def classify_issue(
         evidence_labels=evidence_labels,
         active=active,
         blocker_evidence=tuple(blocker_evidence),
+        blocked_reason_evidence=tuple(blocked_reason_evidence),
+        blocked_label_decision=blocked_label_decision,
         decision_required=decision_required,
         decision_evidence=tuple(decision_evidence),
         readiness_evidence=tuple(readiness_evidence),
@@ -1519,6 +1594,7 @@ def build_audit_plan(
     classifications: list[dict[str, Any]] = []
     mutations: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
+    blocked_label_report: list[dict[str, Any]] = []
     for issue in sorted(issues, key=lambda item: int(item.get("number", 0))):
         classified = classify_issue(
             issue,
@@ -1547,6 +1623,20 @@ def build_audit_plan(
         classifications.append(row)
         issue_mutations = list(classified.mutations)
         mutations.extend(issue_mutations)
+        if classified.blocked_label_decision != "not-applicable":
+            blocked_label_report.append(
+                {
+                    "issue": classified.issue,
+                    "decision": classified.blocked_label_decision,
+                    "blocker_evidence": list(classified.blocker_evidence),
+                    "reason_evidence": list(classified.blocked_reason_evidence),
+                    "fallback_label": (
+                        TRIAGE_LABEL
+                        if classified.blocked_label_decision == "declined-needs-triage"
+                        else None
+                    ),
+                }
+            )
         if classified.decision_required:
             pending.append(
                 {
@@ -1603,11 +1693,13 @@ def build_audit_plan(
         "inventory_uncertainties": sorted(set(inventory_uncertainties)),
         "issues": classifications,
         "mutations": mutations,
+        "blocked_label_report": blocked_label_report,
         "pending_decisions": pending,
         "truncation_or_errors": sorted(set(truncated)),
         "counts": {
             "open_issues": len(classifications),
             "mutations": len(mutations),
+            "blocked_label_decisions": len(blocked_label_report),
             "pending_decisions": len(pending),
             "truncated_or_error_sources": len(set(truncated)),
         },
@@ -1619,6 +1711,32 @@ def build_audit_plan(
 def label_api_path(repo: str, issue_number: int, label: str) -> str:
     """Return the REST label endpoint with every label character URI-escaped."""
     return f"repos/{repo}/issues/{issue_number}/labels/{quote(label, safe='')}"
+
+
+def _blocked_label_plan_errors(mutations: Sequence[object]) -> list[dict[str, Any]]:
+    """Reject blocked-label writes that are not bound to explicit reason evidence."""
+    errors: list[dict[str, Any]] = []
+    for index, mutation in enumerate(mutations):
+        if not isinstance(mutation, Mapping):
+            continue
+        if mutation.get("operation") != "add_label" or mutation.get("value") not in BLOCKED_LABELS:
+            continue
+        reason_evidence = mutation.get("blocked_reason")
+        valid = isinstance(reason_evidence, list) and any(
+            isinstance(item, str) and item.strip() for item in reason_evidence
+        )
+        if not valid:
+            errors.append(
+                {
+                    "index": index,
+                    "mutation": dict(mutation),
+                    "error": (
+                        "blocked label mutation requires blocked_reason evidence from "
+                        "blocked-triage-v1 or a Blocked-by reference"
+                    ),
+                }
+            )
+    return errors
 
 
 def apply_mutations(
@@ -1679,6 +1797,16 @@ def apply_mutations(
         raise ValueError("plan mutations must be a list")
     if len(mutations) > max_mutations:
         raise ValueError("plan exceeds mutation budget")
+    blocked_label_errors = _blocked_label_plan_errors(mutations)
+    if blocked_label_errors:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": "plan contains an unreasoned blocked-label mutation",
+            "applied": [],
+            "failures": blocked_label_errors,
+            "readback": [],
+        }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []

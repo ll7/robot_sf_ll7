@@ -131,6 +131,19 @@ def _normalized_state(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
+def _normalize_base_ref(base_ref: str, *, remote: str) -> str:
+    """Normalize a bare or remote-qualified base branch to its branch name."""
+    normalized = str(base_ref or "").strip()
+    if not normalized:
+        raise GateError("base ref must not be empty")
+    remote_prefix = f"{remote}/"
+    if normalized.startswith(remote_prefix):
+        normalized = normalized[len(remote_prefix) :]
+    if not normalized:
+        raise GateError(f"base ref {base_ref!r} does not contain a branch name")
+    return normalized
+
+
 def _is_graphql_fallback_error(error: GateError) -> bool:
     """Return whether a native GitHub read is eligible for REST fallback."""
     message = str(error).lower()
@@ -141,6 +154,7 @@ def _is_graphql_fallback_error(error: GateError) -> bool:
 
 def _fetch_refs(*, remote: str, base_ref: str, branch: str) -> tuple[str, str | None]:
     """Refresh the base ref and read the remote publication branch tip."""
+    base_ref = _normalize_base_ref(base_ref, remote=remote)
     _run(
         [
             "git",
@@ -406,6 +420,7 @@ def collect_live_state(
     remote: str = "origin",
 ) -> dict[str, Any]:
     """Fetch and assemble the live issue, ref, and local worktree state."""
+    base_ref = _normalize_base_ref(base_ref, remote=remote)
     remote_state_sources = {
         "issue": "graphql",
         "closing_prs": "graphql",
@@ -720,7 +735,11 @@ def _parser() -> argparse.ArgumentParser:
     capture.add_argument("--repo", required=True)
     capture.add_argument("--issue", type=int, required=True)
     capture.add_argument("--branch")
-    capture.add_argument("--base-ref", default="main")
+    capture.add_argument(
+        "--base-ref",
+        default="main",
+        help="base branch name or remote-qualified branch such as origin/main",
+    )
     capture.add_argument("--remote", default="origin")
     capture.add_argument("--snapshot-path")
 
@@ -778,6 +797,9 @@ def main(argv: list[str] | None = None) -> int:
 
         snapshot_path = Path(args.snapshot_path)
         baseline = _load_snapshot(snapshot_path)
+        baseline["base_ref"] = _normalize_base_ref(
+            str(baseline["base_ref"]), remote=str(baseline["remote"])
+        )
         decision_path = _decision_path(snapshot_path, args.decision_path)
         current = collect_live_state(
             repo=str(baseline["repo"]),

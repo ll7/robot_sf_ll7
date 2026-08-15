@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from robot_sf.research.open_dreamer_model_quality import (
     ModelQualityConfig,
     OpenDreamerQualityError,
     _gate_metrics,
+    _source_metadata,
     evaluate_model_quality,
 )
 from scripts.validation.run_open_dreamer_model_quality import main as run_quality_main
@@ -207,6 +209,25 @@ def test_quality_gate_blocks_tiny_committed_preview() -> None:
     assert report["status"] == "blocked_insufficient_data"
     assert "test episodes 0 < 2" in report["reason"]
     assert "one_step_metrics" not in report
+
+
+def test_quality_source_provenance_is_independent_of_caller_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Source reports resolve the checkout commit even when invoked outside the worktree."""
+    monkeypatch.chdir(tmp_path)
+    source = _source_metadata(tmp_path / "missing-diagnostic-dataset.jsonl")
+    repository_root = Path(__file__).resolve().parents[2]
+    expected = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repository_root,
+    ).stdout.strip()
+
+    assert source["git_commit"] == expected
+    assert source["git_commit"] != "unknown"
 
 
 def test_quality_gate_blocks_split_contract_failure(tmp_path: Path) -> None:

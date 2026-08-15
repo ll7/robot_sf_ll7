@@ -29,6 +29,9 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _scenario_seed(value: str) -> tuple[str, int]:
     """Parse one ``SCENARIO_ID:SEED`` collection specification."""
     scenario_id, separator, raw_seed = value.rpartition(":")
@@ -74,6 +77,7 @@ def _git_commit() -> str:
             check=True,
             capture_output=True,
             text=True,
+            cwd=_REPOSITORY_ROOT,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"

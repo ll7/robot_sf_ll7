@@ -52,6 +52,7 @@ from robot_sf.research.open_dreamer_dynamics import (
 
 OPEN_DREAMER_MODEL_QUALITY_VERSION = "open_dreamer_model_quality.v1"
 EVIDENCE_BOUNDARY = "diagnostic_only"
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 QualityStatus = Literal[
     "passed",
@@ -1131,6 +1132,7 @@ def _source_metadata(path: Path) -> dict[str, Any]:
             check=True,
             capture_output=True,
             text=True,
+            cwd=_REPOSITORY_ROOT,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         metadata["git_commit"] = "unknown"

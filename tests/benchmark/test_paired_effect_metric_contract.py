@@ -225,8 +225,8 @@ def test_runner_loads_contract_before_dispatch(tmp_path: Path) -> None:
     assert called is False
 
 
-def test_contract_audit_cli_reports_exposure_without_running_campaign() -> None:
-    """The audit command is deterministic and reports config follow-up scope."""
+def test_contract_audit_cli_reports_contract_complete_exposure_without_running_campaign() -> None:
+    """The audit command remains diagnostic-only while reporting complete config coverage."""
     completed = subprocess.run(
         [
             sys.executable,
@@ -241,12 +241,15 @@ def test_contract_audit_cli_reports_exposure_without_running_campaign() -> None:
         capture_output=True,
         text=True,
     )
-    assert completed.returncode == 2, completed.stderr
+    assert completed.returncode == 0, completed.stderr
     payload = json.loads(completed.stdout)
-    assert payload["status"] == "findings"
+    assert payload["status"] == "ok"
+    assert payload["exposure"]["status"] == "ok"
     assert payload["exposure"]["config_count"] >= 2
-    assert payload["exposure"]["counts"]["covered"] == 2
-    assert payload["exposure"]["counts"]["missing_reference"] == 3
+    assert payload["exposure"]["claim_boundary"].startswith("Exposure audit only.")
+    assert payload["exposure"]["counts"]["missing_reference"] == 0
+    assert payload["exposure"]["counts"]["invalid_reference"] == 0
+    assert payload["exposure"]["counts"]["invalid_contract"] == 0
 
 
 def test_contract_audit_marks_malformed_referenced_contract(tmp_path: Path) -> None:

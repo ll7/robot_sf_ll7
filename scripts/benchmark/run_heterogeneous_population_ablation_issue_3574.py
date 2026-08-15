@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Any, TextIO
 
-from robot_sf.benchmark.campaign_logging import (
+from robot_sf.benchmark.campaign.campaign_logging import (
     add_campaign_logging_argument,
     configure_campaign_logging,
 )

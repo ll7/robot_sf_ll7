@@ -38,7 +38,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight_from_config,
 )

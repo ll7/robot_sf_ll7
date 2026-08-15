@@ -10,7 +10,7 @@ resolves the two dependencies that flag actually refers to, using the
 repository's existing CPU-only infrastructure:
 
 1. the arm checkpoint (`model_id` in the algo_config), resolved through
-   `robot_sf.benchmark.campaign_checkpoint_preflight` (network-free cheap mode);
+   `robot_sf.benchmark.campaign.campaign_checkpoint_preflight` (network-free cheap mode);
 2. the learned-checkpoint observation contract, resolved through
    `robot_sf.benchmark.algorithm_metadata.resolve_learned_checkpoint_observation_contract`.
 
@@ -41,7 +41,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     resolve_learned_checkpoint_observation_contract,
 )
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
-from robot_sf.benchmark.campaign_checkpoint_preflight import (
+from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     iter_campaign_arm_checkpoint_references,
     resolve_arm_checkpoint,

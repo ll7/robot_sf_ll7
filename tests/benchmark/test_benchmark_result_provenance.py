@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+from hashlib import sha256
 from io import StringIO
 from pathlib import Path
 
@@ -11,8 +12,11 @@ import pytest
 
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 from robot_sf.benchmark.result_provenance import (
+    INPUT_BINDING_SCHEMA_VERSION,
     SCHEMA_VERSION,
+    ProvenanceArtifactError,
     ProvenanceRequiredFieldError,
+    ProvenanceValidationError,
     _cpu_model,
     build_execution_context_provenance,
     build_result_provenance_manifest,
@@ -22,6 +26,62 @@ from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest,
 )
 from scripts.validation import check_benchmark_result_provenance
+
+
+def _write_input_files(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Create deterministic benchmark input files for complete manifests."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    schema_path = tmp_path / "schema.json"
+    scenario_path = tmp_path / "scenarios.yaml"
+    algo_config_path = tmp_path / "algo.yaml"
+    schema_path.write_text('{"type":"object"}\n', encoding="utf-8")
+    scenario_path.write_text("- id: a\n", encoding="utf-8")
+    algo_config_path.write_text("algo: goal\n", encoding="utf-8")
+    return schema_path, scenario_path, algo_config_path
+
+
+def _complete_manifest(
+    tmp_path: Path,
+    *,
+    algo_config: bool = True,
+    scenario_file: bool = True,
+) -> dict[str, object]:
+    """Build a deterministic complete manifest with byte-resolvable inputs."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    jsonl_path = tmp_path / "episodes.jsonl"
+    jsonl_path.write_text(
+        '{"episode_id":"test--0","scenario_id":"test","seed":0}\n',
+        encoding="utf-8",
+    )
+    schema_path, scenario_path, algo_config_path = _write_input_files(tmp_path)
+    if not scenario_file:
+        scenario_path.unlink()
+    return build_result_provenance_manifest(
+        out_path=jsonl_path,
+        episode_records=[
+            {
+                "episode_id": "test--0",
+                "scenario_id": "test",
+                "seed": 0,
+                "config_hash": "abc",
+                "git_hash": "def",
+            },
+        ],
+        schema_path=schema_path,
+        scenario_path=scenario_path,
+        scenarios=[{"name": "test"}],
+        algo="goal",
+        algo_config_path=algo_config_path if algo_config else None,
+        benchmark_profile="baseline-safe",
+        suite_key="test_suite",
+        total_jobs=1,
+        written=1,
+        horizon=100,
+        dt=0.1,
+        record_forces=True,
+        active_observation_mode="lidar",
+        active_observation_level="full",
+    )
 
 
 def test_manifest_path_convention() -> None:
@@ -52,6 +112,7 @@ def test_build_manifest_has_correct_schema_version() -> None:
         active_observation_level="full",
     )
     assert manifest["schema_version"] == SCHEMA_VERSION
+    assert manifest["input_binding_schema_version"] == INPUT_BINDING_SCHEMA_VERSION
 
 
 def test_build_manifest_records_execution_context() -> None:
@@ -173,7 +234,7 @@ def test_build_manifest_treats_directory_algo_config_as_missing(tmp_path: Path) 
     }
 
 
-def test_build_manifest_treats_directory_scenario_matrix_as_not_applicable(
+def test_build_manifest_treats_directory_scenario_matrix_as_missing(
     tmp_path: Path,
 ) -> None:
     """Directory scenario matrix paths are not treated as readable files."""
@@ -202,7 +263,7 @@ def test_build_manifest_treats_directory_scenario_matrix_as_not_applicable(
     assert manifest["inputs"]["scenario_matrix"] == {
         "path": str(scenario_dir),
         "sha256": None,
-        "artifact_status": "not_applicable",
+        "artifact_status": "missing",
     }
 
 
@@ -301,14 +362,156 @@ def test_build_row_result_provenance_uses_supplied_postprocessing_steps() -> Non
 
 def test_validator_passes_complete_manifest(tmp_path: Path) -> None:
     """A well-formed manifest should pass validation without raising."""
+    manifest = _complete_manifest(tmp_path)
+    validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_on_available_input_missing_sha256(tmp_path: Path) -> None:
+    """Available benchmark inputs must carry a full SHA-256 digest."""
+    manifest = _complete_manifest(tmp_path)
+    manifest["inputs"]["schema_path"]["sha256"] = None
+
+    with pytest.raises(ProvenanceRequiredFieldError, match="inputs.schema_path.sha256"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_on_available_input_malformed_sha256(tmp_path: Path) -> None:
+    """Short or non-hex input hashes are not complete evidence."""
+    manifest = _complete_manifest(tmp_path)
+    manifest["inputs"]["schema_path"]["sha256"] = "abc123"
+
+    with pytest.raises(ProvenanceRequiredFieldError, match="inputs.schema_path.sha256"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_on_required_input_marked_missing(tmp_path: Path) -> None:
+    """Required inputs cannot be marked missing for complete evidence."""
+    manifest = _complete_manifest(tmp_path)
+    manifest["inputs"]["scenario_matrix"] = {
+        "path": str(tmp_path / "missing-scenarios.yaml"),
+        "sha256": None,
+        "artifact_status": "missing",
+    }
+
+    with pytest.raises(ProvenanceArtifactError, match="inputs.scenario_matrix is missing"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_on_contradictory_input_status_fields(tmp_path: Path) -> None:
+    """Status, path, and digest must agree internally."""
+    manifest = _complete_manifest(tmp_path)
+    manifest["inputs"]["algo_config"] = {
+        "path": str(tmp_path / "algo.yaml"),
+        "sha256": sha256(b"algo: goal\n").hexdigest(),
+        "artifact_status": "not_provided",
+    }
+
+    with pytest.raises(ProvenanceRequiredFieldError, match="inputs.algo_config.path"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_when_referenced_input_file_bytes_change(tmp_path: Path) -> None:
+    """Local validation recomputes referenced input hashes and catches drift."""
+    manifest = _complete_manifest(tmp_path)
+    schema_path = Path(manifest["inputs"]["schema_path"]["path"])
+    schema_path.write_text('{"type":"array"}\n', encoding="utf-8")
+
+    with pytest.raises(ProvenanceRequiredFieldError, match="schema_path.sha256"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_accepts_optional_algo_config_not_provided(tmp_path: Path) -> None:
+    """Algorithm config absence is valid only through the explicit optional shape."""
+    manifest = _complete_manifest(tmp_path, algo_config=False)
+
+    assert manifest["inputs"]["algo_config"] == {
+        "path": None,
+        "sha256": None,
+        "artifact_status": "not_provided",
+    }
+    validate_result_provenance_manifest(manifest)
+
+
+def test_validator_accepts_inline_generated_scenario_input(tmp_path: Path) -> None:
+    """Inline/generated scenario inputs use the documented not_applicable shape."""
+    manifest = _complete_manifest(tmp_path, scenario_file=False)
+
+    assert manifest["inputs"]["scenario_matrix"] == {
+        "path": None,
+        "sha256": None,
+        "artifact_status": "not_applicable",
+        "reason": "inline_or_generated_scenarios",
+    }
+    validate_result_provenance_manifest(manifest)
+
+
+def test_input_bundle_sha256_ignores_path_aliases_to_identical_bytes(tmp_path: Path) -> None:
+    """The input bundle identity is byte-bound, not path-string-bound."""
+    schema_path, scenario_path, algo_config_path = _write_input_files(tmp_path)
+    alias_schema = tmp_path / "schema-alias.json"
+    alias_scenario = tmp_path / "scenarios-alias.yaml"
+    alias_algo = tmp_path / "algo-alias.yaml"
+    alias_schema.write_bytes(schema_path.read_bytes())
+    alias_scenario.write_bytes(scenario_path.read_bytes())
+    alias_algo.write_bytes(algo_config_path.read_bytes())
+
     jsonl_path = tmp_path / "episodes.jsonl"
     jsonl_path.write_text(
         '{"episode_id":"test--0","scenario_id":"test","seed":0}\n',
         encoding="utf-8",
     )
+    kwargs = {
+        "out_path": jsonl_path,
+        "episode_records": [
+            {
+                "episode_id": "test--0",
+                "scenario_id": "test",
+                "seed": 0,
+                "config_hash": "abc",
+                "git_hash": "def",
+            }
+        ],
+        "scenarios": [{"name": "test"}],
+        "algo": "goal",
+        "benchmark_profile": "baseline-safe",
+        "suite_key": "test_suite",
+        "total_jobs": 1,
+        "written": 1,
+        "horizon": 100,
+        "dt": 0.1,
+        "record_forces": True,
+        "active_observation_mode": "lidar",
+        "active_observation_level": "full",
+    }
+    original = build_result_provenance_manifest(
+        schema_path=schema_path,
+        scenario_path=scenario_path,
+        algo_config_path=algo_config_path,
+        **kwargs,
+    )
+    alias = build_result_provenance_manifest(
+        schema_path=alias_schema,
+        scenario_path=alias_scenario,
+        algo_config_path=alias_algo,
+        **kwargs,
+    )
 
-    manifest = build_result_provenance_manifest(
-        out_path=jsonl_path,
+    assert (
+        original["campaign_identity"]["input_bundle_sha256"]
+        == alias["campaign_identity"]["input_bundle_sha256"]
+    )
+    assert original["campaign_identity"]["config_hash"] != alias["campaign_identity"]["config_hash"]
+
+
+def test_input_bundle_sha256_changes_when_input_bytes_change(tmp_path: Path) -> None:
+    """Different input bytes cannot retain the same full input-bundle digest."""
+    first = _complete_manifest(tmp_path / "first")
+    second = _complete_manifest(tmp_path / "second")
+    second_schema = Path(second["inputs"]["schema_path"]["path"])
+    second_schema.write_text('{"type":"array"}\n', encoding="utf-8")
+    second["inputs"]["schema_path"]["sha256"] = sha256(second_schema.read_bytes()).hexdigest()
+    second["campaign_identity"]["input_bundle_sha256"] = build_result_provenance_manifest(
+        out_path=Path(second["raw_artifacts"][0]["path"]),
         episode_records=[
             {
                 "episode_id": "test--0",
@@ -316,13 +519,13 @@ def test_validator_passes_complete_manifest(tmp_path: Path) -> None:
                 "seed": 0,
                 "config_hash": "abc",
                 "git_hash": "def",
-            },
+            }
         ],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
+        schema_path=second_schema,
+        scenario_path=Path(second["inputs"]["scenario_matrix"]["path"]),
         scenarios=[{"name": "test"}],
         algo="goal",
-        algo_config_path=None,
+        algo_config_path=Path(second["inputs"]["algo_config"]["path"]),
         benchmark_profile="baseline-safe",
         suite_key="test_suite",
         total_jobs=1,
@@ -332,32 +535,45 @@ def test_validator_passes_complete_manifest(tmp_path: Path) -> None:
         record_forces=True,
         active_observation_mode="lidar",
         active_observation_level="full",
+    )["campaign_identity"]["input_bundle_sha256"]
+
+    assert (
+        first["campaign_identity"]["input_bundle_sha256"]
+        != second["campaign_identity"]["input_bundle_sha256"]
     )
 
-    # Validation should not raise.
+
+def test_validator_rejects_unmarked_strengthened_manifest(tmp_path: Path) -> None:
+    """Strengthened fields require the explicit additive migration marker."""
+    manifest = _complete_manifest(tmp_path)
+    manifest.pop("input_binding_schema_version")
+
+    with pytest.raises(ProvenanceValidationError, match="cannot claim strengthened"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_accepts_unmarked_historical_v1_manifest(tmp_path: Path) -> None:
+    """Historical v1 manifests remain legacy-only, not strengthened evidence."""
+    manifest = _complete_manifest(tmp_path)
+    manifest.pop("input_binding_schema_version")
+    manifest["campaign_identity"].pop("input_bundle_sha256")
+    manifest["campaign_identity"].pop("algorithm")
+
     validate_result_provenance_manifest(manifest)
 
 
-def test_validator_fails_on_incomplete_manifest() -> None:
+def test_validator_rejects_unknown_input_binding_version(tmp_path: Path) -> None:
+    """Unknown additive contract versions fail closed."""
+    manifest = _complete_manifest(tmp_path)
+    manifest["input_binding_schema_version"] = "benchmark_result_provenance.input_binding.v3"
+
+    with pytest.raises(ProvenanceRequiredFieldError, match="input_binding_schema_version"):
+        validate_result_provenance_manifest(manifest)
+
+
+def test_validator_fails_on_incomplete_manifest(tmp_path: Path) -> None:
     """A manifest with missing required fields should raise."""
-    manifest = build_result_provenance_manifest(
-        out_path=Path("episodes.jsonl"),
-        episode_records=[],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test_suite",
-        total_jobs=0,
-        written=0,
-        horizon=100,
-        dt=0.1,
-        record_forces=True,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
 
     # Corrupt the manifest by deleting a required row field.
     manifest["run"]["repo_commit"] = ""
@@ -368,63 +584,16 @@ def test_validator_fails_on_incomplete_manifest() -> None:
 
 def test_validator_fails_closed_on_non_dict_row(tmp_path: Path) -> None:
     """Malformed row entries fail with a clean provenance validation error."""
-    jsonl_path = tmp_path / "episodes.jsonl"
-    jsonl_path.write_text(
-        '{"episode_id":"test--0","scenario_id":"test","seed":0}\n',
-        encoding="utf-8",
-    )
-    manifest = build_result_provenance_manifest(
-        out_path=jsonl_path,
-        episode_records=[
-            {
-                "episode_id": "test--0",
-                "scenario_id": "test",
-                "seed": 0,
-                "config_hash": "abc",
-                "git_hash": "def",
-            },
-        ],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[{"name": "test"}],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test_suite",
-        total_jobs=1,
-        written=1,
-        horizon=100,
-        dt=0.1,
-        record_forces=True,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
     manifest["rows"] = ["not-a-dict"]
 
     with pytest.raises(ProvenanceRequiredFieldError, match=r"rows\[0\] must be a dict"):
         validate_result_provenance_manifest(manifest)
 
 
-def test_validator_fails_on_missing_scenario_matrix_hash() -> None:
+def test_validator_fails_on_missing_scenario_matrix_hash(tmp_path: Path) -> None:
     """A manifest without campaign_identity.scenario_matrix_hash should fail."""
-    manifest = build_result_provenance_manifest(
-        out_path=Path("episodes.jsonl"),
-        episode_records=[],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test_suite",
-        total_jobs=0,
-        written=0,
-        horizon=100,
-        dt=0.1,
-        record_forces=True,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
 
     del manifest["campaign_identity"]["scenario_matrix_hash"]
 
@@ -434,26 +603,9 @@ def test_validator_fails_on_missing_scenario_matrix_hash() -> None:
         validate_result_provenance_manifest(manifest)
 
 
-def test_validator_fails_on_missing_episodes_jsonl_artifact() -> None:
+def test_validator_fails_on_missing_episodes_jsonl_artifact(tmp_path: Path) -> None:
     """A manifest without an episodes_jsonl artifact entry should fail validation."""
-    manifest = build_result_provenance_manifest(
-        out_path=Path("episodes.jsonl"),
-        episode_records=[],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test_suite",
-        total_jobs=0,
-        written=0,
-        horizon=100,
-        dt=0.1,
-        record_forces=True,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
 
     manifest["raw_artifacts"] = []
 
@@ -611,37 +763,7 @@ def test_cli_checker_accepts_valid_manifest(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The validation CLI exits 0 for a known-good manifest."""
-    jsonl_path = tmp_path / "episodes.jsonl"
-    jsonl_path.write_text(
-        '{"episode_id":"a--1","scenario_id":"a","seed":1}\n',
-        encoding="utf-8",
-    )
-    manifest = build_result_provenance_manifest(
-        out_path=jsonl_path,
-        episode_records=[
-            {
-                "episode_id": "a--1",
-                "scenario_id": "a",
-                "seed": 1,
-                "config_hash": "abc",
-                "git_hash": "def",
-            },
-        ],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[{"name": "a"}],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test",
-        total_jobs=1,
-        written=1,
-        horizon=100,
-        dt=0.1,
-        record_forces=False,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
     manifest_path = tmp_path / "episodes.jsonl.provenance.json"
     write_result_provenance_manifest(manifest_path, manifest)
 
@@ -663,24 +785,7 @@ def test_cli_checker_fails_closed_on_invalid_manifest(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The validation CLI exits 2 when required provenance fields are missing."""
-    manifest = build_result_provenance_manifest(
-        out_path=Path("episodes.jsonl"),
-        episode_records=[],
-        schema_path="schema.json",
-        scenario_path=Path("scenarios.yaml"),
-        scenarios=[],
-        algo="goal",
-        algo_config_path=None,
-        benchmark_profile="baseline-safe",
-        suite_key="test",
-        total_jobs=0,
-        written=0,
-        horizon=100,
-        dt=0.1,
-        record_forces=False,
-        active_observation_mode="lidar",
-        active_observation_level="full",
-    )
+    manifest = _complete_manifest(tmp_path)
     manifest["run"]["repo_commit"] = ""
     manifest_path = tmp_path / "invalid.provenance.json"
     write_result_provenance_manifest(manifest_path, manifest)

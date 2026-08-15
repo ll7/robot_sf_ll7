@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from scripts.dev import issue_audit_core
 from scripts.dev.issue_audit_core import (
     _run_command,
     _run_gh,
@@ -20,6 +21,7 @@ from scripts.dev.issue_audit_core import (
     closure_evidence,
     compute_plan_digest,
     discover_issue_comments,
+    discover_issue_timeline_merged_prs,
     label_api_path,
     main,
     parse_decision_answer,
@@ -151,7 +153,8 @@ def test_gate_matching_does_not_pair_unrelated_status_and_topic_lines() -> None:
     proven = classify_issue(
         _issue(
             112,
-            body="Rights: license missing pending permission review.\n"
+            body="Blocked-by: #900\n"
+            "Rights: license missing pending permission review.\n"
             "## Definition of Done\n- [ ] record the decision",
         ),
         available_labels={"state:blocked", "state:blocked-external-input"},
@@ -188,7 +191,7 @@ def test_gate_matching_ignores_aggregate_reports_and_conditional_rules() -> None
     current = classify_issue(
         _issue(
             115,
-            body="This issue is blocked until the required checkpoint is staged.",
+            body="Blocked-by: #901\nThis issue is blocked until the required checkpoint is staged.",
         ),
         available_labels={"state:blocked", "state:blocked-external-input"},
     )
@@ -252,7 +255,7 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
         _issue(
             118,
             labels=["state:running"],
-            body="This issue is blocked until the required dataset is staged.",
+            body="Blocked-by: #902\nThis issue is blocked until the required dataset is staged.",
         ),
         available_labels={
             "state:running",
@@ -266,6 +269,89 @@ def test_blocker_replaces_single_stale_execution_state() -> None:
         ("remove_label", "state:running"),
         ("add_label", "state:blocked-external-input"),
     }
+    blocked_mutation = next(
+        mutation
+        for mutation in classification.mutations
+        if mutation["value"] == "state:blocked-external-input"
+    )
+    assert blocked_mutation["blocked_reason"] == ["Blocked-by reference present: Blocked-by: #902"]
+
+
+def test_blocker_without_reason_routes_to_needs_triage() -> None:
+    """A prose-only blocker cannot create a dispatch-suppressing state label."""
+    classification = classify_issue(
+        _issue(122, body="This issue is blocked until the required dataset is staged."),
+        available_labels={"state:blocked", "state:blocked-external-input", "needs-triage"},
+    )
+
+    assert classification.classification == "blocked"
+    assert classification.blocked_reason_evidence == ()
+    assert classification.blocked_label_decision == "declined-needs-triage"
+    assert not any(
+        mutation["operation"] == "add_label"
+        and mutation["value"] in issue_audit_core.BLOCKED_LABELS
+        for mutation in classification.mutations
+    )
+    assert {mutation["value"] for mutation in classification.mutations} == {"needs-triage"}
+    assert any("declined state:blocked" in finding for finding in classification.findings)
+
+
+def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:
+    """A complete blocked-triage block is accepted as explicit reason evidence."""
+    body = (
+        "<!-- blocked-triage-v1 tracking=7067 -->\n"
+        "```yaml\n"
+        "blocker_class: dependency\n"
+        "unblock_condition: '#902 is closed'\n"
+        "watcher: next queue pass\n"
+        "next_check_at: next queue pass\n"
+        "last_meaningful_progress_at: '2026-08-14'\n"
+        "```\n"
+        "This issue is blocked until the required dataset is staged."
+    )
+    classification = classify_issue(
+        _issue(125, body=body),
+        available_labels={"state:blocked", "state:blocked-external-input"},
+    )
+
+    assert classification.blocked_label_decision == "apply"
+    blocked_mutation = next(
+        mutation
+        for mutation in classification.mutations
+        if mutation["value"] == "state:blocked-external-input"
+    )
+    assert blocked_mutation["blocked_reason"] == ["blocked-triage-v1 reason block present"]
+
+
+def test_audit_plan_reports_blocked_label_decision() -> None:
+    """The plan exposes whether a blocked-label write was applied or declined."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(123, body="This issue is blocked until the dataset is staged.")],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:blocked", "state:blocked-external-input", "needs-triage"],
+            "inventory": {},
+        }
+    )
+
+    assert plan["blocked_label_report"] == [
+        {
+            "issue": 123,
+            "decision": "declined-needs-triage",
+            "blocker_evidence": [
+                {"kind": "external-input", "text": "dataset evidence includes explicit gate"},
+                {"kind": "blocked", "text": "explicit current blocker"},
+            ],
+            "reason_evidence": [],
+            "fallback_label": "needs-triage",
+        }
+    ]
+    assert plan["counts"]["blocked_label_decisions"] == 1
 
 
 def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
@@ -346,6 +432,210 @@ def test_comment_inventory_reports_degraded_reads_as_unavailable() -> None:
     assert metadata["available"] is False
     assert metadata["errors"]
     assert issues[0]["comments"] == []
+
+
+def test_issue_timeline_recovers_merged_cross_referenced_pr() -> None:
+    """A bounded issue timeline supplies merged-PR coverage beyond global history."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        assert args[0] == "api"
+        assert "issues/110/timeline" in args[1]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                [
+                    {
+                        "event": "cross-referenced",
+                        "created_at": "2026-08-14T10:00:00Z",
+                        "source": {
+                            "type": "issue",
+                            "issue": {
+                                "number": 901,
+                                "title": "Add audit coverage",
+                                "body": "Refs #110",
+                                "state": "closed",
+                                "html_url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+                                "pull_request": {
+                                    "merged_at": "2026-08-14T09:00:00Z",
+                                    "html_url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+                                },
+                            },
+                        },
+                    },
+                    {"event": "commented"},
+                ]
+            ),
+            "",
+        )
+
+    rows, metadata = discover_issue_timeline_merged_prs("ll7/robot_sf_ll7", [110], runner=runner)
+
+    assert [row["number"] for row in rows] == [901]
+    assert rows[0]["coverage_source"] == "targeted_issue_timeline"
+    assert rows[0]["timeline_issue"] == 110
+    assert rows[0]["linked_issue_numbers"] == [110]
+    assert metadata["available"] is True
+    assert metadata["event_count"] == 2
+    assert metadata["row_count"] == 1
+
+
+def test_issue_timeline_failure_is_explicitly_unavailable() -> None:
+    """Timeline/API failures never become an empty successful fallback."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        return subprocess.CompletedProcess(args, 1, "", "timeline unavailable")
+
+    rows, metadata = discover_issue_timeline_merged_prs("ll7/robot_sf_ll7", [110], runner=runner)
+
+    assert rows == []
+    assert metadata["available"] is False
+    assert metadata["errors"]
+
+
+def test_inventory_uses_timeline_fallback_for_partial_closed_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Partial global history triggers targeted merged-PR coverage."""
+    issue = _issue(110)
+    timeline_row = {
+        "number": 901,
+        "title": "Add audit coverage",
+        "body": "Refs #110",
+        "state": "closed",
+        "url": "https://github.com/ll7/robot_sf_ll7/pull/901",
+        "merged_at": "2026-08-14T09:00:00Z",
+        "head_ref": "",
+        "linked_issue_numbers": [110],
+        "coverage_source": "targeted_issue_timeline",
+    }
+
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([issue], {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_pull_requests",
+        lambda _repo, *, state, max_pages, runner: (
+            ([], {"truncated": False, "errors": []})
+            if state == "open"
+            else ([], {"truncated": True, "errors": []})
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_issue_timeline_merged_prs",
+        lambda *args, **kwargs: (
+            [timeline_row],
+            {"available": True, "truncated": False, "errors": [], "row_count": 1},
+        ),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7")
+
+    assert [row["number"] for row in inventory["merged_prs"]] == [901]
+    assert inventory["inventory"]["closure_coverage"]["mode"] == ("issue_timeline_fallback")
+    assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is True
+    assert inventory["inventory"]["closed_prs"]["truncated"] is True
+
+
+def test_closure_evidence_preserves_targeted_timeline_provenance() -> None:
+    """Closure evidence distinguishes targeted timeline coverage from global rows."""
+    issue = _issue(110, body="Completion condition: merged PR #901")
+    merged = [
+        {
+            "number": 901,
+            "title": "Add audit coverage",
+            "body": "",
+            "merged_at": "2026-08-14T09:00:00Z",
+            "linked_issue_numbers": [110],
+            "coverage_source": "targeted_issue_timeline",
+        }
+    ]
+
+    evidence = closure_evidence(issue, merged_prs=merged, open_issue_numbers={110})
+
+    assert evidence["eligible"] is True
+    assert evidence["merged_prs"] == [901]
+    assert evidence["coverage_sources"] == ["targeted_issue_timeline"]
+    assert evidence["targeted_merged_prs"] == [901]
+
+
+def test_targeted_coverage_does_not_hide_global_history_truncation() -> None:
+    """The plan exposes targeted coverage but apply remains fail-closed."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(110, body="Completion condition: merged PR #901")],
+            "open_prs": [],
+            "merged_prs": [
+                {
+                    "number": 901,
+                    "title": "Add audit coverage",
+                    "body": "",
+                    "merged_at": "2026-08-14T09:00:00Z",
+                    "linked_issue_numbers": [110],
+                    "coverage_source": "targeted_issue_timeline",
+                }
+            ],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": [],
+            "inventory": {
+                "closed_prs": {"truncated": True, "errors": []},
+                "issue_timeline_merged_prs": {
+                    "available": True,
+                    "truncated": False,
+                    "errors": [],
+                },
+                "closure_coverage": {
+                    "complete_for_open_issues": True,
+                    "mode": "issue_timeline_fallback",
+                },
+            },
+        }
+    )
+
+    assert plan["inventory_coverage"]["mode"] == "issue_timeline_fallback"
+    assert plan["issues"][0]["closure_evidence"]["targeted_merged_prs"] == [901]
+    assert "closed_prs" in plan["truncation_or_errors"]
+
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("truncated plan must not invoke mutation runner")
+
+    result = apply_mutations(plan, runner=runner)
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "closed_prs" in result["failures"]
+    assert calls == []
 
 
 def test_command_timeouts_return_failures_instead_of_raising(
@@ -729,6 +1019,79 @@ def test_apply_rejects_stale_plan_digest_before_mutation() -> None:
     assert result["applied"] == []
     assert "stale" in result["reason"]
     assert calls == []
+
+
+def test_apply_rejects_unreasoned_blocked_label_before_mutation() -> None:
+    """A hand-edited plan cannot bypass the blocked-label reason guard."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        raise AssertionError("unreasoned blocked-label plan must be rejected before writes")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 124,
+                "value": "state:blocked",
+                "reason": "prose-only blocker",
+                "evidence": ["issue text says blocked"],
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert "unreasoned blocked-label" in result["reason"]
+    assert calls == []
+
+
+def test_apply_accepts_reasoned_blocked_label() -> None:
+    """A planner-bound reason permits the blocked-label write and readback."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        if args[:3] == ["api", "-X", "POST"]:
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if args[:2] == ["api", "repos/ll7/robot_sf_ll7/issues/126"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps({"state": "open", "labels": [{"name": "state:blocked"}]}),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {args}")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 126,
+                "value": "state:blocked",
+                "reason": "record a proven blocker",
+                "evidence": ["blocked evidence"],
+                "blocked_reason": ["Blocked-by reference present: Blocked-by: #902"],
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is True
+    assert result["readback"][0]["verified"]["missing_additions"] == []
+    assert len(calls) == 2
 
 
 def test_pending_queue_can_record_readback_confirmed_safe_mutations() -> None:

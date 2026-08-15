@@ -299,6 +299,54 @@ def test_duplicate_fidelity_surface_id_fails_closed() -> None:
 
 
 @pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (
+            lambda packet: packet["held_out_plan"]["persistence_rule"].__setitem__(
+                "per_seed_clear_condition", "lane_segregation_index >= 0.4 for one step"
+            ),
+            "persistence_rule.per_seed_clear_condition",
+        ),
+        (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][0].__setitem__(
+                "metric", "wrong_metric"
+            ),
+            "fidelity surface lane_formation.metric",
+        ),
+        (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][1].__setitem__(
+                "direction", "wrong_direction"
+            ),
+            "fidelity surface exit_arching.direction",
+        ),
+        (
+            lambda packet: packet["fidelity_cost_surfaces"]["outcomes"][2].__setitem__(
+                "scenario_source", "unreviewed_source"
+            ),
+            "fidelity surface doorway_oscillation.scenario_source",
+        ),
+        (
+            lambda packet: packet["result_packet_skeleton"]["required_fields"].pop(),
+            "result_packet_skeleton.required_fields drifted",
+        ),
+        (
+            lambda packet: packet["stop_rules"].pop(),
+            "stop_rules drifted",
+        ),
+    ],
+)
+def test_declared_stage_b_semantics_cannot_drift(
+    mutate: Callable[[dict[str, object]], object], match: str
+) -> None:
+    """The validator freezes semantics, not only identifiers and row counts."""
+    packet = copy.deepcopy(_packet())
+    mutate(packet)
+
+    with pytest.raises(StageBPreregistrationError, match=match):
+        validate_preregistration_config(packet, config_path=PACKET)
+
+
+@pytest.mark.parametrize(
     ("section", "key", "value", "match"),
     [
         (

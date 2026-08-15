@@ -45,6 +45,86 @@ EXPECTED_FIDELITY_SURFACES = (
     "collision_overlap",
     "planner_facing_interaction",
 )
+EXPECTED_PERSISTENCE_RULE = {
+    "steady_state_window": "the declared post-warmup observation window from the Stage A protocol",
+    "per_seed_clear_condition": (
+        "lane_segregation_index >= 0.5 for the complete steady_state_window"
+    ),
+    "confirmation_rule": "at least 8 of 10 held-out seeds satisfy per_seed_clear_condition",
+    "report_all_seed_values": True,
+}
+EXPECTED_FIDELITY_SURFACE_FIELDS = {
+    "lane_formation": {
+        "metric": "lane_segregation_index",
+        "unit": [0, 1],
+        "role": "primary",
+        "direction": "larger_is_more_lane_segregation",
+        "source_contract": "robot_sf.research.lane_formation_reference",
+    },
+    "exit_arching": {
+        "metric": "exit_density_ratio",
+        "unit": "dimensionless_ratio",
+        "role": "fidelity_cost",
+        "direction": "positive_delta_is_arching_cost",
+        "scenario_source": "robot_sf.research.emergent_phenomena.default_scenario_set",
+    },
+    "doorway_oscillation": {
+        "metric": "oscillation_flips",
+        "unit": "flips_per_observation_window",
+        "role": "fidelity_cost",
+        "direction": "positive_delta_is_oscillation_cost",
+        "scenario_source": "robot_sf.research.emergent_phenomena.default_scenario_set",
+    },
+    "throughput": {
+        "metric": "completed_agents_per_second",
+        "unit": "agents_per_second",
+        "role": "fidelity_cost",
+        "direction": "negative_delta_is_throughput_cost",
+        "scenario_source": "robot_sf.research.emergent_phenomena.default_scenario_set",
+    },
+    "collision_overlap": {
+        "metric": "collision_and_overlap_rate",
+        "unit": "proportion_of_valid_rows",
+        "role": "fidelity_cost",
+        "direction": "positive_delta_is_collision_overlap_cost",
+        "scenario_source": "native_runner_metric_contract_to_be_named_before_launch",
+    },
+    "planner_facing_interaction": {
+        "metric": ["completion_rate", "progress_at_timeout", "collision_rate"],
+        "unit": "declared_per_metric",
+        "role": "downstream_diagnostic",
+        "direction": "report_signed_deltas_without_a_universal_planner_claim",
+        "scenario_source": "named_planner_facing_suite_required_before_launch",
+    },
+}
+EXPECTED_RESULT_PACKET_FIELDS = (
+    "research_question_and_hypothesis",
+    "evidence_tier_and_admission_state",
+    "source_artifact_ids_paths_digests_generation_commit_command",
+    "analysis_population_inclusion_exclusion_and_attrition",
+    "native_adapter_fallback_degraded_unavailable_rejected_accounting",
+    "primary_estimand_analysis_unit_pairing_key_comparator_and_contrast_direction",
+    "metric_units_support_denominators_missingness_and_uncertainty",
+    "fidelity_surface_effects_and_sensitivity_results",
+    "figure_ids_visual_contracts_and_sample_size_display",
+    "structured_caption_assertions_with_observed_inferred_unavailable_status",
+    "claim_boundary_forbidden_claims_and_exact_decision_vocabulary",
+    "independent_review_identity_status_digest_and_findings",
+)
+EXPECTED_FORBIDDEN_RESULT_FIELDS = (
+    "dissertation_admission",
+    "paper_facing_claim",
+    "released_default_recommendation",
+    "universal_social_force_model_claim",
+)
+EXPECTED_STOP_RULES = (
+    "Stop before compute if the Stage A source digest or implementation contract drifts.",
+    "Stop with no candidate if the frozen eligibility rule returns an empty set.",
+    "Stop and classify incomplete if any required row is non-native, missing, non-finite, fallback, or degraded.",
+    "Stop if a seed, surface, comparator, or parameter is substituted after outcomes are inspected.",
+    "Stop before interpretation if the result packet cannot bind every number, figure, caption, and claim to exact artifacts.",
+    "Never change released defaults in this issue.",
+)
 
 
 class StageBPreregistrationError(ValueError):
@@ -190,13 +270,20 @@ def validate_preregistration_config(
         packet.get("required_fields"), "result_packet_skeleton.required_fields"
     )
     _require(
-        len(set(required_packet_fields)) == len(required_packet_fields),
-        "result_packet_skeleton.required_fields must be unique",
+        required_packet_fields == list(EXPECTED_RESULT_PACKET_FIELDS),
+        "result_packet_skeleton.required_fields drifted",
     )
-    _list(packet.get("forbidden_until_reviewed"), "result_packet_skeleton.forbidden_until_reviewed")
+    forbidden_packet_fields = _list(
+        packet.get("forbidden_until_reviewed"), "result_packet_skeleton.forbidden_until_reviewed"
+    )
+    _require(
+        forbidden_packet_fields == list(EXPECTED_FORBIDDEN_RESULT_FIELDS),
+        "result_packet_skeleton.forbidden_until_reviewed drifted",
+    )
 
     stop_rules = _list(config.get("stop_rules"), "stop_rules")
     _require(len(stop_rules) >= 5, "stop_rules must retain the full fail-closed stop contract")
+    _require(stop_rules == list(EXPECTED_STOP_RULES), "stop_rules drifted")
 
     readiness = _mapping(config.get("readiness_decision"), "readiness_decision")
     _require(
@@ -617,11 +704,11 @@ def _validate_held_out_plan(config: Mapping[str, Any]) -> None:
         "held-out missingness policy must remain fail-closed",
     )
     persistence = _mapping(held_out.get("persistence_rule"), "held_out_plan.persistence_rule")
-    _require(
-        persistence.get("confirmation_rule")
-        == "at least 8 of 10 held-out seeds satisfy per_seed_clear_condition",
-        "held-out confirmation rule drifted",
-    )
+    for key, expected in EXPECTED_PERSISTENCE_RULE.items():
+        _require(
+            persistence.get(key) == expected,
+            f"held_out_plan.persistence_rule.{key} drifted",
+        )
 
 
 def _validate_fidelity_surfaces(config: Mapping[str, Any]) -> None:
@@ -651,9 +738,11 @@ def _validate_fidelity_surfaces(config: Mapping[str, Any]) -> None:
     _require(set(by_id) == set(EXPECTED_FIDELITY_SURFACES), "fidelity surface set drifted")
     for surface_id in EXPECTED_FIDELITY_SURFACES:
         entry = _mapping(by_id[surface_id], f"fidelity_cost_surfaces.{surface_id}")
-        _require(entry.get("metric"), f"fidelity surface {surface_id} must name a metric")
-        _require(entry.get("unit"), f"fidelity surface {surface_id} must name units")
-        _require(entry.get("direction"), f"fidelity surface {surface_id} must name direction")
+        for key, expected in EXPECTED_FIDELITY_SURFACE_FIELDS[surface_id].items():
+            _require(
+                entry.get(key) == expected,
+                f"fidelity surface {surface_id}.{key} drifted",
+            )
     _require(
         surfaces.get("decision_policy")
         == "report_tradeoffs; do not pre-authorize a recalibration or default change",

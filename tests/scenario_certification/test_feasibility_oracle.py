@@ -213,11 +213,14 @@ def test_oracle_reports_infeasible_by_construction_when_no_inflated_path() -> No
     assert verdict.completion.blocker == "route_geometrically_infeasible_no_traversal_path"
 
 
-def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out() -> None:
-    """A geometrically feasible route that times out is time-truncated."""
+@pytest.mark.parametrize("termination_reason", ["max_steps", "terminated", "truncated", "timeout"])
+def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out(
+    termination_reason: str,
+) -> None:
+    """All shared timeout labels produce the time-truncated diagnostic verdict."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 500, "horizon": 500, "termination_reason": "max_steps"}
+        return {"steps": 500, "horizon": 500, "termination_reason": termination_reason}
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -232,6 +235,15 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     assert verdict.geometric.route_geometrically_feasible is True
     assert verdict.completion.route_completion_feasible is False
     assert verdict.completion.min_completion_steps is None
+
+
+def test_termination_completion_preserves_non_timeout_terminal_reasons() -> None:
+    """Collision and runtime-failure labels remain distinct from timeout labels."""
+    for termination_reason in ("collision", "failure", "failed", "error"):
+        assert feasibility_oracle._termination_completion(termination_reason) == (
+            False,
+            termination_reason,
+        )
 
 
 def test_oracle_corridor_margin_is_none_when_no_static_obstacles() -> None:

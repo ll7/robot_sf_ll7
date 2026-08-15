@@ -9,9 +9,11 @@ from typing import Any
 
 import pytest
 
+from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.independent_outcome_producer import (
     EXECUTION_RECORD_SCHEMA_VERSION,
     _merge_existing_packet,
+    _validate_episode_outcome,
     build_outcome_packet,
     load_execution_records,
 )
@@ -412,6 +414,58 @@ def test_producer_rejects_noncanonical_outcome_values(
             binding_path=binding_path,
             producer_commit=PRODUCER_COMMIT,
         )
+
+
+@pytest.mark.parametrize(
+    ("termination_reason", "outcome", "expected_failure"),
+    [
+        (
+            "success",
+            {"route_complete": True, "collision_event": False, "timeout_event": False},
+            "success",
+        ),
+        (
+            "collision",
+            {"route_complete": False, "collision_event": True, "timeout_event": False},
+            "collision",
+        ),
+        (
+            "terminated",
+            {"route_complete": False, "collision_event": False, "timeout_event": True},
+            "timeout",
+        ),
+        (
+            "truncated",
+            {"route_complete": False, "collision_event": False, "timeout_event": True},
+            "timeout",
+        ),
+        (
+            "max_steps",
+            {"route_complete": False, "collision_event": False, "timeout_event": True},
+            "timeout",
+        ),
+    ],
+)
+def test_validate_episode_outcome_matches_attribution_policy(
+    termination_reason: str, outcome: dict[str, bool], expected_failure: str
+) -> None:
+    """Every accepted canonical reason maps to the same attribution category."""
+    record = {"termination_reason": termination_reason, "outcome": outcome}
+
+    _validate_episode_outcome(record, manifest_id="candidate_0")
+
+    assert attribution_from_episode_record(record).primary_failure == expected_failure
+
+
+def test_producer_rejects_terminated_without_timeout_flag() -> None:
+    """A terminal episode cannot silently become an unclassified incomplete row."""
+    record = {
+        "termination_reason": "terminated",
+        "outcome": {"route_complete": False, "collision_event": False, "timeout_event": False},
+    }
+
+    with pytest.raises(ValueError, match="timeout_event disagrees with termination_reason"):
+        _validate_episode_outcome(record, manifest_id="candidate_0")
 
 
 def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> None:

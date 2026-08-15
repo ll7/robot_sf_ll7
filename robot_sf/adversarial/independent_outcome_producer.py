@@ -36,7 +36,10 @@ from robot_sf.adversarial.independent_outcomes import (
     payload_sha256,
 )
 from robot_sf.adversarial.proposal_model import load_issue_3275_contract
-from robot_sf.benchmark.termination_reason import TERMINATION_REASONS
+from robot_sf.benchmark.termination_reason import (
+    TERMINATION_REASONS,
+    TIMEOUT_TERMINATION_REASONS,
+)
 
 EXECUTION_RECORD_SCHEMA_VERSION = "issue_7066_execution_record.v1"
 _ARMS = ("proposal", "random")
@@ -329,7 +332,7 @@ def _validate_episode_outcome(record: dict[str, Any], *, manifest_id: str) -> No
         raise ValueError(
             f"episode record {manifest_id} collision_event disagrees with termination_reason"
         )
-    if timeout != (termination_reason in {"truncated", "max_steps"}):
+    if timeout != (termination_reason in TIMEOUT_TERMINATION_REASONS):
         raise ValueError(
             f"episode record {manifest_id} timeout_event disagrees with termination_reason"
         )

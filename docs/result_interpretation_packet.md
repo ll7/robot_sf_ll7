@@ -110,6 +110,15 @@ Every metric also names one or more declared `source_ids`, so a reviewer can
 start from the metric's retained source or aggregate artifact when reproducing
 its support, denominator, effect, uncertainty, and null values. Unknown or empty
 metric source bindings fail closed.
+
+For a `supported` pairwise decision, the validator goes further: exactly one
+registered `report_summary` source must contain the matching metric and planner
+pair. The packet's support, denominator, effect, confidence interval, raw
+p-value, and adjusted p-value must match that source row (within the documented
+display-rounding tolerance), and the source row plus packet must satisfy the
+source's declared adjusted-alpha decision rule. A structurally valid or
+statistically favorable number cannot claim `supported` without this
+source-row binding.
 Packets also list `fail_closed_changes`, making the retained exclusions and
 claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard

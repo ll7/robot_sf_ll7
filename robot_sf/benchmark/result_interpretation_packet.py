@@ -21,6 +21,7 @@ import re
 import shlex
 import subprocess
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -648,10 +649,11 @@ def _validate_metric_source_bindings(
         )
 
 
-def _validate_supported_decision(
+def _validate_supported_decision(  # noqa: C901
     d: DecisionEntry,
     metric: MetricEntry,
     execution_mode: ExecutionMode,
+    sources: list[SourceRef],
     errors: list[str],
 ) -> None:
     contrast = _validate_supported_contrast(d, errors)
@@ -706,6 +708,8 @@ def _validate_supported_decision(
             f"decision {d.decision_id!r}: contrast_result support is below the declared "
             "support_threshold"
         )
+    if contrast is not None:
+        _validate_supported_source_binding(d, metric, contrast, sources, errors)
     if metric.support_threshold is None:
         errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")
     elif metric.support < metric.support_threshold:
@@ -719,6 +723,141 @@ def _validate_supported_decision(
     if d.refusal_reason is not None:
         errors.append(f"decision {d.decision_id!r}: supported outcome cannot have refusal_reason")
     _validate_claim_escalation(d.decision_id, d.rationale, errors)
+
+
+_SOURCE_ROUNDED_TOLERANCE = 5e-5
+
+
+def _close_to_source(value: object, expected: object) -> bool:
+    """Compare packet numbers to source aggregates after documented rounding.
+
+    Returns:
+        ``True`` when the values are equal within the source rounding tolerance.
+    """
+
+    if isinstance(value, bool) or isinstance(expected, bool):
+        return value == expected
+    if not isinstance(value, (int, float)) or not isinstance(expected, (int, float)):
+        return False
+    if not math.isfinite(float(value)) or not math.isfinite(float(expected)):
+        return False
+    return math.isclose(
+        float(value), float(expected), rel_tol=0.0, abs_tol=_SOURCE_ROUNDED_TOLERANCE
+    )
+
+
+def _validate_supported_source_binding(  # noqa: C901
+    decision: DecisionEntry,
+    metric: MetricEntry,
+    contrast: ContrastResult,
+    sources: list[SourceRef],
+    errors: list[str],
+) -> None:
+    """Bind supported statistics to one registered aggregate source row.
+
+    A supported packet is an interpretation claim, not merely a structurally
+    valid number.  The registered ``report_summary`` artifact must contain the
+    exact planner-pair/metric row, and its policy must record a rejecting
+    decision at the adjusted alpha threshold.  Values in the packet may be
+    rounded for presentation, but cannot be replaced with arbitrary statistics.
+    """
+
+    source_refs = [source for source in sources if source.source_id in metric.source_ids]
+    report_refs = [source for source in source_refs if source.kind == "report_summary"]
+    if len(report_refs) != 1:
+        errors.append(
+            f"decision {decision.decision_id!r}: supported outcome requires exactly one "
+            "registered report_summary source"
+        )
+        return
+    source = report_refs[0]
+    path = _REPO_ROOT / source.path
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        errors.append(
+            f"decision {decision.decision_id!r}: cannot read report_summary source "
+            f"{source.source_id!r}: {exc}"
+        )
+        return
+    if not isinstance(report, dict):
+        errors.append(f"decision {decision.decision_id!r}: report_summary source must be an object")
+        return
+    rows = report.get("decisions")
+    if not isinstance(rows, list):
+        errors.append(f"decision {decision.decision_id!r}: report_summary source has no decisions")
+        return
+    comparator = contrast.comparator
+    matches = [
+        row
+        for row in rows
+        if isinstance(row, Mapping)
+        and row.get("metric_id") == metric.metric_id
+        and row.get("reference_planner") == comparator.reference
+        and row.get("comparison_planner") == comparator.comparison
+    ]
+    if len(matches) != 1:
+        errors.append(
+            f"decision {decision.decision_id!r}: report_summary source must contain one "
+            f"row for {metric.metric_id!r} {comparator.reference!r}->{comparator.comparison!r}"
+        )
+        return
+    row = matches[0]
+    checks = (
+        ("n_paired", contrast.support, "contrast support"),
+        ("n_paired", contrast.denominator, "contrast denominator"),
+        ("mean_difference", contrast.effect, "contrast effect"),
+        ("ci95_low", contrast.uncertainty.ci_low, "contrast ci_low"),
+        ("ci95_high", contrast.uncertainty.ci_high, "contrast ci_high"),
+        ("raw_p_value", contrast.uncertainty.p_value_raw, "contrast raw p-value"),
+        (
+            "holm_adjusted_p_value",
+            contrast.uncertainty.p_value_adjusted,
+            "contrast adjusted p-value",
+        ),
+    )
+    for source_field, observed, label in checks:
+        if not _close_to_source(observed, row.get(source_field)):
+            errors.append(
+                f"decision {decision.decision_id!r}: {label} is not bound to "
+                f"report_summary.{source_field}"
+            )
+    policy = report.get("policy")
+    alpha = policy.get("alpha") if isinstance(policy, Mapping) else None
+    adjusted = row.get("holm_adjusted_p_value")
+    if row.get("rejected_at_alpha") is not True:
+        errors.append(
+            f"decision {decision.decision_id!r}: source row does not reject its declared alpha"
+        )
+    if (
+        isinstance(alpha, bool)
+        or not isinstance(alpha, (int, float))
+        or not 0.0 < float(alpha) < 1.0
+        or isinstance(adjusted, bool)
+        or not isinstance(adjusted, (int, float))
+        or not math.isfinite(float(adjusted))
+        or float(adjusted) > float(alpha)
+    ):
+        errors.append(
+            f"decision {decision.decision_id!r}: source adjusted p-value does not "
+            "satisfy the source decision rule"
+        )
+    packet_adjusted = contrast.uncertainty.p_value_adjusted
+    if (
+        isinstance(alpha, (int, float))
+        and not isinstance(alpha, bool)
+        and 0.0 < float(alpha) < 1.0
+        and (
+            isinstance(packet_adjusted, bool)
+            or not isinstance(packet_adjusted, (int, float))
+            or not math.isfinite(float(packet_adjusted))
+            or float(packet_adjusted) > float(alpha)
+        )
+    ):
+        errors.append(
+            f"decision {decision.decision_id!r}: packet adjusted p-value does not "
+            "satisfy the source decision rule"
+        )
 
 
 def _validate_supported_contrast(
@@ -815,6 +954,7 @@ def _validate_decision(
     d: DecisionEntry,
     metrics_by_id: dict[str, MetricEntry],
     execution_mode: ExecutionMode,
+    sources: list[SourceRef],
     errors: list[str],
 ) -> None:
     if d.outcome not in _VALID_DECISION_OUTCOMES:
@@ -831,7 +971,7 @@ def _validate_decision(
     _validate_supplied_contrast(d, errors)
     _validate_claim_escalation(f"decision {d.decision_id} rationale", d.rationale, errors)
     if d.outcome == "supported":
-        _validate_supported_decision(d, metric, execution_mode, errors)
+        _validate_supported_decision(d, metric, execution_mode, sources, errors)
     elif not d.refusal_reason:
         errors.append(f"decision {d.decision_id!r}: non-supported outcome requires refusal_reason")
 
@@ -1530,7 +1670,7 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
 
     metrics_by_id = {m.metric_id: m for m in packet.metrics}
     for d in packet.decisions:
-        _validate_decision(d, metrics_by_id, packet.execution_mode, errors)
+        _validate_decision(d, metrics_by_id, packet.execution_mode, packet.sources, errors)
 
     _validate_claim_boundary(packet.claim_boundary, packet.forbidden_claims, errors)
     for index, finding in enumerate(packet.findings):

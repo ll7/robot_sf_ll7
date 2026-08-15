@@ -804,6 +804,34 @@ class TestFailClosedMetricSourceBinding:
         assert any("source_ids" in e for e in errors)
 
 
+class TestFailClosedSupportedSourceStatistics:
+    def test_supported_effect_must_match_registered_source_row(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["decisions"][0]["contrast_result"]["effect"] = 0.0
+        payload["decisions"][0]["effect"] = 0.0
+        errors = validate_packet(payload)
+        assert any("contrast effect" in error and "report_summary" in error for error in errors)
+
+    def test_supported_inference_must_match_registered_source_row(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        contrast = payload["decisions"][0]["contrast_result"]
+        contrast["uncertainty"]["p_value_adjusted"] = 1.0
+        errors = validate_packet(payload)
+        assert any("adjusted p-value" in error and "report_summary" in error for error in errors)
+        assert any("decision rule" in error for error in errors)
+
+    def test_supported_support_must_match_registered_source_row(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        contrast = payload["decisions"][0]["contrast_result"]
+        contrast["support"] = 1
+        contrast["denominator"] = 1
+        errors = validate_packet(payload)
+        assert any("contrast support" in error and "report_summary" in error for error in errors)
+        assert any(
+            "contrast denominator" in error and "report_summary" in error for error in errors
+        )
+
+
 # ---------------------------------------------------------------------------
 # Fail-closed: support > denominator
 # ---------------------------------------------------------------------------

@@ -694,7 +694,14 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 blockers.append(f"{role}: {planner_key!r} has a row with missing scenario_id/seed")
                 continue
             key = (planner_key, scenario_id, seed)
-            mode = _execution_mode(summary_for_status, record)
+            summary_mode = _execution_mode(summary_for_status)
+            record_mode = _execution_mode(record)
+            if summary_mode and record_mode and summary_mode != record_mode:
+                blockers.append(
+                    f"{role}: {_key_text(key)} execution mode {record_mode!r} "
+                    f"disagrees with run summary {summary_mode!r}"
+                )
+            mode = record_mode or summary_mode
             run_modes.add(mode)
             if mode not in VALID_EXECUTION_MODES:
                 fallback_rows.append(_key_text(key))

@@ -285,3 +285,22 @@ def test_fallback_execution_is_not_treated_as_success(tmp_path: Path) -> None:
 
     assert result["status"] == "blocked"
     assert any("fallback" in blocker for blocker in result["blockers"])
+
+
+def test_episode_execution_mode_cannot_disagree_with_run_summary(tmp_path: Path) -> None:
+    """A fallback episode cannot hide behind a native run summary."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"] = {"planner_kinematics": {"execution_mode": "fallback"}}
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any("disagrees with run summary" in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []

@@ -45,6 +45,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
+from robot_sf.benchmark.termination_reason import TIMEOUT_TERMINATION_REASONS
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -912,15 +913,9 @@ def _termination_completion(termination: str) -> tuple[bool | None, str | None]:
     """
     if termination in {"success", "goal_reached", "route_complete", "completed"}:
         return True, termination or None
-    if termination in {
-        "timeout",
-        "collision",
-        "failure",
-        "failed",
-        "error",
-        "truncated",
-        "max_steps",
-    }:
+    if termination in {"collision", "failure", "failed", "error"}:
+        return False, termination or None
+    if termination in TIMEOUT_TERMINATION_REASONS:
         return False, termination or None
     return None, termination or None
 

@@ -30,18 +30,16 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
+from robot_sf.benchmark.termination_reason import TIMEOUT_TERMINATION_REASONS
+
 PACKAGE_SCHEMA = "ch7-evidence-package.v1"
 REDUCED_PUBLICATION_ATLAS_SCHEMA = "ch7-reduced-publication-atlas.v2"
 COMPACT_SCHEMA = "issue_6814_compact_packet.v1"
 PORTFOLIO_SCHEMA = "ch7_case_portfolio.v2"
 TERMINAL_LABEL_CONTRACT = "ch7-terminal-label-normalization.v1"
-TERMINAL_TIMEOUT_REASONS: tuple[str, ...] = (
-    "horizon",
-    "max_steps",
-    "terminated",
-    "timeout",
-    "truncated",
-)
+# Keep the historical public name while sourcing the policy from the shared
+# benchmark termination vocabulary.
+TERMINAL_TIMEOUT_REASONS: tuple[str, ...] = TIMEOUT_TERMINATION_REASONS
 TERMINAL_LABEL_PRECEDENCE: tuple[str, ...] = (
     "route_complete",
     "collision_event",

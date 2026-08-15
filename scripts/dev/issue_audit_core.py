@@ -50,6 +50,7 @@ TYPE_PREFIX = "type:"
 EVIDENCE_PREFIX = "evidence:"
 DECISION_LABEL = "decision-required"
 TRIAGE_LABEL = "needs-triage"
+REVIEW_STATE_LABEL = "state:review"
 BLOCKED_LABELS = frozenset({"state:blocked", "state:blocked-external-input"})
 BLOCKED_TRIAGE_BLOCK_RE = re.compile(
     r"<!--\s*blocked-triage-v1\b[^>]*-->.*?```(?:yaml|yml)\s*\n.*?```",
@@ -164,6 +165,21 @@ READY_HEADING_PATTERN = re.compile(
 )
 CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[[ xX]\]\s+", re.MULTILINE)
 UNCHECKED_CHECKBOX_PATTERN = re.compile(r"^\s*[-*]\s+\[ \]\s+", re.MULTILINE)
+TERMINAL_REVIEW_STATUS_LINE_PATTERN = re.compile(
+    r"^\s*(?:[-*]\s*)?(?:report|campaign|execution|run)\s+status\s*:\s*"
+    r"(?P<status>.+)$",
+    re.IGNORECASE,
+)
+TERMINAL_REVIEW_STATUS_PATTERN = re.compile(
+    r"\b(?:"
+    r"diagnostic[_ -]+ready[_ -]+for[_ -]+(?:domain[_ -]+)?(?:review|interpretation)"
+    r"|terminal[_ -]+(?:review|interpretation)[_ -]+pending"
+    r"|(?:domain[_ -]+review|interpretation)[_ -]+pending"
+    r"|(?:complete|completed|terminal)[_ -]+for[_ -]+"
+    r"(?:domain[_ -]+review|interpretation)"
+    r")\b",
+    re.IGNORECASE,
+)
 ISSUE_REF_PATTERN = re.compile(r"(?<![\w-])#(\d+)\b|(?:issue|issues)[ -](\d+)\b", re.IGNORECASE)
 OPTION_LINE_PATTERN = re.compile(
     r"^\s*(?:[-*]\s+)?(?:\*\*)?"
@@ -1032,6 +1048,27 @@ def _ready_evidence(body: str) -> list[str]:
     return evidence
 
 
+def _terminal_review_evidence(text: str) -> list[str]:
+    """Return explicit report-status evidence that execution awaits review.
+
+    The status-line requirement is deliberate: prose about a future campaign,
+    an acceptance criterion, or a hypothetical terminal state must not suppress
+    dispatch.  A machine-readable status such as
+    ``diagnostic_ready_for_domain_review`` is current evidence that the
+    completed execution has crossed into interpretation or domain review.
+    """
+    evidence: list[str] = []
+    for raw_line in text.splitlines():
+        line = " ".join(raw_line.split())
+        if not line:
+            continue
+        match = TERMINAL_REVIEW_STATUS_LINE_PATTERN.match(line)
+        if not match or not TERMINAL_REVIEW_STATUS_PATTERN.search(match.group("status")):
+            continue
+        evidence.append(f"terminal review status: {_compact_excerpt(line)}")
+    return evidence[:3]
+
+
 def _active_records(
     issue_number: int,
     *,
@@ -1219,6 +1256,7 @@ class Classification:
     blocked_label_decision: str
     decision_required: bool
     decision_evidence: tuple[str, ...]
+    terminal_review_evidence: tuple[str, ...]
     readiness_evidence: tuple[str, ...]
     closure: dict[str, Any]
     mutations: tuple[dict[str, Any], ...]
@@ -1241,6 +1279,7 @@ class Classification:
             "blocked_label_decision": self.blocked_label_decision,
             "decision_required": self.decision_required,
             "decision_evidence": list(self.decision_evidence),
+            "terminal_review_evidence": list(self.terminal_review_evidence),
             "readiness_evidence": list(self.readiness_evidence),
             "closure_evidence": self.closure,
             "mutations": list(self.mutations),
@@ -1299,7 +1338,9 @@ def classify_issue(
             "SLURM job inventory unavailable; preserve this issue and do not promote it to ready"
         )
 
+    terminal_review_evidence = _terminal_review_evidence(text)
     decision_evidence = _decision_evidence(text, labels)
+    decision_evidence.extend(terminal_review_evidence)
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")
     readiness_evidence = _ready_evidence(body)
@@ -1323,15 +1364,53 @@ def classify_issue(
     state_set = execution_state_set
     ready = ready and not stale_running
     external_blocker = any(item["kind"] == "external-input" for item in blocker_evidence)
+    execution_records_active = any(active.get(kind) for kind in ("claims", "worktrees", "jobs"))
+    terminal_review_override = bool(terminal_review_evidence) and not (
+        execution_records_active or gate_blocked or job_inventory_uncertain
+    )
+    if terminal_review_override and active["open_prs"]:
+        findings.append(
+            "terminal review status supersedes open PR-only activity for dispatch classification"
+        )
     blocked_label_decision = "not-applicable"
     winner = _state_winner(
         state_set,
         blocker=gate_blocked and bool(blocked_reason_evidence),
         external_blocker=external_blocker,
-        active=active_now,
+        active=active_now and not terminal_review_override,
         ready=ready,
     )
+    if terminal_review_override:
+        winner = None
     mutations: list[dict[str, Any]] = []
+
+    if terminal_review_override:
+        for label in sorted(state_set.intersection({"state:ready", "state:running"})):
+            if _available(label, available_labels):
+                mutations.append(
+                    _mutation(
+                        "remove_label",
+                        number,
+                        value=label,
+                        reason="terminal report status selects review instead of dispatch or execution",
+                        evidence=terminal_review_evidence,
+                    )
+                )
+            else:
+                findings.append(f"cannot remove unavailable label {label}")
+        if REVIEW_STATE_LABEL not in labels:
+            if _available(REVIEW_STATE_LABEL, available_labels):
+                mutations.append(
+                    _mutation(
+                        "add_label",
+                        number,
+                        value=REVIEW_STATE_LABEL,
+                        reason="mark completed execution as awaiting domain review",
+                        evidence=terminal_review_evidence,
+                    )
+                )
+            else:
+                findings.append(f"cannot add unavailable label {REVIEW_STATE_LABEL}")
 
     if len(state_set) > 1:
         if winner is None:
@@ -1565,6 +1644,7 @@ def classify_issue(
         blocked_label_decision=blocked_label_decision,
         decision_required=decision_required,
         decision_evidence=tuple(decision_evidence),
+        terminal_review_evidence=tuple(terminal_review_evidence),
         readiness_evidence=tuple(readiness_evidence),
         closure=closure,
         mutations=tuple(unique_mutations),

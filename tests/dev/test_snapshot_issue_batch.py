@@ -68,6 +68,20 @@ def test_explicit_blocker_labels_are_not_claimable(label: str) -> None:
     assert label in reason
 
 
+@pytest.mark.parametrize("label", ["blocked:needs-maintainer", "blocked:needs-campaign"])
+def test_active_portfolio_explicit_blockers_are_not_executable(label: str) -> None:
+    """Active-portfolio routing must honor the same explicit blocker namespace."""
+    classification, reason = snapshot_issue_batch._portfolio_classification(
+        labels=[label],
+        title="workflow issue",
+        assignees=[],
+        claim=_claim_status(1),
+    )
+
+    assert classification == "needs_human_decision"
+    assert reason == "maintainer decision label blocks autonomous execution"
+
+
 def test_snapshot_issues_emits_compact_fields() -> None:
     """Snapshot output should include excerpts and claim state without raw bodies."""
     body = " ".join(["detail"] * 100)

@@ -289,7 +289,7 @@ class TestFailClosedComparatorDirection:
             "reference_minus_comparison",
             "not_applicable",
         ):
-            payload = copy.deepcopy(_VALID_6474)
+            payload = copy.deepcopy(_VALID_CH7)
             payload["estimand"]["comparator"]["direction"] = direction
             errors = validate_packet(payload)
             assert errors == [], f"direction {direction!r} should be valid: {errors}"
@@ -411,7 +411,7 @@ class TestFailClosedDecisionVocabulary:
         ["supported", "not_supported", "inconclusive", "invalid", "unavailable"],
     )
     def test_valid_outcomes_accepted(self, outcome: str) -> None:
-        payload = copy.deepcopy(_VALID_6474)
+        payload = copy.deepcopy(_VALID_6474 if outcome == "supported" else _VALID_6944)
         payload["decisions"][0]["outcome"] = outcome
         if outcome in ("supported",):
             payload["decisions"][0]["refusal_reason"] = None
@@ -894,6 +894,14 @@ class TestFailClosedSupportedSourceStatistics:
         assert any("uncertainty method" in error and "preregistration" in error for error in errors)
         assert any("multiplicity" in error and "preregistration" in error for error in errors)
 
+    def test_shared_metric_effect_must_match_primary_source_row(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        payload["metrics"][0]["effect"] = 0.0
+
+        errors = validate_packet(payload)
+
+        assert any("metric effect" in error and "report_summary" in error for error in errors)
+
     def test_supported_population_and_execution_counts_must_match_report(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["population"]["total"] = 1
@@ -906,7 +914,9 @@ class TestFailClosedSupportedSourceStatistics:
 
         assert any("population total" in error and "report_summary" in error for error in errors)
         assert any("population included" in error and "report_summary" in error for error in errors)
-        assert any("execution_mode counts" in error and "report_summary" in error for error in errors)
+        assert any(
+            "execution_mode counts" in error and "report_summary" in error for error in errors
+        )
 
     def test_top_level_estimator_comparator_must_match_supported_decision(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
@@ -918,7 +928,9 @@ class TestFailClosedSupportedSourceStatistics:
 
         errors = validate_packet(payload)
 
-        assert any("estimand.comparator" in error and "supported decision" in error for error in errors)
+        assert any(
+            "estimand.comparator" in error and "supported decision" in error for error in errors
+        )
 
 
 # ---------------------------------------------------------------------------

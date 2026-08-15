@@ -124,6 +124,16 @@ cannot claim `supported` without this source-row binding.
 For supported decisions, the metric-level support, denominator, and threshold
 must also agree with the decision-specific structured contrast; a packet cannot
 hide inconsistent accounting in a shared metric summary.
+Supported packets must also register exactly one machine-readable
+`preregistration` source. Its result contract binds the metric unit and
+denominator, null value, uncertainty and multiplicity declarations, comparator
+direction, and support threshold. For the full paired campaign contract, the
+threshold is derived from the preregistered seed and scenario dimensions rather
+than accepted as a packet-authored number. The report summary's validation block
+must agree with the packet's population and execution-mode counts, and the
+shared metric effect and uncertainty must bind to the packet-level primary
+comparator row. The packet-level comparator used by observed captions must
+match one of the supported decision comparators.
 Packets also list `fail_closed_changes`, making the retained exclusions and
 claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard

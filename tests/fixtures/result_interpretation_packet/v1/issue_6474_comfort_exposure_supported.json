@@ -45,6 +45,16 @@
       "description": "Aggregated summary JSON with paired mean differences and bootstrap CIs."
     },
     {
+      "source_id": "preregistration",
+      "path": "docs/context/evidence/issue_6474_social_compliance_preregistration.json",
+      "sha256": "3eba1d07cd6f244ba3879eac8c62234a5faba6b9727327062335d6d34b65e450",
+      "kind": "preregistration",
+      "commit": "2fc4498cc5499bd3569eb1ac941a3029e0f51040",
+      "tracked_commit": "2fc4498cc5499bd3569eb1ac941a3029e0f51040",
+      "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",
+      "description": "Machine-readable result interpretation contract for the preregistered campaign."
+    },
+    {
       "source_id": "interpretation_review",
       "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_interpretation.md.review.json",
       "sha256": "473e0801c0d581fbe70d45f65c3adedad843e8c7c3ac704f077464266ee65d57",
@@ -93,10 +103,8 @@
   "metrics": [
     {
       "metric_id": "comfort_exposure_person_s",
-      "source_ids": [
-        "report_summary"
-      ],
-      "unit": "person-seconds",
+      "source_ids": ["report_summary", "preregistration"],
+      "unit": "person_seconds",
       "desirability": "lower_is_better",
       "support": 180,
       "denominator": 180,

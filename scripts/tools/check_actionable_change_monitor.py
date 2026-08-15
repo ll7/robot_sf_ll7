@@ -16,6 +16,8 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from scripts.dev.check_pr_ci_status import _latest_check_runs
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ISSUE = 6819
 DEFAULT_LIMIT = 500
@@ -23,6 +25,7 @@ PAGE_SIZE = 100
 STALE_DRAFT_HOURS = 72
 SCHEMA_VERSION = "robot_sf.actionable_change_monitor.v2"
 FINGERPRINT_RE = re.compile(r"<!--\s*actionable-change-monitor:fingerprint:([0-9a-f]{64})\s*-->")
+_ACTIONS_RUN_JOB_URL_RE = re.compile(r"/actions/runs/(?P<run_id>[0-9]+)/job/[0-9]+(?:$|[/?#])")
 RESEARCH_LABELS = frozenset(
     {
         "benchmark",
@@ -297,6 +300,98 @@ def _check_run_identity(check: dict[str, Any]) -> str:
         return f"id:{check_id}"
     payload = _canonical_json(check).encode("utf-8")
     return f"payload:{hashlib.sha256(payload).hexdigest()}"
+
+
+def _rest_check_run_workflow_identity(
+    run: dict[str, Any],
+    *,
+    repo: str,
+    cache: dict[str, tuple[str, str]],
+) -> tuple[str, str]:
+    """Return workflow identity for a REST check run when it is available.
+
+    The commit check-runs endpoint can omit workflow metadata even though the
+    job URL embeds the Actions run ID. Only duplicate-named runs call the
+    Actions endpoint, keeping the monitor's bounded read surface small.
+    """
+    workflow_id = str(run.get("workflow_id", "") or "")
+    workflow = run.get("workflow")
+    if isinstance(workflow, dict):
+        workflow_name = str(workflow.get("name", "") or "")
+    else:
+        workflow_name = str(workflow or "")
+    if not workflow_name:
+        check_suite = run.get("check_suite")
+        suite_workflow = check_suite.get("workflow") if isinstance(check_suite, dict) else None
+        if isinstance(suite_workflow, dict):
+            workflow_name = str(suite_workflow.get("name", "") or "")
+        elif suite_workflow:
+            workflow_name = str(suite_workflow)
+    if workflow_id or workflow_name:
+        return workflow_id, workflow_name
+
+    details_url = str(run.get("details_url", "") or "")
+    match = _ACTIONS_RUN_JOB_URL_RE.search(details_url)
+    if match is None:
+        return "", ""
+    run_id = match.group("run_id")
+    if run_id not in cache:
+        payload = _gh_json(f"repos/{repo}/actions/runs/{run_id}")
+        if isinstance(payload, dict):
+            cache[run_id] = (
+                str(payload.get("workflow_id", "") or ""),
+                str(payload.get("name", "") or ""),
+            )
+        else:
+            cache[run_id] = ("", "")
+    return cache[run_id]
+
+
+def _effective_check_runs(
+    check_runs: list[dict[str, Any]],
+    *,
+    repo: str,
+) -> list[dict[str, Any]]:
+    """Drop only check runs superseded by newer runs from the same workflow.
+
+    REST check-run payloads retain cancelled reruns on the same commit. A
+    cancelled run is actionable only when it is the latest run for its
+    workflow/job identity. Runs without a workflow identity or start time stay
+    in the result so missing provenance remains fail-closed.
+    """
+    name_counts: dict[str, int] = {}
+    for run in check_runs:
+        name = str(run.get("name", "") or "")
+        name_counts[name] = name_counts.get(name, 0) + 1
+
+    workflow_cache: dict[str, tuple[str, str]] = {}
+    rollup: list[dict[str, Any]] = []
+    for run in check_runs:
+        name = str(run.get("name", "") or "")
+        workflow_id = ""
+        workflow_name = ""
+        if name_counts.get(name, 0) > 1:
+            workflow_id, workflow_name = _rest_check_run_workflow_identity(
+                run,
+                repo=repo,
+                cache=workflow_cache,
+            )
+        rollup.append(
+            {
+                "__typename": "CheckRun",
+                "name": name,
+                "status": str(run.get("status", "") or ""),
+                "conclusion": run.get("conclusion") or "",
+                "startedAt": str(run.get("started_at", "") or ""),
+                "workflowId": workflow_id,
+                "workflowName": workflow_name,
+                "__source_id": run.get("id"),
+            }
+        )
+
+    effective_rollup, _superseded_count = _latest_check_runs(rollup)
+    effective_ids = {row["__source_id"] for row in effective_rollup}
+    return [run for run in check_runs if run.get("id") in effective_ids]
 
 
 def _check_findings(
@@ -997,12 +1092,15 @@ def _fetch_snapshot(
         if not sha:
             raise MonitorError(f"research PR #{pr.get('number')} has no head SHA")
         pr_number = int(pr["number"])
-        checks[pr_number] = _fetch_commit_collection(
-            repo,
-            sha,
-            resource="check-runs",
-            collection_key="check_runs",
-            limit=limit,
+        checks[pr_number] = _effective_check_runs(
+            _fetch_commit_collection(
+                repo,
+                sha,
+                resource="check-runs",
+                collection_key="check_runs",
+                limit=limit,
+            ),
+            repo=repo,
         )
         statuses[pr_number] = _fetch_commit_collection(
             repo,

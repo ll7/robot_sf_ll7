@@ -88,6 +88,20 @@ selects a winner:
 5. state:ready when explicit acceptance or validation evidence exists and no
    gate or active record remains.
 
+Before the autonomous core adds either dispatch-suppressing blocker label
+(`state:blocked` or `state:blocked-external-input`), the issue body or complete
+comment inventory must contain an explicit `blocked-triage-v1` reason block or
+a `Blocked-by: #<issue-or-pr-number>` reference. The reason evidence is bound
+into the planned mutation and the apply path rejects a blocked-label mutation
+that omits it. Prose that merely looks like a blocker is not enough: when the
+blocker is otherwise detectable but its reason is not recorded, the core
+declines the blocked-label write and adds the existing `needs-triage` label
+when available. The plan's `blocked_label_report` records the blocker evidence,
+reason evidence, and whether the write was applied, declined, or already
+present. An existing unexplained blocker label is reported for repair review;
+absence of a reason is not treated as proof that the underlying blocker has
+resolved.
+
 A stale state:running label is preserved when no active record is observable;
 absence of evidence is not evidence of completion. Multiple states without a
 decisive signal become a decision gate.

@@ -73,10 +73,19 @@ CLAIM_BOUNDARIES = [
 
 
 def _load_optional_json(path: Path | None) -> dict[str, Any] | list[Any] | None:
-    """Load optional JSON snapshot; return None if no path or missing."""
-    if path is None or not path.is_file():
+    """Load an optional JSON snapshot from a file or readable stream path.
+
+    ``Path.is_file()`` rejects named pipes and ``/dev/fd`` paths even though
+    they provide a valid readable JSON source. Optional snapshots are allowed
+    to degrade only when the source cannot be opened; malformed JSON remains
+    an error so callers do not silently rank from invalid input.
+    """
+    if path is None:
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except OSError:
+        return None
 
 
 def _snapshot_items(snapshot: dict[str, Any] | list[Any] | None, key: str) -> list[dict[str, Any]]:
@@ -560,13 +569,13 @@ def main() -> None:
         "--open-issues-snapshot",
         type=Path,
         default=None,
-        help="Optional JSON snapshot of open issues, for deterministic ranking input.",
+        help="Optional JSON snapshot file or readable stream path for deterministic ranking.",
     )
     parser.add_argument(
         "--recent-prs-snapshot",
         type=Path,
         default=None,
-        help="Optional JSON snapshot of recent PRs, for deterministic source-status input.",
+        help="Optional JSON snapshot file or readable stream path for recent-PR context.",
     )
     args = parser.parse_args()
 

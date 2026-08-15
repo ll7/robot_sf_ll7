@@ -243,6 +243,27 @@ def test_quality_gate_blocks_split_contract_failure(tmp_path: Path) -> None:
     assert "adaptation failed closed" in report["reason"]
 
 
+def test_quality_gate_blocks_adjacent_manifest_digest_drift(tmp_path: Path) -> None:
+    """A manifest for different dataset bytes must not accompany quality metrics."""
+    dataset_path = _fixture_dataset(tmp_path)
+    manifest_path = dataset_path.with_suffix(".manifest.json")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "dataset_path": dataset_path.name,
+                "dataset_sha256": "0" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = evaluate_model_quality(_config(dataset_path)).to_dict()
+
+    assert report["status"] == "blocked_contract"
+    assert "manifest dataset_sha256 does not match" in report["reason"]
+    assert "one_step_metrics" not in report
+
+
 def test_quality_gate_blocks_without_continuation_class_diversity(tmp_path: Path) -> None:
     report = evaluate_model_quality(_config(_fixture_dataset(tmp_path, terminal=False))).to_dict()
 

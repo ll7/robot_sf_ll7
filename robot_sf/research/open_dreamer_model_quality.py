@@ -380,6 +380,15 @@ def evaluate_model_quality(
             source=source,
         )
 
+    manifest_errors = _manifest_consistency_errors(source)
+    if manifest_errors:
+        return _blocked_report(
+            "blocked_contract",
+            "; ".join(manifest_errors),
+            config=config,
+            source=source,
+        )
+
     bounds = ActionBounds(
         max_linear_speed=config.max_linear_speed,
         max_angular_speed=config.max_angular_speed,
@@ -1166,6 +1175,7 @@ def _manifest_metadata(path: Path) -> dict[str, Any]:
         {
             "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
             "schema_version": payload.get("schema_version"),
+            "dataset_path": payload.get("dataset_path"),
             "dataset_sha256": payload.get("dataset_sha256"),
             "git_commit": provenance.get("git_commit"),
             "artifact_durability": provenance.get("artifact_durability"),
@@ -1173,6 +1183,39 @@ def _manifest_metadata(path: Path) -> dict[str, Any]:
         }
     )
     return result
+
+
+def _manifest_consistency_errors(source: Mapping[str, Any]) -> list[str]:
+    """Return provenance errors for an adjacent trajectory manifest, if present.
+
+    The manifest is the retained identity record for a trajectory dataset.  A report that
+    evaluates changed JSONL bytes while retaining the old manifest would otherwise expose both
+    digests and still proceed to model-quality metrics, making the provenance mismatch easy to
+    overlook.
+    """
+    manifest = source.get("manifest")
+    if not isinstance(manifest, Mapping) or not manifest.get("available"):
+        return []
+    errors: list[str] = []
+    manifest_error = manifest.get("error")
+    if manifest_error:
+        errors.append(f"trajectory manifest is unreadable: {manifest_error}")
+        return errors
+    dataset_path = source.get("dataset_path")
+    expected_name = Path(str(dataset_path)).name if dataset_path else None
+    if manifest.get("dataset_path") != expected_name:
+        errors.append(
+            "trajectory manifest dataset_path does not match evaluated dataset: "
+            f"{manifest.get('dataset_path')!r} != {expected_name!r}"
+        )
+    dataset_sha256 = source.get("dataset_sha256")
+    manifest_sha256 = manifest.get("dataset_sha256")
+    if not dataset_sha256 or manifest_sha256 != dataset_sha256:
+        errors.append(
+            "trajectory manifest dataset_sha256 does not match evaluated dataset bytes: "
+            f"{manifest_sha256!r} != {dataset_sha256!r}"
+        )
+    return errors
 
 
 def _manifest_source_route(provenance: Mapping[str, Any]) -> str:

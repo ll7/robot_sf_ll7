@@ -121,6 +121,9 @@ source reference must explicitly declare the paired effect convention
 `comparison_minus_reference`, and the packet direction must bind to that
 declaration as well. A structurally valid or statistically favorable number
 cannot claim `supported` without this source-row binding.
+For supported decisions, the metric-level support, denominator, and threshold
+must also agree with the decision-specific structured contrast; a packet cannot
+hide inconsistent accounting in a shared metric summary.
 Packets also list `fail_closed_changes`, making the retained exclusions and
 claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard

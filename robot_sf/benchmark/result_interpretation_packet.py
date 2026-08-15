@@ -710,6 +710,24 @@ def _validate_supported_decision(  # noqa: C901
             "support_threshold"
         )
     if contrast is not None:
+        if metric.support != contrast.support:
+            errors.append(
+                f"decision {d.decision_id!r}: metric support must match "
+                "contrast_result.support for a supported outcome"
+            )
+        if metric.denominator != contrast.denominator:
+            errors.append(
+                f"decision {d.decision_id!r}: metric denominator must match "
+                "contrast_result.denominator for a supported outcome"
+            )
+        if (
+            metric.support_threshold is not None
+            and metric.support_threshold != contrast.support_threshold
+        ):
+            errors.append(
+                f"decision {d.decision_id!r}: metric support_threshold must match "
+                "contrast_result.support_threshold for a supported outcome"
+            )
         _validate_supported_source_binding(d, metric, contrast, sources, errors)
     if metric.support_threshold is None:
         errors.append(f"decision {d.decision_id!r}: supported outcome requires support_threshold")

@@ -849,6 +849,19 @@ class TestFailClosedSupportedSourceStatistics:
             "contrast denominator" in error and "report_summary" in error for error in errors
         )
 
+    def test_supported_metric_accounting_must_match_decision_contrast(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        metric = payload["metrics"][0]
+        metric["support"] = 1
+        metric["denominator"] = 1
+        metric["support_threshold"] = 1
+
+        errors = validate_packet(payload)
+
+        assert any("metric support must match" in error for error in errors)
+        assert any("metric denominator must match" in error for error in errors)
+        assert any("metric support_threshold must match" in error for error in errors)
+
 
 # ---------------------------------------------------------------------------
 # Fail-closed: support > denominator

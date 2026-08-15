@@ -47,7 +47,9 @@ def _string_literal_parts(expr: ast.AST) -> list[str]:
     return parts
 
 
-def _has_write_mode(call: ast.Call) -> bool:
+def _has_write_mode(
+    call: ast.Call, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> bool:
     """Return whether an ``open`` call requests a write-capable mode."""
     mode: ast.expr | None = None
     if len(call.args) >= 2:
@@ -58,11 +60,16 @@ def _has_write_mode(call: ast.Call) -> bool:
             break
     if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
         return any(flag in mode.value for flag in ("w", "a", "x", "+"))
+    if isinstance(mode, ast.Name) and mode.id in write_mode_names:
+        return True
     return False
 
 
 def _expr_mentions_evidence(
-    expr: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+    expr: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
 ) -> bool:
     """Return whether an expression resolves to an evidence-tree path.
 
@@ -81,16 +88,25 @@ def _expr_mentions_evidence(
         return True
     if isinstance(expr, ast.Name):
         return expr.id in evidence_names
+    if (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id in evidence_factory_names
+    ):
+        return True
     if isinstance(expr, ast.Attribute) and expr.attr in evidence_arg_dests:
         return True
     return any(
-        _expr_mentions_evidence(child, evidence_names, evidence_arg_dests)
+        _expr_mentions_evidence(child, evidence_names, evidence_arg_dests, evidence_factory_names)
         for child in ast.iter_child_nodes(expr)
     )
 
 
 def _evidence_argparse_dests(
-    tree: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
 ) -> set[str]:
     """Collect argparse destinations whose ``add_argument`` default is evidence.
 
@@ -113,7 +129,7 @@ def _evidence_argparse_dests(
             None,
         )
         if default is None or not _expr_mentions_evidence(
-            default, evidence_names, evidence_arg_dests
+            default, evidence_names, evidence_arg_dests, evidence_factory_names
         ):
             continue
         dest: str | None = None
@@ -146,7 +162,11 @@ def _evidence_argparse_dests(
     return dests
 
 
-def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str]:
+def _evidence_path_names(
+    tree: ast.AST,
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
     """Collect simple names assigned from expressions containing the evidence path."""
     evidence_names: set[str] = set()
     changed = True
@@ -160,7 +180,7 @@ def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str
             else:
                 continue
             if node.value is None or not _expr_mentions_evidence(
-                node.value, evidence_names, evidence_arg_dests
+                node.value, evidence_names, evidence_arg_dests, evidence_factory_names
             ):
                 continue
             for target in targets:
@@ -170,7 +190,76 @@ def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str
     return evidence_names
 
 
-def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str]]:
+def _return_mentions_evidence_path(
+    expr: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str],
+) -> bool:
+    """Recognize path-like returns without treating prose as a path factory."""
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        value = expr.value.strip()
+        return value.startswith(EVIDENCE_PATH_FRAGMENT) or value.startswith(
+            f"./{EVIDENCE_PATH_FRAGMENT}"
+        )
+    if isinstance(expr, ast.Name):
+        return expr.id in evidence_names
+    if isinstance(expr, ast.Call):
+        if isinstance(expr.func, ast.Name) and expr.func.id in evidence_factory_names:
+            return True
+        if isinstance(expr.func, ast.Name) and expr.func.id in {
+            "Path",
+            "PurePath",
+            "PosixPath",
+            "WindowsPath",
+        }:
+            return _expr_mentions_evidence(
+                expr, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+        if isinstance(expr.func, ast.Attribute) and expr.func.attr in {
+            "joinpath",
+            "with_name",
+            "with_suffix",
+            "resolve",
+        }:
+            return _expr_mentions_evidence(
+                expr, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+        return False
+    if isinstance(expr, (ast.BinOp, ast.JoinedStr, ast.IfExp, ast.Attribute, ast.Subscript)):
+        return _expr_mentions_evidence(
+            expr, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
+    return False
+
+
+def _evidence_factory_names(
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
+    """Collect functions that return a path resolving to the evidence tree."""
+    factories: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(
+            isinstance(return_node, ast.Return)
+            and return_node.value is not None
+            and _return_mentions_evidence_path(
+                return_node.value,
+                evidence_names,
+                evidence_arg_dests,
+                evidence_factory_names,
+            )
+            for return_node in ast.walk(node)
+        ):
+            factories.add(node.name)
+    return factories
+
+
+def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
     """Resolve evidence names and argparse dests jointly to a fixed point.
 
     A destination whose default is a module constant (``default=DEFAULT_OUTPUT``)
@@ -180,21 +269,117 @@ def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str]]:
     """
     evidence_names: set[str] = set()
     evidence_arg_dests: set[str] = set()
+    evidence_factory_names: set[str] = set()
     changed = True
     while changed:
         changed = False
-        names = _evidence_path_names(tree, evidence_arg_dests)
+        names = _evidence_path_names(tree, evidence_arg_dests, evidence_factory_names)
         if names - evidence_names:
             evidence_names |= names
             changed = True
-        dests = _evidence_argparse_dests(tree, evidence_names, evidence_arg_dests)
+        factories = _evidence_factory_names(
+            tree, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
+        if factories - evidence_factory_names:
+            evidence_factory_names |= factories
+            changed = True
+        dests = _evidence_argparse_dests(
+            tree, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
         if dests - evidence_arg_dests:
             evidence_arg_dests |= dests
             changed = True
-    return evidence_names, evidence_arg_dests
+    return evidence_names, evidence_arg_dests, evidence_factory_names
 
 
-def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
+def _write_mode_names(tree: ast.AST) -> set[str]:
+    """Collect simple names assigned a write-capable file mode."""
+    write_mode_names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            value = node.value
+            is_write_mode = (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+                and any(flag in value.value for flag in ("w", "a", "x", "+"))
+            ) or (isinstance(value, ast.Name) and value.id in write_mode_names)
+            if not is_write_mode:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in write_mode_names:
+                    write_mode_names.add(target.id)
+                    changed = True
+    return write_mode_names
+
+
+def _assignment_targets(node: ast.AST) -> list[ast.expr]:
+    """Return simple assignment targets for data-flow scans."""
+    if isinstance(node, ast.Assign):
+        return node.targets
+    if isinstance(node, ast.AnnAssign):
+        return [node.target]
+    return []
+
+
+def _writer_alias_operation(
+    value: ast.AST,
+    aliases: dict[str, str],
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str],
+) -> str | None:
+    """Return the raw-write operation represented by an assigned expression."""
+    if isinstance(value, ast.Attribute) and value.attr in WRITE_METHODS:
+        if _expr_mentions_evidence(
+            value.value,
+            evidence_names,
+            evidence_arg_dests,
+            evidence_factory_names,
+        ):
+            return f".{value.attr}()"
+    elif isinstance(value, ast.Name):
+        return aliases.get(value.id)
+    return None
+
+
+def _writer_aliases(
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str],
+) -> dict[str, str]:
+    """Collect names aliased to evidence-bound ``Path`` write methods."""
+    aliases: dict[str, str] = {}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            targets = _assignment_targets(node)
+            if not targets:
+                continue
+            operation = _writer_alias_operation(
+                node.value, aliases, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+            if operation is None:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in aliases:
+                    aliases[target.id] = operation
+                    changed = True
+    return aliases
+
+
+def _write_path_exprs(
+    node: ast.Call, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> list[ast.AST]:
     """Return the path expressions a write-primitive call targets.
 
     Used by indirect-helper detection to decide whether a private helper forwards
@@ -204,19 +389,21 @@ def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
     if isinstance(function, ast.Attribute):
         if function.attr in WRITE_METHODS:
             return [function.value]
-        if function.attr == "open" and _has_write_mode(node):
+        if function.attr == "open" and _has_write_mode(node, write_mode_names):
             return [function.value]
         if function.attr == "dump" and len(node.args) >= 2:
             return [node.args[1]]
         if function.attr == "DictWriter" and node.args:
             return [node.args[0]]
     elif isinstance(function, ast.Name) and function.id == "open":
-        if _has_write_mode(node) and node.args:
+        if _has_write_mode(node, write_mode_names) and node.args:
             return [node.args[0]]
     return []
 
 
-def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[str, set[str]]:
+def _local_path_origins(
+    func_def: ast.FunctionDef | ast.AsyncFunctionDef, params: list[str]
+) -> dict[str, set[str]]:
     """Map helper-local path aliases back to the parameters they derive from."""
     path_origins = {parameter: {parameter} for parameter in params}
     changed = True
@@ -247,7 +434,31 @@ def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[st
     return path_origins
 
 
-def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | None:
+def _path_origins_in_expr(expr: ast.AST, path_origins: dict[str, set[str]]) -> set[str]:
+    """Return helper parameters referenced by an expression."""
+    return {
+        origin
+        for child in ast.walk(expr)
+        if isinstance(child, ast.Name)
+        for origin in path_origins.get(child.id, ())
+    }
+
+
+def _helper_call_arguments(
+    node: ast.Call, parameter_name: str, positional_index: int | None
+) -> list[ast.expr]:
+    """Return arguments bound to a forwarded helper path parameter."""
+    arguments = [keyword.value for keyword in node.keywords if keyword.arg == parameter_name]
+    if positional_index is not None and positional_index < len(node.args):
+        arguments.append(node.args[positional_index])
+    return arguments
+
+
+def _forward_path_parameter(
+    func_def: ast.FunctionDef | ast.AsyncFunctionDef,
+    write_mode_names: set[str] | frozenset[str] = frozenset(),
+    forwarding_helpers: dict[str, _ForwardingHelper] | None = None,
+) -> _ForwardingHelper | None:
     """Return the parameter a helper forwards to a write.
 
     A module-level helper like ``_write(path, text)`` that calls
@@ -265,10 +476,16 @@ def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | No
     for node in ast.walk(func_def):
         if not isinstance(node, ast.Call):
             continue
-        for expr in _write_path_exprs(node):
-            for child in ast.walk(expr):
-                if isinstance(child, ast.Name):
-                    forwarded.update(path_origins.get(child.id, ()))
+        for expr in _write_path_exprs(node, write_mode_names):
+            forwarded.update(_path_origins_in_expr(expr, path_origins))
+        if (
+            forwarding_helpers
+            and isinstance(node.func, ast.Name)
+            and node.func.id in forwarding_helpers
+        ):
+            helper_parameter, helper_positional_index = forwarding_helpers[node.func.id]
+            for expr in _helper_call_arguments(node, helper_parameter, helper_positional_index):
+                forwarded.update(_path_origins_in_expr(expr, path_origins))
     if not forwarded:
         return None
     parameter_name = min(forwarded, key=params.index)
@@ -278,14 +495,22 @@ def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | No
     return parameter_name, positional_index
 
 
-def _forwarding_helpers(tree: ast.AST) -> dict[str, _ForwardingHelper]:
+def _forwarding_helpers(
+    tree: ast.AST, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> dict[str, _ForwardingHelper]:
     """Map module-level helpers to the parameters they forward to raw writes."""
     helpers: dict[str, _ForwardingHelper] = {}
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
-            parameter = _forward_path_parameter(node)
-            if parameter is not None:
+    function_defs = [
+        node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for node in function_defs:
+            parameter = _forward_path_parameter(node, write_mode_names, helpers)
+            if parameter is not None and helpers.get(node.name) != parameter:
                 helpers[node.name] = parameter
+                changed = True
     return helpers
 
 
@@ -303,15 +528,26 @@ class _DirectWriterVisitor(ast.NodeVisitor):
         self,
         evidence_names: set[str],
         evidence_arg_dests: set[str],
+        evidence_factory_names: set[str],
+        write_mode_names: set[str],
         forwarding_helpers: dict[str, _ForwardingHelper],
+        writer_aliases: dict[str, str],
     ) -> None:
         self.violations: list[tuple[int, str, str]] = []
         self.evidence_names = evidence_names
         self.evidence_arg_dests = evidence_arg_dests
+        self.evidence_factory_names = evidence_factory_names
+        self.write_mode_names = write_mode_names
         self.forwarding_helpers = forwarding_helpers
+        self.writer_aliases = writer_aliases
 
     def _mentions(self, expr: ast.AST) -> bool:
-        return _expr_mentions_evidence(expr, self.evidence_names, self.evidence_arg_dests)
+        return _expr_mentions_evidence(
+            expr,
+            self.evidence_names,
+            self.evidence_arg_dests,
+            self.evidence_factory_names,
+        )
 
     def _record(self, node: ast.Call, operation: str, kind: str) -> None:
         self.violations.append((node.lineno, operation, kind))
@@ -327,7 +563,11 @@ class _DirectWriterVisitor(ast.NodeVisitor):
     def _check_attribute_call(self, node: ast.Call, function: ast.Attribute) -> None:
         if function.attr in WRITE_METHODS and self._mentions(function.value):
             self._record(node, f".{function.attr}()", "direct")
-        elif function.attr == "open" and _has_write_mode(node) and self._mentions(function.value):
+        elif (
+            function.attr == "open"
+            and _has_write_mode(node, self.write_mode_names)
+            and self._mentions(function.value)
+        ):
             self._record(node, ".open(..., write mode)", "direct")
         elif function.attr == "DictWriter" and node.args and self._mentions(node.args[0]):
             self._record(node, "csv.DictWriter()", "direct")
@@ -340,9 +580,15 @@ class _DirectWriterVisitor(ast.NodeVisitor):
                 self._record(node, f"{function.attr}()", "direct")
 
     def _check_name_call(self, node: ast.Call, function: ast.Name) -> None:
-        if (
+        if function.id in self.writer_aliases:
+            self._record(
+                node,
+                f"{function.id}() (alias for {self.writer_aliases[function.id]})",
+                "direct",
+            )
+        elif (
             function.id == "open"
-            and _has_write_mode(node)
+            and _has_write_mode(node, self.write_mode_names)
             and node.args
             and self._mentions(node.args[0])
         ):
@@ -382,7 +628,8 @@ def _structural_helper_violations(
     helper_lines = {
         node.name: node.lineno
         for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in forwarding_helpers
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in forwarding_helpers
     }
     return [
         (
@@ -481,11 +728,22 @@ def _repo_relative_path(path: Path, repo_root: Path) -> str:
 def _violation_tuples(source_path: Path, source: str) -> list[tuple[int, str, str]]:
     """Return raw evidence-writer bypasses in ``source``."""
     tree = ast.parse(source, filename=str(source_path))
-    evidence_names, evidence_arg_dests = _evidence_name_sets(tree)
-    forwarding_helpers = _forwarding_helpers(tree)
+    evidence_names, evidence_arg_dests, evidence_factory_names = _evidence_name_sets(tree)
+    write_mode_names = _write_mode_names(tree)
+    forwarding_helpers = _forwarding_helpers(tree, write_mode_names)
+    writer_aliases = _writer_aliases(
+        tree, evidence_names, evidence_arg_dests, evidence_factory_names
+    )
     has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
 
-    visitor = _DirectWriterVisitor(evidence_names, evidence_arg_dests, forwarding_helpers)
+    visitor = _DirectWriterVisitor(
+        evidence_names,
+        evidence_arg_dests,
+        evidence_factory_names,
+        write_mode_names,
+        forwarding_helpers,
+        writer_aliases,
+    )
     visitor.visit(tree)
     violations = visitor.violations
     violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))

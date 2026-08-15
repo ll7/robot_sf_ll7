@@ -516,6 +516,87 @@ args.output.write_text('{}', encoding='utf-8')
     assert check_file(path) == []
 
 
+def test_write_mode_alias_is_caught(tmp_path: Path) -> None:
+    """A write mode held in a simple name cannot hide an evidence write."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+MODE = "w"
+with OUTPUT.open(mode=MODE) as handle:
+    handle.write("{}")
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert ".open" in blockers[0]
+
+
+def test_bound_writer_alias_is_caught(tmp_path: Path) -> None:
+    """A bound ``write_text`` method alias still targets the evidence tree."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+OUTPUT = Path("docs/context/evidence/example/out.json")
+write = OUTPUT.write_text
+write("{}")
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert "alias for .write_text()" in blockers[0]
+
+
+def test_evidence_path_factory_is_caught(tmp_path: Path) -> None:
+    """A path factory returning an evidence path cannot hide a raw write."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+def output_path():
+    return Path("docs/context/evidence/example/out.json")
+
+output_path().write_text("{}")
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_two_hop_private_helper_bypass_is_caught(tmp_path: Path) -> None:
+    """A raw-write helper chain remains visible to the forwarding analysis."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+
+def sink(path):
+    path.write_text("{}")
+
+def emit(path):
+    sink(path)
+
+emit(Path("docs/context/evidence/example/out.json"))
+""",
+    )
+
+    blockers = check_file(path)
+
+    assert any("emit()" in blocker and "evidence-tree" in blocker for blocker in blockers)
+
+
 def test_inventory_file_reports_raw_writer_with_exemption_status(tmp_path: Path) -> None:
     """Inventory mode reports residual bypasses instead of honoring exemptions."""
     path = _write_fixture(
@@ -739,3 +820,5 @@ def test_cli_inventory_json_smoke_current_checkout() -> None:
     paths = [finding["path"] for finding in payload["findings"]]
     assert paths == sorted(paths)
     assert all(_is_inventory_path(path) for path in paths)
+    assert all(finding["exemption_status"] == "valid" for finding in payload["findings"])
+    assert all(finding["exemption_reason"] for finding in payload["findings"])

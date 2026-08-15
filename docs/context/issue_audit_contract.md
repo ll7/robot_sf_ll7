@@ -88,6 +88,17 @@ selects a winner:
 5. state:ready when explicit acceptance or validation evidence exists and no
    gate or active record remains.
 
+`state:review` is a composable qualifier, not a dispatch state. When the
+complete issue body/comment inventory contains an explicit report-status line
+such as `Report status: diagnostic_ready_for_domain_review`, and no claim,
+worktree, or active job remains, the classifier treats terminal review as
+stronger than an open PR-only record. It removes stale `state:ready` or
+`state:running`, adds the existing `state:review` label when available, and
+surfaces `decision-required`. It does not infer terminality from a future
+acceptance criterion, a hypothetical stop rule, or an unstructured mention of
+the word "terminal". A live claim, worktree, job, blocker, or unavailable
+SLURM inventory keeps the classifier fail-closed.
+
 Before the autonomous core adds either dispatch-suppressing blocker label
 (`state:blocked` or `state:blocked-external-input`), the issue body or complete
 comment inventory must contain an explicit `blocked-triage-v1` reason block or
@@ -121,6 +132,13 @@ Readiness requires concrete issue-local evidence such as an acceptance,
 definition-of-done, success-criteria, validation heading, complete checklist,
 or explicit validation command. A title, a type label, Project #5 placement,
 or a plausible implementation idea is not enough.
+
+Terminal campaign results awaiting interpretation or domain review are not
+dispatch-ready. The audit recognizes only explicit report-status evidence, so a
+completed run can be routed to review without treating its metrics as a new
+benchmark or paper-facing claim. Open implementation/report PRs may remain
+active repository work, but they do not by themselves restore `state:ready`
+after an explicit terminal-review status.
 
 The following are fail-closed gates:
 

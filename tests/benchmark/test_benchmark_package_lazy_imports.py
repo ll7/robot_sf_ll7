@@ -38,6 +38,7 @@ _LIGHTWEIGHT_MODULES = [
     "robot_sf.benchmark.errors",
     "robot_sf.benchmark.benchmark_protocol",
     "robot_sf.benchmark.helper_registry",
+    "robot_sf.benchmark.scenario_coverage",
     "robot_sf.benchmark.scenario_failure_cause",
 ]
 
@@ -90,8 +91,11 @@ def test_scenario_failure_cause_shim_is_quiet_when_invoked() -> None:
 
             from robot_sf.benchmark import scenario_failure_cause
 
+            from robot_sf.benchmark.scenario import scenario_failure_cause as canonical
+
+            assert scenario_failure_cause is canonical
             assert scenario_failure_cause.__name__ == (
-                "robot_sf.benchmark.scenario_failure_cause"
+                "robot_sf.benchmark.scenario.scenario_failure_cause"
             )
             verdict = scenario_failure_cause.classify_scenario_failure_cause(
                 {
@@ -119,6 +123,41 @@ def test_scenario_failure_cause_shim_is_quiet_when_invoked() -> None:
     for pattern in _HEAVY_INIT_PATTERNS:
         assert pattern not in result.stderr, (
             "Invoking scenario_failure_cause through robot_sf.benchmark emitted "
+            f"heavy-stack noise (pattern {pattern!r}).\n"
+            f"stderr snippet: {result.stderr[:500]}"
+        )
+
+
+def test_scenario_coverage_shim_is_quiet_and_identity_preserving() -> None:
+    """The scenario coverage shim must load the lazy canonical module only."""
+    result = _run_import(
+        textwrap.dedent(
+            """
+            import sys
+
+            from robot_sf.benchmark import scenario_coverage
+            from robot_sf.benchmark.scenario import scenario_coverage as canonical
+
+            assert scenario_coverage is canonical
+            assert scenario_coverage.__name__ == (
+                "robot_sf.benchmark.scenario.scenario_coverage"
+            )
+            report = scenario_coverage.build_scenario_coverage_report(
+                [{"name": "fixture", "simulation_config": {}}],
+                source="fixture.yaml",
+            )
+            assert report["schema_version"] == "scenario_coverage_entropy.v1"
+            assert "robot_sf.sensor.registry" not in sys.modules
+            print("OK")
+            """
+        )
+    )
+
+    assert result.returncode == 0, f"scenario coverage shim failed:\n{result.stderr}"
+    assert result.stdout.strip() == "OK"
+    for pattern in _HEAVY_INIT_PATTERNS:
+        assert pattern not in result.stderr, (
+            "Invoking scenario_coverage through robot_sf.benchmark emitted "
             f"heavy-stack noise (pattern {pattern!r}).\n"
             f"stderr snippet: {result.stderr[:500]}"
         )

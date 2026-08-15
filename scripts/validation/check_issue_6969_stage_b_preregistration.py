@@ -355,6 +355,18 @@ def _validate_stage_a_snapshot_matches_summary(
     stage_a = _mapping(summary.get("stage_a"), "stage_a_summary.stage_a")
 
     snapshot = _mapping(config.get("stage_a_snapshot"), "stage_a_snapshot")
+    implementation_commits = _mapping(
+        snapshot.get("implementation_commits"), "stage_a_snapshot.implementation_commits"
+    )
+    reference_stage = _mapping(summary.get("reference_stage"), "stage_a_summary.reference_stage")
+    _require(
+        reference_stage.get("implementation_commit") == implementation_commits.get("reference"),
+        "Stage A reference implementation commit disagrees with preregistration snapshot",
+    )
+    _require(
+        stage_a.get("implementation_commit") == implementation_commits.get("parameter_screen"),
+        "Stage A parameter-screen implementation commit disagrees with preregistration snapshot",
+    )
     _require(
         stage_a.get("native_rows") == snapshot.get("native_rows"),
         "Stage A summary native row count disagrees with preregistration snapshot",

@@ -245,6 +245,31 @@ def test_hidden_stage_a_space_filling_candidate_fails_closed(tmp_path: Path) -> 
         validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
 
 
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (
+            lambda summary: _stage_a(summary).__setitem__("implementation_commit", "0" * 40),
+            "parameter-screen implementation commit",
+        ),
+        (
+            lambda summary: summary["reference_stage"].__setitem__(
+                "implementation_commit", "0" * 40
+            ),
+            "reference implementation commit",
+        ),
+    ],
+)
+def test_stage_a_summary_implementation_lineage_fails_closed(
+    tmp_path: Path, mutate: Callable[[dict[str, Any]], None], match: str
+) -> None:
+    """Pinned Stage A summaries must bind both recorded implementation commits."""
+    packet, source_root = _mutated_summary_packet(tmp_path, mutate)
+
+    with pytest.raises(StageBPreregistrationError, match=match):
+        validate_preregistration_config(packet, config_path=PACKET, source_root=source_root)
+
+
 def test_held_out_seed_overlap_fails_closed() -> None:
     """Held-out rows cannot reuse a Stage A seed."""
     packet = copy.deepcopy(_packet())

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.benchmark.exact_repeat_campaign import _record_is_degraded
 from robot_sf.benchmark.utils import (
     episode_collision_value,
     episode_metric_value,
@@ -333,10 +334,17 @@ def _checkpoint_receipt(
         bool(payload.get("stage"))
         and _as_bool(payload.get("submit_safe"))
         and str(arm.get("hash_source") or "").strip() == "computed_file"
+        and mode == "enforced_staged"
+        and str(arm.get("status") or "").strip() in {"staged", "present_local"}
+        and isinstance(arm.get("resolved_path"), str)
+        and bool(str(arm.get("resolved_path") or "").strip())
+        and str(arm.get("load_status") or "").strip() in {"not_run", "loaded"}
+        and (arm.get("load_status") != "loaded" or arm.get("load_succeeded") is True)
+        and arm.get("fallback_triggered") is not True
     )
     if not identity_matches:
         status = "identity_mismatch"
-    elif staged and str(arm.get("status") or "") == "staged":
+    elif staged:
         status = "staged_receipt"
     elif mode == "metadata_only":
         status = "metadata_only"
@@ -489,6 +497,12 @@ def _validate_summary_rows(
             blockers.append(f"{name}/{planner_key}: summary row is not benchmark-success")
         if str(row.get("availability_status") or "") != "available":
             blockers.append(f"{name}/{planner_key}: availability is not available")
+        readiness_status = str(row.get("readiness_status") or "").strip().lower()
+        if readiness_status not in {"native", "adapter"}:
+            blockers.append(
+                f"{name}/{planner_key}: readiness status {readiness_status!r} is not "
+                "native or adapter"
+            )
         if str(row.get("execution_mode") or "").lower() in {
             "fallback",
             "degraded",
@@ -578,6 +592,10 @@ def _episode_status_blockers(
     if episode_status in {"fallback", "error", "invalid", "unavailable", "degraded", "blocked"}:
         blockers.append(
             f"{name}: episode status {episode_status!r} is not benchmark evidence at {key!r}"
+        )
+    if _record_is_degraded(record):
+        blockers.append(
+            f"{name}: planner step fallback/degradation is not benchmark evidence at {key!r}"
         )
     return blockers
 
@@ -967,6 +985,15 @@ def _regime_comparison(
     return result
 
 
+def _provenance_interpretation_status(receipts: Iterable[dict[str, Any]]) -> str:
+    """Return the conservative interpretation status for checkpoint receipts."""
+    return (
+        "declared_and_receipted"
+        if all(receipt.get("status") == "staged_receipt" for receipt in receipts)
+        else "blocked"
+    )
+
+
 def build_report(
     *,
     nominal_root: Path,
@@ -1055,7 +1082,9 @@ def build_report(
         "checkpoint_sha256": options.expected_model_sha256,
         "nominal": nominal.checkpoint,
         "stress": stress.checkpoint,
-        "interpretation_status": "blocked" if provenance_blockers else "declared_and_receipted",
+        "interpretation_status": _provenance_interpretation_status(
+            (nominal.checkpoint, stress.checkpoint)
+        ),
         "overlap_caveat": {
             "stress": "documented_in_distribution_in_ppo_full_maintained_eval_v1",
             "nominal": "not_in_documented_eval-set_components; possible atomic-archetype overlap is unresolved",

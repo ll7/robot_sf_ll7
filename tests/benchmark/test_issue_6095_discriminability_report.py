@@ -15,9 +15,11 @@ from scripts.benchmark.build_issue_6095_discriminability_report import (
     ReportContractError,
     _checkpoint_receipt,
     _episode_row,
+    _provenance_interpretation_status,
     _provenance_limitation_lines,
     _validate_campaign_receipts,
     _validate_episode_row,
+    _validate_summary_rows,
     bootstrap_mean_ci,
     classify_stress_floor,
 )
@@ -147,6 +149,117 @@ def test_checkpoint_receipt_requires_computed_file_hash_source(tmp_path: Path) -
     )
 
     assert receipt["status"] == "unresolved"
+
+
+def test_checkpoint_receipt_rejects_failed_staged_runtime_receipt(tmp_path: Path) -> None:
+    """A failed or pathless staged receipt must not support interpretation."""
+    preflight = tmp_path / "preflight"
+    preflight.mkdir()
+    (preflight / "checkpoint_staging.json").write_text(
+        '{"mode":"enforced_staged","stage":true,"submit_safe":true,'
+        '"arms":[{"planner_key":"ppo","model_id":"model",'
+        '"checkpoint_sha256":"sha","status":"staged",'
+        '"hash_source":"computed_file","load_status":"failed",'
+        '"load_succeeded":false,"fallback_triggered":true}]}' + "\n",
+        encoding="utf-8",
+    )
+
+    receipt = _checkpoint_receipt(
+        tmp_path,
+        expected_model_id="model",
+        expected_sha256="sha",
+    )
+
+    assert receipt["status"] == "unresolved"
+
+
+def test_checkpoint_receipt_accepts_complete_enforced_staged_receipt(tmp_path: Path) -> None:
+    """A complete enforced-staged preflight receipt remains admissible."""
+    preflight = tmp_path / "preflight"
+    preflight.mkdir()
+    (preflight / "checkpoint_staging.json").write_text(
+        '{"mode":"enforced_staged","stage":true,"submit_safe":true,'
+        '"arms":[{"planner_key":"ppo","model_id":"model",'
+        '"checkpoint_sha256":"sha","status":"staged",'
+        '"hash_source":"computed_file","resolved_path":"/cache/model",'
+        '"load_status":"not_run","load_succeeded":null,"fallback_triggered":null}]}\n',
+        encoding="utf-8",
+    )
+
+    receipt = _checkpoint_receipt(
+        tmp_path,
+        expected_model_id="model",
+        expected_sha256="sha",
+    )
+
+    assert receipt["status"] == "staged_receipt"
+
+
+def test_checkpoint_interpretation_status_blocks_non_staged_receipts() -> None:
+    """Invalid checkpoint receipts must not render as declared and receipted."""
+    assert (
+        _provenance_interpretation_status(({"status": "staged_receipt"}, {"status": "unresolved"}))
+        == "blocked"
+    )
+
+
+@pytest.mark.parametrize("readiness_status", ["fallback", "degraded", "unknown", ""])
+def test_summary_row_rejects_non_native_or_adapter_readiness(
+    readiness_status: str,
+) -> None:
+    """Summary readiness must not bypass the native/adapter evidence contract."""
+    summary_rows = {
+        "orca": {
+            "episodes": 1,
+            "status": "ok",
+            "benchmark_success": True,
+            "availability_status": "available",
+            "readiness_status": readiness_status,
+            "execution_mode": "adapter",
+        },
+        "ppo": {
+            "episodes": 1,
+            "status": "ok",
+            "benchmark_success": True,
+            "availability_status": "available",
+            "readiness_status": "native",
+            "execution_mode": "native",
+        },
+    }
+
+    blockers, _warnings = _validate_summary_rows(
+        name="nominal",
+        summary_rows=summary_rows,
+        expected_episode_count=1,
+    )
+
+    assert any("readiness status" in blocker for blocker in blockers)
+
+
+@pytest.mark.parametrize(
+    "algorithm_metadata",
+    [
+        {"status": "policy_step_timeout_fallback"},
+        {"status": "ok", "policy_step_timeout": {"fallback_actions": 1}},
+    ],
+)
+def test_episode_row_rejects_runner_degraded_fallback_markers(
+    algorithm_metadata: dict[str, object],
+) -> None:
+    """Runner-emitted fallback markers must not become benchmark evidence."""
+    row = _episode("orca", "scenario", 111)
+    blockers = _validate_episode_row(
+        name="nominal",
+        key=("orca", "scenario", 111),
+        record={"algorithm_metadata": algorithm_metadata},
+        row=row,
+        scenario_ids=("scenario",),
+        expected_seeds=(111,),
+        expected_commit="fixture",
+        expected_model_id="model",
+    )
+
+    assert any("fallback/degradation" in blocker for blocker in blockers)
 
 
 def test_episode_row_rejects_missing_or_unknown_termination_reason(tmp_path: Path) -> None:

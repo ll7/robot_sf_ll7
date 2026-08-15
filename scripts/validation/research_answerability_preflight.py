@@ -456,7 +456,7 @@ def apply_proof_results(
     updated = copy.deepcopy(dict(contract))
     surfaces = proof_report.get("surfaces")
     if not isinstance(surfaces, Mapping):
-        return updated
+        surfaces = {}
     declarations = updated.get("proof_surfaces")
     if not isinstance(declarations, Mapping):
         return updated
@@ -464,9 +464,14 @@ def apply_proof_results(
     for surface in PROOF_SURFACES:
         declaration = declarations.get(surface)
         result = surfaces.get(surface)
-        if not isinstance(declaration, Mapping) or not isinstance(result, Mapping):
+        if not isinstance(declaration, Mapping):
             continue
         entry = dict(declaration)
+        if not isinstance(result, Mapping):
+            entry["status"] = "not_run"
+            entry["unavailable_reason"] = "collector did not return a proof result"
+            updated_surfaces[surface] = entry
+            continue
         entry["status"] = result.get("status", "not_run")
         reason = result.get("reason") or result.get("unavailable_reason")
         if reason:

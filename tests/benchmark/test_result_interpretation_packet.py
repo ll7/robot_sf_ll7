@@ -805,6 +805,15 @@ class TestFailClosedMetricSourceBinding:
 
 
 class TestFailClosedSupportedSourceStatistics:
+    def test_supported_source_must_declare_direction_convention(self) -> None:
+        payload = copy.deepcopy(_VALID_6474)
+        report_source = next(
+            source for source in payload["sources"] if source["source_id"] == "report_summary"
+        )
+        report_source.pop("direction")
+        errors = validate_packet(payload)
+        assert any("source reference must declare direction" in error for error in errors)
+
     def test_supported_direction_must_match_source_convention(self) -> None:
         payload = copy.deepcopy(_VALID_6474)
         payload["decisions"][0]["comparator"]["direction"] = "reference_minus_comparison"

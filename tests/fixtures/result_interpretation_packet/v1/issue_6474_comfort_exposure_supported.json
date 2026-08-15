@@ -38,6 +38,7 @@
       "path": "docs/context/evidence/issue_6474_social_compliance_nominal_campaign_report.summary.json",
       "sha256": "8fdb9fbb62a20b4cda5d5e0d3df4c037be252610f01428d97ef18f83c12ef43f",
       "kind": "report_summary",
+      "direction": "comparison_minus_reference",
       "commit": "3615540feab993e55fba658e8fff63e5de4b6de4",
       "tracked_commit": "9efad2d46fec58052796a56d5ebd4c28e4a359e9",
       "command": "uv run python scripts/benchmark/build_social_compliance_cross_planner_report_issue_6474.py --self-test",

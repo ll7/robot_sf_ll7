@@ -116,11 +116,11 @@ registered `report_summary` source must contain the matching metric and planner
 pair. The packet's support, denominator, effect, confidence interval, raw
 p-value, and adjusted p-value must match that source row (within the documented
 display-rounding tolerance), and the source row plus packet must satisfy the
-source's declared adjusted-alpha decision rule. The source report's declared
-paired effect convention is `comparison_minus_reference`, and the packet
-direction must bind to that convention as well. A structurally valid or
-statistically favorable number cannot claim `supported` without this source-row
-binding.
+source's declared adjusted-alpha decision rule. The packet's `report_summary`
+source reference must explicitly declare the paired effect convention
+`comparison_minus_reference`, and the packet direction must bind to that
+declaration as well. A structurally valid or statistically favorable number
+cannot claim `supported` without this source-row binding.
 Packets also list `fail_closed_changes`, making the retained exclusions and
 claim refusals explicit in the review report.  The top-level `forbidden_claims`
 mirror the claim-boundary refusal list, and a small high-risk phrase guard

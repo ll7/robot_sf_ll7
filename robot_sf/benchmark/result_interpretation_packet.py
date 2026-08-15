@@ -162,6 +162,7 @@ class SourceRef:
     tracked_commit: str
     command: str
     description: str = ""
+    direction: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -804,7 +805,17 @@ def _validate_supported_source_binding(  # noqa: C901
         )
         return
     row = matches[0]
-    source_direction = row.get("direction", _SOURCE_CONTRAST_DIRECTION)
+    source_direction = source.direction
+    if source_direction != _SOURCE_CONTRAST_DIRECTION:
+        errors.append(
+            f"decision {decision.decision_id!r}: report_summary source reference must "
+            f"declare direction={_SOURCE_CONTRAST_DIRECTION!r}"
+        )
+    if row.get("direction") is not None and row.get("direction") != source_direction:
+        errors.append(
+            f"decision {decision.decision_id!r}: source row direction does not "
+            "match the report declaration"
+        )
     if comparator.direction != source_direction:
         errors.append(
             f"decision {decision.decision_id!r}: contrast direction "
@@ -1770,6 +1781,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
             tracked_commit=s["tracked_commit"],
             command=s["command"],
             description=s.get("description", ""),
+            direction=s.get("direction"),
         )
         for s in d["sources"]
     ]

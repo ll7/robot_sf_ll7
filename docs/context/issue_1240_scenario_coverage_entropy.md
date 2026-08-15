@@ -75,7 +75,7 @@ uv run --active pytest \
   tests/benchmark/test_runner_scenario_matrix_manifest.py \
   -q
 uv run --active ruff check \
-  robot_sf/benchmark/scenario_coverage.py \
+  robot_sf/benchmark/scenario/scenario_coverage.py \
   scripts/tools/scenario_coverage_entropy.py \
   tests/benchmark/test_scenario_coverage.py
 uv run --active python scripts/validation/check_docs_proof_consistency.py \
@@ -95,7 +95,7 @@ also passed, Ruff passed, docs proof consistency passed, `git diff --check` pass
 smoke wrote ignored outputs under `output/scenario_coverage/`.
 
 The first full PR-readiness run passed the full test suite but failed changed-file coverage because
-`robot_sf/benchmark/scenario_coverage.py` was at `78.7%`, below the `80%` minimum. Additional
+the scenario coverage implementation was at `78.7%`, below the `80%` minimum. Additional
 focused tests now cover minimal legacy rows, empty/duplicate input errors, Markdown rendering, and
 artifact writers; the focused coverage for `scenario_coverage.py` is `95.48%`.
 

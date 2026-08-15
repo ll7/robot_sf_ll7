@@ -375,12 +375,20 @@ def _validate_campaign_receipts(  # noqa: C901
     if str(campaign.get("campaign_execution_status") or "") != "completed":
         blockers.append(f"{name}: campaign execution did not complete")
     row_status = campaign.get("row_status_summary")
-    if isinstance(row_status, dict):
+    if not isinstance(row_status, dict):
+        blockers.append(f"{name}: campaign row_status_summary is missing or invalid")
+    else:
         for field, description in (
+            ("successful_evidence_rows", "successful evidence row count"),
+            ("accepted_unavailable_rows", "accepted unavailable rows"),
             ("fallback_or_degraded_rows", "fallback/degraded rows"),
             ("unexpected_failed_rows", "unexpected failed rows"),
         ):
-            if int(row_status.get(field) or 0) != 0:
+            value = _finite_float(row_status.get(field))
+            if value is None or not value.is_integer() or value < 0.0:
+                blockers.append(f"{name}: row_status_summary.{field} is missing or invalid")
+                continue
+            if field != "successful_evidence_rows" and value != 0.0:
                 blockers.append(f"{name}: {description} are present")
     if str(integrity.get("status") or "") != "valid" or not _as_bool(
         integrity.get("benchmark_success_allowed")
@@ -532,6 +540,28 @@ def _load_episode_rows(
     return rows, blockers, warnings
 
 
+def _episode_status_blockers(
+    *, name: str, key: tuple[str, str, int], record: dict[str, Any]
+) -> list[str]:
+    """Reject raw episode statuses that cannot support benchmark evidence."""
+    blockers: list[str] = []
+    termination_reason = str(record.get("termination_reason") or "").strip().lower()
+    if termination_reason == "error":
+        blockers.append(f"{name}: failed episode termination is not benchmark evidence at {key!r}")
+    algorithm_status = str(_nested(record, "algorithm_metadata", "status") or "").strip().lower()
+    if algorithm_status in {"fallback", "error", "placeholder", "unavailable", "degraded"}:
+        blockers.append(
+            f"{name}: planner algorithm status {algorithm_status!r} is not benchmark evidence "
+            f"at {key!r}"
+        )
+    episode_status = str(record.get("status") or "").strip().lower()
+    if episode_status in {"fallback", "error", "invalid", "unavailable", "degraded", "blocked"}:
+        blockers.append(
+            f"{name}: episode status {episode_status!r} is not benchmark evidence at {key!r}"
+        )
+    return blockers
+
+
 def _validate_episode_row(
     *,
     name: str,
@@ -567,6 +597,7 @@ def _validate_episode_row(
         blockers.append(f"{name}: dt mismatch at {key!r}: {row.dt!r}")
     if planner_key == "ppo" and row.model_id != expected_model_id:
         blockers.append(f"{name}: PPO model id mismatch at {key!r}: {row.model_id!r}")
+    blockers.extend(_episode_status_blockers(name=name, key=key, record=record))
     if _record_kinematics(record) != EXPECTED_KINEMATICS:
         blockers.append(f"{name}: kinematics mismatch at {key!r}")
     record_commit = str(record.get("git_hash") or "").strip()

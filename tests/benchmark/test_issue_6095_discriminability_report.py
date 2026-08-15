@@ -15,6 +15,7 @@ from scripts.benchmark.build_issue_6095_discriminability_report import (
     ReportContractError,
     _episode_row,
     _provenance_limitation_lines,
+    _validate_campaign_receipts,
     _validate_episode_row,
     bootstrap_mean_ci,
     classify_stress_floor,
@@ -163,3 +164,77 @@ def test_episode_row_validates_planner_execution_and_observation_contract() -> N
 
     assert any("execution mode" in blocker for blocker in blockers)
     assert any("observation level" in blocker for blocker in blockers)
+
+
+def test_episode_row_rejects_failed_or_degraded_statuses() -> None:
+    """Raw failed or degraded rows must not become diagnostic metric values."""
+    row = _episode("orca", "scenario", 111)
+    record = {
+        "termination_reason": "error",
+        "status": "failure",
+        "algorithm_metadata": {"status": "fallback"},
+    }
+
+    blockers = _validate_episode_row(
+        name="nominal",
+        key=("orca", "scenario", 111),
+        record=record,
+        row=row,
+        scenario_ids=("scenario",),
+        expected_seeds=(111,),
+        expected_commit="fixture",
+        expected_model_id="model",
+    )
+
+    assert any("failed episode termination" in blocker for blocker in blockers)
+    assert any("algorithm status 'fallback'" in blocker for blocker in blockers)
+
+
+def test_campaign_receipts_require_complete_zero_failure_row_summary() -> None:
+    """Missing or non-zero row-status receipts must fail closed."""
+    summary = {
+        "campaign": {
+            "scenario_matrix": "matrix",
+            "git_hash": "fixture",
+            "benchmark_success": True,
+            "evidence_status": "valid",
+            "campaign_execution_status": "completed",
+            "row_status_summary": {
+                "successful_evidence_rows": 1,
+                "accepted_unavailable_rows": 1,
+                "fallback_or_degraded_rows": 0,
+                "unexpected_failed_rows": 0,
+            },
+        }
+    }
+    manifest = {
+        "scenario_matrix": "matrix",
+        "git": {"commit": "fixture"},
+        "seed_policy": {"resolved_seeds": [111]},
+    }
+    integrity = {"status": "valid", "benchmark_success_allowed": True}
+
+    _campaign, blockers = _validate_campaign_receipts(
+        name="nominal",
+        summary=summary,
+        manifest=manifest,
+        integrity=integrity,
+        expected_matrix="matrix",
+        expected_seeds=(111,),
+        expected_commit="fixture",
+    )
+
+    assert any("accepted unavailable rows are present" in blocker for blocker in blockers)
+
+    summary["campaign"].pop("row_status_summary")
+    _campaign, blockers = _validate_campaign_receipts(
+        name="nominal",
+        summary=summary,
+        manifest=manifest,
+        integrity=integrity,
+        expected_matrix="matrix",
+        expected_seeds=(111,),
+        expected_commit="fixture",
+    )
+
+    assert any("row_status_summary is missing or invalid" in blocker for blocker in blockers)

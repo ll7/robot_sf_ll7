@@ -1029,6 +1029,8 @@ def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> N
     def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
         del timeout
         assert repo == "ll7/robot_sf_ll7"
+        if path == "branches/main":
+            return {"commit": {"sha": "main-sha"}}
         if path == "pulls?state=open&per_page=2&page=1":
             return rest_rows
         if path.startswith("pulls/") and path.count("/") == 1:
@@ -1077,12 +1079,15 @@ def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> N
     assert [pr["number"] for pr in payload["prs"]] == [42, 43]
     for pr in payload["prs"]:
         assert pr["data_source"] == "rest_fallback_graphql_quota"
+        assert pr["review_threads"] == "unknown_graphql_quota"
         assert pr["review_threads_admission"] == "fail_closed_unknown"
+        assert pr["head_sha"].startswith("head-")
         assert pr["base_freshness"]["verdict"] == "fresh"
         assert pr["checks"]["overall"] == "success"
         assert pr["preflight"]["status"] == "blocked"
         assert "review_threads_unknown_graphql_quota" in pr["preflight"]["reasons"]
         assert pr["next_action"] == "inspect_blocking_preflight"
+        assert pr["preflight"]["head_sha_matches_expected"] is True
     mock_rest.assert_any_call("pulls?state=open&per_page=2&page=1", repo="ll7/robot_sf_ll7")
 
 

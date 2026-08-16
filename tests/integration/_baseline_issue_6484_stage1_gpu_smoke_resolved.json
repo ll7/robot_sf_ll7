@@ -1,0 +1,7 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "0519fbae2fa7788af0e6f19c207afc99c96506ec",
+  "variants": {
+    "expert_ppo_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke.yaml": "774449784ca26de2b36807589d6532a9a803b47955027d09df04d2e69d575941"
+  }
+}

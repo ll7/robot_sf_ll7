@@ -1,22 +1,8 @@
+base_config: issue_4014_recurrent_ppo_lstm_base.yaml
 policy_id: ppo_lstm_recurrent_issue_4014_smoke
 algorithm: recurrent_ppo
-scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
-total_timesteps: 2048
-seeds: [4014]
-randomize_seeds: false
 env_overrides:
   observation_mode: socnav_struct
-env_factory_kwargs:
-  reward_name: route_completion_v2
-convergence:
-  success_rate: 0.8
-  collision_rate: 0.1
-  plateau_window: 512
-evaluation:
-  evaluation_episodes: 3
-  randomize_seeds: false
-  step_schedule:
-    - every_steps: 1024
 recurrent_ppo_hyperparams:
   learning_rate: 0.0001
   n_steps: 128

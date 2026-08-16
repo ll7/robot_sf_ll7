@@ -2654,6 +2654,114 @@ def test_issue_6484_baseline_promotion_variants_keep_distinct_overrides() -> Non
     assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]
 
 
+# Issue #6484: the issue-791 reward-curriculum short-budget pair shares one
+# base config while preserving frozen resolved mappings and explicit launch identity.
+_ISSUE_6484_REWARD_CURRICULUM_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_REWARD_CURRICULUM_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_base.yaml"
+)
+_ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_reward_curriculum_promotion_resolved.json"
+)
+_ISSUE_6484_REWARD_CURRICULUM_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml",
+]
+
+
+def _issue_6484_reward_curriculum_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change config baseline."""
+    assert _ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH.exists(), (
+        "Pre-change reward-curriculum baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_REWARD_CURRICULUM_VARIANTS)
+    return baseline
+
+
+def _issue_6484_reward_curriculum_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_REWARD_CURRICULUM_VARIANTS)
+def test_issue_6484_reward_curriculum_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited reward-curriculum variant matches its pre-refactor mapping."""
+    path = (_ISSUE_6484_REWARD_CURRICULUM_DIR / variant).resolve()
+    baseline = _issue_6484_reward_curriculum_baseline()
+
+    assert _issue_6484_reward_curriculum_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.evaluation.step_schedule
+
+
+def test_issue_6484_reward_curriculum_base_reuse_and_explicit_launch_identity() -> None:
+    """The variants reuse one lean base and keep launch identity explicit."""
+    base_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR / _ISSUE_6484_REWARD_CURRICULUM_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "step_schedule" not in base_yaml.get("evaluation", {})
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    for variant in _ISSUE_6484_REWARD_CURRICULUM_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_REWARD_CURRICULUM_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_REWARD_CURRICULUM_BASE_NAME
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "num_envs",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert variant_yaml["num_envs"] == 2
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_reward_curriculum_variants_keep_distinct_overrides() -> None:
+    """The inherited variants retain distinct budgets, cadence, and W&B metadata."""
+    short_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR
+        / "expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml"
+    ).resolve()
+    long_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR
+        / "expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml"
+    ).resolve()
+    short = load_expert_training_config(short_path)
+    long = load_expert_training_config(long_path)
+    short_mapping = _load_expert_training_config_mapping(short_path)
+    long_mapping = _load_expert_training_config_mapping(long_path)
+
+    assert short.num_envs == long.num_envs == 2
+    assert short.total_timesteps == 131072
+    assert long.total_timesteps == 262144
+    assert short.evaluation.step_schedule == ((None, 65536),)
+    assert long.evaluation.step_schedule == ((None, 32768),)
+    assert short.policy_id != long.policy_id
+    assert short_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-128k-promotion"
+    assert long_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-256k-promotion"
+    assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-791 baseline env22 pair shares a dedicated base while
 # preserving explicit launch identity and frozen resolved mappings.
 _ISSUE_6484_BASELINE_ENV22_DIR = Path("configs/training/ppo/ablations")
@@ -2739,6 +2847,226 @@ def test_issue_6484_baseline_env22_variants_keep_distinct_overrides() -> None:
     assert one_m.evaluation.step_schedule == ((None, 131072),)
     assert three_m.evaluation.step_schedule == ((None, 262144),)
     assert one_m.policy_id != three_m.policy_id
+
+
+# Issue #6484: the issue-791 attention-head env22 pair shares a dedicated base
+# while preserving explicit launch identity and frozen resolved mappings.
+_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_attention_head_promotion_env22_base.yaml"
+)
+_ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_attention_head_promotion_env22_resolved.json"
+)
+_ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml",
+    "expert_ppo_issue_791_attention_head_promotion_3m_env22.yaml",
+]
+
+
+def _issue_6484_attention_head_env22_baseline() -> dict:
+    """Load and integrity-check the frozen attention-head env22 baseline."""
+    assert _ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change attention-head env22 baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS)
+    return baseline
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS)
+def test_issue_6484_attention_head_env22_resolves_to_prechange_values(variant: str) -> None:
+    """Each attention-head env22 variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_attention_head_env22_baseline()
+
+    assert _issue_6484_baseline_promotion_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+
+
+def test_issue_6484_attention_head_env22_base_reuse_and_explicit_launch_identity() -> None:
+    """The attention-head env22 variants reuse one base and keep launch identity explicit."""
+    base_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / _ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "step_schedule" not in base_yaml.get("evaluation", {})
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    for variant in _ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "num_envs",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_attention_head_env22_variants_keep_distinct_overrides() -> None:
+    """The attention-head env22 variants retain distinct budgets and metadata."""
+    one_m_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml"
+    ).resolve()
+    three_m_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_3m_env22.yaml"
+    ).resolve()
+    one_m = load_expert_training_config(one_m_path)
+    three_m = load_expert_training_config(three_m_path)
+    one_m_mapping = _load_expert_training_config_mapping(one_m_path)
+    three_m_mapping = _load_expert_training_config_mapping(three_m_path)
+
+    assert one_m.num_envs == three_m.num_envs == 22
+    assert one_m.total_timesteps == 1_000_000
+    assert three_m.total_timesteps == 3_000_000
+    assert one_m.evaluation.step_schedule == ((None, 131072),)
+    assert three_m.evaluation.step_schedule == ((None, 262144),)
+    assert one_m.policy_id != three_m.policy_id
+    assert one_m_mapping["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert three_m_mapping["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert one_m_mapping["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert three_m_mapping["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert one_m_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-1m-promotion-env22"
+    assert three_m_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-3m-promotion-env22"
+    assert (
+        one_m_mapping["tracking"]["wandb"]["tags"] != three_m_mapping["tracking"]["wandb"]["tags"]
+    )
+
+
+# Issue #6484: the issue-791 attention-head long-horizon pair shares only its
+# byte-equivalent settings. Run identity and intentional 10M differences stay
+# explicit in both variants.
+_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_attention_head_promotion_10m_env22_base.yaml"
+)
+_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_attention_head_promotion_10m_env22_resolved.json"
+)
+_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml",
+    "expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml",
+]
+
+
+def _issue_6484_attention_head_10m_env22_baseline() -> dict:
+    """Load and integrity-check the frozen long-horizon baseline."""
+    assert _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change long-horizon baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_VARIANTS)
+    return baseline
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_VARIANTS)
+def test_issue_6484_attention_head_10m_env22_resolves_to_prechange_values(
+    variant: str,
+) -> None:
+    """Each inherited long-horizon variant matches its frozen resolved mapping."""
+    path = (_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_attention_head_10m_env22_baseline()
+
+    assert _issue_6484_baseline_promotion_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_attention_head_10m_env22_base_reuse_keeps_run_identity_explicit() -> None:
+    """The long-horizon base contains only common values and no launch metadata."""
+    base_path = (
+        _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR / _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "scenario_config" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "predictive_foresight_device" not in base_yaml["env_overrides"]
+    assert "scenario_sampling" not in base_yaml
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    expected_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "env_overrides",
+        "scenario_sampling",
+        "evaluation",
+        "tracking",
+    }
+    for variant in _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_BASE_NAME
+        assert set(variant_yaml) == expected_keys
+        assert set(variant_yaml["env_overrides"]) == {"predictive_foresight_device"}
+        assert variant_yaml["env_overrides"]["predictive_foresight_device"] == "cuda"
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_attention_head_10m_env22_preserves_intentional_differences() -> None:
+    """Scenario/sampler identity and W&B metadata remain distinct after inheritance."""
+    classic_path = (
+        _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_10m_env22.yaml"
+    ).resolve()
+    eval_aligned_path = (
+        _ISSUE_6484_ATTENTION_HEAD_10M_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_10m_env22_eval_aligned.yaml"
+    ).resolve()
+    classic = _load_expert_training_config_mapping(classic_path)
+    eval_aligned = _load_expert_training_config_mapping(eval_aligned_path)
+
+    assert classic["scenario_config"] != eval_aligned["scenario_config"]
+    assert "weights" in classic["scenario_sampling"]
+    assert "weights" not in eval_aligned["scenario_sampling"]
+    assert classic["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert eval_aligned["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert classic["total_timesteps"] == eval_aligned["total_timesteps"] == 10_000_000
+    assert classic["evaluation"]["step_schedule"] == eval_aligned["evaluation"]["step_schedule"]
+    assert classic["policy_id"] != eval_aligned["policy_id"]
+    assert classic["tracking"]["wandb"]["job_type"] != eval_aligned["tracking"]["wandb"]["job_type"]
+    assert classic["tracking"]["wandb"]["tags"] != eval_aligned["tracking"]["wandb"]["tags"]
 
 
 # Issue #6484: the issue-791 asymmetric-critic short-budget pair shares one

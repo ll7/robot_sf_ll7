@@ -43,7 +43,10 @@ from scripts.dev._gh_pagination import is_likely_truncated
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 PER_PAGE = 100
 DEFAULT_MAX_ISSUE_PAGES = 10
-DEFAULT_MAX_PR_PAGES = 20
+# Keep the shared REST inventory bounded while covering the repository's current
+# closed/open PR history during GraphQL-quota fallback. Hitting this cap remains
+# fail-closed; callers can raise it explicitly with ``--max-pr-pages``.
+DEFAULT_MAX_PR_PAGES = 50
 PARENT_MARKERS = re.compile(
     r"\b(parent|roadmap|epic|tracking|multi[- ]slice|umbrella)\b",
     re.IGNORECASE,

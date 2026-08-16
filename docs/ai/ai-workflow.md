@@ -353,7 +353,8 @@ manual merge), a fresh readiness run, and a new snapshot. The integration path u
 merges and never resets or deletes the worktree. Under exhausted GraphQL quota, the gate may record
 an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
 `remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
-publication.
+publication. The shared REST fallback currently reads up to 50 pages of 100 pull requests; a cap
+hit remains blocked rather than authorizing from a partial inventory.
 
 ## What This Note Does Not Replace
 

@@ -45,6 +45,7 @@ from scripts.training.train_ppo import (
     load_expert_training_config,
     run_expert_training,
 )
+from scripts.training.train_recurrent_ppo import load_recurrent_ppo_config
 
 
 def test_expert_training_dry_run(tmp_path, monkeypatch):
@@ -4499,6 +4500,127 @@ def test_issue_4014_ppo_smoke_variants_keep_distinct_overrides() -> None:
     assert matched_mapping["tracking"]["tensorboard"] is False
     assert "tracking" not in mamba_mapping
     assert mamba_matched_mapping["tracking"]["tensorboard"] is False
+
+
+# Issue #6484: the true recurrent-PPO LSTM smoke pair shares its common
+# scenario, budget, reward, convergence, and evaluation contract. Recurrent
+# algorithm fields remain in each raw variant because train_recurrent_ppo.py
+# validates those fields before handing the path to the shared PPO resolver.
+_ISSUE_6484_RECURRENT_4014_DIR = Path("configs/training/ppo")
+_ISSUE_6484_RECURRENT_4014_BASE_NAME = "issue_4014_recurrent_ppo_lstm_base.yaml"
+_ISSUE_6484_RECURRENT_4014_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_recurrent_ppo_lstm_resolved.json"
+)
+_ISSUE_6484_RECURRENT_4014_VARIANTS = [
+    "issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+
+
+def _issue_6484_recurrent_4014_baseline() -> dict:
+    """Load and integrity-check the frozen recurrent-config baseline."""
+    assert _ISSUE_6484_RECURRENT_4014_BASELINE_PATH.exists(), (
+        "Pre-change recurrent baseline missing; capture it before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_RECURRENT_4014_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_6484_recurrent_4014_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for a recurrent variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RECURRENT_4014_VARIANTS)
+def test_issue_6484_recurrent_4014_resolves_to_prechange_values(variant: str) -> None:
+    """The recurrent base merge preserves each pre-change resolved mapping."""
+    path = (_ISSUE_6484_RECURRENT_4014_DIR / variant).resolve()
+    baseline = _issue_6484_recurrent_4014_baseline()
+
+    assert _issue_6484_recurrent_4014_fingerprint(path) == baseline["variants"][variant]
+
+
+def test_issue_6484_recurrent_4014_base_keeps_runtime_identity_explicit() -> None:
+    """The base carries shared settings while raw recurrent fields stay in variants."""
+    base_path = (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert base_yaml == {
+        "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+        "total_timesteps": 2048,
+        "seeds": [4014],
+        "randomize_seeds": False,
+        "env_factory_kwargs": {"reward_name": "route_completion_v2"},
+        "convergence": {"success_rate": 0.8, "collision_rate": 0.1, "plateau_window": 512},
+        "evaluation": {
+            "evaluation_episodes": 3,
+            "randomize_seeds": False,
+            "step_schedule": [{"every_steps": 1024}],
+        },
+    }
+
+    first_yaml = yaml.safe_load(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[0]).read_text(
+            encoding="utf-8"
+        )
+    )
+    matched_yaml = yaml.safe_load(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[1]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert first_yaml["base_config"] == _ISSUE_6484_RECURRENT_4014_BASE_NAME
+    assert matched_yaml["base_config"] == _ISSUE_6484_RECURRENT_4014_BASE_NAME
+    assert set(first_yaml) == {
+        "base_config",
+        "policy_id",
+        "algorithm",
+        "env_overrides",
+        "recurrent_ppo_hyperparams",
+    }
+    assert set(matched_yaml) == {
+        "base_config",
+        "policy_id",
+        "algorithm",
+        "recurrent_policy",
+        "num_envs",
+        "worker_mode",
+        "tracking",
+        "env_overrides",
+        "recurrent_ppo_hyperparams",
+    }
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RECURRENT_4014_VARIANTS)
+def test_issue_6484_recurrent_4014_loads_through_recurrent_entrypoint(variant: str) -> None:
+    """Both variants remain valid for the dedicated recurrent-PPO entrypoint."""
+    path = (_ISSUE_6484_RECURRENT_4014_DIR / variant).resolve()
+    config = load_recurrent_ppo_config(path)
+
+    assert config.algorithm == "recurrent_ppo"
+    assert config.recurrent_policy == "MultiInputLstmPolicy"
+    assert config.base.total_timesteps == 2048
+    assert config.recurrent_ppo_hyperparams["n_steps"] == 128
+    assert config.base.evaluation.step_schedule == ((None, 1024),)
+
+
+def test_issue_6484_recurrent_4014_preserves_observation_and_launch_overrides() -> None:
+    """The socnav and matched default-gym launch identities remain distinct."""
+    first = _load_expert_training_config_mapping(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[0]).resolve()
+    )
+    matched = _load_expert_training_config_mapping(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[1]).resolve()
+    )
+
+    assert first["env_overrides"]["observation_mode"] == "socnav_struct"
+    assert matched["env_overrides"]["observation_mode"] == "default_gym"
+    assert "num_envs" not in first
+    assert matched["num_envs"] == 1
+    assert matched["worker_mode"] == "dummy"
+    assert matched["tracking"] == {"tensorboard": False}
 
 
 # Issue #4018: the issue_4018 density-curriculum / fixed-density smoke pair was

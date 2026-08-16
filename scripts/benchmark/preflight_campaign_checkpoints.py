@@ -106,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         int: Process exit code (see module docstring).
     """
     args = build_arg_parser().parse_args(argv)
+    checkpoint_preflight_mode = "enforced_staged" if args.stage else "metadata_only"
     if not args.config.is_file():
         print(f"error: campaign config not found: {args.config}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -119,13 +120,23 @@ def main(argv: list[str] | None = None) -> int:
     except CampaignCheckpointPreflightError as exc:
         print(str(exc), file=sys.stderr)
         if args.json:
-            print(json.dumps({"status": "blocked", "arms": list(exc.arms)}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "mode": checkpoint_preflight_mode,
+                        "arms": list(exc.arms),
+                    },
+                    indent=2,
+                )
+            )
         if args.report_path is not None:
             args.report_path.parent.mkdir(parents=True, exist_ok=True)
             args.report_path.write_text(
                 json.dumps(
                     {
                         "status": "blocked",
+                        "mode": checkpoint_preflight_mode,
                         "stage": bool(args.stage),
                         "arms": list(exc.arms),
                     },
@@ -139,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_CONFIG_ERROR
 
     mode = "staged" if args.stage else "resolvable"
-    payload = {"status": "ok", **summary}
+    payload = {"status": "ok", "mode": checkpoint_preflight_mode, **summary}
     if args.json:
         print(json.dumps(payload, indent=2))
     else:

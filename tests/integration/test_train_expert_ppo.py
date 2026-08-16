@@ -3956,6 +3956,115 @@ def test_issue_6484_resume_promotion_10m_env22_preserves_exploration_override() 
     assert best["tracking"]["wandb"]["tags"] != exploration["tracking"]["wandb"]["tags"]
 
 
+# Issue #6484: the issue-791 eval-aligned reward-curriculum 10M n_steps=4096
+# pair shares the environment, reward, sampler, optimizer, and evaluation
+# stack. Capacity, convergence target, and attribution remain variant-specific.
+_ISSUE_6484_EVAL_NSTEPS4096_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_base.yaml"
+)
+_ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_eval_nsteps4096_resolved.json"
+)
+_ISSUE_6484_EVAL_NSTEPS4096_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml",
+]
+
+
+def _issue_6484_eval_nsteps4096_baseline() -> dict:
+    """Load and integrity-check the frozen eval-aligned n_steps baseline."""
+    assert _ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH.exists(), (
+        "Pre-change eval-aligned n_steps baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_EVAL_NSTEPS4096_VARIANTS)
+    return baseline
+
+
+def _issue_6484_eval_nsteps4096_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS)
+def test_issue_6484_eval_nsteps4096_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited n_steps variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_EVAL_NSTEPS4096_DIR / variant).resolve()
+    baseline = _issue_6484_eval_nsteps4096_baseline()
+
+    assert _issue_6484_eval_nsteps4096_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.ppo_hyperparams["n_steps"] == 4096
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_eval_nsteps4096_base_keeps_variant_identity_explicit() -> None:
+    """The base owns the shared stack while capacity and attribution stay explicit."""
+    base_path = (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    for identity_key in ("policy_id", "scenario_config", "num_envs", "total_timesteps"):
+        assert identity_key not in base_yaml
+    assert "feature_extractor_kwargs" not in base_yaml
+    assert "success_rate" not in base_yaml["convergence"]
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    expected_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "feature_extractor_kwargs",
+        "convergence",
+        "evaluation",
+        "tracking",
+    }
+    for variant in _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_EVAL_NSTEPS4096_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME
+        assert set(variant_yaml) == expected_keys
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_eval_nsteps4096_preserves_capacity_and_convergence_overrides() -> None:
+    """The pair retains distinct capacity, success target, and W&B launch identity."""
+    standard = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS[0]).resolve()
+    )
+    large = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS[1]).resolve()
+    )
+
+    assert standard["feature_extractor_kwargs"]["grid_channels"] == [32, 64, 64]
+    assert large["feature_extractor_kwargs"]["grid_channels"] == [64, 128, 128]
+    assert standard["feature_extractor_kwargs"]["socnav_hidden_dims"] == [128, 128]
+    assert large["feature_extractor_kwargs"]["socnav_hidden_dims"] == [256, 256]
+    assert standard["convergence"]["success_rate"] == 0.9
+    assert large["convergence"]["success_rate"] == 0.95
+    assert standard["ppo_hyperparams"] == large["ppo_hyperparams"]
+    assert standard["env_overrides"] == large["env_overrides"]
+    assert standard["env_factory_kwargs"] == large["env_factory_kwargs"]
+    assert standard["tracking"]["wandb"]["job_type"] != large["tracking"]["wandb"]["job_type"]
+    assert standard["tracking"]["wandb"]["tags"] != large["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.

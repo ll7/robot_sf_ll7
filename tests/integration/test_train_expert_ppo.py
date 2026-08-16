@@ -2654,6 +2654,114 @@ def test_issue_6484_baseline_promotion_variants_keep_distinct_overrides() -> Non
     assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]
 
 
+# Issue #6484: the issue-791 reward-curriculum short-budget pair shares one
+# base config while preserving frozen resolved mappings and explicit launch identity.
+_ISSUE_6484_REWARD_CURRICULUM_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_REWARD_CURRICULUM_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_base.yaml"
+)
+_ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_reward_curriculum_promotion_resolved.json"
+)
+_ISSUE_6484_REWARD_CURRICULUM_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml",
+]
+
+
+def _issue_6484_reward_curriculum_baseline() -> dict:
+    """Load and integrity-check the frozen pre-change config baseline."""
+    assert _ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH.exists(), (
+        "Pre-change reward-curriculum baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_REWARD_CURRICULUM_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_REWARD_CURRICULUM_VARIANTS)
+    return baseline
+
+
+def _issue_6484_reward_curriculum_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_REWARD_CURRICULUM_VARIANTS)
+def test_issue_6484_reward_curriculum_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited reward-curriculum variant matches its pre-refactor mapping."""
+    path = (_ISSUE_6484_REWARD_CURRICULUM_DIR / variant).resolve()
+    baseline = _issue_6484_reward_curriculum_baseline()
+
+    assert _issue_6484_reward_curriculum_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.evaluation.step_schedule
+
+
+def test_issue_6484_reward_curriculum_base_reuse_and_explicit_launch_identity() -> None:
+    """The variants reuse one lean base and keep launch identity explicit."""
+    base_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR / _ISSUE_6484_REWARD_CURRICULUM_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "step_schedule" not in base_yaml.get("evaluation", {})
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    for variant in _ISSUE_6484_REWARD_CURRICULUM_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_REWARD_CURRICULUM_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_REWARD_CURRICULUM_BASE_NAME
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "num_envs",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert variant_yaml["num_envs"] == 2
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_reward_curriculum_variants_keep_distinct_overrides() -> None:
+    """The inherited variants retain distinct budgets, cadence, and W&B metadata."""
+    short_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR
+        / "expert_ppo_issue_791_reward_curriculum_promotion_128k.yaml"
+    ).resolve()
+    long_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_DIR
+        / "expert_ppo_issue_791_reward_curriculum_promotion_256k.yaml"
+    ).resolve()
+    short = load_expert_training_config(short_path)
+    long = load_expert_training_config(long_path)
+    short_mapping = _load_expert_training_config_mapping(short_path)
+    long_mapping = _load_expert_training_config_mapping(long_path)
+
+    assert short.num_envs == long.num_envs == 2
+    assert short.total_timesteps == 131072
+    assert long.total_timesteps == 262144
+    assert short.evaluation.step_schedule == ((None, 65536),)
+    assert long.evaluation.step_schedule == ((None, 32768),)
+    assert short.policy_id != long.policy_id
+    assert short_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-128k-promotion"
+    assert long_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-256k-promotion"
+    assert short_mapping["tracking"]["wandb"]["tags"] != long_mapping["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-791 baseline env22 pair shares a dedicated base while
 # preserving explicit launch identity and frozen resolved mappings.
 _ISSUE_6484_BASELINE_ENV22_DIR = Path("configs/training/ppo/ablations")

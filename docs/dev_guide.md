@@ -792,6 +792,12 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
   `unavailable-current-main`), and the required action. Stale bases are `stale`; missing or
   unavailable provenance is `blocked`, so those rows cannot route to merge readiness from the
   compact snapshot alone.
+- If GraphQL quota is exhausted during `--active` discovery, the snapshot uses a bounded REST
+  open-PR list plus the existing per-PR REST enrichment path. Such snapshots carry
+  `data_source: rest_fallback_graphql_quota` and `route_evidence_only: true`; GraphQL-only review
+  threads are `unknown_graphql_quota`, so every row remains blocked from merge-ready admission until
+  a fresh thread-capable snapshot is available. A REST-list failure emits one compact error row and
+  never fabricates PR entries.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
 
@@ -802,6 +808,14 @@ uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
 
 The resulting JSON keeps review/comment/CI payloads compact; review noise is reduced to counts,
 latest author-attributed samples, and bounded body excerpts.
+
+When GraphQL quota is exhausted, `--active` uses a bounded REST open-pull-request list and the
+existing per-PR REST enrichment instead of returning an error-only queue. Such snapshots mark
+`data_source: rest_fallback_graphql_quota` and each row carries
+`review_threads_admission: fail_closed_unknown`, because REST cannot refresh GraphQL-only review
+threads. The PR loop policy classifies a merge-ready row in that state as
+`unknown_review_threads` and routes it to `await_review_threads`; the fallback is queue
+orientation only and never establishes merge readiness.
 
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The

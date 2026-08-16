@@ -179,6 +179,35 @@ def _rest_api_get(path: str, *, repo: str, timeout: int = 45) -> Any:
         return None
 
 
+def _rest_open_pr_list(*, repo: str, limit: int) -> tuple[list[dict[str, Any]], bool] | None:
+    """Return a bounded open-PR list through REST and its conservative truncation state.
+
+    The active queue normally uses ``gh pr list`` because it returns the compact GraphQL shape
+    directly.  When that call is blocked by GraphQL quota, REST can still enumerate open PRs.  A
+    result that fills the requested limit remains marked truncated because REST cannot prove that
+    no additional page exists without consuming another page request.
+    """
+    requested_limit = max(int(limit), 1)
+    page_size = min(requested_limit, 100)
+    page = 1
+    rows: list[dict[str, Any]] = []
+    last_page_size = 0
+    while len(rows) < requested_limit:
+        payload = _rest_api_get(
+            f"pulls?state=open&per_page={page_size}&page={page}",
+            repo=repo,
+        )
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            return None
+        last_page_size = len(payload)
+        rows.extend(payload)
+        if len(payload) < page_size:
+            break
+        page += 1
+    truncated = len(rows) >= requested_limit and last_page_size >= page_size
+    return rows[:requested_limit], truncated
+
+
 def _rest_check_run_workflow_identity(
     run: dict[str, Any],
     *,
@@ -358,7 +387,13 @@ def _head_preflight(
     return None, [], True
 
 
-def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
+def _fetch_pr_rest(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    current_main_sha: str = "",
+) -> dict[str, Any]:
     """Build a compact PR snapshot from REST endpoints when GraphQL quota is exhausted.
 
     Maps REST pull/reviews/comments/check-runs payloads into the gh-JSON shape consumed by
@@ -448,7 +483,7 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     payload = _pr_payload_from_dict(
         pr_dict,
         base_sha=base_sha,
-        current_main_sha=_fetch_current_main_sha(repo=repo),
+        current_main_sha=current_main_sha or _fetch_current_main_sha(repo=repo),
         default_number=number,
         expected_head_sha=expected_head_sha,
     )
@@ -456,6 +491,16 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     payload["review_threads"] = "unknown_graphql_quota"
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
+    preflight = payload.get("preflight")
+    if isinstance(preflight, dict):
+        reasons = preflight.setdefault("reasons", [])
+        if isinstance(reasons, list) and "review_threads_unknown_graphql_quota" not in reasons:
+            reasons.append("review_threads_unknown_graphql_quota")
+        preflight["status"] = "blocked"
+        preflight["review_threads"] = "unknown_graphql_quota"
+        preflight["review_threads_admission"] = "fail_closed_unknown"
+    payload["next_action"] = "inspect_blocking_preflight"
+    payload["attention"] = "preflight_attention"
     return payload
 
 
@@ -969,6 +1014,61 @@ def fetch_pr(
     )
 
 
+def _active_snapshot_envelope(
+    *,
+    repo: str,
+    prs: list[dict[str, Any]],
+    truncated: bool,
+    truncation_note: str,
+    data_source: str | None = None,
+) -> dict[str, Any]:
+    """Build the common active-queue envelope for GraphQL and REST routes."""
+    payload: dict[str, Any] = {
+        "schema": SCHEMA_VERSION,
+        "repo": repo,
+        "mode": "active",
+        "truncated": truncated,
+        "truncation_note": truncation_note,
+        "route_health_overview": _route_health_overview(prs),
+        "prs": prs,
+    }
+    if data_source:
+        payload["data_source"] = data_source
+        if data_source == "rest_fallback_graphql_quota":
+            payload["route_evidence_only"] = True
+            payload["review_threads"] = "unknown_graphql_quota"
+            payload["review_threads_admission"] = "fail_closed_unknown"
+    return payload
+
+
+def _active_rest_fallback_error(*, repo: str, error: str) -> dict[str, Any]:
+    """Return a bounded active-snapshot error for an unusable REST fallback."""
+    return {
+        "schema": SCHEMA_VERSION,
+        "repo": repo,
+        "mode": "active",
+        "data_source": "rest_fallback_graphql_quota",
+        "route_evidence_only": True,
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+        "truncated": False,
+        "truncation_note": "",
+        "route_health_overview": {
+            "healthy": 0,
+            "stale": 0,
+            "blocked": 0,
+            "unknown": 0,
+        },
+        "prs": [
+            {
+                "status": "error",
+                "error_kind": "graphql_quota_exhausted",
+                "error": error,
+            }
+        ],
+    }
+
+
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     """Return a compact active PR queue snapshot."""
     current_main_sha = _fetch_current_main_sha(repo=repo)
@@ -988,20 +1088,64 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     )
 
     if result.returncode != 0:
-        return {
-            "schema": SCHEMA_VERSION,
-            "repo": repo,
-            "mode": "active",
-            "truncated": False,
-            "truncation_note": "",
-            "route_health_overview": {"healthy": 0, "stale": 0, "blocked": 0, "unknown": 0},
-            "prs": [
+        stderr = result.stderr.strip()
+        if _is_graphql_quota_error(stderr):
+            rest_listing = _rest_open_pr_list(repo=repo, limit=limit)
+            if rest_listing is not None:
+                listed, truncated = rest_listing
+                prs: list[dict[str, Any]] = []
+                for listed_pr in listed:
+                    number = listed_pr.get("number")
+                    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+                        return _active_snapshot_envelope(
+                            repo=repo,
+                            prs=[
+                                {
+                                    "status": "error",
+                                    "error_kind": "rest_payload_malformed",
+                                    "error": "REST active PR list contained a row without an integer number",
+                                }
+                            ],
+                            truncated=False,
+                            truncation_note="",
+                        )
+                    head = listed_pr.get("head")
+                    head_sha = head.get("sha") if isinstance(head, dict) else ""
+                    prs.append(
+                        _fetch_pr_rest(
+                            number,
+                            repo=repo,
+                            expected_head_sha=str(head_sha or ""),
+                            current_main_sha=current_main_sha,
+                        )
+                    )
+                return _active_snapshot_envelope(
+                    repo=repo,
+                    prs=prs,
+                    truncated=truncated,
+                    truncation_note=(
+                        "REST open-PR list may be capped: got "
+                        f"{len(prs)} rows at --limit {limit}; raise --limit or paginate"
+                        if truncated
+                        else ""
+                    ),
+                    data_source="rest_fallback_graphql_quota",
+                )
+            return _active_rest_fallback_error(
+                repo=repo,
+                error="GraphQL quota exhausted and REST open-PR list fallback failed",
+            )
+        return _active_snapshot_envelope(
+            repo=repo,
+            prs=[
                 {
                     "status": "error",
-                    "error": result.stderr.strip() or f"gh returned exit code {result.returncode}",
+                    "error": stderr or f"gh returned exit code {result.returncode}",
                 }
             ],
-        }
+            truncated=False,
+            truncation_note="",
+        )
     try:
         listed = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
@@ -1048,20 +1192,17 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
         if isinstance(pr, dict)
     ]
     truncated = is_likely_truncated(len(listed), limit=limit)
-    return {
-        "schema": SCHEMA_VERSION,
-        "repo": repo,
-        "mode": "active",
-        "truncated": truncated,
-        "truncation_note": (
+    return _active_snapshot_envelope(
+        repo=repo,
+        prs=prs,
+        truncated=truncated,
+        truncation_note=(
             "gh pr list may be capped: got "
             f"{len(listed)} rows at --limit {limit}; raise --limit or paginate"
             if truncated
             else ""
         ),
-        "route_health_overview": _route_health_overview(prs),
-        "prs": prs,
-    }
+    )
 
 
 def snapshot_prs(

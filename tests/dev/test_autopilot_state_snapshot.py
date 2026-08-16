@@ -354,6 +354,153 @@ def test_route_manifest_snapshot_exposes_failed_route_without_acceptance(tmp_pat
     assert row["next_action"] == "inspect_parent_diff_and_run_local_validation"
 
 
+def test_route_manifest_snapshot_preserves_valid_success_route_evidence(tmp_path: Path) -> None:
+    """A complete v2 success remains route evidence without implying acceptance."""
+    run_dir = tmp_path / "run-success"
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "local"},
+                "chosen_run_dir": str(run_dir),
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "local"},
+                        "returncode": 0,
+                        "failure_class": "none",
+                        "terminal_state": "none",
+                        "run_dir": str(run_dir),
+                        "compact_artifacts": {
+                            "result_json": {"present": True},
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "ok"
+    assert row["chosen_terminal_state"] == "none"
+    assert row["failed_attempts"] == []
+    assert row["acceptance_state"] == "not_established"
+
+
+def test_route_manifest_snapshot_rejects_missing_schema(tmp_path: Path) -> None:
+    """A route manifest without the canonical schema must fail closed."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "route_evidence_only": True,
+                "attempted_routes": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "malformed"
+    assert row["schema"] is None
+    assert "schema" in row["error"]
+    assert row["acceptance_state"] == "not_established"
+
+
+def test_route_manifest_snapshot_marks_missing_terminal_state_unavailable(
+    tmp_path: Path,
+) -> None:
+    """A v2 attempt without terminal state must not look like a successful route."""
+    run_dir = tmp_path / "run-1"
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "chosen_route": {"provider": "opencode-go"},
+                "chosen_run_dir": str(run_dir),
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "opencode-go"},
+                        "returncode": 0,
+                        "failure_class": "none",
+                        "run_dir": str(run_dir),
+                        "compact_artifacts": {
+                            "result_json": {"present": False, "reason": "missing"},
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "unavailable"
+    assert row["chosen_terminal_state"] == "unavailable"
+    assert row["chosen_failure_class"] == "missing_terminal_state"
+    assert row["chosen_missing_artifacts"] == ["result_json"]
+    assert row["failed_attempts"][0]["terminal_state"] == "unavailable"
+    assert row["acceptance_state"] == "not_established"
+    assert row["next_action"] == "inspect_route_manifest_path_and_route_artifacts"
+
+
+def test_route_manifest_snapshot_rejects_unsupported_terminal_state(tmp_path: Path) -> None:
+    """Unknown terminal states must remain malformed rather than accepted evidence."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "attempted_routes": [
+                    {
+                        "terminal_state": "unexpected",
+                        "returncode": 0,
+                        "run_dir": str(tmp_path / "run-1"),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "malformed"
+    assert "unsupported terminal_state" in row["error"]
+    assert row["acceptance_state"] == "not_established"
+
+
+def test_route_manifest_snapshot_rejects_malformed_attempt_record(tmp_path: Path) -> None:
+    """Non-object attempt records must not be normalized into unavailable evidence."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "attempted_routes": ["not-an-attempt"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["status"] == "malformed"
+    assert "malformed attempt records" in row["error"]
+    assert row["acceptance_state"] == "not_established"
+
+
 def test_route_manifest_snapshot_reports_unavailable_manifest(tmp_path: Path) -> None:
     """A missing route manifest must remain an explicit handoff error."""
     row = snapshot.route_manifest_snapshot(tmp_path / "missing-routing-manifest.json")

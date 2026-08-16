@@ -49,8 +49,9 @@ resource, type, and evidence labels:
 
 ## Execution state
 
-The core execution states are mutually exclusive. The classifier gives the more
-blocking state precedence when contradictory labels coexist:
+The core execution states recognized by the classifier are mutually exclusive.
+The classifier gives the more blocking state precedence when contradictory labels
+coexist:
 
 | Label | Meaning |
 | --- | --- |
@@ -59,7 +60,9 @@ blocking state precedence when contradictory labels coexist:
 | `state:blocked` | Internal prerequisite or decision blocks execution. |
 | `state:blocked-external-input` | External data, access, license, or other outside input blocks execution. |
 | `state:hold` | Explicit classifier-compatible hold. It is not in the current live label inventory; do not create it manually. |
-| `state:done` | The tracked work is recorded as done; verify the issue/PR terminal state separately. |
+
+`state:done` is a live terminal marker, but is not part of the classifier's
+execution-state precedence set. Verify the issue/PR terminal state separately.
 
 These are composable state qualifiers rather than replacement execution states:
 `state:review`, `state:needs-artifact-promotion`, and `state:needs-interpretation`.

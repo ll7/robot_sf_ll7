@@ -3822,6 +3822,140 @@ def test_issue_6484_followup_32k_preserves_intervention_and_tracking_overrides()
     }
 
 
+# Issue #6484: the issue-791 reward-curriculum 10M resume-promotion pair
+# shares the checkpoint-compatible environment and training stack. The
+# exploration candidate keeps its three PPO gate changes explicit.
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_base.yaml"
+)
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_resume_promotion_10m_env22_resolved.json"
+)
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml",
+]
+
+
+def _issue_6484_resume_promotion_10m_env22_baseline() -> dict:
+    """Load and integrity-check the frozen resume-promotion baseline."""
+    assert _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change resume-promotion baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS)
+    return baseline
+
+
+def _issue_6484_resume_promotion_10m_env22_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS)
+def test_issue_6484_resume_promotion_10m_env22_resolves_to_prechange_values(
+    variant: str,
+) -> None:
+    """Each inherited resume variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_resume_promotion_10m_env22_baseline()
+
+    assert (
+        _issue_6484_resume_promotion_10m_env22_fingerprint(path) == baseline["variants"][variant]
+    ), f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.resume_from is not None
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_resume_promotion_10m_env22_base_keeps_resume_identity_explicit() -> None:
+    """The base owns the shared stack while resume and launch identity stay in variants."""
+    base_path = (
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+        / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    for identity_key in (
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+    ):
+        assert identity_key not in base_yaml
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    common_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+        "evaluation",
+        "tracking",
+    }
+    expected_keys = {
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[0]: common_keys,
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[1]: common_keys | {"ppo_hyperparams"},
+    }
+    for variant in _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_resume_promotion_10m_env22_preserves_exploration_override() -> None:
+    """Only the candidate's three update-size/exploration gates differ."""
+    best = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+            / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[0]
+        ).resolve()
+    )
+    exploration = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+            / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[1]
+        ).resolve()
+    )
+
+    assert best["resume_from"] == exploration["resume_from"]
+    assert (
+        best["ppo_hyperparams"]["learning_rate"] == exploration["ppo_hyperparams"]["learning_rate"]
+    )
+    assert best["ppo_hyperparams"]["batch_size"] == exploration["ppo_hyperparams"]["batch_size"]
+    assert best["ppo_hyperparams"]["n_epochs"] == exploration["ppo_hyperparams"]["n_epochs"]
+    assert {
+        key
+        for key in best["ppo_hyperparams"]
+        if best["ppo_hyperparams"][key] != exploration["ppo_hyperparams"][key]
+    } == {"ent_coef", "clip_range", "target_kl"}
+    assert exploration["ppo_hyperparams"]["ent_coef"] == 0.02
+    assert exploration["ppo_hyperparams"]["clip_range"] == 0.15
+    assert exploration["ppo_hyperparams"]["target_kl"] == 0.03
+    assert best["tracking"]["wandb"]["job_type"] != exploration["tracking"]["wandb"]["job_type"]
+    assert best["tracking"]["wandb"]["tags"] != exploration["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.

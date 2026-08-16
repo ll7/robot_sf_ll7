@@ -1419,6 +1419,10 @@ def compute_paired_changes(
         or contract.alpha != float(alpha)
     ):
         raise ValueError("inference_contract parameters do not match paired-change parameters")
+    if contract.interval_method != PAIRED_INTERVAL_METHOD:
+        raise ValueError(
+            f"unsupported interval_method for paired bootstrap: {contract.interval_method!r}"
+        )
     n_resamples = contract.requested_resamples
     seed = contract.seed
     alpha = contract.alpha

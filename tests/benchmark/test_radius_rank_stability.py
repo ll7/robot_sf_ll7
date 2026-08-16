@@ -755,6 +755,25 @@ def test_paired_inference_contract_rejects_malformed_metadata() -> None:
         build_paired_inference_contract(n_resamples=1000, seed=123, interval_method="")
 
 
+def test_paired_changes_reject_unimplemented_interval_method() -> None:
+    """A contract cannot label percentile output as an unsupported method."""
+    contract = build_paired_inference_contract(
+        n_resamples=1000,
+        seed=123,
+        interval_method="studentized_bootstrap",
+    )
+    with pytest.raises(ValueError, match="unsupported interval_method"):
+        compute_paired_changes(
+            {},
+            "success",
+            baseline_radius=_BASELINE,
+            radii=_RADII,
+            n_resamples=1000,
+            seed=123,
+            inference_contract=contract,
+        )
+
+
 # --- family transitions ----------------------------------------------------
 
 

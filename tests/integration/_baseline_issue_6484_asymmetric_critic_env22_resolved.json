@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "ea7f60592584209c525268b5375cb8ebff1335bb",
+  "variants": {
+    "expert_ppo_issue_791_asymmetric_critic_promotion_1m_env22.yaml": "6bd85adc9904f717f6ace1c212837ea6d4a8416547799b55614b79c940521268",
+    "expert_ppo_issue_791_asymmetric_critic_promotion_3m_env22.yaml": "a44987de6b6c2e5c5d2d94bbc6d22cf10a47f34bb69f43e7dd4ebe22609cbd4c"
+  }
+}

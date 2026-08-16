@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "1711b63c32368704fee4acf3ee2d1fde1770a371",
+  "variants": {
+    "expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned.yaml": "013b7036a6fee2f668f4378782df6b7533df342ef050c56dc9f83f403f890a6d",
+    "expert_ppo_issue_791_baseline_promotion_10m_env22_eval_aligned_large_capacity.yaml": "dbb6462d64430451b801a400b88c5151943a8fd08235f5263b9b24cf674e8f6c"
+  }
+}

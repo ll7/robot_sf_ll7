@@ -420,6 +420,44 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
     assert [command[1] for command in commands] == ["issue", "pr", "pr"]
 
 
+def test_collect_live_state_uses_configured_rest_page_budget(monkeypatch) -> None:
+    """REST fallback discovery must use and record the caller's page budget."""
+    observed: dict[str, int] = {}
+
+    def fail_graphql(command: list[str]) -> Any:
+        raise gate.GateError("GraphQL: API rate limit already exceeded")
+
+    def closing_prs_rest(**kwargs: Any) -> list[dict[str, Any]]:
+        observed["closing"] = kwargs["max_pages"]
+        return []
+
+    def open_covering_prs_rest(**kwargs: Any) -> list[dict[str, Any]]:
+        observed["open"] = kwargs["max_pages"]
+        return []
+
+    monkeypatch.setattr(gate, "_json_command", fail_graphql)
+    monkeypatch.setattr(
+        gate,
+        "_issue_state_rest",
+        lambda **_: {"state": "OPEN", "updatedAt": "now", "closedAt": None},
+    )
+    monkeypatch.setattr(gate, "_closing_prs_rest", closing_prs_rest)
+    monkeypatch.setattr(gate, "_open_covering_prs_rest", open_covering_prs_rest)
+    monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
+    monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+
+    result = gate.collect_live_state(
+        repo="ll7/robot_sf_ll7",
+        issue=7033,
+        branch="feature/rest-fallback",
+        max_pr_pages=40,
+    )
+
+    assert observed == {"closing": 40, "open": 40}
+    assert result["rest_pr_page_budget"] == 40
+
+
 def test_collect_live_state_does_not_mask_graphql_auth_failure(monkeypatch) -> None:
     """GraphQL authentication failures must remain fail-closed instead of using REST."""
     monkeypatch.setattr(
@@ -597,9 +635,34 @@ def test_parser_exposes_capture_check_and_sync() -> None:
     """All three lifecycle actions remain discoverable from the CLI parser."""
     parser = gate._parser()
 
-    assert parser.parse_args(["capture", "--repo", "o/r", "--issue", "1"]).command == "capture"
-    assert parser.parse_args(["check", "--snapshot-path", "state.json"]).command == "check"
-    assert parser.parse_args(["sync", "--snapshot-path", "state.json", "--integrate"]).integrate
+    capture = parser.parse_args(
+        ["capture", "--repo", "o/r", "--issue", "1", "--max-pr-pages", "40"]
+    )
+    check = parser.parse_args(["check", "--snapshot-path", "state.json"])
+    sync = parser.parse_args(["sync", "--snapshot-path", "state.json", "--integrate"])
+
+    assert capture.command == "capture"
+    assert capture.max_pr_pages == 40
+    assert check.command == "check"
+    assert check.max_pr_pages is None
+    assert sync.integrate
+
+
+def test_parser_rejects_non_positive_rest_page_budget() -> None:
+    """The CLI must reject a page budget that cannot make progress."""
+    parser = gate._parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["capture", "--repo", "o/r", "--issue", "1", "--max-pr-pages", "0"])
+
+
+def test_page_budget_reuses_snapshot_value_unless_overridden() -> None:
+    """Checks should preserve the capture budget while allowing an explicit refresh override."""
+    assert gate._effective_page_budget(None, snapshot={"rest_pr_page_budget": 40}) == 40
+    assert gate._effective_page_budget(60, snapshot={"rest_pr_page_budget": 40}) == 60
+
+    with pytest.raises(gate.GateError, match="invalid REST PR page budget"):
+        gate._effective_page_budget(None, snapshot={"rest_pr_page_budget": 0})
 
 
 def test_check_cli_writes_ready_decision(tmp_path, monkeypatch, capsys) -> None:

@@ -31,14 +31,16 @@ provenance contract:
 
 The handoff accepts both the legacy `status: ok` checkpoint receipt and the current
 enforced staging receipt when it reports `mode: enforced_staged`, `stage: true`,
-equal checked/resolved counts, and `submit_safe: true`.
+equal positive checked/resolved counts, and `submit_safe: true`. A `0/0` or
+otherwise empty checkpoint receipt is blocked, even when its counts happen to match.
 
 The handoff is fail-closed. It writes `status: blocked` and no numeric rows when a
 campaign is incomplete, a key is missing or duplicated, provenance drifts, checkpoint
-staging is not submit-safe, or any row is fallback, degraded, unavailable, failed,
-partial, or diagnostic-only. A `status: ready` artifact is nominal evidence for this
-fixed ablation only; it is not paper-grade evidence and does not by itself establish a
-horizon finding.
+staging is not submit-safe, or any row is missing an explicit execution mode or carries
+fallback, degraded, unavailable, failed, partial, diagnostic-only, or other blocked
+status markers. An episode row never inherits execution mode from its run summary. A
+`status: ready` artifact is nominal evidence for this fixed ablation only; it is not
+paper-grade evidence and does not by itself establish a horizon finding.
 
 The default contract is the launch packet's 12 planners, 48 scenarios, seeds
 `[111, 112, 113]`, 1,728 rows per arm, and scenario-matrix hash `c10df617a87c`.

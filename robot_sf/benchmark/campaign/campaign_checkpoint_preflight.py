@@ -407,18 +407,18 @@ _SUBMIT_SAFE_STATUSES_STAGED: frozenset[str] = frozenset({"present_local", "stag
 def _compute_submit_safe(resolutions: list[ArmCheckpointResolution], *, stage: bool) -> bool:
     """Return whether the resolutions are sufficient to *submit* (not just resolve offline).
 
-    A campaign is submit-safe only when every required arm checkpoint is already materialized on
-    the submit node's local cache. ``stageable_remote`` is acceptable for offline metadata preflight
-    (cheap, network-free) but is *not* sufficient to submit to ``sbatch`` -- the compute node would
-    re-discover the same missing-cache failure that issue #4613 was created to fail-closed against
-    up front. With ``stage=True`` the resolutions that survived the staging step are also trusted
-    (the file was downloaded and checksum-verified).
+    A campaign is submit-safe only when at least one required arm checkpoint exists and every
+    checkpoint is already materialized on the submit node's local cache. ``stageable_remote`` is
+    acceptable for offline metadata preflight (cheap, network-free) but is *not* sufficient to
+    submit to ``sbatch`` -- the compute node would re-discover the same missing-cache failure that
+    issue #4613 was created to fail-closed against up front. With ``stage=True`` the resolutions
+    that survived the staging step are also trusted (the file was downloaded and checksum-verified).
 
     Returns:
         bool: True when every resolution status is in the submit-safe set for the mode.
     """
     if not resolutions:
-        return True
+        return False
     allowed = _SUBMIT_SAFE_STATUSES_STAGED if stage else _SUBMIT_SAFE_STATUSES_CHEAP
     return all(resolution.status in allowed for resolution in resolutions)
 
@@ -492,7 +492,8 @@ def check_campaign_arm_checkpoints_preflight(
         fail_closed_implicit: Whether implicit registry defaults are blocking when unresolved.
 
     Returns:
-        dict[str, Any]: A summary with the checked/resolved counts and per-arm resolution status.
+        dict[str, Any]: A summary with the checked/resolved counts and per-arm resolution status;
+            an empty reference set is explicitly not submit-safe.
 
     Raises:
         CampaignCheckpointPreflightError: When one or more arm checkpoints are unresolvable.
@@ -506,7 +507,7 @@ def check_campaign_arm_checkpoints_preflight(
             "checked": 0,
             "resolved": 0,
             "stage": bool(stage),
-            "submit_safe": True,
+            "submit_safe": False,
             "arms": [],
         }
 

@@ -153,11 +153,11 @@ def test_submit_safe_true_after_staged(tmp_path: Path) -> None:
     assert summary["submit_safe"] is True
 
 
-def test_submit_safe_true_for_empty_campaign(tmp_path: Path) -> None:
-    """A campaign with no checkpoint-bearing arms is trivially submit-safe."""
+def test_submit_safe_false_for_empty_campaign(tmp_path: Path) -> None:
+    """A campaign with no checkpoint-bearing arms has no submit-safe coverage."""
     cfg = _campaign((PlannerSpec(key="orca", algo="orca"),), tmp_path=tmp_path)
     summary = check_campaign_arm_checkpoints_preflight(cfg)
-    assert summary["submit_safe"] is True
+    assert summary["submit_safe"] is False
 
 
 # --- enforced_staged mode wires stage=True via prepare_campaign_preflight --
@@ -369,6 +369,59 @@ def test_cli_json_reports_submit_safe_false_for_stageable_remote(
     assert payload["submit_safe"] is False
     assert payload["arms"][0]["status"] == "stageable_remote"
     assert report_path.is_file()
+    persisted = json.loads(report_path.read_text(encoding="utf-8"))
+    assert persisted["submit_safe"] is False
+
+
+@pytest.mark.parametrize("stage", (False, True), ids=("cheap", "enforced-staged"))
+def test_cli_json_never_reports_submit_safe_for_zero_references(
+    tmp_path: Path, stage: bool
+) -> None:
+    """A no-checkpoint campaign cannot produce a submit-safe preflight receipt."""
+    config_path = tmp_path / "campaign.yaml"
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "name": "cli_empty_checkpoint_campaign",
+                "scenario_matrix": str(scenario_path),
+                "planners": [{"key": "orca", "algo": "orca"}],
+                "seed_policy": {"mode": "explicit", "seed_set": "paper_eval_s20"},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    report_path = tmp_path / "submit_packet" / "checkpoint_resolvability.json"
+
+    import subprocess
+
+    command = [
+        sys.executable,
+        SCRIPT_PATH,
+        "--config",
+        str(config_path),
+        "--json",
+        "--report-path",
+        str(report_path),
+    ]
+    if stage:
+        command.append("--stage")
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=_subprocess_env({"ROBOT_SF_TESTING": "1"}),
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["checked"] == 0
+    assert payload["resolved"] == 0
+    assert payload["submit_safe"] is False
+    assert payload["arms"] == []
     persisted = json.loads(report_path.read_text(encoding="utf-8"))
     assert persisted["submit_safe"] is False
 

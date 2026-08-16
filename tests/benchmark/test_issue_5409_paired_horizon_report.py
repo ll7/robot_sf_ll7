@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scripts.benchmark.build_issue_5409_paired_horizon_report import analyze_pair
 
 if TYPE_CHECKING:
@@ -151,6 +153,9 @@ def _campaign_root(
                         "scenario_params": {
                             "run_horizon": horizon,
                             "metadata": {"archetype": "fixture_family"},
+                        },
+                        "algorithm_metadata": {
+                            "planner_kinematics": {"execution_mode": execution_mode}
                         },
                     }
                 )
@@ -302,5 +307,86 @@ def test_episode_execution_mode_cannot_disagree_with_run_summary(tmp_path: Path)
 
     assert result["status"] == "blocked"
     assert any("disagrees with run summary" in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+def test_missing_episode_execution_mode_does_not_inherit_run_summary(tmp_path: Path) -> None:
+    """A missing row mode remains blocked even when the run summary is native."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0].pop("algorithm_metadata")
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any(
+        "missing explicit row-level execution mode" in blocker for blocker in result["blockers"]
+    )
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "marker"),
+    (
+        ("status", "fallback", "status='fallback'"),
+        ("readiness_status", "degraded", "readiness_status='degraded'"),
+        ("availability_status", "unavailable", "availability_status='unavailable'"),
+        ("fallback_triggered", True, "fallback_triggered='true'"),
+        ("degraded", True, "degraded='true'"),
+    ),
+)
+def test_blocked_row_status_markers_are_rejected_independently(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    marker: str,
+) -> None:
+    """A blocked row marker cannot be hidden by an otherwise native row mode."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0][field] = value
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any(marker in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+def test_zero_checkpoint_coverage_is_not_submit_safe(tmp_path: Path) -> None:
+    """An enforced 0/0 checkpoint receipt cannot pass the paired handoff gate."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    for root in (h500, h600):
+        checkpoint_path = root / "preflight" / "checkpoint_staging.json"
+        checkpoint = json.loads(checkpoint_path.read_text())
+        checkpoint.pop("status")
+        checkpoint.update(
+            {
+                "mode": "enforced_staged",
+                "stage": True,
+                "checked": 0,
+                "resolved": 0,
+                "submit_safe": True,
+            }
+        )
+        _write_json(checkpoint_path, checkpoint)
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any("checkpoint staging receipt" in blocker for blocker in result["blockers"])
     deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
     assert deltas["rows"] == []

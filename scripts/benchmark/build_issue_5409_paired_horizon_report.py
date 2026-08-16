@@ -70,6 +70,22 @@ METRICS: tuple[str, ...] = (
     "snqi",
 )
 VALID_EXECUTION_MODES = frozenset({"native", "adapter"})
+BLOCKED_ROW_MARKERS = frozenset(
+    {
+        "blocked",
+        "degraded",
+        "diagnostic-only",
+        "excluded",
+        "failed",
+        "failure",
+        "fallback",
+        "not-available",
+        "not-run",
+        "partial",
+        "partial-failure",
+        "unavailable",
+    }
+)
 DEFAULT_SCENARIO_COUNT = 48
 DEFAULT_SEEDS = (111, 112, 113)
 DEFAULT_ROWS_PER_ARM = 1728
@@ -321,6 +337,47 @@ def _execution_mode(*payloads: dict[str, Any]) -> str:
     return ""
 
 
+def _row_status_markers(record: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return fail-closed status markers declared directly on one episode row."""
+    paths = (
+        ("status",),
+        ("readiness_status",),
+        ("availability_status",),
+        ("benchmark_availability", "status"),
+        ("benchmark_availability", "readiness_status"),
+        ("benchmark_availability", "availability_status"),
+        ("algorithm_metadata", "status"),
+        ("algorithm_metadata_contract", "status"),
+    )
+    markers: list[tuple[str, str]] = []
+    for path in paths:
+        value = _nested(record, *path)
+        marker = str(value or "").strip().lower().replace("_", "-")
+        if marker in BLOCKED_ROW_MARKERS:
+            markers.append((".".join(path), marker))
+
+    for field in ("fallback", "fallback_triggered", "degraded", "diagnostic_only"):
+        if record.get(field) is True:
+            markers.append((field, "true"))
+    return markers
+
+
+def _checkpoint_coverage_is_nonempty(checkpoint: dict[str, Any]) -> bool:
+    """Reject an explicitly empty or malformed checkpoint coverage pair."""
+    checked = checkpoint.get("checked")
+    resolved = checkpoint.get("resolved")
+    if checked is None and resolved is None:
+        return True
+    return (
+        isinstance(checked, int)
+        and not isinstance(checked, bool)
+        and isinstance(resolved, int)
+        and not isinstance(resolved, bool)
+        and checked == resolved
+        and checked > 0
+    )
+
+
 def _checkpoint_gate_is_submit_safe(checkpoint: dict[str, Any]) -> bool:
     """Accept the known submit-safe checkpoint receipt shapes.
 
@@ -330,6 +387,8 @@ def _checkpoint_gate_is_submit_safe(checkpoint: dict[str, Any]) -> bool:
     explicit submit-safe evidence is present.
     """
     if checkpoint.get("submit_safe") is not True:
+        return False
+    if not _checkpoint_coverage_is_nonempty(checkpoint):
         return False
     status = str(checkpoint.get("status") or "").strip().lower()
     if status in {"ok", "staged"}:
@@ -344,7 +403,7 @@ def _checkpoint_gate_is_submit_safe(checkpoint: dict[str, Any]) -> bool:
         and isinstance(resolved, int)
         and not isinstance(resolved, bool)
         and checked == resolved
-        and checked >= 0
+        and checked > 0
     )
 
 
@@ -701,7 +760,15 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     f"{role}: {_key_text(key)} execution mode {record_mode!r} "
                     f"disagrees with run summary {summary_mode!r}"
                 )
-            mode = record_mode or summary_mode
+            if not record_mode:
+                blockers.append(
+                    f"{role}: {_key_text(key)} is missing explicit row-level execution mode"
+                )
+            for marker_path, marker in _row_status_markers(record):
+                blockers.append(
+                    f"{role}: {_key_text(key)} has blocked row marker {marker_path}={marker!r}"
+                )
+            mode = record_mode
             run_modes.add(mode)
             if mode not in VALID_EXECUTION_MODES:
                 fallback_rows.append(_key_text(key))

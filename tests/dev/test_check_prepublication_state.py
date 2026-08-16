@@ -648,6 +648,119 @@ def test_parser_exposes_capture_check_and_sync() -> None:
     assert sync.integrate
 
 
+def test_capture_help_documents_repository_formats(capsys) -> None:
+    """Capture help must explain both explicit and local repository arguments."""
+    parser = gate._parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["capture", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "OWNER/REPO" in help_text
+    assert "ll7/robot_sf_ll7" in help_text
+    assert "local checkout path" in help_text
+
+
+def test_local_repository_argument_resolves_github_remote(tmp_path, monkeypatch) -> None:
+    """A local checkout path should become the normalized GitHub repository slug."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="git@github.com:ll7/robot_sf_ll7.git\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    assert gate._normalize_repo_argument(str(checkout), remote="origin") == "ll7/robot_sf_ll7"
+    assert commands == [["git", "-C", str(checkout.resolve()), "remote", "get-url", "origin"]]
+
+
+def test_capture_cli_stores_normalized_local_repository(tmp_path, monkeypatch, capsys) -> None:
+    """The documented local-path capture invocation must persist a repository slug."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    snapshot_path = tmp_path / "snapshot.json"
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        assert command == [
+            "git",
+            "-C",
+            str(checkout.resolve()),
+            "remote",
+            "get-url",
+            "origin",
+        ]
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="https://github.com/ll7/robot_sf_ll7.git\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **kwargs: _snapshot(repo=kwargs["repo"], issue=kwargs["issue"]),
+    )
+
+    assert (
+        gate.main(
+            [
+                "capture",
+                "--repo",
+                str(checkout),
+                "--issue",
+                "7206",
+                "--branch",
+                "issue-7206-prepublication-repo-format",
+                "--snapshot-path",
+                str(snapshot_path),
+            ]
+        )
+        == 0
+    )
+
+    capsys.readouterr()
+    assert json.loads(snapshot_path.read_text(encoding="utf-8"))["repo"] == "ll7/robot_sf_ll7"
+
+
+def test_repository_argument_preserves_explicit_slug() -> None:
+    """An explicit repository slug should not require local Git metadata."""
+    assert gate._normalize_repo_argument("ll7/robot_sf_ll7", remote="origin") == (
+        "ll7/robot_sf_ll7"
+    )
+    assert gate._normalize_repo_argument("github.example/ll7/robot_sf_ll7", remote="origin") == (
+        "github.example/ll7/robot_sf_ll7"
+    )
+
+
+def test_local_repository_argument_fails_before_github_reads(tmp_path, monkeypatch) -> None:
+    """A checkout without the requested remote must produce an actionable local error."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command,
+            2,
+            stdout="",
+            stderr="fatal: No such remote 'origin'",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    with pytest.raises(gate.GateError, match="pass an explicit OWNER/REPO"):
+        gate._normalize_repo_argument(str(checkout), remote="origin")
+
+
 def test_parser_rejects_non_positive_rest_page_budget() -> None:
     """The CLI must reject a page budget that cannot make progress."""
     parser = gate._parser()

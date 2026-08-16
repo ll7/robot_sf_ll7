@@ -1,0 +1,9 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "83569fb1743f0e14e34746f81be2f98f9625046c",
+  "variants": {
+    "expert_ppo_issue_791_asymmetric_critic_followup_32k.yaml": "361c87afa3b82f8a8680ffe56cf22f9bac7b7a4c9abbad3f78f8b7441f01ff3a",
+    "expert_ppo_issue_791_attention_head_followup_32k.yaml": "62fa5b616d921a7840868b66fffd5954e3942ddb6b11e5068f4169011518bc74",
+    "expert_ppo_issue_791_reward_curriculum_followup_32k.yaml": "78d6808fe6f9a48a4a9ac9f7cd45f7cb44a8c9240cb9c6983ab80b5136a8abec"
+  }
+}

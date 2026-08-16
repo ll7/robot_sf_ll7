@@ -417,10 +417,8 @@ def _compute_submit_safe(resolutions: list[ArmCheckpointResolution], *, stage: b
     Returns:
         bool: True when every resolution status is in the submit-safe set for the mode.
     """
-    if not resolutions:
-        return False
     allowed = _SUBMIT_SAFE_STATUSES_STAGED if stage else _SUBMIT_SAFE_STATUSES_CHEAP
-    return all(resolution.status in allowed for resolution in resolutions)
+    return bool(resolutions) and all(resolution.status in allowed for resolution in resolutions)
 
 
 def _format_failure_lines(failures: list[ArmCheckpointResolution]) -> str:

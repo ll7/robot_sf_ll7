@@ -491,6 +491,16 @@ def _fetch_pr_rest(
     payload["review_threads"] = "unknown_graphql_quota"
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
+    preflight = payload.get("preflight")
+    if isinstance(preflight, dict):
+        reasons = preflight.setdefault("reasons", [])
+        if isinstance(reasons, list) and "review_threads_unknown_graphql_quota" not in reasons:
+            reasons.append("review_threads_unknown_graphql_quota")
+        preflight["status"] = "blocked"
+        preflight["review_threads"] = "unknown_graphql_quota"
+        preflight["review_threads_admission"] = "fail_closed_unknown"
+    payload["next_action"] = "inspect_blocking_preflight"
+    payload["attention"] = "preflight_attention"
     return payload
 
 
@@ -1024,7 +1034,39 @@ def _active_snapshot_envelope(
     }
     if data_source:
         payload["data_source"] = data_source
+        if data_source == "rest_fallback_graphql_quota":
+            payload["route_evidence_only"] = True
+            payload["review_threads"] = "unknown_graphql_quota"
+            payload["review_threads_admission"] = "fail_closed_unknown"
     return payload
+
+
+def _active_rest_fallback_error(*, repo: str, error: str) -> dict[str, Any]:
+    """Return a bounded active-snapshot error for an unusable REST fallback."""
+    return {
+        "schema": SCHEMA_VERSION,
+        "repo": repo,
+        "mode": "active",
+        "data_source": "rest_fallback_graphql_quota",
+        "route_evidence_only": True,
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+        "truncated": False,
+        "truncation_note": "",
+        "route_health_overview": {
+            "healthy": 0,
+            "stale": 0,
+            "blocked": 0,
+            "unknown": 0,
+        },
+        "prs": [
+            {
+                "status": "error",
+                "error_kind": "graphql_quota_exhausted",
+                "error": error,
+            }
+        ],
+    }
 
 
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
@@ -1054,7 +1096,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
                 prs: list[dict[str, Any]] = []
                 for listed_pr in listed:
                     number = listed_pr.get("number")
-                    if isinstance(number, bool) or not isinstance(number, int):
+                    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
                         return _active_snapshot_envelope(
                             repo=repo,
                             prs=[
@@ -1067,11 +1109,13 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
                             truncated=False,
                             truncation_note="",
                         )
+                    head = listed_pr.get("head")
+                    head_sha = head.get("sha") if isinstance(head, dict) else ""
                     prs.append(
                         _fetch_pr_rest(
                             number,
                             repo=repo,
-                            expected_head_sha="",
+                            expected_head_sha=str(head_sha or ""),
                             current_main_sha=current_main_sha,
                         )
                     )
@@ -1087,17 +1131,9 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
                     ),
                     data_source="rest_fallback_graphql_quota",
                 )
-            return _active_snapshot_envelope(
+            return _active_rest_fallback_error(
                 repo=repo,
-                prs=[
-                    {
-                        "status": "error",
-                        "error_kind": "graphql_quota_exhausted",
-                        "error": "GraphQL quota exhausted and REST open-PR list fallback failed",
-                    }
-                ],
-                truncated=False,
-                truncation_note="",
+                error="GraphQL quota exhausted and REST open-PR list fallback failed",
             )
         return _active_snapshot_envelope(
             repo=repo,

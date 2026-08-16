@@ -1,0 +1,18 @@
+# Shared base for the issue-4014 true recurrent-PPO LSTM smoke variants.
+# Launch a variant file, not this base: recurrent algorithm, policy, observation
+# mode, recurrent hyperparameters, and worker metadata stay variant-owned.
+scenario_config: ../../scenarios/sets/classic_cross_trap_subset.yaml
+total_timesteps: 2048
+seeds: [4014]
+randomize_seeds: false
+env_factory_kwargs:
+  reward_name: route_completion_v2
+convergence:
+  success_rate: 0.8
+  collision_rate: 0.1
+  plateau_window: 512
+evaluation:
+  evaluation_episodes: 3
+  randomize_seeds: false
+  step_schedule:
+    - every_steps: 1024

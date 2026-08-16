@@ -90,6 +90,17 @@ sudo apt-get install -y --no-install-recommends libglib2.0-0 libgl1 fonts-dejavu
 `poppler-utils` provides `pdftoppm`, which the Chapter 7 evidence-package builder uses for
 mandatory rendered-page quality assurance.
 
+The shared CI helper `scripts/dev/ci_install_headless_packages.sh` skips packages already present
+on the runner and bounds both the apt-update and apt-install phases to 300 seconds by default
+(600 seconds maximum per phase). The two-phase default budget is therefore 600 seconds, inside
+the outer 1,200-second CI step budget. Set `CI_HEADLESS_APT_PHASE_TIMEOUT_SECONDS` only when
+diagnosing a runner-specific problem; values must be integer seconds from 1 through 600.
+
+When a phase times out or fails, the helper exits nonzero and reports the phase, required package
+set, observed apt source hosts, timeout budget, and elapsed seconds. A third-party apt 403 remains
+a warning-only exception; official-source failures, package-resolution failures, and timeouts
+remain fail-closed.
+
 The promoted-planner and nightly performance workflows use the same headless stack, without `jq`
 where it is not needed.
 

@@ -3616,6 +3616,106 @@ def test_issue_6484_reward_curriculum_10m_env22_preserves_intentional_difference
     assert classic["tracking"]["wandb"]["tags"] != eval_aligned["tracking"]["wandb"]["tags"]
 
 
+# Issue #6484: the issue-791 Stage-1 ablations share one base. Intervention-
+# specific actor/critic settings remain explicit in each variant.
+_ISSUE_6484_STAGE1_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_STAGE1_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_STAGE1_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_stage1_resolved.json"
+)
+_ISSUE_6484_STAGE1_VARIANTS = [
+    "expert_ppo_issue_791_asymmetric_critic_stage1.yaml",
+    "expert_ppo_issue_791_attention_head_stage1.yaml",
+    "expert_ppo_issue_791_reward_curriculum_stage1.yaml",
+]
+
+
+def _issue_6484_stage1_baseline() -> dict:
+    """Load and integrity-check the frozen Stage-1 config baseline."""
+    assert _ISSUE_6484_STAGE1_BASELINE_PATH.exists(), (
+        "Pre-change Stage-1 baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_STAGE1_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_STAGE1_VARIANTS)
+    return baseline
+
+
+def _issue_6484_stage1_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one Stage-1 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_STAGE1_VARIANTS)
+def test_issue_6484_stage1_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited Stage-1 variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_STAGE1_DIR / variant).resolve()
+    baseline = _issue_6484_stage1_baseline()
+
+    assert _issue_6484_stage1_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.total_timesteps == 8192
+    assert config.evaluation.step_schedule == ((None, 8192),)
+
+
+def test_issue_6484_stage1_base_keeps_intervention_identity_explicit() -> None:
+    """The base contains shared settings while interventions stay in variants."""
+    base_path = (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "scenario_config" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "asymmetric_critic" not in base_yaml["env_factory_kwargs"]
+    assert "use_pedestrian_attention" not in base_yaml["feature_extractor_kwargs"]
+
+    common_keys = {"base_config", "policy_id", "scenario_config", "num_envs", "total_timesteps"}
+    expected_keys = {
+        _ISSUE_6484_STAGE1_VARIANTS[0]: common_keys | {"env_factory_kwargs"},
+        _ISSUE_6484_STAGE1_VARIANTS[1]: common_keys
+        | {"env_factory_kwargs", "feature_extractor_kwargs"},
+        _ISSUE_6484_STAGE1_VARIANTS[2]: common_keys,
+    }
+    for variant in _ISSUE_6484_STAGE1_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_STAGE1_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_STAGE1_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+
+
+def test_issue_6484_stage1_preserves_intervention_specific_overrides() -> None:
+    """The asymmetric-critic and attention interventions remain explicit."""
+    asymmetric = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[0]).resolve()
+    )
+    attention = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[1]).resolve()
+    )
+    reward = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[2]).resolve()
+    )
+
+    assert asymmetric["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert attention["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert "asymmetric_critic" not in reward["env_factory_kwargs"]
+    assert attention["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert attention["feature_extractor_kwargs"]["attn_d_model"] == 64
+    assert "use_pedestrian_attention" not in reward["feature_extractor_kwargs"]
+    assert {m["scenario_config"] for m in (asymmetric, attention, reward)} == {
+        "../../../scenarios/classic_interactions_francis2023.yaml"
+    }
+    assert asymmetric["policy_id"] != attention["policy_id"] != reward["policy_id"]
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.

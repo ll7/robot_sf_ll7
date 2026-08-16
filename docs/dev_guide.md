@@ -448,6 +448,9 @@ same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions an
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
 deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
 the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
+For repositories whose merged-PR history exceeds the default REST page budget, pass
+`--max-pr-pages <positive-integer>` to `capture`; a later `check` or `sync` reuses that recorded
+budget unless it receives an explicit override. Truncated inventories still block publication.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
 state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used

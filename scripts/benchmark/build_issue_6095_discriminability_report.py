@@ -5,6 +5,8 @@ The report deliberately reads the retained episode JSONL files instead of copyin
 the aggregate values from ``campaign_summary.json``.  It validates the frozen
 matrix contract, reports seed-aware uncertainty, classifies every stress scenario,
 and keeps checkpoint/provenance blockers separate from valid campaign execution.
+Invalid, incomplete, fallback, or malformed episode rows produce a structured
+blocked report with no numeric comparison instead of raising before artifact output.
 """
 
 from __future__ import annotations
@@ -151,6 +153,15 @@ def _as_bool(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "ok", "pass"}
     return bool(value)
+
+
+def _strict_receipt_bool_state(value: Any, *, allow_none: bool = False) -> str:
+    """Parse a receipt boolean without accepting string or numeric coercions."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if allow_none and value is None:
+        return "null"
+    return "invalid"
 
 
 def _nested(mapping: Any, *keys: str) -> Any:
@@ -330,23 +341,38 @@ def _checkpoint_receipt(
     sha256 = str(arm.get("checkpoint_sha256") or "").strip()
     identity_matches = model_id == expected_model_id and sha256 == expected_sha256
     mode = str(payload.get("mode") or "").strip()
+    stage = payload.get("stage")
+    submit_safe = payload.get("submit_safe")
+    load_succeeded = arm.get("load_succeeded")
+    fallback_triggered = arm.get("fallback_triggered")
+    stage_state = _strict_receipt_bool_state(stage)
+    submit_safe_state = _strict_receipt_bool_state(submit_safe)
+    load_succeeded_state = _strict_receipt_bool_state(load_succeeded, allow_none=True)
+    fallback_triggered_state = _strict_receipt_bool_state(fallback_triggered, allow_none=True)
+    boolean_fields_valid = (
+        stage_state != "invalid"
+        and submit_safe_state != "invalid"
+        and load_succeeded_state != "invalid"
+        and fallback_triggered_state != "invalid"
+    )
     staged = (
-        bool(payload.get("stage"))
-        and _as_bool(payload.get("submit_safe"))
+        boolean_fields_valid
+        and stage_state == "true"
+        and submit_safe_state == "true"
         and str(arm.get("hash_source") or "").strip() == "computed_file"
         and mode == "enforced_staged"
         and str(arm.get("status") or "").strip() in {"staged", "present_local"}
         and isinstance(arm.get("resolved_path"), str)
         and bool(str(arm.get("resolved_path") or "").strip())
         and str(arm.get("load_status") or "").strip() in {"not_run", "loaded"}
-        and (arm.get("load_status") != "loaded" or arm.get("load_succeeded") is True)
-        and arm.get("fallback_triggered") is not True
+        and (arm.get("load_status") != "loaded" or load_succeeded_state == "true")
+        and fallback_triggered_state in {"null", "false"}
     )
     if not identity_matches:
         status = "identity_mismatch"
     elif staged:
         status = "staged_receipt"
-    elif mode == "metadata_only":
+    elif boolean_fields_valid and mode == "metadata_only":
         status = "metadata_only"
     else:
         status = "unresolved"
@@ -354,14 +380,17 @@ def _checkpoint_receipt(
         "status": status,
         "path": str(path),
         "mode": mode,
-        "stage": bool(payload.get("stage")),
-        "submit_safe": _as_bool(payload.get("submit_safe")),
+        "stage": stage,
+        "submit_safe": submit_safe,
         "arm_status": arm.get("status"),
         "model_id": model_id,
         "checkpoint_sha256": sha256,
         "hash_source": arm.get("hash_source"),
         "resolved_path": arm.get("resolved_path"),
         "load_status": arm.get("load_status"),
+        "load_succeeded": load_succeeded,
+        "fallback_triggered": fallback_triggered,
+        "boolean_fields_valid": boolean_fields_valid,
         "identity_matches_expected": identity_matches,
     }
 
@@ -479,7 +508,7 @@ def _validate_campaign_metadata(
     )
 
 
-def _validate_summary_rows(
+def _validate_summary_rows(  # noqa: C901
     *, name: str, summary_rows: dict[str, dict[str, Any]], expected_episode_count: int
 ) -> tuple[list[str], list[str]]:
     """Validate planner-level campaign summary rows."""
@@ -491,7 +520,13 @@ def _validate_summary_rows(
         row = summary_rows.get(planner_key)
         if row is None:
             continue
-        if int(float(row.get("episodes") or 0)) != expected_episode_count:
+        episode_count = _finite_float(row.get("episodes"))
+        if (
+            episode_count is None
+            or not episode_count.is_integer()
+            or episode_count < 0.0
+            or int(episode_count) != expected_episode_count
+        ):
             blockers.append(f"{name}/{planner_key}: unexpected episode count")
         if str(row.get("status") or "") != "ok" or not _as_bool(row.get("benchmark_success")):
             blockers.append(f"{name}/{planner_key}: summary row is not benchmark-success")
@@ -512,10 +547,13 @@ def _validate_summary_rows(
             blockers.append(f"{name}/{planner_key}: summary execution mode is degraded/fallback")
         fairness_flags = row.get("fairness_mismatch_flags")
         if fairness_flags:
-            warnings.append(
-                f"{name}/{planner_key}: campaign fairness summary reports {len(fairness_flags)} "
-                "mismatch flag(s); this report does not use planner ranking."
-            )
+            if isinstance(fairness_flags, (list, tuple)):
+                warnings.append(
+                    f"{name}/{planner_key}: campaign fairness summary reports {len(fairness_flags)} "
+                    "mismatch flag(s); this report does not use planner ranking."
+                )
+            else:
+                blockers.append(f"{name}/{planner_key}: fairness mismatch flags are invalid")
     return blockers, warnings
 
 
@@ -540,8 +578,12 @@ def _load_episode_rows(
             blockers.append(
                 f"{name}/{planner_key}: raw episode count {len(records)} != {expected_episode_count}"
             )
-        for record in records:
-            row = _episode_row(record, planner_key=planner_key, source=path)
+        for row_number, record in enumerate(records, start=1):
+            try:
+                row = _episode_row(record, planner_key=planner_key, source=path)
+            except (KeyError, TypeError, ValueError) as exc:
+                blockers.append(f"{name}/{planner_key}: invalid episode row {row_number}: {exc}")
+                continue
             key = (planner_key, row.scenario_id, row.seed)
             if key in rows:
                 blockers.append(f"{name}: duplicate planner/scenario/seed identity {key!r}")
@@ -742,6 +784,77 @@ def _load_regime(
         checkpoint=checkpoint,
         metadata=metadata,
     )
+
+
+def _blocked_regime(
+    *,
+    name: str,
+    root: Path,
+    expected_matrix: str,
+    expected_seeds: tuple[int, ...],
+    blocker: str,
+) -> RegimeData:
+    """Represent a regime that could not be loaded without inventing metrics."""
+    resolved_root = root.resolve()
+    return RegimeData(
+        name=name,
+        root=resolved_root,
+        campaign_id="",
+        scenario_matrix=expected_matrix,
+        scenario_matrix_hash="",
+        git_commit="",
+        scenario_ids=(),
+        seeds=expected_seeds,
+        rows={},
+        blockers=[f"{name}: {blocker}"],
+        warnings=[],
+        checkpoint={
+            "status": "invalid",
+            "path": str(resolved_root / "preflight"),
+            "blocker": blocker,
+        },
+        metadata={
+            "campaign_id": "",
+            "scenario_count": None,
+            "episode_count_per_planner": None,
+            "total_episodes": None,
+            "raw_execution_modes": {},
+            "raw_observation_levels": {},
+            "config_hashes": [],
+            "checkpoint_provenance_enforcement": None,
+        },
+    )
+
+
+def _load_regime_or_blocked(
+    *,
+    name: str,
+    root: Path,
+    expected_matrix: str,
+    expected_seeds: tuple[int, ...],
+    expected_commit: str,
+    expected_model_id: str,
+    expected_model_sha256: str,
+) -> RegimeData:
+    """Load a regime while preserving artifact output for malformed inputs."""
+    try:
+        return _load_regime(
+            name=name,
+            root=root,
+            expected_matrix=expected_matrix,
+            expected_seeds=expected_seeds,
+            expected_commit=expected_commit,
+            expected_model_id=expected_model_id,
+            expected_model_sha256=expected_model_sha256,
+        )
+    except (AttributeError, KeyError, OSError, OverflowError, TypeError, ValueError) as exc:
+        return _blocked_regime(
+            name=name,
+            root=root,
+            expected_matrix=expected_matrix,
+            expected_seeds=expected_seeds,
+            blocker=f"campaign artifact validation failed: {exc}",
+        )
 
 
 def _stable_seed(*parts: str, base: int) -> int:
@@ -994,6 +1107,111 @@ def _provenance_interpretation_status(receipts: Iterable[dict[str, Any]]) -> str
     )
 
 
+def _blocked_report(
+    *,
+    nominal: RegimeData,
+    stress: RegimeData,
+    options: ReportOptions,
+    blockers: Iterable[str],
+) -> dict[str, Any]:
+    """Build a blocked report without fabricating aggregate metric values."""
+    blocker_list = sorted({str(blocker) for blocker in blockers})
+
+    def regime_payload(regime: RegimeData) -> dict[str, Any]:
+        return {
+            "campaign_id": regime.campaign_id,
+            "root": str(regime.root),
+            "scenario_matrix": regime.scenario_matrix,
+            "scenario_matrix_hash": regime.scenario_matrix_hash,
+            "scenario_ids": list(regime.scenario_ids),
+            "metadata": regime.metadata,
+            "s3": None,
+            "s10": None,
+            "blockers": regime.blockers,
+        }
+
+    ppo_provenance = {
+        "model_id": options.expected_model_id,
+        "checkpoint_sha256": options.expected_model_sha256,
+        "nominal": nominal.checkpoint,
+        "stress": stress.checkpoint,
+        "interpretation_status": _provenance_interpretation_status(
+            (nominal.checkpoint, stress.checkpoint)
+        ),
+        "overlap_caveat": {
+            "stress": "documented_in_distribution_in_ppo_full_maintained_eval_v1",
+            "nominal": "not_in_documented_eval-set_components; possible atomic-archetype overlap is unresolved",
+            "claim_impact": "no unseen-scenario generalization or planner-family claim is allowed",
+        },
+    }
+    return {
+        "schema_version": "issue-6095-discriminability-report.v1",
+        "issue": 6095,
+        "status": "blocked_validation",
+        "benchmark_success_allowed": False,
+        "interpretation_allowed": False,
+        "numeric_data_available": False,
+        "numeric_data": {
+            "status": "unavailable",
+            "reason": "validation_blockers",
+            "rows": [],
+        },
+        "claim_boundary": (
+            "No numeric nominal-versus-stress or stress-floor comparison is valid until all "
+            "declared rows satisfy the frozen identity, outcome, runtime, and provenance "
+            "contracts; no planner-family superiority, transfer, unseen-scenario "
+            "generalization, safety, or paper-grade claim is permitted."
+        ),
+        "frozen_contract": {
+            "commit": options.expected_commit,
+            "planners": list(EXPECTED_PLANNERS),
+            "seeds": list(options.expected_seeds),
+            "s3_seeds": list(options.s3_seeds),
+            "horizon": EXPECTED_HORIZON,
+            "dt": EXPECTED_DT,
+            "kinematics": EXPECTED_KINEMATICS,
+            "model_id": options.expected_model_id,
+            "checkpoint_sha256": options.expected_model_sha256,
+        },
+        "regimes": {
+            "nominal": regime_payload(nominal),
+            "stress": regime_payload(stress),
+        },
+        "nominal_vs_stress": {
+            "status": "blocked",
+            "numeric_data_available": False,
+            "s3": None,
+            "s10": None,
+            "direction": {},
+            "both_planners_nominal_higher_s10": None,
+            "both_planners_direction_stable": None,
+        },
+        "stress_floor": {
+            "status": "blocked",
+            "numeric_data_available": False,
+            "seed_list": list(options.expected_seeds),
+            "scenario_count": None,
+            "class_counts": {},
+            "both_zero_count": None,
+            "both_zero_distinguished_count": None,
+            "both_zero_distinguished_by_collision_count": None,
+            "both_zero_distinguished_by_near_miss_count": None,
+            "scenarios": [],
+        },
+        "ppo_provenance": ppo_provenance,
+        "warnings": sorted(set(nominal.warnings + stress.warnings)),
+        "blockers": blocker_list,
+        "analysis_method": {
+            "confidence": 0.95,
+            "bootstrap": "two_way_scenario_seed_cluster",
+            "bootstrap_samples": options.bootstrap_samples,
+            "bootstrap_seed": options.bootstrap_seed,
+            "near_miss_outcome": "episode has near_misses > 0",
+            "both_zero_discriminability": "not computed because validation blockers prevent numeric aggregation",
+        },
+    }
+
+
 def build_report(
     *,
     nominal_root: Path,
@@ -1004,7 +1222,7 @@ def build_report(
     options = options or ReportOptions()
     if not set(options.s3_seeds).issubset(options.expected_seeds) or not options.s3_seeds:
         raise ValueError("s3_seeds must be a non-empty subset of expected_seeds")
-    nominal = _load_regime(
+    nominal = _load_regime_or_blocked(
         name="nominal",
         root=nominal_root,
         expected_matrix="configs/scenarios/nominal_v1.yaml",
@@ -1013,7 +1231,7 @@ def build_report(
         expected_model_id=options.expected_model_id,
         expected_model_sha256=options.expected_model_sha256,
     )
-    stress = _load_regime(
+    stress = _load_regime_or_blocked(
         name="stress",
         root=stress_root,
         expected_matrix="configs/scenarios/classic_interactions_francis2023.yaml",
@@ -1022,11 +1240,29 @@ def build_report(
         expected_model_id=options.expected_model_id,
         expected_model_sha256=options.expected_model_sha256,
     )
-    validation_blockers = sorted(set(nominal.blockers + stress.blockers))
-    if nominal.scenario_ids == stress.scenario_ids:
+    validation_blockers = list(nominal.blockers + stress.blockers)
+    if nominal.scenario_ids and stress.scenario_ids and nominal.scenario_ids == stress.scenario_ids:
         validation_blockers.append("nominal and stress scenario matrices unexpectedly match")
-    if nominal.scenario_matrix_hash == stress.scenario_matrix_hash:
+    if (
+        nominal.scenario_matrix_hash
+        and stress.scenario_matrix_hash
+        and nominal.scenario_matrix_hash == stress.scenario_matrix_hash
+    ):
         validation_blockers.append("nominal and stress scenario matrix hashes unexpectedly match")
+    validation_blockers = sorted(set(validation_blockers))
+    provenance_blockers = [
+        f"{regime.name}: checkpoint receipt is metadata-only; runtime checkpoint use is not hash-verified"
+        for regime in (nominal, stress)
+        if regime.checkpoint.get("status") == "metadata_only"
+    ]
+    blockers = sorted(set(validation_blockers + provenance_blockers))
+    if validation_blockers:
+        return _blocked_report(
+            nominal=nominal,
+            stress=stress,
+            options=options,
+            blockers=blockers,
+        )
     nominal_summaries = {
         "s3": summarize_regime(
             nominal,
@@ -1061,12 +1297,6 @@ def build_report(
     }
     floor = classify_stress_floor(stress, seeds=options.expected_seeds)
     comparison = _regime_comparison(nominal_summaries, stress_summaries)
-    provenance_blockers = [
-        f"{regime.name}: checkpoint receipt is metadata-only; runtime checkpoint use is not hash-verified"
-        for regime in (nominal, stress)
-        if regime.checkpoint.get("status") == "metadata_only"
-    ]
-    blockers = sorted(set(validation_blockers + provenance_blockers))
     if validation_blockers:
         status = "blocked_validation"
     elif provenance_blockers:
@@ -1097,6 +1327,8 @@ def build_report(
         "status": status,
         "benchmark_success_allowed": not validation_blockers,
         "interpretation_allowed": not blockers,
+        "numeric_data_available": True,
+        "numeric_data": {"status": "available"},
         "claim_boundary": (
             "Configured-matrix nominal-versus-stress diagnostics only; no planner-family "
             "superiority, transfer, unseen-scenario generalization, safety, or paper-grade claim."
@@ -1217,50 +1449,66 @@ def _markdown_report(report: dict[str, Any]) -> str:
             f"{regime['metadata']['episode_count_per_planner']} | {regime['campaign_id']} | "
             f"`{regime['scenario_matrix_hash']}` |"
         )
+    if report.get("numeric_data_available", True):
+        lines.extend(
+            [
+                "",
+                "## Success and collision estimates",
+                "",
+                "Intervals are two-way scenario/seed cluster bootstrap 95% percentile intervals; "
+                "they are descriptive and do not establish planner superiority.",
+                "",
+                "| seed schedule | regime | planner | success | collision | near-miss-any |",
+                "|---|---|---|---|---|---|",
+            ]
+        )
+        for label in ("s3", "s10"):
+            for regime_name in ("nominal", "stress"):
+                for planner in EXPECTED_PLANNERS:
+                    metrics = report["regimes"][regime_name][label]["planners"][planner]
+                    lines.append(
+                        f"| {label.upper()} | {regime_name} | {planner} | "
+                        f"{_fmt_interval(metrics['success'])} | {_fmt_interval(metrics['collision'])} | "
+                        f"{_fmt_interval(metrics['near_miss_any'])} |"
+                    )
+        lines.extend(
+            [
+                "",
+                "## Nominal-versus-stress decision rule",
+                "",
+                f"- Both planners have a higher observed nominal success estimate in S10: "
+                f"**{report['nominal_vs_stress']['both_planners_nominal_higher_s10']}**.",
+                f"- The nominal-higher direction is stable between S3 and S10: "
+                f"**{report['nominal_vs_stress']['both_planners_direction_stable']}**.",
+                "- These observations are conditional diagnostics; the report does not promote the "
+                "stress-floor interpretation when a blocker below is present.",
+                "",
+                "## Stress success-floor classification",
+                "",
+                f"- Both planners have some success: **{report['stress_floor']['class_counts'].get('both_planners_some_success', 0)}**.",
+                f"- Exactly one planner has some success: **{report['stress_floor']['class_counts'].get('exactly_one_planner_some_success', 0)}**.",
+                f"- Both planners have zero success: **{report['stress_floor']['both_zero_count']}**.",
+                f"- Both-zero scenarios with a non-equal collision or near-miss outcome: **{report['stress_floor']['both_zero_distinguished_count']}**.",
+                f"  Collision-only count: **{report['stress_floor']['both_zero_distinguished_by_collision_count']}**; "
+                f"near-miss count: **{report['stress_floor']['both_zero_distinguished_by_near_miss_count']}**.",
+                "",
+                "Near-miss discriminability uses both the episode-level any-near-miss rate and the "
+                "mean near-miss count; differences are descriptive exact observed differences.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "## Numeric analysis",
+                "",
+                "- Numeric data: **unavailable** because validation blockers prevent safe aggregation.",
+                "- No aggregate metric rows, nominal-versus-stress comparison, or stress-floor "
+                "classification is emitted in this blocked report.",
+            ]
+        )
     lines.extend(
         [
-            "",
-            "## Success and collision estimates",
-            "",
-            "Intervals are two-way scenario/seed cluster bootstrap 95% percentile intervals; "
-            "they are descriptive and do not establish planner superiority.",
-            "",
-            "| seed schedule | regime | planner | success | collision | near-miss-any |",
-            "|---|---|---|---|---|---|",
-        ]
-    )
-    for label in ("s3", "s10"):
-        for regime_name in ("nominal", "stress"):
-            for planner in EXPECTED_PLANNERS:
-                metrics = report["regimes"][regime_name][label]["planners"][planner]
-                lines.append(
-                    f"| {label.upper()} | {regime_name} | {planner} | "
-                    f"{_fmt_interval(metrics['success'])} | {_fmt_interval(metrics['collision'])} | "
-                    f"{_fmt_interval(metrics['near_miss_any'])} |"
-                )
-    lines.extend(
-        [
-            "",
-            "## Nominal-versus-stress decision rule",
-            "",
-            f"- Both planners have a higher observed nominal success estimate in S10: "
-            f"**{report['nominal_vs_stress']['both_planners_nominal_higher_s10']}**.",
-            f"- The nominal-higher direction is stable between S3 and S10: "
-            f"**{report['nominal_vs_stress']['both_planners_direction_stable']}**.",
-            "- These observations are conditional diagnostics; the report does not promote the "
-            "stress-floor interpretation when a blocker below is present.",
-            "",
-            "## Stress success-floor classification",
-            "",
-            f"- Both planners have some success: **{report['stress_floor']['class_counts'].get('both_planners_some_success', 0)}**.",
-            f"- Exactly one planner has some success: **{report['stress_floor']['class_counts'].get('exactly_one_planner_some_success', 0)}**.",
-            f"- Both planners have zero success: **{report['stress_floor']['both_zero_count']}**.",
-            f"- Both-zero scenarios with a non-equal collision or near-miss outcome: **{report['stress_floor']['both_zero_distinguished_count']}**.",
-            f"  Collision-only count: **{report['stress_floor']['both_zero_distinguished_by_collision_count']}**; "
-            f"near-miss count: **{report['stress_floor']['both_zero_distinguished_by_near_miss_count']}**.",
-            "",
-            "Near-miss discriminability uses both the episode-level any-near-miss rate and the "
-            "mean near-miss count; differences are descriptive exact observed differences.",
             "",
             "## PPO provenance and limitations",
             "",

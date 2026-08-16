@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,6 +24,7 @@ from scripts.benchmark.build_issue_6095_discriminability_report import (
     _validate_summary_rows,
     bootstrap_mean_ci,
     classify_stress_floor,
+    main,
 )
 
 
@@ -84,6 +87,196 @@ def _regime() -> RegimeData:
         checkpoint={},
         metadata={"kinematics": EXPECTED_KINEMATICS},
     )
+
+
+def _write_json(path: Path, payload: object) -> None:
+    """Write one compact JSON fixture artifact."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+
+def _write_checkpoint_fixture(
+    root: Path,
+    *,
+    field: str | None = None,
+    value: object = None,
+    load_status: str = "not_run",
+) -> None:
+    """Write a complete checkpoint receipt, optionally corrupting one boolean field."""
+    payload: dict[str, object] = {
+        "mode": "enforced_staged",
+        "stage": True,
+        "submit_safe": True,
+        "arms": [
+            {
+                "planner_key": "ppo",
+                "model_id": "model",
+                "checkpoint_sha256": "sha",
+                "status": "staged",
+                "hash_source": "computed_file",
+                "resolved_path": "/cache/model",
+                "load_status": load_status,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+            }
+        ],
+    }
+    if field in {"stage", "submit_safe"}:
+        payload[field] = value
+    elif field is not None:
+        payload["arms"][0][field] = value  # type: ignore[index]
+    _write_json(root / "preflight" / "checkpoint_staging.json", payload)
+
+
+def _write_campaign_fixture(root: Path, *, regime: str, row_case: str) -> None:
+    """Write a small complete campaign with one deliberately invalid row case."""
+    scenario_ids = tuple(f"{regime}_{index}" for index in range(4))
+    matrix = (
+        "configs/scenarios/nominal_v1.yaml"
+        if regime == "nominal"
+        else "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
+    matrix_hash = f"{regime}-hash"
+    campaign_id = f"fixture-{regime}"
+    _write_json(
+        root / "campaign_manifest.json",
+        {
+            "campaign_id": campaign_id,
+            "scenario_matrix": matrix,
+            "scenario_matrix_hash": matrix_hash,
+            "seed_policy": {"resolved_seeds": [111]},
+            "git": {"commit": "fixture"},
+        },
+    )
+    _write_json(
+        root / "preflight" / "preview_scenarios.json",
+        {"scenarios": [{"name": scenario, "seeds": [111]} for scenario in scenario_ids]},
+    )
+    _write_checkpoint_fixture(root)
+    _write_json(root / "reports" / "matrix_summary.json", {"rows": []})
+    _write_json(
+        root / "reports" / "campaign_integrity.json",
+        {"status": "valid", "benchmark_success_allowed": True, "blockers": []},
+    )
+    _write_json(
+        root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {
+                "campaign_id": campaign_id,
+                "scenario_matrix": matrix,
+                "scenario_matrix_hash": matrix_hash,
+                "git_hash": "fixture",
+                "benchmark_success": True,
+                "evidence_status": "valid",
+                "campaign_execution_status": "completed",
+                "total_episodes": 8,
+                "row_status_summary": {
+                    "successful_evidence_rows": 8,
+                    "accepted_unavailable_rows": 0,
+                    "fallback_or_degraded_rows": 0,
+                    "unexpected_failed_rows": 0,
+                },
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "orca",
+                    "episodes": 4,
+                    "status": "ok",
+                    "benchmark_success": True,
+                    "availability_status": "available",
+                    "readiness_status": "adapter",
+                    "execution_mode": "adapter",
+                },
+                {
+                    "planner_key": "ppo",
+                    "episodes": 4,
+                    "status": "ok",
+                    "benchmark_success": True,
+                    "availability_status": "available",
+                    "readiness_status": "native",
+                    "execution_mode": "native",
+                },
+            ],
+        },
+    )
+
+    for planner_key, execution_mode in (("orca", "adapter"), ("ppo", "native")):
+        run_dir = root / "runs" / f"{planner_key}__differential_drive"
+        records: list[dict[str, object]] = []
+        for scenario_id in scenario_ids:
+            if row_case == "missing" and planner_key == "ppo" and scenario_id == scenario_ids[0]:
+                continue
+            record: dict[str, object] = {
+                "scenario_id": scenario_id,
+                "seed": 111,
+                "termination_reason": "success",
+                "status": "success",
+                "git_hash": "fixture",
+                "horizon": 100,
+                "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
+                "outcome": {
+                    "route_complete": True,
+                    "collision_event": False,
+                    "timeout_event": False,
+                },
+                "result_provenance": {"simulator_settings": {"horizon": 100, "dt": 0.1}},
+                "scenario_params": {"robot_config": {"type": "differential_drive"}},
+                "algorithm_metadata": {
+                    "planner_kinematics": {
+                        "execution_mode": execution_mode,
+                        "robot_kinematics": "differential_drive",
+                    },
+                    "learned_checkpoint_observation_contract": {
+                        "observation_level": "tracked_agents_no_noise"
+                    },
+                },
+            }
+            if planner_key == "ppo":
+                record["algorithm_metadata"]["config"] = {"model_id": "model"}  # type: ignore[index]
+            if row_case == "malformed" and planner_key == "orca" and scenario_id == scenario_ids[0]:
+                record.pop("outcome")
+            if row_case == "fallback" and planner_key == "ppo" and scenario_id == scenario_ids[0]:
+                record["algorithm_metadata"]["status"] = "fallback"  # type: ignore[index]
+            records.append(record)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "episodes.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+        )
+
+
+def _run_report_cli(
+    nominal_root: Path,
+    stress_root: Path,
+    output_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> int:
+    """Run the real report CLI against the compact fixture roots."""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_issue_6095_discriminability_report.py",
+            "--nominal-root",
+            str(nominal_root),
+            "--stress-root",
+            str(stress_root),
+            "--output-dir",
+            str(output_dir),
+            "--expected-commit",
+            "fixture",
+            "--expected-model-id",
+            "model",
+            "--expected-model-sha256",
+            "sha",
+            "--expected-seed",
+            "111",
+            "--s3-seed",
+            "111",
+            "--bootstrap-samples",
+            "100",
+        ],
+    )
+    return main()
 
 
 def test_bootstrap_mean_ci_is_deterministic_and_seed_scenario_aware() -> None:
@@ -193,6 +386,59 @@ def test_checkpoint_receipt_accepts_complete_enforced_staged_receipt(tmp_path: P
     )
 
     assert receipt["status"] == "staged_receipt"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("stage", "true"),
+        ("stage", "false"),
+        ("submit_safe", "true"),
+        ("submit_safe", "false"),
+        ("load_succeeded", "true"),
+        ("load_succeeded", "false"),
+        ("fallback_triggered", "true"),
+        ("fallback_triggered", "false"),
+    ],
+)
+def test_checkpoint_receipt_rejects_string_boolean_flags(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    """String booleans must not pass the staged checkpoint receipt gate."""
+    preflight = tmp_path / "preflight"
+    preflight.mkdir()
+    _write_checkpoint_fixture(tmp_path, field=field, value=value)
+
+    receipt = _checkpoint_receipt(
+        tmp_path,
+        expected_model_id="model",
+        expected_sha256="sha",
+    )
+
+    assert receipt["status"] == "unresolved"
+    assert receipt["boolean_fields_valid"] is False
+    assert receipt[field] == value
+
+
+def test_checkpoint_receipt_requires_boolean_load_success_when_loaded(tmp_path: Path) -> None:
+    """A loaded receipt with a string load result remains unresolved."""
+    preflight = tmp_path / "preflight"
+    preflight.mkdir()
+    _write_checkpoint_fixture(
+        tmp_path,
+        field="load_succeeded",
+        value="true",
+        load_status="loaded",
+    )
+
+    receipt = _checkpoint_receipt(
+        tmp_path,
+        expected_model_id="model",
+        expected_sha256="sha",
+    )
+
+    assert receipt["status"] == "unresolved"
+    assert receipt["boolean_fields_valid"] is False
 
 
 def test_checkpoint_interpretation_status_blocks_non_staged_receipts() -> None:
@@ -404,3 +650,64 @@ def test_campaign_receipts_require_complete_zero_failure_row_summary() -> None:
     )
 
     assert any("row_status_summary is missing or invalid" in blocker for blocker in blockers)
+
+
+@pytest.mark.parametrize("row_case", ["malformed", "missing", "fallback"])
+def test_cli_writes_blocked_no_numeric_report_for_invalid_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, row_case: str
+) -> None:
+    """Malformed, incomplete, and fallback rows write blocked artifacts without metrics."""
+    nominal_root = tmp_path / "nominal"
+    stress_root = tmp_path / "stress"
+    output_dir = tmp_path / "report"
+    _write_campaign_fixture(nominal_root, regime="nominal", row_case=row_case)
+    _write_campaign_fixture(stress_root, regime="stress", row_case=row_case)
+
+    assert _run_report_cli(nominal_root, stress_root, output_dir, monkeypatch) == 2
+
+    report = json.loads(
+        (output_dir / "issue6095_discriminability_report.json").read_text(encoding="utf-8")
+    )
+    markdown = (output_dir / "issue6095_discriminability_report.md").read_text(encoding="utf-8")
+
+    assert report["status"] == "blocked_validation"
+    assert report["benchmark_success_allowed"] is False
+    assert report["interpretation_allowed"] is False
+    assert report["numeric_data_available"] is False
+    assert report["numeric_data"] == {
+        "status": "unavailable",
+        "reason": "validation_blockers",
+        "rows": [],
+    }
+    assert report["nominal_vs_stress"]["s10"] is None
+    assert report["stress_floor"]["scenarios"] == []
+    assert "Numeric data: **unavailable**" in markdown
+    assert "No aggregate metric rows" in markdown
+    expected_blocker_text = {
+        "malformed": "invalid episode row",
+        "missing": "raw identity set",
+        "fallback": "fallback",
+    }[row_case]
+    assert any(expected_blocker_text in blocker.lower() for blocker in report["blockers"])
+
+
+def test_cli_keeps_numeric_report_for_complete_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A complete fixture still takes the existing numeric report path."""
+    nominal_root = tmp_path / "nominal"
+    stress_root = tmp_path / "stress"
+    output_dir = tmp_path / "report"
+    _write_campaign_fixture(nominal_root, regime="nominal", row_case="complete")
+    _write_campaign_fixture(stress_root, regime="stress", row_case="complete")
+
+    assert _run_report_cli(nominal_root, stress_root, output_dir, monkeypatch) == 0
+
+    report = json.loads(
+        (output_dir / "issue6095_discriminability_report.json").read_text(encoding="utf-8")
+    )
+    markdown = (output_dir / "issue6095_discriminability_report.md").read_text(encoding="utf-8")
+
+    assert report["numeric_data_available"] is True
+    assert report["regimes"]["nominal"]["s10"] is not None
+    assert "Success and collision estimates" in markdown

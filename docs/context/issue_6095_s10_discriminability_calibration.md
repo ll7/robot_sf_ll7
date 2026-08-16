@@ -10,6 +10,12 @@ not runtime hash/load or paper-facing evidence.
 closed on matrix, row-identity, runtime-contract, fallback/degraded, or PPO-provenance violations
 and writes a machine-readable JSON report plus a compact Markdown handoff.
 
+If a raw row is malformed, missing, incomplete, or marked fallback/degraded, the CLI still writes
+both artifacts with `status: blocked_validation`, `numeric_data_available: false`, and no aggregate
+metric rows, then exits non-zero. The blocked artifact preserves the exact validation and provenance
+blockers; it is not partial benchmark evidence and must not be used to infer a zero or other numeric
+result.
+
 ## Execution result (2026-08-14)
 
 Both campaigns used commit `fcc495b955c9eab00bc60842b5cae63f74cf2e2c`, seeds 111--120, horizon

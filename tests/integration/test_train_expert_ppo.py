@@ -2741,6 +2741,112 @@ def test_issue_6484_baseline_env22_variants_keep_distinct_overrides() -> None:
     assert one_m.policy_id != three_m.policy_id
 
 
+# Issue #6484: the issue-791 attention-head env22 pair shares a dedicated base
+# while preserving explicit launch identity and frozen resolved mappings.
+_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_attention_head_promotion_env22_base.yaml"
+)
+_ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_attention_head_promotion_env22_resolved.json"
+)
+_ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml",
+    "expert_ppo_issue_791_attention_head_promotion_3m_env22.yaml",
+]
+
+
+def _issue_6484_attention_head_env22_baseline() -> dict:
+    """Load and integrity-check the frozen attention-head env22 baseline."""
+    assert _ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change attention-head env22 baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS)
+    return baseline
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS)
+def test_issue_6484_attention_head_env22_resolves_to_prechange_values(variant: str) -> None:
+    """Each attention-head env22 variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_attention_head_env22_baseline()
+
+    assert _issue_6484_baseline_promotion_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+
+
+def test_issue_6484_attention_head_env22_base_reuse_and_explicit_launch_identity() -> None:
+    """The attention-head env22 variants reuse one base and keep launch identity explicit."""
+    base_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / _ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "step_schedule" not in base_yaml.get("evaluation", {})
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    for variant in _ISSUE_6484_ATTENTION_HEAD_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_ATTENTION_HEAD_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_ATTENTION_HEAD_ENV22_BASE_NAME
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "num_envs",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_attention_head_env22_variants_keep_distinct_overrides() -> None:
+    """The attention-head env22 variants retain distinct budgets and metadata."""
+    one_m_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_1m_env22.yaml"
+    ).resolve()
+    three_m_path = (
+        _ISSUE_6484_ATTENTION_HEAD_ENV22_DIR
+        / "expert_ppo_issue_791_attention_head_promotion_3m_env22.yaml"
+    ).resolve()
+    one_m = load_expert_training_config(one_m_path)
+    three_m = load_expert_training_config(three_m_path)
+    one_m_mapping = _load_expert_training_config_mapping(one_m_path)
+    three_m_mapping = _load_expert_training_config_mapping(three_m_path)
+
+    assert one_m.num_envs == three_m.num_envs == 22
+    assert one_m.total_timesteps == 1_000_000
+    assert three_m.total_timesteps == 3_000_000
+    assert one_m.evaluation.step_schedule == ((None, 131072),)
+    assert three_m.evaluation.step_schedule == ((None, 262144),)
+    assert one_m.policy_id != three_m.policy_id
+    assert one_m_mapping["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert three_m_mapping["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert one_m_mapping["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert three_m_mapping["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert one_m_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-1m-promotion-env22"
+    assert three_m_mapping["tracking"]["wandb"]["job_type"] == "expert-ppo-3m-promotion-env22"
+    assert (
+        one_m_mapping["tracking"]["wandb"]["tags"] != three_m_mapping["tracking"]["wandb"]["tags"]
+    )
+
+
 # Issue #6484: the issue-791 asymmetric-critic short-budget pair shares one
 # base config. The frozen fingerprints pin the pre-refactor resolved mappings.
 _ISSUE_6484_ASYMMETRIC_CRITIC_DIR = Path("configs/training/ppo/ablations")

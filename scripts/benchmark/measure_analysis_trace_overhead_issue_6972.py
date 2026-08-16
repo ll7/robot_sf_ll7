@@ -10,6 +10,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import os
 import platform
 import statistics
 import subprocess
@@ -37,6 +38,31 @@ SCENARIO = {
 TRACE_TELEMETRY = {"analysis_trace": "all", "planner_debug_trace": "none"}
 DEFAULT_STABILITY_TOLERANCE_FRACTION = 0.25
 RECEIPT_SCHEMA_VERSION = "analysis_trace_overhead_measurement_receipt.v2"
+THREAD_SETTING_KEYS = (
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "BLIS_NUM_THREADS",
+)
+
+
+def _execution_context(*, warmups: int) -> dict[str, Any]:
+    """Record timing context needed for a later host/order reconciliation."""
+
+    return {
+        "execution_order": "alternating off/on, then on/off by batch",
+        "warmup_state": {
+            "warmups_per_arm_per_batch": warmups,
+            "excluded_from_timing": True,
+        },
+        "cache_state": {
+            "process_warmup": "per_arm_per_batch",
+            "external_cache": "uncontrolled",
+        },
+        "numerical_thread_settings": {key: os.environ.get(key) for key in THREAD_SETTING_KEYS},
+    }
 
 
 def _git_hash() -> str:
@@ -403,6 +429,7 @@ def measure(
                 "cannot hide a failed batch"
             ),
         },
+        "execution_context": _execution_context(warmups=warmups),
         "batches": batch_results,
         "arms": {"analysis_trace_off": off, "analysis_trace_on": on},
         "checks": checks,

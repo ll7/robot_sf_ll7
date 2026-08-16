@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-13
+updated_at: 2026-08-17
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -77,6 +77,10 @@ entries:
   freshness: evidence
   area: workflow_evidence
 - path: docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_reconciliation.v1.json
   status: evidence
   freshness: evidence
   area: workflow_evidence

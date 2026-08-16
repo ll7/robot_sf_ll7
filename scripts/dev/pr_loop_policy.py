@@ -398,6 +398,8 @@ def _merge_ready_state(
     base_state = _base_freshness_state(pr)
     if base_state is not None:
         return base_state
+    if pr.get("review_threads_admission") == "fail_closed_unknown":
+        return "unknown_review_threads"
     if not has_current_accepted_gate_verdict(pr, head_sha):
         return "pending_gate_verdict"
     metadata_digest = str(pr.get("metadata_digest", "") or "")
@@ -499,6 +501,8 @@ def _compute_flow_decision(
         return "escalate"
     match state:
         case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
+            return "continue"
+        case "unknown_review_threads":
             return "continue"
         case (
             "failed_ci"
@@ -628,6 +632,18 @@ def recommend_action(  # noqa: C901
                 reason=(
                     "CI green, merge-ready, and current gate verdict exist but the final PR "
                     "title/body lacks a matching trusted pr-metadata trailer"
+                ),
+                actions_remaining=remaining,
+            )
+        case "unknown_review_threads":
+            return PolicyDecision(
+                pr=pr_number,
+                action="await_review_threads",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "REST fallback cannot refresh GraphQL-only review threads; "
+                    "retry after the GraphQL quota resets"
                 ),
                 actions_remaining=remaining,
             )

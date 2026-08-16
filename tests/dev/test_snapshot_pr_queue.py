@@ -967,6 +967,21 @@ def _resp(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
     return MagicMock(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def _rest_pull_payload(number: int) -> dict[str, object]:
+    """Return the REST pull shape needed by the active-list fallback test."""
+    return {
+        "number": number,
+        "title": f"rest PR {number}",
+        "state": "open",
+        "draft": False,
+        "labels": [],
+        "html_url": f"https://github.test/pull/{number}",
+        "head": {"ref": f"feature-{number}", "sha": f"head-{number}"},
+        "base": {"sha": "main-sha"},
+        "mergeable_state": "clean",
+    }
+
+
 def test_is_graphql_quota_error_detection() -> None:
     assert _is_graphql_quota_error(QUOTA_STDERR)
     assert _is_graphql_quota_error("server error: API rate limit exceeded")
@@ -1014,6 +1029,86 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["title"] == "demo"
     assert "merge-ready" in payload["labels"]
     assert payload["checks"]["overall"] == "success"
+
+
+def test_snapshot_active_prs_falls_back_to_rest_on_graphql_quota() -> None:
+    """Active discovery should reuse REST PR enrichment when GraphQL list quota is exhausted."""
+    rest_values: list[object] = [
+        [{"number": 42}, {"number": 43}],
+        _rest_pull_payload(42),
+        [],
+        [],
+        {"check_runs": [{"name": "ci", "status": "completed", "conclusion": "success"}]},
+        _rest_pull_payload(43),
+        [],
+        [],
+        {"check_runs": [{"name": "ci", "status": "completed", "conclusion": "success"}]},
+    ]
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_values),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=5)
+
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["truncated"] is False
+    assert [pr["number"] for pr in payload["prs"]] == [42, 43]
+    for pr in payload["prs"]:
+        assert pr["review_threads"] == "unknown_graphql_quota"
+        assert pr["review_threads_admission"] == "fail_closed_unknown"
+        assert pr["head_sha"].startswith("head-")
+        assert pr["checks"]["overall"] == "success"
+
+
+def test_snapshot_active_prs_rest_fallback_marks_exact_limit_conservatively() -> None:
+    """A REST page that fills the requested limit must remain marked as potentially truncated."""
+    rest_values: list[object] = [
+        [{"number": 42}, {"number": 43}],
+        _rest_pull_payload(42),
+        [],
+        [],
+        {"check_runs": []},
+        _rest_pull_payload(43),
+        [],
+        [],
+        {"check_runs": []},
+    ]
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_values),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2)
+
+    assert payload["truncated"] is True
+    assert "REST open-PR list may be capped" in payload["truncation_note"]
+    assert [pr["number"] for pr in payload["prs"]] == [42, 43]
+
+
+def test_snapshot_active_prs_rest_fallback_failure_is_fail_closed() -> None:
+    """A quota error with an unavailable REST list must not fabricate PR rows."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", return_value=None),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=5)
+
+    assert payload["truncated"] is False
+    assert payload["prs"] == [
+        {
+            "status": "error",
+            "error_kind": "graphql_quota_exhausted",
+            "error": "GraphQL quota exhausted and REST open-PR list fallback failed",
+        }
+    ]
 
 
 def test_fetch_pr_rest_suppresses_duplicate_cancelled_run_with_actions_metadata() -> None:

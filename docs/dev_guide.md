@@ -803,6 +803,14 @@ uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
 The resulting JSON keeps review/comment/CI payloads compact; review noise is reduced to counts,
 latest author-attributed samples, and bounded body excerpts.
 
+When GraphQL quota is exhausted, `--active` uses a bounded REST open-pull-request list and the
+existing per-PR REST enrichment instead of returning an error-only queue. Such snapshots mark
+`data_source: rest_fallback_graphql_quota` and each row carries
+`review_threads_admission: fail_closed_unknown`, because REST cannot refresh GraphQL-only review
+threads. The PR loop policy classifies a merge-ready row in that state as
+`unknown_review_threads` and routes it to `await_review_threads`; the fallback is queue
+orientation only and never establishes merge readiness.
+
 Use `BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh` before PR handoff when a
 branch adds or edits context notes, evidence bundles, or other proof-heavy docs surfaces. The
 checker is intentionally conservative: it only flags high-confidence issues such as missing

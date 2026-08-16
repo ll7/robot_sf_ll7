@@ -247,6 +247,23 @@ def test_classify_ready_to_merge() -> None:
     assert classify_pr_state(pr) == "ready_to_merge"
 
 
+def test_classify_unknown_review_threads_blocks_merge_ready() -> None:
+    """REST fallback snapshots cannot admit merge-ready while GraphQL-only threads are unknown."""
+    pr = _pr(
+        105,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["review_threads_admission"] = "fail_closed_unknown"
+
+    assert classify_pr_state(pr) == "unknown_review_threads"
+    decision = recommend_action("unknown_review_threads", pr_number=105, actions_remaining=3)
+    assert decision.action == "await_review_threads"
+    assert decision.flow_decision == "continue"
+
+
 def test_classify_stale_merge_base() -> None:
     """Stale merge base should fail closed and not reach ready_to_merge."""
     pr = _with_merge_base(

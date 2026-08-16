@@ -3716,6 +3716,101 @@ def test_issue_6484_stage1_preserves_intervention_specific_overrides() -> None:
     assert asymmetric["policy_id"] != attention["policy_id"] != reward["policy_id"]
 
 
+# Issue #6484: the historical Stage-1 CUDA foresight smoke config shares the
+# Stage-1 stack while keeping its hardware and short-run overrides explicit.
+_ISSUE_6484_STAGE1_GPU_SMOKE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_stage1_gpu_smoke_resolved.json"
+)
+_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT = (
+    "expert_ppo_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke.yaml"
+)
+
+
+def _issue_6484_stage1_gpu_smoke_baseline() -> dict:
+    """Load and integrity-check the frozen CUDA smoke baseline."""
+    assert _ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH.exists(), (
+        "Pre-change GPU smoke baseline missing; re-run capture before changing the config"
+    )
+    baseline = json.loads(_ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == {_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT}
+    return baseline
+
+
+def _issue_6484_stage1_gpu_smoke_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for the CUDA smoke config."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_issue_6484_stage1_gpu_smoke_resolves_to_prechange_values() -> None:
+    """The inherited CUDA smoke config matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).resolve()
+    baseline = _issue_6484_stage1_gpu_smoke_baseline()
+
+    assert (
+        _issue_6484_stage1_gpu_smoke_fingerprint(path)
+        == baseline["variants"][_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT]
+    ), f"Resolved config differs from the baseline at {baseline['source_revision']}."
+    config = load_expert_training_config(path)
+    assert config.policy_id == "ppo_expert_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke"
+    assert config.num_envs == 2
+    assert config.total_timesteps == 4096
+    assert config.evaluation.evaluation_episodes == 10
+    assert config.evaluation.step_schedule == ((None, 4096),)
+
+
+def test_issue_6484_stage1_gpu_smoke_keeps_hardware_and_budget_overrides_explicit() -> None:
+    """The variant declares only its CUDA and short-smoke differences."""
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert variant_yaml["base_config"] == _ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME
+    assert set(variant_yaml) == {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "env_overrides",
+        "env_factory_kwargs",
+        "evaluation",
+    }
+    assert variant_yaml["env_overrides"] == {"predictive_foresight_device": "cuda"}
+    assert variant_yaml["env_factory_kwargs"] == {"asymmetric_critic": True}
+    assert variant_yaml["evaluation"] == {
+        "evaluation_episodes": 10,
+        "step_schedule": [{"every_steps": 4096}],
+    }
+
+
+def test_issue_6484_stage1_gpu_smoke_preserves_shared_foresight_stack() -> None:
+    """Inheritance retains the shared stack while applying the smoke overrides."""
+    path = (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).resolve()
+    resolved = _load_expert_training_config_mapping(path)
+    base = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME).resolve()
+    )
+
+    assert resolved["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert (
+        resolved["env_overrides"]["predictive_foresight_model_id"]
+        == base["env_overrides"]["predictive_foresight_model_id"]
+    )
+    assert resolved["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert (
+        resolved["env_factory_kwargs"]["reward_name"] == base["env_factory_kwargs"]["reward_name"]
+    )
+    assert resolved["evaluation"]["hold_out_scenarios"] == base["evaluation"]["hold_out_scenarios"]
+    assert resolved["tracking"] == base["tracking"]
+
+
 # Issue #6484: the ordinary issue-791 32k follow-up family chains on the
 # Stage-1 base while keeping intervention and W&B attribution explicit.
 _ISSUE_6484_FOLLOWUP_32K_DIR = Path("configs/training/ppo/ablations")

@@ -458,7 +458,9 @@ by the issue closure audit. The snapshot records `remote_state_sources` and any
 `remote_state_fallbacks`, so a REST-backed decision is auditable rather than silently presented as
 a native read. Authentication, authorization, repository-resolution, malformed-response, and
 truncated-inventory failures remain blocked; do not replace this gate with an ad-hoc manual state
-check.
+check. The shared REST PR inventory defaults to 50 pages of 100 rows (5,000 rows); the closure audit
+can raise that bounded cap with `--max-pr-pages` when a repository outgrows it, while the
+prepublication gate still blocks rather than treating a capped inventory as complete.
 
 **Rollback path.** Remove step 7 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`

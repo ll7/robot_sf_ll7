@@ -1,0 +1,13 @@
+# Shared base for the ordinary issue-791 32k follow-up family.
+#
+# The asymmetric-critic, attention-head, and reward-curriculum variants keep
+# their launch identity, intervention, and W&B attribution explicit. This
+# chains on the Stage-1 base because the ordinary follow-up reuses its complete
+# observation, optimizer, reward, sampler, convergence, and evaluation stack.
+base_config: expert_ppo_issue_791_stage1_base.yaml
+total_timesteps: 32768
+tracking:
+  tensorboard: false
+  wandb:
+    enabled: true
+    project: robot_sf

@@ -366,10 +366,12 @@ def test_cli_json_reports_submit_safe_false_for_stageable_remote(
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
+    assert payload["mode"] == "metadata_only"
     assert payload["submit_safe"] is False
     assert payload["arms"][0]["status"] == "stageable_remote"
     assert report_path.is_file()
     persisted = json.loads(report_path.read_text(encoding="utf-8"))
+    assert persisted["mode"] == "metadata_only"
     assert persisted["submit_safe"] is False
 
 

@@ -448,6 +448,9 @@ same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions an
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
 deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
 the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
+For repositories whose merged-PR history exceeds the default REST page budget, pass
+`--max-pr-pages <positive-integer>` to `capture`; a later `check` or `sync` reuses that recorded
+budget unless it receives an explicit override. Truncated inventories still block publication.
 
 When the authenticated GraphQL quota is exhausted, the gate falls back independently for issue
 state, open-covering-PR, and merged-closing-PR discovery to the bounded REST endpoints already used
@@ -455,7 +458,9 @@ by the issue closure audit. The snapshot records `remote_state_sources` and any
 `remote_state_fallbacks`, so a REST-backed decision is auditable rather than silently presented as
 a native read. Authentication, authorization, repository-resolution, malformed-response, and
 truncated-inventory failures remain blocked; do not replace this gate with an ad-hoc manual state
-check.
+check. The shared REST PR inventory defaults to 50 pages of 100 rows (5,000 rows); the closure audit
+can raise that bounded cap with `--max-pr-pages` when a repository outgrows it, while the
+prepublication gate still blocks rather than treating a capped inventory as complete.
 
 **Rollback path.** Remove step 7 from `.agents/skills/gh-pr-merger/SKILL.md` and
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`

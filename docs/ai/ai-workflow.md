@@ -338,6 +338,7 @@ uv run python scripts/dev/check_prepublication_state.py capture \
   --repo ll7/robot_sf_ll7 --issue <number> --branch <head-branch> \
   --base-ref origin/main \
   --snapshot-path output/validation/prepublication/<head-branch>.json
+# For a large merged-PR history, add --max-pr-pages <positive-integer> to capture.
 uv run python scripts/dev/check_prepublication_state.py check \
   --snapshot-path output/validation/prepublication/<head-branch>.json
 uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project-number 5
@@ -352,7 +353,8 @@ manual merge), a fresh readiness run, and a new snapshot. The integration path u
 merges and never resets or deletes the worktree. Under exhausted GraphQL quota, the gate may record
 an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
 `remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
-publication.
+publication. The shared REST fallback currently reads up to 50 pages of 100 pull requests; a cap
+hit remains blocked rather than authorizing from a partial inventory.
 
 ## What This Note Does Not Replace
 

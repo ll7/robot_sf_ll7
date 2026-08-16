@@ -56,6 +56,33 @@ class GateError(RuntimeError):
     """Raised when the gate cannot establish a trustworthy remote state."""
 
 
+def _positive_page_budget(value: str) -> int:
+    """Parse a positive REST page budget for the CLI."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("page budget must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("page budget must be a positive integer")
+    return parsed
+
+
+def _effective_page_budget(
+    explicit: int | None,
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> int:
+    """Choose a validated explicit or snapshot-recorded REST page budget."""
+    value: object = explicit
+    if value is None and snapshot is not None:
+        value = snapshot.get("rest_pr_page_budget", DEFAULT_MAX_REST_PR_PAGES)
+    if value is None:
+        value = DEFAULT_MAX_REST_PR_PAGES
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise GateError(f"invalid REST PR page budget: {value!r}")
+    return value
+
+
 def _run(
     command: list[str], *, check: bool = True, timeout: float = DEFAULT_TIMEOUT_SECONDS
 ) -> subprocess.CompletedProcess[str]:
@@ -359,12 +386,14 @@ def _issue_state_rest(*, repo: str, issue: int, gh_api: Any = None) -> dict[str,
     }
 
 
-def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+def _closing_prs_rest(
+    *, repo: str, issue: int, max_pages: int = DEFAULT_MAX_REST_PR_PAGES
+) -> list[dict[str, Any]]:
     """Find merged PRs closing an issue through a bounded REST inventory."""
     try:
         rows, meta = fetch_closed_pr_rows(
             repo=repo,
-            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+            max_pages=max_pages,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise GateError(f"GitHub REST merged-PR fallback failed: {exc}") from exc
@@ -385,12 +414,14 @@ def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
     return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
 
 
-def _open_covering_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+def _open_covering_prs_rest(
+    *, repo: str, issue: int, max_pages: int = DEFAULT_MAX_REST_PR_PAGES
+) -> list[dict[str, Any]]:
     """Find open PRs covering an issue through a bounded REST inventory."""
     try:
         rows, meta = fetch_open_pr_rows(
             repo=repo,
-            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+            max_pages=max_pages,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise GateError(f"GitHub REST open-PR fallback failed: {exc}") from exc
@@ -418,8 +449,10 @@ def collect_live_state(
     branch: str,
     base_ref: str = "main",
     remote: str = "origin",
+    max_pr_pages: int = DEFAULT_MAX_REST_PR_PAGES,
 ) -> dict[str, Any]:
     """Fetch and assemble the live issue, ref, and local worktree state."""
+    max_pr_pages = _effective_page_budget(max_pr_pages)
     base_ref = _normalize_base_ref(base_ref, remote=remote)
     remote_state_sources = {
         "issue": "graphql",
@@ -463,7 +496,7 @@ def collect_live_state(
     except GateError as exc:
         if not _is_graphql_fallback_error(exc):
             raise
-        closing_prs = _closing_prs_rest(repo=repo, issue=issue)
+        closing_prs = _closing_prs_rest(repo=repo, issue=issue, max_pages=max_pr_pages)
         remote_state_sources["closing_prs"] = "rest"
         remote_state_fallbacks["closing_prs"] = str(exc)
     try:
@@ -471,7 +504,7 @@ def collect_live_state(
     except GateError as exc:
         if not _is_graphql_fallback_error(exc):
             raise
-        open_covering_prs = _open_covering_prs_rest(repo=repo, issue=issue)
+        open_covering_prs = _open_covering_prs_rest(repo=repo, issue=issue, max_pages=max_pr_pages)
         remote_state_sources["open_covering_prs"] = "rest"
         remote_state_fallbacks["open_covering_prs"] = str(exc)
 
@@ -488,6 +521,7 @@ def collect_live_state(
         "open_covering_prs": open_covering_prs,
         "remote_state_sources": remote_state_sources,
         "remote_state_fallbacks": remote_state_fallbacks,
+        "rest_pr_page_budget": max_pr_pages,
         "remote": remote,
         "base_ref": base_ref,
         "base_sha": base_sha,
@@ -741,6 +775,15 @@ def _parser() -> argparse.ArgumentParser:
         help="base branch name or remote-qualified branch such as origin/main",
     )
     capture.add_argument("--remote", default="origin")
+    capture.add_argument(
+        "--max-pr-pages",
+        type=_positive_page_budget,
+        default=DEFAULT_MAX_REST_PR_PAGES,
+        help=(
+            "maximum REST pages used for merged/open PR fallback discovery "
+            f"(default: {DEFAULT_MAX_REST_PR_PAGES})"
+        ),
+    )
     capture.add_argument("--snapshot-path")
 
     for name, help_text in (
@@ -750,6 +793,15 @@ def _parser() -> argparse.ArgumentParser:
         command = subparsers.add_parser(name, help=help_text)
         command.add_argument("--snapshot-path", required=True)
         command.add_argument("--decision-path")
+        command.add_argument(
+            "--max-pr-pages",
+            type=_positive_page_budget,
+            default=None,
+            help=(
+                "override the REST page budget; otherwise reuse the capture budget "
+                "recorded in the snapshot"
+            ),
+        )
         if name == "sync":
             command.add_argument(
                 "--integrate",
@@ -780,6 +832,7 @@ def main(argv: list[str] | None = None) -> int:
                 branch=branch,
                 base_ref=args.base_ref,
                 remote=args.remote,
+                max_pr_pages=args.max_pr_pages,
             )
             _write_json(snapshot_path, snapshot)
             decision = "ready" if snapshot["issue_state"] == "OPEN" else "superseded"
@@ -800,6 +853,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline["base_ref"] = _normalize_base_ref(
             str(baseline["base_ref"]), remote=str(baseline["remote"])
         )
+        max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
         decision_path = _decision_path(snapshot_path, args.decision_path)
         current = collect_live_state(
             repo=str(baseline["repo"]),
@@ -807,6 +861,7 @@ def main(argv: list[str] | None = None) -> int:
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),
             remote=str(baseline["remote"]),
+            max_pr_pages=max_pr_pages,
         )
         decision = evaluate_state(baseline, current)
         if (
@@ -843,6 +898,7 @@ def main(argv: list[str] | None = None) -> int:
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),
             remote=str(baseline["remote"]),
+            max_pr_pages=max_pr_pages,
         )
         _write_json(snapshot_path, refreshed)
         refreshed_decision = evaluate_state(refreshed, refreshed)

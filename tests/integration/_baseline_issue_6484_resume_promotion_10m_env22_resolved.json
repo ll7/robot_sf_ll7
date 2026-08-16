@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "a3d99cd7b473430f4682449ee1f96735aacec860",
+  "variants": {
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml": "4811676839eeed35e94adfae05a87471e7a7117ba2604e5d660f04bb4b7a6cb9",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml": "1f3c42257ac82ec8dc439e18feff0e026fbfc19da7a64380425c0660708b48a7"
+  }
+}

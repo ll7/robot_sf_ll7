@@ -351,7 +351,52 @@ def test_route_manifest_snapshot_exposes_failed_route_without_acceptance(tmp_pat
     assert row["acceptance_state"] == "not_established"
     assert row["route_evidence_only"] is True
     assert len(row["failed_attempts"]) == 1
+    assert len(row["incomplete_output_attempts"]) == 1
+    assert row["aggregation"] == "inconclusive"
     assert row["next_action"] == "inspect_parent_diff_and_run_local_validation"
+
+
+def test_route_manifest_snapshot_overrides_false_confirmed_aggregation(tmp_path: Path) -> None:
+    """A reported confirmed aggregate must be downgraded when output evidence is empty."""
+    manifest_path = tmp_path / "routing_manifest.json"
+    compact_artifacts = {
+        key: {"present": True, "path": f"run/{key}", "size_bytes": 10}
+        for key in ("result_json", "result_md", "diffstat", "status", "validation")
+    }
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": "routed_worker_manifest.v2",
+                "route_evidence_only": True,
+                "aggregation": "confirmed",
+                "chosen_route": {"provider": "antigravity"},
+                "chosen_run_dir": str(tmp_path / "run-1"),
+                "attempted_routes": [
+                    {
+                        "attempt_index": 0,
+                        "route": {"provider": "antigravity"},
+                        "returncode": 0,
+                        "failure_class": "none",
+                        "terminal_state": "none",
+                        "run_dir": str(tmp_path / "run-1"),
+                        "stdout": "",
+                        "stderr": "headless command permission denied",
+                        "compact_artifacts": compact_artifacts,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    row = snapshot.route_manifest_snapshot(manifest_path)
+
+    assert row["aggregation"] == "inconclusive"
+    assert row["aggregation_reason"] == "reported_confirmed_without_usable_worker_output"
+    assert row["chosen_output_contract"]["missing_evidence"] == [
+        "worker_output_empty",
+        "permission_denied",
+    ]
 
 
 def test_route_manifest_snapshot_reports_unavailable_manifest(tmp_path: Path) -> None:

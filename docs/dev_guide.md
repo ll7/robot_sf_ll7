@@ -1128,6 +1128,13 @@ Markdown with overall metrics, per-manifest breakdowns, provider trends,
 incomplete-provider and failure-class totals, common missing artifact counts,
 and the same route-evidence-only recommendations and warning.
 
+Version 2 routed-worker manifests also expose the additive `aggregation` contract. A route is
+`confirmed` only when its terminal state is successful and non-empty result, narrative, and
+validation artifacts are present. Empty worker output, an explicit no-findings signal, or a
+permission-denied/headless failure remains `inconclusive`; readers must downgrade a contradictory
+reported `confirmed` value. This is still route evidence only, not task acceptance or research
+evidence.
+
 ### PR Review: Route Efficiency
 
 When reviewing PRs with route-efficiency changes, ensure:

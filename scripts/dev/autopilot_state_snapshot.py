@@ -18,6 +18,7 @@ from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import _latest_check_runs
+from scripts.dev.routed_worker_manifest import classify_worker_output
 
 FAILURE_CONCLUSIONS = {
     "action_required",
@@ -130,6 +131,14 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
             "missing_artifacts_known": False,
             "compact_artifacts_available": False,
             "scope_check": None,
+            "aggregation": "inconclusive",
+            "aggregation_reason": "malformed_attempt",
+            "output_contract": {
+                "status": "inconclusive",
+                "aggregation": "inconclusive",
+                "reason": "malformed_attempt",
+                "missing_evidence": ["malformed_attempt"],
+            },
             "malformed": True,
         }
 
@@ -141,6 +150,11 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
             if not isinstance(value, dict) or value.get("present") is not True:
                 missing_artifacts.append(str(key))
     terminal_state = attempt.get("terminal_state")
+    output_contract = classify_worker_output(
+        attempt,
+        terminal_state=terminal_state,
+        compact_artifacts=compact if isinstance(compact, dict) else {},
+    )
     return {
         "attempt_index": attempt.get("attempt_index"),
         "route": attempt.get("route"),
@@ -153,6 +167,9 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
         "missing_artifacts_known": compact_artifacts_available,
         "compact_artifacts_available": compact_artifacts_available,
         "scope_check": attempt.get("scope_check"),
+        "aggregation": output_contract["aggregation"],
+        "aggregation_reason": output_contract["reason"],
+        "output_contract": output_contract,
     }
 
 
@@ -206,6 +223,18 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
     failed_attempts = [
         row for row in attempt_rows if row.get("terminal_state") in ROUTE_TERMINAL_FAILURES
     ]
+    incomplete_output_attempts = [
+        row for row in attempt_rows if row.get("aggregation") == "inconclusive"
+    ]
+    chosen_output_contract = chosen.get("output_contract") if chosen else None
+    aggregation = chosen.get("aggregation", "inconclusive") if chosen else "inconclusive"
+    aggregation_reason = (
+        chosen.get("aggregation_reason", "no_chosen_route") if chosen else "no_chosen_route"
+    )
+    reported_aggregation = raw.get("aggregation")
+    if reported_aggregation == "confirmed" and aggregation != "confirmed":
+        aggregation = "inconclusive"
+        aggregation_reason = "reported_confirmed_without_usable_worker_output"
     return {
         **base,
         "status": "ok",
@@ -224,7 +253,12 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
         "chosen_scope_check": chosen.get("scope_check")
         if chosen
         else raw.get("chosen_scope_check"),
+        "aggregation_contract": raw.get("aggregation_contract"),
+        "aggregation": aggregation,
+        "aggregation_reason": aggregation_reason,
+        "chosen_output_contract": chosen_output_contract,
         "failed_attempts": failed_attempts,
+        "incomplete_output_attempts": incomplete_output_attempts,
         "attempt_count": len(attempt_rows),
         "next_action": "inspect_parent_diff_and_run_local_validation",
     }
@@ -413,7 +447,17 @@ def controller_checkpoint(
     generated_paths = (git.get("compact_status") or {}).get("generated_paths_present", [])
     route_failures = route_failures or []
     route_failure_count = sum(
-        len(row.get("failed_attempts", [])) for row in route_failures if isinstance(row, dict)
+        max(
+            len(row.get("failed_attempts", [])),
+            len(row.get("incomplete_output_attempts", [])),
+        )
+        for row in route_failures
+        if isinstance(row, dict)
+    )
+    route_incomplete_output_count = sum(
+        len(row.get("incomplete_output_attempts", []))
+        for row in route_failures
+        if isinstance(row, dict)
     )
     next_action = "continue_from_snapshot"
     if errors:
@@ -449,6 +493,7 @@ def controller_checkpoint(
         "prs": pr_next_actions,
         "route_failure_manifest_count": len(route_failures),
         "route_failure_attempt_count": route_failure_count,
+        "route_incomplete_output_attempt_count": route_incomplete_output_count,
         "token_efficiency": {
             "parent_output_limit_lines": 200,
             "compact_first": True,

@@ -18,8 +18,8 @@ from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import _latest_check_runs
-from scripts.dev.routed_worker_manifest import classify_worker_output
 from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
+from scripts.dev.routed_worker_manifest import classify_worker_output
 
 FAILURE_CONCLUSIONS = {
     "action_required",

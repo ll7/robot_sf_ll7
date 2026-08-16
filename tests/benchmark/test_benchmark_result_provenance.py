@@ -8,8 +8,11 @@ from hashlib import sha256
 from io import StringIO
 from pathlib import Path
 
+import numba
+import numpy as np
 import pytest
 
+from robot_sf._execution_context import EXECUTION_CONTEXT_FIELDS, execution_context_digest
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 from robot_sf.benchmark.result_provenance import (
     INPUT_BINDING_SCHEMA_VERSION,
@@ -116,7 +119,7 @@ def test_build_manifest_has_correct_schema_version() -> None:
 
 
 def test_build_manifest_records_execution_context() -> None:
-    """The manifest must record hostname/cpu/thread-env so cross-context runs are comparable (issue #5817)."""
+    """The manifest records the complete canonical execution context and digest."""
     manifest = build_result_provenance_manifest(
         out_path=Path("episodes.jsonl"),
         episode_records=[],
@@ -136,10 +139,25 @@ def test_build_manifest_records_execution_context() -> None:
         active_observation_level="full",
     )
     ctx = manifest["run"]["execution_context"]
-    assert set(ctx) >= {"hostname", "cpu_model", "python_version", "platform", "thread_env"}
+    assert set(ctx) == {"hostname", *EXECUTION_CONTEXT_FIELDS, "execution_context_sha256"}
     assert isinstance(ctx["hostname"], str) and ctx["hostname"]
     assert isinstance(ctx["thread_env"], dict)
     assert set(ctx["thread_env"]) >= {"OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}
+    canonical_context = {field: ctx[field] for field in EXECUTION_CONTEXT_FIELDS}
+    assert canonical_context["numpy_version"] == np.__version__
+    assert canonical_context["numba_version"] == str(numba.__version__)
+    assert ctx["execution_context_sha256"] == execution_context_digest(canonical_context)
+
+
+@pytest.mark.parametrize("field", ["numpy_version", "numba_version"])
+def test_execution_context_digest_binds_runtime_versions(field: str) -> None:
+    """Changing either runtime version changes the canonical context digest."""
+    provenance = build_execution_context_provenance()
+    canonical_context = {name: provenance[name] for name in EXECUTION_CONTEXT_FIELDS}
+    drifted_context = dict(canonical_context)
+    drifted_context[field] = f"{drifted_context[field]}-drifted"
+
+    assert execution_context_digest(drifted_context) != provenance["execution_context_sha256"]
 
 
 def test_execution_context_captures_thread_env(monkeypatch) -> None:

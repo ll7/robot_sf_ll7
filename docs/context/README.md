@@ -148,6 +148,8 @@ knowledge, not every transient iteration detail.
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 * Issue #6646 held-out diagnosis comparison infrastructure and fail-closed admission contract:
   [issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md)
+* Issue #7197 deterministic diagnosis fixture admission and source-leakage guard:
+  [issue_7197_failure_diagnosis_fixture_evaluation.md](issue_7197_failure_diagnosis_fixture_evaluation.md)
 * Issue #6871 diagnosis and execution report crosswalk:
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 * Issue #6875 camera-ready report crosswalk producer:

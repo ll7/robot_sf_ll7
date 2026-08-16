@@ -268,11 +268,14 @@ def _read_gate1_config_state(
 
 
 def validate_gate1_report(  # noqa: C901
-    report: dict[str, Any], *, packet_config: dict[str, Any]
+    report: Any, *, packet_config: dict[str, Any]
 ) -> tuple[dict[str, Any], list[str]]:
     """Validate schema, identity, radii, and all 15 required binding surfaces."""
     gate = packet_config["gate1"]
     errors: list[str] = []
+    if not isinstance(report, dict):
+        errors.append(f"Gate 1 report must be a mapping, got {type(report).__name__}")
+        report = {}
     for key, expected in (
         ("schema", gate["report_schema"]),
         ("canary_schema", gate["canary_schema"]),
@@ -309,13 +312,26 @@ def validate_gate1_report(  # noqa: C901
         if not radius_matches:
             errors.append(f"Gate 1 verdict radius {actual_radius!r}, expected {expected_radius!r}")
         surfaces = verdict.get("surfaces")
-        names = [item.get("surface") for item in surfaces] if isinstance(surfaces, list) else []
+        valid_surfaces = (
+            [item for item in surfaces if isinstance(item, dict)]
+            if isinstance(surfaces, list)
+            else []
+        )
+        invalid_surface_count = (
+            len(surfaces) - len(valid_surfaces) if isinstance(surfaces, list) else 0
+        )
+        if invalid_surface_count:
+            errors.append(
+                f"Gate 1 surfaces at {expected_radius} m contain "
+                f"{invalid_surface_count} non-mapping entries"
+            )
+        names = [item.get("surface") for item in valid_surfaces]
         if names != expected_surfaces:
             errors.append(f"Gate 1 surface roster {names!r}, expected {expected_surfaces!r}")
         if not isinstance(surfaces, list) or len(surfaces) != len(expected_surfaces):
             errors.append(f"Gate 1 must contain five surfaces at {expected_radius} m")
         unbound = (
-            [item.get("surface") for item in surfaces if not item.get("bound")]
+            [item.get("surface") for item in valid_surfaces if not item.get("bound")]
             if isinstance(surfaces, list)
             else expected_surfaces
         )
@@ -327,7 +343,7 @@ def validate_gate1_report(  # noqa: C901
                 "go": verdict.get("go"),
                 "surface_count": len(surfaces) if isinstance(surfaces, list) else 0,
                 "bound_surface_count": (
-                    sum(bool(item.get("bound")) for item in surfaces)
+                    sum(bool(item.get("bound")) for item in valid_surfaces)
                     if isinstance(surfaces, list)
                     else 0
                 ),
@@ -347,13 +363,16 @@ def validate_gate1_report(  # noqa: C901
 
 
 def validate_preflight_payload(
-    payload: dict[str, Any], *, arm_key: str, radius_m: float, config_sha256: str
+    payload: Any, *, arm_key: str, radius_m: float, config_sha256: str
 ) -> dict[str, Any]:
     """Validate one public preflight without accepting any episode output."""
     errors: list[str] = []
+    if not isinstance(payload, dict):
+        errors.append(f"preflight payload must be a mapping, got {type(payload).__name__}")
+        payload = {}
     binding = payload.get("radius_binding")
     if not isinstance(binding, dict):
-        errors.append("radius_binding is missing")
+        errors.append("radius_binding must be a mapping")
         binding = {}
     checks = {
         "schema_version": (payload.get("schema_version"), "benchmark-preflight-validate-config.v1"),
@@ -371,11 +390,18 @@ def validate_preflight_payload(
     for name, (actual, expected) in checks.items():
         if actual != expected:
             errors.append(f"{name}={actual!r}, expected {expected!r}")
-    resolved_seeds = (payload.get("seed_policy") or {}).get("resolved_seeds")
+    seed_policy = payload.get("seed_policy")
+    if not isinstance(seed_policy, dict):
+        errors.append("seed_policy must be a mapping")
+        seed_policy = {}
+    resolved_seeds = seed_policy.get("resolved_seeds")
     expected_seeds = list(range(EXPECTED_SEED_RANGE[0], EXPECTED_SEED_RANGE[1] + 1))
     if resolved_seeds != expected_seeds:
         errors.append(f"resolved seeds {resolved_seeds!r}, expected {expected_seeds!r}")
-    checkpoint = payload.get("checkpoint_preflight") or {}
+    checkpoint = payload.get("checkpoint_preflight")
+    if not isinstance(checkpoint, dict):
+        errors.append("checkpoint_preflight must be a mapping")
+        checkpoint = {}
     if checkpoint.get("mode") != "metadata_only":
         errors.append(
             f"checkpoint preflight mode={checkpoint.get('mode')!r}, expected 'metadata_only'"
@@ -438,26 +464,49 @@ def _run_preflights(
     records: list[dict[str, Any]] = []
     for arm_key, radius_m in ARM_SPECS:
         config_path = str(packet_config["arm_configs"][arm_key])
-        config_sha = _sha256(_repo_path(repo_root, config_path))
         campaign_id = f"issue7198-{arm_key}"
         arm_output_root = output_root / "preflight" / arm_key
         command = _preflight_command(config_path, arm_output_root, campaign_id)
-        result = _run(command, cwd=repo_root, timeout=900)
         campaign_root = arm_output_root / campaign_id
         validate_path = campaign_root / "preflight" / "validate_config.json"
-        stdout_path = output_root / "logs" / f"preflight_{arm_key}.stdout.txt"
-        stderr_path = output_root / "logs" / f"preflight_{arm_key}.stderr.txt"
-        _write_text(stdout_path, result["stdout"])
-        _write_text(stderr_path, result["stderr"])
-        record: dict[str, Any] = {
+        base_record: dict[str, Any] = {
             "arm_key": arm_key,
             "radius_m": radius_m,
             "campaign_id": campaign_id,
             "config_path": config_path,
-            "config_sha256": config_sha,
+            "config_sha256": None,
             "command": _command_text(command),
-            "returncode": result["returncode"],
             "validate_config_path": _repo_relative(repo_root, validate_path),
+        }
+        try:
+            config_file = _repo_path(repo_root, config_path)
+            if not config_file.is_file():
+                raise FileNotFoundError(config_file)
+            config_sha = _sha256(config_file)
+        except (OSError, ValueError) as exc:
+            reason = f"{arm_key}: unable to resolve config for preflight: {exc}"
+            blockers.append(reason)
+            base_record.update(
+                {
+                    "returncode": None,
+                    "stdout_path": None,
+                    "stderr_path": None,
+                    "structural_status": "blocked",
+                    "errors": [reason],
+                    "episodes": 0,
+                }
+            )
+            records.append(base_record)
+            continue
+        result = _run(command, cwd=repo_root, timeout=900)
+        stdout_path = output_root / "logs" / f"preflight_{arm_key}.stdout.txt"
+        stderr_path = output_root / "logs" / f"preflight_{arm_key}.stderr.txt"
+        _write_text(stdout_path, result["stdout"])
+        _write_text(stderr_path, result["stderr"])
+        record = {
+            **base_record,
+            "config_sha256": config_sha,
+            "returncode": result["returncode"],
             "stdout_path": _repo_relative(repo_root, stdout_path),
             "stderr_path": _repo_relative(repo_root, stderr_path),
         }
@@ -493,6 +542,7 @@ def _run_preflights(
         ]
         if episode_files:
             validation["errors"].append(f"production episode files were emitted: {episode_files!r}")
+            validation["structural_status"] = "blocked"
         for error in validation["errors"]:
             blockers.append(f"{arm_key}: {error}")
         if validation["checkpoint_preflight"]["submit_safe"] is not True:
@@ -515,7 +565,7 @@ def _parse_queue_summary(text: str) -> dict[str, Any]:
 
 
 def _parse_route_output(text: str) -> dict[str, Any]:
-    selected = re.search(r"^ selected:\s*(\S+)\s*$", text, re.MULTILINE)
+    selected = re.search(r"^\s+selected:\s*(\S+)\s*$", text, re.MULTILINE)
     elapsed = re.search(r"^\s+- estimated elapsed\s+(\d+)s\s*$", text, re.MULTILINE)
     score = re.search(r"^\s+- score\s+([0-9.]+)\s*$", text, re.MULTILINE)
     return {
@@ -664,12 +714,15 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
     return snapshot
 
 
-def _submission_command(packet_config: dict[str, Any], private_snapshot: dict[str, Any]) -> str:
+def _submission_command(
+    packet_config: dict[str, Any], private_snapshot: dict[str, Any], *, artifact_manifest: str
+) -> str:
+    """Render a copyable submission template with an expandable results URI."""
     route = private_snapshot.get("route") or {}
     selected = route.get("selected_route") or "<selected-route>"
     cluster = str(selected).split(":", 1)[0]
     results_expr = "$" + "{ROBOT_SF_RADIUS_SWEEP_RESULTS_URI}/{job_id}"
-    return shlex.join(
+    command = shlex.join(
         [
             "bash",
             "ops/jobs/scripts/submit_and_record.sh",
@@ -694,11 +747,12 @@ def _submission_command(packet_config: dict[str, Any], private_snapshot: dict[st
             "--remote-results",
             results_expr,
             "--artifact-manifest",
-            "output/issue_7198_radius_sweep_admission/packet.json",
+            artifact_manifest,
             "--script",
             "<remote-slurm-script>",
         ]
     )
+    return command.replace(shlex.quote(results_expr), results_expr, 1)
 
 
 def prepare_packet(  # noqa: PLR0915
@@ -734,6 +788,16 @@ def prepare_packet(  # noqa: PLR0915
     blockers.extend(gate1_config_errors)
 
     manifest_root = output_root / "manifest"
+    manifest_command = [
+        "uv",
+        "run",
+        "python",
+        "scripts/benchmark/build_radius_sweep_manifest_issue_6642.py",
+        "--manifest-config",
+        str(packet_config["manifest_config"]),
+        "--out",
+        _repo_relative(repo_root, manifest_root),
+    ]
     try:
         _manifest, manifest_check, manifest_path, check_path = build_and_check(
             _repo_path(repo_root, str(packet_config["manifest_config"])),
@@ -854,13 +918,14 @@ def prepare_packet(  # noqa: PLR0915
         "artifacts": artifact_record,
         "missingness_policy": packet_config["missingness_policy"],
         "commands": {
-            "manifest_check": (
-                "uv run python scripts/benchmark/build_radius_sweep_manifest_issue_6642.py "
-                "--check-only"
-            ),
+            "manifest_check": _command_text(manifest_command),
             "gate1_current_canary": _command_text(gate1_command),
             "arm_preflights": [record["command"] for record in preflights],
-            "private_submission_entrypoint": _submission_command(packet_config, private_ops),
+            "private_submission_entrypoint": _submission_command(
+                packet_config,
+                private_ops,
+                artifact_manifest=artifact_record["public_manifest_path"],
+            ),
             "submission_executed": False,
         },
         "blockers": unique_blockers,

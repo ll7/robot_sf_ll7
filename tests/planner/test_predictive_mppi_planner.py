@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
@@ -148,6 +149,35 @@ def test_predictive_mppi_caches_absent_grid_payload_and_accepts_full_elite_fract
     assert calls == 1
     assert 0.0 <= linear <= planner.config.max_linear_speed
     assert abs(angular) <= planner.config.max_angular_speed
+
+
+def test_predictive_mppi_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Malformed clearance calls fail explicitly when no payload source is supplied."""
+    planner = PredictiveMPPIAdapter(build_predictive_mppi_config({}), allow_fallback=True)
+
+    with pytest.raises(
+        ValueError,
+        match="Predictive MPPI obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+
+def test_predictive_mppi_obstacle_clearance_accepts_precomputed_grid_without_observation() -> None:
+    """A supplied grid payload remains sufficient without an observation mapping."""
+    planner = PredictiveMPPIAdapter(build_predictive_mppi_config({}), allow_fallback=True)
+    grid = np.zeros((1, 3, 3), dtype=float)
+    grid[0, 1, 1] = 1.0
+    meta = {
+        "origin": np.asarray([-1.0, -1.0], dtype=float),
+        "resolution": np.asarray([1.0], dtype=float),
+        "size": np.asarray([3.0, 3.0], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([0, -1, -1, -1], dtype=int),
+    }
+
+    assert (
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float), grid_payload=(grid, meta)) == 0.0
+    )
 
 
 def test_predictive_mppi_stops_at_goal() -> None:

@@ -137,6 +137,13 @@ the configs are still not benchmark evidence and production compute remains bloc
 the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
+Issue #7198 current-source Gate 2 admission packet: validates the closed Gate 1 receipt,
+freezes candidate inputs and checksums, runs zero-episode preflights for all three radius
+arms, and captures private queue/router evidence. It emits a fail-closed
+ready-for-authorization or blocked verdict without submitting production compute or making
+a radius-sensitivity claim:
+[issue_7198_radius_sweep_admission.md](issue_7198_radius_sweep_admission.md).
+
 Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle for #6600:
 the analysis tooling is merged and fails closed, while the scientific analysis remains
 blocked until Gate 2 supplies complete row identities or a fail-closed missingness ledger.

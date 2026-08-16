@@ -158,6 +158,13 @@ no scientific-result claim; the committed reference fixture remains blocked by i
 independent-review marker:
 [issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md).
 
+Issue #7197 deterministic diagnosis fixture admission: per-case source-predicate digests,
+independent-review and adjudication metadata, explicit training/prompt-development exclusions,
+reference-label leakage guards, and fail-closed invocation of the existing adapter and metric
+evaluator. The test-only source bundle proves contract integrity; the production reference
+fixture remains pending independent review:
+[issue_7197_failure_diagnosis_fixture_evaluation.md](issue_7197_failure_diagnosis_fixture_evaluation.md).
+
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory
 groupings for the flat `robot_sf/benchmark/` namespace (planning only; no module is moved in this

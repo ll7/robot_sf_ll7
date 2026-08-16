@@ -1,0 +1,8 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "ab6b5ad35c36e44b3d23b4383aceedb6d85a1881",
+  "variants": {
+    "issue_4014_ppo_lstm_recurrent_smoke.yaml": "53ac744b128530b12cd830c7c3d5a3a29582501fa14254db5e82b11b327dcdf1",
+    "issue_4014_recurrent_ppo_lstm_smoke_matched.yaml": "6f8a719da02f51cee902143a804abccba64e3e2690c53ab91d1b15428703d5a1"
+  }
+}

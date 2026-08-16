@@ -41,6 +41,8 @@ same-commit paired batches and fail-closed target decisions. Two sequential runs
 were internally stable but disagreed: one measured 18.469% (`not_met`) and one
 8.327% (`met`); the profile remains opt-in and diagnostic only:
 [issue_6987_analysis_trace_overhead_2026-08-12/README.md](evidence/issue_6987_analysis_trace_overhead_2026-08-12/README.md).
+The linked reconciliation packet preserves both decisions and refuses a cross-receipt average
+when legacy cache/thread context is unavailable.
 
 Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
 `issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free

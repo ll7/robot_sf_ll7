@@ -20,6 +20,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     from robot_sf.feature_extractors.attention_extractor import MultiHeadAttention
     from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
     import robot_sf.nav.svg_map_parser as svg
+    from robot_sf.planner.dwa import DWAPlannerAdapter
     import robot_sf.planner.socnav as socnav
     import robot_sf.scenario_certification.v1 as cert
     from robot_sf.sim.simulator import init_simulators
@@ -111,6 +112,14 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: grid.generate([], [], ((0.0, 0.0), 0.0)),
     )
 
+    dwa = DWAPlannerAdapter()
+    expect(
+        "dwa_obstacle_clearance_observation",
+        ValueError,
+        "DWA obstacle clearance requires observation when grid_payload is absent",
+        lambda: dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
+    )
+
     original_torch = socnav.torch
     planner = socnav.PredictionPlannerAdapter.__new__(socnav.PredictionPlannerAdapter)
     planner._baseline_predictor = None
@@ -193,6 +202,7 @@ _EXPECTED_MARKERS = (
     "PASS social_force_observation: TypeError",
     "PASS ppo_observation: TypeError",
     "PASS occupancy_shape: ValueError",
+    "PASS dwa_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
     "PASS route_goal: RuntimeError",
@@ -208,6 +218,7 @@ _EXPECTED_MESSAGES = (
     "SocialForcePlanner requires Observation, got object",
     "PPOPolicy requires Observation, got object",
     "Invalid grid shape: (2, 200, 0)",
+    "DWA obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",
     "None goal",

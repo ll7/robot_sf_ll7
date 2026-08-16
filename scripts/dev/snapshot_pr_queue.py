@@ -358,7 +358,13 @@ def _head_preflight(
     return None, [], True
 
 
-def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[str, Any]:
+def _fetch_pr_rest(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    current_main_sha: str = "",
+) -> dict[str, Any]:
     """Build a compact PR snapshot from REST endpoints when GraphQL quota is exhausted.
 
     Maps REST pull/reviews/comments/check-runs payloads into the gh-JSON shape consumed by
@@ -448,7 +454,7 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     payload = _pr_payload_from_dict(
         pr_dict,
         base_sha=base_sha,
-        current_main_sha=_fetch_current_main_sha(repo=repo),
+        current_main_sha=current_main_sha or _fetch_current_main_sha(repo=repo),
         default_number=number,
         expected_head_sha=expected_head_sha,
     )
@@ -456,6 +462,16 @@ def _fetch_pr_rest(number: int, *, repo: str, expected_head_sha: str) -> dict[st
     payload["review_threads"] = "unknown_graphql_quota"
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
+    preflight = payload.get("preflight")
+    if isinstance(preflight, dict):
+        reasons = preflight.setdefault("reasons", [])
+        if isinstance(reasons, list) and "review_threads_unknown_graphql_quota" not in reasons:
+            reasons.append("review_threads_unknown_graphql_quota")
+        preflight["status"] = "blocked"
+        preflight["review_threads"] = "unknown_graphql_quota"
+        preflight["review_threads_admission"] = "fail_closed_unknown"
+    payload["next_action"] = "inspect_blocking_preflight"
+    payload["attention"] = "preflight_attention"
     return payload
 
 
@@ -969,6 +985,34 @@ def fetch_pr(
     )
 
 
+def _active_rest_fallback_error(*, repo: str, error: str) -> dict[str, Any]:
+    """Return a bounded active-snapshot error for an unusable REST fallback."""
+    return {
+        "schema": SCHEMA_VERSION,
+        "repo": repo,
+        "mode": "active",
+        "data_source": "rest_fallback_graphql_quota",
+        "route_evidence_only": True,
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+        "truncated": False,
+        "truncation_note": "",
+        "route_health_overview": {
+            "healthy": 0,
+            "stale": 0,
+            "blocked": 0,
+            "unknown": 0,
+        },
+        "prs": [
+            {
+                "status": "error",
+                "error_kind": "graphql_quota_exhausted",
+                "error": error,
+            }
+        ],
+    }
+
+
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     """Return a compact active PR queue snapshot."""
     current_main_sha = _fetch_current_main_sha(repo=repo)
@@ -988,6 +1032,62 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     )
 
     if result.returncode != 0:
+        stderr = result.stderr.strip()
+        if _is_graphql_quota_error(stderr):
+            rest_limit = max(limit, 1)
+            listed_rest = _rest_api_get(
+                f"pulls?state=open&per_page={rest_limit}&page=1",
+                repo=repo,
+            )
+            if not isinstance(listed_rest, list):
+                return _active_rest_fallback_error(
+                    repo=repo,
+                    error="GraphQL quota exhausted and REST open-PR list fallback failed",
+                )
+            rest_rows: list[dict[str, Any]] = []
+            for row in listed_rest:
+                if not isinstance(row, dict):
+                    return _active_rest_fallback_error(
+                        repo=repo,
+                        error="REST open-PR list fallback returned malformed data",
+                    )
+                number = row.get("number")
+                if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+                    return _active_rest_fallback_error(
+                        repo=repo,
+                        error="REST open-PR list fallback returned an invalid PR number",
+                    )
+                head = row.get("head")
+                head_sha = head.get("sha") if isinstance(head, dict) else ""
+                rest_rows.append({"number": number, "head_sha": str(head_sha or "")})
+            prs = [
+                _fetch_pr_rest(
+                    int(row["number"]),
+                    repo=repo,
+                    expected_head_sha=str(row["head_sha"]),
+                    current_main_sha=current_main_sha,
+                )
+                for row in rest_rows
+            ]
+            truncated = is_likely_truncated(len(rest_rows), limit=limit)
+            return {
+                "schema": SCHEMA_VERSION,
+                "repo": repo,
+                "mode": "active",
+                "data_source": "rest_fallback_graphql_quota",
+                "route_evidence_only": True,
+                "review_threads": "unknown_graphql_quota",
+                "review_threads_admission": "fail_closed_unknown",
+                "truncated": truncated,
+                "truncation_note": (
+                    "REST open-PR list may be capped: got "
+                    f"{len(rest_rows)} rows at --limit {limit}; raise --limit or paginate"
+                    if truncated
+                    else ""
+                ),
+                "route_health_overview": _route_health_overview(prs),
+                "prs": prs,
+            }
         return {
             "schema": SCHEMA_VERSION,
             "repo": repo,

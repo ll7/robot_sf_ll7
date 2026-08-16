@@ -84,6 +84,10 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_reconciliation.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json.review.json
   status: evidence
   freshness: evidence

@@ -1011,9 +1011,101 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["review_threads_admission"] == "fail_closed_unknown"
     assert payload["head_sha"] == "abc"
     assert payload["preflight"]["head_sha_matches_expected"] is True
+    assert payload["preflight"]["status"] == "blocked"
+    assert "review_threads_unknown_graphql_quota" in payload["preflight"]["reasons"]
+    assert payload["next_action"] == "inspect_blocking_preflight"
     assert payload["title"] == "demo"
     assert "merge-ready" in payload["labels"]
     assert payload["checks"]["overall"] == "success"
+
+
+def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> None:
+    """Active discovery should use bounded REST and preserve fail-closed row evidence."""
+    rest_rows = [
+        {"number": 42, "head": {"sha": "head-42"}},
+        {"number": 43, "head": {"sha": "head-43"}},
+    ]
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        if path == "pulls?state=open&per_page=2&page=1":
+            return rest_rows
+        if path.startswith("pulls/") and path.count("/") == 1:
+            number = int(path.split("/", 1)[1])
+            return {
+                "number": number,
+                "title": f"REST PR {number}",
+                "state": "open",
+                "draft": False,
+                "labels": [{"name": "merge-ready"}],
+                "html_url": f"https://github.test/pull/{number}",
+                "head": {"ref": f"feature-{number}", "sha": f"head-{number}"},
+                "base": {"sha": "main-sha"},
+                "mergeable_state": "clean",
+            }
+        if path.endswith("/reviews") or path.endswith("/comments"):
+            return []
+        if path.startswith("commits/") and path.endswith("/check-runs"):
+            return {
+                "check_runs": [
+                    {
+                        "name": "ci",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "details_url": "https://github.test/check/1",
+                    }
+                ]
+            }
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get) as mock_rest,
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=2)
+
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["route_evidence_only"] is True
+    assert payload["review_threads"] == "unknown_graphql_quota"
+    assert payload["review_threads_admission"] == "fail_closed_unknown"
+    assert payload["truncated"] is True
+    assert "REST open-PR list may be capped" in payload["truncation_note"]
+    assert [pr["number"] for pr in payload["prs"]] == [42, 43]
+    for pr in payload["prs"]:
+        assert pr["data_source"] == "rest_fallback_graphql_quota"
+        assert pr["review_threads_admission"] == "fail_closed_unknown"
+        assert pr["base_freshness"]["verdict"] == "fresh"
+        assert pr["checks"]["overall"] == "success"
+        assert pr["preflight"]["status"] == "blocked"
+        assert "review_threads_unknown_graphql_quota" in pr["preflight"]["reasons"]
+        assert pr["next_action"] == "inspect_blocking_preflight"
+    mock_rest.assert_any_call("pulls?state=open&per_page=2&page=1", repo="ll7/robot_sf_ll7")
+
+
+def test_snapshot_active_prs_rest_list_failure_has_no_fabricated_rows() -> None:
+    """A failed REST list remains a compact error rather than partial PR data."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", return_value=None),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=20)
+
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["truncated"] is False
+    assert payload["prs"] == [
+        {
+            "status": "error",
+            "error_kind": "graphql_quota_exhausted",
+            "error": "GraphQL quota exhausted and REST open-PR list fallback failed",
+        }
+    ]
 
 
 def test_fetch_pr_rest_suppresses_duplicate_cancelled_run_with_actions_metadata() -> None:
@@ -1092,8 +1184,9 @@ def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
     ):
         payload = fetch_pr(7, repo="ll7/robot_sf_ll7", expected_head_sha="differenthead")
     assert payload["status"] == "ok"
-    assert payload["preflight"]["status"] == "stale"
+    assert payload["preflight"]["status"] == "blocked"
     assert "head_sha_mismatch" in payload["preflight"]["reasons"]
+    assert "review_threads_unknown_graphql_quota" in payload["preflight"]["reasons"]
     assert payload["preflight"]["head_sha_matches_expected"] is False
 
 

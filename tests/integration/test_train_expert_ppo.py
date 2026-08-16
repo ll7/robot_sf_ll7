@@ -4819,3 +4819,95 @@ def test_issue_6484_horizon100_loads_through_ppo_entrypoint() -> None:
     assert config.scenario_config.name == "ppo_full_maintained_eval_v1_horizon100.yaml"
     assert config.evaluation.scenario_config.name == "ppo_full_maintained_eval_v1_horizon100.yaml"
     assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+# Issue #6484: the historical issue-791 baseline warm-start variant reuses the
+# existing env22 base while keeping checkpoint identity and launch metadata explicit.
+_ISSUE_6484_BASELINE_RESUME_BEST_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME = (
+    "expert_ppo_issue_791_baseline_promotion_env22_base.yaml"
+)
+_ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_baseline_resume_best_resolved.json"
+)
+_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT = (
+    "expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml"
+)
+
+
+def _issue_6484_baseline_resume_best_baseline() -> dict:
+    """Load and integrity-check the frozen warm-start config baseline."""
+    assert _ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH.exists(), (
+        "Pre-change warm-start baseline missing; capture it before changing the config"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == {_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT}
+    return baseline
+
+
+def _issue_6484_baseline_resume_best_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for the warm-start variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_issue_6484_baseline_resume_best_resolves_to_prechange_values() -> None:
+    """Base inheritance preserves the exact pre-refactor warm-start mapping."""
+    path = (
+        _ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT
+    ).resolve()
+    baseline = _issue_6484_baseline_resume_best_baseline()
+
+    assert (
+        _issue_6484_baseline_resume_best_fingerprint(path)
+        == baseline["variants"][_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT]
+    ), f"Resolved config differs from the baseline at {baseline['source_revision']}."
+
+
+def test_issue_6484_baseline_resume_best_keeps_resume_identity_explicit() -> None:
+    """The variant keeps checkpoint, budget, cadence, and W&B identity visible."""
+    base_yaml = yaml.safe_load(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+
+    assert "resume_from" not in base_yaml
+    assert variant_yaml["base_config"] == _ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME
+    assert set(variant_yaml) == {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+        "evaluation",
+        "tracking",
+    }
+    assert variant_yaml["resume_from"].endswith(
+        "ppo_expert_issue_791_baseline_promotion_1m_env22_best.zip"
+    )
+    assert variant_yaml["evaluation"] == {"step_schedule": [{"every_steps": 131072}]}
+    assert variant_yaml["tracking"]["wandb"]["job_type"] == ("expert-ppo-1m-promotion-env22")
+    assert "resume-best" in variant_yaml["tracking"]["wandb"]["tags"]
+
+
+def test_issue_6484_baseline_resume_best_loads_through_ppo_entrypoint() -> None:
+    """The inherited warm-start variant remains valid for the PPO entrypoint."""
+    config = load_expert_training_config(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT).resolve()
+    )
+
+    assert config.policy_id == "ppo_expert_issue_791_baseline_promotion_1m_env22"
+    assert config.num_envs == 22
+    assert config.total_timesteps == 1_000_000
+    assert config.evaluation.step_schedule == ((None, 131072),)

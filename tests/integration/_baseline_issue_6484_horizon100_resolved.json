@@ -1,0 +1,7 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "321ae7883c0ea1f9d2c8b39e0f99e941103e7e12",
+  "variants": {
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml": "91d0aa5d6a807ac99d33059b0cbb974504f13d2460f49d31ded4a987f7880926"
+  }
+}

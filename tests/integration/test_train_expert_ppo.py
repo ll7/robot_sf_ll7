@@ -45,6 +45,7 @@ from scripts.training.train_ppo import (
     load_expert_training_config,
     run_expert_training,
 )
+from scripts.training.train_recurrent_ppo import load_recurrent_ppo_config
 
 
 def test_expert_training_dry_run(tmp_path, monkeypatch):
@@ -3495,6 +3496,788 @@ def test_issue_6484_asymmetric_env22_variants_keep_distinct_overrides() -> None:
     assert one_m.policy_id != three_m.policy_id
 
 
+# Issue #6484: the issue-791 reward-curriculum 10M env22 pair shares only its
+# byte-equivalent settings. Scenario source, classic sampler weights, and
+# launch metadata remain explicit in each variant.
+_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_base.yaml"
+)
+_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_reward_curriculum_10m_env22_resolved.json"
+)
+_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml",
+]
+
+
+def _issue_6484_reward_curriculum_10m_env22_baseline() -> dict:
+    """Load and integrity-check the frozen reward-curriculum baseline."""
+    assert _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change reward-curriculum baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_VARIANTS)
+    return baseline
+
+
+def _issue_6484_reward_curriculum_10m_env22_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_VARIANTS)
+def test_issue_6484_reward_curriculum_10m_env22_resolves_to_prechange_values(
+    variant: str,
+) -> None:
+    """Each inherited reward-curriculum variant matches its frozen mapping."""
+    path = (_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_reward_curriculum_10m_env22_baseline()
+
+    assert (
+        _issue_6484_reward_curriculum_10m_env22_fingerprint(path) == baseline["variants"][variant]
+    ), f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_reward_curriculum_10m_env22_base_keeps_launch_identity_explicit() -> None:
+    """The pair's shared base contains no run-specific identity or sampler profile."""
+    base_path = (
+        _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR
+        / _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "scenario_config" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "scenario_sampling" not in base_yaml
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    expected_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "scenario_sampling",
+        "evaluation",
+        "tracking",
+    }
+    for variant in _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_BASE_NAME
+        assert set(variant_yaml) == expected_keys
+        assert set(variant_yaml["scenario_sampling"]) >= {"strategy", "profile_strategy"}
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_reward_curriculum_10m_env22_preserves_intentional_differences() -> None:
+    """Scenario, sampler, and W&B launch identity remain distinct."""
+    classic = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR
+            / "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22.yaml"
+        ).resolve()
+    )
+    eval_aligned = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_REWARD_CURRICULUM_10M_ENV22_DIR
+            / "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned.yaml"
+        ).resolve()
+    )
+
+    assert classic["scenario_config"] != eval_aligned["scenario_config"]
+    assert "weights" in classic["scenario_sampling"]
+    assert "weights" not in eval_aligned["scenario_sampling"]
+    assert classic["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert eval_aligned["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert classic["total_timesteps"] == eval_aligned["total_timesteps"] == 10_000_000
+    assert classic["evaluation"]["step_schedule"] == eval_aligned["evaluation"]["step_schedule"]
+    assert classic["policy_id"] != eval_aligned["policy_id"]
+    assert classic["tracking"]["wandb"]["job_type"] != eval_aligned["tracking"]["wandb"]["job_type"]
+    assert classic["tracking"]["wandb"]["tags"] != eval_aligned["tracking"]["wandb"]["tags"]
+
+
+# Issue #6484: the issue-791 Stage-1 ablations share one base. Intervention-
+# specific actor/critic settings remain explicit in each variant.
+_ISSUE_6484_STAGE1_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_STAGE1_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_STAGE1_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_stage1_resolved.json"
+)
+_ISSUE_6484_STAGE1_VARIANTS = [
+    "expert_ppo_issue_791_asymmetric_critic_stage1.yaml",
+    "expert_ppo_issue_791_attention_head_stage1.yaml",
+    "expert_ppo_issue_791_reward_curriculum_stage1.yaml",
+]
+
+
+def _issue_6484_stage1_baseline() -> dict:
+    """Load and integrity-check the frozen Stage-1 config baseline."""
+    assert _ISSUE_6484_STAGE1_BASELINE_PATH.exists(), (
+        "Pre-change Stage-1 baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_STAGE1_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_STAGE1_VARIANTS)
+    return baseline
+
+
+def _issue_6484_stage1_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one Stage-1 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_STAGE1_VARIANTS)
+def test_issue_6484_stage1_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited Stage-1 variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_STAGE1_DIR / variant).resolve()
+    baseline = _issue_6484_stage1_baseline()
+
+    assert _issue_6484_stage1_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.total_timesteps == 8192
+    assert config.evaluation.step_schedule == ((None, 8192),)
+
+
+def test_issue_6484_stage1_base_keeps_intervention_identity_explicit() -> None:
+    """The base contains shared settings while interventions stay in variants."""
+    base_path = (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert "scenario_config" not in base_yaml
+    assert "num_envs" not in base_yaml
+    assert "total_timesteps" not in base_yaml
+    assert "asymmetric_critic" not in base_yaml["env_factory_kwargs"]
+    assert "use_pedestrian_attention" not in base_yaml["feature_extractor_kwargs"]
+
+    common_keys = {"base_config", "policy_id", "scenario_config", "num_envs", "total_timesteps"}
+    expected_keys = {
+        _ISSUE_6484_STAGE1_VARIANTS[0]: common_keys | {"env_factory_kwargs"},
+        _ISSUE_6484_STAGE1_VARIANTS[1]: common_keys
+        | {"env_factory_kwargs", "feature_extractor_kwargs"},
+        _ISSUE_6484_STAGE1_VARIANTS[2]: common_keys,
+    }
+    for variant in _ISSUE_6484_STAGE1_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_STAGE1_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_STAGE1_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+
+
+def test_issue_6484_stage1_preserves_intervention_specific_overrides() -> None:
+    """The asymmetric-critic and attention interventions remain explicit."""
+    asymmetric = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[0]).resolve()
+    )
+    attention = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[1]).resolve()
+    )
+    reward = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_DIR / _ISSUE_6484_STAGE1_VARIANTS[2]).resolve()
+    )
+
+    assert asymmetric["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert attention["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert "asymmetric_critic" not in reward["env_factory_kwargs"]
+    assert attention["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert attention["feature_extractor_kwargs"]["attn_d_model"] == 64
+    assert "use_pedestrian_attention" not in reward["feature_extractor_kwargs"]
+    assert {m["scenario_config"] for m in (asymmetric, attention, reward)} == {
+        "../../../scenarios/classic_interactions_francis2023.yaml"
+    }
+    assert asymmetric["policy_id"] != attention["policy_id"] != reward["policy_id"]
+
+
+# Issue #6484: the historical Stage-1 CUDA foresight smoke config shares the
+# Stage-1 stack while keeping its hardware and short-run overrides explicit.
+_ISSUE_6484_STAGE1_GPU_SMOKE_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_stage1_gpu_smoke_resolved.json"
+)
+_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT = (
+    "expert_ppo_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke.yaml"
+)
+
+
+def _issue_6484_stage1_gpu_smoke_baseline() -> dict:
+    """Load and integrity-check the frozen CUDA smoke baseline."""
+    assert _ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH.exists(), (
+        "Pre-change GPU smoke baseline missing; re-run capture before changing the config"
+    )
+    baseline = json.loads(_ISSUE_6484_STAGE1_GPU_SMOKE_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == {_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT}
+    return baseline
+
+
+def _issue_6484_stage1_gpu_smoke_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for the CUDA smoke config."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_issue_6484_stage1_gpu_smoke_resolves_to_prechange_values() -> None:
+    """The inherited CUDA smoke config matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).resolve()
+    baseline = _issue_6484_stage1_gpu_smoke_baseline()
+
+    assert (
+        _issue_6484_stage1_gpu_smoke_fingerprint(path)
+        == baseline["variants"][_ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT]
+    ), f"Resolved config differs from the baseline at {baseline['source_revision']}."
+    config = load_expert_training_config(path)
+    assert config.policy_id == "ppo_expert_issue_791_asymmetric_critic_stage1_gpu_foresight_smoke"
+    assert config.num_envs == 2
+    assert config.total_timesteps == 4096
+    assert config.evaluation.evaluation_episodes == 10
+    assert config.evaluation.step_schedule == ((None, 4096),)
+
+
+def test_issue_6484_stage1_gpu_smoke_keeps_hardware_and_budget_overrides_explicit() -> None:
+    """The variant declares only its CUDA and short-smoke differences."""
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert variant_yaml["base_config"] == _ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME
+    assert set(variant_yaml) == {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "env_overrides",
+        "env_factory_kwargs",
+        "evaluation",
+    }
+    assert variant_yaml["env_overrides"] == {"predictive_foresight_device": "cuda"}
+    assert variant_yaml["env_factory_kwargs"] == {"asymmetric_critic": True}
+    assert variant_yaml["evaluation"] == {
+        "evaluation_episodes": 10,
+        "step_schedule": [{"every_steps": 4096}],
+    }
+
+
+def test_issue_6484_stage1_gpu_smoke_preserves_shared_foresight_stack() -> None:
+    """Inheritance retains the shared stack while applying the smoke overrides."""
+    path = (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_VARIANT).resolve()
+    resolved = _load_expert_training_config_mapping(path)
+    base = _load_expert_training_config_mapping(
+        (_ISSUE_6484_STAGE1_GPU_SMOKE_DIR / _ISSUE_6484_STAGE1_GPU_SMOKE_BASE_NAME).resolve()
+    )
+
+    assert resolved["env_overrides"]["predictive_foresight_device"] == "cuda"
+    assert (
+        resolved["env_overrides"]["predictive_foresight_model_id"]
+        == base["env_overrides"]["predictive_foresight_model_id"]
+    )
+    assert resolved["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert (
+        resolved["env_factory_kwargs"]["reward_name"] == base["env_factory_kwargs"]["reward_name"]
+    )
+    assert resolved["evaluation"]["hold_out_scenarios"] == base["evaluation"]["hold_out_scenarios"]
+    assert resolved["tracking"] == base["tracking"]
+
+
+# Issue #6484: the ordinary issue-791 32k follow-up family chains on the
+# Stage-1 base while keeping intervention and W&B attribution explicit.
+_ISSUE_6484_FOLLOWUP_32K_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_FOLLOWUP_32K_BASE_NAME = "expert_ppo_issue_791_followup_32k_base.yaml"
+_ISSUE_6484_FOLLOWUP_32K_STAGE1_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_followup_32k_resolved.json"
+)
+_ISSUE_6484_FOLLOWUP_32K_VARIANTS = [
+    "expert_ppo_issue_791_asymmetric_critic_followup_32k.yaml",
+    "expert_ppo_issue_791_attention_head_followup_32k.yaml",
+    "expert_ppo_issue_791_reward_curriculum_followup_32k.yaml",
+]
+
+
+def _issue_6484_followup_32k_baseline() -> dict:
+    """Load and integrity-check the frozen 32k follow-up baseline."""
+    assert _ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH.exists(), (
+        "Pre-change 32k follow-up baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_FOLLOWUP_32K_VARIANTS)
+    return baseline
+
+
+def _issue_6484_followup_32k_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one 32k variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_FOLLOWUP_32K_VARIANTS)
+def test_issue_6484_followup_32k_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited 32k variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_FOLLOWUP_32K_DIR / variant).resolve()
+    baseline = _issue_6484_followup_32k_baseline()
+
+    assert _issue_6484_followup_32k_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.total_timesteps == 32768
+    assert config.evaluation.step_schedule == ((None, 8192),)
+    assert config.tracking["wandb"]["enabled"] is True
+
+
+def test_issue_6484_followup_32k_base_keeps_shared_stack_and_identity_explicit() -> None:
+    """The chained base owns shared settings while variants own identity."""
+    base_path = (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert base_yaml == {
+        "base_config": _ISSUE_6484_FOLLOWUP_32K_STAGE1_BASE_NAME,
+        "total_timesteps": 32768,
+        "tracking": {
+            "tensorboard": False,
+            "wandb": {"enabled": True, "project": "robot_sf"},
+        },
+    }
+    common_keys = {"base_config", "policy_id", "scenario_config", "num_envs", "tracking"}
+    expected_keys = {
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[0]: common_keys | {"env_factory_kwargs"},
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[1]: common_keys
+        | {"env_factory_kwargs", "feature_extractor_kwargs"},
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[2]: common_keys,
+    }
+    for variant in _ISSUE_6484_FOLLOWUP_32K_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_FOLLOWUP_32K_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_FOLLOWUP_32K_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+
+
+def test_issue_6484_followup_32k_preserves_intervention_and_tracking_overrides() -> None:
+    """The three intervention and W&B identities remain explicit."""
+    asymmetric = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[0]).resolve()
+    )
+    attention = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[1]).resolve()
+    )
+    reward = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[2]).resolve()
+    )
+
+    assert asymmetric["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert attention["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert "asymmetric_critic" not in reward["env_factory_kwargs"]
+    assert attention["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert attention["feature_extractor_kwargs"]["attn_d_model"] == 64
+    assert "use_pedestrian_attention" not in reward["feature_extractor_kwargs"]
+    assert {m["tracking"]["wandb"]["group"] for m in (asymmetric, attention, reward)} == {
+        "issue-791-asymmetric-critic",
+        "issue-791-attention-head",
+        "issue-791-reward-curriculum",
+    }
+    assert {m["tracking"]["wandb"]["job_type"] for m in (asymmetric, attention, reward)} == {
+        "expert-ppo-32k-followup"
+    }
+
+
+# Issue #6484: the issue-791 reward-curriculum 10M resume-promotion pair
+# shares the checkpoint-compatible environment and training stack. The
+# exploration candidate keeps its three PPO gate changes explicit.
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_base.yaml"
+)
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_resume_promotion_10m_env22_resolved.json"
+)
+_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_best.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_resume_exploration_boost.yaml",
+]
+
+
+def _issue_6484_resume_promotion_10m_env22_baseline() -> dict:
+    """Load and integrity-check the frozen resume-promotion baseline."""
+    assert _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH.exists(), (
+        "Pre-change resume-promotion baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS)
+    return baseline
+
+
+def _issue_6484_resume_promotion_10m_env22_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS)
+def test_issue_6484_resume_promotion_10m_env22_resolves_to_prechange_values(
+    variant: str,
+) -> None:
+    """Each inherited resume variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR / variant).resolve()
+    baseline = _issue_6484_resume_promotion_10m_env22_baseline()
+
+    assert (
+        _issue_6484_resume_promotion_10m_env22_fingerprint(path) == baseline["variants"][variant]
+    ), f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.resume_from is not None
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_resume_promotion_10m_env22_base_keeps_resume_identity_explicit() -> None:
+    """The base owns the shared stack while resume and launch identity stay in variants."""
+    base_path = (
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+        / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    for identity_key in (
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+    ):
+        assert identity_key not in base_yaml
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    common_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+        "evaluation",
+        "tracking",
+    }
+    expected_keys = {
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[0]: common_keys,
+        _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[1]: common_keys | {"ppo_hyperparams"},
+    }
+    for variant in _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_resume_promotion_10m_env22_preserves_exploration_override() -> None:
+    """Only the candidate's three update-size/exploration gates differ."""
+    best = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+            / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[0]
+        ).resolve()
+    )
+    exploration = _load_expert_training_config_mapping(
+        (
+            _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_DIR
+            / _ISSUE_6484_RESUME_PROMOTION_10M_ENV22_VARIANTS[1]
+        ).resolve()
+    )
+
+    assert best["resume_from"] == exploration["resume_from"]
+    assert (
+        best["ppo_hyperparams"]["learning_rate"] == exploration["ppo_hyperparams"]["learning_rate"]
+    )
+    assert best["ppo_hyperparams"]["batch_size"] == exploration["ppo_hyperparams"]["batch_size"]
+    assert best["ppo_hyperparams"]["n_epochs"] == exploration["ppo_hyperparams"]["n_epochs"]
+    assert {
+        key
+        for key in best["ppo_hyperparams"]
+        if best["ppo_hyperparams"][key] != exploration["ppo_hyperparams"][key]
+    } == {"ent_coef", "clip_range", "target_kl"}
+    assert exploration["ppo_hyperparams"]["ent_coef"] == 0.02
+    assert exploration["ppo_hyperparams"]["clip_range"] == 0.15
+    assert exploration["ppo_hyperparams"]["target_kl"] == 0.03
+    assert best["tracking"]["wandb"]["job_type"] != exploration["tracking"]["wandb"]["job_type"]
+    assert best["tracking"]["wandb"]["tags"] != exploration["tracking"]["wandb"]["tags"]
+
+
+# Issue #6484: the issue-791 eval-aligned reward-curriculum 10M n_steps=4096
+# pair shares the environment, reward, sampler, optimizer, and evaluation
+# stack. Capacity, convergence target, and attribution remain variant-specific.
+_ISSUE_6484_EVAL_NSTEPS4096_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096_base.yaml"
+)
+_ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_eval_nsteps4096_resolved.json"
+)
+_ISSUE_6484_EVAL_NSTEPS4096_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_nsteps4096.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_nsteps4096.yaml",
+]
+
+
+def _issue_6484_eval_nsteps4096_baseline() -> dict:
+    """Load and integrity-check the frozen eval-aligned n_steps baseline."""
+    assert _ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH.exists(), (
+        "Pre-change eval-aligned n_steps baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_EVAL_NSTEPS4096_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_EVAL_NSTEPS4096_VARIANTS)
+    return baseline
+
+
+def _issue_6484_eval_nsteps4096_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS)
+def test_issue_6484_eval_nsteps4096_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited n_steps variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_EVAL_NSTEPS4096_DIR / variant).resolve()
+    baseline = _issue_6484_eval_nsteps4096_baseline()
+
+    assert _issue_6484_eval_nsteps4096_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.ppo_hyperparams["n_steps"] == 4096
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_eval_nsteps4096_base_keeps_variant_identity_explicit() -> None:
+    """The base owns the shared stack while capacity and attribution stay explicit."""
+    base_path = (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    for identity_key in ("policy_id", "scenario_config", "num_envs", "total_timesteps"):
+        assert identity_key not in base_yaml
+    assert "feature_extractor_kwargs" not in base_yaml
+    assert "success_rate" not in base_yaml["convergence"]
+    assert "step_schedule" not in base_yaml["evaluation"]
+    assert "job_type" not in base_yaml["tracking"]["wandb"]
+    assert "tags" not in base_yaml["tracking"]["wandb"]
+
+    expected_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "feature_extractor_kwargs",
+        "convergence",
+        "evaluation",
+        "tracking",
+    }
+    for variant in _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_EVAL_NSTEPS4096_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_EVAL_NSTEPS4096_BASE_NAME
+        assert set(variant_yaml) == expected_keys
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_eval_nsteps4096_preserves_capacity_and_convergence_overrides() -> None:
+    """The pair retains distinct capacity, success target, and W&B launch identity."""
+    standard = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS[0]).resolve()
+    )
+    large = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_NSTEPS4096_DIR / _ISSUE_6484_EVAL_NSTEPS4096_VARIANTS[1]).resolve()
+    )
+
+    assert standard["feature_extractor_kwargs"]["grid_channels"] == [32, 64, 64]
+    assert large["feature_extractor_kwargs"]["grid_channels"] == [64, 128, 128]
+    assert standard["feature_extractor_kwargs"]["socnav_hidden_dims"] == [128, 128]
+    assert large["feature_extractor_kwargs"]["socnav_hidden_dims"] == [256, 256]
+    assert standard["convergence"]["success_rate"] == 0.9
+    assert large["convergence"]["success_rate"] == 0.95
+    assert standard["ppo_hyperparams"] == large["ppo_hyperparams"]
+    assert standard["env_overrides"] == large["env_overrides"]
+    assert standard["env_factory_kwargs"] == large["env_factory_kwargs"]
+    assert standard["tracking"]["wandb"]["job_type"] != large["tracking"]["wandb"]["job_type"]
+    assert standard["tracking"]["wandb"]["tags"] != large["tracking"]["wandb"]["tags"]
+
+
+# Issue #6484: the untouched eval-aligned reward-curriculum intervention pair
+# reuses the existing 10M env22 base. Foresight and reward strength remain
+# explicit because they are the experimental differences between the variants.
+_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_base.yaml"
+)
+_ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_eval_reward_variants_resolved.json"
+)
+_ISSUE_6484_EVAL_REWARD_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml",
+]
+
+
+def _issue_6484_eval_reward_variants_baseline() -> dict:
+    """Load and integrity-check the frozen eval-aligned intervention baseline."""
+    assert _ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH.exists(), (
+        "Pre-change eval-aligned intervention baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_EVAL_REWARD_VARIANTS)
+    return baseline
+
+
+def _issue_6484_eval_reward_variants_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one intervention variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_EVAL_REWARD_VARIANTS)
+def test_issue_6484_eval_reward_variants_resolve_to_prechange_values(variant: str) -> None:
+    """Each inherited intervention variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / variant).resolve()
+    baseline = _issue_6484_eval_reward_variants_baseline()
+
+    assert _issue_6484_eval_reward_variants_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_eval_reward_variants_keep_interventions_explicit() -> None:
+    """The existing base owns common values while each intervention stays visible."""
+    base_path = (
+        _ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+
+    common_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "scenario_sampling",
+        "evaluation",
+        "tracking",
+    }
+    expected_keys = {
+        _ISSUE_6484_EVAL_REWARD_VARIANTS[0]: common_keys | {"env_overrides"},
+        _ISSUE_6484_EVAL_REWARD_VARIANTS[1]: common_keys | {"env_factory_kwargs"},
+    }
+    for variant in _ISSUE_6484_EVAL_REWARD_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_eval_reward_variants_preserve_distinct_interventions() -> None:
+    """Foresight and reward-strength overrides retain their intended semantics."""
+    no_foresight = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS[0]).resolve()
+    )
+    reward_strong = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS[1]).resolve()
+    )
+
+    assert no_foresight["env_overrides"]["predictive_foresight_enabled"] is False
+    assert reward_strong["env_overrides"]["predictive_foresight_enabled"] is True
+    assert no_foresight["env_factory_kwargs"]["reward_kwargs"]["weights"]["progress"] == 1.1
+    assert reward_strong["env_factory_kwargs"]["reward_kwargs"]["weights"]["progress"] == 1.5
+    assert (
+        no_foresight["env_factory_kwargs"]["reward_curriculum"]["stages"][1]["reward_kwargs"][
+            "weights"
+        ]["terminal_bonus"]
+        == 20.0
+    )
+    assert (
+        reward_strong["env_factory_kwargs"]["reward_curriculum"]["stages"][1]["reward_kwargs"][
+            "weights"
+        ]["terminal_bonus"]
+        == 30.0
+    )
+    assert (
+        no_foresight["tracking"]["wandb"]["job_type"]
+        != reward_strong["tracking"]["wandb"]["job_type"]
+    )
+    assert no_foresight["tracking"]["wandb"]["tags"] != reward_strong["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.
@@ -3719,6 +4502,127 @@ def test_issue_4014_ppo_smoke_variants_keep_distinct_overrides() -> None:
     assert mamba_matched_mapping["tracking"]["tensorboard"] is False
 
 
+# Issue #6484: the true recurrent-PPO LSTM smoke pair shares its common
+# scenario, budget, reward, convergence, and evaluation contract. Recurrent
+# algorithm fields remain in each raw variant because train_recurrent_ppo.py
+# validates those fields before handing the path to the shared PPO resolver.
+_ISSUE_6484_RECURRENT_4014_DIR = Path("configs/training/ppo")
+_ISSUE_6484_RECURRENT_4014_BASE_NAME = "issue_4014_recurrent_ppo_lstm_base.yaml"
+_ISSUE_6484_RECURRENT_4014_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_recurrent_ppo_lstm_resolved.json"
+)
+_ISSUE_6484_RECURRENT_4014_VARIANTS = [
+    "issue_4014_ppo_lstm_recurrent_smoke.yaml",
+    "issue_4014_recurrent_ppo_lstm_smoke_matched.yaml",
+]
+
+
+def _issue_6484_recurrent_4014_baseline() -> dict:
+    """Load and integrity-check the frozen recurrent-config baseline."""
+    assert _ISSUE_6484_RECURRENT_4014_BASELINE_PATH.exists(), (
+        "Pre-change recurrent baseline missing; capture it before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_RECURRENT_4014_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    return baseline
+
+
+def _issue_6484_recurrent_4014_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for a recurrent variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RECURRENT_4014_VARIANTS)
+def test_issue_6484_recurrent_4014_resolves_to_prechange_values(variant: str) -> None:
+    """The recurrent base merge preserves each pre-change resolved mapping."""
+    path = (_ISSUE_6484_RECURRENT_4014_DIR / variant).resolve()
+    baseline = _issue_6484_recurrent_4014_baseline()
+
+    assert _issue_6484_recurrent_4014_fingerprint(path) == baseline["variants"][variant]
+
+
+def test_issue_6484_recurrent_4014_base_keeps_runtime_identity_explicit() -> None:
+    """The base carries shared settings while raw recurrent fields stay in variants."""
+    base_path = (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert base_yaml == {
+        "scenario_config": "../../scenarios/sets/classic_cross_trap_subset.yaml",
+        "total_timesteps": 2048,
+        "seeds": [4014],
+        "randomize_seeds": False,
+        "env_factory_kwargs": {"reward_name": "route_completion_v2"},
+        "convergence": {"success_rate": 0.8, "collision_rate": 0.1, "plateau_window": 512},
+        "evaluation": {
+            "evaluation_episodes": 3,
+            "randomize_seeds": False,
+            "step_schedule": [{"every_steps": 1024}],
+        },
+    }
+
+    first_yaml = yaml.safe_load(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[0]).read_text(
+            encoding="utf-8"
+        )
+    )
+    matched_yaml = yaml.safe_load(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[1]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert first_yaml["base_config"] == _ISSUE_6484_RECURRENT_4014_BASE_NAME
+    assert matched_yaml["base_config"] == _ISSUE_6484_RECURRENT_4014_BASE_NAME
+    assert set(first_yaml) == {
+        "base_config",
+        "policy_id",
+        "algorithm",
+        "env_overrides",
+        "recurrent_ppo_hyperparams",
+    }
+    assert set(matched_yaml) == {
+        "base_config",
+        "policy_id",
+        "algorithm",
+        "recurrent_policy",
+        "num_envs",
+        "worker_mode",
+        "tracking",
+        "env_overrides",
+        "recurrent_ppo_hyperparams",
+    }
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_RECURRENT_4014_VARIANTS)
+def test_issue_6484_recurrent_4014_loads_through_recurrent_entrypoint(variant: str) -> None:
+    """Both variants remain valid for the dedicated recurrent-PPO entrypoint."""
+    path = (_ISSUE_6484_RECURRENT_4014_DIR / variant).resolve()
+    config = load_recurrent_ppo_config(path)
+
+    assert config.algorithm == "recurrent_ppo"
+    assert config.recurrent_policy == "MultiInputLstmPolicy"
+    assert config.base.total_timesteps == 2048
+    assert config.recurrent_ppo_hyperparams["n_steps"] == 128
+    assert config.base.evaluation.step_schedule == ((None, 1024),)
+
+
+def test_issue_6484_recurrent_4014_preserves_observation_and_launch_overrides() -> None:
+    """The socnav and matched default-gym launch identities remain distinct."""
+    first = _load_expert_training_config_mapping(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[0]).resolve()
+    )
+    matched = _load_expert_training_config_mapping(
+        (_ISSUE_6484_RECURRENT_4014_DIR / _ISSUE_6484_RECURRENT_4014_VARIANTS[1]).resolve()
+    )
+
+    assert first["env_overrides"]["observation_mode"] == "socnav_struct"
+    assert matched["env_overrides"]["observation_mode"] == "default_gym"
+    assert "num_envs" not in first
+    assert matched["num_envs"] == 1
+    assert matched["worker_mode"] == "dummy"
+    assert matched["tracking"] == {"tensorboard": False}
+
+
 # Issue #4018: the issue_4018 density-curriculum / fixed-density smoke pair was
 # migrated to inherit shared settings from a single base config. The constants
 # below pin that contract and the frozen pre-change resolved-config baseline.
@@ -3825,3 +4729,294 @@ def test_issue_4018_density_smoke_variants_keep_distinct_overrides() -> None:
         "issue-4018",
         "fixed-density-smoke",
     ]
+
+
+# Issue #6484: the issue-857 horizon-matched clone reuses the validated
+# large-capacity reward-curriculum base while retaining horizon-specific
+# scenario manifests and launch attribution.
+_ISSUE_6484_HORIZON100_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_HORIZON100_BASE_NAME = "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_large_capacity_base.yaml"
+_ISSUE_6484_HORIZON100_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_horizon100_resolved.json"
+)
+_ISSUE_6484_HORIZON100_VARIANT = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_horizon100.yaml"
+)
+
+
+def _issue_6484_horizon100_baseline() -> dict:
+    """Load and integrity-check the frozen horizon-100 config baseline."""
+    assert _ISSUE_6484_HORIZON100_BASELINE_PATH.exists(), (
+        "Pre-change horizon-100 baseline missing; capture it before changing the config"
+    )
+    baseline = json.loads(_ISSUE_6484_HORIZON100_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == {_ISSUE_6484_HORIZON100_VARIANT}
+    return baseline
+
+
+def _issue_6484_horizon100_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for the horizon-100 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_issue_6484_horizon100_resolves_to_prechange_values() -> None:
+    """Base inheritance preserves the exact pre-refactor resolved mapping."""
+    path = (_ISSUE_6484_HORIZON100_DIR / _ISSUE_6484_HORIZON100_VARIANT).resolve()
+    baseline = _issue_6484_horizon100_baseline()
+
+    assert (
+        _issue_6484_horizon100_fingerprint(path)
+        == baseline["variants"][_ISSUE_6484_HORIZON100_VARIANT]
+    ), f"Resolved config differs from the baseline at {baseline['source_revision']}."
+
+
+def test_issue_6484_horizon100_keeps_horizon_identity_explicit() -> None:
+    """The variant keeps horizon-specific paths, convergence, and launch identity visible."""
+    base_yaml = yaml.safe_load(
+        (_ISSUE_6484_HORIZON100_DIR / _ISSUE_6484_HORIZON100_BASE_NAME)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_6484_HORIZON100_DIR / _ISSUE_6484_HORIZON100_VARIANT)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+
+    assert "base_config" not in base_yaml
+    assert variant_yaml["base_config"] == _ISSUE_6484_HORIZON100_BASE_NAME
+    assert set(variant_yaml) == {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "seeds",
+        "convergence",
+        "env_factory_kwargs",
+        "evaluation",
+        "tracking",
+    }
+    assert variant_yaml["scenario_config"].endswith("_horizon100.yaml")
+    assert variant_yaml["evaluation"]["scenario_config"].endswith("_horizon100.yaml")
+    assert variant_yaml["convergence"] == {"success_rate": 0.9}
+    assert variant_yaml["tracking"]["wandb"]["job_type"] == "expert-ppo-10m-horizon100"
+    assert "horizon100" in variant_yaml["tracking"]["wandb"]["tags"]
+
+
+def test_issue_6484_horizon100_loads_through_ppo_entrypoint() -> None:
+    """The inherited variant remains valid for the standard PPO entrypoint."""
+    config = load_expert_training_config(
+        (_ISSUE_6484_HORIZON100_DIR / _ISSUE_6484_HORIZON100_VARIANT).resolve()
+    )
+
+    assert (
+        config.policy_id == "ppo_expert_issue_791_reward_curriculum_promotion_10m_env22_horizon100"
+    )
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.scenario_config.name == "ppo_full_maintained_eval_v1_horizon100.yaml"
+    assert config.evaluation.scenario_config.name == "ppo_full_maintained_eval_v1_horizon100.yaml"
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+# Issue #6484: the historical issue-791 baseline warm-start variant reuses the
+# existing env22 base while keeping checkpoint identity and launch metadata explicit.
+_ISSUE_6484_BASELINE_RESUME_BEST_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME = (
+    "expert_ppo_issue_791_baseline_promotion_env22_base.yaml"
+)
+_ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_baseline_resume_best_resolved.json"
+)
+_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT = (
+    "expert_ppo_issue_791_baseline_promotion_1m_env22_resume_best.yaml"
+)
+
+
+def _issue_6484_baseline_resume_best_baseline() -> dict:
+    """Load and integrity-check the frozen warm-start config baseline."""
+    assert _ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH.exists(), (
+        "Pre-change warm-start baseline missing; capture it before changing the config"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_BASELINE_RESUME_BEST_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == {_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT}
+    return baseline
+
+
+def _issue_6484_baseline_resume_best_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for the warm-start variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def test_issue_6484_baseline_resume_best_resolves_to_prechange_values() -> None:
+    """Base inheritance preserves the exact pre-refactor warm-start mapping."""
+    path = (
+        _ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT
+    ).resolve()
+    baseline = _issue_6484_baseline_resume_best_baseline()
+
+    assert (
+        _issue_6484_baseline_resume_best_fingerprint(path)
+        == baseline["variants"][_ISSUE_6484_BASELINE_RESUME_BEST_VARIANT]
+    ), f"Resolved config differs from the baseline at {baseline['source_revision']}."
+
+
+def test_issue_6484_baseline_resume_best_keeps_resume_identity_explicit() -> None:
+    """The variant keeps checkpoint, budget, cadence, and W&B identity visible."""
+    base_yaml = yaml.safe_load(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+    variant_yaml = yaml.safe_load(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+
+    assert "resume_from" not in base_yaml
+    assert variant_yaml["base_config"] == _ISSUE_6484_BASELINE_RESUME_BEST_BASE_NAME
+    assert set(variant_yaml) == {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "resume_from",
+        "evaluation",
+        "tracking",
+    }
+    assert variant_yaml["resume_from"].endswith(
+        "ppo_expert_issue_791_baseline_promotion_1m_env22_best.zip"
+    )
+    assert variant_yaml["evaluation"] == {"step_schedule": [{"every_steps": 131072}]}
+    assert variant_yaml["tracking"]["wandb"]["job_type"] == ("expert-ppo-1m-promotion-env22")
+    assert "resume-best" in variant_yaml["tracking"]["wandb"]["tags"]
+
+
+def test_issue_6484_baseline_resume_best_loads_through_ppo_entrypoint() -> None:
+    """The inherited warm-start variant remains valid for the PPO entrypoint."""
+    config = load_expert_training_config(
+        (_ISSUE_6484_BASELINE_RESUME_BEST_DIR / _ISSUE_6484_BASELINE_RESUME_BEST_VARIANT).resolve()
+    )
+
+    assert config.policy_id == "ppo_expert_issue_791_baseline_promotion_1m_env22"
+    assert config.num_envs == 22
+    assert config.total_timesteps == 1_000_000
+    assert config.evaluation.step_schedule == ((None, 131072),)
+
+
+# Issue #6484: reward-curriculum v2 variants share the warmup-100 contract
+# while keeping run budget, seed policy, cadence, and attribution explicit.
+_ISSUE_6484_REWARD_V2_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_REWARD_V2_BASE_NAME = "expert_ppo_issue_791_reward_curriculum_v2_base.yaml"
+_ISSUE_6484_REWARD_V2_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_reward_curriculum_v2_resolved.json"
+)
+_ISSUE_6484_REWARD_V2_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml",
+    "expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml",
+]
+
+
+def _issue_6484_reward_v2_baseline() -> dict:
+    """Load and integrity-check the frozen reward-curriculum v2 baseline."""
+    assert _ISSUE_6484_REWARD_V2_BASELINE_PATH.exists(), (
+        "Pre-change reward-curriculum v2 baseline missing; capture it before changing the configs"
+    )
+    baseline = json.loads(_ISSUE_6484_REWARD_V2_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_REWARD_V2_VARIANTS)
+    return baseline
+
+
+def _issue_6484_reward_v2_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for a v2 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_REWARD_V2_VARIANTS)
+def test_issue_6484_reward_v2_resolves_to_prechange_values(variant: str) -> None:
+    """Base inheritance preserves each v2 variant's exact pre-refactor mapping."""
+    path = (_ISSUE_6484_REWARD_V2_DIR / variant).resolve()
+    baseline = _issue_6484_reward_v2_baseline()
+
+    assert _issue_6484_reward_v2_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config differs from the baseline at {baseline['source_revision']}."
+    )
+
+
+def test_issue_6484_reward_v2_base_and_variant_ownership_are_explicit() -> None:
+    """The shared warmup is centralized while launch identity remains variant-owned."""
+    base_yaml = yaml.safe_load(
+        (_ISSUE_6484_REWARD_V2_DIR / _ISSUE_6484_REWARD_V2_BASE_NAME)
+        .resolve()
+        .read_text(encoding="utf-8")
+    )
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    assert base_yaml["env_factory_kwargs"]["reward_curriculum"]["stages"][0] == {
+        "until_episodes": 100,
+        "reward_kwargs": {
+            "weights": {
+                "progress": 1.1,
+                "collision": -15.0,
+                "timeout": -6.5,
+                "terminal_bonus": 20.0,
+            }
+        },
+    }
+    for variant in _ISSUE_6484_REWARD_V2_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_REWARD_V2_DIR / variant).resolve().read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_REWARD_V2_BASE_NAME
+        assert set(variant_yaml) == {
+            "base_config",
+            "policy_id",
+            "randomize_seeds",
+            "total_timesteps",
+            "evaluation",
+            "tracking",
+        }
+        assert variant_yaml["tracking"]["wandb"]["job_type"]
+        assert variant_yaml["tracking"]["wandb"]["tags"]
+
+
+@pytest.mark.parametrize(
+    ("variant", "randomize_seeds", "total_timesteps", "every_steps"),
+    [
+        (
+            "expert_ppo_issue_791_reward_curriculum_promotion_128k_v2.yaml",
+            True,
+            131072,
+            65536,
+        ),
+        (
+            "expert_ppo_issue_791_reward_curriculum_followup_32k_v2.yaml",
+            False,
+            32768,
+            8192,
+        ),
+    ],
+)
+def test_issue_6484_reward_v2_loads_through_standard_ppo_entrypoint(
+    variant: str, randomize_seeds: bool, total_timesteps: int, every_steps: int
+) -> None:
+    """Both inherited variants remain valid through the standard PPO loader."""
+    config = load_expert_training_config((_ISSUE_6484_REWARD_V2_DIR / variant).resolve())
+
+    assert config.seeds == (123,)
+    assert config.randomize_seeds is randomize_seeds
+    assert config.total_timesteps == total_timesteps
+    assert config.evaluation.step_schedule == ((None, every_steps),)

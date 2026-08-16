@@ -18,6 +18,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
 from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows, fetch_open_pr_rows
@@ -37,6 +38,7 @@ _CLOSING_REFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+_REPO_COMPONENT_RE = re.compile(r"^[^/\s]+$")
 DEFAULT_TIMEOUT_SECONDS = 120
 GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ", "api rate limit")
 GRAPHQL_FAIL_CLOSED_MARKERS = (
@@ -169,6 +171,78 @@ def _normalize_base_ref(base_ref: str, *, remote: str) -> str:
     if not normalized:
         raise GateError(f"base ref {base_ref!r} does not contain a branch name")
     return normalized
+
+
+def _repo_slug_from_remote_url(remote_url: str) -> str:
+    """Convert a Git remote URL to the GitHub CLI repository argument format."""
+    value = str(remote_url or "").strip()
+    if not value:
+        raise GateError("Git remote URL is empty")
+
+    host: str | None = None
+    path = ""
+    if value.startswith("git@") and ":" in value:
+        host, path = value[4:].split(":", 1)
+    else:
+        parsed = urlparse(value)
+        host = parsed.hostname
+        path = parsed.path
+
+    components = [component for component in path.strip("/").split("/") if component]
+    if components and components[-1].endswith(".git"):
+        components[-1] = components[-1][:-4]
+    if len(components) != 2 or not all(_REPO_COMPONENT_RE.fullmatch(item) for item in components):
+        raise GateError(f"Git remote URL must identify an OWNER/REPO pair; got {remote_url!r}")
+
+    normalized_host = str(host or "").lower()
+    if normalized_host in {"", "github.com", "www.github.com"}:
+        return "/".join(components)
+    if not _REPO_COMPONENT_RE.fullmatch(normalized_host):
+        raise GateError(f"Git remote URL has an invalid host: {remote_url!r}")
+    return "/".join([normalized_host, *components])
+
+
+def _normalize_repo_argument(repo: str, *, remote: str) -> str:
+    """Normalize a GitHub repository slug or a local checkout path."""
+    value = str(repo or "").strip()
+    if not value:
+        raise GateError(
+            "repository must be OWNER/REPO (for example, ll7/robot_sf_ll7) "
+            "or an existing local checkout path"
+        )
+
+    path = Path(value).expanduser()
+    explicit_path = value.startswith((".", "/", "~")) or path.exists()
+    if not explicit_path and 2 <= value.count("/") + 1 <= 3:
+        components = value.split("/")
+        if all(_REPO_COMPONENT_RE.fullmatch(component) for component in components):
+            return value
+
+    if not explicit_path:
+        raise GateError(
+            "repository must be OWNER/REPO (for example, ll7/robot_sf_ll7) "
+            "or an existing local checkout path"
+        )
+    if not path.is_dir():
+        raise GateError(f"local repository path does not exist or is not a directory: {repo!r}")
+
+    resolved_path = path.resolve()
+    result = _run(
+        ["git", "-C", str(resolved_path), "remote", "get-url", remote],
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "remote lookup failed"
+        raise GateError(
+            f"local repository path {repo!r} has no usable Git remote {remote!r}: {detail}; "
+            "pass an explicit OWNER/REPO value if the checkout has no GitHub remote"
+        )
+    try:
+        return _repo_slug_from_remote_url(result.stdout)
+    except GateError as exc:
+        raise GateError(
+            f"local repository path {repo!r} has no GitHub-compatible remote {remote!r}: {exc}"
+        ) from exc
 
 
 def _is_graphql_fallback_error(error: GateError) -> bool:
@@ -766,7 +840,14 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     capture = subparsers.add_parser("capture", help="capture a pre-publication baseline")
-    capture.add_argument("--repo", required=True)
+    capture.add_argument(
+        "--repo",
+        required=True,
+        help=(
+            "GitHub repository as OWNER/REPO (for example, ll7/robot_sf_ll7), "
+            "or a local checkout path whose Git remote resolves to that repository"
+        ),
+    )
     capture.add_argument("--issue", type=int, required=True)
     capture.add_argument("--branch")
     capture.add_argument(
@@ -821,13 +902,14 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "capture":
+            repo = _normalize_repo_argument(args.repo, remote=args.remote)
             issue = _issue_number(args.issue)
             branch = args.branch or _git_branch()
             snapshot_path = (
                 Path(args.snapshot_path) if args.snapshot_path else _default_snapshot_path(branch)
             )
             snapshot = collect_live_state(
-                repo=args.repo,
+                repo=repo,
                 issue=issue,
                 branch=branch,
                 base_ref=args.base_ref,
@@ -853,10 +935,11 @@ def main(argv: list[str] | None = None) -> int:
         baseline["base_ref"] = _normalize_base_ref(
             str(baseline["base_ref"]), remote=str(baseline["remote"])
         )
+        repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
         max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
         decision_path = _decision_path(snapshot_path, args.decision_path)
         current = collect_live_state(
-            repo=str(baseline["repo"]),
+            repo=repo,
             issue=_issue_number(baseline["issue"]),
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),
@@ -893,7 +976,7 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_CODES["refresh-required"]
 
         refreshed = collect_live_state(
-            repo=str(baseline["repo"]),
+            repo=repo,
             issue=_issue_number(baseline["issue"]),
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),

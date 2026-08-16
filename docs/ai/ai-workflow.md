@@ -345,6 +345,8 @@ uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project
 ```
 
 `check_prepublication_state.py` is the remote-state companion to local readiness stamps. It
+accepts an explicit `OWNER/REPO` value or a local checkout path for `capture --repo`; local paths
+are resolved through the selected Git remote and stored as normalized repository slugs.
 refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD SHAs, and checks
 that the claimed issue remains open and has not gained a new explicit same-repository covering PR
 or merged closing PR. A `ready` result is the only publication-permitting result; `superseded` and

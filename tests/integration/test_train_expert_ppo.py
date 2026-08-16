@@ -4065,6 +4065,123 @@ def test_issue_6484_eval_nsteps4096_preserves_capacity_and_convergence_overrides
     assert standard["tracking"]["wandb"]["tags"] != large["tracking"]["wandb"]["tags"]
 
 
+# Issue #6484: the untouched eval-aligned reward-curriculum intervention pair
+# reuses the existing 10M env22 base. Foresight and reward strength remain
+# explicit because they are the experimental differences between the variants.
+_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME = (
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_base.yaml"
+)
+_ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_eval_reward_variants_resolved.json"
+)
+_ISSUE_6484_EVAL_REWARD_VARIANTS = [
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_no_foresight.yaml",
+    "expert_ppo_issue_791_reward_curriculum_promotion_10m_env22_eval_aligned_reward_strong.yaml",
+]
+
+
+def _issue_6484_eval_reward_variants_baseline() -> dict:
+    """Load and integrity-check the frozen eval-aligned intervention baseline."""
+    assert _ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH.exists(), (
+        "Pre-change eval-aligned intervention baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(
+        _ISSUE_6484_EVAL_REWARD_VARIANTS_BASELINE_PATH.read_text(encoding="utf-8")
+    )
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_EVAL_REWARD_VARIANTS)
+    return baseline
+
+
+def _issue_6484_eval_reward_variants_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one intervention variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_EVAL_REWARD_VARIANTS)
+def test_issue_6484_eval_reward_variants_resolve_to_prechange_values(variant: str) -> None:
+    """Each inherited intervention variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / variant).resolve()
+    baseline = _issue_6484_eval_reward_variants_baseline()
+
+    assert _issue_6484_eval_reward_variants_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 22
+    assert config.total_timesteps == 10_000_000
+    assert config.evaluation.step_schedule == ((None, 524288),)
+
+
+def test_issue_6484_eval_reward_variants_keep_interventions_explicit() -> None:
+    """The existing base owns common values while each intervention stays visible."""
+    base_path = (
+        _ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME
+    ).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+    assert "base_config" not in base_yaml
+
+    common_keys = {
+        "base_config",
+        "policy_id",
+        "scenario_config",
+        "num_envs",
+        "total_timesteps",
+        "scenario_sampling",
+        "evaluation",
+        "tracking",
+    }
+    expected_keys = {
+        _ISSUE_6484_EVAL_REWARD_VARIANTS[0]: common_keys | {"env_overrides"},
+        _ISSUE_6484_EVAL_REWARD_VARIANTS[1]: common_keys | {"env_factory_kwargs"},
+    }
+    for variant in _ISSUE_6484_EVAL_REWARD_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_EVAL_REWARD_VARIANTS_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+        assert set(variant_yaml["evaluation"]) == {"step_schedule"}
+        assert set(variant_yaml["tracking"]) == {"wandb"}
+        assert set(variant_yaml["tracking"]["wandb"]) == {"job_type", "tags"}
+
+
+def test_issue_6484_eval_reward_variants_preserve_distinct_interventions() -> None:
+    """Foresight and reward-strength overrides retain their intended semantics."""
+    no_foresight = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS[0]).resolve()
+    )
+    reward_strong = _load_expert_training_config_mapping(
+        (_ISSUE_6484_EVAL_REWARD_VARIANTS_DIR / _ISSUE_6484_EVAL_REWARD_VARIANTS[1]).resolve()
+    )
+
+    assert no_foresight["env_overrides"]["predictive_foresight_enabled"] is False
+    assert reward_strong["env_overrides"]["predictive_foresight_enabled"] is True
+    assert no_foresight["env_factory_kwargs"]["reward_kwargs"]["weights"]["progress"] == 1.1
+    assert reward_strong["env_factory_kwargs"]["reward_kwargs"]["weights"]["progress"] == 1.5
+    assert (
+        no_foresight["env_factory_kwargs"]["reward_curriculum"]["stages"][1]["reward_kwargs"][
+            "weights"
+        ]["terminal_bonus"]
+        == 20.0
+    )
+    assert (
+        reward_strong["env_factory_kwargs"]["reward_curriculum"]["stages"][1]["reward_kwargs"][
+            "weights"
+        ]["terminal_bonus"]
+        == 30.0
+    )
+    assert (
+        no_foresight["tracking"]["wandb"]["job_type"]
+        != reward_strong["tracking"]["wandb"]["job_type"]
+    )
+    assert no_foresight["tracking"]["wandb"]["tags"] != reward_strong["tracking"]["wandb"]["tags"]
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.

@@ -448,6 +448,10 @@ same-repository `Closes`, `Fixes`, or `Resolves` reference; ordinary mentions an
 do not supersede the route. Its integration path uses ordinary Git merges and never resets or
 deletes local worktrees. The capture command accepts either a bare base branch such as `main` or
 the equivalent remote-qualified form such as `origin/main` when `--remote origin` is used.
+The required `--repo` value accepts `OWNER/REPO` (for example, `ll7/robot_sf_ll7`) or a local
+checkout path; a local path is resolved through the named Git remote and the normalized repository
+slug is stored in the snapshot. A checkout without a usable GitHub remote fails before remote-state
+collection, so pass the explicit repository slug in that case.
 For repositories whose merged-PR history exceeds the default REST page budget, pass
 `--max-pr-pages <positive-integer>` to `capture`; a later `check` or `sync` reuses that recorded
 budget unless it receives an explicit override. Truncated inventories still block publication.

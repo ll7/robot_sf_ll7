@@ -3716,6 +3716,112 @@ def test_issue_6484_stage1_preserves_intervention_specific_overrides() -> None:
     assert asymmetric["policy_id"] != attention["policy_id"] != reward["policy_id"]
 
 
+# Issue #6484: the ordinary issue-791 32k follow-up family chains on the
+# Stage-1 base while keeping intervention and W&B attribution explicit.
+_ISSUE_6484_FOLLOWUP_32K_DIR = Path("configs/training/ppo/ablations")
+_ISSUE_6484_FOLLOWUP_32K_BASE_NAME = "expert_ppo_issue_791_followup_32k_base.yaml"
+_ISSUE_6484_FOLLOWUP_32K_STAGE1_BASE_NAME = "expert_ppo_issue_791_stage1_base.yaml"
+_ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_followup_32k_resolved.json"
+)
+_ISSUE_6484_FOLLOWUP_32K_VARIANTS = [
+    "expert_ppo_issue_791_asymmetric_critic_followup_32k.yaml",
+    "expert_ppo_issue_791_attention_head_followup_32k.yaml",
+    "expert_ppo_issue_791_reward_curriculum_followup_32k.yaml",
+]
+
+
+def _issue_6484_followup_32k_baseline() -> dict:
+    """Load and integrity-check the frozen 32k follow-up baseline."""
+    assert _ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH.exists(), (
+        "Pre-change 32k follow-up baseline missing; re-run capture before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_FOLLOWUP_32K_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_FOLLOWUP_32K_VARIANTS)
+    return baseline
+
+
+def _issue_6484_followup_32k_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for one 32k variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_FOLLOWUP_32K_VARIANTS)
+def test_issue_6484_followup_32k_resolves_to_prechange_values(variant: str) -> None:
+    """Each inherited 32k variant matches its frozen pre-refactor mapping."""
+    path = (_ISSUE_6484_FOLLOWUP_32K_DIR / variant).resolve()
+    baseline = _issue_6484_followup_32k_baseline()
+
+    assert _issue_6484_followup_32k_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config {variant} differs from the baseline at {baseline['source_revision']}."
+    )
+    config = load_expert_training_config(path)
+    assert config.policy_id
+    assert config.num_envs == 2
+    assert config.total_timesteps == 32768
+    assert config.evaluation.step_schedule == ((None, 8192),)
+    assert config.tracking["wandb"]["enabled"] is True
+
+
+def test_issue_6484_followup_32k_base_keeps_shared_stack_and_identity_explicit() -> None:
+    """The chained base owns shared settings while variants own identity."""
+    base_path = (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert base_yaml == {
+        "base_config": _ISSUE_6484_FOLLOWUP_32K_STAGE1_BASE_NAME,
+        "total_timesteps": 32768,
+        "tracking": {
+            "tensorboard": False,
+            "wandb": {"enabled": True, "project": "robot_sf"},
+        },
+    }
+    common_keys = {"base_config", "policy_id", "scenario_config", "num_envs", "tracking"}
+    expected_keys = {
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[0]: common_keys | {"env_factory_kwargs"},
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[1]: common_keys
+        | {"env_factory_kwargs", "feature_extractor_kwargs"},
+        _ISSUE_6484_FOLLOWUP_32K_VARIANTS[2]: common_keys,
+    }
+    for variant in _ISSUE_6484_FOLLOWUP_32K_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_FOLLOWUP_32K_DIR / variant).read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_FOLLOWUP_32K_BASE_NAME
+        assert set(variant_yaml) == expected_keys[variant]
+
+
+def test_issue_6484_followup_32k_preserves_intervention_and_tracking_overrides() -> None:
+    """The three intervention and W&B identities remain explicit."""
+    asymmetric = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[0]).resolve()
+    )
+    attention = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[1]).resolve()
+    )
+    reward = _load_expert_training_config_mapping(
+        (_ISSUE_6484_FOLLOWUP_32K_DIR / _ISSUE_6484_FOLLOWUP_32K_VARIANTS[2]).resolve()
+    )
+
+    assert asymmetric["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert attention["env_factory_kwargs"]["asymmetric_critic"] is True
+    assert "asymmetric_critic" not in reward["env_factory_kwargs"]
+    assert attention["feature_extractor_kwargs"]["use_pedestrian_attention"] is True
+    assert attention["feature_extractor_kwargs"]["attn_d_model"] == 64
+    assert "use_pedestrian_attention" not in reward["feature_extractor_kwargs"]
+    assert {m["tracking"]["wandb"]["group"] for m in (asymmetric, attention, reward)} == {
+        "issue-791-asymmetric-critic",
+        "issue-791-attention-head",
+        "issue-791-reward-curriculum",
+    }
+    assert {m["tracking"]["wandb"]["job_type"] for m in (asymmetric, attention, reward)} == {
+        "expert-ppo-32k-followup"
+    }
+
+
 # Issue #6484: the issue-1024 h500 schedule retrain variants share one base
 # config. The constants below pin the family and its frozen pre-change
 # resolved-config fingerprints.

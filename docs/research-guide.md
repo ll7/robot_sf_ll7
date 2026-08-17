@@ -22,6 +22,9 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 
 - [Benchmark Runner And Metrics](./benchmark.md) — episode schema, aggregation, metrics suite
   (collisions, comfort exposure, SNQI), and validation hooks.
+- [Prediction, Planning, and Runtime-Safety Diagnostic](./prediction_planning_safety_diagnostic.md)
+  — fixture-only `prediction_planning_safety.v1` trace contract, split coverage, event accounting,
+  and claim boundary for issue #7317.
 - [Benchmark Spec](./benchmark_spec.md) — formal benchmark specification.
 - [Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md) — formal metric
   definitions, including per-pedestrian force quantiles.

@@ -20,7 +20,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
-from scripts.dev.pr_loop_policy import BASE_POLICY_RE, GATE_VERDICT_RE
+from scripts.dev.pr_loop_policy import BASE_POLICY_RE, CHANGED_COVERAGE_RE, GATE_VERDICT_RE
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -839,6 +839,63 @@ def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(verdicts))
 
 
+def _parse_explicit_changed_coverage_verdict(item: Any) -> str | None:
+    """Normalize one explicit changed-coverage verdict record to trailer text."""
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return None
+    verdict = str(item.get("verdict", "")).lower()
+    sha = str(item.get("sha") or item.get("head_sha") or "")
+    reason = str(item.get("reason") or "")
+    if verdict not in {"passed", "not-required"} or not sha:
+        return None
+    trailer = f"changed-coverage: {verdict} @ {sha}"
+    if reason:
+        trailer += f" reason={reason}"
+    return trailer
+
+
+def _extract_changed_coverage_trailers_from_bodies(items: Any) -> list[str]:
+    """Extract trusted changed-coverage trailers before compact-body truncation."""
+    trailers: list[str] = []
+    if not isinstance(items, list):
+        return trailers
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        association = str(entry.get("authorAssociation", "")).upper()
+        if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+            continue
+        body = entry.get("body")
+        if not isinstance(body, str) or not body:
+            continue
+        for match in CHANGED_COVERAGE_RE.finditer(body):
+            verdict, sha, reason = match.groups()
+            trailer = f"changed-coverage: {verdict.lower()} @ {sha}"
+            if reason:
+                trailer += f" reason={reason.lower()}"
+            trailers.append(trailer)
+    return trailers
+
+
+def _extract_changed_coverage_verdicts(pr: dict[str, Any]) -> list[str]:
+    """Extract trusted exact-head changed-coverage proof from a raw PR payload."""
+    verdicts: list[str] = []
+    existing_list = pr.get("changed_coverage_verdicts")
+    if isinstance(existing_list, list):
+        for item in existing_list:
+            parsed = _parse_explicit_changed_coverage_verdict(item)
+            if parsed:
+                verdicts.append(parsed)
+    parsed_single = _parse_explicit_changed_coverage_verdict(pr.get("changed_coverage_verdict"))
+    if parsed_single:
+        verdicts.append(parsed_single)
+    verdicts.extend(_extract_changed_coverage_trailers_from_bodies(pr.get("reviews")))
+    verdicts.extend(_extract_changed_coverage_trailers_from_bodies(pr.get("comments")))
+    return list(dict.fromkeys(verdicts))
+
+
 def _extract_base_policies(pr: dict[str, Any]) -> list[str]:
     """Extract trusted exact-head base-policy selectors from reviews/comments."""
     policies: list[str] = []
@@ -956,6 +1013,12 @@ def _pr_payload_from_dict(
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        # Every merge-admission snapshot requires an exact-head local changed-line
+        # coverage verdict, or a machine-readable not-required exception. The
+        # final gate remains authoritative; this field lets the queue policy
+        # stop before a PR reaches merge-ready routing.
+        "changed_coverage_required": True,
+        "changed_coverage_verdicts": _extract_changed_coverage_verdicts(pr),
         "base_policy": _extract_base_policies(pr),
         "metadata_digest": metadata_digest_value,
         "metadata_verdicts": metadata_verdicts,

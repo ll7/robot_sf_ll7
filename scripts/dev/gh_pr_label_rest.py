@@ -30,95 +30,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from typing import Any
 
+from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
+from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
+from scripts.dev._gh_rest import gh_api_post as _gh_api_post
+from scripts.dev._gh_rest import subprocess  # noqa: F401
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
-
-
-def _gh_api_post(
-    path: str, payload: dict[str, object], *, timeout: int = 30
-) -> subprocess.CompletedProcess[str]:
-    """POST *path* through ``gh api``, returning failures for clear handling."""
-    args = ["gh", "api", "--method", "POST", path, "--input", "-"]
-    try:
-        return subprocess.run(
-            args,
-            input=json.dumps(payload),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; label update was not verified",
-        )
-
-
-def _gh_api_delete(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """DELETE *path* through ``gh api``, returning failures for clear handling."""
-    args = ["gh", "api", "--method", "DELETE", path]
-    try:
-        return subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; label update was not verified",
-        )
-
-
-def _gh_api_get(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """GET *path* through ``gh api`` for reading current label state."""
-    args = ["gh", "api", path]
-    try:
-        return subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; could not read labels",
-        )
 
 
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:

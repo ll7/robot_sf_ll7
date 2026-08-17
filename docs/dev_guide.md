@@ -530,8 +530,12 @@ before the queue auto-merges a PR:
   `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`) authored by a repository owner,
   member, or collaborator; verdict-like text from an untrusted contributor is ignored. The metadata
   digest is computed from the live title/body through the REST-backed snapshot and stale or missing
-  metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested
-  reviewers. The current source-head CI rollup
+  metadata evidence fails closed. The gate also requires a current exact-head changed-line coverage
+  verdict: `changed-coverage: passed @ <head_sha>`. Docs-only or another explicitly non-runtime
+  change may use `changed-coverage: not-required @ <head_sha> reason=<code>`; the reason is mandatory
+  and the verdict is still bound to the exact reviewed head. Missing, stale, malformed, or
+  conflicting coverage evidence fails closed. The gate also requires no unresolved actionable
+  review threads and no outstanding explicitly requested reviewers. The current source-head CI rollup
   must also remain green; superseded check runs are discarded with the same helper used by the
   guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
   waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
@@ -543,9 +547,9 @@ before the queue auto-merges a PR:
   queue (the queue base SHA equals current `main`).
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
-  SHA, label set, metadata digest and metadata-verdict status, gate-verdict status, staleness
-  verdict, CI conclusion, and reviewer-thread resolution plus requested-reviewer status, so every
-  merge decision is inspectable and reproducible.
+  SHA, label set, metadata and changed-coverage verdict status/reason, gate-verdict status,
+  staleness verdict, CI conclusion, and reviewer-thread resolution plus requested-reviewer status,
+  so every merge decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 
@@ -564,6 +568,17 @@ Until these toggles are applied, the workflow does not provide the queue-side co
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
+
+**Changed-line coverage admission (issue #7293).** The authoritative changed-line proof for merge
+admission is the exact-head verdict in trusted review/comment evidence, produced only after the
+local `PR_READY_MODE=final` readiness run has completed its `check_changed_coverage.sh` gate. The
+hosted `coverage-gate` remains the absolute-coverage floor and currently runs on non-PR events;
+its skipped result on a pull request is not changed-line proof. The merge-queue gate therefore
+requires the local exact-head verdict (or a machine-readable `not-required` exception) and rejects
+stale evidence after a later commit. A reviewer must post the changed-coverage trailer alongside
+`gate-verdict` and the reconciled metadata digest, then apply `merge-ready`; the native queue
+rechecks that evidence on the prospective merge head. This keeps local readiness, the hosted
+coverage floor, and queue admission as distinct, inspectable contracts.
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for

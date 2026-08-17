@@ -62,6 +62,7 @@ fixed_factors:
 
 preflight:
   entrypoint: scripts/tools/run_camera_ready_benchmark.py
+  submission_preflight_entrypoint: scripts/benchmark/run_radius_sweep_admission_preflight_issue_7198.sh
   mode: preflight
   checkpoint_preflight_mode: enforced_staged
   submit_safe_checkpoint_mode: enforced_staged
@@ -83,9 +84,7 @@ private_ops:
   submission_config: configs/benchmarks/issue_7198_radius_sweep_admission_v1.yaml
   submission_script: /home/luttkule/git/robot_sf_ll7-private-ops/auxme/SLURM/issue_6642_radius_sweep.sl
   named_preflight_command: >-
-    UV_NO_SYNC=1 .venv/bin/python scripts/benchmark/prepare_radius_sweep_admission_issue_7198.py
-    --packet-config configs/benchmarks/issue_7198_radius_sweep_admission_v1.yaml
-    --out output/issue_7198_radius_sweep_admission
+    bash scripts/benchmark/run_radius_sweep_admission_preflight_issue_7198.sh
   artifact_contract: >-
     admission_packet.json,input_checksums.json,gate1_current_canary.json,
     arm_preflight_validate_config.json,arm_preflight_checkpoint_receipt.json,

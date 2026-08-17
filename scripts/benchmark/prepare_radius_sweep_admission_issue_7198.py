@@ -878,6 +878,7 @@ def prepare_packet(  # noqa: PLR0915
         [
             "scripts/benchmark/run_radius_binding_canary_issue_6641.py",
             "scripts/benchmark/build_radius_sweep_manifest_issue_6642.py",
+            "scripts/benchmark/run_radius_sweep_admission_preflight_issue_7198.sh",
             "scripts/tools/run_camera_ready_benchmark.py",
             "robot_sf/benchmark/radius_sweep_manifest.py",
         ]

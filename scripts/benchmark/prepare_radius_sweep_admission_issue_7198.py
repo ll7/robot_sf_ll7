@@ -603,7 +603,7 @@ def _parse_queue_summary(text: str) -> dict[str, Any]:
 def _parse_route_output(text: str) -> dict[str, Any]:
     selected = re.search(r"^\s+selected:\s*(\S+)\s*$", text, re.MULTILINE)
     elapsed = re.search(r"^\s+- estimated elapsed\s+(\d+)s\s*$", text, re.MULTILINE)
-    score = re.search(r"^\s+- score\s+([0-9.]+)\s*$", text, re.MULTILINE)
+    score = re.search(r"^\s+- score\s+(-?[0-9]+(?:\.[0-9]+)?)\s*$", text, re.MULTILINE)
     selected_route = selected.group(1) if selected else None
     partition = None
     sbatch_args = None
@@ -772,10 +772,12 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
             }
         )
         snapshot["route"] = route
-        if result["returncode"] not in (0, 2):
+        if result["returncode"] != 0:
             blockers.append("private-ops route evaluation failed")
         if not route.get("selected_route"):
             blockers.append("private-ops route evaluation did not select a route")
+        if route.get("partition") is None or route.get("score") is None:
+            blockers.append("private-ops route evidence did not include a valid selected route score/partition")
         if not route["live_capacity_checked"]:
             blockers.append(
                 "private-ops route evidence is static; live capacity remains unverified"
@@ -815,7 +817,7 @@ def _submission_command(
         "--estimated-elapsed-sec",
         str(route.get("estimated_elapsed_sec") or packet_config["resources"].get("estimated_elapsed_sec", "<elapsed-sec>")),
         "--routing-score",
-        str(route.get("score") or "<routing-score>"),
+        str(route["score"] if route.get("score") is not None else "<routing-score>"),
         "--job-name",
         str(private_cfg.get("job_name", "<job-name>")),
         "--campaign",

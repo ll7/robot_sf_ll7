@@ -273,6 +273,20 @@ def test_route_parser_preserves_static_estimate() -> None:
     }
 
 
+def test_route_parser_accepts_negative_fallback_score() -> None:
+    """Verify a fallback route's negative score remains observable for fail-closed admission."""
+    route = _parse_route_output(
+        "   selected: licca:test\n"
+        " - estimated elapsed 43200s\n"
+        " - score -10065.69\n"
+        "1\tlicca:test\tlicca\ttest\t-10065.69\t43200\t40\t0\t155\tnot_allowed_for_job_class\t--partition=test\n"
+    )
+
+    assert route["selected_route"] == "licca:test"
+    assert route["partition"] == "test"
+    assert route["score"] == -10065.69
+
+
 def test_preflight_command_is_check_only_and_zero_episode() -> None:
     """Verify the recorded arm command uses preflight mode and skips production output."""
     command = _preflight_command(

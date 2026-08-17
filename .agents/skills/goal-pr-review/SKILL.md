@@ -227,6 +227,15 @@ helper is route evidence only and does not perform GitHub-visible writes.
    selector evidence remains blocked.
 6. Re-query unresolved review threads after push, metadata reconciliation, and verification before resolving anything, especially
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
+
+For an explicitly stacked PR set, capture `scripts/dev/stacked_prs.py status --prs <root> <tip>
+--json` before applying review labels. Use its root-to-tip base alignment and exact-head fields as
+the review snapshot; use `retarget` or `sync` only from a clean worktree and only with the expected
+heads recorded from that snapshot. After any base retarget, push, merge, or GitHub automatic base
+advance, rerun the affected PR's focused validation, metadata reconciliation, review evidence, and
+thread snapshot. A child PR is not merge-ready merely because its parent merged: the stacked helper
+stops after advancing the child until fresh CI and exact-head evidence are current.
+
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
 8. After the full proof bar closes, reconcile the final title/body one more time and compute its

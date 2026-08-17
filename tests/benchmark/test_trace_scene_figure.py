@@ -32,6 +32,7 @@ from robot_sf.benchmark.trace_scene_figure import (
     _focused_pedestrian_tracks,
     _pedestrian_styles,
     _snap_marker_indices,
+    _wrap_overwide_label,
     load_episode,
     render_comparison,
     render_scene,
@@ -319,10 +320,10 @@ def test_real_scene_and_comparison_have_no_hard_qa_defects(tmp_path: Path) -> No
         plt.close(comparison_figure)
 
 
-def test_timeline_reference_labels_do_not_overlap_data_lines(
+def test_proxemic_reference_lines_are_named_in_the_figure_key(
     synthetic_episode: EpisodeTrace, tmp_path: Path
 ) -> None:
-    """Reference labels must be placed clear of ordinary timeline data lines."""
+    """Reference lines are named in the key, never annotated over the timeline curves."""
 
     _, figure = render_scene(
         synthetic_episode,
@@ -330,6 +331,15 @@ def test_timeline_reference_labels_do_not_overlap_data_lines(
         return_figure=True,
     )
     try:
+        key_entries = [text.get_text() for legend in figure.legends for text in legend.get_texts()]
+        assert any(entry.startswith("collision envelope") for entry in key_entries), key_entries
+        assert any(entry.startswith("personal space") for entry in key_entries), key_entries
+        timeline_label_texts = [
+            text.get_text()
+            for text in figure.axes[1].texts
+            if text.get_visible() and text.get_text().strip()
+        ]
+        assert timeline_label_texts == []
         hard_reference_overlaps = [
             defect
             for defect in lint_figure(figure)
@@ -340,6 +350,84 @@ def test_timeline_reference_labels_do_not_overlap_data_lines(
         assert not hard_reference_overlaps, [defect.message for defect in hard_reference_overlaps]
     finally:
         plt.close(figure)
+
+
+def test_scene_labels_use_a_halo_box_instead_of_glyph_path_effects(
+    synthetic_episode: EpisodeTrace, tmp_path: Path
+) -> None:
+    """Halos are drawn as boxes: a glyph-stroke path effect would outline the text.
+
+    Matplotlib's vector backends emit path-effect text as filled glyph outlines, which
+    no PDF text extractor can read back, so the halo must stay a patch behind the text.
+    """
+
+    _, figure = render_scene(
+        synthetic_episode,
+        tmp_path / "halo.pdf",
+        return_figure=True,
+    )
+    try:
+        annotations = [
+            text for text in figure.axes[0].texts if text.get_visible() and text.get_text().strip()
+        ]
+        assert annotations
+        for text in annotations:
+            assert not text.get_path_effects(), text.get_text()
+            assert text.get_bbox_patch() is not None, text.get_text()
+    finally:
+        plt.close(figure)
+
+
+def test_rendered_pdf_labels_are_extractable_text_spans(
+    synthetic_episode: EpisodeTrace, tmp_path: Path
+) -> None:
+    """Every visible annotation must come back out of the saved PDF as searchable text."""
+
+    pymupdf = pytest.importorskip("pymupdf", reason="PDF text extraction needs PyMuPDF")
+    output, figure = render_scene(
+        synthetic_episode,
+        tmp_path / "spans.pdf",
+        return_figure=True,
+    )
+    try:
+        expected = {
+            " ".join(text.get_text().split())
+            for text in figure.findobj(Text)
+            if text.get_visible()
+            and text.get_text().strip()
+            and str(text.get_gid() or "").startswith("trace-scene")
+        }
+    finally:
+        plt.close(figure)
+
+    with pymupdf.open(output) as document:
+        extracted = " ".join(page.get_text() for page in document)
+    normalized = " ".join(extracted.split())
+
+    assert normalized
+    missing = sorted(label for label in expected if label not in normalized)
+    assert not missing, missing
+
+
+def test_overwide_label_is_wrapped_at_its_middle_space() -> None:
+    """A label wider than its panel is broken in two rather than spilling out of it."""
+
+    figure, ax = plt.subplots(figsize=(6, 3))
+    text = ax.text(0.5, 0.5, "d_min = 1.55 m")
+    figure.canvas.draw()
+    renderer = figure.canvas.get_renderer()
+    width = text.get_window_extent(renderer).width
+
+    _wrap_overwide_label(text, renderer, width + 1.0)
+    assert text.get_text() == "d_min = 1.55 m"
+
+    _wrap_overwide_label(text, renderer, width / 2.0)
+    assert text.get_text() == "d_min =\n1.55 m"
+
+    unbreakable = ax.text(0.5, 0.2, "d_min")
+    _wrap_overwide_label(unbreakable, renderer, 1.0)
+    assert unbreakable.get_text() == "d_min"
+    plt.close(figure)
 
 
 def test_scene_trajectory_is_visibly_gapped_behind_annotation() -> None:

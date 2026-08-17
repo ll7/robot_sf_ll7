@@ -92,6 +92,16 @@ class _BatchOnlyFastPysfWrapper:
         self.calls.append(points_arr.copy())
         return points_arr + np.array([10.0, 20.0])
 
+    def diagnostics(self) -> dict[str, object]:
+        """Return deterministic test diagnostics."""
+        return {
+            "planner_type": "_BatchOnlyFastPysfWrapper",
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        }
+
 
 def test_load_baseline_planner_covers_import_and_config_branches(
     tmp_path: Path,

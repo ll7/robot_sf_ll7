@@ -449,7 +449,10 @@ uv run python scripts/dev/stacked_prs.py status \
 The status record reports each head/base ref and SHA, current check-run conclusions (older
 superseded runs are excluded), review digest, requested reviewers, review-thread resolution,
 exact-head verdict, final PR metadata digest, and whether the current stack alignment is
-merge-ready. Unknown review-thread state is never treated as green.
+merge-ready. Review, review-comment, conversation-comment, and check-run collections are read
+through bounded REST pagination and include page/row provenance in the `pagination` field. A full
+page at the configured budget is reported as possibly truncated and fails closed; malformed pages
+also fail closed. Unknown review-thread state is never treated as green.
 
 To align a stack, preview the desired root `-> main` and child `-> parent-source-branch` changes,
 then apply them only with the exact heads captured from the same snapshot:

@@ -360,6 +360,276 @@ def test_build_open_pr_command_uses_no_closing_issues_references_field() -> None
     assert "closingIssuesReferences" not in command
 
 
+def test_build_open_pr_rest_command_is_bounded_and_page_aware() -> None:
+    command = issue_claim.build_open_pr_rest_command(repo="ll7/robot_sf_ll7")
+
+    assert command == [
+        "gh",
+        "api",
+        "repos/ll7/robot_sf_ll7/pulls?state=open&per_page=100&page=1",
+        "--jq",
+        "[.[] | {number,body,title}]",
+    ]
+
+
+def test_build_all_pr_rest_command_normalizes_lifecycle_state() -> None:
+    command = issue_claim.build_all_pr_rest_command(repo="ll7/robot_sf_ll7")
+
+    assert command == [
+        "gh",
+        "api",
+        "repos/ll7/robot_sf_ll7/pulls?state=all&per_page=100&page=1",
+        "--jq",
+        (
+            '[.[] | {number,body,title,state:(if .merged_at then "MERGED" '
+            'elif .state == "open" then "OPEN" else "CLOSED" end)}]'
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "builder",
+    [issue_claim.build_open_pr_rest_command, issue_claim.build_all_pr_rest_command],
+)
+def test_build_rest_pr_command_rejects_non_positive_page(builder) -> None:
+    with pytest.raises(ValueError, match="page must be positive"):
+        builder(repo="ll7/robot_sf_ll7", page=0)
+
+
+def test_open_pr_snapshot_decodes_multiple_rest_pages() -> None:
+    result = issue_claim.CommandResult(
+        command=("gh", "api"),
+        returncode=0,
+        stdout=(
+            '[{"number":456,"body":"Refs #123","title":"first"}]\n'
+            '[{"number":789,"body":"Closes #123","title":"second"}]\n'
+        ),
+        stderr="",
+    )
+
+    payload = issue_claim._open_prs_covering_issue(result, issue_number=123)
+
+    assert payload["ok"] is True
+    assert payload["covering_prs"] == [456, 789]
+
+
+def test_open_pr_coverage_uses_rest_after_graphql_quota_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["gh", "pr"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout='[{"number":456,"body":"Refs #123","title":"feature work"}]',
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._open_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is True
+    assert payload["covering_prs"] == [456]
+    assert payload["source"] == "rest_fallback"
+    assert len(calls) == 2
+    assert calls[1][0:2] == ["gh", "api"]
+    assert "page=1" in calls[1][2]
+
+
+def test_open_pr_coverage_retains_malformed_rest_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["gh", "pr"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="not json", stderr=""
+            )
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._open_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is False
+    assert payload["source"] == "rest_fallback"
+    assert payload["covering_prs"] == []
+    assert len(calls) == 2
+
+
+def test_open_pr_coverage_retains_failed_rest_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["gh", "pr"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=1, stdout="", stderr="REST unavailable"
+            )
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._open_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is False
+    assert payload["source"] == "rest_fallback"
+    assert "REST unavailable" in payload["error"]
+    assert len(calls) == 2
+
+
+def test_open_pr_coverage_marks_bounded_rest_fallback_truncated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["gh", "pr"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            page = int(command[2].rsplit("=", maxsplit=1)[1])
+            rows = [
+                {"number": page * issue_claim.PR_REST_PAGE_SIZE + offset, "body": "", "title": ""}
+                for offset in range(issue_claim.PR_REST_PAGE_SIZE)
+            ]
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout=json.dumps(rows), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._open_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is True
+    assert payload["covering_prs"] == []
+    assert payload["truncated"] is True
+    assert payload["source"] == "rest_fallback"
+    assert len(calls) == 1 + issue_claim.PR_SNAPSHOT_LIMIT // issue_claim.PR_REST_PAGE_SIZE
+
+
+def test_open_pr_coverage_does_not_fallback_for_unknown_graphql_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        return issue_claim.CommandResult(
+            command=tuple(command),
+            returncode=1,
+            stdout="",
+            stderr="GraphQL: permission denied",
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._open_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is False
+    assert payload["source"] == "graphql"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "GraphQL: Field 'closingIssuesReferences' doesn't exist on type 'PullRequest'",
+        "GraphQL: Field 'closingIssuesReferences' is unsupported",
+    ],
+)
+def test_graphql_retired_field_errors_are_rest_fallback_eligible(error: str) -> None:
+    result = issue_claim.CommandResult(
+        command=("gh", "pr", "list"), returncode=1, stdout="", stderr=error
+    )
+
+    assert issue_claim._is_graphql_rest_fallback_error(result) is True
+
+
+def test_all_pr_coverage_uses_rest_after_graphql_quota_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["gh", "pr"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout=('[{"number":456,"body":"Fixes #123","title":"feature","state":"MERGED"}]'),
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {command!r}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim._all_prs_covering_issue_with_fallback(
+        repo="ll7/robot_sf_ll7", issue_number=123
+    )
+
+    assert payload["ok"] is True
+    assert payload["open_prs"] == []
+    assert payload["terminal_prs"] == [456]
+    assert payload["source"] == "rest_fallback"
+    assert len(calls) == 2
+    assert calls[1][0:2] == ["gh", "api"]
+    assert "page=1" in calls[1][2]
+
+
 def test_main_returns_failure_when_acquire_push_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """A rejected GitHub create-ref call should make the acquire command fail closed."""
     calls: list[list[str]] = []
@@ -695,6 +965,45 @@ def test_release_permits_when_open_prs_exist_but_none_cover_issue(
     assert payload["ok"] is True
     assert payload["claimed"] is False
     assert payload["covering_prs"] == []
+
+
+def test_release_reports_rest_fallback_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: API rate limit already exceeded",
+            )
+        if command[0:2] == ["gh", "api"]:
+            return issue_claim.CommandResult(
+                command=tuple(command), returncode=0, stdout="[]", stderr=""
+            )
+        return issue_claim.CommandResult(
+            command=tuple(command), returncode=0, stdout="deleted\n", stderr=""
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is True
+    assert payload["coverage_source"] == "rest_fallback"
+    assert "GraphQL: API rate limit" in payload["coverage_fallback_reason"]
+    assert any(command[0:2] == ["gh", "api"] for command in calls)
 
 
 def test_open_pr_snapshot_nonzero_returncode_fails_closed() -> None:

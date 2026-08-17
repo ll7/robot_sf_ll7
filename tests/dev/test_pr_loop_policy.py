@@ -11,6 +11,8 @@ import pytest
 
 from scripts.dev.pr_loop_policy import (
     GATE_VERDICT_MIN_SHA_OVERLAP,
+    VALID_ACTIONS,
+    VALID_STATES,
     PolicyDecision,
     _accepted_gate_verdict_shas,
     _review_state,
@@ -231,6 +233,79 @@ def test_classify_failed_ci() -> None:
     assert classify_pr_state(pr) == "failed_ci"
 
 
+def test_failed_ci_snapshot_preflight_remains_diagnosable() -> None:
+    """The snapshot's generic blocked envelope must not hide a concrete CI failure."""
+    pr = _pr(101, overall="failure")
+    pr["preflight"] = {"status": "blocked", "reasons": ["ci_checks_failed"]}
+
+    assert classify_pr_state(pr) == "failed_ci"
+
+
+def test_failed_ci_producer_preflight_remains_diagnosable() -> None:
+    """Nested stale preflight evidence must not hide a concrete CI failure."""
+    pr = _pr(101, overall="failure", head_sha=FULL_SHA)
+    pr["preflight"] = {
+        "status": "stale",
+        "reasons": ["head_sha_mismatch"],
+        "expected_head_sha": "b" * 40,
+        "head_sha": FULL_SHA,
+        "head_sha_matches_expected": False,
+    }
+
+    assert classify_pr_state(pr) == "failed_ci"
+
+
+def test_classify_green_producer_stale_preflight_never_reaches_readiness() -> None:
+    """Producer-shaped stale head evidence must block a green merge-ready PR."""
+    pr = _pr(
+        102,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["preflight"] = {
+        "status": "stale",
+        "reasons": ["head_sha_mismatch"],
+        "expected_head_sha": "b" * 40,
+        "head_sha": FULL_SHA,
+        "head_sha_matches_expected": False,
+    }
+
+    assert classify_pr_state(pr) == "stale_worktree"
+
+
+def test_classify_pending_producer_stale_preflight_precedes_pending_ci() -> None:
+    """Producer-shaped stale head evidence must precede a pending-CI wait."""
+    pr = _pr(103, overall="pending", head_sha=FULL_SHA)
+    pr["preflight"] = {
+        "status": "stale",
+        "reasons": ["head_sha_mismatch"],
+        "expected_head_sha": "b" * 40,
+        "head_sha": FULL_SHA,
+        "head_sha_matches_expected": False,
+    }
+
+    assert classify_pr_state(pr) == "stale_worktree"
+
+
+def test_classify_pending_explicit_blocked_preflight_precedes_pending_ci() -> None:
+    """An explicit producer blocker must precede a pending-CI wait."""
+    pr = _pr(104, overall="pending")
+    pr["preflight"] = {
+        "status": "blocked",
+        "reasons": ["explicit_blocked:state:blocked"],
+        "blocked_state": {
+            "status": "blocked",
+            "labels": ["state:blocked"],
+            "reasons": ["explicit_blocked:state:blocked"],
+            "next_owner_or_gate": "blocker_owner_or_maintainer",
+        },
+    }
+
+    assert classify_pr_state(pr) == "blocked_preflight"
+
+
 def test_classify_stale_worktree() -> None:
     """Head SHA mismatch should classify as stale_worktree."""
     pr = _pr(102, head_sha="new-sha", expected_head_sha="old-sha")
@@ -270,6 +345,123 @@ def test_classify_unknown_review_threads_blocks_merge_ready() -> None:
     decision = recommend_action("unknown_review_threads", pr_number=105, actions_remaining=3)
     assert decision.action == "await_review_threads"
     assert decision.flow_decision == "continue"
+
+
+def test_rest_quota_snapshot_waits_for_review_threads() -> None:
+    """A producer-shaped REST quota row must use the documented bounded wait action."""
+    pr = _pr(
+        7195,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["preflight"] = {
+        "status": "blocked",
+        "reasons": ["review_threads_unknown_graphql_quota"],
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+    }
+    pr["review_threads"] = "unknown_graphql_quota"
+    pr["review_threads_admission"] = "fail_closed_unknown"
+    pr["review_thread_snapshot"] = {"status": "unknown_graphql_quota"}
+
+    assert classify_pr_state(pr) == "unknown_review_threads"
+    decision = recommend_action("unknown_review_threads", pr_number=7195, actions_remaining=3)
+    assert decision.action == "await_review_threads"
+    assert decision.action in VALID_ACTIONS
+
+
+def test_nested_incomplete_review_thread_snapshot_never_classifies_ready() -> None:
+    """Nested quota/error evidence must fail closed even without promoted fields."""
+    expected_by_status = {
+        "unknown_graphql_quota": "unknown_review_threads",
+        "error": "blocked_preflight",
+    }
+    for nested_status, expected_state in expected_by_status.items():
+        pr = _pr(
+            7196,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        )
+        pr["review_thread_snapshot"] = {"status": nested_status}
+
+        assert classify_pr_state(pr) == expected_state
+
+
+def test_generic_blocked_preflight_remains_generic() -> None:
+    """An unrelated preflight blocker must not masquerade as quota exhaustion."""
+    pr = _pr(7198, overall="success")
+    pr["preflight"] = {"status": "blocked", "reasons": ["missing_authority"]}
+
+    assert classify_pr_state(pr) == "blocked_preflight"
+
+
+def test_explicit_owner_block_precedes_quota_wait() -> None:
+    """An explicit owner gate must remain stronger than temporary quota evidence."""
+    pr = _pr(7199, overall="success")
+    pr["preflight"] = {
+        "status": "blocked",
+        "blocked_state": {
+            "status": "blocked",
+            "labels": ["state:blocked"],
+            "reasons": ["explicit_blocked:state:blocked"],
+            "next_owner_or_gate": "blocker_owner_or_maintainer",
+        },
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+    }
+
+    assert classify_pr_state(pr) == "blocked_preflight"
+
+
+def test_stale_exact_head_precedes_quota_wait() -> None:
+    """A reviewed-head mismatch must refresh state before waiting for quota."""
+    pr = _pr(
+        7200,
+        overall="success",
+        head_sha=FULL_SHA,
+        expected_head_sha="b" * 40,
+    )
+    pr["review_threads"] = "unknown_graphql_quota"
+    pr["review_threads_admission"] = "fail_closed_unknown"
+
+    assert classify_pr_state(pr) == "stale_worktree"
+
+
+def test_policy_contract_includes_unknown_review_thread_route() -> None:
+    """The fail-closed REST state must be part of the exported policy contract."""
+    assert "unknown_review_threads" in VALID_STATES
+    assert "await_review_threads" in VALID_ACTIONS
+
+
+def test_classify_uses_nested_expected_head_for_legacy_snapshots() -> None:
+    """Older snapshots with only preflight head binding must still reject stale heads."""
+    pr = _pr(106, head_sha="new-sha")
+    pr["preflight"] = {"expected_head_sha": "old-sha"}
+
+    assert classify_pr_state(pr) == "stale_worktree"
+
+
+def test_classify_missing_base_precedes_blocked_preflight() -> None:
+    """Missing base provenance must route to snapshot refresh before generic blockers."""
+    pr = _with_base_freshness(
+        _pr(
+            7197,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        verdict="missing-base",
+        base_sha=None,
+        current_main_sha="main-sha",
+    )
+    pr["preflight"] = {"status": "blocked", "reasons": ["base_sha_missing"]}
+
+    assert classify_pr_state(pr) == "stale_merge_base"
 
 
 def test_classify_stale_merge_base() -> None:
@@ -949,6 +1141,17 @@ def test_recommend_stale_merge_base() -> None:
         "PR must be rebased onto main"
     )
     assert decision.actions_remaining == 2
+
+
+def test_recommend_blocked_preflight_uses_generic_reason() -> None:
+    """Generic preflight blockers must not imply that review threads are the blocker."""
+    decision = recommend_action("blocked_preflight", pr_number=4011, actions_remaining=3)
+
+    assert decision.action == "no_action"
+    assert (
+        decision.reason == "snapshot preflight is blocked; inspect the blocking reason before retry"
+    )
+    assert "review" not in decision.reason.lower()
 
 
 def test_recommend_no_action_for_default() -> None:

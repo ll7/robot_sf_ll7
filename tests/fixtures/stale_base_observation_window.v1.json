@@ -1,0 +1,154 @@
+{
+  "schema_version": "stale_base_observation_window.v1",
+  "repo": "ll7/robot_sf_ll7",
+  "evidence_status": "workflow_fixture",
+  "policy": {
+    "policy_id": "risk-tiered-stale-base",
+    "rollout_at": "2026-08-17T00:00:00Z",
+    "source_snapshot": {
+      "path": "fixture://policy/6272",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "available": true,
+      "role": "policy-decision"
+    }
+  },
+  "window": {
+    "window_id": "fixture-normal-throughput-2026-08-18",
+    "kind": "normal_throughput",
+    "start_at": "2026-08-18T10:00:00Z",
+    "end_at": "2026-08-18T11:00:00Z",
+    "source_snapshots": [
+      {
+        "path": "fixture://queue/2026-08-18T11:00:00Z",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "available": true,
+        "role": "queue-window"
+      }
+    ]
+  },
+  "records": [
+    {
+      "pr_number": 1001,
+      "risk_tier": "ordinary",
+      "wait_type": "ordinary_cas",
+      "hold_started_at": "2026-08-18T10:01:00Z",
+      "hold_ended_at": "2026-08-18T10:01:30Z",
+      "attribution": "stale_base",
+      "evidence": {
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ci_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reviewed_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "cas_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ci_base_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "current_main_sha": "cccccccccccccccccccccccccccccccccccccccc",
+        "cas_main_sha": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "pr_number": 1002,
+      "risk_tier": "ordinary",
+      "wait_type": "ordinary_cas",
+      "hold_started_at": "2026-08-18T10:02:00Z",
+      "hold_ended_at": "2026-08-18T10:03:30Z",
+      "attribution": "stale_base",
+      "evidence": {
+        "head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "ci_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "reviewed_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "cas_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "ci_base_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "current_main_sha": "ffffffffffffffffffffffffffffffffffffffff",
+        "cas_main_sha": "ffffffffffffffffffffffffffffffffffffffff"
+      }
+    },
+    {
+      "pr_number": 1003,
+      "risk_tier": "base_sensitive",
+      "wait_type": "base_sensitive_refresh",
+      "hold_started_at": "2026-08-18T10:04:00Z",
+      "hold_ended_at": "2026-08-18T10:06:00Z",
+      "attribution": "unknown",
+      "evidence": {
+        "head_sha": "1212121212121212121212121212121212121212",
+        "ci_head_sha": "1212121212121212121212121212121212121212",
+        "reviewed_head_sha": "1212121212121212121212121212121212121212",
+        "cas_head_sha": "1212121212121212121212121212121212121212",
+        "ci_base_sha": "1313131313131313131313131313131313131313",
+        "current_main_sha": "1414141414141414141414141414141414141414",
+        "cas_main_sha": "1414141414141414141414141414141414141414"
+      }
+    },
+    {
+      "pr_number": 1004,
+      "risk_tier": "ordinary",
+      "wait_type": "none",
+      "attribution": "not_attributable",
+      "evidence": {}
+    },
+    {
+      "pr_number": 1005,
+      "risk_tier": "unknown",
+      "wait_type": "unknown",
+      "attribution": "unknown"
+    }
+  ],
+  "red_main_events": [
+    {
+      "incident_id": "fixture-stale",
+      "red_main_observed": true,
+      "evidence": {
+        "pr_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ci_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "merge_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ci_base_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "merge_base_sha": "cccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "incident_id": "fixture-not-stale",
+      "red_main_observed": true,
+      "evidence": {
+        "pr_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "ci_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "merge_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "ci_base_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "merge_base_sha": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    {
+      "incident_id": "fixture-unknown",
+      "red_main_observed": true,
+      "evidence": {}
+    }
+  ],
+  "baseline": {
+    "schema_version": "stale_base_observation_window.v1",
+    "source_snapshots": [
+      {
+        "path": "fixture://queue/pre-rollout",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "available": true,
+        "role": "pre-rollout-baseline"
+      }
+    ],
+    "records": [
+      {
+        "pr_number": 9001,
+        "risk_tier": "ordinary",
+        "wait_type": "ordinary_cas",
+        "hold_started_at": "2026-08-10T10:00:00Z",
+        "hold_ended_at": "2026-08-10T10:00:45Z",
+        "attribution": "stale_base",
+        "evidence": {
+          "head_sha": "1515151515151515151515151515151515151515",
+          "ci_head_sha": "1515151515151515151515151515151515151515",
+          "reviewed_head_sha": "1515151515151515151515151515151515151515",
+          "cas_head_sha": "1515151515151515151515151515151515151515",
+          "ci_base_sha": "1616161616161616161616161616161616161616",
+          "current_main_sha": "1717171717171717171717171717171717171717",
+          "cas_main_sha": "1717171717171717171717171717171717171717"
+        }
+      }
+    ]
+  }
+}

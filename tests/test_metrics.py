@@ -62,6 +62,17 @@ def test_metrics_docstring_marks_implemented_and_not_stubbed():
     assert "implemented" in doc, "Docstring should describe implementation status"
 
 
+def test_ped_turn_rate_wraps_heading_delta_at_pi_boundary() -> None:
+    """Pedestrian turn rates use the shared half-open angle convention."""
+    headings = np.array([math.pi - 0.1, -math.pi + 0.1])
+    ped_vel = np.stack([np.cos(headings), np.sin(headings)], axis=1)[:, np.newaxis, :]
+
+    turn_rate = metrics_mod._ped_turn_rate_magnitude(ped_vel, dt=1.0)
+
+    assert turn_rate.shape == (1, 1)
+    assert turn_rate[0, 0] == pytest.approx(0.2)
+
+
 def test_metrics_keys_empty_crowd():
     """TODO docstring. Document this function."""
     ep = _make_episode(T=5, K=0)

@@ -31,6 +31,7 @@ CI_JOB_TIMEOUTS = {
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
     "reproducibility-check": 10,
+    "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
@@ -850,6 +851,23 @@ def test_reproducibility_check_job_contract() -> None:
 
     # Excluded from ci aggregate needs
     assert "reproducibility-check" not in ci_job["needs"]
+    reconciliation_job = workflow["jobs"]["reproducibility-check-reconciliation"]
+    assert reconciliation_job["needs"] == ["reproducibility-check"]
+    assert "always()" in reconciliation_job["if"]
+    assert reconciliation_job["continue-on-error"] is True
+    assert reconciliation_job["permissions"] == {
+        "actions": "read",
+        "checks": "write",
+        "contents": "read",
+    }
+    assert "reproducibility-check-reconciliation" not in ci_job["needs"]
+    reconcile_step = next(
+        step
+        for step in reconciliation_job["steps"]
+        if step.get("name") == "Reconcile exact successful check-run"
+    )
+    assert "REPRODUCIBILITY_HEAD_SHA" in reconcile_step["env"]
+    assert "REPRODUCIBILITY_JOB_RESULT" in reconcile_step["env"]
 
     policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
     assert "cannot make that aggregate job fail" in policy_text

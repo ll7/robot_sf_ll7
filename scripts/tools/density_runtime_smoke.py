@@ -13,11 +13,11 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner_actions import (
+from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     policy_command_to_env_action,
     vel_and_acc,
 )
-from robot_sf.benchmark.map_runner_env import build_env_config
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics
 from robot_sf.benchmark.termination_reason import resolve_termination_reason
 from robot_sf.gym_env.environment_factory import make_robot_env

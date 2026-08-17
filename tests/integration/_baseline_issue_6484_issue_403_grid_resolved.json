@@ -1,0 +1,12 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "d074cea748aff2d3a4eac84e1da7892cebadc614",
+  "variants": {
+    "expert_ppo_issue_403_grid.yaml": "1c168a87a437860e2337491b5a2d6ae823c0fabe4202a33ab5ce0781bc3749ce",
+    "expert_ppo_issue_403_grid_diffdrive.yaml": "8911de22e62afa3a2a125899e8ca8ef8f44ce82ca04fd8f419d7e09a1dc07050",
+    "expert_ppo_issue_403_grid_diffdrive_reverse.yaml": "a3780ac3718e62ac6937bf6e43fb0ffa9b28696ee06f0729862bd1db69ef9264",
+    "expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml": "ddf2776b4fb2bacc909c1f0e3c181f2f3269ca7d5526bc3f08a64412a18d16e7",
+    "expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml": "06b434a573f1787303813e5e52cb08a771cb878e8ad132be7762993779749b57",
+    "expert_ppo_issue_403_grid_radius_0_6.yaml": "8a2c92d85ef2558672a35d2c410c934e3c94551d8210d5720a5807bf4da1f6a7"
+  }
+}

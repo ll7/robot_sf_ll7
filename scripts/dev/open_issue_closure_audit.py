@@ -32,18 +32,22 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev._gh_rest import run_gh_api_or_raise as _gh_api_get
+from scripts.dev._gh_rest import subprocess  # noqa: F401
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 PER_PAGE = 100
 DEFAULT_MAX_ISSUE_PAGES = 10
-DEFAULT_MAX_PR_PAGES = 20
+# Keep the shared REST inventory bounded while covering the repository's current
+# closed/open PR history during GraphQL-quota fallback. Hitting this cap remains
+# fail-closed; callers can raise it explicitly with ``--max-pr-pages``.
+DEFAULT_MAX_PR_PAGES = 50
 PARENT_MARKERS = re.compile(
     r"\b(parent|roadmap|epic|tracking|multi[- ]slice|umbrella)\b",
     re.IGNORECASE,
@@ -301,22 +305,6 @@ def build_title_linked_index(
             if _title_mentions_issue(title, number):
                 index[number].append(pr_row)
     return index
-
-
-def _gh_api_get(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """Run a read-only ``gh api`` GET and return the completed process.
-
-    The caller inspects ``returncode``/``stderr`` and parses ``stdout``. A missing
-    GitHub CLI is raised as :class:`RuntimeError` so the CLI entry point can emit
-    the schema-valid error packet and exit non-zero.
-    """
-    args = ["gh", "api", path]
-    try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
-    except FileNotFoundError as exc:
-        raise RuntimeError("GitHub CLI 'gh' was not found") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"GitHub REST read timed out after {timeout}s ({path})") from exc
 
 
 def _paginate_rest(

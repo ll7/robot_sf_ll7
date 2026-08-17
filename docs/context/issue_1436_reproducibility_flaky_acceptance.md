@@ -80,6 +80,17 @@ uploads that report with `if: always()`. Failure reports use
 `benchmark_repro_check.report.v1` and include `status`, `stage`, and `error`
 details, so a fail-closed failure remains visible without blocking the PR.
 
+The follow-up `reproducibility-check-reconciliation` job addresses the separate
+GitHub-hosted status-propagation race tracked in Issue #6893. It identifies the
+same workflow run, attempt, and pull-request head SHA, and may update the
+Actions-owned check-run only when the matching job is already
+`completed/success` and the check-run is still pending. It performs a REST
+read-back and writes `output/validation/reproducibility_check_run_reconciliation.json`.
+Any identity mismatch, terminal non-success, missing job, or API failure is
+reported without mutation. The reconciliation job is `continue-on-error` and
+excluded from the `ci` aggregate, so this repair remains diagnostic and does
+not authorize a merge or promote benchmark evidence.
+
 The exact current local command is:
 
 ```bash

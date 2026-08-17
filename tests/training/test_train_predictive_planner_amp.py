@@ -160,6 +160,31 @@ def test_amp_off_cpu_training_path_is_unchanged(monkeypatch: pytest.MonkeyPatch)
     assert (loss, ade, fde) == (loss2, ade2, fde2)
 
 
+def test_training_gradient_clipping_fails_closed_on_nonfinite_norm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Training must ask PyTorch to reject non-finite gradient norms."""
+    calls: list[dict[str, object]] = []
+    real_clip = torch.nn.utils.clip_grad_norm_
+
+    def _spy_clip(*args: object, **kwargs: object) -> object:
+        calls.append(dict(kwargs))
+        return real_clip(*args, **kwargs)
+
+    monkeypatch.setattr(torch.nn.utils, "clip_grad_norm_", _spy_clip)
+    model, optimizer = _fresh_cpu_setup()
+    trainer._run_epoch(
+        model=model,
+        loader=_tiny_loader(),
+        optimizer=optimizer,
+        device=torch.device("cpu"),
+        scaler=None,
+    )
+
+    assert calls
+    assert all(call.get("error_if_nonfinite") is True for call in calls)
+
+
 def test_amp_off_eval_path_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     """With AMP off, the CPU eval path also runs without autocast or a scaler."""
     autocast_calls: list[tuple[tuple, dict]] = []

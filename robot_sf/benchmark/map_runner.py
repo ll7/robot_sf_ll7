@@ -21,7 +21,6 @@ from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.sac import SACPlanner
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark import map_runner_episode as _map_runner_episode_module
-from robot_sf.benchmark import map_runner_policy_resolution as _policy_resolution
 from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
@@ -36,28 +35,6 @@ from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_thresho
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency.latency_stress import (
     not_available_latency_metrics,
-)
-from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
-from robot_sf.benchmark.map_runner_actions import (
-    command_xy_payload as _command_xy_payload,  # noqa: F401 - compatibility re-export for tests.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    policy_command_to_env_action as _policy_command_to_env_action,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    robot_kinematics_label as _robot_kinematics_label,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    robot_max_speed as _robot_max_speed,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    scenario_robot_kinematics_label as _scenario_robot_kinematics_label,
-)
-from robot_sf.benchmark.map_runner_actions import (
-    stack_ped_positions as _stack_ped_positions,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    vel_and_acc as _vel_and_acc,  # noqa: F401 - compatibility re-export.
 )
 from robot_sf.benchmark.map_runner_batch_plan import (
     build_seed_jobs as _build_seed_jobs,
@@ -134,35 +111,62 @@ from robot_sf.benchmark.map_runner_policies import gap_reference as _gap_referen
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import group_avoidance as _group_avoidance_builder
 from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_global_rl_builder
+from robot_sf.benchmark.map_runner_policies import (
+    map_runner_policy_resolution as _policy_resolution,
+)
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
-from robot_sf.benchmark.map_runner_policy_actions import (
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    command_xy_payload as _command_xy_payload,  # noqa: F401 - compatibility re-export for tests.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    policy_command_to_env_action as _policy_command_to_env_action,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_kinematics_label as _robot_kinematics_label,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_max_speed as _robot_max_speed,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    scenario_robot_kinematics_label as _scenario_robot_kinematics_label,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    stack_ped_positions as _stack_ped_positions,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    vel_and_acc as _vel_and_acc,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
 )
-from robot_sf.benchmark.map_runner_policy_actions import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     update_adapter_impact_metrics as _update_adapter_impact_metrics,
 )
-from robot_sf.benchmark.map_runner_policy_common import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     apply_direct_world_velocity_metadata as _apply_direct_world_velocity_metadata,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     attach_planner_reset as _attach_planner_reset,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     holonomic_world_velocity_command as _holonomic_world_velocity_command,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_profile,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile_impl,
 )
 from robot_sf.benchmark.map_runner_provenance import (
@@ -201,7 +205,7 @@ from robot_sf.benchmark.result_provenance import (
 from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest as _write_result_provenance_manifest,
 )
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,

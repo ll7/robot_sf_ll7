@@ -106,7 +106,7 @@ uv run python -c 'from robot_sf.nav.svg_map_parser import convert_map; convert_m
 uv run python -c 'from robot_sf.nav.svg_map_parser import convert_map; convert_map("maps/svg_maps/construction_corridor_zigzag.svg")'
 
 # Validate scenario archetype loads and passes schema validation
-uv run python -c 'from robot_sf.training.scenario_loader import load_scenarios; from robot_sf.benchmark.scenario_schema import validate_scenario_list; scenarios = load_scenarios("configs/scenarios/archetypes/temporary_construction_corridor.yaml"); assert len(scenarios) > 0; errors = validate_scenario_list(scenarios); assert not errors'
+uv run python -c 'from robot_sf.training.scenario_loader import load_scenarios; from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list; scenarios = load_scenarios("configs/scenarios/archetypes/temporary_construction_corridor.yaml"); assert len(scenarios) > 0; errors = validate_scenario_list(scenarios); assert not errors'
 ```
 
 ## Claim Boundary

@@ -18,7 +18,7 @@ FP32/loader/AMP smoke. It supersedes the original PR #7263 handoff for provenanc
 
 ## Frozen contract and identity
 
-- Runtime commit: `75c8c51b9d9bbd544dd49763662c80360a2788a2`.
+- Runtime commit: `74a55c43f46edca6d1d928074a8a890e608065af`.
 - Config: `configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml`.
 - Config SHA-256: `c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942`.
 - Dataset SHA-256: `8b8f30ca85a493805277c2b12ae8390dedf60fc9671e8427974e7e2d7bdcd434`.
@@ -32,9 +32,9 @@ FP32/loader/AMP smoke. It supersedes the original PR #7263 handoff for provenanc
 
 | Arm | Repeats | Examples/s after warm-up | Peak allocated bytes | Curve result |
 | --- | ---: | ---: | ---: | --- |
-| `fp32_control` | 2 | 30,707.54 | 17,415,168 | control |
-| `fp32_loader` | 2 | 24,685.93 | 17,415,168 | equivalent |
-| `amp_loader` | 2 | 22,304.83 | 17,344,000 | equivalent |
+| `fp32_control` | 2 | 33,678.22 | 17,415,168 | control |
+| `fp32_loader` | 2 | 21,239.02 | 17,415,168 | equivalent |
+| `amp_loader` | 2 | 22,104.56 | 17,344,000 | equivalent |
 
 Terminal classification: `equivalent_smoke`. All six checkpoints passed strict model loading.
 The complete compact machine-readable handoff is [`summary.json`](summary.json); the raw logs,

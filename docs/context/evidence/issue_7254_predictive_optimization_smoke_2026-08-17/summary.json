@@ -4,10 +4,10 @@
   "parent_issue": 6482,
   "evidence_tier": "diagnostic-only",
   "claim_boundary": "bounded one-fixture training-signal equivalence and throughput diagnostic only; no policy, benchmark, general-speedup, or paper claim",
-  "runtime_commit_sha": "75c8c51b9d9bbd544dd49763662c80360a2788a2",
+  "runtime_commit_sha": "74a55c43f46edca6d1d928074a8a890e608065af",
   "config_path": "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml",
   "config_sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
-  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml --output-root output/review_issue7254_corrected_final",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml --output-root output/review_issue7254_corrected_final_v2",
   "host": {
     "gpu_name": "NVIDIA GeForce RTX 3080",
     "nvidia_smi": "NVIDIA GeForce RTX 3080, 580.159.03, 10240",
@@ -18,7 +18,7 @@
   "source_provenance": {
     "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
     "robot_sf/planner/predictive_model.py": "7302e6f9581382903091cd6e85abff4eb384cbd92546bb974d3de79644934f26",
-    "scripts/training/run_predictive_optimization_smoke.py": "51c21e20c4bef41d194c06bc2a5c7135a128822cdd2c10e7a6661bc8feac3bfa",
+    "scripts/training/run_predictive_optimization_smoke.py": "4b54de1570c764495db95025ea143784d18398667f412b5fd111369337ee6002",
     "scripts/training/train_predictive_planner.py": "353b4a9dbbc1afb4d6920b485f91810c8c4aba5168fa938de6a195deee85e30a"
   },
   "fixture": {
@@ -51,7 +51,7 @@
       "ba7d4318ed52dd2dfc29ca891c823ff707f1db2ec91051e8463801acb1f8731c",
       "4d4f0777fc14d987b9d5c681c001a8fbe80bfe27f10a8771193fdf38d286991c"
     ],
-    "environment_fingerprint": "2688e8cef360cc5551e0b22e5a861dce3e9f52d332c4c3c6b5b2ffbf50c2a818",
+    "environment_fingerprint": "eed0507ca0659f470fbe4e452e085365f736be4ecb8a05c94b4b76b848be08de",
     "update_counts_identical": true,
     "strict_checkpoint_loads": true
   },
@@ -59,62 +59,62 @@
     {
       "arm": "fp32_control",
       "repeat": 1,
-      "examples_per_sec": 31111.14853438,
+      "examples_per_sec": 33769.710100771816,
       "peak_cuda_memory_allocated_bytes": 17415168,
-      "checkpoint_sha256": "a6dd846c391ce17f2e932b306cd75f7f735ad5d1d4112223bda7a7c7260ee8b8",
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
       "checkpoint_load": "strict_ok"
     },
     {
       "arm": "fp32_control",
       "repeat": 2,
-      "examples_per_sec": 30303.92538969,
+      "examples_per_sec": 33586.720650526404,
       "peak_cuda_memory_allocated_bytes": 17415168,
-      "checkpoint_sha256": "a6dd846c391ce17f2e932b306cd75f7f735ad5d1d4112223bda7a7c7260ee8b8",
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
       "checkpoint_load": "strict_ok"
     },
     {
       "arm": "fp32_loader",
       "repeat": 1,
-      "examples_per_sec": 23317.61131158,
+      "examples_per_sec": 19314.15988302741,
       "peak_cuda_memory_allocated_bytes": 17415168,
-      "checkpoint_sha256": "a6dd846c391ce17f2e932b306cd75f7f735ad5d1d4112223bda7a7c7260ee8b8",
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
       "checkpoint_load": "strict_ok"
     },
     {
       "arm": "fp32_loader",
       "repeat": 2,
-      "examples_per_sec": 26054.25380591,
+      "examples_per_sec": 23163.87204861334,
       "peak_cuda_memory_allocated_bytes": 17415168,
-      "checkpoint_sha256": "a6dd846c391ce17f2e932b306cd75f7f735ad5d1d4112223bda7a7c7260ee8b8",
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
       "checkpoint_load": "strict_ok"
     },
     {
       "arm": "amp_loader",
       "repeat": 1,
-      "examples_per_sec": 21589.36807765,
+      "examples_per_sec": 21498.306961682687,
       "peak_cuda_memory_allocated_bytes": 17344000,
-      "checkpoint_sha256": "01c949dfc50ddc26246f56f80e76652f3a9c4ebb735779ed84fdc760283f2d89",
+      "checkpoint_sha256": "d3df28b312a70389b424d71a1cc84d10cbbcceea1736386ee8eef252467f4e95",
       "checkpoint_load": "strict_ok"
     },
     {
       "arm": "amp_loader",
       "repeat": 2,
-      "examples_per_sec": 23020.29284989,
+      "examples_per_sec": 22710.809988909747,
       "peak_cuda_memory_allocated_bytes": 17344000,
-      "checkpoint_sha256": "01c949dfc50ddc26246f56f80e76652f3a9c4ebb735779ed84fdc760283f2d89",
+      "checkpoint_sha256": "d3df28b312a70389b424d71a1cc84d10cbbcceea1736386ee8eef252467f4e95",
       "checkpoint_load": "strict_ok"
     }
   ],
   "arms": {
     "fp32_control": {
       "repeats": 2,
-      "examples_per_sec": 30707.53696203,
+      "examples_per_sec": 33678.21537564911,
       "peak_cuda_memory_allocated_bytes": [17415168, 17415168],
       "curve_result": "control"
     },
     "fp32_loader": {
       "repeats": 2,
-      "examples_per_sec": 24685.93255874,
+      "examples_per_sec": 21239.015965820374,
       "peak_cuda_memory_allocated_bytes": [17415168, 17415168],
       "max_abs_delta_vs_control_mean": {
         "train_loss": 0.0,
@@ -126,7 +126,7 @@
     },
     "amp_loader": {
       "repeats": 2,
-      "examples_per_sec": 22304.83046377,
+      "examples_per_sec": 22104.558475296217,
       "peak_cuda_memory_allocated_bytes": [17344000, 17344000],
       "max_abs_delta_vs_control_mean": {
         "train_loss": 0.00001474221547,
@@ -139,6 +139,6 @@
   },
   "result_classification": "equivalent_smoke",
   "throughput_interpretation": "Both optimized arms were slower than the control in this run; no default-performance recommendation is supported.",
-  "local_comparison_json_sha256": "5c421ede97b8252f2722afc3ffd6f36b4fec8e455d83a7d63b17ec71f0b5a6ed",
-  "local_comparison_markdown_sha256": "ce92dd3da7a288682c98b32f777915dfac6f394f3fb41c23432ea92877958be8"
+  "local_comparison_json_sha256": "799b8347365703465faa10b1050ab296ac9af99793f825d0fa73be582b5322f0",
+  "local_comparison_markdown_sha256": "30d924f12069397a8b8a1bb446f1922d662ce7b8a0ef385dc85dac086cc07854"
 }

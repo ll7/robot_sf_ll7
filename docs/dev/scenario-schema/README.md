@@ -3,7 +3,7 @@
 This document describes the JSON Schema used to validate benchmark scenario matrices for `robot_sf_bench`.
 
 - Schema file: `robot_sf/benchmark/schemas/scenarios.schema.json`
-- Validator helper: `robot_sf/benchmark/scenario_schema.py`
+- Validator helper: `robot_sf/benchmark/scenario/scenario_schema.py`
 - CLI validation: `robot_sf_bench validate-config --matrix <path>.yaml`
 - Current manifest metadata version: `robot_sf.scenario_matrix.v1`
 

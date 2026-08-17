@@ -18,6 +18,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
 from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows, fetch_open_pr_rows
@@ -37,6 +38,7 @@ _CLOSING_REFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+_REPO_COMPONENT_RE = re.compile(r"^[^/\s]+$")
 DEFAULT_TIMEOUT_SECONDS = 120
 GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ", "api rate limit")
 GRAPHQL_FAIL_CLOSED_MARKERS = (
@@ -54,6 +56,33 @@ GRAPHQL_FAIL_CLOSED_MARKERS = (
 
 class GateError(RuntimeError):
     """Raised when the gate cannot establish a trustworthy remote state."""
+
+
+def _positive_page_budget(value: str) -> int:
+    """Parse a positive REST page budget for the CLI."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("page budget must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("page budget must be a positive integer")
+    return parsed
+
+
+def _effective_page_budget(
+    explicit: int | None,
+    *,
+    snapshot: dict[str, Any] | None = None,
+) -> int:
+    """Choose a validated explicit or snapshot-recorded REST page budget."""
+    value: object = explicit
+    if value is None and snapshot is not None:
+        value = snapshot.get("rest_pr_page_budget", DEFAULT_MAX_REST_PR_PAGES)
+    if value is None:
+        value = DEFAULT_MAX_REST_PR_PAGES
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise GateError(f"invalid REST PR page budget: {value!r}")
+    return value
 
 
 def _run(
@@ -142,6 +171,78 @@ def _normalize_base_ref(base_ref: str, *, remote: str) -> str:
     if not normalized:
         raise GateError(f"base ref {base_ref!r} does not contain a branch name")
     return normalized
+
+
+def _repo_slug_from_remote_url(remote_url: str) -> str:
+    """Convert a Git remote URL to the GitHub CLI repository argument format."""
+    value = str(remote_url or "").strip()
+    if not value:
+        raise GateError("Git remote URL is empty")
+
+    host: str | None = None
+    path = ""
+    if value.startswith("git@") and ":" in value:
+        host, path = value[4:].split(":", 1)
+    else:
+        parsed = urlparse(value)
+        host = parsed.hostname
+        path = parsed.path
+
+    components = [component for component in path.strip("/").split("/") if component]
+    if components and components[-1].endswith(".git"):
+        components[-1] = components[-1][:-4]
+    if len(components) != 2 or not all(_REPO_COMPONENT_RE.fullmatch(item) for item in components):
+        raise GateError(f"Git remote URL must identify an OWNER/REPO pair; got {remote_url!r}")
+
+    normalized_host = str(host or "").lower()
+    if normalized_host in {"", "github.com", "www.github.com"}:
+        return "/".join(components)
+    if not _REPO_COMPONENT_RE.fullmatch(normalized_host):
+        raise GateError(f"Git remote URL has an invalid host: {remote_url!r}")
+    return "/".join([normalized_host, *components])
+
+
+def _normalize_repo_argument(repo: str, *, remote: str) -> str:
+    """Normalize a GitHub repository slug or a local checkout path."""
+    value = str(repo or "").strip()
+    if not value:
+        raise GateError(
+            "repository must be OWNER/REPO (for example, ll7/robot_sf_ll7) "
+            "or an existing local checkout path"
+        )
+
+    path = Path(value).expanduser()
+    explicit_path = value.startswith((".", "/", "~")) or path.exists()
+    if not explicit_path and 2 <= value.count("/") + 1 <= 3:
+        components = value.split("/")
+        if all(_REPO_COMPONENT_RE.fullmatch(component) for component in components):
+            return value
+
+    if not explicit_path:
+        raise GateError(
+            "repository must be OWNER/REPO (for example, ll7/robot_sf_ll7) "
+            "or an existing local checkout path"
+        )
+    if not path.is_dir():
+        raise GateError(f"local repository path does not exist or is not a directory: {repo!r}")
+
+    resolved_path = path.resolve()
+    result = _run(
+        ["git", "-C", str(resolved_path), "remote", "get-url", remote],
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "remote lookup failed"
+        raise GateError(
+            f"local repository path {repo!r} has no usable Git remote {remote!r}: {detail}; "
+            "pass an explicit OWNER/REPO value if the checkout has no GitHub remote"
+        )
+    try:
+        return _repo_slug_from_remote_url(result.stdout)
+    except GateError as exc:
+        raise GateError(
+            f"local repository path {repo!r} has no GitHub-compatible remote {remote!r}: {exc}"
+        ) from exc
 
 
 def _is_graphql_fallback_error(error: GateError) -> bool:
@@ -359,12 +460,14 @@ def _issue_state_rest(*, repo: str, issue: int, gh_api: Any = None) -> dict[str,
     }
 
 
-def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+def _closing_prs_rest(
+    *, repo: str, issue: int, max_pages: int = DEFAULT_MAX_REST_PR_PAGES
+) -> list[dict[str, Any]]:
     """Find merged PRs closing an issue through a bounded REST inventory."""
     try:
         rows, meta = fetch_closed_pr_rows(
             repo=repo,
-            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+            max_pages=max_pages,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise GateError(f"GitHub REST merged-PR fallback failed: {exc}") from exc
@@ -385,12 +488,14 @@ def _closing_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
     return sorted(matches, key=lambda item: str(item.get("merged_at") or ""))
 
 
-def _open_covering_prs_rest(*, repo: str, issue: int) -> list[dict[str, Any]]:
+def _open_covering_prs_rest(
+    *, repo: str, issue: int, max_pages: int = DEFAULT_MAX_REST_PR_PAGES
+) -> list[dict[str, Any]]:
     """Find open PRs covering an issue through a bounded REST inventory."""
     try:
         rows, meta = fetch_open_pr_rows(
             repo=repo,
-            max_pages=DEFAULT_MAX_REST_PR_PAGES,
+            max_pages=max_pages,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         raise GateError(f"GitHub REST open-PR fallback failed: {exc}") from exc
@@ -418,8 +523,10 @@ def collect_live_state(
     branch: str,
     base_ref: str = "main",
     remote: str = "origin",
+    max_pr_pages: int = DEFAULT_MAX_REST_PR_PAGES,
 ) -> dict[str, Any]:
     """Fetch and assemble the live issue, ref, and local worktree state."""
+    max_pr_pages = _effective_page_budget(max_pr_pages)
     base_ref = _normalize_base_ref(base_ref, remote=remote)
     remote_state_sources = {
         "issue": "graphql",
@@ -463,7 +570,7 @@ def collect_live_state(
     except GateError as exc:
         if not _is_graphql_fallback_error(exc):
             raise
-        closing_prs = _closing_prs_rest(repo=repo, issue=issue)
+        closing_prs = _closing_prs_rest(repo=repo, issue=issue, max_pages=max_pr_pages)
         remote_state_sources["closing_prs"] = "rest"
         remote_state_fallbacks["closing_prs"] = str(exc)
     try:
@@ -471,7 +578,7 @@ def collect_live_state(
     except GateError as exc:
         if not _is_graphql_fallback_error(exc):
             raise
-        open_covering_prs = _open_covering_prs_rest(repo=repo, issue=issue)
+        open_covering_prs = _open_covering_prs_rest(repo=repo, issue=issue, max_pages=max_pr_pages)
         remote_state_sources["open_covering_prs"] = "rest"
         remote_state_fallbacks["open_covering_prs"] = str(exc)
 
@@ -488,6 +595,7 @@ def collect_live_state(
         "open_covering_prs": open_covering_prs,
         "remote_state_sources": remote_state_sources,
         "remote_state_fallbacks": remote_state_fallbacks,
+        "rest_pr_page_budget": max_pr_pages,
         "remote": remote,
         "base_ref": base_ref,
         "base_sha": base_sha,
@@ -732,7 +840,14 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     capture = subparsers.add_parser("capture", help="capture a pre-publication baseline")
-    capture.add_argument("--repo", required=True)
+    capture.add_argument(
+        "--repo",
+        required=True,
+        help=(
+            "GitHub repository as OWNER/REPO (for example, ll7/robot_sf_ll7), "
+            "or a local checkout path whose Git remote resolves to that repository"
+        ),
+    )
     capture.add_argument("--issue", type=int, required=True)
     capture.add_argument("--branch")
     capture.add_argument(
@@ -741,6 +856,15 @@ def _parser() -> argparse.ArgumentParser:
         help="base branch name or remote-qualified branch such as origin/main",
     )
     capture.add_argument("--remote", default="origin")
+    capture.add_argument(
+        "--max-pr-pages",
+        type=_positive_page_budget,
+        default=DEFAULT_MAX_REST_PR_PAGES,
+        help=(
+            "maximum REST pages used for merged/open PR fallback discovery "
+            f"(default: {DEFAULT_MAX_REST_PR_PAGES})"
+        ),
+    )
     capture.add_argument("--snapshot-path")
 
     for name, help_text in (
@@ -750,6 +874,15 @@ def _parser() -> argparse.ArgumentParser:
         command = subparsers.add_parser(name, help=help_text)
         command.add_argument("--snapshot-path", required=True)
         command.add_argument("--decision-path")
+        command.add_argument(
+            "--max-pr-pages",
+            type=_positive_page_budget,
+            default=None,
+            help=(
+                "override the REST page budget; otherwise reuse the capture budget "
+                "recorded in the snapshot"
+            ),
+        )
         if name == "sync":
             command.add_argument(
                 "--integrate",
@@ -769,17 +902,19 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "capture":
+            repo = _normalize_repo_argument(args.repo, remote=args.remote)
             issue = _issue_number(args.issue)
             branch = args.branch or _git_branch()
             snapshot_path = (
                 Path(args.snapshot_path) if args.snapshot_path else _default_snapshot_path(branch)
             )
             snapshot = collect_live_state(
-                repo=args.repo,
+                repo=repo,
                 issue=issue,
                 branch=branch,
                 base_ref=args.base_ref,
                 remote=args.remote,
+                max_pr_pages=args.max_pr_pages,
             )
             _write_json(snapshot_path, snapshot)
             decision = "ready" if snapshot["issue_state"] == "OPEN" else "superseded"
@@ -800,13 +935,16 @@ def main(argv: list[str] | None = None) -> int:
         baseline["base_ref"] = _normalize_base_ref(
             str(baseline["base_ref"]), remote=str(baseline["remote"])
         )
+        repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
+        max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
         decision_path = _decision_path(snapshot_path, args.decision_path)
         current = collect_live_state(
-            repo=str(baseline["repo"]),
+            repo=repo,
             issue=_issue_number(baseline["issue"]),
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),
             remote=str(baseline["remote"]),
+            max_pr_pages=max_pr_pages,
         )
         decision = evaluate_state(baseline, current)
         if (
@@ -838,11 +976,12 @@ def main(argv: list[str] | None = None) -> int:
             return EXIT_CODES["refresh-required"]
 
         refreshed = collect_live_state(
-            repo=str(baseline["repo"]),
+            repo=repo,
             issue=_issue_number(baseline["issue"]),
             branch=str(baseline["branch"]),
             base_ref=str(baseline["base_ref"]),
             remote=str(baseline["remote"]),
+            max_pr_pages=max_pr_pages,
         )
         _write_json(snapshot_path, refreshed)
         refreshed_decision = evaluate_state(refreshed, refreshed)

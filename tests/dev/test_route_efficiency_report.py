@@ -154,6 +154,34 @@ def test_snapshot_provides_acceptance_metadata() -> None:
     assert report["final_outcome"]["note"] == "merged"
 
 
+def test_route_snapshot_cannot_confirm_without_usable_output_contract() -> None:
+    """Route evidence with an unverified aggregate cannot become task acceptance."""
+    manifest = _manifest(
+        [
+            {
+                "attempt_index": 0,
+                "route": {"provider": "antigravity"},
+                "returncode": 0,
+                "failure_class": "none",
+                "compact_artifacts": _compact_artifacts(present=True),
+            }
+        ]
+    )
+    snapshot = {
+        "accepted": True,
+        "outcome": "confirmed",
+        "route_evidence_only": True,
+        "aggregation": "confirmed",
+    }
+
+    report = rer.analyze_manifests([manifest], snapshot=snapshot)
+
+    assert report["final_outcome"]["accepted"] is None
+    assert report["final_outcome"]["note"] == (
+        "route evidence is incomplete; worker output and validation are not confirmed"
+    )
+
+
 def test_snapshot_preserves_explicit_falsy_metadata() -> None:
     """Explicit falsy snapshot values should not be replaced by defaults."""
     manifest = _manifest(

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner_policy_common import build_adapter_policy
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import build_adapter_policy
 from robot_sf.planner.learned_risk_surface import (
     RiskSurfacePlannerAdapter,
     build_local_risk_surface_spec,

@@ -28,6 +28,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.planner.scenario_belief_adapter import project_scenario_belief_for_planner
 from robot_sf.representation import scenario_belief_from_simulator_oracle
 
@@ -99,7 +100,7 @@ def _is_out_of_view(
         return True
     if fov_degrees < 360.0 and dist > 1e-6:
         bearing = float(np.arctan2(rel[1], rel[0]))
-        delta = (bearing - robot_heading + np.pi) % (2.0 * np.pi) - np.pi
+        delta = wrap_angle_pi(bearing - robot_heading)
         if abs(delta) > float(np.deg2rad(fov_degrees) / 2.0):
             return True
     return False

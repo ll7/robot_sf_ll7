@@ -1,0 +1,123 @@
+{
+  "schema_version": "flint-chart-surface-input.v1",
+  "surface_id": "figure_7_6_success_by_family",
+  "figure_id": "figure_7_6",
+  "metric": {"id": "success_rate", "unit": "fraction"},
+  "source": {
+    "context": "release",
+    "source_commit": "1111111111111111111111111111111111111111",
+    "release_id": "synthetic-release-fixture-v1",
+    "artifact_catalog": {
+      "path": "fixtures/flint/release/artifact_catalog.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "input_hashes": {
+      "fixtures/flint/release/canonical_report.json": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "durability": "synthetic_fixture"
+  },
+  "display_population": [
+    {"planner_key": "ppo", "scenario_family": "doorway"},
+    {"planner_key": "sacadrl", "scenario_family": "doorway"},
+    {"planner_key": "ppo", "scenario_family": "open_space"},
+    {"planner_key": "sacadrl", "scenario_family": "open_space"}
+  ],
+  "canonical_cells": [
+    {
+      "planner_key": "ppo",
+      "scenario_family": "doorway",
+      "value": 0.75,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": [],
+      "uncertainty": {"status": "available", "lower": 0.55, "upper": 0.9, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "sacadrl",
+      "scenario_family": "doorway",
+      "value": 0.75,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": [],
+      "uncertainty": {"status": "available", "lower": 0.55, "upper": 0.9, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "ppo",
+      "scenario_family": "open_space",
+      "value": 0.9,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": ["invalid_input"],
+      "uncertainty": {"status": "available", "lower": 0.7, "upper": 1.0, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "sacadrl",
+      "scenario_family": "open_space",
+      "value": 0.8,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": ["invalid_input"],
+      "uncertainty": {"status": "available", "lower": 0.6, "upper": 0.95, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    }
+  ],
+  "candidate_cells": [
+    {
+      "planner_key": "ppo",
+      "scenario_family": "doorway",
+      "value": 0.75,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": [],
+      "uncertainty": {"status": "available", "lower": 0.55, "upper": 0.9, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "sacadrl",
+      "scenario_family": "doorway",
+      "value": 0.75,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": [],
+      "uncertainty": {"status": "available", "lower": 0.55, "upper": 0.9, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "ppo",
+      "scenario_family": "open_space",
+      "value": 0.9,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": ["invalid_input"],
+      "uncertainty": {"status": "available", "lower": 0.7, "upper": 1.0, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    },
+    {
+      "planner_key": "sacadrl",
+      "scenario_family": "open_space",
+      "value": 0.8,
+      "denominator": 20,
+      "exposure_definition": "episode",
+      "exclusions": ["invalid_input"],
+      "uncertainty": {"status": "available", "lower": 0.6, "upper": 0.95, "method": "fixture_interval"},
+      "capability_track": "native",
+      "evidence_status": "analysis_only"
+    }
+  ],
+  "renderer_policy": {
+    "canonical_renderer": "matplotlib/pgf/tikz",
+    "tie_policy": "exact_ties_no_catalog_rank",
+    "source_context_separation": true,
+    "requires_tie_preservation": true
+  }
+}

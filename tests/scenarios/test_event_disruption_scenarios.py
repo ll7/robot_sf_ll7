@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,

@@ -2519,10 +2519,8 @@ def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path
     """Removing the ignored field preserves every other resolved config value."""
     baseline = _issue_6904_baseline()
     config_path = Path(rel_path)
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert raw["evaluation"].get("step_schedule")
-
     resolved = _load_expert_training_config_mapping(config_path)
+    assert resolved["evaluation"].get("step_schedule")
     assert "frequency_episodes" not in resolved.get("evaluation", {})
     canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
     actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()

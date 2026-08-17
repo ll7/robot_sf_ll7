@@ -1074,9 +1074,10 @@ def test_classic_interactions_francis2023_manifest_resolves_all_maps() -> None:
     classic_interactions_francis2023 scenario chain is broken, this test catches
     it before a long SLURM allocation is consumed.
     """
-    manifest = Path("configs/scenarios/classic_interactions_francis2023.yaml")
-    if not manifest.exists():
-        pytest.skip("Combined manifest not found; run from repo root.")
+    manifest = (
+        Path(__file__).resolve().parents[2]
+        / "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
 
     scenarios = load_scenarios(manifest)
     assert scenarios, "Manifest loaded no scenarios"

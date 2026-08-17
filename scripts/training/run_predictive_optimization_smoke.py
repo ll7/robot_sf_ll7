@@ -26,6 +26,7 @@ _CONFIG_SCHEMA = "predictive-optimization-smoke.v1"
 _RESULT_SCHEMA = "predictive-optimization-smoke-result.v1"
 _METRICS = ("train_loss", "val_loss", "val_ade", "val_fde")
 _TIMING_FIELDS = ("train_runtime_sec", "val_runtime_sec")
+_COUNT_FIELDS = ("train_steps", "val_steps", "train_examples", "val_examples")
 
 
 def _read_mapping(path: Path, *, label: str) -> dict[str, Any]:
@@ -174,6 +175,25 @@ def _validate_arm_semantics(arm: dict[str, Any]) -> None:
             )
 
 
+def _expected_loader_manifest(arm: dict[str, Any]) -> dict[str, Any]:
+    """Return the effective CUDA loader manifest required for one arm."""
+    num_workers = int(arm["num_workers"])
+    return {
+        "num_workers": num_workers,
+        "pin_memory": bool(arm["pin_memory"]),
+        "persistent_workers": bool(arm["persistent_workers"] and num_workers > 0),
+        "prefetch_factor": int(arm["prefetch_factor"]) if num_workers > 0 else None,
+        "non_blocking": bool(arm["pin_memory"]),
+        "device": "cuda",
+    }
+
+
+def _expected_amp_manifest(arm: dict[str, Any]) -> dict[str, Any]:
+    """Return the effective AMP manifest required for one arm."""
+    enabled = bool(arm["amp"])
+    return {"enabled": enabled, "requested": enabled, "dtype": "float16" if enabled else None}
+
+
 def _validate_config(config: dict[str, Any]) -> None:
     """Validate the frozen three-arm comparison contract."""
     if config.get("schema_version") != _CONFIG_SCHEMA:
@@ -196,6 +216,85 @@ def _validate_config(config: dict[str, Any]) -> None:
         _validate_arm_semantics(arm)
     if not any(_bool(_mapping(arm, label="arm").get("amp"), label="arm.amp") for arm in arms):
         raise ValueError("one arm must request AMP")
+
+
+def _validate_summary_identity(
+    *, summary: dict[str, Any], arm_id: str, dataset: dict[str, Any], git_commit: str
+) -> None:
+    """Validate commit, device, and dataset provenance in one trainer summary."""
+    if str(summary.get("git_commit")) != git_commit:
+        raise RuntimeError(f"{arm_id} recorded a different git commit: {summary.get('git_commit')}")
+    if str(summary.get("device")) != "cuda":
+        raise RuntimeError(f"{arm_id} did not run on CUDA: {summary.get('device')!r}")
+    dataset_text = str(summary.get("dataset", "")).strip()
+    if not dataset_text or Path(dataset_text).resolve() != Path(str(dataset["path"])).resolve():
+        raise RuntimeError(f"{arm_id} recorded a different dataset: {summary.get('dataset')!r}")
+    expected_dataset_ids = [f"predictive_training:{dataset['dataset_id']}"]
+    if summary.get("source_dataset_ids") != expected_dataset_ids:
+        raise RuntimeError(
+            f"{arm_id} recorded different dataset ids: {summary.get('source_dataset_ids')!r}"
+        )
+
+
+def _validate_summary_runtime_flags(*, summary: dict[str, Any], arm: dict[str, Any]) -> None:
+    """Validate effective loader and AMP settings in one trainer summary."""
+    arm_id = str(arm["id"])
+    if summary.get("data_loader") != _expected_loader_manifest(arm):
+        raise RuntimeError(f"{arm_id} loader manifest drifted: {summary.get('data_loader')!r}")
+    if summary.get("amp") != _expected_amp_manifest(arm):
+        raise RuntimeError(f"{arm_id} AMP manifest drifted: {summary.get('amp')!r}")
+
+
+def _validate_summary_training_contract(
+    *, summary: dict[str, Any], config: dict[str, Any], arm_id: str
+) -> None:
+    """Validate common trainer and model settings against the frozen config."""
+    training = _mapping(config["training"], label="training")
+    expected_scalars = {
+        "epochs": int(training["epochs"]),
+        "batch_size": int(training["batch_size"]),
+        "learning_rate": float(training["lr"]),
+        "weight_decay": float(training["weight_decay"]),
+        "seed": int(training["seed"]),
+    }
+    for field, expected in expected_scalars.items():
+        if summary.get(field) != expected:
+            raise RuntimeError(
+                f"{arm_id} recorded {field}={summary.get(field)!r}, expected {expected!r}"
+            )
+
+    model_config = _mapping(summary.get("config"), label=f"{arm_id}.config")
+    fixture = _mapping(config["fixture"], label="fixture")
+    expected_model_fields = {
+        "max_agents": int(fixture["max_agents"]),
+        "horizon_steps": int(fixture["horizon_steps"]),
+        "input_dim": int(fixture["input_dim"]),
+        "hidden_dim": int(training["hidden_dim"]),
+        "message_passing_steps": int(training["message_passing_steps"]),
+    }
+    for field, expected in expected_model_fields.items():
+        if model_config.get(field) != expected:
+            raise RuntimeError(
+                f"{arm_id} recorded model config {field}={model_config.get(field)!r}, "
+                f"expected {expected!r}"
+            )
+
+
+def _validate_arm_summary(
+    *,
+    summary: dict[str, Any],
+    config: dict[str, Any],
+    arm: dict[str, Any],
+    dataset: dict[str, Any],
+    git_commit: str,
+) -> None:
+    """Fail closed when a trainer summary drifts from the frozen arm contract."""
+    arm_id = str(arm["id"])
+    _validate_summary_identity(
+        summary=summary, arm_id=arm_id, dataset=dataset, git_commit=git_commit
+    )
+    _validate_summary_runtime_flags(summary=summary, arm=arm)
+    _validate_summary_training_contract(summary=summary, config=config, arm_id=arm_id)
 
 
 def _write_fixture(*, fixture: dict[str, Any], output_dir: Path) -> dict[str, Any]:
@@ -384,10 +483,13 @@ def _run_arm(
 
     summary_path = run_dir / "training_summary.json"
     summary = _read_mapping(summary_path, label="training summary")
-    if str(summary.get("git_commit")) != git_commit:
-        raise RuntimeError(f"{arm_id} recorded a different git commit: {summary.get('git_commit')}")
-    if str(summary.get("device")) != "cuda":
-        raise RuntimeError(f"{arm_id} did not run on CUDA: {summary.get('device')!r}")
+    _validate_arm_summary(
+        summary=summary,
+        config=config,
+        arm=arm,
+        dataset=dataset,
+        git_commit=git_commit,
+    )
     if not _finite_history(summary):
         raise RuntimeError(f"{arm_id} produced missing or non-finite metric history")
     checkpoint_path = Path(str(summary.get("checkpoint", "")))
@@ -426,6 +528,20 @@ def _run_arm(
     }
 
 
+def _count_signature(history: list[dict[str, Any]]) -> tuple[tuple[int, ...], ...]:
+    """Return validated per-epoch update/example counts for cross-arm comparison."""
+    signature: list[tuple[int, ...]] = []
+    for epoch, row in enumerate(history, start=1):
+        counts: list[int] = []
+        for field in _COUNT_FIELDS:
+            value = float(row[field])
+            if not math.isfinite(value) or value <= 0.0 or not value.is_integer():
+                raise ValueError(f"epoch {epoch} has invalid {field}: {row[field]!r}")
+            counts.append(int(value))
+        signature.append(tuple(counts))
+    return tuple(signature)
+
+
 def _compare(*, results: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
     """Compare optimized arms against repeated FP32 control curves."""
     comparison = _mapping(config["comparison"], label="comparison")
@@ -441,6 +557,25 @@ def _compare(*, results: list[dict[str, Any]], config: dict[str, Any]) -> dict[s
     controls = [result for result in results if result["arm"] == "fp32_control"]
     if len(controls) < 2:
         raise ValueError("at least two FP32 control repeats are required")
+
+    configured_arms = {
+        str(_mapping(arm, label="arm")["id"]): _mapping(arm, label="arm") for arm in config["arms"]
+    }
+    for arm_id, arm in configured_arms.items():
+        observed = [result for result in results if str(result["arm"]) == arm_id]
+        expected_repeats = _int(arm["repeats"], label=f"arms[{arm_id}].repeats", minimum=1)
+        if len(observed) != expected_repeats:
+            raise ValueError(f"{arm_id} has {len(observed)} repeats; expected {expected_repeats}")
+
+    dataset_digests = {str(result.get("dataset_sha256", "")) for result in results}
+    if len(dataset_digests) != 1 or not next(iter(dataset_digests), ""):
+        raise ValueError("all arms must use one non-empty dataset digest")
+    count_signatures = {
+        _count_signature([dict(row) for row in result["history"]]) for result in results
+    }
+    if len(count_signatures) != 1:
+        raise ValueError("all arms must process identical data identities and update counts")
+
     control_histories = [[dict(row) for row in result["history"]][warmup:] for result in controls]
     control_reference: dict[str, list[float]] = {}
     control_dispersion: dict[str, float] = {}

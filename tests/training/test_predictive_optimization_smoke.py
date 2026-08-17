@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from scripts.training import run_predictive_optimization_smoke as smoke
 
@@ -43,6 +44,7 @@ def _result(arm: str, repeat: int, offset: float) -> dict:
     return {
         "arm": arm,
         "repeat": repeat,
+        "dataset_sha256": "fixture-sha256",
         "history": _history(offset),
         "throughput": {"examples_per_sec": 256.0, "steps_per_sec": 4.0},
         "peak_cuda_memory_allocated_bytes": 123,
@@ -59,6 +61,55 @@ def test_committed_config_has_the_frozen_three_arm_contract() -> None:
         "amp_loader",
     }
     assert config["comparison"]["warmup_epochs"] == 1
+
+
+def test_arm_summary_contract_rejects_effective_flag_drift(tmp_path: Path) -> None:
+    """A trainer summary must match the declared CUDA arm before comparison."""
+    config = _config()
+    arm = next(arm for arm in config["arms"] if arm["id"] == "amp_loader")
+    dataset = {
+        "path": str(tmp_path / "fixture.npz"),
+        "dataset_id": config["fixture"]["dataset_id"],
+    }
+    training = config["training"]
+    fixture = config["fixture"]
+    summary = {
+        "git_commit": "abc123",
+        "device": "cuda",
+        "dataset": dataset["path"],
+        "source_dataset_ids": [f"predictive_training:{dataset['dataset_id']}"],
+        "data_loader": smoke._expected_loader_manifest(arm),
+        "amp": smoke._expected_amp_manifest(arm),
+        "epochs": training["epochs"],
+        "batch_size": training["batch_size"],
+        "learning_rate": training["lr"],
+        "weight_decay": training["weight_decay"],
+        "seed": training["seed"],
+        "config": {
+            "max_agents": fixture["max_agents"],
+            "horizon_steps": fixture["horizon_steps"],
+            "input_dim": fixture["input_dim"],
+            "hidden_dim": training["hidden_dim"],
+            "message_passing_steps": training["message_passing_steps"],
+        },
+    }
+
+    smoke._validate_arm_summary(
+        summary=summary,
+        config=config,
+        arm=arm,
+        dataset=dataset,
+        git_commit="abc123",
+    )
+    summary["data_loader"]["num_workers"] = 0
+    with pytest.raises(RuntimeError, match="loader manifest drifted"):
+        smoke._validate_arm_summary(
+            summary=summary,
+            config=config,
+            arm=arm,
+            dataset=dataset,
+            git_commit="abc123",
+        )
 
 
 def test_fixture_generation_is_deterministic(tmp_path: Path) -> None:
@@ -82,7 +133,9 @@ def test_compare_uses_control_repeat_dispersion_and_warmup() -> None:
         _result("fp32_control", 1, 0.0),
         _result("fp32_control", 2, 0.0001),
         _result("fp32_loader", 1, 0.0006),
+        _result("fp32_loader", 2, 0.0006),
         _result("amp_loader", 1, 0.0008),
+        _result("amp_loader", 2, 0.0008),
     ]
 
     comparison = smoke._compare(results=results, config=config)
@@ -92,6 +145,23 @@ def test_compare_uses_control_repeat_dispersion_and_warmup() -> None:
     assert comparison["equivalence_envelope"]["val_loss"] == 0.001
     assert comparison["arms"]["fp32_loader"]["equivalent_to_control"] is True
     assert comparison["arms"]["amp_loader"]["equivalent_to_control"] is True
+
+
+def test_compare_rejects_mismatched_update_counts() -> None:
+    """Different arm update counts must not be interpreted as curve equivalence."""
+    config = _config()
+    results = [
+        _result("fp32_control", 1, 0.0),
+        _result("fp32_control", 2, 0.0001),
+        _result("fp32_loader", 1, 0.0006),
+        _result("fp32_loader", 2, 0.0006),
+        _result("amp_loader", 1, 0.0008),
+        _result("amp_loader", 2, 0.0008),
+    ]
+    results[-1]["history"][1]["train_steps"] = 3.0
+
+    with pytest.raises(ValueError, match="identical data identities and update counts"):
+        smoke._compare(results=results, config=config)
 
 
 def test_arm_training_args_keep_amp_and_loader_changes_explicit() -> None:

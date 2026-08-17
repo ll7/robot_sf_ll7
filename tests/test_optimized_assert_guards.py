@@ -34,6 +34,10 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         downstream_activation_errors,
         preflight_issue_5303_powered_contract,
     )
+    import robot_sf.benchmark.collision.collision_pressure_report as collision_pressure_report
+    from robot_sf.benchmark.collision.collision_pressure_report import (
+        CollisionPressureReportError,
+    )
     from robot_sf.benchmark.tie_aware_ranking import (
         TieAwareRankingError,
         _intervals_overlap_or_contact,
@@ -106,6 +110,24 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
             replace(tie_item, uncertainty_low=None), tie_item
         ),
     )
+
+    original_ledger_from_row = collision_pressure_report._ledger_from_row
+    original_ledger_exclusion_reason = collision_pressure_report._ledger_exclusion_reason
+    collision_pressure_report._ledger_from_row = lambda _row: None
+    collision_pressure_report._ledger_exclusion_reason = lambda _ledger: None
+    try:
+        expect(
+            "collision_pressure_ledger_guard",
+            CollisionPressureReportError,
+            "selected row is missing an auditable event ledger",
+            lambda: collision_pressure_report._select_rows(
+                [{"episode_id": "episode-1", "scenario_family": "family_a"}],
+                ["family_a"],
+            ),
+        )
+    finally:
+        collision_pressure_report._ledger_from_row = original_ledger_from_row
+        collision_pressure_report._ledger_exclusion_reason = original_ledger_exclusion_reason
 
 
     expect(
@@ -335,6 +357,7 @@ _EXPECTED_MARKERS = (
     "PASS issue_5303_v2_preflight: ready",
     "PASS issue_5303_terminal_mapping: fail-closed",
     "PASS tie_aware_interval_bounds: TieAwareRankingError",
+    "PASS collision_pressure_ledger_guard: CollisionPressureReportError",
     "PASS attention_positive_heads: ValueError",
     "PASS attention_divisibility: ValueError",
     "PASS simulator_map_definition: TypeError",
@@ -360,6 +383,7 @@ _EXPECTED_MARKERS = (
 _EXPECTED_MESSAGES = (
     "terminal result must be a mapping",
     "interval comparison requires both uncertainty bounds",
+    "selected row is missing an auditable event ledger",
     "num_heads must be positive, got 0",
     "embed_dim=8 must be divisible by num_heads=3",
     "map_def should be of type MapDefinition",
@@ -416,6 +440,7 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
         "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py",
         "robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py",
         "robot_sf/benchmark/tie_aware_ranking.py",
+        "robot_sf/benchmark/collision/collision_pressure_report.py",
     ),
 )
 def test_scoped_production_modules_have_no_production_asserts(

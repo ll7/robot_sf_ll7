@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi_array
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -26,7 +27,7 @@ def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: Wrapped angles in ``[-pi, pi)``.
     """
-    return ((angle + np.pi) % (2.0 * np.pi)) - np.pi
+    return wrap_angle_pi_array(angle)
 
 
 @dataclass

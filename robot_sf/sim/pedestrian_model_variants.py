@@ -7,6 +7,8 @@ from math import atan2
 import numpy as np
 from pysocialforce.scene import EXPLICIT_EULER, normalize_integration_scheme
 
+from robot_sf.common.math_utils import wrap_angle_pi_array
+
 SOCIAL_FORCE_DEFAULT = "social_force_default"
 HSFM_TOTAL_FORCE_V1 = "hsfm_total_force_v1"
 HSFM_TTC_PREDICTIVE_V1 = "hsfm_ttc_predictive_v1"
@@ -891,8 +893,8 @@ def wrap_to_pi(angle: np.ndarray | float) -> np.ndarray:
     Returns:
         The angle(s) wrapped to a single canonical turn, as a float array.
     """
-    wrapped = np.mod(np.asarray(angle, dtype=float) + np.pi, 2.0 * np.pi) - np.pi
-    # ``np.mod`` maps the -pi boundary to -pi; fold it to +pi so the interval is (-pi, pi].
+    wrapped = wrap_angle_pi_array(angle)
+    # The pedestrian model intentionally uses the closed positive boundary ``(-pi, pi]``.
     wrapped = np.where(wrapped <= -np.pi, np.pi, wrapped)
     return wrapped
 

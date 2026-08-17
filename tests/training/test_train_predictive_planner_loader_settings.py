@@ -345,3 +345,13 @@ def test_training_summary_manifest_records_effective_loader_settings(
         "non_blocking": False,
         "device": "cpu",
     }
+    assert summary["peak_cuda_memory_allocated_bytes"] is None
+    assert summary["peak_cuda_memory_reserved_bytes"] is None
+    assert len(summary["history"]) == 1
+    history_row = summary["history"][0]
+    assert history_row["train_runtime_sec"] >= 0.0
+    assert history_row["val_runtime_sec"] >= 0.0
+    assert history_row["train_steps"] > 0.0
+    assert history_row["val_steps"] > 0.0
+    assert history_row["train_examples"] > 0.0
+    assert history_row["val_examples"] > 0.0

@@ -36,28 +36,6 @@ from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency.latency_stress import (
     not_available_latency_metrics,
 )
-from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
-from robot_sf.benchmark.map_runner_actions import (
-    command_xy_payload as _command_xy_payload,  # noqa: F401 - compatibility re-export for tests.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    policy_command_to_env_action as _policy_command_to_env_action,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    robot_kinematics_label as _robot_kinematics_label,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    robot_max_speed as _robot_max_speed,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    scenario_robot_kinematics_label as _scenario_robot_kinematics_label,
-)
-from robot_sf.benchmark.map_runner_actions import (
-    stack_ped_positions as _stack_ped_positions,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_actions import (
-    vel_and_acc as _vel_and_acc,  # noqa: F401 - compatibility re-export.
-)
 from robot_sf.benchmark.map_runner_batch_plan import (
     build_seed_jobs as _build_seed_jobs,
 )
@@ -140,6 +118,30 @@ from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_r
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    command_xy_payload as _command_xy_payload,  # noqa: F401 - compatibility re-export for tests.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    policy_command_to_env_action as _policy_command_to_env_action,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_kinematics_label as _robot_kinematics_label,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_max_speed as _robot_max_speed,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    scenario_robot_kinematics_label as _scenario_robot_kinematics_label,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    stack_ped_positions as _stack_ped_positions,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    vel_and_acc as _vel_and_acc,  # noqa: F401 - compatibility re-export.
+)
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
 )

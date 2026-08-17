@@ -36,3 +36,11 @@ def test_selector_fails_closed_when_inventory_is_missing() -> None:
 
     assert result["status"] == UNKNOWN
     assert result["reason"] == "changed_file_inventory_unavailable"
+
+
+def test_path_normalization_preserves_hidden_directory_names() -> None:
+    """Normalization removes only an explicit relative prefix."""
+    result = classify_changed_files(["./.agents/skills/example.md"], sensitive_files=SENSITIVE)
+
+    assert result["status"] == ORDINARY
+    assert result["changed_files"] == [".agents/skills/example.md"]

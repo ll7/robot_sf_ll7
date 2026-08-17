@@ -16,6 +16,14 @@ ORDINARY = "ordinary"
 UNKNOWN = "unknown"
 
 
+def _normalize_repo_path(path: str) -> str:
+    """Normalize only repeated ``./`` prefixes without changing hidden directories."""
+    normalized = path
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
 def find_base_sensitive_test_files(repo_root: Path) -> list[str]:
     """Return repository-relative test files declaring the ``base_sensitive`` marker.
 
@@ -50,7 +58,7 @@ def classify_changed_files(
     an ordinary PR.  A present inventory with no marker-file intersection is ordinary and may use
     the immediate current-base compare-and-swap path at merge time.
     """
-    normalized_sensitive = {str(path).lstrip("./") for path in sensitive_files}
+    normalized_sensitive = {_normalize_repo_path(str(path)) for path in sensitive_files}
     if changed_files is None:
         return {
             "status": UNKNOWN,
@@ -61,7 +69,9 @@ def classify_changed_files(
             "reason": "changed_file_inventory_unavailable",
         }
 
-    normalized_changed = sorted({str(path).lstrip("./") for path in changed_files if str(path)})
+    normalized_changed = sorted(
+        {_normalize_repo_path(str(path)) for path in changed_files if str(path)}
+    )
     changed_sensitive = sorted(path for path in normalized_changed if path in normalized_sensitive)
     return {
         "status": BASE_SENSITIVE if changed_sensitive else ORDINARY,

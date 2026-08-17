@@ -156,6 +156,30 @@ The optional-dependency preflight uses import-spec probes without importing proj
 `missing_optional` result is setup evidence and should not be confused with a changed-code
 collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
 
+### Local CI scratch capacity
+
+The local continuous-integration (CI) runner checks temporary-directory capacity before it starts
+dependency setup or a CI phase, so a nearly full temporary filesystem fails early with a usable
+remediation. The default guard requires 1 GiB free at `${TMPDIR:-/tmp}`:
+
+```bash
+scripts/dev/run_ci_local.sh --no-setup lint test
+```
+
+When `/tmp` is a small or nearly full temporary filesystem, point the run at a writable,
+disk-backed directory instead:
+
+```bash
+scripts/dev/run_ci_local.sh --scratch-dir /path/on/disk
+scripts/dev/run_worktree_shared_venv.sh --scratch-dir /path/on/disk -- \
+  pytest tests/dev/test_ci_script_contract.py -q
+```
+
+`--scratch-dir` places temporary files plus the default `uv`, XDG, and Matplotlib caches below
+that directory. The wrappers retain an explicitly supplied `ROBOT_SF_CI_MIN_FREE_BYTES` override;
+use it only for a deliberately bounded run when the default 1 GiB guard is not appropriate. A
+capacity failure means no CI phase or wrapped command was started; it is not a test-suite result.
+
 Notes:
 
 - The symlink target should point at the main checkout's local machine context, not a copied

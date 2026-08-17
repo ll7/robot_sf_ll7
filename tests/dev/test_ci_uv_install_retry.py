@@ -80,6 +80,14 @@ def _write_stub_sleep(bin_dir: Path, log: Path) -> None:
     stub.chmod(0o755)
 
 
+def _write_unavailable_uv(bin_dir: Path) -> None:
+    """Hide any host-provided uv so fallback tests control the initial state."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    stub = bin_dir / "uv"
+    stub.write_text("#!/usr/bin/env bash\nexit 127\n")
+    stub.chmod(0o755)
+
+
 def _run_helper(tmp_path: Path, *, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     """Run the helper with a deterministic temporary environment."""
     bash = shutil.which("bash")
@@ -108,6 +116,7 @@ def _retry_env(tmp_path: Path, *, succeed_on: int) -> tuple[dict[str, str], Path
         install_bin=install_bin,
         succeed_on=succeed_on,
     )
+    _write_unavailable_uv(fake_bin)
     _write_stub_sleep(fake_bin, tmp_path / "sleep.log")
 
     env = os.environ.copy()
@@ -173,6 +182,20 @@ def test_ci_install_uv_retry_reuses_exact_existing_binary(tmp_path: Path) -> Non
     assert not pip_log.exists()
 
 
+def test_ci_install_uv_retry_accepts_platform_suffix(tmp_path: Path) -> None:
+    """Platform/build details after the exact uv version token are valid."""
+    env, counter, pip_log = _retry_env(tmp_path, succeed_on=99)
+    env["STUB_UV_VERSION"] = "0.11.21 (x86_64-unknown-linux-gnu)"
+    _write_stub_uv(tmp_path / "user-bin")
+
+    result = _run_helper(tmp_path, env=env)
+
+    assert result.returncode == 0, f"stdout: {result.stdout}, stderr: {result.stderr}"
+    assert "reuse source=path version=0.11.21" in result.stdout
+    assert not counter.exists()
+    assert not pip_log.exists()
+
+
 def test_ci_install_uv_retry_rejects_wrong_installed_version(tmp_path: Path) -> None:
     """A successful install that yields the wrong version must fail closed."""
     env, _, _ = _retry_env(tmp_path, succeed_on=1)
@@ -192,6 +215,8 @@ def test_shared_setup_keeps_pinned_action_and_adds_fail_closed_fallback() -> Non
     assert "steps.setup-uv.outcome == 'failure'" in action_text
     assert "scripts/dev/ci_install_uv_retry.sh" in action_text
     assert "uv --version" in action_text
+    assert 'actual_version="${actual#uv }"' in action_text
+    assert '"$actual_version" != "$UV_VERSION"' in action_text
     assert 'enable-cache: "true"' in action_text
     assert 'prune-cache: "true"' in action_text
 

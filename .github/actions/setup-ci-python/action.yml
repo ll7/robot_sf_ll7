@@ -64,7 +64,9 @@ runs:
       run: |
         expected="uv ${UV_VERSION}"
         actual="$(uv --version 2>/dev/null || true)"
-        if [[ "$actual" != "$expected" ]]; then
+        actual_version="${actual#uv }"
+        actual_version="${actual_version%% *}"
+        if [[ "$actual" != uv\ * || "$actual_version" != "$UV_VERSION" ]]; then
           echo "::error::uv setup was not proven: expected '${expected}', got '${actual:-missing uv}'" >&2
           exit 1
         fi

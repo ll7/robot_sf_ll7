@@ -75,7 +75,15 @@ if [[ -n "${GITHUB_PATH:-}" ]]; then
 fi
 
 expected="uv ${uv_version}"
-if command -v uv >/dev/null 2>&1 && [[ "$(uv --version 2>/dev/null || true)" == "$expected" ]]; then
+uv_version_matches() {
+  local actual="$1"
+  [[ "$actual" == uv\ * ]] || return 1
+  local actual_version="${actual#uv }"
+  actual_version="${actual_version%% *}"
+  [[ "$actual_version" == "$uv_version" ]]
+}
+
+if command -v uv >/dev/null 2>&1 && uv_version_matches "$(uv --version 2>/dev/null || true)"; then
   echo "ci_install_uv_retry reuse source=path version=${uv_version}"
   exit 0
 fi
@@ -102,7 +110,7 @@ while true; do
   if [[ "$status" -eq 0 ]]; then
     hash -r
     actual="$(uv --version 2>/dev/null || true)"
-    if [[ "$actual" == "$expected" ]]; then
+    if uv_version_matches "$actual"; then
       echo "ci_install_uv_retry success source=pypi version=${uv_version} attempt=${attempt}/${max_attempts}"
       exit 0
     fi

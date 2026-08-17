@@ -88,10 +88,10 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import 
     _parse_algo_config,
     _resolve_policy_search_candidate_runtime,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_stress_profile,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile,
 )
 from robot_sf.benchmark.map_runner_static_deadlock import (

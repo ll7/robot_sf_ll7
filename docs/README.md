@@ -21,6 +21,8 @@ own index so you never fall straight into issue-specific context notes.
   planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
 - 🔬 **[Research & Benchmark Guide](./research-guide.md)** — benchmark semantics, evidence grading,
   scenario certification, release protocol, provenance discipline.
+- 🧭 **[Feasibility-First Scenario Search](./feasibility_first_scenario_search.md)** — fixture-only
+  rejection accounting and deterministic risk-feature ordering for adversarial research.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
 - 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation

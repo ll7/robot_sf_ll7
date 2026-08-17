@@ -42,7 +42,10 @@ def _raw_pr(
         "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
         "comments": [
             {
-                "body": metadata_trailer(metadata_digest("merge queue test PR", "final body")),
+                "body": (
+                    metadata_trailer(metadata_digest("merge queue test PR", "final body"))
+                    + f"\nchanged-coverage: passed @ {FULL_SHA}"
+                ),
                 "authorAssociation": "OWNER",
             }
         ],
@@ -534,6 +537,90 @@ def test_stale_metadata_verdict_is_distinguished_from_missing() -> None:
     assert audit.metadata_digest == current_digest
     assert audit.metadata_verdict_status == "stale"
     assert "stale_pr_metadata_verdict" in audit.reasons
+
+
+def test_changed_coverage_verdict_is_required_for_live_admission() -> None:
+    """The live gate requires exact-head changed-line coverage proof."""
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata_digest("merge queue test PR", "final body"),
+            "metadata_verdicts": [
+                metadata_trailer(metadata_digest("merge queue test PR", "final body"))
+            ],
+            "changed_coverage_required": True,
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "missing"
+    assert "missing_changed_coverage_verdict" in audit.reasons
+
+
+@pytest.mark.parametrize(
+    ("trailer", "status"),
+    [
+        (f"changed-coverage: passed @ {FULL_SHA}", "passed"),
+        (f"changed-coverage: not-required @ {FULL_SHA} reason=docs-only", "not_required"),
+    ],
+)
+def test_changed_coverage_exact_head_proof_or_exception_admits(trailer: str, status: str) -> None:
+    """A current proof or explicit exception satisfies the coverage dimension."""
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata_digest("merge queue test PR", "final body"),
+            "metadata_verdicts": [
+                metadata_trailer(metadata_digest("merge queue test PR", "final body"))
+            ],
+            "changed_coverage_required": True,
+            "changed_coverage_verdicts": [trailer],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.changed_coverage_status == status
+
+
+def test_changed_coverage_old_head_cannot_admit_new_head() -> None:
+    """Coverage proof from the merged exact head must not authorize a later commit."""
+    later_head = "b" + FULL_SHA[1:]
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": later_head,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "gate_verdicts": [f"gate-verdict: accepted @ {later_head}"],
+            "metadata_digest": metadata_digest("merge queue test PR", "final body"),
+            "metadata_verdicts": [
+                metadata_trailer(metadata_digest("merge queue test PR", "final body"))
+            ],
+            "changed_coverage_required": True,
+            "changed_coverage_verdicts": [f"changed-coverage: passed @ {FULL_SHA}"],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "stale"
+    assert "stale_changed_coverage_verdict" in audit.reasons
 
 
 def test_evaluate_merge_gate_fails_closed_when_runtime_dimensions_are_missing() -> None:

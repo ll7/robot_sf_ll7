@@ -43,12 +43,15 @@ def test_robot_pose_record_equality_and_hash() -> None:
     assert isinstance(hash(record), int)
 
 
-def test_bresenham_line_includes_endpoints() -> None:
-    """Verify Bresenham helper returns a connected line path."""
-    cells = OccupancyGrid._bresenham_line(0, 0, 2, 1)
-    assert cells[0] == (0, 0)
-    assert cells[-1] == (2, 1)
-    assert len(cells) >= 3
+@pytest.mark.parametrize(
+    ("x0", "y0", "x1", "y1"),
+    [(0, 0, 2, 1), (4, 3, 1, -2), (2, 2, 2, 2), (-2, 4, 3, 4)],
+)
+def test_bresenham_line_matches_canonical_rasterizer(x0: int, y0: int, x1: int, y1: int) -> None:
+    """Keep the legacy cell-order API equal to the canonical rasterizer."""
+    rows, cols = rasterization._bresenham_line(y0, x0, y1, x1)
+    expected = list(zip(cols.tolist(), rows.tolist(), strict=True))
+    assert OccupancyGrid._bresenham_line(x0, y0, x1, y1) == expected
 
 
 def test_rasterize_obstacles_aggregates_out_of_bounds_debug_logs() -> None:

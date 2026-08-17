@@ -26,6 +26,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         build_predictive_mppi_config,
     )
     from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSocialPlannerAdapter
+    from robot_sf.planner.mppi_social import MPPISocialConfig, MPPISocialPlannerAdapter
     from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
     import robot_sf.planner.socnav as socnav
     import robot_sf.scenario_certification.v1 as cert
@@ -151,6 +152,15 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: nmpc_social._occupancy_cost(np.zeros(2, dtype=float)),
     )
 
+    mppi_social = MPPISocialPlannerAdapter(
+        MPPISocialConfig(sample_count=1, iterations=1, horizon_steps=1)
+    )
+    expect(
+        "mppi_social_obstacle_clearance_observation",
+        ValueError,
+        "MPPI Social obstacle clearance requires observation when grid_payload is absent",
+        lambda: mppi_social._min_obstacle_clearance(np.zeros(2, dtype=float)),
+    )
     risk_dwa = RiskDWAPlannerAdapter()
     expect(
         "risk_dwa_obstacle_clearance_observation",
@@ -245,6 +255,7 @@ _EXPECTED_MARKERS = (
     "PASS predictive_mppi_obstacle_clearance_observation: ValueError",
     "PASS nmpc_social_obstacle_clearance_observation: ValueError",
     "PASS nmpc_social_occupancy_observation: ValueError",
+    "PASS mppi_social_obstacle_clearance_observation: ValueError",
     "PASS risk_dwa_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
@@ -265,6 +276,7 @@ _EXPECTED_MESSAGES = (
     "Predictive MPPI obstacle clearance requires observation when grid_payload is absent",
     "NMPC Social obstacle clearance requires observation when grid_payload is absent",
     "NMPC Social occupancy cost requires observation when grid_payload is absent",
+    "MPPI Social obstacle clearance requires observation when grid_payload is absent",
     "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",

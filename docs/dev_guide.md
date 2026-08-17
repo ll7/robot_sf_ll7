@@ -661,6 +661,13 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
+That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
+Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job
+is completed successfully and the check-run is still pending, then reads the check-run back to verify
+`completed/success`. Identity mismatches, terminal failures, missing jobs, and API errors remain
+fail-closed with a JSON report; the reconciliation job is diagnostic-only and outside the `ci`
+aggregate.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and

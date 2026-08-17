@@ -328,6 +328,44 @@ jobs:
           path: output/benchmarks/reproducibility_check.json
           if-no-files-found: warn
 
+  reproducibility-check-reconciliation:
+    # A successful Actions job can transiently retain a pending check-run on
+    # GitHub-hosted state. Reconcile only that exact job identity; keep the
+    # hosted-state repair diagnostic-only and outside the ci aggregate.
+    if: >-
+      ${{ always() && (github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch') }}
+    needs: [reproducibility-check]
+    continue-on-error: true
+    permissions:
+      actions: read
+      checks: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Reconcile exact successful check-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPRODUCIBILITY_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REPRODUCIBILITY_JOB_RESULT: ${{ needs.reproducibility-check.result }}
+        run: >-
+          python scripts/dev/reconcile_reproducibility_check_run.py
+          --output output/validation/reproducibility_check_run_reconciliation.json
+
+      - name: Upload reconciliation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproducibility-check-reconciliation
+          path: output/validation/reproducibility_check_run_reconciliation.json
+          if-no-files-found: warn
+
   xdist-scratch-isolation:
     runs-on: ubuntu-latest
     timeout-minutes: 15

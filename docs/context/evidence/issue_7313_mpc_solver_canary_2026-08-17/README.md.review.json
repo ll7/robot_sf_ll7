@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/README.md",
+  "artifact_sha256": "3d571d2858b1e12e40b453f7c84338fb1a4659ecec04254aa4fef7e5911ad0c5",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

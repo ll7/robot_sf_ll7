@@ -351,6 +351,44 @@ def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
 
+def _planner_runtime_diagnostics(planner: Any) -> dict[str, Any] | None:
+    """Return child-process foresight and planner diagnostics as one payload."""
+    payload = _planner_foresight_diagnostics(planner) or {}
+    diagnostics_fn = getattr(planner, "diagnostics", None)
+    if callable(diagnostics_fn):
+        try:
+            diagnostics = diagnostics_fn()
+        except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution
+            diagnostics = None
+        if isinstance(diagnostics, Mapping):
+            payload["planner_diagnostics"] = dict(diagnostics)
+    return payload or None
+
+
+def _apply_fallback_diagnostics(metadata: dict[str, Any], diagnostics: Mapping[str, Any]) -> None:
+    """Mark metadata as fallback when a runtime diagnostics payload says so."""
+    if diagnostics.get("fallback") is not True:
+        return
+    if metadata.get("status") in (None, "ok"):
+        metadata["status"] = "fallback"
+    reason = diagnostics.get("fallback_reason")
+    if isinstance(reason, str) and reason:
+        metadata.setdefault("fallback_reason", reason)
+
+
+def _attach_runtime_diagnostics(
+    metadata: dict[str, Any],
+    key: str,
+    raw: Any,
+    *,
+    fallback_planner_type: str,
+) -> None:
+    """Normalize and attach runtime diagnostics, preserving fallback status."""
+    normalized = normalize_planner_diagnostics(raw, fallback_planner_type=fallback_planner_type)
+    metadata[key] = normalized
+    _apply_fallback_diagnostics(metadata, normalized)
+
+
 def _config_torch_worker(planner: Any) -> None:
     """Configure torch for deterministic single-threaded execution in a forked worker."""
     torch = try_import("torch")
@@ -375,7 +413,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
         if callable(ensure_load):
             ensure_load()
-        conn.send(("init_ok", _planner_foresight_diagnostics(planner)))
+        conn.send(("init_ok", _planner_runtime_diagnostics(planner)))
     except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
@@ -397,7 +435,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
                 continue
             try:
                 action = planner.step(payload)
-                conn.send(("ok", (action, _planner_foresight_diagnostics(planner))))
+                conn.send(("ok", (action, _planner_runtime_diagnostics(planner))))
             except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
@@ -427,6 +465,7 @@ class _PlannerStepProcess:
         self._process: mp.Process | None = None
         self._conn: Any | None = None
         self._latest_foresight_diagnostics: dict[str, Any] | None = None
+        self._latest_planner_diagnostics: dict[str, Any] | None = None
 
     def step(self, obs: Any) -> Any:
         """Run one planner step or raise when timeout/isolation fails.
@@ -465,7 +504,7 @@ class _PlannerStepProcess:
                     ) from exc
                 if status == "ok":
                     action, diagnostics = payload
-                    self._set_foresight_diagnostics(diagnostics)
+                    self._set_runtime_diagnostics(diagnostics)
                     self._worker_needs_warmup = False
                     return action
                 error_type, message = payload
@@ -522,17 +561,25 @@ class _PlannerStepProcess:
                 raise RuntimeError("planner step worker initialization timed out")
             error_type, msg = payload
             raise RuntimeError(f"planner step worker failed to initialize ({error_type}: {msg})")
-        self._set_foresight_diagnostics(payload)
+        self._set_runtime_diagnostics(payload)
         self._worker_needs_warmup = True
 
     def foresight_diagnostics(self) -> dict[str, Any]:
         """Return foresight diagnostics most recently relayed from the child worker."""
         return dict(self._latest_foresight_diagnostics or {})
 
-    def _set_foresight_diagnostics(self, diagnostics: Any) -> None:
+    def diagnostics(self) -> dict[str, Any]:
+        """Return planner diagnostics most recently relayed from the child worker."""
+        return dict(self._latest_planner_diagnostics or {})
+
+    def _set_runtime_diagnostics(self, diagnostics: Any) -> None:
         """Store serializable diagnostics relayed by the child process."""
         if isinstance(diagnostics, Mapping):
-            self._latest_foresight_diagnostics = dict(diagnostics)
+            payload = dict(diagnostics)
+            planner_diagnostics = payload.pop("planner_diagnostics", None)
+            self._latest_foresight_diagnostics = payload
+            if isinstance(planner_diagnostics, Mapping):
+                self._latest_planner_diagnostics = dict(planner_diagnostics)
 
     def _terminate_worker(self) -> None:
         """Terminate the current worker after a timeout."""
@@ -1377,7 +1424,9 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
     policy_fn._planner_close = _close_policy  # type: ignore[attr-defined]
     policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
     if callable(getattr(planner, "diagnostics", None)):
-        policy_fn.diagnostics = adapter.diagnostics  # type: ignore[attr-defined]
+        policy_fn.diagnostics = (  # type: ignore[attr-defined]
+            step_runner.diagnostics if step_runner is not None else adapter.diagnostics
+        )
 
     return policy_fn
 
@@ -1983,6 +2032,7 @@ def _simulate_episode_with_policy(
             reached_goal_step = t + 1
             break
 
+    robot_policy.force_diagnostics = wrapper.diagnostics  # type: ignore[attr-defined]
     return (
         robot_pos_traj,
         robot_vel_traj,
@@ -2261,8 +2311,21 @@ def run_episode(  # noqa: PLR0913
     policy_diag = getattr(robot_policy, "diagnostics", None)
     if callable(policy_diag):
         live_diag = policy_diag()
-        algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = normalize_planner_diagnostics(
-            live_diag, fallback_planner_type=algo
+        _attach_runtime_diagnostics(
+            algo_metadata,
+            NATIVE_COMMAND_DIAGNOSTICS_KEY,
+            live_diag,
+            fallback_planner_type=algo,
+        )
+
+    force_diag = getattr(robot_policy, "force_diagnostics", None)
+    if callable(force_diag):
+        live_force_diag = force_diag()
+        _attach_runtime_diagnostics(
+            algo_metadata,
+            "force_diagnostics",
+            live_force_diag,
+            fallback_planner_type="FastPysfWrapper",
         )
 
     # Issue #6190: refresh the predictive planner's foresight-model-load

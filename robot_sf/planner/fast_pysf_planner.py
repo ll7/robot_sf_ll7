@@ -131,7 +131,21 @@ class FastPysfPlannerPolicy:
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "FastPysfPlannerPolicy"}
+        diagnostics: dict[str, Any] = {
+            "planner_type": "FastPysfPlannerPolicy",
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        }
+        wrapper_diagnostics = self._wrapper.diagnostics()
+        if isinstance(wrapper_diagnostics, dict):
+            diagnostics["fast_pysf_wrapper"] = wrapper_diagnostics
+            diagnostics["fallback"] = bool(wrapper_diagnostics.get("fallback", False))
+            diagnostics["fallback_count"] = int(wrapper_diagnostics.get("fallback_count", 0))
+            diagnostics["fallback_reason"] = wrapper_diagnostics.get("fallback_reason")
+            diagnostics["fallback_reasons"] = dict(wrapper_diagnostics.get("fallback_reasons", {}))
+        return diagnostics
 
 
 __all__ = ["FastPysfPlannerConfig", "FastPysfPlannerPolicy"]

@@ -665,8 +665,8 @@ class SocialForcePlanner(BasePolicy):
         self._sim = None
         self._wrapper = None
 
-    def diagnostics(self) -> dict[str, Any]:
-        """Return runtime diagnostics, including FastPysfWrapper fallbacks."""
+    def _fast_pysf_diagnostics(self) -> dict[str, Any]:
+        """Return private FastPysfWrapper diagnostics for metadata assembly."""
         diagnostics: dict[str, Any] = {
             "planner_type": "SocialForcePlanner",
             "fallback": False,
@@ -703,7 +703,7 @@ class SocialForcePlanner(BasePolicy):
             "config_hash": config_hash,
             "status": "ok",
         }
-        runtime_diagnostics = self.diagnostics()
+        runtime_diagnostics = self._fast_pysf_diagnostics()
         metadata["planner_diagnostics"] = runtime_diagnostics
         if runtime_diagnostics["fallback"]:
             metadata["status"] = "fallback"

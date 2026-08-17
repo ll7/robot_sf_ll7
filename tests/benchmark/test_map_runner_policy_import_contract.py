@@ -15,6 +15,7 @@ import pytest
         ("map_runner_policy_common", "build_adapter_policy"),
         ("map_runner_policy_metadata", "finalize_feasibility_metadata"),
         ("map_runner_policy_resolution", None),
+        ("map_runner_actions", "policy_command_to_env_action"),
     ),
 )
 def test_legacy_policy_module_is_identity_alias(

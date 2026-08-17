@@ -470,6 +470,14 @@ prepublication gate still blocks rather than treating a capped inventory as comp
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.
 
+**Observation follow-up (issue #7261).** The selected policy must be measured from a named,
+SHA-pinned normal-throughput window after rollout; a live queue snapshot is not a latency or
+causality measurement. Use `scripts/dev/measure_stale_base_policy.py` with an explicit
+`stale_base_observation_window.v1` input. The helper keeps ordinary compare-and-swap waits and
+base-sensitive refresh waits separate, requires exact-head/base evidence for stale-base attribution,
+and reports missing source data as `not_available`. Its output is workflow evidence only and does
+not authorize a policy change, merge, campaign, or publication.
+
 ### Merge queue gate (issue #6274)
 
 **Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`

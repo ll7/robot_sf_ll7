@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
+with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
+compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The
+committed fixture is synthetic and is not normal-throughput or benchmark evidence:
+[issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md).
+
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
 one campaign cell, preserves terminal-verdict denominators, and remains

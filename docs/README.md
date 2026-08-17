@@ -195,7 +195,6 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 403 Grid PPO Training Runbook](./training/issue_403_grid_training.md)** - Step-by-step training for the grid+SocNav PPO expert.
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
-* **[Leakage-Safe Parametric Curriculum Diagnostic](./parametric_curriculum_diagnostic.md)** - Fixture-only curriculum manifests, deterministic replay, and fail-closed train/evaluation leakage checks.
 * **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and map-derived lifecycle follow-up for predictive planner inputs
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.

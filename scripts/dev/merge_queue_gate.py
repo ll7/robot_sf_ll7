@@ -12,6 +12,9 @@ fail-closed preflight as ``gh-pr-merger``:
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
+  - a current exact-head ``changed-coverage: passed @ <head_sha>`` trailer, or
+    a reasoned ``changed-coverage: not-required @ <head_sha> reason=<code>``
+    exception,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
@@ -20,9 +23,9 @@ fail-closed preflight as ``gh-pr-merger``:
     base SHA equals current ``main``; evaluated against ``main`` in ``--pr`` mode).
 
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
-queue merging strategy, base SHA, label set, metadata digest and trailer
-statuses, staleness verdict, CI conclusion, reviewer-thread resolution, and
-requested-reviewer status so the merge decision is inspectable and reproducible.
+queue merging strategy, base SHA, label set, metadata and changed-coverage
+verdict statuses, staleness verdict, CI conclusion, reviewer-thread resolution,
+and requested-reviewer status so the merge decision is inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -66,12 +69,14 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _rollup_status,
 )
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    current_changed_coverage_verdict,
     has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer  # noqa: E402
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+    _extract_changed_coverage_verdicts,
     _extract_gate_verdicts,
     _extract_metadata_verdicts,
 )
@@ -126,6 +131,9 @@ class MergeGateAudit:
     gate_verdict_status: str
     metadata_digest: str
     metadata_verdict_status: str
+    changed_coverage_required: bool
+    changed_coverage_status: str
+    changed_coverage_reason: str
     staleness_verdict: str
     thread_resolution: str
     reviewer_request_status: str
@@ -196,7 +204,7 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
-def _fail_closed_reasons(  # noqa: PLR0913
+def _fail_closed_reasons(  # noqa: C901, PLR0913
     *,
     draft: bool,
     merge_ready: bool,
@@ -204,6 +212,8 @@ def _fail_closed_reasons(  # noqa: PLR0913
     staleness_verdict: str,
     gate_verdict_status: str,
     metadata_verdict_status: str,
+    changed_coverage_required: bool,
+    changed_coverage_status: str,
     thread_resolution: str,
     reviewer_request_status: str,
     merge_group_head_binding: str,
@@ -230,6 +240,13 @@ def _fail_closed_reasons(  # noqa: PLR0913
             if metadata_verdict_status == "stale"
             else "missing_pr_metadata_verdict"
         )
+    if changed_coverage_required and changed_coverage_status not in {"passed", "not_required"}:
+        reason = {
+            "stale": "stale_changed_coverage_verdict",
+            "invalid": "invalid_changed_coverage_exception",
+            "ambiguous": "ambiguous_changed_coverage_verdict",
+        }.get(changed_coverage_status, "missing_changed_coverage_verdict")
+        reasons.append(reason)
     if merge_group_head_binding == "mismatch":
         reasons.append("merge_group_head_sha_mismatch")
     if thread_resolution != "resolved":
@@ -247,7 +264,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     return reasons
 
 
-def evaluate_merge_gate(
+def evaluate_merge_gate(  # noqa: C901
     pr: dict[str, Any],
     *,
     main_sha: str = "",
@@ -268,6 +285,8 @@ def evaluate_merge_gate(
         ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
         ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
+        ``changed_coverage_required`` plus trusted ``changed_coverage_verdicts``
+        or compact review/comment body excerpts,
         ``reviewers_requested`` when supplied by the live snapshot.
       main_sha: current ``main`` HEAD SHA. When both ``base_sha`` and
         ``main_sha`` are present and differ, the gate fails closed as stale. When
@@ -292,8 +311,8 @@ def evaluate_merge_gate(
 
     Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
     ``reasons``. The audit always records the evaluated head SHA, base SHA, label
-    set, gate-verdict and metadata-verdict statuses, staleness verdict, CI
-    conclusion, and thread resolution so the decision is inspectable.
+    set, gate-verdict, metadata-verdict, and changed-coverage statuses, staleness
+    verdict, CI conclusion, and thread resolution so the decision is inspectable.
     """
     head_sha = str(pr.get("head_sha", "") or "")
     labels = _label_names(pr)
@@ -312,6 +331,13 @@ def evaluate_merge_gate(
     gate_verdict_status = _gate_verdict_status(pr, head_sha)
     metadata_digest_value = str(pr.get("metadata_digest", "") or "")
     metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
+    changed_coverage_required = pr.get("changed_coverage_required") is True
+    if changed_coverage_required:
+        changed_coverage_status, changed_coverage_reason = current_changed_coverage_verdict(
+            pr, head_sha
+        )
+    else:
+        changed_coverage_status, changed_coverage_reason = "not_applicable", ""
 
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
     if merge_group_head_sha:
@@ -351,6 +377,8 @@ def evaluate_merge_gate(
             staleness_verdict=staleness_verdict,
             gate_verdict_status=gate_verdict_status,
             metadata_verdict_status=metadata_verdict_status,
+            changed_coverage_required=changed_coverage_required,
+            changed_coverage_status=changed_coverage_status,
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
@@ -378,6 +406,9 @@ def evaluate_merge_gate(
         gate_verdict_status=gate_verdict_status,
         metadata_digest=metadata_digest_value,
         metadata_verdict_status=metadata_verdict_status,
+        changed_coverage_required=changed_coverage_required,
+        changed_coverage_status=changed_coverage_status,
+        changed_coverage_reason=changed_coverage_reason,
         staleness_verdict=staleness_verdict,
         thread_resolution=thread_resolution,
         reviewer_request_status=reviewer_request_status,
@@ -649,6 +680,8 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
+        "changed_coverage_required": True,
+        "changed_coverage_verdicts": _extract_changed_coverage_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
         # Each GitHub review request is an explicit request for review. Treat any
@@ -829,6 +862,9 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
         f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
+        f"- changed-coverage required: `{audit.changed_coverage_required}`",
+        f"- changed-coverage status: `{audit.changed_coverage_status}`",
+        f"- changed-coverage reason: `{audit.changed_coverage_reason or 'n/a'}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
@@ -840,7 +876,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
         "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
-        "trailer + resolved threads + no outstanding reviewer requests + "
+        "trailer + current exact-head `changed-coverage: passed` trailer or "
+        "reasoned `not-required` exception + resolved threads + no outstanding reviewer requests + "
         "`ALLGREEN` queue strategy; fail-closed on any missing dimension. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
@@ -941,7 +978,7 @@ def _evaluate_live(
     return audit, None
 
 
-def _self_test() -> int:
+def _self_test() -> int:  # noqa: PLR0915
     """Run deterministic assertions covering the issue #6274 gate contract.
 
     Exercises the three validation scenarios plus the additional fail-closed
@@ -975,6 +1012,8 @@ def _self_test() -> int:
         if gate_verdict_sha:
             pr["gate_verdict"] = {"verdict": "accepted", "sha": gate_verdict_sha}
             pr["metadata_verdicts"] = [metadata_trailer(digest)]
+        pr["changed_coverage_required"] = True
+        pr["changed_coverage_verdicts"] = [f"changed-coverage: passed @ {head_sha}"]
         return pr
 
     failures: list[str] = []
@@ -1021,6 +1060,37 @@ def _self_test() -> int:
     expect(
         not audit.passed and "missing_exact_head_gate_verdict" in audit.reasons,
         "stale-head: gate-verdict for a different SHA must fail closed",
+    )
+
+    # Changed-line coverage must bind to the exact reviewed head.
+    coverage_missing_pr = _pr(labels=["merge-ready"], gate_verdict_sha=full_sha)
+    coverage_missing_pr["changed_coverage_verdicts"] = []
+    audit = evaluate_merge_gate(
+        coverage_missing_pr,
+        ci_overall="success",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    expect(
+        not audit.passed and "missing_changed_coverage_verdict" in audit.reasons,
+        "changed-coverage-missing: absent proof must fail closed",
+    )
+    expect(
+        audit.changed_coverage_status == "missing",
+        "changed-coverage-missing: audit must record missing status",
+    )
+
+    coverage_stale_pr = _pr(labels=["merge-ready"], gate_verdict_sha=full_sha)
+    coverage_stale_pr["changed_coverage_verdicts"] = [f"changed-coverage: passed @ {other_sha}"]
+    audit = evaluate_merge_gate(
+        coverage_stale_pr,
+        ci_overall="success",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    expect(
+        not audit.passed and "stale_changed_coverage_verdict" in audit.reasons,
+        "changed-coverage-stale: later head must not reuse old proof",
     )
 
     # CI failure -> fail.
@@ -1120,6 +1190,9 @@ def _self_test() -> int:
         "ci_overall",
         "gate_verdict_status",
         "staleness_verdict",
+        "changed_coverage_required",
+        "changed_coverage_status",
+        "changed_coverage_reason",
         "thread_resolution",
         "reviewer_request_status",
         "merge_ready",

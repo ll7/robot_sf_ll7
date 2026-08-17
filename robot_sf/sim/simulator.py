@@ -75,6 +75,8 @@ from robot_sf.sim.pedestrian_model_variants import (
     HSFM_TOTAL_FORCE_V1,
     HSFM_TTC_PREDICTIVE_V1,
     HSFM_ZANLUNGO_COLLISION_PREDICTION_V1,
+    PYSF_POSITION_SLICE,
+    PYSF_VELOCITY_SLICE,
     fov_attenuated_total_force,
     normalize_pedestrian_model,
     pairwise_social_force_contributions,
@@ -85,8 +87,6 @@ from robot_sf.sim.pedestrian_model_variants import (
 )
 from robot_sf.sim.pedestrian_speed_tiers import sample_desired_pedestrian_speeds
 
-PYSF_POSITION_SLICE = slice(0, 2)
-PYSF_VELOCITY_SLICE = slice(2, 4)
 PYSF_TAU_INDEX = 6
 MIN_HEADING_SPEED_MPS = 1e-6
 

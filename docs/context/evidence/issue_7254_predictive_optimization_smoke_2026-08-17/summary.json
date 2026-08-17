@@ -1,5 +1,6 @@
 {
   "schema_version": "issue_7254_predictive_optimization_smoke_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "issue": 7254,
   "parent_issue": 6482,
   "evidence_tier": "diagnostic-only",

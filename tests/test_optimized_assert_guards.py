@@ -27,6 +27,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     )
     from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSocialPlannerAdapter
     from robot_sf.planner.mppi_social import MPPISocialConfig, MPPISocialPlannerAdapter
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
     import robot_sf.planner.socnav as socnav
     import robot_sf.scenario_certification.v1 as cert
     from robot_sf.sim.simulator import init_simulators
@@ -160,6 +161,13 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         "MPPI Social obstacle clearance requires observation when grid_payload is absent",
         lambda: mppi_social._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
+    risk_dwa = RiskDWAPlannerAdapter()
+    expect(
+        "risk_dwa_obstacle_clearance_observation",
+        ValueError,
+        "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
+        lambda: risk_dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
+    )
 
     original_torch = socnav.torch
     planner = socnav.PredictionPlannerAdapter.__new__(socnav.PredictionPlannerAdapter)
@@ -248,6 +256,7 @@ _EXPECTED_MARKERS = (
     "PASS nmpc_social_obstacle_clearance_observation: ValueError",
     "PASS nmpc_social_occupancy_observation: ValueError",
     "PASS mppi_social_obstacle_clearance_observation: ValueError",
+    "PASS risk_dwa_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
     "PASS route_goal: RuntimeError",
@@ -268,6 +277,7 @@ _EXPECTED_MESSAGES = (
     "NMPC Social obstacle clearance requires observation when grid_payload is absent",
     "NMPC Social occupancy cost requires observation when grid_payload is absent",
     "MPPI Social obstacle clearance requires observation when grid_payload is absent",
+    "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",
     "None goal",

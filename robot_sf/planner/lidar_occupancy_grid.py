@@ -20,6 +20,7 @@ from robot_sf.planner.grid_route import (
     GridRoutePlannerConfig,
     build_grid_route_config,
 )
+from robot_sf.planner.protocol import _reset_with_optional_seed
 from robot_sf.sensor.goal_sensor import TARGET_DISTANCE_CAP_M
 from robot_sf.sensor.sensor_fusion import OBS_DRIVE_STATE, OBS_RAYS
 
@@ -231,6 +232,7 @@ class LidarOccupancyGridRouteAdapter:
         self._last_status = "not_run"
         self._last_error: str | None = None
         self._last_occupied_cells = 0
+        self._closed = False
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset wrapped planner state when supported."""
@@ -239,10 +241,7 @@ class LidarOccupancyGridRouteAdapter:
             if seed is None:
                 reset()
             else:
-                try:
-                    reset(seed=seed)
-                except TypeError:
-                    reset()
+                _reset_with_optional_seed(reset, seed=seed)
         self._last_status = "not_run"
         self._last_error = None
         self._last_occupied_cells = 0
@@ -282,6 +281,7 @@ class LidarOccupancyGridRouteAdapter:
             dict[str, Any]: JSON-compatible adapter diagnostics.
         """
         return {
+            "planner_type": type(self).__name__,
             "adapter": "LidarOccupancyGridRouteAdapter",
             "status": self._last_status,
             "error": self._last_error,
@@ -301,6 +301,15 @@ class LidarOccupancyGridRouteAdapter:
             "grid_size": [float(self.config.width), float(self.config.height)],
             "normalized_observation": bool(self.config.normalized_observation),
         }
+
+    def close(self) -> None:
+        """Release wrapped planner resources once; idempotent thereafter."""
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self.grid_route, "close", None)
+        if callable(close):
+            close()
 
 
 def build_lidar_grid_route_config(cfg: dict[str, Any] | None) -> LidarGridRouteBuildConfig:

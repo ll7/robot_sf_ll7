@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 7322
+latest_reconciliation_issue: 7410
 latest_reviewed_date: 2026-08-17
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 421
-refreshed_baseline_files_with_findings: 93
+refreshed_baseline_total_findings: 428
+refreshed_baseline_files_with_findings: 94
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -111,6 +111,12 @@ decision_summary: >-
   heuristic; both findings are explicitly dispositioned below and the refreshed baseline grows
   from 419 findings across 91 files to 421 findings across 93 files. The package remains
   blocked_pending_domain_approval / not_admitted and is not paper-facing evidence.
+  Build receipt addendum (issue #7410): the durable Chapter 7 v2 build-provenance receipt records
+  exact source, environment, rebuild, and diagnostic bindings without admitting the package. The
+  generic linter does not infer artifact paths from the receipt's nested package-hash projections,
+  and its frozen v1 member references are intentionally package-relative. The seven resulting
+  findings are explicitly dispositioned below; the baseline grows from 421 findings across 93 files
+  to 428 findings across 94 files. The receipt remains provenance-only and non-paper-facing.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -273,6 +279,16 @@ reviewed_files:
       artifact resolution. The source package and its member hashes are independently verified by
       the v2 builder and the custody note; retain the exact generated view and baseline this
       reviewed non-claim finding rather than mutating the package schema.
+  - path: docs/context/evidence/issue_7322_ch7_build_receipt.v1.json
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      This receipt is the durable, independently checked build-provenance contract for the
+      collision-excluded Chapter 7 v2 package. Its nested SHA-256 projections and package-relative
+      frozen-v1 member references are consumed by the receipt verifier, but the generic linter
+      cannot infer those bindings as adjacent artifact paths. Rewriting the receipt to satisfy the
+      generic heuristic would weaken the versioned receipt schema; the exact paths, source commit,
+      and non-admission boundary remain fail-closed in the receipt checker.
   # Added 2026-08-05: these S10 metadata-only preflight packets were newly added to the baseline
   # by #6776 and therefore belong under reviewed_files, not reviewed_baseline_increases.
   - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json

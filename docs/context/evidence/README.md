@@ -127,6 +127,12 @@ Policy caveats:
   checksum-covered, but remains `blocked_pending_domain_approval` / `not_admitted`; see the
   [custody note](issue_7322_ch7_custody_note.md) for retrieval, provenance, and blockers.
 
+- `issue_7322_ch7_build_receipt.v1.json`: independently checkable build provenance for the
+  Chapter 7 v2 package. It binds the source commit/tree, builder and verifier hashes, locked
+  dependency identity, two rebuilt payload trees, and the successful non-admission diagnostic.
+  It is build provenance only; it is not an admission receipt, domain approval, benchmark result,
+  or paper-facing evidence.
+
 - `issue_6102_robot_speed_tier_recovery/`: compact recovery receipt for the
   structurally complete local copy of job 13828 (2,160 native cells). The recorded
   independent result root is missing, so this packet remains `durable-required`,

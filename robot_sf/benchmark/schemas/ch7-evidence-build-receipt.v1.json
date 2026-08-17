@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-evidence-build-receipt.v1.json",
+  "title": "Chapter 7 v2 evidence build receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "package_issue",
+    "status",
+    "claim_boundary",
+    "repository",
+    "source",
+    "inputs",
+    "environment",
+    "commands",
+    "package",
+    "rebuilds",
+    "check_only",
+    "admission_boundary",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-evidence-build-receipt.v1"},
+    "issue": {"const": 7410},
+    "package_issue": {"const": 7087},
+    "status": {"const": "verified_build_provenance"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "source_tree_contract", "receipt_excluded_from_source_commit"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "source_tree_contract": {"const": "git-commit-tree.v1"},
+        "receipt_excluded_from_source_commit": {"const": true}
+      }
+    },
+    "source": {"$ref": "#/$defs/source"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_package", "config", "portfolio"],
+      "properties": {
+        "source_package": {"$ref": "#/$defs/source_package"},
+        "config": {"$ref": "#/$defs/path_hash"},
+        "portfolio": {"$ref": "#/$defs/path_hash"}
+      }
+    },
+    "environment": {"$ref": "#/$defs/environment"},
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["build", "build_determinism", "verify_check_only"],
+      "properties": {
+        "build": {"$ref": "#/$defs/command"},
+        "build_determinism": {"$ref": "#/$defs/command"},
+        "verify_check_only": {"$ref": "#/$defs/command"}
+      }
+    },
+    "package": {"$ref": "#/$defs/package"},
+    "rebuilds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_hash_algorithm", "byte_identical", "matches_tracked_package", "build_a", "build_b"],
+      "properties": {
+        "tree_hash_algorithm": {"const": "payload-tree-sha256.v1"},
+        "byte_identical": {"const": true},
+        "matches_tracked_package": {"const": true},
+        "build_a": {"$ref": "#/$defs/package_hashes"},
+        "build_b": {"$ref": "#/$defs/package_hashes"}
+      }
+    },
+    "check_only": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "exit_code", "status", "admission_status", "diagnostic"],
+      "properties": {
+        "command": {"$ref": "#/$defs/command"},
+        "exit_code": {"const": 0},
+        "status": {"const": "blocked_pending_domain_approval"},
+        "admission_status": {"const": "not_admitted"},
+        "diagnostic": {"type": "object"}
+      }
+    },
+    "admission_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["admission_receipt_created", "domain_approval_recorded", "publication_authorized", "benchmark_result_admitted"],
+      "properties": {
+        "admission_receipt_created": {"const": false},
+        "domain_approval_recorded": {"const": false},
+        "publication_authorized": {"const": false},
+        "benchmark_result_admitted": {"const": false}
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonicalization", "scope", "receipt_payload_sha256"],
+      "properties": {
+        "canonicalization": {"const": "json-sort-keys-utf8-newline.v1"},
+        "scope": {"const": "top-level-object-with-integrity.receipt_payload_sha256-removed.v1"},
+        "receipt_payload_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "path_hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "source_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256sums_sha256", "manifest_sha256", "members"],
+      "properties": {
+        "path": {"const": "docs/context/evidence/issue_6792_ch7_evidence_package_v1"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "members": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/path_hash"}
+        }
+      }
+    },
+    "source_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["builder", "verifier", "package_schema", "admission_schema", "files"],
+      "properties": {
+        "builder": {"$ref": "#/$defs/source_record"},
+        "verifier": {"$ref": "#/$defs/source_record"},
+        "package_schema": {"$ref": "#/$defs/source_record"},
+        "admission_schema": {"$ref": "#/$defs/source_record"},
+        "files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source_record"}}
+      }
+    },
+    "python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "version", "command"],
+      "properties": {
+        "implementation": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "command": {"type": "array", "const": ["python", "--version"]}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "uv", "project", "lock", "resolved_dependencies"],
+      "properties": {
+        "python": {"$ref": "#/$defs/python"},
+        "uv": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "command"],
+          "properties": {
+            "version": {"type": "string", "minLength": 1},
+            "command": {"type": "array", "const": ["uv", "--version"]}
+          }
+        },
+        "project": {"$ref": "#/$defs/path_hash"},
+        "lock": {"$ref": "#/$defs/path_hash"},
+        "resolved_dependencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "sha256", "line_count"],
+          "properties": {
+            "command": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "line_count": {"type": "integer", "minimum": 1}
+          }
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "cwd"],
+      "properties": {
+        "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "cwd": {"const": "."}
+      }
+    },
+    "package_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_sha256", "sha256sums_sha256", "tree_sha256"],
+      "properties": {
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "tree_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "manifest_sha256", "sha256sums_sha256", "tree_sha256", "tree_hash_algorithm", "status", "admission_status"],
+      "properties": {
+        "path": {"const": "docs/context/evidence/issue_7322_ch7_evidence_package_v2"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "tree_sha256": {"$ref": "#/$defs/sha256"},
+        "tree_hash_algorithm": {"const": "payload-tree-sha256.v1"},
+        "status": {"const": "blocked_pending_domain_approval"},
+        "admission_status": {"const": "not_admitted"}
+      }
+    }
+  }
+}

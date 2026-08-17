@@ -135,6 +135,33 @@ terminal-label mapping and `SHA256SUMS` covers the generated payload. The v2
 package remains `not_admitted`; a maintainer-owned
 `ch7-evidence-admission.v2` receipt is required before paper-facing use.
 
+### Build provenance receipt
+
+The tracked package has a separate build-provenance receipt so a later reconstruction can be
+distinguished from the exact reproducible build. The receipt records the package-producing Git
+commit/tree, builder and verifier source hashes, v2 inputs, Python/uv and locked dependency
+identity, two independent payload-tree hashes, and the successful `--check-only` diagnostic. The
+receipt is intentionally outside the package checksum set and is not an admission receipt.
+
+Generate a receipt after rebuilding the package from the intended source commit:
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_build_receipt.py \
+  --source-commit <package-producing-commit> \
+  --output docs/context/evidence/issue_7322_ch7_build_receipt.v1.json
+```
+
+Verify the durable receipt from a checkout that contains that source commit:
+
+```bash
+uv run python scripts/analysis/verify_ch7_evidence_build_receipt.py \
+  --receipt docs/context/evidence/issue_7322_ch7_build_receipt.v1.json
+```
+
+The checker fails closed on changed source/config/dependency identity, package bytes, or
+check-only status. It does not create an admission receipt, authorize publication, or promote any
+benchmark or paper claim.
+
 ### Outcome-free admission diagnostic
 
 Before domain review and durable source retrieval are available, validate a

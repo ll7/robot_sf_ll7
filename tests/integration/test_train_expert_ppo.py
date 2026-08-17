@@ -2519,11 +2519,12 @@ def test_issue_6904_frequency_episodes_drop_preserves_resolved_behavior(rel_path
     """Removing the ignored field preserves every other resolved config value."""
     baseline = _issue_6904_baseline()
     config_path = Path(rel_path)
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    assert raw["evaluation"].get("step_schedule")
 
     resolved = _load_expert_training_config_mapping(config_path)
     assert "frequency_episodes" not in resolved.get("evaluation", {})
+    # Shared cadence may live in an inherited base_config rather than the raw
+    # variant YAML; the resolved mapping is the behavior under test.
+    assert resolved["evaluation"].get("step_schedule")
     canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
     actual_fingerprint = hashlib.sha256(canonical.encode()).hexdigest()
     assert actual_fingerprint == baseline["variants"][rel_path]

@@ -1785,11 +1785,36 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
 
 def test_gh_comment_current_falls_back_to_local_branch_without_upstream(tmp_path: Path) -> None:
     """An unpublished linked worktree uses its local branch for REST lookup."""
-    repo = tmp_path / "unpublished-worktree"
-    repo.mkdir()
+    main_repo = tmp_path / "main-repo"
+    main_repo.mkdir()
     subprocess.run(
-        ["git", "init", "--quiet", "--initial-branch", "unpublished"],
-        cwd=repo,
+        ["git", "init", "--quiet", "--initial-branch", "main"],
+        cwd=main_repo,
+        check=True,
+        timeout=30,
+    )
+    (main_repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=main_repo, check=True, timeout=30)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=contract-test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        cwd=main_repo,
+        check=True,
+        timeout=30,
+    )
+    repo = tmp_path / "unpublished-worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--quiet", "-b", "unpublished", str(repo), "HEAD"],
+        cwd=main_repo,
         check=True,
         timeout=30,
     )

@@ -6,12 +6,17 @@ returns the first action of the best sequence.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi_array
+from robot_sf.planner.predictive_human_cost import (
+    PredictiveGaussianHumanCost,
+    PredictiveGaussianHumanCostConfig,
+    build_predictive_gaussian_human_cost_config,
+)
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
@@ -70,6 +75,9 @@ class MPPISocialConfig:
     progress_escape_distance: float = 1.0
     progress_escape_speed: float = 0.45
     progress_escape_heading_gain: float = 1.4
+    predictive_human_cost: PredictiveGaussianHumanCostConfig = field(
+        default_factory=PredictiveGaussianHumanCostConfig
+    )
 
 
 class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -220,6 +228,8 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         prev_v = float(current_speed)
         smooth_penalty = 0.0
+        human_cost = 0.0
+        human_cost_model = PredictiveGaussianHumanCost(self.config.predictive_human_cost)
         for step, action in enumerate(sequence):
             v = float(action[0])
             w = float(action[1])
@@ -242,6 +252,14 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                     ttc = ttc[ttc > 0.0]
                     if ttc.size > 0:
                         min_ttc = min(min_ttc, float(np.min(ttc)))
+                human_cost += float(
+                    human_cost_model.evaluate(
+                        x,
+                        ped_pos,
+                        ped_vel,
+                        time_s=t,
+                    )
+                )
 
             min_obs = min(
                 min_obs,
@@ -267,6 +285,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             - 1.5 * obs_penalty
             - float(self.config.ttc_weight) * ttc_term
             - float(self.config.smoothness_weight) * smooth_penalty
+            - float(self.config.predictive_human_cost.weight) * human_cost
         )
         return -reward
 
@@ -308,6 +327,8 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         min_ttc = np.full(samples, float("inf"), dtype=float)
         smooth_pen = np.zeros(samples, dtype=float)
         prev_v = np.full(samples, float(current_speed), dtype=float)
+        human_cost = np.zeros(samples, dtype=float)
+        human_cost_model = PredictiveGaussianHumanCost(self.config.predictive_human_cost)
 
         for step in range(horizon):
             v = batch[:, step, 0]  # (samples,)
@@ -345,6 +366,15 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 pos_ttc = np.where((ttc_vals > 0), ttc_vals, float("inf"))
                 sample_min_ttc = np.min(pos_ttc, axis=1)
                 min_ttc = np.minimum(min_ttc, sample_min_ttc)
+                human_cost += np.asarray(
+                    human_cost_model.evaluate(
+                        pos,
+                        ped_pos,
+                        ped_vel,
+                        time_s=t,
+                    ),
+                    dtype=float,
+                )
 
             # Obstacle clearance per sample at this step
             for s in range(samples):
@@ -380,6 +410,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             - 1.5 * obs_pen
             - float(self.config.ttc_weight) * ttc_term
             - float(self.config.smoothness_weight) * smooth_pen
+            - float(self.config.predictive_human_cost.weight) * human_cost
         )
         return -reward
 
@@ -469,7 +500,10 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "MPPISocialPlannerAdapter"}
+        return {
+            "planner_type": "MPPISocialPlannerAdapter",
+            "predictive_human_cost": asdict(self.config.predictive_human_cost),
+        }
 
 
 def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
@@ -511,6 +545,9 @@ def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:
         progress_escape_distance=float(cfg.get("progress_escape_distance", 1.0)),
         progress_escape_speed=float(cfg.get("progress_escape_speed", 0.45)),
         progress_escape_heading_gain=float(cfg.get("progress_escape_heading_gain", 1.4)),
+        predictive_human_cost=build_predictive_gaussian_human_cost_config(
+            cfg.get("predictive_human_cost")
+        ),
     )
 
 

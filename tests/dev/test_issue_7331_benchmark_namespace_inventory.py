@@ -10,6 +10,10 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Current ``main`` includes the predictive-baseline contract added by #7351.
+# Keep this explicit so a new direct child fails the audit until it is
+# deliberately classified, rather than silently changing the inventory size.
+EXPECTED_DIRECT_CHILD_COUNT = 293
 
 
 @pytest.fixture(scope="module")
@@ -25,9 +29,9 @@ def test_current_namespace_is_complete_and_routes_fail_closed(
     payload = inventory
 
     assert payload["schema"] == "benchmark-namespace-residual-inventory.v1"
-    assert payload["direct_child_count"] == 292
+    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
     assert len(payload["direct_children"]) == payload["direct_child_count"]
-    assert len({row["name"] for row in payload["direct_children"]}) == 292
+    assert len({row["name"] for row in payload["direct_children"]}) == EXPECTED_DIRECT_CHILD_COUNT
     assert payload["recommendation"]["code"] == "pause_no_low_risk_cluster"
     assert payload["import_cycle_ledger"]
     assert all(cycle == sorted(cycle) for cycle in payload["import_cycle_ledger"])
@@ -87,7 +91,7 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["direct_child_count"] == 292
+    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
     assert "# Benchmark namespace residual inventory (issue #7331)" in markdown_path.read_text(
         encoding="utf-8"
     )

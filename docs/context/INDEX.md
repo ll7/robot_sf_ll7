@@ -26,6 +26,13 @@ instead of carrying private copies, without trace execution or evidence
 admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
+Issue #7030 agent figure interpretation evaluation: digest-pinned fixture replay
+with per-dimension aggregate scores, exact critical-error examples, reviewer
+coverage, and explicit `not_available` workflow-comparison states. The current
+corpus is diagnostic-only and makes no model, benchmark, paper, or dissertation
+claim:
+[issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md).
+
 Issue #6792 Chapter 7 evidence admission packet: immutable `ch7-evidence-package.v1` payload,
 trusted source-registry approval, and the separate `ch7-evidence-admission.v1` receipt. The
 package remains blocked until the author approves the exact digest; no trajectory or causal claim

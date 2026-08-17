@@ -20,6 +20,7 @@ import torch
 import yaml
 
 from robot_sf.planner.obstacle_features import infer_predictive_feature_schema
+from robot_sf.planner.predictive_model import PredictiveModelConfig, PredictiveTrajectoryModel
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONFIG_SCHEMA = "predictive-optimization-smoke.v1"
@@ -27,6 +28,11 @@ _RESULT_SCHEMA = "predictive-optimization-smoke-result.v1"
 _METRICS = ("train_loss", "val_loss", "val_ade", "val_fde")
 _TIMING_FIELDS = ("train_runtime_sec", "val_runtime_sec")
 _COUNT_FIELDS = ("train_steps", "val_steps", "train_examples", "val_examples")
+_RUNTIME_SOURCE_PATHS = (
+    "scripts/training/run_predictive_optimization_smoke.py",
+    "scripts/training/train_predictive_planner.py",
+    "robot_sf/planner/predictive_model.py",
+)
 
 
 def _read_mapping(path: Path, *, label: str) -> dict[str, Any]:
@@ -84,6 +90,46 @@ def _sha256(path: Path) -> str:
 def _git_commit() -> str:
     """Return the exact repository commit used for every subprocess arm."""
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=_REPO_ROOT, text=True).strip()
+
+
+def _source_provenance(*, config_path: Path) -> dict[str, Any]:
+    """Bind the run to clean tracked source bytes and the committed config."""
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain=v1", "--untracked-files=no"],
+        cwd=_REPO_ROOT,
+        text=True,
+    ).strip()
+    if status:
+        raise RuntimeError(
+            f"refusing diagnostic comparison from a worktree with tracked modifications: {status}"
+        )
+
+    paths = (config_path, *(_REPO_ROOT / path for path in _RUNTIME_SOURCE_PATHS))
+    file_hashes: dict[str, str] = {}
+    for path in paths:
+        resolved = path.resolve()
+        try:
+            relative = resolved.relative_to(_REPO_ROOT).as_posix()
+        except ValueError as exc:
+            raise RuntimeError(f"runtime source must be inside the repository: {path}") from exc
+        actual_hash = _sha256(resolved)
+        committed_bytes = subprocess.check_output(
+            ["git", "show", f"HEAD:{relative}"], cwd=_REPO_ROOT
+        )
+        committed_hash = hashlib.sha256(committed_bytes).hexdigest()
+        if actual_hash != committed_hash:
+            raise RuntimeError(
+                f"runtime source differs from HEAD for {relative}: "
+                f"working_tree={actual_hash}, HEAD={committed_hash}"
+            )
+        file_hashes[relative] = actual_hash
+    return {"git_commit": _git_commit(), "files": file_hashes}
+
+
+def _environment_fingerprint(metadata: dict[str, Any]) -> str:
+    """Hash stable runtime metadata so per-run environment drift fails closed."""
+    payload = json.dumps(metadata, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _validate_fixture(fixture: dict[str, Any]) -> None:
@@ -234,6 +280,19 @@ def _validate_summary_identity(
         raise RuntimeError(
             f"{arm_id} recorded different dataset ids: {summary.get('source_dataset_ids')!r}"
         )
+    split_sha256 = summary.get("split_sha256")
+    if not isinstance(split_sha256, str) or not split_sha256:
+        raise RuntimeError(f"{arm_id} is missing split provenance")
+    history = summary.get("history")
+    if not isinstance(history, list) or not history:
+        raise RuntimeError(f"{arm_id} is missing training history")
+    if any(
+        not isinstance(row, dict)
+        or not isinstance(row.get("train_order_sha256"), str)
+        or not row["train_order_sha256"]
+        for row in history
+    ):
+        raise RuntimeError(f"{arm_id} is missing a complete training-order digest")
 
 
 def _validate_summary_runtime_flags(*, summary: dict[str, Any], arm: dict[str, Any]) -> None:
@@ -243,6 +302,33 @@ def _validate_summary_runtime_flags(*, summary: dict[str, Any], arm: dict[str, A
         raise RuntimeError(f"{arm_id} loader manifest drifted: {summary.get('data_loader')!r}")
     if summary.get("amp") != _expected_amp_manifest(arm):
         raise RuntimeError(f"{arm_id} AMP manifest drifted: {summary.get('amp')!r}")
+
+
+def _validate_summary_optimizer(
+    *, summary: dict[str, Any], training: dict[str, Any], arm_id: str
+) -> None:
+    """Validate optimizer identity while accepting JSON/YAML scalar spelling."""
+    expected = {
+        "class": "torch.optim.AdamW",
+        "learning_rate": float(training["lr"]),
+        "weight_decay": float(training["weight_decay"]),
+    }
+    observed = _mapping(summary.get("optimizer"), label=f"{arm_id}.optimizer")
+    if observed.get("class") != expected["class"]:
+        raise RuntimeError(f"{arm_id} recorded optimizer {observed!r}, expected {expected!r}")
+    for field in ("learning_rate", "weight_decay"):
+        try:
+            observed_value = float(observed[field])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"{arm_id} recorded invalid optimizer {field}: {observed!r}"
+            ) from exc
+        if not math.isfinite(observed_value) or observed_value != expected[field]:
+            raise RuntimeError(f"{arm_id} recorded optimizer {observed!r}, expected {expected!r}")
+    if set(observed) != set(expected):
+        raise RuntimeError(
+            f"{arm_id} recorded optimizer fields {sorted(observed)}, expected {sorted(expected)}"
+        )
 
 
 def _validate_summary_training_contract(
@@ -256,6 +342,7 @@ def _validate_summary_training_contract(
         "learning_rate": float(training["lr"]),
         "weight_decay": float(training["weight_decay"]),
         "seed": int(training["seed"]),
+        "val_split": float(training["val_split"]),
     }
     for field, expected in expected_scalars.items():
         observed = summary.get(field)
@@ -276,19 +363,25 @@ def _validate_summary_training_contract(
 
     model_config = _mapping(summary.get("config"), label=f"{arm_id}.config")
     fixture = _mapping(config["fixture"], label="fixture")
-    expected_model_fields = {
+    expected_model_config = {
         "max_agents": int(fixture["max_agents"]),
         "horizon_steps": int(fixture["horizon_steps"]),
         "input_dim": int(fixture["input_dim"]),
         "hidden_dim": int(training["hidden_dim"]),
         "message_passing_steps": int(training["message_passing_steps"]),
+        "distance_temperature": 2.0,
+        "feature_schema_name": infer_predictive_feature_schema(int(fixture["input_dim"]))["name"],
     }
-    for field, expected in expected_model_fields.items():
-        if model_config.get(field) != expected:
-            raise RuntimeError(
-                f"{arm_id} recorded model config {field}={model_config.get(field)!r}, "
-                f"expected {expected!r}"
-            )
+    if model_config != expected_model_config:
+        raise RuntimeError(
+            f"{arm_id} recorded model config {model_config!r}, expected {expected_model_config!r}"
+        )
+
+    _validate_summary_optimizer(summary=summary, training=training, arm_id=arm_id)
+    if summary.get("objective") != {"name": "masked_trajectory_loss"}:
+        raise RuntimeError(
+            f"{arm_id} recorded an unexpected objective: {summary.get('objective')!r}"
+        )
 
 
 def _validate_arm_summary(
@@ -453,6 +546,41 @@ def _throughput(summary: dict[str, Any], *, warmup_epochs: int) -> dict[str, flo
     }
 
 
+def _validate_checkpoint(
+    *, checkpoint: Any, summary: dict[str, Any], arm_id: str
+) -> dict[str, Any]:
+    """Require the canonical checkpoint shape and a strict model load."""
+    if not isinstance(checkpoint, dict):
+        raise RuntimeError(f"{arm_id} checkpoint is not a mapping")
+    required_keys = ("config", "state_dict", "epoch", "metrics", "extra", "feature_schema")
+    missing_keys = [key for key in required_keys if key not in checkpoint]
+    if missing_keys:
+        raise RuntimeError(f"{arm_id} checkpoint is missing keys: {missing_keys}")
+    state_dict = checkpoint["state_dict"]
+    if not isinstance(state_dict, dict) or not state_dict:
+        raise RuntimeError(f"{arm_id} checkpoint has no supported state-dict payload")
+    checkpoint_config = _mapping(checkpoint["config"], label=f"{arm_id}.checkpoint.config")
+    if checkpoint_config != _mapping(summary["config"], label=f"{arm_id}.summary.config"):
+        raise RuntimeError(f"{arm_id} checkpoint model config differs from training summary")
+    try:
+        model_config = PredictiveModelConfig(**checkpoint_config)
+        model = PredictiveTrajectoryModel(model_config)
+        load_result = model.load_state_dict(state_dict, strict=True)
+    except Exception as exc:
+        raise RuntimeError(f"{arm_id} checkpoint failed strict model loading: {exc}") from exc
+    if load_result.missing_keys or load_result.unexpected_keys:
+        raise RuntimeError(
+            f"{arm_id} checkpoint load was not exact: "
+            f"missing={load_result.missing_keys}, unexpected={load_result.unexpected_keys}"
+        )
+    return {
+        "required_keys": list(required_keys),
+        "observed_keys": sorted(str(key) for key in checkpoint),
+        "state_dict_keys": len(state_dict),
+        "load_result": "strict_ok",
+    }
+
+
 def _run_arm(
     *,
     config: dict[str, Any],
@@ -476,6 +604,7 @@ def _run_arm(
         str(run_dir),
         *_arm_training_args(config=config, arm=arm),
     ]
+    environment_before = _host_metadata()
     started = time.perf_counter()
     with log_path.open("w", encoding="utf-8") as log_handle:
         completed = subprocess.run(
@@ -488,6 +617,11 @@ def _run_arm(
             check=False,
         )
     wall_runtime_sec = float(time.perf_counter() - started)
+    environment_after = _host_metadata()
+    environment_before_fingerprint = _environment_fingerprint(environment_before)
+    environment_after_fingerprint = _environment_fingerprint(environment_after)
+    if environment_before_fingerprint != environment_after_fingerprint:
+        raise RuntimeError(f"{arm_id} environment changed during the training subprocess")
     if completed.returncode != 0:
         tail = "\n".join(log_path.read_text(encoding="utf-8").splitlines()[-30:])
         raise RuntimeError(f"{arm_id} repeat {repeat} failed ({completed.returncode}):\n{tail}")
@@ -507,11 +641,11 @@ def _run_arm(
     if not checkpoint_path.exists():
         raise RuntimeError(f"{arm_id} did not produce a readable checkpoint path")
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    state_dict = checkpoint.get("state_dict") if isinstance(checkpoint, dict) else None
-    if state_dict is None and isinstance(checkpoint, dict):
-        state_dict = checkpoint.get("model_state_dict")
-    if not isinstance(state_dict, dict) or not state_dict:
-        raise RuntimeError(f"{arm_id} checkpoint has no supported state-dict payload")
+    checkpoint_contract = _validate_checkpoint(
+        checkpoint=checkpoint,
+        summary=summary,
+        arm_id=arm_id,
+    )
     throughput = _throughput(
         summary,
         warmup_epochs=_int(
@@ -529,6 +663,12 @@ def _run_arm(
         "dataset_sha256": dataset["dataset_sha256"],
         "checkpoint_sha256": _sha256(checkpoint_path),
         "checkpoint_size_bytes": checkpoint_path.stat().st_size,
+        "checkpoint_contract": checkpoint_contract,
+        "split_sha256": summary["split_sha256"],
+        "train_order_sha256": [str(row["train_order_sha256"]) for row in summary["history"]],
+        "environment_before": environment_before,
+        "environment_after": environment_after,
+        "environment_fingerprint": environment_after_fingerprint,
         "device": summary["device"],
         "data_loader": summary["data_loader"],
         "amp": summary["amp"],
@@ -553,6 +693,51 @@ def _count_signature(history: list[dict[str, Any]]) -> tuple[tuple[int, ...], ..
     return tuple(signature)
 
 
+def _validate_cross_arm_identity(
+    *, results: list[dict[str, Any]], config: dict[str, Any]
+) -> dict[str, Any]:
+    """Require matching data, order, counts, and environment across all arms."""
+    configured_arms = {
+        str(_mapping(arm, label="arm")["id"]): _mapping(arm, label="arm") for arm in config["arms"]
+    }
+    for arm_id, arm in configured_arms.items():
+        observed = [result for result in results if str(result["arm"]) == arm_id]
+        expected_repeats = _int(arm["repeats"], label=f"arms[{arm_id}].repeats", minimum=1)
+        if len(observed) != expected_repeats:
+            raise ValueError(f"{arm_id} has {len(observed)} repeats; expected {expected_repeats}")
+
+    dataset_digests = {str(result.get("dataset_sha256", "")) for result in results}
+    split_digests = {str(result.get("split_sha256", "")) for result in results}
+    order_signatures = {
+        tuple(str(value) for value in result.get("train_order_sha256", ())) for result in results
+    }
+    environment_fingerprints = {
+        str(result.get("environment_fingerprint", "")) for result in results
+    }
+    count_signatures = {
+        _count_signature([dict(row) for row in result["history"]]) for result in results
+    }
+    if len(dataset_digests) != 1 or not next(iter(dataset_digests), ""):
+        raise ValueError("all arms must use one non-empty dataset digest")
+    if len(split_digests) != 1 or not next(iter(split_digests), ""):
+        raise ValueError("all arms must use one non-empty train/validation split digest")
+    if len(order_signatures) != 1 or not next(iter(order_signatures), ()):
+        raise ValueError("all arms must materialize identical training sampler orders")
+    if any(not value for value in next(iter(order_signatures))):
+        raise ValueError("all arms must record non-empty training sampler order digests")
+    if len(environment_fingerprints) != 1 or not next(iter(environment_fingerprints), ""):
+        raise ValueError("all arms must use one stable environment fingerprint")
+    if len(count_signatures) != 1:
+        raise ValueError("all arms must process identical data identities and update counts")
+    return {
+        "dataset_sha256": next(iter(dataset_digests)),
+        "split_sha256": next(iter(split_digests)),
+        "train_order_sha256": list(next(iter(order_signatures))),
+        "environment_fingerprint": next(iter(environment_fingerprints)),
+        "update_counts_identical": True,
+    }
+
+
 def _compare(*, results: list[dict[str, Any]], config: dict[str, Any]) -> dict[str, Any]:
     """Compare optimized arms against repeated FP32 control curves."""
     comparison = _mapping(config["comparison"], label="comparison")
@@ -569,23 +754,7 @@ def _compare(*, results: list[dict[str, Any]], config: dict[str, Any]) -> dict[s
     if len(controls) < 2:
         raise ValueError("at least two FP32 control repeats are required")
 
-    configured_arms = {
-        str(_mapping(arm, label="arm")["id"]): _mapping(arm, label="arm") for arm in config["arms"]
-    }
-    for arm_id, arm in configured_arms.items():
-        observed = [result for result in results if str(result["arm"]) == arm_id]
-        expected_repeats = _int(arm["repeats"], label=f"arms[{arm_id}].repeats", minimum=1)
-        if len(observed) != expected_repeats:
-            raise ValueError(f"{arm_id} has {len(observed)} repeats; expected {expected_repeats}")
-
-    dataset_digests = {str(result.get("dataset_sha256", "")) for result in results}
-    if len(dataset_digests) != 1 or not next(iter(dataset_digests), ""):
-        raise ValueError("all arms must use one non-empty dataset digest")
-    count_signatures = {
-        _count_signature([dict(row) for row in result["history"]]) for result in results
-    }
-    if len(count_signatures) != 1:
-        raise ValueError("all arms must process identical data identities and update counts")
+    identity = _validate_cross_arm_identity(results=results, config=config)
 
     control_histories = [[dict(row) for row in result["history"]][warmup:] for result in controls]
     control_reference: dict[str, list[float]] = {}
@@ -646,6 +815,7 @@ def _compare(*, results: list[dict[str, Any]], config: dict[str, Any]) -> dict[s
         "control_reference": control_reference,
         "control_max_pairwise_abs_delta": control_dispersion,
         "equivalence_envelope": envelopes,
+        "identity": identity,
         "arms": arms,
         "result_classification": "equivalent_smoke" if all_equivalent else "numerically_divergent",
     }
@@ -704,6 +874,12 @@ def main(argv: list[str] | None = None) -> int:
     _validate_config(config)
     if not torch.cuda.is_available():
         raise RuntimeError("issue #7254 requires a CUDA-capable host; refusing a CPU fallback")
+    source_provenance = _source_provenance(config_path=config_path)
+    git_commit = str(source_provenance["git_commit"])
+    frozen_comparison = json.loads(
+        json.dumps(_mapping(config["comparison"], label="comparison"), sort_keys=True)
+    )
+    host_metadata = _host_metadata()
     output_root_raw = args.output_root or _mapping(config["output"], label="output").get("root")
     output_root = Path(str(output_root_raw))
     if not output_root.is_absolute():
@@ -712,7 +888,6 @@ def main(argv: list[str] | None = None) -> int:
         raise FileExistsError(f"refusing to overwrite existing output root: {output_root}")
     output_root.mkdir(parents=True)
 
-    git_commit = _git_commit()
     fixture = _write_fixture(
         fixture=_mapping(config["fixture"], label="fixture"),
         output_dir=output_root / "dataset",
@@ -731,12 +906,20 @@ def main(argv: list[str] | None = None) -> int:
                     git_commit=git_commit,
                 )
             )
+    final_source_provenance = _source_provenance(config_path=config_path)
+    if final_source_provenance != source_provenance:
+        raise RuntimeError("runtime source or commit changed during the comparison")
     result = {
         "schema_version": _RESULT_SCHEMA,
         "issue": 7254,
         "config": str(config_path),
+        "comparison_contract": frozen_comparison,
+        "source_provenance": source_provenance,
         "git_commit": git_commit,
-        "host": _host_metadata(),
+        "host": host_metadata,
+        "environment_fingerprints": sorted(
+            {str(run["environment_fingerprint"]) for run in results}
+        ),
         "dataset": fixture,
         "runs": results,
         "comparison": _compare(results=results, config=config),

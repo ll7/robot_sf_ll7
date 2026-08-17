@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -19,7 +20,7 @@ import numpy as np
 import torch
 import yaml
 from loguru import logger
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 
 from robot_sf import common
 from robot_sf.benchmark.map_runner import run_map_batch
@@ -449,6 +450,53 @@ def _seeded_worker_init_fn(_worker_id: int) -> None:
     random.seed(worker_seed)
 
 
+class _RecordingRandomSampler(RandomSampler):
+    """RandomSampler that records the exact order materialized for one epoch."""
+
+    def __init__(self, data_source: Any, *, generator: torch.Generator) -> None:
+        super().__init__(data_source, replacement=False, generator=generator)
+        self.last_order_sha256: str | None = None
+
+    def __iter__(self):
+        """Yield one permutation and retain a digest for the completed epoch."""
+        indices: list[int] = []
+        for index in super().__iter__():
+            index_int = int(index)
+            indices.append(index_int)
+            yield index_int
+        payload = np.asarray(indices, dtype="<i8")
+        self.last_order_sha256 = hashlib.sha256(payload.tobytes()).hexdigest()
+
+
+def _index_split_sha256(*, train_idx: np.ndarray, val_idx: np.ndarray) -> str:
+    """Digest the exact train/validation split indices used by both loaders."""
+    digest = hashlib.sha256()
+    for name, values in (("train", train_idx), ("validation", val_idx)):
+        encoded_name = name.encode("utf-8")
+        normalized = np.asarray(values, dtype="<i8")
+        digest.update(len(encoded_name).to_bytes(8, "little"))
+        digest.update(encoded_name)
+        digest.update(len(normalized).to_bytes(8, "little"))
+        digest.update(normalized.tobytes())
+    return digest.hexdigest()
+
+
+def _loader_train_order_sha256(loader: DataLoader) -> str:
+    """Return the recorded train-sampler order digest for the completed epoch."""
+    digest = getattr(loader.sampler, "last_order_sha256", None)
+    if not isinstance(digest, str) or not digest:
+        raise RuntimeError("training loader did not record a complete sampler order")
+    return digest
+
+
+def _loader_split_sha256(loader: DataLoader) -> str:
+    """Return the split digest attached when the train/validation loaders were built."""
+    digest = getattr(loader, "_robot_sf_split_sha256", None)
+    if not isinstance(digest, str) or not digest:
+        raise RuntimeError("training loader is missing the split provenance digest")
+    return digest
+
+
 def _dataloader_kwargs(
     *,
     batch_size: int,
@@ -471,9 +519,9 @@ def _dataloader_kwargs(
         if settings.prefetch_factor is not None:
             kwargs["prefetch_factor"] = int(settings.prefetch_factor)
         kwargs["worker_init_fn"] = _seeded_worker_init_fn
-        generator = torch.Generator()
-        generator.manual_seed(int(seed))
-        kwargs["generator"] = generator
+        worker_generator = torch.Generator()
+        worker_generator.manual_seed(int(seed))
+        kwargs["generator"] = worker_generator
     return kwargs
 
 
@@ -500,6 +548,8 @@ def _prepare_loaders(
     if train_idx.size == 0:
         train_idx = val_idx
 
+    split_sha256 = _index_split_sha256(train_idx=train_idx, val_idx=val_idx)
+
     def _ds(sel: np.ndarray) -> TensorDataset:
         """Build one tensor dataset slice from selected row indices.
 
@@ -513,9 +563,12 @@ def _prepare_loaders(
             torch.from_numpy(target_mask[sel]).float(),
         )
 
+    sampler_generator = torch.Generator()
+    sampler_generator.manual_seed(int(seed))
+    train_sampler = _RecordingRandomSampler(_ds(train_idx), generator=sampler_generator)
     train_loader = DataLoader(
-        _ds(train_idx),
-        shuffle=True,
+        train_sampler.data_source,
+        sampler=train_sampler,
         drop_last=False,
         **_dataloader_kwargs(batch_size=batch_size, settings=settings, seed=seed),
     )
@@ -525,6 +578,8 @@ def _prepare_loaders(
         drop_last=False,
         **_dataloader_kwargs(batch_size=batch_size, settings=settings, seed=seed),
     )
+    train_loader._robot_sf_split_sha256 = split_sha256
+    val_loader._robot_sf_split_sha256 = split_sha256
     return train_loader, val_loader
 
 
@@ -1084,6 +1139,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             non_blocking=loader_settings.non_blocking,
             scaler=scaler,
         )
+        train_order_sha256 = _loader_train_order_sha256(train_loader)
         train_runtime_sec = float(time.perf_counter() - train_started)
         val_started = time.perf_counter()
         val_loss, val_ade, val_fde = _run_epoch(
@@ -1110,6 +1166,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             "val_steps": float(len(val_loader)),
             "train_examples": float(len(train_loader.dataset)),
             "val_examples": float(len(val_loader.dataset)),
+            "train_order_sha256": train_order_sha256,
         }
         history.append(row)
 
@@ -1315,6 +1372,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         "model_id": args.model_id,
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),
+        "split_sha256": _loader_split_sha256(train_loader),
         "device": str(device),
         "data_loader": loader_settings.as_manifest(),
         "amp": {
@@ -1334,7 +1392,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         "batch_size": int(args.batch_size),
         "learning_rate": float(args.lr),
         "weight_decay": float(args.weight_decay),
+        "val_split": float(args.val_split),
         "seed": int(args.seed),
+        "optimizer": {
+            "class": "torch.optim.AdamW",
+            "learning_rate": float(args.lr),
+            "weight_decay": float(args.weight_decay),
+        },
+        "objective": {"name": "masked_trajectory_loss"},
         "git_commit": _git_commit(),
         "selection_mode": selection["selection_mode"],
         "selection": selection,

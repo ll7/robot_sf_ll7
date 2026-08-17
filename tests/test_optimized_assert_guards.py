@@ -11,6 +11,11 @@ from pathlib import Path
 
 import pytest
 
+# This import-heavy child can run several times slower on contended CI runners than
+# locally. Keep a generous finite bound so resource starvation does not masquerade as
+# a guard-contract failure while a wedged child still fails closed.
+_OPTIMIZED_GUARD_SUBPROCESS_TIMEOUT_SECONDS = 180
+
 _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     """
     from dataclasses import replace
@@ -423,7 +428,7 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
         check=False,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=_OPTIMIZED_GUARD_SUBPROCESS_TIMEOUT_SECONDS,
     )
     combined_output = f"{result.stdout}\n{result.stderr}"
 

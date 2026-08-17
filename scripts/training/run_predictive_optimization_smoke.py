@@ -566,7 +566,7 @@ def _validate_checkpoint(
         model_config = PredictiveModelConfig(**checkpoint_config)
         model = PredictiveTrajectoryModel(model_config)
         load_result = model.load_state_dict(state_dict, strict=True)
-    except Exception as exc:
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
         raise RuntimeError(f"{arm_id} checkpoint failed strict model loading: {exc}") from exc
     if load_result.missing_keys or load_result.unexpected_keys:
         raise RuntimeError(

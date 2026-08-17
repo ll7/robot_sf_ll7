@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.example/schemas/predictive_baseline_diagnostic.v1.json",
+  "title": "Predictive baseline diagnostic report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evidence_tier",
+    "claim_boundary",
+    "config",
+    "config_digest",
+    "seed_manifest",
+    "pairing",
+    "simulator_executed",
+    "benchmark_evidence",
+    "campaign_approval_required",
+    "source_transfer_claim",
+    "methods",
+    "smoke_records",
+    "unavailable_metrics",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "predictive_baseline_diagnostic.v1"},
+    "evidence_tier": {"const": "diagnostic-only"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "config": {"type": "object"},
+    "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "seed_manifest": {
+      "type": "object",
+      "required": ["scenario_id", "seed"],
+      "properties": {
+        "scenario_id": {"type": "string", "minLength": 1},
+        "seed": {"type": "integer"}
+      },
+      "additionalProperties": false
+    },
+    "pairing": {
+      "type": "object",
+      "required": ["same_scenario_and_seed", "method_ids", "reference_method_id"],
+      "properties": {
+        "same_scenario_and_seed": {"const": true},
+        "method_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+        "reference_method_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "simulator_executed": {"const": false},
+    "benchmark_evidence": {"const": false},
+    "campaign_approval_required": {"const": true},
+    "source_transfer_claim": {"const": false},
+    "methods": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "method_id",
+          "display_name",
+          "planner_family",
+          "adapter_name",
+          "observation_contract",
+          "action_contract",
+          "source_reference",
+          "license_status",
+          "implementation_mode",
+          "benchmark_status",
+          "fallback_policy",
+          "claim_boundary",
+          "config",
+          "config_digest"
+        ],
+        "properties": {
+          "method_id": {"type": "string", "minLength": 1},
+          "display_name": {"type": "string", "minLength": 1},
+          "planner_family": {"type": "string", "minLength": 1},
+          "adapter_name": {"type": "string", "minLength": 1},
+          "observation_contract": {"type": "string", "minLength": 1},
+          "action_contract": {"type": "string", "minLength": 1},
+          "source_reference": {"type": "string", "minLength": 1},
+          "license_status": {"type": "string", "minLength": 1},
+          "implementation_mode": {"enum": ["native", "adapter", "unavailable"]},
+          "benchmark_status": {"enum": ["diagnostic_only", "not_available"]},
+          "fallback_policy": {"type": "string", "minLength": 1},
+          "claim_boundary": {"type": "string", "minLength": 1},
+          "config": {"type": "object"},
+          "config_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "smoke_records": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["method_id", "status", "command", "repeat_command", "deterministic", "diagnostics", "unavailable_metrics"],
+        "properties": {
+          "method_id": {"type": "string", "minLength": 1},
+          "status": {"enum": ["smoke_pass", "unavailable", "failed"]},
+          "command": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+          "repeat_command": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+          "deterministic": {"type": "boolean"},
+          "diagnostics": {"type": "object"},
+          "unavailable_metrics": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+          "runtime_ms": {"type": ["number", "null"], "minimum": 0},
+          "failure_reason": {"type": ["string", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "unavailable_metrics": {
+      "type": "object",
+      "required": ["success", "collision", "near_miss", "timeout", "path_efficiency", "pedestrian_disruption", "minimum_distance", "action_smoothness"],
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "limitations": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "additionalProperties": false
+}

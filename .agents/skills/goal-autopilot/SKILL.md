@@ -248,15 +248,10 @@ Before each phase, run a delegation checkpoint:
 - For optional discovery scouts, default to a short hard timeout (120-180s) and require periodic
   evidence in the ledger. If a bounded scout emits no heartbeat within one timeout slice, treat it as
   incomplete and retry with an explicit local timeout + heartbeat plan.
-- Start at least one eligible routed worker or Spark sidecar for any phase likely to exceed about
-  10 minutes, unless the next action is a local-only publication step or all routes are unavailable.
-- Before spawning a Spark sidecar, check the active ledger or most recent route
-  snapshot for a Spark quota reset/usage-limit marker. If Spark is unavailable,
-  record the reset time and route directly to the next eligible cheap worker
-  instead of discovering the quota limit by failed spawn. If a spawn still
-  returns a usage-limit error, close the app-agent handle immediately, add the
-  reset time to the route cache, and continue locally or with the next eligible
-  route rather than retrying Spark.
+- Start at least one eligible routed worker for any phase likely to exceed about 10 minutes,
+  unless the next action is a local-only publication step or all routes are unavailable. Resolve
+  the provider/model through the [shared model-routing pointer](../../README.md#shared-model-routing)
+  using the phase task class and current evidence state; do not select a model locally.
 - If no helper is used, record `delegation_skipped: <reason>` with one of: `tiny`,
   `critical-path-blocker`, `route-unavailable`, `sensitive-context`, `pure-synthesis`, or
   `local-publication-step`.
@@ -274,7 +269,7 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
 1. Record the PR number, expected head SHA, current CI state, and static wait budget in the active
    ledger. The default budget is `ceil(920s * 1.3) = 1196s`, unless a newer committed skill/doc
    baseline has replaced it.
-2. Start one read-only `ci_wait_monitor` route or Codex app/Spark sidecar for that PR. In non-TTY
+2. Start one read-only `ci_wait_monitor` route for that PR. In non-TTY
    agent sessions, use bounded polling rather than `gh pr checks --watch`:
 
    ```bash
@@ -567,34 +562,13 @@ Run the cleanup checkpoint again before honoring a user pivot or final handoff.
 The result should state `closed`, `preserved`, or `not_applicable` for each
 subagent/worker, and should explain any dirty worktree left behind.
 
-### Spark Sidecar Routing
+### Shared model routing
 
-Spark (`gpt-5.3-codex-spark`, or the configured Spark sidecar model) is a first-class route for
-small, low-risk read-only task classes during the autopilot cycle. Route Spark when the task fits
-one of:
-
-- **tiny lookup** — file location, name resolution, short grep.
-- **read-only review** — narrow diff inspection, single-file summary.
-- **docs cross-check** — link validation, path reference checks.
-- **issue/file surface mapping** — issue-to-file coverage, surface enumeration.
-- **inspect small command output** — bounded stdout/stderr review.
-
-Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
-recommended next prompt.
-
-When Spark is rate-limited, treat the failed spawn as a routing signal, not as
-task evidence. Close the app-agent handle when one was allocated, cache the
-reset timestamp in the active ledger, and skip Spark for the rest of the phase.
-
-Do not route Spark to:
-
-- final benchmark interpretation and paper claims,
-- merge readiness and publication decisions,
-- GitHub mutation (labels, comments, PR creation, merge, close),
-- long CI polling unless a bounded monitor helper exists,
-- shell-executable fallback unless a real headless wrapper is available.
-
-This is routing guidance only; do not configure Spark as a shell-executable fallback.
+Use the [shared model-routing pointer](../../README.md#shared-model-routing) before dispatching
+any delegated phase. It owns the current native tiers, evidenced escalation rule, and external
+provider budget alternatives. This skill must not duplicate a model inventory or maintain a local
+sidecar route table. Route selection is route evidence only; the controller still reviews artifacts,
+the diff, and validation locally before accepting work.
 
 ## Delegation Failure Recovery
 

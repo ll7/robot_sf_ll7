@@ -22,6 +22,8 @@ jobs:
         with:
           script: |
             const automaticLabel = "review-bot-auto";
+            const retryableStatuses = new Set([429, 500, 502, 503, 504]);
+            const maxAttempts = 3;
             const highRiskPrefixes = [
               "robot_sf/",
               "fast-pysf/",
@@ -29,6 +31,37 @@ jobs:
               "tests/",
               ".github/workflows/",
             ];
+
+            async function withGithubRetry(operation, description) {
+              for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+                try {
+                  return await operation();
+                } catch (error) {
+                  const status = Number(error.status);
+                  if (!retryableStatuses.has(status) || attempt === maxAttempts) {
+                    throw error;
+                  }
+                  const delayMs = 1000 * 2 ** (attempt - 1);
+                  core.warning(
+                    `${description} failed with HTTP ${status}; retrying in ${delayMs}ms ` +
+                      `(attempt ${attempt + 1}/${maxAttempts}).`,
+                  );
+                  await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+              }
+              throw new Error(`${description} failed after ${maxAttempts} attempts.`);
+            }
+
+            const issueParams = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            };
+            const labels = await withGithubRetry(
+              () => github.paginate(github.rest.issues.listLabelsOnIssue, issueParams),
+              "Listing pull request labels",
+            );
+            const hasAutomaticLabel = labels.some(({ name }) => name === automaticLabel);
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,23 +73,28 @@ jobs:
             );
 
             if (hasHighRiskPath) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                labels: [automaticLabel],
-              });
-              core.info(`Applied ${automaticLabel} to a code-bearing pull request.`);
+              if (hasAutomaticLabel) {
+                core.info(`${automaticLabel} is already present on this code-bearing pull request.`);
+              } else {
+                await withGithubRetry(
+                  () => github.rest.issues.addLabels({ ...issueParams, labels: [automaticLabel] }),
+                  `Adding ${automaticLabel}`,
+                );
+                core.info(`Applied ${automaticLabel} to a code-bearing pull request.`);
+              }
+              return;
+            }
+
+            if (!hasAutomaticLabel) {
+              core.info(`No ${automaticLabel} label was present.`);
               return;
             }
 
             try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                name: automaticLabel,
-              });
+              await withGithubRetry(
+                () => github.rest.issues.removeLabel({ ...issueParams, name: automaticLabel }),
+                `Removing ${automaticLabel}`,
+              );
               core.info(`Removed ${automaticLabel}; no high-risk paths remain.`);
             } catch (error) {
               if (error.status !== 404) {

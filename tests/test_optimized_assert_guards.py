@@ -25,8 +25,8 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         PredictiveMPPIAdapter,
         build_predictive_mppi_config,
     )
-    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
     from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSocialPlannerAdapter
+    from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
     import robot_sf.planner.socnav as socnav
     import robot_sf.scenario_certification.v1 as cert
     from robot_sf.sim.simulator import init_simulators
@@ -137,14 +137,6 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: predictive_mppi._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
 
-    risk_dwa = RiskDWAPlannerAdapter()
-    expect(
-        "risk_dwa_obstacle_clearance_observation",
-        ValueError,
-        "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
-        lambda: risk_dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
-    )
-
     nmpc_social = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=1))
     expect(
         "nmpc_social_obstacle_clearance_observation",
@@ -157,6 +149,14 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         ValueError,
         "NMPC Social occupancy cost requires observation when grid_payload is absent",
         lambda: nmpc_social._occupancy_cost(np.zeros(2, dtype=float)),
+    )
+
+    risk_dwa = RiskDWAPlannerAdapter()
+    expect(
+        "risk_dwa_obstacle_clearance_observation",
+        ValueError,
+        "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
+        lambda: risk_dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
 
     original_torch = socnav.torch
@@ -243,9 +243,9 @@ _EXPECTED_MARKERS = (
     "PASS occupancy_shape: ValueError",
     "PASS dwa_obstacle_clearance_observation: ValueError",
     "PASS predictive_mppi_obstacle_clearance_observation: ValueError",
-    "PASS risk_dwa_obstacle_clearance_observation: ValueError",
     "PASS nmpc_social_obstacle_clearance_observation: ValueError",
     "PASS nmpc_social_occupancy_observation: ValueError",
+    "PASS risk_dwa_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
     "PASS route_goal: RuntimeError",
@@ -263,9 +263,9 @@ _EXPECTED_MESSAGES = (
     "Invalid grid shape: (2, 200, 0)",
     "DWA obstacle clearance requires observation when grid_payload is absent",
     "Predictive MPPI obstacle clearance requires observation when grid_payload is absent",
-    "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
     "NMPC Social obstacle clearance requires observation when grid_payload is absent",
     "NMPC Social occupancy cost requires observation when grid_payload is absent",
+    "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",
     "None goal",

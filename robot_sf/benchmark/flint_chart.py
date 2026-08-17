@@ -364,6 +364,19 @@ def _validate_renderer_policy(
     return dict(policy)
 
 
+def _validate_metric(value: Any, *, name: str) -> dict[str, str]:
+    """Validate and normalize one metric descriptor.
+
+    Returns:
+        Normalized metric descriptor.
+    """
+    metric = _mapping(value, name=name)
+    return {
+        "id": _string(metric.get("id"), name=f"{name}.id"),
+        "unit": _string(metric.get("unit"), name=f"{name}.unit"),
+    }
+
+
 def _add_tie_metadata(
     cells: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -414,9 +427,7 @@ def build_surface(payload: Mapping[str, Any]) -> dict[str, Any]:
         raise FlintChartContractError(f"schema_version must be {SURFACE_INPUT_SCHEMA_VERSION!r}")
     surface_id = _string(payload.get("surface_id"), name="surface_id")
     figure_id = _string(payload.get("figure_id"), name="figure_id")
-    metric = _mapping(payload.get("metric"), name="metric")
-    metric_id = _string(metric.get("id"), name="metric.id")
-    metric_unit = _string(metric.get("unit"), name="metric.unit")
+    metric = _validate_metric(payload.get("metric"), name="metric")
     source = _validate_source(_mapping(payload.get("source"), name="source"))
     population = _population_keys(payload.get("display_population"))
     canonical = _index_cells(payload.get("canonical_cells"), name="canonical_cells")
@@ -430,7 +441,7 @@ def build_surface(payload: Mapping[str, Any]) -> dict[str, Any]:
         "schema_version": SURFACE_SCHEMA_VERSION,
         "surface_id": surface_id,
         "figure_id": figure_id,
-        "metric": {"id": metric_id, "unit": metric_unit},
+        "metric": metric,
         "source_context": source["context"],
         "source": source,
         "display_population": [
@@ -476,23 +487,198 @@ def _index_output_cells(value: Any, *, name: str) -> dict[tuple[str, str], dict[
     return _index_cells(normalized, name=name)
 
 
-def _validate_surface_document(surface: Mapping[str, Any], *, path: Path) -> None:
-    """Validate the minimum output contract consumed by the atlas builder."""
+def _output_tie_references(
+    raw_cells: Any,
+    *,
+    name: str,
+) -> dict[tuple[str, str], str | None]:
+    """Normalize output-cell tie references.
+
+    Returns:
+        Tie-group reference keyed by planner and scenario family.
+    """
+    if not isinstance(raw_cells, list) or not raw_cells:
+        raise FlintChartContractError(f"{name} requires a non-empty cells list")
+    observed_ties: dict[tuple[str, str], str | None] = {}
+    for index, raw_cell in enumerate(raw_cells):
+        cell = _mapping(raw_cell, name=f"{name}.cells[{index}]")
+        key = (
+            _string(cell.get("planner_key"), name=f"{name}.cells[{index}].planner_key"),
+            _string(
+                cell.get("scenario_family"),
+                name=f"{name}.cells[{index}].scenario_family",
+            ),
+        )
+        if key in observed_ties:
+            raise FlintChartContractError(f"{name}.cells contains duplicate cell {key!r}")
+        tie_group = cell.get("tie_group")
+        observed_ties[key] = (
+            None
+            if tie_group is None
+            else _string(tie_group, name=f"{name}.cells[{index}].tie_group")
+        )
+    return observed_ties
+
+
+def _normalize_tie_members(value: Any, *, name: str) -> list[list[str]]:
+    """Normalize the members of one exact-value tie group.
+
+    Returns:
+        Normalized planner and scenario-family member pairs.
+    """
+    if not isinstance(value, list) or len(value) < 2:
+        raise FlintChartContractError(f"{name} must contain at least two cells")
+    members: list[list[str]] = []
+    member_keys: set[tuple[str, str]] = set()
+    for member_index, raw_member in enumerate(value):
+        if not isinstance(raw_member, list) or len(raw_member) != 2:
+            raise FlintChartContractError(f"{name}[{member_index}] must be a two-item list")
+        member = (
+            _string(raw_member[0], name=f"{name}[{member_index}][0]"),
+            _string(raw_member[1], name=f"{name}[{member_index}][1]"),
+        )
+        if member in member_keys:
+            raise FlintChartContractError(f"{name} contains duplicate cell {member!r}")
+        member_keys.add(member)
+        members.append(list(member))
+    return members
+
+
+def _normalize_tie_groups(
+    value: Any,
+    *,
+    name: str,
+) -> dict[str, dict[str, Any]]:
+    """Normalize exact-value tie groups keyed by group id.
+
+    Returns:
+        Normalized tie groups keyed by group id.
+    """
+    if not isinstance(value, list):
+        raise FlintChartContractError(f"{name} must be a list")
+    observed_groups: dict[str, dict[str, Any]] = {}
+    for index, raw_group in enumerate(value):
+        group = _mapping(raw_group, name=f"{name}[{index}]")
+        allowed_fields = {"group_id", "scenario_family", "value", "members"}
+        unexpected_fields = set(group) - allowed_fields
+        if unexpected_fields:
+            raise FlintChartContractError(
+                f"{name}[{index}] contains unsupported fields: {sorted(unexpected_fields)!r}"
+            )
+        group_id = _string(group.get("group_id"), name=f"{name}[{index}].group_id")
+        if group_id in observed_groups:
+            raise FlintChartContractError(f"{name} contains duplicate group {group_id!r}")
+        observed_groups[group_id] = {
+            "group_id": group_id,
+            "scenario_family": _string(
+                group.get("scenario_family"), name=f"{name}[{index}].scenario_family"
+            ),
+            "value": _finite_number(group.get("value"), name=f"{name}[{index}].value"),
+            "members": _normalize_tie_members(
+                group.get("members"), name=f"{name}[{index}].members"
+            ),
+        }
+    return observed_groups
+
+
+def _validate_tie_metadata(
+    raw_cells: Any,
+    cells: Mapping[tuple[str, str], Mapping[str, Any]],
+    value: Any,
+    *,
+    name: str,
+) -> None:
+    """Validate output-cell tie references and exact tie-group membership."""
+    observed_ties = _output_tie_references(raw_cells, name=name)
+
+    expected = _add_tie_metadata(cells)
+    expected_ties = {
+        (cell["planner_key"], cell["scenario_family"]): cell["tie_group"]
+        for cell in expected["cells"]
+    }
+    if observed_ties != expected_ties:
+        raise FlintChartContractError(f"{name} cell tie references do not match exact values")
+
+    observed_groups = _normalize_tie_groups(value, name=name)
+    expected_groups = {group["group_id"]: group for group in expected["tie_groups"]}
+    if observed_groups != expected_groups:
+        raise FlintChartContractError(f"{name} do not match exact-value tie groups")
+
+
+def _validate_surface_coverage(
+    value: Any,
+    *,
+    name: str,
+    expected_cells: int,
+    actual_cells: int,
+) -> dict[str, Any]:
+    """Validate and normalize complete surface coverage metadata.
+
+    Returns:
+        Normalized complete-coverage metadata.
+    """
+    coverage = _mapping(value, name=name)
+    if coverage.get("status") != "complete":
+        raise FlintChartContractError(f"{name}: status must be complete")
+    if (
+        coverage.get("expected_cells") != expected_cells
+        or coverage.get("actual_cells") != actual_cells
+    ):
+        raise FlintChartContractError(f"{name}: counts do not match cells")
+    for field in ("missing_cells", "duplicate_cells", "dropped_cells"):
+        if coverage.get(field) != []:
+            raise FlintChartContractError(f"{name}.{field} must be empty")
+    return {
+        "status": "complete",
+        "expected_cells": expected_cells,
+        "actual_cells": actual_cells,
+        "missing_cells": [],
+        "duplicate_cells": [],
+        "dropped_cells": [],
+    }
+
+
+def _validate_surface_parity(value: Any, *, name: str, expected_cells: int) -> dict[str, Any]:
+    """Validate and normalize complete canonical parity metadata.
+
+    Returns:
+        Normalized passed-parity metadata.
+    """
+    parity = _mapping(value, name=name)
+    if parity.get("status") != "passed":
+        raise FlintChartContractError(f"{name}: status must be passed")
+    if parity.get("compared_cells") != expected_cells:
+        raise FlintChartContractError(f"{name}: compared cell count does not match cells")
+    if parity.get("compared_fields") != list(_PARITY_FIELDS):
+        raise FlintChartContractError(f"{name}: fields are incomplete or reordered")
+    if parity.get("missing_cells") != [] or parity.get("extra_cells") != []:
+        raise FlintChartContractError(f"{name}: contains missing or extra cells")
+    return {
+        "status": "passed",
+        "compared_cells": expected_cells,
+        "compared_fields": list(_PARITY_FIELDS),
+        "missing_cells": [],
+        "extra_cells": [],
+    }
+
+
+def _validate_surface_document(surface: Mapping[str, Any], *, path: Path) -> dict[str, Any]:
+    """Validate and normalize the surface contract consumed by the atlas builder.
+
+    Returns:
+        Normalized fields needed to build one atlas entry.
+    """
     if surface.get("schema_version") != SURFACE_SCHEMA_VERSION:
         raise FlintChartContractError(f"{path}: unsupported surface schema")
     surface_id = _string(surface.get("surface_id"), name=f"{path}.surface_id")
+    figure_id = _string(surface.get("figure_id"), name=f"{path}.figure_id")
     context = _string(surface.get("source_context"), name=f"{path}.source_context")
     if context not in {"release", "replay"}:
         raise FlintChartContractError(f"{path}: invalid source_context")
     source = _validate_source(_mapping(surface.get("source"), name=f"{path}.source"))
     if source["context"] != context:
         raise FlintChartContractError(f"{path}: source context disagrees with source_context")
-    coverage = _mapping(surface.get("coverage"), name=f"{path}.coverage")
-    if coverage.get("status") != "complete":
-        raise FlintChartContractError(f"{path}: incomplete surface coverage")
-    parity = _mapping(surface.get("parity"), name=f"{path}.parity")
-    if parity.get("status") != "passed":
-        raise FlintChartContractError(f"{path}: canonical parity was not passed")
+    metric = _validate_metric(surface.get("metric"), name=f"{path}.metric")
     if surface.get("render_status") != "not_run":
         raise FlintChartContractError(
             f"{path}: render status must remain not_run in the foundation"
@@ -501,12 +687,33 @@ def _validate_surface_document(surface: Mapping[str, Any], *, path: Path) -> Non
     population = _population_keys(surface.get("display_population"))
     if set(cells) != set(population):
         raise FlintChartContractError(f"{path}: cells do not match display population")
-    if coverage.get("expected_cells") != len(population) or coverage.get("actual_cells") != len(
-        cells
-    ):
-        raise FlintChartContractError(f"{path}: coverage counts do not match cells")
-    _string(surface.get("claim_boundary"), name=f"{path}.claim_boundary")
-    _string(surface_id, name=f"{path}.surface_id")
+    coverage = _validate_surface_coverage(
+        surface.get("coverage"),
+        name=f"{path}.coverage",
+        expected_cells=len(population),
+        actual_cells=len(cells),
+    )
+    parity = _validate_surface_parity(
+        surface.get("parity"), name=f"{path}.parity", expected_cells=len(population)
+    )
+    _validate_renderer_policy(surface.get("renderer_policy"), figure_id=figure_id, cells=cells)
+    _validate_tie_metadata(
+        surface.get("cells"),
+        cells,
+        surface.get("tie_groups"),
+        name=f"{path}.tie_groups",
+    )
+    if _string(surface.get("claim_boundary"), name=f"{path}.claim_boundary") != CLAIM_BOUNDARY:
+        raise FlintChartContractError(f"{path}: claim boundary is not analysis-only")
+    return {
+        "surface_id": surface_id,
+        "figure_id": figure_id,
+        "source_context": context,
+        "source": source,
+        "metric": metric,
+        "coverage": coverage,
+        "parity": parity,
+    }
 
 
 def build_atlas_manifest(surface_paths: Sequence[Path], *, atlas_id: str) -> dict[str, Any]:
@@ -523,8 +730,8 @@ def build_atlas_manifest(surface_paths: Sequence[Path], *, atlas_id: str) -> dic
     context_ids: dict[str, list[str]] = {"release": [], "replay": []}
     for path in surface_paths:
         surface = load_json(path)
-        _validate_surface_document(surface, path=path)
-        key = (str(surface["surface_id"]), str(surface["source_context"]))
+        validated_surface = _validate_surface_document(surface, path=path)
+        key = (validated_surface["surface_id"], validated_surface["source_context"])
         if key in seen:
             raise FlintChartContractError(f"duplicate surface context {key!r}")
         seen.add(key)
@@ -533,12 +740,12 @@ def build_atlas_manifest(surface_paths: Sequence[Path], *, atlas_id: str) -> dic
         entries.append(
             {
                 "surface_id": key[0],
-                "figure_id": _string(surface.get("figure_id"), name=f"{path}.figure_id"),
+                "figure_id": validated_surface["figure_id"],
                 "source_context": context,
-                "source": dict(_mapping(surface["source"], name=f"{path}.source")),
-                "metric": dict(_mapping(surface["metric"], name=f"{path}.metric")),
-                "coverage": dict(_mapping(surface["coverage"], name=f"{path}.coverage")),
-                "parity": dict(_mapping(surface["parity"], name=f"{path}.parity")),
+                "source": validated_surface["source"],
+                "metric": validated_surface["metric"],
+                "coverage": validated_surface["coverage"],
+                "parity": validated_surface["parity"],
                 "surface_sha256": sha256_file(path),
             }
         )

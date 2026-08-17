@@ -148,6 +148,34 @@ def test_output_surface_mutation_cannot_claim_complete_population(tmp_path: Path
         build_atlas_manifest([path], atlas_id="mutated")
 
 
+@pytest.mark.parametrize(
+    "mutation, expected",
+    [
+        (
+            lambda surface: surface["renderer_policy"].update(
+                {"canonical_renderer": "unapproved/renderer"}
+            ),
+            "renderer_policy.canonical_renderer",
+        ),
+        (lambda surface: surface["metric"].pop("id"), "metric.id"),
+        (
+            lambda surface: surface["cells"][0].update({"tie_group": None}),
+            "cell tie references",
+        ),
+        (lambda surface: surface.update({"claim_boundary": "promoted"}), "analysis-only"),
+    ],
+)
+def test_atlas_rejects_mutated_surface_contract(tmp_path: Path, mutation, expected: str) -> None:
+    """The atlas must not accept hand-edited surface metadata."""
+    surface = build_surface(_payload())
+    mutation(surface)
+    path = tmp_path / "mutated-contract.surface.json"
+    write_json(path, surface)
+
+    with pytest.raises(FlintChartContractError, match=expected):
+        build_atlas_manifest([path], atlas_id="mutated-contract")
+
+
 def test_payload_copy_is_independent() -> None:
     """The fixture helper does not expose mutable state across builds."""
     original = _payload()

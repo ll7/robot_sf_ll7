@@ -1,0 +1,113 @@
+{
+  "claim_boundary": "Environment-bound local timing reconciliation only; this packet is not benchmark, paper-facing, real-world, safety, release, campaign, or optimization evidence.",
+  "compatibility": {
+    "compatible": false,
+    "cross_receipt_aggregation": "forbidden",
+    "reasons": [
+      "missing_execution_context"
+    ]
+  },
+  "issue": 6987,
+  "receipt_errors": [],
+  "receipts": [
+    {
+      "batch_overhead_fractions": [
+        0.1592854557731187,
+        0.23389172829007765
+      ],
+      "environment": {
+        "machine": "x86_64",
+        "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+        "python": "3.13.13"
+      },
+      "execution_context": {
+        "cache_state": {
+          "reason": "missing_execution_context.cache_state",
+          "status": "unavailable"
+        },
+        "complete": false,
+        "execution_order": "alternating off/on, then on/off by batch",
+        "numerical_thread_settings": {
+          "reason": "missing_execution_context.thread_settings",
+          "status": "unavailable"
+        },
+        "warmup_state": {
+          "status": "derived_from_method",
+          "warmups_per_arm_per_batch": 1
+        }
+      },
+      "fixture_digest": "e797dfa4cb472d489cbcd878e13a1a1e801110a83203b0d7eb1f506eed64289b",
+      "integrity_checks": {
+        "control_sequence_digest_stable": true,
+        "paired_outcomes_and_metrics_equal": true,
+        "trace_artifact_matches_provenance": true,
+        "trace_git_hash_matches_commit": true
+      },
+      "integrity_passed": true,
+      "median_overhead_fraction": 0.184690807640298,
+      "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json",
+      "receipt_sha256": "6a403daf23cdd7a6dcf135b99ad18175c66583343176bdee33048a78354674ab",
+      "repository_commit": "b2388de674eb078852e6713d40a6387e65b96c5b",
+      "stability_passed": true,
+      "stability_status": "stable",
+      "target_decision": "not_met",
+      "target_met": false
+    },
+    {
+      "batch_overhead_fractions": [
+        0.03635790440094144,
+        0.09525301943308007
+      ],
+      "environment": {
+        "machine": "x86_64",
+        "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+        "python": "3.13.13"
+      },
+      "execution_context": {
+        "cache_state": {
+          "reason": "missing_execution_context.cache_state",
+          "status": "unavailable"
+        },
+        "complete": false,
+        "execution_order": "alternating off/on, then on/off by batch",
+        "numerical_thread_settings": {
+          "reason": "missing_execution_context.thread_settings",
+          "status": "unavailable"
+        },
+        "warmup_state": {
+          "status": "derived_from_method",
+          "warmups_per_arm_per_batch": 1
+        }
+      },
+      "fixture_digest": "e797dfa4cb472d489cbcd878e13a1a1e801110a83203b0d7eb1f506eed64289b",
+      "integrity_checks": {
+        "control_sequence_digest_stable": true,
+        "paired_outcomes_and_metrics_equal": true,
+        "trace_artifact_matches_provenance": true,
+        "trace_git_hash_matches_commit": true
+      },
+      "integrity_passed": true,
+      "median_overhead_fraction": 0.08327469822495859,
+      "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.rerun.json",
+      "receipt_sha256": "caea4612ad1a65d806bcc332138b8767f2a8f7ad89cfd9b1a6c3e4d78d5ad9c1",
+      "repository_commit": "b2388de674eb078852e6713d40a6387e65b96c5b",
+      "stability_passed": true,
+      "stability_status": "stable",
+      "target_decision": "met",
+      "target_met": true
+    }
+  ],
+  "reconciliation": {
+    "classification": "unavailable",
+    "context_complete": false,
+    "reason": "No cross-receipt average is computed; incompatible or incomplete context is reported as unavailable.",
+    "target_decision": "unavailable",
+    "target_decisions": [
+      "not_met",
+      "met"
+    ]
+  },
+  "schema_version": "analysis_trace_overhead_reconciliation.v1",
+  "source_issue": 6972,
+  "status": "diagnostic_only"
+}

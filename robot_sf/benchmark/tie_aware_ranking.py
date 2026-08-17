@@ -440,10 +440,13 @@ def _compare_pair(
 
 
 def _intervals_overlap_or_contact(left: _Item, right: _Item) -> bool:
-    assert left.uncertainty_low is not None
-    assert left.uncertainty_high is not None
-    assert right.uncertainty_low is not None
-    assert right.uncertainty_high is not None
+    if (
+        left.uncertainty_low is None
+        or left.uncertainty_high is None
+        or right.uncertainty_low is None
+        or right.uncertainty_high is None
+    ):
+        raise TieAwareRankingError("interval comparison requires both uncertainty bounds")
     return not (
         left.uncertainty_high < right.uncertainty_low
         or right.uncertainty_high < left.uncertainty_low

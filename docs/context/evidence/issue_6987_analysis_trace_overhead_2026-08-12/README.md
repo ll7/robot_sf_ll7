@@ -24,6 +24,12 @@ stable. That prevents a general or campaign-facing conclusion that the target is
 on this host. The current status is measurement variance bounded but unresolved; the analysis-trace
 profile remains opt-in, and no trace-builder optimization is justified by these receipts alone.
 
+The tracked [reconciliation packet](analysis_trace_overhead_reconciliation.v1.json) keeps both
+decisions separate and classifies the comparison as `unavailable`: these legacy receipts do not
+record cache state or numerical-thread settings. The reconciliation CLI therefore refuses to
+average them or promote a host/order explanation. Future measurements record that context in the
+receipt itself.
+
 The earlier optimized comparison receipt in
 `issue_6972_analysis_trace_overhead_2026-08-12/` is historical diagnostic evidence. Its receipt
 records Linux 6.8 / CPython 3.13.14 at optimized commit `2fe5b888...`, not macOS and not the
@@ -55,3 +61,15 @@ The command records the exact repository commit, environment, fixture, arm order
 timings, compressed sizes, and integrity checks. The durable receipts are
 [the first run](analysis_trace_overhead_receipt.v2.stable-run.json) and
 [the independent rerun](analysis_trace_overhead_receipt.v2.rerun.json).
+
+To reconcile multiple receipts without averaging incompatible timing contexts, run:
+
+```bash
+uv run python scripts/analysis/reconcile_analysis_trace_overhead_issue_6987.py \
+  docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json \
+  docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.rerun.json \
+  --output /tmp/issue-6987-reconciliation.json
+```
+
+Exit status 2 means the comparison is unavailable or context-incomplete; it is not a failed
+benchmark. The packet remains diagnostic-only and never authorizes a campaign or optimization.

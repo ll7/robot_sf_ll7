@@ -21,7 +21,7 @@ from robot_sf.benchmark.multi_amv import (
     multi_amv_settings_from_scenario,
     multi_robot_eligible_episode_summary,
 )
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 from robot_sf.gym_env.unified_config import MultiRobotConfig, RobotSimulationConfig
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_multi_amv_smoke import (

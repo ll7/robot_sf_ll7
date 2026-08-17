@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.scenario_schema import (
+from robot_sf.benchmark.scenario.scenario_schema import (
     validate_scenario_list,
     validate_scenario_matrix_metadata,
 )

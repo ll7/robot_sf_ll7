@@ -1,3 +1,5 @@
+"""Tests for the fail-closed Chapter 7 v2 build provenance receipt."""
+
 from __future__ import annotations
 
 import copy
@@ -7,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from scripts.analysis import verify_ch7_evidence_build_receipt_v1 as receipt
-
 
 REPO_ROOT = Path(__file__).parents[2]
 RECEIPT_PATH = (

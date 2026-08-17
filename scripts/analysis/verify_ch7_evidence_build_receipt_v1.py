@@ -18,7 +18,7 @@ import sys
 import tempfile
 import tomllib
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -386,7 +386,7 @@ def create_receipt(
         "schema_version": RECEIPT_SCHEMA_VERSION,
         "issue": 7410,
         "status": "build_provenance_verified",
-        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "repository": {
             "source_commit": source_commit,
             "source_tree": source_tree,
@@ -496,42 +496,31 @@ def _verify_source_commit(repo_root: Path, repository: Mapping[str, Any]) -> Non
         )
 
 
-def verify_receipt(receipt: Path, *, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
-    """Verify every recorded hash and the non-admission boundary."""
-
-    repo_root = repo_root.resolve()
-    wrapper = _read_object(receipt, "build receipt")
-    _validate_schema(wrapper, "build receipt")
-    payload = wrapper["payload"]
-    expected_hash = wrapper["receipt_hash"]["sha256"]
-    if _sha256_bytes(_canonical_bytes(payload)) != expected_hash:
-        raise Ch7EvidenceBuildReceiptError("receipt payload hash mismatch")
-    _verify_source_commit(repo_root, payload["repository"])
-
-    if payload["repository"]["source_worktree_tracked_clean"] is not True:
-        raise Ch7EvidenceBuildReceiptError(
-            "receipt was not generated from a clean tracked worktree"
-        )
-    for key, binding in payload["implementation"].items():
+def _verify_implementation(repo_root: Path, implementation: Mapping[str, Any]) -> None:
+    for key, binding in implementation.items():
         path = _repo_path(repo_root, binding["path"], f"implementation.{key}")
-        if _sha256_file(path) != _require_sha(
-            binding["sha256"], f"implementation.{key}"
-        ):
+        actual = _sha256_file(path)
+        expected = _require_sha(binding["sha256"], f"implementation.{key}")
+        if actual != expected:
             raise Ch7EvidenceBuildReceiptError(f"implementation hash mismatch: {key}")
 
-    package = _repo_path(repo_root, payload["package"]["path"], "v2 package")
+
+def _verify_package(
+    repo_root: Path, package_record: Mapping[str, Any]
+) -> tuple[Path, dict[str, Any]]:
+    package = _repo_path(repo_root, package_record["path"], "v2 package")
     sums_sha, listed = admission._verify_members(
         package, label="durable v2 package", require_review_sidecars=True
     )
-    if listed != payload["package"]["listed_members"]:
+    if listed != package_record["listed_members"]:
         raise Ch7EvidenceBuildReceiptError("durable package member list changed")
-    if sums_sha != payload["package"]["sha256sums_sha256"]:
+    if sums_sha != package_record["sha256sums_sha256"]:
         raise Ch7EvidenceBuildReceiptError("durable package SHA256SUMS changed")
-    if _sha256_file(package / "manifest.json") != payload["package"]["manifest_sha256"]:
+    if _sha256_file(package / "manifest.json") != package_record["manifest_sha256"]:
         raise Ch7EvidenceBuildReceiptError("durable package manifest changed")
-    if _payload_tree_hash(package, listed) != payload["package"]["payload_tree_sha256"]:
+    if _payload_tree_hash(package, listed) != package_record["payload_tree_sha256"]:
         raise Ch7EvidenceBuildReceiptError("durable package payload tree changed")
-    if _directory_tree_hash(package) != payload["package"]["directory_tree_sha256"]:
+    if _directory_tree_hash(package) != package_record["directory_tree_sha256"]:
         raise Ch7EvidenceBuildReceiptError("durable package directory tree changed")
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     if (
@@ -539,14 +528,18 @@ def verify_receipt(receipt: Path, *, repo_root: Path = REPO_ROOT) -> dict[str, A
         or manifest.get("admission_status") != "not_admitted"
     ):
         raise Ch7EvidenceBuildReceiptError("package admission boundary changed")
+    return package, manifest
 
-    for key, binding in payload["inputs"].items():
-        if key == "frozen_v1":
-            continue
+
+def _verify_inputs(repo_root: Path, inputs: Mapping[str, Any]) -> None:
+    for key in ("v2_config", "v2_portfolio"):
+        binding = inputs[key]
         path = _repo_path(repo_root, binding["path"], f"inputs.{key}")
-        if _sha256_file(path) != _require_sha(binding["sha256"], f"inputs.{key}"):
+        actual = _sha256_file(path)
+        expected = _require_sha(binding["sha256"], f"inputs.{key}")
+        if actual != expected:
             raise Ch7EvidenceBuildReceiptError(f"input hash mismatch: {key}")
-    frozen = payload["inputs"]["frozen_v1"]
+    frozen = inputs["frozen_v1"]
     frozen_package = _repo_path(repo_root, frozen["path"], "frozen v1 package")
     actual_frozen = builder.verify_v1_source_package(frozen_package)
     for field, actual in (
@@ -560,28 +553,35 @@ def verify_receipt(receipt: Path, *, repo_root: Path = REPO_ROOT) -> dict[str, A
                 f"frozen v1 input hash mismatch: {field}"
             )
 
-    project = payload["environment"]["project"]
+
+def _verify_environment(repo_root: Path, environment: Mapping[str, Any]) -> None:
+    project = environment["project"]
     for key in ("pyproject", "lock"):
         binding = project[key]
         path = _repo_path(repo_root, binding["path"], f"environment.project.{key}")
-        if _sha256_file(path) != _require_sha(
-            binding["sha256"], f"environment.project.{key}"
-        ):
+        actual = _sha256_file(path)
+        expected = _require_sha(binding["sha256"], f"environment.project.{key}")
+        if actual != expected:
             raise Ch7EvidenceBuildReceiptError(f"dependency identity changed: {key}")
     if project["name"] != "robot_sf" or project["requires_python"] != ">=3.11":
         raise Ch7EvidenceBuildReceiptError("project dependency identity changed")
 
-    generated_hashes = payload["determinism"]["output_tree_hashes"]
+
+def _verify_determinism(
+    package_record: Mapping[str, Any], determinism: Mapping[str, Any]
+) -> None:
+    generated_hashes = determinism["output_tree_hashes"]
     if (
         len(set(generated_hashes)) != 1
-        or generated_hashes[0] != payload["package"]["payload_tree_sha256"]
+        or generated_hashes[0] != package_record["payload_tree_sha256"]
     ):
         raise Ch7EvidenceBuildReceiptError("independent build tree hashes do not agree")
-    if payload["determinism"]["outputs_match"] is not True:
+    if determinism["outputs_match"] is not True:
         raise Ch7EvidenceBuildReceiptError("deterministic build result was not proven")
 
+
+def _verify_check_only(package: Path, recorded: Mapping[str, Any]) -> None:
     diagnostic = v2_admission.diagnose_v2_package(package)
-    recorded = payload["check_only"]
     if (
         recorded["exit_code"] != 0
         or recorded["result_schema"] != diagnostic["schema_version"]
@@ -591,10 +591,33 @@ def verify_receipt(receipt: Path, *, repo_root: Path = REPO_ROOT) -> dict[str, A
         )
     if _sha256_bytes(_canonical_bytes(diagnostic)) != recorded["result_sha256"]:
         raise Ch7EvidenceBuildReceiptError("check-only result changed")
-    if recorded["blocker_codes"] != sorted(
+    actual_blockers = sorted(
         item["code"] for item in diagnostic["diagnostics"]["blockers"]
-    ):
+    )
+    if recorded["blocker_codes"] != actual_blockers:
         raise Ch7EvidenceBuildReceiptError("check-only blocker set changed")
+
+
+def verify_receipt(receipt: Path, *, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
+    """Verify every recorded hash and the non-admission boundary."""
+
+    repo_root = repo_root.resolve()
+    wrapper = _read_object(receipt, "build receipt")
+    _validate_schema(wrapper, "build receipt")
+    payload = wrapper["payload"]
+    if _sha256_bytes(_canonical_bytes(payload)) != wrapper["receipt_hash"]["sha256"]:
+        raise Ch7EvidenceBuildReceiptError("receipt payload hash mismatch")
+    _verify_source_commit(repo_root, payload["repository"])
+    if payload["repository"]["source_worktree_tracked_clean"] is not True:
+        raise Ch7EvidenceBuildReceiptError(
+            "receipt was not generated from a clean tracked worktree"
+        )
+    _verify_implementation(repo_root, payload["implementation"])
+    package, _manifest = _verify_package(repo_root, payload["package"])
+    _verify_inputs(repo_root, payload["inputs"])
+    _verify_environment(repo_root, payload["environment"])
+    _verify_determinism(payload["package"], payload["determinism"])
+    _verify_check_only(package, payload["check_only"])
     if payload["admission_boundary"]["status"] != "not_admitted":
         raise Ch7EvidenceBuildReceiptError("receipt admission boundary changed")
     return {
@@ -621,6 +644,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Create or verify one Chapter 7 v2 build provenance receipt."""
+
     args = _parser().parse_args(argv)
     try:
         if args.command == "create":

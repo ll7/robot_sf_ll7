@@ -174,11 +174,7 @@ def test_research_templates_use_canonical_evidence_vocabularies() -> None:
     assert "observed, inferred, or proposal" in research_text
 
     form = _load_form(TEMPLATE_DIR / "research-validation.yml")
-    fields = {
-        item["id"]: item
-        for item in form["body"]
-        if isinstance(item, dict) and "id" in item
-    }
+    fields = {item["id"]: item for item in form["body"] if isinstance(item, dict) and "id" in item}
     assert fields["evidence_grade"]["attributes"]["options"] == [
         "observed",
         "inferred",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import os
 import subprocess
@@ -29,6 +30,7 @@ if ((count <= FAKE_GH_FAILURES)); then
   exit 1
 fi
 cat > "${FAKE_GH_CAPTURE:?}"
+printf '%s' "$*" > "${FAKE_GH_ARGS:?}"
 printf '{"id":"fake-sarif-id"}\\n'
 """,
         encoding="utf-8",
@@ -53,6 +55,11 @@ def _run_helper(tmp_path: Path, *, failures: int, status: int) -> subprocess.Com
             "GITHUB_REPOSITORY": "ll7/robot_sf_ll7",
             "GITHUB_SHA": "abc123",
             "GITHUB_REF": "refs/pull/7373/merge",
+            "GITHUB_WORKSPACE": "/home/runner/work/robot_sf_ll7/robot_sf_ll7",
+            "GITHUB_RUN_ID": "12345",
+            "GITHUB_RUN_ATTEMPT": "2",
+            "GITHUB_WORKFLOW": "CodeQL",
+            "CODEQL_ANALYSIS_KEY": ".github/workflows/codeql.yml:analyze",
             "CODEQL_UPLOAD_MAX_ATTEMPTS": "3",
             "CODEQL_UPLOAD_BACKOFF_BASE_SECONDS": "0",
             "CODEQL_UPLOAD_BACKOFF_CAP_SECONDS": "0",
@@ -60,6 +67,7 @@ def _run_helper(tmp_path: Path, *, failures: int, status: int) -> subprocess.Com
             "FAKE_GH_STATUS": str(status),
             "FAKE_GH_STATE": str(tmp_path / "gh-state"),
             "FAKE_GH_CAPTURE": str(tmp_path / "gh-capture.json"),
+            "FAKE_GH_ARGS": str(tmp_path / "gh-args"),
         }
     )
     return subprocess.run(
@@ -80,9 +88,19 @@ def test_codeql_upload_retries_transient_failure_and_records_success(tmp_path: P
     assert "attempt=3/3" in result.stdout
     assert "final_status=success" in result.stdout
     payload = json.loads((tmp_path / "gh-capture.json").read_text(encoding="utf-8"))
-    assert payload["commit_sha"] == "abc123"
+    assert payload["commit_oid"] == "abc123"
     assert payload["ref"] == "refs/pull/7373/merge"
-    assert base64.b64decode(payload["sarif"]).decode() == '{"version":"2.1.0","runs":[]}'
+    assert payload["analysis_key"] == ".github/workflows/codeql.yml:analyze"
+    assert payload["analysis_name"] == "CodeQL"
+    assert payload["workflow_run_id"] == 12345
+    assert payload["workflow_run_attempt"] == 2
+    assert payload["tool_names"] == []
+    assert gzip.decompress(base64.b64decode(payload["sarif"])).decode() == (
+        '{"version":"2.1.0","runs":[]}'
+    )
+    assert "--method PUT repos/ll7/robot_sf_ll7/code-scanning/analysis --input -" in (
+        tmp_path / "gh-args"
+    ).read_text(encoding="utf-8")
 
 
 def test_codeql_upload_fails_closed_on_non_transient_error(tmp_path: Path) -> None:
@@ -113,5 +131,7 @@ def test_codeql_workflow_uses_local_fail_closed_upload_helper() -> None:
 
     assert "upload: never" in workflow
     assert "output: codeql-results" in workflow
-    assert "scripts/ci/upload_codeql_sarif_retry.sh codeql-results" in workflow
+    assert "post-processed-sarif-path: codeql-results-processed" in workflow
+    assert "scripts/ci/upload_codeql_sarif_retry.sh codeql-results-processed" in workflow
+    assert '"scripts/ci/upload_codeql_sarif_retry.sh"' in workflow
     assert "security-events: write" in workflow

@@ -404,6 +404,13 @@ jobs:
       - name: Check distribution license payloads
         run: uv run python scripts/tools/check_distribution_licenses.py dist
 
+      - name: Capture dependency license inventory
+        # This is report-only on pull requests. Release publication must rerun the same
+        # command with --fail-on-unresolved after every target environment is hydrated.
+        run: >-
+          uv run python scripts/tools/check_dependency_license_inventory.py
+          --output output/validation/dependency-license-inventory.json
+
       - name: Clean wheel install/import smoke
         run: bash scripts/validation/wheel_install_smoke.sh
 
@@ -413,6 +420,14 @@ jobs:
         with:
           name: wheel-smoke-report
           path: output/validation/wheel_install_smoke_report.json
+          if-no-files-found: warn
+
+      - name: Upload dependency license inventory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-license-inventory
+          path: output/validation/dependency-license-inventory.json
           if-no-files-found: warn
 
   examples-smoke:

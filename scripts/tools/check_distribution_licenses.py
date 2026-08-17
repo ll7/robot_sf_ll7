@@ -101,8 +101,17 @@ REQUIREMENTS = (
             "Apache License, Version 2.0",
             "SocNavBench",
             "TBD) Lab",
-            "does not include model weights",
         ),
+    ),
+    ArchiveRequirement(
+        label="SocNavBench licensing manifest",
+        path_suffix="third_party/socnavbench/LICENSING.yaml",
+        markers=("schema_version: robot_sf.third_party_licensing.v1", "default_license_spdx: MIT"),
+    ),
+    ArchiveRequirement(
+        label="SocNavBench provenance record",
+        path_suffix="third_party/socnavbench/UPSTREAM.md",
+        markers=("https://github.com/CMU-TBD/SocNavBench", "Commit:", "License: MIT"),
     ),
     ArchiveRequirement(
         label="python-rvo2 provenance record",
@@ -139,6 +148,30 @@ PYRVO2_REQUIREMENTS = (
 )
 
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
+
+
+def _check_sdist_scope(archive: Path) -> list[str]:
+    """Reject tracked model artifacts from a source-distribution archive."""
+    try:
+        members = _archive_members(archive)
+    except DistributionLicenseError as exc:
+        return [str(exc)]
+
+    model_members = []
+    for name in members:
+        parts = PurePosixPath(name).parts
+        root_index = 1 if parts and parts[0].startswith("robot_sf-") else 0
+        if len(parts) > root_index and parts[root_index] == "model":
+            model_members.append(name)
+    if not model_members:
+        return []
+    preview = ", ".join(sorted(model_members)[:5])
+    if len(model_members) > 5:
+        preview += ", ..."
+    return [
+        f"{archive.name}: source distribution must not contain root model artifacts "
+        f"(found {preview})"
+    ]
 
 
 def _archive_members(archive: Path) -> dict[str, str]:
@@ -246,6 +279,8 @@ def check_distribution(dist_dir: Path, *, require_pyrvo2: bool = False) -> Distr
 
     for archive in (*wheels, *sdists):
         errors.extend(_check_archive(archive))
+    for archive in sdists:
+        errors.extend(_check_sdist_scope(archive))
     for archive in pyrvo2_wheels:
         errors.extend(_check_archive(archive, PYRVO2_REQUIREMENTS))
 

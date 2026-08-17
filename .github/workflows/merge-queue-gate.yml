@@ -18,9 +18,10 @@ name: Merge Queue Gate
 # emitted to the job summary and stdout.
 #
 # Source-PR runs are fail-closed authority checks as well as merge-group checks.
-# They are refreshed on source-head, label, reviewer-request, and review-state
-# mutations. The live snapshot reads both trusted comments and reviews, while
-# the direct merge authority performs the same preflight immediately before CAS.
+# They are refreshed on source-head, label, reviewer-request, review-state, and
+# issue-comment mutations. The live snapshot reads both trusted comments and
+# reviews, while the direct merge authority performs the same preflight
+# immediately before CAS.
 # To activate this behavior, add this job's status check ("Merge Queue Gate /
 # merge-queue-gate") to the merge queue's required status checks,
 # enable "Only merge non-failing pull requests", and enable "Require
@@ -47,6 +48,11 @@ on:
       - submitted
       - edited
       - dismissed
+  issue_comment:
+    types:
+      - created
+      - edited
+      - deleted
   merge_group:
   workflow_dispatch:
     inputs:
@@ -63,7 +69,7 @@ permissions:
   statuses: read
 
 concurrency:
-  group: merge-queue-gate-${{ github.ref }}
+  group: merge-queue-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -72,7 +78,8 @@ jobs:
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request' ||
-      github.event_name == 'pull_request_review'
+      github.event_name == 'pull_request_review' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -84,6 +91,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
           PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -101,6 +109,10 @@ jobs:
               ;;
             pull_request|pull_request_review)
               trusted_ref="$(resolve_branch_sha "$PULL_REQUEST_BASE_REF")"
+              ;;
+            issue_comment)
+              pull_request_base_ref="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" --jq '.base.ref')"
+              trusted_ref="$(resolve_branch_sha "$pull_request_base_ref")"
               ;;
             workflow_dispatch)
               trusted_ref="$(resolve_branch_sha "$DEFAULT_BRANCH")"
@@ -162,11 +174,13 @@ jobs:
 
       - name: Run merge-admission audit (source PR head)
         if: >-
-          (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') &&
+          (github.event_name == 'pull_request' ||
+          github.event_name == 'pull_request_review' ||
+          (github.event_name == 'issue_comment' && github.event.issue.pull_request != null)) &&
           steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
           python scripts/dev/merge_queue_gate.py \

@@ -1149,14 +1149,17 @@ def _self_test() -> int:
         "audit: label set recorded and includes merge-ready",
     )
 
-    # Abbreviated gate-verdict SHA (>=7 hex) must match the full head (parity with
-    # pr_loop_policy.GATE_VERDICT_MIN_SHA_OVERLAP).
+    # Abbreviated gate-verdict SHAs are diagnostic-only and cannot authorize a
+    # live merge admission.
     audit = evaluate_merge_gate(
         _pr(labels=["merge-ready"], gate_verdict_sha=full_sha[:12], ci_overall="success"),
         threads_resolved=True,
         reviewers_requested=False,
     )
-    expect(audit.passed, "abbreviated-sha: 12-char gate-verdict prefix must match head")
+    expect(
+        not audit.passed,
+        "abbreviated-sha: 12-char gate-verdict prefix must fail closed",
+    )
 
     # Trailer carried in a comment body must satisfy the gate. The compact
     # snapshot shape (``comment_snapshot.latest[].body_excerpt``) is what

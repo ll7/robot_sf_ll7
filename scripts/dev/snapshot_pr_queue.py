@@ -798,7 +798,7 @@ def _parse_explicit_verdict(item: Any) -> str | None:
     return None
 
 
-_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER"}
 
 
 def _extract_trailers_from_bodies(items: Any) -> list[str]:

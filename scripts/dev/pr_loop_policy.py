@@ -79,8 +79,9 @@ VALID_STATES = frozenset(
     }
 )
 
-# Minimum overlap (hex chars) required to treat an abbreviated trailer SHA as a
-# match for a longer head SHA. Seven mirrors git's default short SHA width.
+# Minimum overlap (hex chars) retained for diagnostic/base-policy surfaces that
+# still understand abbreviated SHAs. Merge authority below requires the full
+# 40-character identity.
 GATE_VERDICT_MIN_SHA_OVERLAP = 7
 
 # Matches ``gate-verdict: accepted @ <sha>`` trailers embedded in comment or
@@ -92,6 +93,10 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_EXACT_GATE_VERDICT_RE = re.compile(
+    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{40})\b",
+    re.IGNORECASE,
+)
 _GATE_CARRIER_MARKER_RE = re.compile(r"gate-verdict\s*:", re.IGNORECASE)
 _AUTHORITY_CARRIER_MARKER_RE = re.compile(
     r"gate-verdict\s*:|^[ \t]*(?:[-*>][ \t]*)?"
@@ -222,12 +227,21 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
     return texts
 
 
-_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER"}
 
 
 def _carrier_timestamp(entry: dict[str, Any]) -> str:
     """Return the carrier's authoritative GitHub timestamp, if present."""
-    for key in ("submittedAt", "createdAt", "updatedAt", "submitted_at", "created_at"):
+    # Edits mutate authority. Prefer the mutation timestamp so an edited older
+    # review cannot remain ordered by its original submission time.
+    for key in (
+        "updatedAt",
+        "updated_at",
+        "submittedAt",
+        "submitted_at",
+        "createdAt",
+        "created_at",
+    ):
         value = entry.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
@@ -257,7 +271,9 @@ def _raw_authority_carriers(
     Raw carriers are retained by the live merge gate so the newest directive can
     be selected before any compact extraction collapses history. If a carrier
     has a malformed timestamp alongside timestamped carriers, it sorts newest;
-    that uncertainty therefore fails closed instead of reviving an older verdict.
+    callers also reject any invalid timestamp so chronology cannot revive an
+    older verdict. Dismissed reviews are retained as revocation tombstones even
+    when their body no longer contains the original trailer.
     """
     carriers: list[dict[str, Any]] = []
     sequence = 0
@@ -274,13 +290,17 @@ def _raw_authority_carriers(
             ).upper()
             if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
                 continue
+            state = str(entry.get("state") or "").upper()
             body = entry.get("body")
-            if not isinstance(body, str) or not body or not marker.search(body):
+            if not isinstance(body, str):
+                continue
+            if not body or (state != "DISMISSED" and not marker.search(body)):
                 continue
             timestamp = _carrier_timestamp(entry)
             carriers.append(
                 {
                     "body": body,
+                    "state": state,
                     "timestamp": timestamp,
                     "timestamp_value": _carrier_timestamp_value(timestamp),
                     "sequence": sequence,
@@ -412,16 +432,35 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     gate described in issue #6019 — the dispatcher must reject any exact head
     unless every required check is green AND such a trailer is present.
     """
-    if not isinstance(pr, dict) or not head_sha:
+    if (
+        not isinstance(pr, dict)
+        or not isinstance(head_sha, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha)
+    ):
         return False
-    latest_raw = _latest_raw_gate_carrier(pr)
-    if latest_raw is not None:
+    raw_carrier_fields_present = any(
+        isinstance(pr.get(key), list) for key in ("comments", "reviews")
+    )
+    raw_carriers = _raw_authority_carriers(pr, marker=_GATE_CARRIER_MARKER_RE)
+    if raw_carrier_fields_present:
+        if not raw_carriers or any(
+            item["timestamp_value"] is None for item in raw_carriers
+        ):
+            return False
+        latest_raw = raw_carriers[-1]
+        if latest_raw.get("state") == "DISMISSED":
+            return False
         return any(
-            _sha_matches_head(match.group(1), head_sha)
-            for match in _GATE_VERDICT_RE.finditer(str(latest_raw["body"]))
+            match.group(1).lower() == head_sha.lower()
+            for match in _EXACT_GATE_VERDICT_RE.finditer(
+                str(latest_raw["body"])
+            )
         )
     accepted = _accepted_gate_verdict_shas(pr)
-    return any(_sha_matches_head(sha, head_sha) for sha in accepted)
+    return any(
+        len(sha) == 40 and sha.lower() == head_sha.lower()
+        for sha in accepted
+    )
 
 
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:

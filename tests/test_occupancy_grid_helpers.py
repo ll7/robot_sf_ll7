@@ -47,9 +47,7 @@ def test_robot_pose_record_equality_and_hash() -> None:
     ("x0", "y0", "x1", "y1"),
     [(0, 0, 2, 1), (4, 3, 1, -2), (2, 2, 2, 2), (-2, 4, 3, 4)],
 )
-def test_bresenham_line_matches_canonical_rasterizer(
-    x0: int, y0: int, x1: int, y1: int
-) -> None:
+def test_bresenham_line_matches_canonical_rasterizer(x0: int, y0: int, x1: int, y1: int) -> None:
     """Keep the legacy cell-order API equal to the canonical rasterizer."""
     rows, cols = rasterization._bresenham_line(y0, x0, y1, x1)
     expected = list(zip(cols.tolist(), rows.tolist(), strict=True))

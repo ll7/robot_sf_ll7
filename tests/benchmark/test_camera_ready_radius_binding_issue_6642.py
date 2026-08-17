@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.benchmark.camera_ready._config as camera_ready_config
 from robot_sf.benchmark.camera_ready import (
     CampaignConfig,
     PlannerSpec,
@@ -80,6 +81,17 @@ def test_legacy_campaign_without_radius_block_is_a_no_op() -> None:
     assert result is scenarios
     assert result == scenarios
     assert _minimal_campaign().radius_sweep is None
+
+
+def test_missing_binding_metadata_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An admitted arm cannot proceed when its provenance block is unavailable."""
+    monkeypatch.setattr(camera_ready_config, "_radius_binding_metadata", lambda _cfg: None)
+
+    with pytest.raises(
+        RadiusSweepBindingPreflightError,
+        match="radius-sweep binding metadata could not be constructed",
+    ):
+        _apply_radius_sweep_binding([{"name": "s1"}], _bound_config())
 
 
 @pytest.mark.parametrize(

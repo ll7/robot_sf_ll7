@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
-from matplotlib.patheffects import withStroke
 from matplotlib.transforms import Bbox
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
@@ -62,6 +61,16 @@ _LABEL_AXES_MARGIN_PX = 4.0
 # placement pass considers clear must also be clear for the linter.
 _LABEL_COLLISION_PADDING_PX = 2.5
 _LABEL_LEADER_THRESHOLD_PX = 18.0
+#: Annotation halo: a rounded white box drawn behind each placed label.  A box (not a
+#: glyph-stroke path effect) keeps every label a real text span in vector output --
+#: the PDF/PS backends draw path-effect text as outlined glyph paths, which PDF text
+#: extraction (search, screen readers, downstream figure QA) cannot read.
+_LABEL_HALO_BBOX: dict[str, Any] = {
+    "boxstyle": "round,pad=0.15",
+    "fc": "white",
+    "ec": "none",
+    "alpha": 0.9,
+}
 _TELEPORT_STEP_M = (
     3.0  # a walking ped moves <0.3 m/0.1s step; respawns jump ~25 m -> break the line
 )
@@ -945,6 +954,10 @@ def _move_text_in_display_space(text: Any, shift_x: float, shift_y: float) -> No
 _ZONE_LABEL_GID = "trace-scene-zone-label"
 _KEY_FRAME_LABEL_GID = "trace-scene-key-frame-label"
 _SCENE_TRAJECTORY_GID = "trace-scene-trajectory"
+#: Muted context (non-focal) pedestrian tracks: still avoided by the label placer, but
+#: a secondary time label that cannot clear them is kept rather than dropped -- they are
+#: background context, not the tracks the annotations describe.
+_CONTEXT_TRAJECTORY_GID = "trace-scene-context-trajectory"
 _TIMELINE_GUIDE_GID = "trace-scene-time-guide"
 _LABEL_LINE_PADDING_PX = 1.0
 _LABEL_MARKER_PADDING_PX = 2.5
@@ -1048,26 +1061,29 @@ def _finite_polyline_runs(xdata: Any, ydata: Any) -> list[np.ndarray]:
     ]
 
 
-def _collect_line_obstacles(ax: Axes) -> list[np.ndarray]:
+def _collect_line_obstacles(
+    ax: Axes, *, exclude_gids: frozenset[str] = frozenset()
+) -> list[np.ndarray]:
     """Collect display-space polylines of the visible data lines and zone outlines.
 
     Besides trajectory/reference ``Line2D`` artists, the outlines of unfilled polygons
     (start/goal zone rectangles) count as obstacles so labels do not straddle a zone
-    border.
+    border.  Lines tagged with one of ``exclude_gids`` are skipped.
 
     Returns:
         list[np.ndarray]: One (N, 2) display-space point array per polyline.
     """
 
     polylines: list[np.ndarray] = []
+    skipped_gids = exclude_gids | {_TIMELINE_GUIDE_GID}
     for child in ax.get_children():
         if not child.get_visible():
             continue
         if isinstance(child, Line2D):
-            # Timeline guides are cut around reference-label bboxes after placement;
-            # treating them as fixed obstacles here can make a long label trade the
-            # guide for a hard collision with the underlying distance curve.
-            if child.get_gid() == _TIMELINE_GUIDE_GID:
+            # Timeline marker guides are thin dashed context lines; treating them as
+            # fixed obstacles can make a long label trade a guide crossing for a hard
+            # collision with the underlying distance curve.
+            if child.get_gid() in skipped_gids:
                 continue
             for run in _finite_polyline_runs(child.get_xdata(), child.get_ydata()):
                 polylines.append(child.get_transform().transform(run))
@@ -1331,6 +1347,7 @@ def _add_label_leader(
     ax: Axes,
     original_center: tuple[float, float],
     final_bbox: Bbox,
+    axes_bbox: Bbox,
     leader_segments: list[tuple[tuple[float, float], tuple[float, float]]],
 ) -> None:
     """Draw a thin leader from a label's anchor context to its displaced position."""
@@ -1342,13 +1359,25 @@ def _add_label_leader(
     # The leader stops at the label's padded bbox edge: drawn to the bbox
     # center it would strike through the label's own glyphs.
     leader_end = _trim_leader_end(original_center, final_center, final_bbox)
+    # A label anchored outside the panel (a track start beyond the plotted extent)
+    # gets a leader that starts AT the panel border: the axes clip would hide the
+    # outside part anyway, but the unclipped geometry would still run under the
+    # panel title or tick labels.
+    interval = _segment_bbox_interval(original_center, leader_end, axes_bbox, 0.0)
+    if interval is None:
+        return
+    t_enter, _ = interval
+    leader_start = (
+        original_center[0] + t_enter * (leader_end[0] - original_center[0]),
+        original_center[1] + t_enter * (leader_end[1] - original_center[1]),
+    )
     # Anchor the leader in DATA coordinates: raw display pixels are only valid
     # at the layout pass's canvas dpi, so a leader kept in display space lands
     # in the wrong place in the saved PDF (72 dpi) or a high-dpi PNG.
     data_from_display = ax.transData.inverted().transform
-    original_data = data_from_display(original_center)
+    original_data = data_from_display(leader_start)
     leader_end_data = data_from_display(leader_end)
-    leader_segments.append((original_center, leader_end))
+    leader_segments.append((leader_start, leader_end))
     leader = Line2D(
         [original_data[0], leader_end_data[0]],
         [original_data[1], leader_end_data[1]],
@@ -1362,16 +1391,61 @@ def _add_label_leader(
     ax.add_line(leader)
 
 
+def _collect_decoration_bboxes(ax: Axes, renderer: Any) -> list[Bbox]:
+    """Collect display-space bboxes of the axes decorations labels must not cover.
+
+    Tick labels, axis labels, and the panel title are fixed text: an annotation that
+    cannot fit inside a narrow panel would otherwise be free to spill over them.
+
+    Returns:
+        list[Bbox]: One bbox per visible, non-empty decoration text.
+    """
+
+    decorations = [
+        *ax.get_xticklabels(),
+        *ax.get_yticklabels(),
+        ax.xaxis.label,
+        ax.yaxis.label,
+        ax.title,
+    ]
+    return [
+        text.get_window_extent(renderer)
+        for text in decorations
+        if text.get_visible() and text.get_text().strip()
+    ]
+
+
+def _wrap_overwide_label(text: Any, renderer: Any, max_width_px: float) -> None:
+    """Break a one-line label at its middle space when it is wider than its panel.
+
+    A label wider than the panel cannot be placed inside it at all; two shorter lines
+    (``d_min =`` / ``1.55 m``) keep the text inside the axes and off the tick labels.
+    Multi-line labels and labels without a break point are left unchanged.
+    """
+
+    content = text.get_text()
+    if "\n" in content or " " not in content.strip():
+        return
+    if text.get_window_extent(renderer).width <= max_width_px:
+        return
+    stripped = content.strip()
+    break_points = [index for index, char in enumerate(stripped) if char == " "]
+    middle = len(stripped) / 2
+    split_at = min(break_points, key=lambda index: abs(index - middle))
+    text.set_text(stripped[:split_at] + "\n" + stripped[split_at + 1 :])
+
+
 def _place_scene_annotations(ax: Axes) -> None:
     """Place scene annotations clear of labels, tracks, markers, and leader lines.
 
     Matplotlib resolves text extents only after a canvas draw. This pass works in display
     pixels, prioritizes key-frame labels, and tries compact north/east/south/west offsets
     before larger displacements. Besides other labels, candidate positions avoid the data
-    lines (trajectories, reference connectors), marker points, and the leader lines drawn
-    for earlier labels, so no annotation text lands on another label or on a track. Labels
-    that require a substantial move retain their anchor context through a thin leader line;
-    a prospective leader that would cross an already-placed label is penalized.
+    lines (trajectories, reference connectors), marker points, the axes decorations (tick
+    labels, axis labels, title), and the leader lines drawn for earlier labels, so no
+    annotation text lands on another label or on a track. Labels that require a
+    substantial move retain their anchor context through a thin leader line; a
+    prospective leader that would cross an already-placed label is penalized.
     """
 
     figure = ax.figure
@@ -1380,15 +1454,25 @@ def _place_scene_annotations(ax: Axes) -> None:
     axes_bbox = ax.get_window_extent(renderer)
     labels = [text for text in ax.texts if text.get_visible() and text.get_text().strip()]
     labels.sort(key=lambda text: (_scene_label_priority(text.get_text()), ax.texts.index(text)))
+    inner_width = axes_bbox.width - 2.0 * _LABEL_AXES_MARGIN_PX
     for text in labels:
-        # Cartography-style white halo, drawn above every data artist: where a dense
-        # scene leaves no fully clear position, the glyphs stay legible over any
+        # Cartography-style white halo box, drawn above every data artist: where a
+        # dense scene leaves no fully clear position, the glyphs stay legible over any
         # track, marker, or reference line instead of being painted over by them.
-        text.set_path_effects([withStroke(linewidth=_fs(2.2), foreground="white", alpha=0.9)])
+        # The box keeps the label a text span (see ``_LABEL_HALO_BBOX``).
+        text.set_bbox(dict(_LABEL_HALO_BBOX))
         text.set_zorder(11)
+        _wrap_overwide_label(text, renderer, inner_width)
     line_obstacles = _collect_line_obstacles(ax)
+    # The tracks and connectors the annotations describe: a plain time label that
+    # cannot clear these is dropped (see below); muted context tracks are excluded.
+    primary_line_obstacles = _collect_line_obstacles(
+        ax, exclude_gids=frozenset({_CONTEXT_TRAJECTORY_GID})
+    )
     marker_obstacles = _collect_marker_obstacles(ax)
-    placed_bboxes: list[Bbox] = []
+    # Decorations are seeded as already-placed labels: hard text-on-text avoidance,
+    # never displaced themselves.
+    placed_bboxes: list[Bbox] = _collect_decoration_bboxes(ax, renderer)
     leader_segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
     # Print layouts search proportionally farther: the same px offset covers a larger
     # fraction of the smaller canvas, but the (font-scaled) labels are also wider in px
@@ -1421,25 +1505,30 @@ def _place_scene_annotations(ax: Axes) -> None:
             obstacles,
             allow_marker_overlap=text.get_gid() == "trace-scene-time-label",
         )
-        if _scene_label_priority(text.get_text()) >= 2 and any(
-            _bboxes_collide(final_bbox, placed) for placed in placed_bboxes
-        ):
+        priority = _scene_label_priority(text.get_text())
+        if priority >= 2 and any(_bboxes_collide(final_bbox, placed) for placed in placed_bboxes):
             # Time and pedestrian labels are secondary to key-frame labels and the
             # filtered-count note.  If the bounded escape search cannot place one
             # without a hard text-text collision, omit the label and retain the
             # underlying marker/track rather than emitting an unreadable overlap.
             text.set_visible(False)
             continue
+        if priority >= 4 and _count_bbox_line_hits(final_bbox, primary_line_obstacles, ()):
+            # A plain time label is the most expendable annotation: the marker cadence
+            # is stated in the key, so a label that would cover the robot/focal track,
+            # the closest-approach connector, or a zone outline is dropped instead.
+            text.set_visible(False)
+            continue
         _move_text_in_display_space(text, shift_x, shift_y)
         placed_bboxes.append(final_bbox)
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
-            _add_label_leader(ax, original_center, final_bbox, leader_segments)
+            _add_label_leader(ax, original_center, final_bbox, axes_bbox, leader_segments)
 
 
 def _clear_tagged_lines_behind_labels(  # noqa: C901 - bounded line-clipping branches
     ax: Axes,
     *,
-    line_gid: str,
+    line_gids: frozenset[str],
     text_gids: frozenset[str],
 ) -> None:
     """Split tagged lines around rendered label boxes to leave honest visual clearance."""
@@ -1457,7 +1546,7 @@ def _clear_tagged_lines_behind_labels(  # noqa: C901 - bounded line-clipping bra
         return
 
     for line in ax.lines:
-        if line.get_gid() != line_gid or not line.get_visible():
+        if line.get_gid() not in line_gids or not line.get_visible():
             continue
         replacement_x: list[float] = []
         replacement_y: list[float] = []
@@ -1516,7 +1605,7 @@ def _clear_scene_trajectories_behind_annotations(ax: Axes) -> None:
 
     _clear_tagged_lines_behind_labels(
         ax,
-        line_gid=_SCENE_TRAJECTORY_GID,
+        line_gids=frozenset({_SCENE_TRAJECTORY_GID, _CONTEXT_TRAJECTORY_GID}),
         text_gids=frozenset(
             {
                 "trace-scene-time-label",
@@ -1525,16 +1614,6 @@ def _clear_scene_trajectories_behind_annotations(ax: Axes) -> None:
                 _ZONE_LABEL_GID,
             }
         ),
-    )
-
-
-def _clear_timeline_guides_behind_reference_labels(ax: Axes) -> None:
-    """Cut small, visible gaps where timeline guides pass behind reference labels."""
-
-    _clear_tagged_lines_behind_labels(
-        ax,
-        line_gid=_TIMELINE_GUIDE_GID,
-        text_gids=frozenset({"trace-scene-reference-label"}),
     )
 
 
@@ -1933,7 +2012,9 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
                 alpha=style.alpha,
                 zorder=4,
             )[0]
-            pedestrian_track.set_gid(_SCENE_TRAJECTORY_GID)
+            pedestrian_track.set_gid(
+                _SCENE_TRAJECTORY_GID if style.show_label else _CONTEXT_TRAJECTORY_GID
+            )
         if style.draw_markers:
             for marker_time in marker_times:
                 x, y = _position_at_time(track, marker_time)
@@ -2004,6 +2085,16 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
     return marker_indices
 
 
+def _reference_line_style(color: str, linewidth: float) -> dict[str, Any]:
+    """Return the shared line style of a proxemic reference line (panel and key alike).
+
+    Returns:
+        dict[str, Any]: ``Line2D`` keyword arguments.
+    """
+
+    return {"color": color, "linestyle": "--", "linewidth": linewidth, "alpha": 0.5}
+
+
 def _draw_timeline(
     ax: Axes,
     episode: EpisodeTrace,
@@ -2011,18 +2102,24 @@ def _draw_timeline(
     *,
     collision_envelope_m: float,
     comfort_distance_m: float,
-) -> None:
-    """Draw the distance/speed timeline panel with reference lines and marker gridlines."""
+) -> list[Line2D]:
+    """Draw the distance/speed timeline panel with reference lines and marker gridlines.
+
+    The proxemic reference lines are NOT labelled inside the panel: on a final-size
+    timeline panel there is no clear band for the labels, so they inevitably sit on
+    the distance/speed curves.  The lines are named in the figure key instead
+    (see ``_add_figure_key``).
+
+    Returns:
+        list[Line2D]: Key handles for the reference lines actually drawn.
+    """
     time = episode.time_s
     ax.plot(time, episode.min_robot_ped_distance_m, color=INK, linewidth=1.3)
-    ax.axhline(
-        collision_envelope_m,
-        color=RED,
-        linestyle="--",
-        linewidth=0.8,
-        alpha=0.5,
-        zorder=1,
-    )
+    envelope_style = _reference_line_style(RED, 0.8)
+    ax.axhline(collision_envelope_m, zorder=1, **envelope_style)
+    key_handles = [
+        Line2D([], [], label=f"collision envelope ({collision_envelope_m:g} m)", **envelope_style)
+    ]
     distance_values = [
         *episode.min_robot_ped_distance_m,
         collision_envelope_m,
@@ -2033,58 +2130,17 @@ def _draw_timeline(
     span = max(upper_data - lower_data, 1.0)
     padding = max(0.5, 0.08 * span)
     ax.set_ylim(0.0, upper_data + padding)  # start the distance axis at 0
-    # A white glyph halo keeps the reference label legible where the distance/speed
-    # curves or the marker gridlines pass underneath it on narrow print panels,
-    # while the curves stay visible between the letters.
-    reference_label_halo = [withStroke(linewidth=_fs(2.0), foreground="white", alpha=0.9)]
-    envelope_label = ax.annotate(
-        f"collision envelope ({collision_envelope_m:g} m)",
-        (0.99, collision_envelope_m),
-        xycoords=ax.get_yaxis_transform(),
-        xytext=(0, 12),
-        textcoords="offset points",
-        color=RED,
-        alpha=0.7,
-        fontsize=_fs(11),
-        ha="right",
-        va="bottom",
-        zorder=4,
-    )
-    envelope_label.set_gid("trace-scene-reference-label")
-    envelope_label.set_path_effects(reference_label_halo)
     lower_y, upper_y = ax.get_ylim()
     if (
         not math.isclose(comfort_distance_m, collision_envelope_m)
         and lower_y <= comfort_distance_m <= upper_y
         and lower_y <= collision_envelope_m <= upper_y
     ):
-        ax.axhline(
-            comfort_distance_m,
-            color=GRAY,
-            linestyle="--",
-            linewidth=0.7,
-            alpha=0.5,
-            zorder=1,
+        comfort_style = _reference_line_style(GRAY, 0.7)
+        ax.axhline(comfort_distance_m, zorder=1, **comfort_style)
+        key_handles.append(
+            Line2D([], [], label=f"personal space ({comfort_distance_m:g} m)", **comfort_style)
         )
-        # Print layouts drop the label below its line: on a narrow final-size panel the
-        # two above-line reference labels would meet mid-panel (text_text_overlap).
-        # The anchor sits a few points right of x=0 so the text clears the y-axis spine.
-        below_line = _LABEL_GAP_SCALE > 1.0
-        comfort_label = ax.annotate(
-            "personal space",
-            (0.0, comfort_distance_m),
-            xycoords=ax.get_yaxis_transform(),
-            xytext=(4, -12) if below_line else (4, 12),
-            textcoords="offset points",
-            color=GRAY,
-            alpha=0.7,
-            fontsize=_fs(11),
-            ha="left",
-            va="top" if below_line else "bottom",
-            zorder=4,
-        )
-        comfort_label.set_gid("trace-scene-reference-label")
-        comfort_label.set_path_effects(reference_label_halo)
     ax.set_xlabel("time (s)")
     # Print layouts wrap the y-label: the rotated one-line form is taller than the
     # final-size timeline panel and would be clipped at the exact-width canvas edge.
@@ -2136,6 +2192,55 @@ def _draw_timeline(
     for spine in speed_ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
+    return key_handles
+
+
+def _merge_key_handles(handle_groups: Sequence[Sequence[Line2D]]) -> list[Line2D]:
+    """Merge per-panel key handles into one ordered list without duplicate labels.
+
+    Returns:
+        list[Line2D]: The first handle seen for each distinct label, in order.
+    """
+
+    merged: list[Line2D] = []
+    seen: set[str] = set()
+    for handles in handle_groups:
+        for handle in handles:
+            label = handle.get_label()
+            if label not in seen:
+                seen.add(label)
+                merged.append(handle)
+    return merged
+
+
+def _add_figure_key(figure: Figure, handles: Sequence[Line2D]) -> None:
+    """Attach the figure key (legend) below the panels, on as few rows as fit the canvas.
+
+    The key names the time-marker cadence and the proxemic reference lines.  Columns
+    are reduced until the key row is narrower than the canvas, so a narrow final-size
+    print canvas wraps the entries onto more rows instead of clipping them.
+    """
+
+    if not handles:
+        return
+    canvas_width = figure.bbox.width
+    legend = None
+    for columns in range(len(handles), 0, -1):
+        if legend is not None:
+            legend.remove()
+        legend = figure.legend(
+            handles=list(handles),
+            loc="outside lower center",
+            frameon=False,
+            fontsize=_fs(12),
+            ncols=columns,
+            handlelength=2.0,
+            columnspacing=1.6,
+        )
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+        if legend.get_window_extent(renderer).width <= canvas_width - 4.0:
+            return
 
 
 def _clamp_texts_to_canvas(figure: Figure, margin_px: float = 2.0) -> None:
@@ -2279,20 +2384,18 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
                 highlight_focal=highlight_focal,
             )
             if timeline_ax is not None:
-                _draw_timeline(
+                key_handles = _draw_timeline(
                     timeline_ax,
                     episode,
                     marker_indices,
                     collision_envelope_m=collision_envelope_m,
                     comfort_distance_m=comfort_distance_m,
                 )
+                _add_figure_key(figure, key_handles)
             else:
                 figure.subplots_adjust(left=0.12, right=0.96, bottom=0.09, top=0.93)
             _place_scene_annotations(scene_ax)
             _clear_scene_trajectories_behind_annotations(scene_ax)
-            if timeline_ax is not None:
-                _place_scene_annotations(timeline_ax)
-                _clear_timeline_guides_behind_reference_labels(timeline_ax)
             figure.set_layout_engine("none")
             if figure_width_in is not None:
                 _clamp_texts_to_canvas(figure)
@@ -2411,6 +2514,7 @@ def _render_comparison_figure(  # noqa: PLR0913 - internal split of render_compa
             scene_axes = [figure.add_subplot(grid[0, column]) for column in range(2)]
             timeline_axes = [None, None]
 
+        reference_handle_groups: list[list[Line2D]] = []
         for episode, pedestrian_selection, scene_ax, timeline_ax in zip(
             episodes, focused_results, scene_axes, timeline_axes, strict=True
         ):
@@ -2430,15 +2534,17 @@ def _render_comparison_figure(  # noqa: PLR0913 - internal split of render_compa
                 highlight_focal=highlight_focal,
             )
             if timeline_ax is not None:
-                _draw_timeline(
-                    timeline_ax,
-                    episode,
-                    marker_indices,
-                    collision_envelope_m=collision_envelope_m,
-                    comfort_distance_m=comfort_distance_m,
+                reference_handle_groups.append(
+                    _draw_timeline(
+                        timeline_ax,
+                        episode,
+                        marker_indices,
+                        collision_envelope_m=collision_envelope_m,
+                        comfort_distance_m=comfort_distance_m,
+                    )
                 )
 
-        legend_handle = Line2D(
+        marker_handle = Line2D(
             [],
             [],
             color=INK,
@@ -2447,20 +2553,11 @@ def _render_comparison_figure(  # noqa: PLR0913 - internal split of render_compa
             linewidth=0.8,
             label=f"time-synchronized markers every {effective_marker_interval_s:g} s",
         )
-        figure.legend(
-            handles=[legend_handle],
-            loc="outside lower center",
-            frameon=False,
-            fontsize=_fs(12),
-        )
+        _add_figure_key(figure, [marker_handle, *_merge_key_handles(reference_handle_groups)])
         figure.canvas.draw()
         for scene_ax in scene_axes:
             _place_scene_annotations(scene_ax)
             _clear_scene_trajectories_behind_annotations(scene_ax)
-        for timeline_ax in timeline_axes:
-            if timeline_ax is not None:
-                _place_scene_annotations(timeline_ax)
-                _clear_timeline_guides_behind_reference_labels(timeline_ax)
         figure.set_layout_engine("none")
         if not tight:
             _clamp_texts_to_canvas(figure)

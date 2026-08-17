@@ -19,12 +19,10 @@ from jsonschema import Draft202012Validator, ValidationError
 from scripts.analysis import verify_ch7_evidence_admission as admission
 
 PACKAGE_SCHEMA = (
-    Path(__file__).parents[2]
-    / "robot_sf/benchmark/schemas/ch7-evidence-package.v2.json"
+    Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-package.v2.json"
 )
 RECEIPT_SCHEMA = (
-    Path(__file__).parents[2]
-    / "robot_sf/benchmark/schemas/ch7-evidence-admission.v2.json"
+    Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-admission.v2.json"
 )
 DIAGNOSTIC_SCHEMA_VERSION = "ch7-evidence-admission-diagnostic.v1"
 V2_FORBIDDEN_CLAIMS = (
@@ -74,8 +72,7 @@ def _verify_check_only_members(package: Path) -> tuple[str, list[str]]:
     """Accept generated payloads and verify, rather than reject, durable sidecars."""
 
     has_review_sidecars = any(
-        path.is_file() and path.name.endswith(".review.json")
-        for path in package.rglob("*")
+        path.is_file() and path.name.endswith(".review.json") for path in package.rglob("*")
     )
     return admission._verify_members(
         package,
@@ -120,9 +117,7 @@ def _receipt_template(
             "forbidden_claims": list(V2_FORBIDDEN_CLAIMS),
         },
         "roles": {
-            "available": {
-                role: {"grain": details["grain"]} for role, details in roles.items()
-            }
+            "available": {role: {"grain": details["grain"]} for role, details in roles.items()}
         },
         "retrieval": {
             "source_package_key": None,
@@ -138,9 +133,7 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     try:
         sums_sha, _listed = _verify_check_only_members(package)
     except admission.Ch7EvidenceAdmissionError as exc:
-        raise Ch7EvidenceAdmissionV2Error(
-            f"package member verification failed: {exc}"
-        ) from exc
+        raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
     package = package.resolve()
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
@@ -221,9 +214,7 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
             package, label="Chapter 7 v2 evidence package"
         )
     except admission.Ch7EvidenceAdmissionError as exc:
-        raise Ch7EvidenceAdmissionV2Error(
-            f"package member verification failed: {exc}"
-        ) from exc
+        raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
     package = package.resolve()
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
@@ -251,20 +242,14 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
         "v1_reduced_atlas_member_sha256",
     ):
         if source_binding[field] != expected_source[field]:
-            raise Ch7EvidenceAdmissionV2Error(
-                f"receipt source binding differs: {field}"
-            )
+            raise Ch7EvidenceAdmissionV2Error(f"receipt source binding differs: {field}")
     if (
         source_binding["portfolio_config_sha256"]
         != manifest["inputs"]["portfolio_config"]["sha256"]
     ):
-        raise Ch7EvidenceAdmissionV2Error(
-            "receipt portfolio binding differs from manifest"
-        )
+        raise Ch7EvidenceAdmissionV2Error("receipt portfolio binding differs from manifest")
     if receipt_payload["scope"]["claim_boundary"] != manifest["claim_boundary"]:
-        raise Ch7EvidenceAdmissionV2Error(
-            "receipt claim boundary differs from manifest"
-        )
+        raise Ch7EvidenceAdmissionV2Error("receipt claim boundary differs from manifest")
     expected_roles = {
         role: {"grain": details["grain"]} for role, details in manifest["roles"].items()
     }

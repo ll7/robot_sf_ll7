@@ -158,7 +158,7 @@ crossed the domain and metric gates.
 ### Additive issue #7410 build provenance receipt
 
 The durable build receipt is tracked beside the package at
-`docs/context/evidence/issue_7322_ch7_evidence_build_receipt.v1.json`. Generate
+`docs/context/issue_7322_ch7_evidence_build_receipt.v1.json`. Generate
 it only after the builder, verifier, receipt checker, and schema changes are
 committed in the source checkout:
 
@@ -167,14 +167,14 @@ uv run python scripts/analysis/verify_ch7_evidence_build_receipt_v1.py create \
   --source-package docs/context/evidence/issue_6792_ch7_evidence_package_v1 \
   --package docs/context/evidence/issue_7322_ch7_evidence_package_v2 \
   --config configs/analysis/ch7_evidence_package.v2.yaml \
-  --receipt docs/context/evidence/issue_7322_ch7_evidence_build_receipt.v1.json
+  --receipt docs/context/issue_7322_ch7_evidence_build_receipt.v1.json
 ```
 
 Verify the committed receipt from a clean descendant checkout with:
 
 ```bash
 uv run python scripts/analysis/verify_ch7_evidence_build_receipt_v1.py verify \
-  --receipt docs/context/evidence/issue_7322_ch7_evidence_build_receipt.v1.json
+  --receipt docs/context/issue_7322_ch7_evidence_build_receipt.v1.json
 ```
 
 The receipt records the source commit/tree before the receipt was added,

@@ -12,8 +12,7 @@ from scripts.analysis import build_ch7_evidence_package_v2 as builder
 from scripts.analysis import verify_ch7_evidence_admission_v2 as verifier
 
 SOURCE_PACKAGE = (
-    Path(__file__).parents[2]
-    / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
+    Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
 )
 
 
@@ -65,8 +64,7 @@ def _valid_receipt() -> dict[str, object]:
 def test_v2_admission_schema_is_versioned_and_strict() -> None:
     schema = json.loads(
         (
-            Path(__file__).parents[2]
-            / "robot_sf/benchmark/schemas/ch7-evidence-admission.v2.json"
+            Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-admission.v2.json"
         ).read_text(encoding="utf-8")
     )
     validator = Draft202012Validator(schema)
@@ -82,9 +80,7 @@ def test_blocked_builder_output_cannot_cross_the_v2_admission_boundary(
 ) -> None:
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
-    with pytest.raises(
-        verifier.Ch7EvidenceAdmissionV2Error, match="review sidecars|admitted"
-    ):
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="review sidecars|admitted"):
         verifier.verify_v2_admission(output, tmp_path / "receipt.json")
 
 
@@ -123,10 +119,7 @@ def test_check_only_diagnoses_blocked_package_and_builds_template(
 
 
 def test_check_only_accepts_reviewed_durable_package() -> None:
-    package = (
-        Path(__file__).parents[2]
-        / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
-    )
+    package = Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
 
     diagnostic = verifier.diagnose_v2_package(package)
 

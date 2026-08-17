@@ -30,9 +30,7 @@ from scripts.analysis import verify_ch7_evidence_admission_v2 as v2_admission
 
 REPO_ROOT = Path(__file__).parents[2]
 RECEIPT_SCHEMA_VERSION = "ch7-evidence-build-receipt.v1"
-RECEIPT_SCHEMA_PATH = (
-    REPO_ROOT / "robot_sf/benchmark/schemas/ch7-evidence-build-receipt.v1.json"
-)
+RECEIPT_SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/ch7-evidence-build-receipt.v1.json"
 BUILDER_PATH = "scripts/analysis/build_ch7_evidence_package_v2.py"
 ADMISSION_VERIFIER_PATH = "scripts/analysis/verify_ch7_evidence_admission_v2.py"
 RECEIPT_CHECKER_PATH = "scripts/analysis/verify_ch7_evidence_build_receipt_v1.py"
@@ -49,8 +47,7 @@ class Ch7EvidenceBuildReceiptError(ValueError):
 
 def _canonical_bytes(payload: Any) -> bytes:
     return (
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        + "\n"
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode("utf-8")
 
 
@@ -93,9 +90,7 @@ def _validate_schema(payload: Mapping[str, Any], label: str) -> None:
 def _repo_path(repo_root: Path, relative: str, label: str) -> Path:
     path = Path(relative)
     if path.is_absolute() or ".." in path.parts:
-        raise Ch7EvidenceBuildReceiptError(
-            f"{label} must be a safe repository-relative path"
-        )
+        raise Ch7EvidenceBuildReceiptError(f"{label} must be a safe repository-relative path")
     resolved_root = repo_root.resolve()
     resolved = (resolved_root / path).resolve()
     try:
@@ -109,9 +104,7 @@ def _relative_path(repo_root: Path, path: Path, label: str) -> str:
     try:
         return path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError as exc:
-        raise Ch7EvidenceBuildReceiptError(
-            f"{label} must be inside the repository"
-        ) from exc
+        raise Ch7EvidenceBuildReceiptError(f"{label} must be inside the repository") from exc
 
 
 def _run(
@@ -141,10 +134,7 @@ def _git(repo_root: Path, *arguments: str) -> str:
 
 def _tracked_worktree_clean(repo_root: Path) -> bool:
     return (
-        subprocess.run(
-            ["git", "diff", "--quiet"], cwd=repo_root, check=False
-        ).returncode
-        == 0
+        subprocess.run(["git", "diff", "--quiet"], cwd=repo_root, check=False).returncode == 0
         and subprocess.run(
             ["git", "diff", "--cached", "--quiet"], cwd=repo_root, check=False
         ).returncode
@@ -155,11 +145,7 @@ def _tracked_worktree_clean(repo_root: Path) -> bool:
 def _directory_tree_hash(root: Path) -> str:
     digest = hashlib.sha256()
     files = sorted(
-        (
-            path
-            for path in root.rglob("*")
-            if path.is_file() and path.name != "SHA256SUMS"
-        ),
+        (path for path in root.rglob("*") if path.is_file() and path.name != "SHA256SUMS"),
         key=lambda path: path.relative_to(root).as_posix(),
     )
     for path in files:
@@ -245,8 +231,7 @@ def _check_only_result(repo_root: Path, package: str) -> dict[str, Any]:
         raise Ch7EvidenceBuildReceiptError("v2 check-only output is not an object")
     blockers = diagnostic.get("diagnostics", {}).get("blockers", [])
     if not isinstance(blockers, list) or not all(
-        isinstance(item, Mapping) and isinstance(item.get("code"), str)
-        for item in blockers
+        isinstance(item, Mapping) and isinstance(item.get("code"), str) for item in blockers
     ):
         raise Ch7EvidenceBuildReceiptError("v2 check-only blockers are malformed")
     if (
@@ -255,9 +240,7 @@ def _check_only_result(repo_root: Path, package: str) -> dict[str, Any]:
         or diagnostic.get("diagnostics", {}).get("admission_authorized") is not False
         or diagnostic.get("diagnostics", {}).get("receipt_created") is not False
     ):
-        raise Ch7EvidenceBuildReceiptError(
-            "v2 check-only did not prove the not-admitted boundary"
-        )
+        raise Ch7EvidenceBuildReceiptError("v2 check-only did not prove the not-admitted boundary")
     return {
         "command": command,
         "exit_code": result.returncode,
@@ -265,9 +248,7 @@ def _check_only_result(repo_root: Path, package: str) -> dict[str, Any]:
         "status": diagnostic.get("status"),
         "admission_status": diagnostic.get("admission_status"),
         "admission_authorized": diagnostic["diagnostics"]["admission_authorized"],
-        "empirical_outcomes_admitted": diagnostic["diagnostics"][
-            "empirical_outcomes_admitted"
-        ],
+        "empirical_outcomes_admitted": diagnostic["diagnostics"]["empirical_outcomes_admitted"],
         "receipt_created": diagnostic["diagnostics"]["receipt_created"],
         "blocker_codes": sorted(item["code"] for item in blockers),
         "result_sha256": _sha256_bytes(_canonical_bytes(diagnostic)),
@@ -309,35 +290,25 @@ def create_receipt(
     if not package_path.is_dir():
         raise Ch7EvidenceBuildReceiptError(f"v2 package is missing: {package_rel}")
 
-    source_commit = _require_commit(
-        _git(repo_root, "rev-parse", "HEAD"), "source commit"
-    )
-    source_tree = _require_commit(
-        _git(repo_root, "rev-parse", "HEAD^{tree}"), "source tree"
-    )
+    source_commit = _require_commit(_git(repo_root, "rev-parse", "HEAD"), "source commit")
+    source_tree = _require_commit(_git(repo_root, "rev-parse", "HEAD^{tree}"), "source tree")
     implementation = {
         "builder": _source_binding(repo_root, BUILDER_PATH, "builder"),
         "admission_verifier": _source_binding(
             repo_root, ADMISSION_VERIFIER_PATH, "admission verifier"
         ),
-        "receipt_checker": _source_binding(
-            repo_root, RECEIPT_CHECKER_PATH, "receipt checker"
-        ),
+        "receipt_checker": _source_binding(repo_root, RECEIPT_CHECKER_PATH, "receipt checker"),
         "receipt_schema": _source_binding(
             repo_root,
             _relative_path(repo_root, RECEIPT_SCHEMA_PATH, "receipt schema"),
             "receipt schema",
         ),
-        "package_schema": _source_binding(
-            repo_root, PACKAGE_SCHEMA_PATH, "package schema"
-        ),
+        "package_schema": _source_binding(repo_root, PACKAGE_SCHEMA_PATH, "package schema"),
     }
     package_sums_sha, listed_members = admission._verify_members(
         package_path, label="durable v2 package", require_review_sidecars=True
     )
-    package_manifest = _read_object(
-        package_path / "manifest.json", "v2 package manifest"
-    )
+    package_manifest = _read_object(package_path / "manifest.json", "v2 package manifest")
     package_manifest_sha = _sha256_file(package_path / "manifest.json")
     package_payload_tree_sha = _payload_tree_hash(package_path, listed_members)
     package_directory_tree_sha = _directory_tree_hash(package_path)
@@ -366,22 +337,16 @@ def create_receipt(
                 )
 
     if any(item["manifest_sha256"] != package_manifest_sha for item in generated):
-        raise Ch7EvidenceBuildReceiptError(
-            "generated manifest differs from durable package"
-        )
+        raise Ch7EvidenceBuildReceiptError("generated manifest differs from durable package")
     if any(item["sha256sums_sha256"] != package_sums_sha for item in generated):
-        raise Ch7EvidenceBuildReceiptError(
-            "generated SHA256SUMS differs from durable package"
-        )
+        raise Ch7EvidenceBuildReceiptError("generated SHA256SUMS differs from durable package")
     if any(item["tree_sha256"] != package_payload_tree_sha for item in generated):
         raise Ch7EvidenceBuildReceiptError(
             "generated output tree differs from durable package payload"
         )
 
     check_only = _check_only_result(repo_root, package_rel)
-    project = tomllib.loads((repo_root / PYPROJECT_PATH).read_text(encoding="utf-8"))[
-        "project"
-    ]
+    project = tomllib.loads((repo_root / PYPROJECT_PATH).read_text(encoding="utf-8"))["project"]
     payload = {
         "schema_version": RECEIPT_SCHEMA_VERSION,
         "issue": 7410,
@@ -448,9 +413,7 @@ def create_receipt(
         "determinism": {
             "output_tree_hashes": [item["tree_sha256"] for item in generated],
             "output_manifest_hashes": [item["manifest_sha256"] for item in generated],
-            "output_sha256sums_hashes": [
-                item["sha256sums_sha256"] for item in generated
-            ],
+            "output_sha256sums_hashes": [item["sha256sums_sha256"] for item in generated],
             "outputs_match": generated[0] == generated[1],
         },
         "check_only": check_only,
@@ -474,14 +437,10 @@ def create_receipt(
 
 
 def _verify_source_commit(repo_root: Path, repository: Mapping[str, Any]) -> None:
-    source_commit = _require_commit(
-        repository.get("source_commit"), "recorded source commit"
-    )
+    source_commit = _require_commit(repository.get("source_commit"), "recorded source commit")
     source_tree = _require_commit(repository.get("source_tree"), "recorded source tree")
     if _git(repo_root, "rev-parse", f"{source_commit}^{{tree}}") != source_tree:
-        raise Ch7EvidenceBuildReceiptError(
-            "recorded source tree does not match source commit"
-        )
+        raise Ch7EvidenceBuildReceiptError("recorded source tree does not match source commit")
     current_head = _git(repo_root, "rev-parse", "HEAD")
     if (
         subprocess.run(
@@ -491,9 +450,7 @@ def _verify_source_commit(repo_root: Path, repository: Mapping[str, Any]) -> Non
         ).returncode
         != 0
     ):
-        raise Ch7EvidenceBuildReceiptError(
-            "current checkout is not descended from source commit"
-        )
+        raise Ch7EvidenceBuildReceiptError("current checkout is not descended from source commit")
 
 
 def _verify_implementation(repo_root: Path, implementation: Mapping[str, Any]) -> None:
@@ -549,9 +506,7 @@ def _verify_inputs(repo_root: Path, inputs: Mapping[str, Any]) -> None:
         ("reduced_atlas_member_sha256", actual_frozen["reduced_atlas_member_sha256"]),
     ):
         if frozen[field] != actual:
-            raise Ch7EvidenceBuildReceiptError(
-                f"frozen v1 input hash mismatch: {field}"
-            )
+            raise Ch7EvidenceBuildReceiptError(f"frozen v1 input hash mismatch: {field}")
 
 
 def _verify_environment(repo_root: Path, environment: Mapping[str, Any]) -> None:
@@ -567,9 +522,7 @@ def _verify_environment(repo_root: Path, environment: Mapping[str, Any]) -> None
         raise Ch7EvidenceBuildReceiptError("project dependency identity changed")
 
 
-def _verify_determinism(
-    package_record: Mapping[str, Any], determinism: Mapping[str, Any]
-) -> None:
+def _verify_determinism(package_record: Mapping[str, Any], determinism: Mapping[str, Any]) -> None:
     generated_hashes = determinism["output_tree_hashes"]
     if (
         len(set(generated_hashes)) != 1
@@ -582,18 +535,11 @@ def _verify_determinism(
 
 def _verify_check_only(package: Path, recorded: Mapping[str, Any]) -> None:
     diagnostic = v2_admission.diagnose_v2_package(package)
-    if (
-        recorded["exit_code"] != 0
-        or recorded["result_schema"] != diagnostic["schema_version"]
-    ):
-        raise Ch7EvidenceBuildReceiptError(
-            "recorded check-only result is not successful"
-        )
+    if recorded["exit_code"] != 0 or recorded["result_schema"] != diagnostic["schema_version"]:
+        raise Ch7EvidenceBuildReceiptError("recorded check-only result is not successful")
     if _sha256_bytes(_canonical_bytes(diagnostic)) != recorded["result_sha256"]:
         raise Ch7EvidenceBuildReceiptError("check-only result changed")
-    actual_blockers = sorted(
-        item["code"] for item in diagnostic["diagnostics"]["blockers"]
-    )
+    actual_blockers = sorted(item["code"] for item in diagnostic["diagnostics"]["blockers"])
     if recorded["blocker_codes"] != actual_blockers:
         raise Ch7EvidenceBuildReceiptError("check-only blocker set changed")
 
@@ -657,11 +603,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         else:
-            print(
-                json.dumps(
-                    verify_receipt(args.receipt), sort_keys=True, separators=(",", ":")
-                )
-            )
+            print(json.dumps(verify_receipt(args.receipt), sort_keys=True, separators=(",", ":")))
     except (
         Ch7EvidenceBuildReceiptError,
         OSError,

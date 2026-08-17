@@ -11,9 +11,7 @@ import pytest
 from scripts.analysis import verify_ch7_evidence_build_receipt_v1 as receipt
 
 REPO_ROOT = Path(__file__).parents[2]
-RECEIPT_PATH = (
-    REPO_ROOT / "docs/context/evidence/issue_7322_ch7_evidence_build_receipt.v1.json"
-)
+RECEIPT_PATH = REPO_ROOT / "docs/context/issue_7322_ch7_evidence_build_receipt.v1.json"
 
 
 def _write_mutated_receipt(tmp_path: Path, mutate) -> Path:
@@ -48,14 +46,10 @@ def test_receipt_payload_hash_is_non_circular() -> None:
 def test_changed_builder_source_is_rejected(tmp_path: Path) -> None:
     path = _write_mutated_receipt(
         tmp_path,
-        lambda payload: payload["implementation"]["builder"].update(
-            {"sha256": "0" * 64}
-        ),
+        lambda payload: payload["implementation"]["builder"].update({"sha256": "0" * 64}),
     )
 
-    with pytest.raises(
-        receipt.Ch7EvidenceBuildReceiptError, match="implementation hash mismatch"
-    ):
+    with pytest.raises(receipt.Ch7EvidenceBuildReceiptError, match="implementation hash mismatch"):
         receipt.verify_receipt(path, repo_root=REPO_ROOT)
 
 
@@ -65,23 +59,17 @@ def test_changed_config_is_rejected(tmp_path: Path) -> None:
         lambda payload: payload["inputs"]["v2_config"].update({"sha256": "0" * 64}),
     )
 
-    with pytest.raises(
-        receipt.Ch7EvidenceBuildReceiptError, match="input hash mismatch"
-    ):
+    with pytest.raises(receipt.Ch7EvidenceBuildReceiptError, match="input hash mismatch"):
         receipt.verify_receipt(path, repo_root=REPO_ROOT)
 
 
 def test_changed_dependency_identity_is_rejected(tmp_path: Path) -> None:
     path = _write_mutated_receipt(
         tmp_path,
-        lambda payload: payload["environment"]["project"]["lock"].update(
-            {"sha256": "0" * 64}
-        ),
+        lambda payload: payload["environment"]["project"]["lock"].update({"sha256": "0" * 64}),
     )
 
-    with pytest.raises(
-        receipt.Ch7EvidenceBuildReceiptError, match="dependency identity changed"
-    ):
+    with pytest.raises(receipt.Ch7EvidenceBuildReceiptError, match="dependency identity changed"):
         receipt.verify_receipt(path, repo_root=REPO_ROOT)
 
 

@@ -153,7 +153,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if grid_payload is None:
             # Observation required when grid_payload not provided
-            assert observation is not None
+            if observation is None:
+                raise ValueError(
+                    "MPPI Social obstacle clearance requires observation "
+                    "when grid_payload is absent"
+                )
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
             return float("inf")

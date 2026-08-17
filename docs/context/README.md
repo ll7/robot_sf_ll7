@@ -15,6 +15,10 @@ The deterministic representative selector is documented in
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md); it selects a future
 trace-dossier representative only and does not establish benchmark evidence.
 
+The post-rollout stale-base observation contract is documented in
+[issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
+SHA-pinned workflow records and keeps missing or unknown attribution unavailable.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

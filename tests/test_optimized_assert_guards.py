@@ -21,6 +21,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
     import robot_sf.nav.svg_map_parser as svg
     from robot_sf.planner.dwa import DWAPlannerAdapter
+    from robot_sf.planner.nmpc_social import NMPCSocialPlannerAdapter
     from robot_sf.planner.predictive_mppi import (
         PredictiveMPPIAdapter,
         build_predictive_mppi_config,
@@ -124,6 +125,20 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
 
+    nmpc_social = NMPCSocialPlannerAdapter()
+    expect(
+        "nmpc_social_obstacle_clearance_observation",
+        ValueError,
+        "NMPC Social obstacle clearance requires observation when grid_payload is absent",
+        lambda: nmpc_social._min_obstacle_clearance(np.zeros(2, dtype=float)),
+    )
+    expect(
+        "nmpc_social_occupancy_cost_observation",
+        ValueError,
+        "NMPC Social occupancy cost requires observation when grid_payload is absent",
+        lambda: nmpc_social._occupancy_cost(np.zeros(2, dtype=float)),
+    )
+
     predictive_mppi = PredictiveMPPIAdapter(
         build_predictive_mppi_config({"sample_count": 1, "iterations": 1}),
         allow_fallback=True,
@@ -218,6 +233,8 @@ _EXPECTED_MARKERS = (
     "PASS ppo_observation: TypeError",
     "PASS occupancy_shape: ValueError",
     "PASS dwa_obstacle_clearance_observation: ValueError",
+    "PASS nmpc_social_obstacle_clearance_observation: ValueError",
+    "PASS nmpc_social_occupancy_cost_observation: ValueError",
     "PASS predictive_mppi_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
@@ -235,6 +252,8 @@ _EXPECTED_MESSAGES = (
     "PPOPolicy requires Observation, got object",
     "Invalid grid shape: (2, 200, 0)",
     "DWA obstacle clearance requires observation when grid_payload is absent",
+    "NMPC Social obstacle clearance requires observation when grid_payload is absent",
+    "NMPC Social occupancy cost requires observation when grid_payload is absent",
     "Predictive MPPI obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",

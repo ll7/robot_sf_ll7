@@ -6,6 +6,7 @@ import warnings
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
@@ -222,6 +223,43 @@ def test_nmpc_social_caches_absent_grid_payload_across_plan(monkeypatch) -> None
     planner.plan(observation)
 
     assert calls == 1
+
+
+@pytest.mark.parametrize(
+    "helper_name, expected_message",
+    (
+        (
+            "_min_obstacle_clearance",
+            "NMPC Social obstacle clearance requires observation when grid_payload is absent",
+        ),
+        (
+            "_occupancy_cost",
+            "NMPC Social occupancy cost requires observation when grid_payload is absent",
+        ),
+    ),
+)
+def test_nmpc_social_obstacle_helpers_require_observation_without_grid(
+    helper_name: str, expected_message: str
+) -> None:
+    """Obstacle helpers should fail clearly when neither observation nor cache is supplied."""
+    planner = NMPCSocialPlannerAdapter()
+
+    with pytest.raises(ValueError, match=expected_message):
+        getattr(planner, helper_name)(np.zeros(2, dtype=float))
+
+
+def test_nmpc_social_obstacle_helpers_accept_precomputed_grid_without_observation() -> None:
+    """Precomputed grid payloads should keep both obstacle helpers observation-independent."""
+    planner = NMPCSocialPlannerAdapter()
+    observation = _obs(obstacle_cells=[(2, 2)])
+    observation["occupancy_grid"][3, 2, 2] = 1.0
+    grid_payload = planner._extract_grid_payload(observation)
+    assert grid_payload is not None
+
+    assert (
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float), grid_payload=grid_payload) == 0.0
+    )
+    assert planner._occupancy_cost(np.zeros(2, dtype=float), grid_payload=grid_payload) == 1.0
 
 
 def test_nmpc_social_prioritizes_current_waypoint_until_close() -> None:

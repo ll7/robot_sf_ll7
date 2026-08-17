@@ -320,8 +320,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> float:
         """Return the nearest obstacle clearance around a point in meters."""
         if grid_payload is None:
-            # Observation required when grid_payload not provided
-            assert observation is not None
+            if observation is None:
+                raise ValueError(
+                    "NMPC Social obstacle clearance requires observation "
+                    "when grid_payload is absent"
+                )
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
             return float("inf")
@@ -364,8 +367,10 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> float:
         """Return raw occupancy at a point for soft obstacle shaping."""
         if grid_payload is None:
-            # Observation required when grid_payload not provided
-            assert observation is not None
+            if observation is None:
+                raise ValueError(
+                    "NMPC Social occupancy cost requires observation when grid_payload is absent"
+                )
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
             return 0.0

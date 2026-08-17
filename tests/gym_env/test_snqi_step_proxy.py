@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import warnings
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
+from robot_sf.benchmark import constants
+from robot_sf.gym_env import snqi_proxy
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy, coerce_xy_rows, extract_robot_xy
 
 
@@ -42,6 +46,38 @@ def test_snqi_proxy_reports_near_miss_and_force_exposure() -> None:
     assert metrics["force_exceed_events"] == 1.0
     assert metrics["comfort_exposure"] == 0.5
     assert metrics["jerk_mean"] == 0.0
+
+
+def test_snqi_threshold_fallback_warns_once_and_matches_benchmark_constants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing benchmark constants must be visible without changing their fallback values."""
+
+    def _missing_constants(_module_name: str) -> object:
+        raise ModuleNotFoundError("benchmark constants unavailable")
+
+    monkeypatch.setattr(snqi_proxy, "_SNQI_THRESHOLD_CACHE", None)
+    monkeypatch.setattr(
+        snqi_proxy,
+        "importlib",
+        SimpleNamespace(import_module=_missing_constants),
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        thresholds = snqi_proxy.resolve_snqi_thresholds()
+        assert snqi_proxy.resolve_snqi_thresholds() == thresholds
+
+    assert len(caught) == 1
+    assert caught[0].category is RuntimeWarning
+    assert "using compatibility defaults" in str(caught[0].message)
+    assert thresholds == pytest.approx(
+        (
+            constants.COLLISION_DIST,
+            constants.NEAR_MISS_DIST,
+            constants.COMFORT_FORCE_THRESHOLD,
+        )
+    )
 
 
 def test_snqi_proxy_uses_ped_position_override_without_reading_simulator_ped_pos() -> None:

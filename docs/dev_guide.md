@@ -368,7 +368,7 @@ observation-track metadata; see `model/registry.md` and
 ### One‑liner quality gates (CLI):
 
 ```bash
-uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
+uv run ruff check --fix . && uv run ruff format . && uvx ty@0.0.58 check . --exit-zero && uv run pytest -n auto tests
 ```
 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
@@ -431,6 +431,72 @@ repository uses the explicit `base_sensitive` marker-file selector from issue #5
   fail closed with a machine-readable error instead of attempting a restore (issue #6689). The
   older REST-only `scripts/dev/update_pr_branch.py` is kept for environments where the REST
   `update-branch` endpoint works.
+
+### Stacked PR orchestration (issue #7345)
+
+Use `scripts/dev/stacked_prs.py` for a stack ordered from root to tip. The helper is a guarded
+coordinator for branch/base-ref mechanics; it does not replace the exact-head review, metadata,
+thread, CI, or branch-protection gates described above. All mutating operations are dry-run by
+default, and `--apply` requires an `PR=SHA` guard for every PR in the supplied stack.
+
+Inspect the live stack before changing it:
+
+```bash
+uv run python scripts/dev/stacked_prs.py status \
+  --prs <root-pr> <child-pr> <tip-pr> --json
+```
+
+The status record reports each head/base ref and SHA, current check-run conclusions (older
+superseded runs are excluded), review digest, requested reviewers, review-thread resolution,
+exact-head verdict, final PR metadata digest, and whether the current stack alignment is
+merge-ready. Review, review-comment, conversation-comment, and check-run collections are read
+through bounded REST pagination and include page/row provenance in the `pagination` field. A full
+page at the configured budget is reported as possibly truncated and fails closed; malformed pages
+also fail closed. Unknown review-thread state is never treated as green.
+
+To align a stack, preview the desired root `-> main` and child `-> parent-source-branch` changes,
+then apply them only with the exact heads captured from the same snapshot:
+
+```bash
+uv run python scripts/dev/stacked_prs.py retarget \
+  --prs <root-pr> <child-pr> --json
+uv run python scripts/dev/stacked_prs.py retarget --apply \
+  --prs <root-pr> <child-pr> \
+  --expected-head <root-pr>=<root-sha> \
+  --expected-head <child-pr>=<child-sha> --json
+```
+
+For local branch synchronization, use a clean linked worktree. The command fetches the base and
+stack branches, merges the preceding remote branch into each branch in order, and pushes ordinary
+(non-force) updates. It restores the worktree's original branch after an applied run:
+
+```bash
+uv run python scripts/dev/stacked_prs.py sync \
+  --worktree /path/to/linked/worktree \
+  --branches <root-branch> <child-branch> <tip-branch> --json
+uv run python scripts/dev/stacked_prs.py sync --apply \
+  --worktree /path/to/linked/worktree \
+  --branches <root-branch> <child-branch> <tip-branch> --json
+```
+
+`merge-cascade` squash-merges only the current green root with GitHub's exact-head merge guard.
+After the merge it verifies whether GitHub automatically retargeted the next PR to `main`. If not,
+it explicitly retargets that PR, verifies the result, and stops until the base change has fresh CI
+and exact-head review evidence. Re-run the command for the next PR; it never blindly merges a child
+against a stale pre-merge base:
+
+```bash
+uv run python scripts/dev/stacked_prs.py merge-cascade --apply \
+  --prs <root-pr> <child-pr> <tip-pr> \
+  --expected-head <root-pr>=<root-sha> \
+  --expected-head <child-pr>=<child-sha> \
+  --expected-head <tip-pr>=<tip-sha> --json
+```
+
+Do not run `sync --apply`, `retarget --apply`, or `merge-cascade --apply` concurrently against the
+same branch/PR. Refresh the status snapshot and expected heads after any external push, retarget,
+merge, or review change. The helper does not force-push, resolve conflicts, bypass requested
+reviewers, or delete branches.
 
 **Why not GitHub merge queue yet?** The native merge queue is the ideal solution — it re-validates
 each PR against the up-to-date prospective main before merging automatically. The repository has
@@ -836,7 +902,11 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
   unavailable provenance is `blocked`, so those rows cannot route to merge readiness from the
   compact snapshot alone.
 - If GraphQL quota is exhausted during `--active` discovery, the snapshot uses a bounded REST
-  open-PR list plus the existing per-PR REST enrichment path. Such snapshots carry
+  open-PR list plus paginated per-PR REST enrichment. The active list uses up to 100 rows per
+  page and marks `truncated: true` only when the requested cap may have discarded rows; a short
+  final page proves completion. Per-PR reviews, conversation comments, and head-bound check runs
+  use bounded 100-row pages and fail closed after the page budget or on malformed payloads, with
+  endpoint status recorded in `rest_enrichment`. Such snapshots carry
   `data_source: rest_fallback_graphql_quota` and `route_evidence_only: true`; GraphQL-only review
   threads are `unknown_graphql_quota`, so every row remains blocked from merge-ready admission until
   a fresh thread-capable snapshot is available. A REST-list failure emits one compact error row and
@@ -853,10 +923,12 @@ The resulting JSON keeps review/comment/CI payloads compact; review noise is red
 latest author-attributed samples, and bounded body excerpts.
 
 When GraphQL quota is exhausted, `--active` uses a bounded REST open-pull-request list and the
-existing per-PR REST enrichment instead of returning an error-only queue. Such snapshots mark
+paginated per-PR REST enrichment instead of returning an error-only queue. Such snapshots mark
 `data_source: rest_fallback_graphql_quota` and each row carries
 `review_threads_admission: fail_closed_unknown`, because REST cannot refresh GraphQL-only review
-threads. The PR loop policy classifies a merge-ready row in that state as
+threads. REST enrichment status is exposed under `rest_enrichment`; an endpoint failure or page
+budget exhaustion is recorded and blocks the row's preflight. The PR loop policy classifies a
+merge-ready row in that state as
 `unknown_review_threads` and routes it to `await_review_threads`; the fallback is queue
 orientation only and never establishes merge readiness.
 
@@ -1196,29 +1268,13 @@ When reviewing PRs with route-efficiency changes, ensure:
 - [ ] **Visible evidence warning**: Confirm the report still displays the route-evidence-only
   warning and does not let route metrics replace manual diff inspection or local validation.
 
-### Spark Sidecar Routing
+### Shared model routing
 
-Spark (`gpt-5.3-codex-spark`, or the configured Spark sidecar model) is a first-class route for
-small, low-risk read-only task classes. Route Spark when the task fits one of:
-
-- **tiny lookup** — file location, name resolution, short grep.
-- **read-only review** — narrow diff inspection, single-file summary.
-- **docs cross-check** — link validation, path reference checks.
-- **issue/file surface mapping** — issue-to-file coverage, surface enumeration.
-- **inspect small command output** — bounded stdout/stderr review.
-
-Spark prompts must require compact output: files inspected, exact evidence, uncertainty, and
-recommended next prompt.
-
-Do not route Spark to:
-
-- final benchmark interpretation and paper claims,
-- merge readiness and publication decisions,
-- GitHub mutation (labels, comments, PR creation, merge, close),
-- long CI polling unless a bounded monitor helper exists,
-- shell-executable fallback unless a real headless wrapper is available.
-
-This is routing guidance only; do not configure Spark as a shell-executable fallback.
+Use the [shared model-routing pointer](../.agents/README.md#shared-model-routing) for delegated
+model and provider selection. It owns the current native tiers, evidenced escalation rule, and
+external-provider budget alternatives. Do not copy a volatile model inventory or maintain a local
+sidecar route table in this repository. Route resolution is dispatch context, not validation or
+acceptance proof.
 
 Assume `OWNER`, `REPO`, `ISSUE`, `BRANCH`, and `BASE` are set:
 
@@ -1964,7 +2020,7 @@ Examples (copy‑ready):
 - Lint/format: Ruff
   - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean with the expanded rule set; document exceptions with comments)
 - Type checking: ty
-  - VS Code task "Type Check (advisory)" (`uvx ty check . --exit-zero`; reports findings while
+  - VS Code task "Type Check (advisory)" (`uvx ty@0.0.58 check . --exit-zero`; reports findings while
     exiting zero for current compatibility)
   - Type findings are useful quality signals and should be fixed when practical, especially in
     substantially touched files or stable contracts such as public interfaces, benchmark schemas,

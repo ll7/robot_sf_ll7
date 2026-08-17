@@ -62,6 +62,9 @@ Do not use it for:
 - `docs/dev_guide.md` ("Merge queue gate", issue #6274)
 - `.github/workflows/merge-queue-gate.yml`
 - `scripts/dev/merge_queue_gate.py`
+- `scripts/dev/base_sensitive_selector.py`
+- `scripts/dev/check_base_sensitive_gates.py`
+- `scripts/dev/check_pr_current_base_cas.py`
 - `.github/PULL_REQUEST_TEMPLATE/pr_default.md`
 
 ## Preflight
@@ -89,12 +92,20 @@ Before each merge operation, verify:
    Exit code `2` means checks were still queued or in progress after the polling budget; inspect the
    listed check URLs or run `gh run view <run-id> --json status,conclusion,jobs` for job state.
 6. No merge conflicts exist (`gh pr view <number> --json mergeable`).
-7. **Merge-staleness check**: run `python scripts/dev/check_pr_merge_staleness.py <number>`.
-   Exit code `1` means main has moved since the PR's CI ran; skip and report the
-   PR as stale — the author must update the branch and re-run CI before merge.
-   Exit code `2` means the check could not determine staleness (API error, no
-   workflow-run metadata); log a warning and continue with remaining preflight
-   checks.  See issue #5389 for context.
+7. **Risk-tiered base policy and final CAS** (issues #5559/#6272): first run
+   `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --json`.
+   The changed-file selector must return `base_sensitive` or `ordinary`; `unknown` or missing
+   inventory fails closed. For `base_sensitive`, run the existing
+   `python scripts/dev/check_pr_merge_staleness.py <number>` and
+   `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --run-subset --json`.
+   Any stale, unknown, or failed result skips the PR; the author must update the branch and rerun
+   CI. For `ordinary`, a trusted exact-head review must carry
+   `base-policy: ordinary-cas @ <head-sha>` and the merger must not infer that status from a local
+   snapshot. Capture `HEAD_SHA` and the current `main` SHA immediately before the merge, then run
+   `uv run python scripts/dev/check_pr_current_base_cas.py --pr <number>
+   --expected-head-sha "$HEAD_SHA" --expected-main-sha "$EXPECTED_MAIN_SHA" --json`.
+   A non-passing CAS result, moved `main`, moved head, missing provenance, or non-`main` target
+   skips the PR. The final merge still uses `--match-head-commit "$HEAD_SHA"`. See issue #6272.
 8. The PR has no unresolved actionable review threads or outstanding explicitly requested external
    reviewers. A distinct-account approval may be waived only under `goal-pr-review`'s documented
    single-account internal-review waiver.

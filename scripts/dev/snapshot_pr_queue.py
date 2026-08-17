@@ -20,7 +20,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
-from scripts.dev.pr_loop_policy import GATE_VERDICT_RE
+from scripts.dev.pr_loop_policy import BASE_POLICY_RE, GATE_VERDICT_RE
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -839,6 +839,31 @@ def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(verdicts))
 
 
+def _extract_base_policies(pr: dict[str, Any]) -> list[str]:
+    """Extract trusted exact-head base-policy selectors from reviews/comments."""
+    policies: list[str] = []
+    explicit = pr.get("base_policy")
+    if isinstance(explicit, str):
+        policies.append(explicit)
+    elif isinstance(explicit, list):
+        policies.extend(item for item in explicit if isinstance(item, str))
+
+    for items in (pr.get("reviews"), pr.get("comments")):
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            association = str(entry.get("authorAssociation", "")).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if not isinstance(body, str):
+                continue
+            policies.extend(match.group(0) for match in BASE_POLICY_RE.finditer(body))
+    return list(dict.fromkeys(policies))
+
+
 def _extract_metadata_verdicts(pr: dict[str, Any]) -> list[str]:  # noqa: C901
     """Extract trusted final title/body reconciliation trailers."""
     verdicts: list[str] = []
@@ -931,6 +956,7 @@ def _pr_payload_from_dict(
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        "base_policy": _extract_base_policies(pr),
         "metadata_digest": metadata_digest_value,
         "metadata_verdicts": metadata_verdicts,
         "review_snapshot": _review_snapshot(pr),

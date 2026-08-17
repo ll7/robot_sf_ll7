@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #6272 risk-tiered stale-base merge policy: explicit marker-file selection for
+base-sensitive changes, current-base subset validation, and trusted exact-head ordinary-path
+compare-and-swap evidence. Missing or unknown provenance remains fail-closed, and the note records
+the measurement boundary for a later normal-throughput observation window:
+[issue_6272_risk_tiered_stale_base_policy.md](issue_6272_risk_tiered_stale_base_policy.md).
+
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
 one campaign cell, preserves terminal-verdict denominators, and remains

@@ -163,10 +163,10 @@ from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     holonomic_world_velocity_command as _holonomic_world_velocity_command,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_profile,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile_impl,
 )
 from robot_sf.benchmark.map_runner_provenance import (

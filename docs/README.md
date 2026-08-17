@@ -21,6 +21,8 @@ own index so you never fall straight into issue-specific context notes.
   planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
 - 🔬 **[Research & Benchmark Guide](./research-guide.md)** — benchmark semantics, evidence grading,
   scenario certification, release protocol, provenance discipline.
+- 🧭 **[Feasibility-First Scenario Search](./feasibility_first_scenario_search.md)** — fixture-only
+  rejection accounting and deterministic risk-feature ordering for adversarial research.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
 - 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation
@@ -320,6 +322,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
 * **[Prediction-Aware MPC Planner](./baselines/prediction_mpc.md)** - Experimental constant-velocity prediction-MPC local planner, config, smoke command, and claim boundary
+* **[Predictive Planner Baseline Diagnostic](./predictive_baseline_diagnostic.md)** - Same-seed MPPI human-cost and NMPC/CBF smoke contract; diagnostic-only
 * **[Dynamic Window Approach Baseline](./baselines/dwa.md)** - Classical acceleration-window local planner, canonical parameters, and experimental claim boundary
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Issue #592 Hybrid Obstacle-Context Predictor Design](./context/issue_592_hybrid_obstacle_predictor_design.md)** - Feature-baseline-first plan for obstacle-conditioned predictive models, with config-first experiment path and benchmark proof gates

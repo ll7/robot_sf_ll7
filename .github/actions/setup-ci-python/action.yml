@@ -24,8 +24,16 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Set up Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
     - name: Install uv
       id: setup-uv
+      # A transient codeload/manifest failure must reach the pinned fallback
+      # below; the final version check remains fail-closed.
+      continue-on-error: true
       uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       with:
         version: ${{ inputs.uv-version }}
@@ -38,10 +46,31 @@ runs:
         echo "cache-hit=${{ steps.setup-uv.outputs.cache-hit }}"
         bash scripts/dev/ci_uv_sync_diag.sh "uv-cache-pre-sync"
 
-    - name: Set up Python
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-      with:
-        python-version: ${{ inputs.python-version }}
+    - name: Retry pinned uv install after action transport failure
+      if: steps.setup-uv.outcome == 'failure'
+      shell: bash
+      env:
+        UV_VERSION: ${{ inputs.uv-version }}
+        UV_INSTALL_MAX_ATTEMPTS: "3"
+        UV_INSTALL_BACKOFF_BASE: "5"
+        UV_INSTALL_BACKOFF_CAP: "30"
+      run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+    - name: Verify pinned uv
+      if: always()
+      shell: bash
+      env:
+        UV_VERSION: ${{ inputs.uv-version }}
+      run: |
+        expected="uv ${UV_VERSION}"
+        actual="$(uv --version 2>/dev/null || true)"
+        actual_version="${actual#uv }"
+        actual_version="${actual_version%% *}"
+        if [[ "$actual" != uv\ * || "$actual_version" != "$UV_VERSION" ]]; then
+          echo "::error::uv setup was not proven: expected '${expected}', got '${actual:-missing uv}'" >&2
+          exit 1
+        fi
+        echo "uv setup verified version=${UV_VERSION}"
 
     - name: System packages for headless
       if: ${{ runner.os == 'Linux' && inputs.install-system-packages == 'true' }}

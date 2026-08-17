@@ -358,7 +358,7 @@ def _planner_metadata_diagnostics(planner: Any) -> dict[str, Any] | None:
         return None
     try:
         metadata = metadata_fn()
-    except Exception:  # pragma: no cover  # noqa: BLE001 - metadata must not break execution
+    except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError):
         return None
     if not isinstance(metadata, Mapping):
         return None
@@ -366,14 +366,13 @@ def _planner_metadata_diagnostics(planner: Any) -> dict[str, Any] | None:
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
 
-def _planner_runtime_diagnostics(planner: Any) -> dict[str, Any] | None:
-    """Return child-process foresight and planner diagnostics as one payload."""
-    payload = _planner_foresight_diagnostics(planner) or {}
-    diagnostics_fn = getattr(planner, "diagnostics", None)
+def _planner_runtime_diagnostics(planner: Any, action_timing_ms: float) -> dict[str, Any] | None:
+    payload: dict[str, Any] = {"action_timing_ms": float(action_timing_ms)}
+    diagnostics_fn = getattr(planner, "get_diagnostics", None)
     if callable(diagnostics_fn):
         try:
             diagnostics = diagnostics_fn()
-        except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution
+        except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError):
             diagnostics = None
         if isinstance(diagnostics, Mapping):
             payload["planner_diagnostics"] = dict(diagnostics)

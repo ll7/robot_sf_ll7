@@ -30,6 +30,7 @@ RECOMMENDATION_ACTIONS = {
     "wait_ci": "wait_ci",
     "stop_pr_closed": "stop_pr_closed",
     "stop_stale_head": "stop_stale_head",
+    "stop_preflight_blocked": "stop_preflight_blocked",
     "stop_user_help_required": "stop_user_help_required",
 }
 AFTER_DIAGNOSIS_ACTIONS = {
@@ -187,8 +188,25 @@ def classify_pr_action(
     state = _string_or_default(pr.get("state")).upper()
     preflight = pr.get("preflight", {}) if isinstance(pr.get("preflight"), dict) else {}
     preflight_status = _string_or_default(preflight.get("status"))
+    nested_review_status = _string_or_default(
+        pr.get("review_thread_snapshot", {}).get("status")
+        if isinstance(pr.get("review_thread_snapshot"), dict)
+        else ""
+    )
+    review_threads = _string_or_default(preflight.get("review_threads", pr.get("review_threads")))
+    review_threads_admission = _string_or_default(
+        preflight.get("review_threads_admission", pr.get("review_threads_admission"))
+    )
     checks_overall = _string_or_default(checks.get("overall"), "pending")
     mergeable = _string_or_default(pr.get("mergeable"))
+    unknown_review_preflight = (
+        review_threads == "unknown_graphql_quota"
+        or review_threads_admission == "fail_closed_unknown"
+        or (nested_review_status and nested_review_status != "ok")
+    )
+    otherwise_blocked_preflight = (
+        preflight_status == "blocked" and checks_overall != "failure" and mergeable != "CONFLICTING"
+    )
 
     if state and state != "OPEN":
         action = "stop_pr_closed"
@@ -202,6 +220,11 @@ def classify_pr_action(
     elif checks_overall == "failure":
         action = "diagnose_ci_failure"
         reasons.append("ci_failure")
+    elif unknown_review_preflight or otherwise_blocked_preflight:
+        action = "stop_preflight_blocked"
+        reasons.extend(
+            str(reason) for reason in preflight.get("reasons", []) or ["preflight_blocked"]
+        )
     elif feedback["has_actionable_feedback"]:
         action = "process_review_comment"
         reasons.append("review_feedback")

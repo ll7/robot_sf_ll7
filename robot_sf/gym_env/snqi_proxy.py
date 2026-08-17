@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -152,6 +153,11 @@ def resolve_snqi_thresholds() -> tuple[float, float, float]:
             _DEFAULT_COLLISION_DIST,
             _DEFAULT_NEAR_MISS_DIST,
             _DEFAULT_COMFORT_FORCE_THRESHOLD,
+        )
+        warnings.warn(
+            "SNQI benchmark threshold constants are unavailable; using compatibility defaults",
+            RuntimeWarning,
+            stacklevel=2,
         )
     return _SNQI_THRESHOLD_CACHE
 

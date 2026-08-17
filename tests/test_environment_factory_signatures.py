@@ -6,6 +6,7 @@ Ensures discoverability and prevents regression back to **kwargs catch-all.
 from __future__ import annotations
 
 import inspect
+import os
 from types import SimpleNamespace
 
 import numpy as np
@@ -437,6 +438,17 @@ def test_make_crowd_sim_env_signature_explicit():
     assert "video_fps" in params
 
 
+def test_global_seed_does_not_mutate_pythonhashseed(monkeypatch):
+    """Factory seeding must not leak an ineffective process-hash setting."""
+    monkeypatch.setenv("PYTHONHASHSEED", "caller-value")
+    monkeypatch.setattr(environment_factory_module.random, "seed", lambda _seed: None)
+    monkeypatch.setattr(environment_factory_module, "_optional_import", lambda _name: None)
+
+    environment_factory_module._apply_global_seed(123)
+
+    assert os.environ["PYTHONHASHSEED"] == "caller-value"
+
+
 def test_make_crowd_sim_env_preserves_preconfigured_values(monkeypatch, tmp_path):
     """Crowd env factory should preserve explicit config values by default."""
 
@@ -530,8 +542,9 @@ def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):
             self.video_fps = None
 
     class FakeCrowdEnv:
-        def __init__(self, config):
+        def __init__(self, config, *, seed=None):
             self.config = config
+            self.seed = seed
             self.applied_seed = None
 
     applied = {}
@@ -561,6 +574,7 @@ def test_make_crowd_sim_env_applies_explicit_overrides(monkeypatch):
 
     assert isinstance(env, FakeCrowdEnv)
     assert applied["seed"] == 123
+    assert env.seed == 123
     assert env.applied_seed == 123
     assert env.config.map_id == "fake"
     assert env.config.peds_have_obstacle_forces is False

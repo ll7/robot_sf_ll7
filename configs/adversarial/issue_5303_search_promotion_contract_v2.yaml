@@ -154,14 +154,16 @@ input_provenance:
       sha256: 0d12a63933168ea88e2afd05cfaeddb99e863bd4d528d671434f17b9b3d9b66f
     - id: powered_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py
-      sha256: 836cf43ec9ce1063986a5ef32d0e0faca66bb8b2cbf9c4451b2874bc27fd9de4
+      # Refreshed after the outcome-free optimized-mode evidence-gate hardening
+      # in #7231; frozen design fields and the promotion boundary are unchanged.
+      sha256: 07114a074cef65ba69b194e4f8f4c663ccacc1a134e8733a4fac717bd4a23901
     - id: powered_contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_contract_v2.py
       sha256: 1f88149400e81284d37615814fe2e9b03a768cce7214e02ba7a210e1bb53b8db
     - id: historical_contract
       path: configs/adversarial/issue_5303_search_promotion_contract.yaml
-      # Tracks the v1 manifest refresh for the same additive objective change.
-      sha256: 771d67c2d3eb446f8cb8e6cf83c27c2151648ed97ec521fc6b5296878f3339ab
+      # Tracks the v1 provenance refresh from the same optimized-mode guard repair.
+      sha256: f18575f28f44b810ab20e3ea6f9f10535bc119b317daa261639065071411fd6d
     - id: historical_search_space
       path: configs/adversarial/issue_5303_search_promotion_space.yaml
       sha256: 04906a154f88c17b5d2797a4d6d934f5b6b74cc25d7e99796bd603f9823f2106

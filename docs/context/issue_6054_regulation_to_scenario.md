@@ -22,7 +22,7 @@ Goals:
   1. **Compilation validity** — did the compiler extract parameters, and what
      could it not interpret?
   2. **Schema validity** — does the generated config satisfy
-     `robot_sf.scenario_matrix.v1` via `robot_sf.benchmark.scenario_schema`
+     `robot_sf.scenario_matrix.v1` via `robot_sf.benchmark.scenario.scenario_schema`
      (reused, not rewritten)?
   3. **Scenario validity** — `not_assessed`. Only execution + review establishes
      this.
@@ -155,7 +155,7 @@ these; the prototype refuses to invent parameters for them.
 
 The output is a `robot_sf.scenario_matrix.v1` scenario matrix (a single-scenario
 list) with hypothesis metadata. It validates against the shared JSON Schema via
-`robot_sf.benchmark.scenario_schema.validate_scenario_list`.
+`robot_sf.benchmark.scenario.scenario_schema.validate_scenario_list`.
 
 Key metadata fields:
 
@@ -256,7 +256,7 @@ map-path resolution convention, and the same `required_manual_review` /
 regulation excerpt and compiling parameters from it, and (b) reporting
 compilation/schema/scenario validity on explicitly separate axes.
 
-It reuses `robot_sf.benchmark.scenario_schema.validate_scenario_list` and
+It reuses `robot_sf.benchmark.scenario.scenario_schema.validate_scenario_list` and
 `validate_scenario_matrix_metadata` without modifying them.
 
 ## Related Files
@@ -266,5 +266,5 @@ It reuses `robot_sf.benchmark.scenario_schema.validate_scenario_list` and
 - `configs/scenarios/single/issue_6054_regulation_to_scenario.yaml` — compiled example output
 - `configs/scenarios/sets/issue_6054_regulation_to_scenario.yaml` — optional set manifest
 - `tests/scenarios/test_convert_regulation_to_scenario.py` — test suite
-- `robot_sf/benchmark/scenario_schema.py` — reused schema validators (not modified)
+- `robot_sf/benchmark/scenario/scenario_schema.py` — reused schema validators (not modified)
 - `docs/context/issue_4760_failure_record_to_scenario.md` — analogous converter note

@@ -51,7 +51,7 @@ def build(
 
     del adapter_impact_eval
 
-    from robot_sf.benchmark.map_runner_policy_common import (  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (  # noqa: PLC0415
         build_adapter_policy,
     )
     from robot_sf.planner.grid_route import (  # noqa: PLC0415

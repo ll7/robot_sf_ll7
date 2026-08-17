@@ -1,0 +1,19 @@
+schema_version: predictive_baseline_diagnostic.v1
+evidence_tier: diagnostic-only
+claim_boundary: >-
+  diagnostic-only same-seed planner smoke; no simulator, benchmark, safety,
+  source-paper reproduction, or transfer claim
+scenario_id: issue_7319_planar_crossing_smoke_v1
+seed: 7319
+pedestrian_count: 2
+horizon_steps: 4
+rollout_dt: 0.25
+sample_count: 16
+iterations: 1
+solver_max_iterations: 8
+cbf_variant: collision_cone
+pgif:
+  weight: 1.8
+  longitudinal_sigma_m: 0.75
+  lateral_sigma_m: 0.45
+  forward_speed_gain: 0.8

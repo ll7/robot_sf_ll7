@@ -707,7 +707,10 @@ def _apply_radius_sweep_binding(
     _assert_radius_sweep_preflight_ready(radius_sweep)
 
     binding_metadata = _radius_binding_metadata(radius_sweep)
-    assert binding_metadata is not None  # validated non-None input above
+    if binding_metadata is None:
+        raise RadiusSweepBindingPreflightError(
+            "radius-sweep binding metadata could not be constructed for admitted arm"
+        )
     patched_scenarios: list[dict[str, Any]] = []
     for scenario in scenarios:
         patched = deepcopy(scenario)

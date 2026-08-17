@@ -103,6 +103,29 @@ def _patched_adapter(return_value: np.ndarray | None = None) -> tuple[MagicMock,
     return mock, patcher
 
 
+def test_diagnostics_propagates_fast_pysf_fallbacks():
+    """FastPysfPlannerPolicy exposes wrapper fallback provenance."""
+    sim = _FakeSimulator(
+        robots=[_FakeRobot(pose=((0.0, 0.0), 0.0))],
+        goal_pos=[(5.0, 0.0)],
+    )
+    wrapper = MagicMock()
+    wrapper.diagnostics.return_value = {
+        "planner_type": "FastPysfWrapper",
+        "fallback": True,
+        "fallback_count": 1,
+        "fallback_reason": "social_force_inverse_square",
+        "fallback_reasons": {"social_force_inverse_square": 1},
+    }
+    policy, _ = _build_policy(sim, wrapper=wrapper)
+
+    diagnostics = policy.diagnostics()
+
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "social_force_inverse_square"
+    assert diagnostics["fast_pysf_wrapper"]["fallback_count"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Timestep source
 # ---------------------------------------------------------------------------

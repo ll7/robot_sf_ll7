@@ -752,6 +752,11 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+When current Actions checks remain `queued` beyond the monitor's five-minute default threshold,
+the payload instead records `checks.pending_reason: "runner_queue_starvation"`, the oldest queued
+age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
+that diagnostic threshold for a known environment. This is an external queue blocker only:
+`checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job

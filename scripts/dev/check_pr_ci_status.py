@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 FAILURE_CONCLUSIONS = {
@@ -24,6 +25,8 @@ FAILURE_CONCLUSIONS = {
     "startup_failure",
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
+QUEUE_STATUSES = {"queued", "requested", "waiting"}
+DEFAULT_QUEUE_STARVATION_SECONDS = 300.0
 _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
 )
@@ -99,6 +102,83 @@ def _rollup_status(check: dict[str, Any]) -> str:
 def _rollup_name(check: dict[str, Any]) -> str:
     """Return a display name for check-run and legacy-status rollup entries."""
     return str(check.get("name") or check.get("context") or "unknown")
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Parse a GitHub timestamp into an aware UTC datetime."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _queue_timestamp(check: dict[str, Any]) -> datetime | None:
+    """Return the best available current-run timestamp for queue-age evidence."""
+    for key in ("startedAt", "started_at", "createdAt", "created_at"):
+        timestamp = _parse_timestamp(check.get(key))
+        if timestamp is not None:
+            return timestamp
+    return None
+
+
+def _queue_state(
+    rollup: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+) -> dict[str, Any]:
+    """Classify current queued checks without changing the fail-closed CI result.
+
+    ``startedAt`` is the earliest timestamp exposed by GitHub for a queued Actions check in the
+    GraphQL PR rollup. REST callers may instead expose ``created_at``. Missing timestamps remain
+    an ordinary queued state; the monitor never infers starvation from an unbounded age.
+    """
+    queued_checks = [check for check in rollup if _rollup_status(check) in QUEUE_STATUSES]
+    if not queued_checks:
+        return {
+            "state": "none",
+            "queued_count": 0,
+            "queued_names": [],
+            "queued_checks": [],
+            "timestamp_available": False,
+        }
+
+    queued_details = [
+        {
+            "name": _rollup_name(check),
+            "details_url": str(check.get("detailsUrl") or check.get("details_url") or ""),
+        }
+        for check in queued_checks
+    ]
+    timestamps = [timestamp for check in queued_checks if (timestamp := _queue_timestamp(check))]
+    state: dict[str, Any] = {
+        "state": "queued",
+        "queued_count": len(queued_checks),
+        "queued_names": sorted({_rollup_name(check) for check in queued_checks}),
+        "queued_checks": queued_details,
+        "timestamp_available": bool(timestamps),
+        "starvation_threshold_seconds": starvation_seconds,
+    }
+    if not timestamps:
+        return state
+
+    current_time = now or datetime.now(UTC)
+    oldest = min(timestamps)
+    age_seconds = max((current_time - oldest).total_seconds(), 0.0)
+    state.update(
+        {
+            "oldest_queued_at": oldest.isoformat().replace("+00:00", "Z"),
+            "oldest_queued_seconds": int(age_seconds),
+        }
+    )
+    if age_seconds >= starvation_seconds:
+        state["state"] = "starved"
+    return state
 
 
 def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
@@ -325,19 +405,51 @@ def _annotate_status_propagation_lag(
     return checks
 
 
-def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, Any], int]:
-    """Build the ``checks`` summary (and superseded count) from raw REST check-run dicts."""
+def _annotate_queue_state(
+    checks: dict[str, Any],
+    rollup: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    starvation_seconds: float,
+) -> dict[str, Any]:
+    """Attach current queue-age evidence while preserving pending/fail-closed semantics."""
+    queue_state = _queue_state(
+        rollup,
+        now=now,
+        starvation_seconds=starvation_seconds,
+    )
+    checks["queue_state"] = queue_state
+    if queue_state["state"] == "starved":
+        checks["pending_reason"] = "runner_queue_starvation"
+        checks["diagnostic"] = "runner_queue_starvation"
+    return checks
+
+
+def _summarize_check_runs(
+    check_runs: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+) -> tuple[dict[str, Any], int]:
+    """Build the ``checks`` summary (and superseded count) from check-run dicts."""
     rollup = [
         {
-            "__typename": "CheckRun",
-            "name": str(run.get("name", "") or ""),
+            "__typename": run.get("__typename", "CheckRun"),
+            "name": str(run.get("name") or run.get("context") or ""),
             "status": str(run.get("status", "") or ""),
-            "conclusion": run.get("conclusion") or "",
-            "detailsUrl": str(run.get("details_url", "") or ""),
-            "startedAt": str(run.get("started_at", "") or ""),
-            "workflowId": str(run.get("workflow_id", "") or ""),
+            "state": str(run.get("state", "") or ""),
+            "conclusion": run.get("conclusion") or run.get("state") or "",
+            "detailsUrl": str(run.get("detailsUrl") or run.get("details_url") or ""),
+            "createdAt": str(run.get("createdAt") or run.get("created_at") or ""),
+            "startedAt": str(run.get("startedAt") or run.get("started_at") or ""),
+            "workflowId": str(run.get("workflowId") or run.get("workflow_id") or ""),
             "workflowName": str(
-                (run.get("workflow") or (run.get("check_suite") or {}).get("workflow") or "")
+                (
+                    run.get("workflowName")
+                    or run.get("workflow")
+                    or (run.get("check_suite") or {}).get("workflow")
+                    or ""
+                )
                 if isinstance(run, dict)
                 else ""
             ),
@@ -379,11 +491,21 @@ def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, A
         "names": sorted(name_counts),
         "details": details,
     }
+    _annotate_queue_state(
+        checks,
+        effective,
+        now=now,
+        starvation_seconds=starvation_seconds,
+    )
     _annotate_status_propagation_lag(checks, effective)
     return checks, superseded_count
 
 
-def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
+def _fetch_ci_status_rest(
+    pr_number: str,
+    *,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+) -> dict[str, Any]:
     """Build the CI status payload from REST when GraphQL quota is exhausted (issue #6564)."""
     pull = _rest_api_get(f"pulls/{pr_number}")
     if not isinstance(pull, dict):
@@ -397,7 +519,10 @@ def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
     checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs")
     check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
     raw_check_runs = check_runs if isinstance(check_runs, list) else []
-    checks, _ = _summarize_check_runs(_enrich_rest_check_runs(raw_check_runs))
+    checks, _ = _summarize_check_runs(
+        _enrich_rest_check_runs(raw_check_runs),
+        starvation_seconds=starvation_seconds,
+    )
     reviews_raw = _rest_api_get(f"pulls/{pr_number}/reviews")
     review_states: dict[str, int] = {}
     for review in reviews_raw if isinstance(reviews_raw, list) else []:
@@ -419,16 +544,24 @@ def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
     }
 
 
-def _gh_view_error_payload(pr_number: str, stderr: str, returncode: int) -> dict[str, Any]:
+def _gh_view_error_payload(
+    pr_number: str,
+    stderr: str,
+    returncode: int,
+    *,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+) -> dict[str, Any]:
     """Map a failed ``gh pr view`` to an error payload, falling back to REST on GraphQL quota."""
     if _is_graphql_quota_error(stderr):
-        return _fetch_ci_status_rest(pr_number)
+        return _fetch_ci_status_rest(pr_number, starvation_seconds=starvation_seconds)
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
 
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
+    *,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
 ) -> dict[str, Any]:
     """Fetch combined CI status for a PR.
 
@@ -453,7 +586,12 @@ def _fetch_ci_status(
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        return _gh_view_error_payload(pr_number, stderr, result.returncode)
+        return _gh_view_error_payload(
+            pr_number,
+            stderr,
+            result.returncode,
+            starvation_seconds=starvation_seconds,
+        )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
     if parse_error or data is None:
@@ -462,27 +600,10 @@ def _fetch_ci_status(
             "error": parse_error or "gh output is not a JSON object",
         }
     raw_rollup = data.get("statusCheckRollup", []) or []
-    rollup, superseded_count = _latest_check_runs(raw_rollup)
-
-    # Classify overall CI state.
-    conclusions: dict[str, int] = {}
-    for check in rollup:
-        c = _rollup_conclusion(check)
-        conclusions[c] = conclusions.get(c, 0) + 1
-
-    states: dict[str, int] = {}
-    for check in rollup:
-        s = _rollup_status(check)
-        states[s] = states.get(s, 0) + 1
-
-    failure_count = sum(conclusions.get(conclusion, 0) for conclusion in FAILURE_CONCLUSIONS)
-    pending_count = sum(states.get(status, 0) for status in PENDING_STATUSES)
-    if failure_count:
-        overall = "failure"
-    elif pending_count or not rollup:
-        overall = "pending"
-    else:
-        overall = "success"
+    checks, _ = _summarize_check_runs(
+        raw_rollup if isinstance(raw_rollup, list) else [],
+        starvation_seconds=starvation_seconds,
+    )
 
     # Aggregate reviews
     reviews = data.get("reviews", []) or []
@@ -490,30 +611,6 @@ def _fetch_ci_status(
     for rev in reviews:
         rs = rev.get("state", "UNKNOWN")
         review_states[rs] = review_states.get(rs, 0) + 1
-
-    name_counts: dict[str, int] = {}
-    for check in rollup:
-        name = _rollup_name(check)
-        name_counts[name] = name_counts.get(name, 0) + 1
-    check_details = [
-        {
-            "name": _rollup_name(check),
-            "status": _rollup_status(check),
-            "conclusion": _rollup_conclusion(check),
-            "details_url": check.get("detailsUrl", "") or check.get("targetUrl", ""),
-        }
-        for check in rollup
-    ]
-    checks = {
-        "total": len(rollup),
-        "superseded": superseded_count,
-        "overall": overall,
-        "by_conclusion": conclusions,
-        "by_status": states,
-        "names": sorted(name_counts),
-        "details": check_details,
-    }
-    _annotate_status_propagation_lag(checks, rollup)
 
     return {
         "status": "ok",
@@ -565,6 +662,36 @@ def _add_monitor_metadata(
         data["monitor"]["diagnostic"] = diagnostic
 
 
+def _append_pending_reason(
+    lines: list[str],
+    checks: dict[str, Any],
+    pending_reason: str,
+) -> None:
+    """Append actionable detail for a known pending blocker."""
+    if pending_reason == "runner_queue_starvation":
+        queue_state = checks.get("queue_state", {})
+        queued_checks = queue_state.get("queued_checks", [])
+        lines.append(
+            f"  pending_reason: {pending_reason}  |  "
+            f"queued checks: {queue_state.get('queued_count', len(queued_checks))}  |  "
+            f"oldest age: {queue_state.get('oldest_queued_seconds', 'unknown')}s"
+        )
+        for queued in queued_checks:
+            url = queued.get("details_url")
+            suffix = f"  |  {url}" if url else ""
+            lines.append(f"    - {queued.get('name', 'unknown')}{suffix}")
+        return
+
+    lag_details = checks.get("status_propagation_lag", [])
+    lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(lag_details)}")
+    for lag in lag_details:
+        lines.append(
+            f"    - {lag.get('name', 'unknown')}: "
+            f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
+            f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
+        )
+
+
 def _format_human(data: dict[str, Any]) -> str:
     """Format CI status data for human-readable compact output."""
     if data.get("status") == "error":
@@ -590,15 +717,7 @@ def _format_human(data: dict[str, Any]) -> str:
     )
     pending_reason = checks.get("pending_reason")
     if pending_reason:
-        lag_details = checks.get("status_propagation_lag", [])
-        lag_count = len(lag_details)
-        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {lag_count}")
-        for lag in lag_details:
-            lines.append(
-                f"    - {lag.get('name', 'unknown')}: "
-                f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
-                f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
-            )
+        _append_pending_reason(lines, checks, pending_reason)
     diagnostic = checks.get("diagnostic")
     if diagnostic:
         lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")
@@ -651,11 +770,12 @@ def _monitor_terminal_reason(
 ) -> str | None:
     """Classify a polling stop, preserving a distinct status-propagation diagnosis."""
     terminal_reason = _terminal_reason(overall, attempt, attempts, local_stop)
-    if (
-        terminal_reason == "attempt_exhausted"
-        and data.get("checks", {}).get("pending_reason") == "status_propagation_lag"
-    ):
-        return "status_propagation_lag"
+    pending_reason = data.get("checks", {}).get("pending_reason")
+    if terminal_reason == "attempt_exhausted" and pending_reason in {
+        "status_propagation_lag",
+        "runner_queue_starvation",
+    }:
+        return str(pending_reason)
     return terminal_reason
 
 
@@ -709,6 +829,7 @@ def _poll_ci_status(
     json_output: bool,
     expected_head_sha: str = "",
     max_wall_seconds: float | None = None,
+    starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
 ) -> dict[str, Any]:
     """Fetch CI status once or poll until checks settle or the budget expires."""
     data: dict[str, Any] = {}
@@ -721,7 +842,11 @@ def _poll_ci_status(
         time.monotonic() + max(0.0, max_wall_seconds) if max_wall_seconds is not None else None
     )
     for attempt in range(1, attempts + 1):
-        data = _fetch_ci_status(pr, backoff=backoff if attempt == 1 else 0.0)
+        data = _fetch_ci_status(
+            pr,
+            backoff=backoff if attempt == 1 else 0.0,
+            starvation_seconds=starvation_seconds,
+        )
         _add_monitor_metadata(
             data,
             expected_head_sha=expected_head_sha,
@@ -830,6 +955,15 @@ were cancelled or failed.
             "without affecting remote GitHub checks"
         ),
     )
+    parser.add_argument(
+        "--queue-starvation-seconds",
+        type=_non_negative_float,
+        default=DEFAULT_QUEUE_STARVATION_SECONDS,
+        help=(
+            "age threshold for labeling current queued checks as runner starvation; "
+            "the CI result remains pending and fail-closed"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
         parser.error(
@@ -849,6 +983,7 @@ were cancelled or failed.
             json_output=args.json,
             expected_head_sha=args.expected_head_sha,
             max_wall_seconds=args.max_wall_seconds,
+            starvation_seconds=args.queue_starvation_seconds,
         )
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)

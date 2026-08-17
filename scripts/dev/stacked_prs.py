@@ -57,6 +57,8 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 SCHEMA = "stacked_prs.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 SUCCESS_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
+REST_PAGE_SIZE = 100
+REST_PAGE_BUDGET = 100
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
 GhApi = Callable[[str, str, dict[str, Any] | None], tuple[Any | None, str | None]]
@@ -126,13 +128,66 @@ def _get_object(path: str, *, api: GhApi = _run_gh_api) -> tuple[dict[str, Any] 
     return _object(value, operation=path)
 
 
-def _get_list(
-    path: str, *, api: GhApi = _run_gh_api
-) -> tuple[list[dict[str, Any]] | None, str | None]:
-    value, error = api("GET", path, None)
-    if error:
-        return None, error
-    return _list(value, operation=path)
+def _get_paginated_list(
+    path: str,
+    *,
+    api: GhApi = _run_gh_api,
+    response_key: str | None = None,
+    page_budget: int = REST_PAGE_BUDGET,
+) -> tuple[list[dict[str, Any]] | None, dict[str, int | bool] | None, str | None]:
+    """Read a bounded REST collection and fail closed on possible truncation.
+
+    GitHub's review/comment endpoints return a JSON list, while the commit
+    check-runs endpoint wraps that list in an object.  The first request keeps
+    the historical path for deterministic fixtures and compatibility; later
+    pages add ``page=N``.  A short page is the only successful end-of-results
+    signal.  Reaching the page budget with a full page is reported as a
+    possible truncation instead of being treated as complete.
+    """
+    if page_budget < 1:
+        return None, None, "REST pagination page budget must be positive"
+    rows: list[dict[str, Any]] = []
+    pages_read = 0
+    for page in range(1, page_budget + 1):
+        page_path = path if page == 1 else f"{path}&page={page}"
+        value, error = api("GET", page_path, None)
+        if error:
+            return None, None, error
+        if response_key is not None and isinstance(value, dict):
+            page_value = value.get(response_key)
+        else:
+            page_value = value
+        page_rows, error = _list(page_value, operation=page_path)
+        if error or page_rows is None:
+            return None, None, error or f"{page_path} returned no collection"
+        rows.extend(page_rows)
+        pages_read = page
+        if len(page_rows) < REST_PAGE_SIZE:
+            return (
+                rows,
+                {
+                    "pages_read": pages_read,
+                    "page_size": REST_PAGE_SIZE,
+                    "page_budget": page_budget,
+                    "row_count": len(rows),
+                    "truncated": False,
+                },
+                None,
+            )
+    return (
+        None,
+        {
+            "pages_read": pages_read,
+            "page_size": REST_PAGE_SIZE,
+            "page_budget": page_budget,
+            "row_count": len(rows),
+            "truncated": True,
+        },
+        (
+            f"{path} reached the REST pagination page budget ({page_budget}) with full pages; "
+            "response may be truncated"
+        ),
+    )
 
 
 def _positive_prs(prs: list[int]) -> tuple[list[int] | None, str | None]:
@@ -358,28 +413,21 @@ def _fetch_review_data(
     repo: str, number: int, *, api: GhApi = _run_gh_api
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Fetch review events/comments needed for digest and verdict checks."""
-    reviews, error = _get_list(f"repos/{repo}/pulls/{number}/reviews?per_page=100", api=api)
-    if error or reviews is None:
+    reviews, reviews_pagination, error = _get_paginated_list(
+        f"repos/{repo}/pulls/{number}/reviews?per_page={REST_PAGE_SIZE}", api=api
+    )
+    if error or reviews is None or reviews_pagination is None:
         return None, error or "review endpoint returned no data"
-    if len(reviews) >= 100:
-        return None, "review endpoint reached its page cap; pagination was not verified"
-    review_comments, error = _get_list(
-        f"repos/{repo}/pulls/{number}/comments?per_page=100", api=api
+    review_comments, review_comments_pagination, error = _get_paginated_list(
+        f"repos/{repo}/pulls/{number}/comments?per_page={REST_PAGE_SIZE}", api=api
     )
-    if error or review_comments is None:
+    if error or review_comments is None or review_comments_pagination is None:
         return None, error or "review-comment endpoint returned no data"
-    if len(review_comments) >= 100:
-        return None, "review-comment endpoint reached its page cap; pagination was not verified"
-    conversation_comments, error = _get_list(
-        f"repos/{repo}/issues/{number}/comments?per_page=100", api=api
+    conversation_comments, conversation_pagination, error = _get_paginated_list(
+        f"repos/{repo}/issues/{number}/comments?per_page={REST_PAGE_SIZE}", api=api
     )
-    if error or conversation_comments is None:
+    if error or conversation_comments is None or conversation_pagination is None:
         return None, error or "conversation-comment endpoint returned no data"
-    if len(conversation_comments) >= 100:
-        return (
-            None,
-            "conversation-comment endpoint reached its page cap; pagination was not verified",
-        )
     reviews_normalized = _body_entries(reviews)
     conversation_normalized = _body_entries(conversation_comments)
     review_digest = _review_digest(reviews, review_comments, conversation_comments)
@@ -390,6 +438,11 @@ def _fetch_review_data(
         "conversation_comments": conversation_normalized,
         "review_digest": review_digest,
         "review_states": dict(sorted(states.items())),
+        "pagination": {
+            "reviews": reviews_pagination,
+            "review_comments": review_comments_pagination,
+            "conversation_comments": conversation_pagination,
+        },
     }, None
 
 
@@ -453,7 +506,7 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
     return reasons
 
 
-def build_stack_status(  # noqa: C901
+def build_stack_status(
     repo: str,
     prs: list[int],
     *,
@@ -490,20 +543,16 @@ def build_stack_status(  # noqa: C901
                 "status": "error",
                 "error": f"PR #{pr['number']} review state: {error}",
             }
-        check_runs, error = _get_list(
-            f"repos/{repo}/commits/{pr['head_sha']}/check-runs?per_page=100", api=api
+        check_runs, check_runs_pagination, error = _get_paginated_list(
+            f"repos/{repo}/commits/{pr['head_sha']}/check-runs?per_page={REST_PAGE_SIZE}",
+            api=api,
+            response_key="check_runs",
         )
-        if error or check_runs is None:
+        if error or check_runs is None or check_runs_pagination is None:
             return {
                 "schema": SCHEMA,
                 "status": "error",
                 "error": f"PR #{pr['number']} checks: {error}",
-            }
-        if len(check_runs) >= 100:
-            return {
-                "schema": SCHEMA,
-                "status": "error",
-                "error": f"PR #{pr['number']} checks reached their page cap; pagination was not verified",
             }
         threads_resolved, thread_error = thread_fetcher(pr["number"])
         parent = live[index - 1] if index else None
@@ -534,6 +583,10 @@ def build_stack_status(  # noqa: C901
             "requested_reviewer_count": len(pr["requested_reviewers"]),
             "requested_team_count": len(pr["requested_teams"]),
             "checks": summarize_check_runs(check_runs),
+            "pagination": {
+                **review_data["pagination"],
+                "check_runs": check_runs_pagination,
+            },
             "review_states": review_data["review_states"],
             "review_digest": review_data["review_digest"],
             "review_threads": {

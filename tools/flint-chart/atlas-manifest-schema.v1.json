@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ll7/robot_sf_ll7/blob/main/tools/flint-chart/atlas-manifest-schema.v1.json",
+  "title": "Flint analysis-only atlas manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "atlas_id",
+    "claim_boundary",
+    "renderer_policy",
+    "surfaces",
+    "contexts",
+    "coverage"
+  ],
+  "properties": {
+    "schema_version": {"const": "flint-chart-atlas-manifest.v1"},
+    "atlas_id": {"type": "string", "minLength": 1},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "renderer_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_renderer", "promotion_status", "source_context_separation"],
+      "properties": {
+        "canonical_renderer": {"const": "matplotlib/pgf/tikz"},
+        "promotion_status": {"const": "not_admitted"},
+        "source_context_separation": {
+          "const": "release_and_replay_are_separate_entries"
+        }
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/surfaceEntry"}
+    },
+    "contexts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release", "replay"],
+      "properties": {
+        "release": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "replay": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "surface_count",
+        "release_surface_count",
+        "replay_surface_count",
+        "duplicate_surface_contexts",
+        "dropped_surfaces"
+      ],
+      "properties": {
+        "status": {"const": "complete"},
+        "surface_count": {"type": "integer", "minimum": 1},
+        "release_surface_count": {"type": "integer", "minimum": 0},
+        "replay_surface_count": {"type": "integer", "minimum": 0},
+        "duplicate_surface_contexts": {"type": "array", "maxItems": 0},
+        "dropped_surfaces": {"type": "array", "maxItems": 0}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "source_commit",
+        "release_id",
+        "artifact_catalog",
+        "input_hashes",
+        "durability"
+      ],
+      "properties": {
+        "context": {"enum": ["release", "replay"]},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "release_id": {"type": "string", "minLength": 1},
+        "artifact_catalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "input_hashes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/sha256"}
+        },
+        "durability": {"const": "durable_pinned"}
+      }
+    },
+    "metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "unit"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "expected_cells", "actual_cells", "missing_cells", "duplicate_cells", "dropped_cells"],
+      "properties": {
+        "status": {"const": "complete"},
+        "expected_cells": {"type": "integer", "minimum": 1},
+        "actual_cells": {"type": "integer", "minimum": 1},
+        "missing_cells": {"type": "array", "maxItems": 0},
+        "duplicate_cells": {"type": "array", "maxItems": 0},
+        "dropped_cells": {"type": "array", "maxItems": 0}
+      }
+    },
+    "parity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "compared_cells", "compared_fields", "missing_cells", "extra_cells"],
+      "properties": {
+        "status": {"const": "passed"},
+        "compared_cells": {"type": "integer", "minimum": 1},
+        "compared_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "missing_cells": {"type": "array", "maxItems": 0},
+        "extra_cells": {"type": "array", "maxItems": 0}
+      }
+    },
+    "surfaceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface_id",
+        "figure_id",
+        "source_context",
+        "source",
+        "metric",
+        "coverage",
+        "parity",
+        "surface_sha256"
+      ],
+      "properties": {
+        "surface_id": {"type": "string", "minLength": 1},
+        "figure_id": {"type": "string", "minLength": 1},
+        "source_context": {"enum": ["release", "replay"]},
+        "source": {"$ref": "#/$defs/source"},
+        "metric": {"$ref": "#/$defs/metric"},
+        "coverage": {"$ref": "#/$defs/coverage"},
+        "parity": {"$ref": "#/$defs/parity"},
+        "surface_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

@@ -110,7 +110,9 @@
     },
     "renderer_policy": {"$ref": "#/$defs/outputRendererPolicy"},
     "render_status": {"const": "not_run"},
-    "claim_boundary": {"type": "string", "minLength": 1}
+    "claim_boundary": {
+      "const": "analysis-only candidate surface; not a promoted figure, benchmark result, evidence admission, or dissertation claim"
+    }
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -143,7 +145,7 @@
           "minProperties": 1,
           "additionalProperties": {"$ref": "#/$defs/sha256"}
         },
-        "durability": {"const": "durable_pinned"}
+        "durability": {"enum": ["durable_pinned", "synthetic_fixture"]}
       }
     },
     "populationItem": {
@@ -205,7 +207,7 @@
         "uncertainty": {"$ref": "#/$defs/uncertainty"},
         "capability_track": {"type": "string", "minLength": 1},
         "evidence_status": {"type": "string", "minLength": 1},
-        "rank": {"type": ["integer", "null"]},
+        "rank": {"const": null},
         "tie_group": {"type": ["string", "null"]}
       }
     },

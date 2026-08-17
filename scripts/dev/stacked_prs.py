@@ -857,6 +857,15 @@ def merge_cascade(  # noqa: C901, PLR0912
                 "error": f"--apply requires expected heads for every PR; missing {missing}",
                 "stack": status,
             }
+        fresh_status = build_stack_status(repo, prs, api=api, thread_fetcher=thread_fetcher)
+        if fresh_status.get("status") != "ok":
+            return {
+                **fresh_status,
+                "operation": "merge-cascade",
+                "error": f"immediate pre-merge snapshot failed: {fresh_status.get('error', 'unknown error')}",
+            }
+        status = fresh_status
+        entries = status["entries"]
         mismatches = [
             entry["pr"]
             for entry in entries
@@ -978,12 +987,17 @@ def merge_cascade(  # noqa: C901, PLR0912
             )
             return result
         verified, error = _fetch_pr(repo, next_pr, api=api)
-        if error or verified is None or verified["base_ref"] != "main":
+        if (
+            error
+            or verified is None
+            or verified["base_ref"] != "main"
+            or verified["head_sha"].lower() != expected_heads[next_pr].lower()
+        ):
             result.update(
                 {
                     "status": "merged_next_retarget_unverified",
                     "next_pr": next_pr,
-                    "error": error or "next PR did not verify base=main",
+                    "error": error or "next PR did not verify base=main and the expected head",
                 }
             )
             return result

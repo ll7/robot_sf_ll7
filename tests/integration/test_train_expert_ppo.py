@@ -4502,6 +4502,113 @@ def test_issue_4014_ppo_smoke_variants_keep_distinct_overrides() -> None:
     assert mamba_matched_mapping["tracking"]["tensorboard"] is False
 
 
+# Issue #6484: the issue-403 grid/SocNav expert-PPO family centralizes its
+# shared feature, environment, convergence, evaluation, and tracking contract.
+# Variant-owned robot capability, seeds, budgets, and hold-out choices remain
+# explicit because they define distinct launch identities.
+_ISSUE_6484_ISSUE_403_GRID_DIR = Path("configs/training/ppo_imitation")
+_ISSUE_6484_ISSUE_403_GRID_BASE_NAME = "expert_ppo_issue_403_grid_base.yaml"
+_ISSUE_6484_ISSUE_403_GRID_BASELINE_PATH = Path(
+    "tests/integration/_baseline_issue_6484_issue_403_grid_resolved.json"
+)
+_ISSUE_6484_ISSUE_403_GRID_VARIANTS = [
+    "expert_ppo_issue_403_grid.yaml",
+    "expert_ppo_issue_403_grid_diffdrive.yaml",
+    "expert_ppo_issue_403_grid_diffdrive_reverse.yaml",
+    "expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m.yaml",
+    "expert_ppo_issue_403_grid_diffdrive_reverse_no_holdout_15m_random.yaml",
+    "expert_ppo_issue_403_grid_radius_0_6.yaml",
+]
+
+
+def _issue_6484_issue_403_grid_baseline() -> dict:
+    """Load and integrity-check the frozen issue-403 resolved-config baseline."""
+    assert _ISSUE_6484_ISSUE_403_GRID_BASELINE_PATH.exists(), (
+        "Pre-change issue-403 baseline missing; capture it before changing configs"
+    )
+    baseline = json.loads(_ISSUE_6484_ISSUE_403_GRID_BASELINE_PATH.read_text(encoding="utf-8"))
+    assert baseline["schema_version"] == "resolved-config-fingerprint.v1"
+    assert set(baseline["variants"]) == set(_ISSUE_6484_ISSUE_403_GRID_VARIANTS)
+    return baseline
+
+
+def _issue_6484_issue_403_grid_fingerprint(config_path: Path) -> str:
+    """Return the canonical resolved-config fingerprint for an issue-403 variant."""
+    resolved = _load_expert_training_config_mapping(config_path)
+    canonical = json.dumps(resolved, default=str, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ISSUE_403_GRID_VARIANTS)
+def test_issue_6484_issue_403_grid_resolves_to_prechange_values(variant: str) -> None:
+    """Base inheritance preserves every issue-403 variant's effective mapping."""
+    path = (_ISSUE_6484_ISSUE_403_GRID_DIR / variant).resolve()
+    baseline = _issue_6484_issue_403_grid_baseline()
+
+    assert _issue_6484_issue_403_grid_fingerprint(path) == baseline["variants"][variant], (
+        f"Resolved config differs from the baseline at {baseline['source_revision']}."
+    )
+
+
+def test_issue_6484_issue_403_grid_base_owns_only_shared_contract() -> None:
+    """All variants inherit one lean base while launch identity stays variant-owned."""
+    base_path = (_ISSUE_6484_ISSUE_403_GRID_DIR / _ISSUE_6484_ISSUE_403_GRID_BASE_NAME).resolve()
+    base_yaml = yaml.safe_load(base_path.read_text(encoding="utf-8"))
+
+    assert "base_config" not in base_yaml
+    assert "policy_id" not in base_yaml
+    for variant in _ISSUE_6484_ISSUE_403_GRID_VARIANTS:
+        variant_yaml = yaml.safe_load(
+            (_ISSUE_6484_ISSUE_403_GRID_DIR / variant).resolve().read_text(encoding="utf-8")
+        )
+        assert variant_yaml["base_config"] == _ISSUE_6484_ISSUE_403_GRID_BASE_NAME
+        assert "policy_id" in variant_yaml
+        assert "total_timesteps" in variant_yaml
+        assert "seeds" in variant_yaml or "randomize_seeds" in variant_yaml
+
+
+@pytest.mark.parametrize("variant", _ISSUE_6484_ISSUE_403_GRID_VARIANTS)
+def test_issue_6484_issue_403_grid_loads_through_expert_ppo_loader(variant: str) -> None:
+    """Every migrated issue-403 variant remains a valid expert-PPO config."""
+    config = load_expert_training_config((_ISSUE_6484_ISSUE_403_GRID_DIR / variant).resolve())
+
+    assert config.policy_id
+    assert config.feature_extractor == "grid_socnav"
+    assert config.total_timesteps in {10_000_000, 15_000_000}
+    assert config.evaluation.step_schedule
+
+
+def test_issue_6484_issue_403_grid_preserves_robot_and_evaluation_variants() -> None:
+    """The split retains robot capability and hold-out distinctions."""
+    directory = _ISSUE_6484_ISSUE_403_GRID_DIR
+    bicycle = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[0]
+    )
+    diffdrive = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[1]
+    )
+    reverse = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[2]
+    )
+    no_holdout = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[3]
+    )
+    randomized = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[4]
+    )
+    radius = _load_expert_training_config_mapping(
+        directory / _ISSUE_6484_ISSUE_403_GRID_VARIANTS[5]
+    )
+
+    assert bicycle["env_overrides"]["robot_config"]["type"] == "bicycle"
+    assert diffdrive["env_overrides"]["robot_config"]["type"] == "differential_drive"
+    assert reverse["env_overrides"]["robot_config"]["allow_backwards"] is True
+    assert no_holdout["evaluation"]["hold_out_scenarios"] == []
+    assert randomized["randomize_seeds"] is True
+    assert randomized["seeds"] == []
+    assert radius["env_overrides"]["robot_config"]["radius"] == 0.6
+
+
 # Issue #6484: the true recurrent-PPO LSTM smoke pair shares its common
 # scenario, budget, reward, convergence, and evaluation contract. Recurrent
 # algorithm fields remain in each raw variant because train_recurrent_ppo.py

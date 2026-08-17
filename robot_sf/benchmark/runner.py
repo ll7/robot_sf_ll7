@@ -358,7 +358,7 @@ def _planner_metadata_diagnostics(planner: Any) -> dict[str, Any] | None:
         return None
     try:
         metadata = metadata_fn()
-    except Exception:  # pragma: no cover  # noqa: BLE001 - metadata must not break execution
+    except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError):
         return None
     if not isinstance(metadata, Mapping):
         return None
@@ -373,7 +373,7 @@ def _planner_runtime_diagnostics(planner: Any) -> dict[str, Any] | None:
     if callable(diagnostics_fn):
         try:
             diagnostics = diagnostics_fn()
-        except Exception:  # pragma: no cover  # noqa: BLE001 - diagnostics must not break execution
+        except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError):
             diagnostics = None
         if isinstance(diagnostics, Mapping):
             payload["planner_diagnostics"] = dict(diagnostics)

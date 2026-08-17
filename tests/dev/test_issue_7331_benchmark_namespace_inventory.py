@@ -10,10 +10,10 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the predictive-baseline contract added by #7351.
+# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062.
 # Keep this explicit so a new direct child fails the audit until it is
 # deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 293
+EXPECTED_DIRECT_CHILD_COUNT = 294
 
 
 @pytest.fixture(scope="module")

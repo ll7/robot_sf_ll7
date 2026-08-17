@@ -6,7 +6,7 @@ returns the first action of the best sequence.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -500,10 +500,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {
-            "planner_type": "MPPISocialPlannerAdapter",
-            "predictive_human_cost": asdict(self.config.predictive_human_cost),
-        }
+        return {"planner_type": "MPPISocialPlannerAdapter"}
 
 
 def build_mppi_social_config(cfg: dict[str, Any] | None) -> MPPISocialConfig:

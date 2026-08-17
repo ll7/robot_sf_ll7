@@ -665,6 +665,27 @@ class SocialForcePlanner(BasePolicy):
         self._sim = None
         self._wrapper = None
 
+    def diagnostics(self) -> dict[str, Any]:
+        """Return runtime diagnostics, including FastPysfWrapper fallbacks."""
+        diagnostics: dict[str, Any] = {
+            "planner_type": "SocialForcePlanner",
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        }
+        wrapper = self._wrapper
+        wrapper_diagnostics = getattr(wrapper, "diagnostics", None)
+        if callable(wrapper_diagnostics):
+            payload = wrapper_diagnostics()
+            if isinstance(payload, dict):
+                diagnostics["fast_pysf_wrapper"] = payload
+                diagnostics["fallback"] = bool(payload.get("fallback", False))
+                diagnostics["fallback_count"] = int(payload.get("fallback_count", 0))
+                diagnostics["fallback_reason"] = payload.get("fallback_reason")
+                diagnostics["fallback_reasons"] = dict(payload.get("fallback_reasons", {}))
+        return diagnostics
+
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the planner.
 
@@ -682,6 +703,11 @@ class SocialForcePlanner(BasePolicy):
             "config_hash": config_hash,
             "status": "ok",
         }
+        runtime_diagnostics = self.diagnostics()
+        metadata["planner_diagnostics"] = runtime_diagnostics
+        if runtime_diagnostics["fallback"]:
+            metadata["status"] = "fallback"
+            metadata["fallback_reason"] = runtime_diagnostics["fallback_reason"]
         if self.config.ammv_diagnostics_enabled:
             ammv_force = (
                 self._last_ammv_force

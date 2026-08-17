@@ -229,7 +229,7 @@ def _validate_summary_identity(
     dataset_text = str(summary.get("dataset", "")).strip()
     if not dataset_text or Path(dataset_text).resolve() != Path(str(dataset["path"])).resolve():
         raise RuntimeError(f"{arm_id} recorded a different dataset: {summary.get('dataset')!r}")
-    expected_dataset_ids = [f"predictive_training:{dataset['dataset_id']}"]
+    expected_dataset_ids = [f"prediction_planner:{dataset['dataset_id']}"]
     if summary.get("source_dataset_ids") != expected_dataset_ids:
         raise RuntimeError(
             f"{arm_id} recorded different dataset ids: {summary.get('source_dataset_ids')!r}"

@@ -77,7 +77,7 @@ def test_arm_summary_contract_rejects_effective_flag_drift(tmp_path: Path) -> No
         "git_commit": "abc123",
         "device": "cuda",
         "dataset": dataset["path"],
-        "source_dataset_ids": [f"predictive_training:{dataset['dataset_id']}"],
+        "source_dataset_ids": [f"prediction_planner:{dataset['dataset_id']}"],
         "data_loader": smoke._expected_loader_manifest(arm),
         "amp": smoke._expected_amp_manifest(arm),
         "epochs": training["epochs"],

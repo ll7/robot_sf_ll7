@@ -49,9 +49,12 @@ GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SUMMARY_FIELDS = (
     "queue_entries",
     "ready_entries",
+    "submit_eligible_entries",
+    "ready_but_submit_blocked",
     "blocked_or_inactive_entries",
     "active_ledger_jobs",
 )
+CHECKPOINT_PREFLIGHT_MODES = frozenset({"metadata_only", "enforced_staged"})
 
 
 def _utc_now() -> str:
@@ -362,11 +365,20 @@ def validate_gate1_report(  # noqa: C901
     }, errors
 
 
-def validate_preflight_payload(
-    payload: Any, *, arm_key: str, radius_m: float, config_sha256: str
+def validate_preflight_payload(  # noqa: C901
+    payload: Any,
+    *,
+    arm_key: str,
+    radius_m: float,
+    config_sha256: str,
+    expected_checkpoint_mode: str = "metadata_only",
 ) -> dict[str, Any]:
     """Validate one public preflight without accepting any episode output."""
     errors: list[str] = []
+    if expected_checkpoint_mode not in CHECKPOINT_PREFLIGHT_MODES:
+        errors.append(
+            f"unsupported expected checkpoint preflight mode: {expected_checkpoint_mode!r}"
+        )
     if not isinstance(payload, dict):
         errors.append(f"preflight payload must be a mapping, got {type(payload).__name__}")
         payload = {}
@@ -402,11 +414,17 @@ def validate_preflight_payload(
     if not isinstance(checkpoint, dict):
         errors.append("checkpoint_preflight must be a mapping")
         checkpoint = {}
-    if checkpoint.get("mode") != "metadata_only":
+    if checkpoint.get("mode") != expected_checkpoint_mode:
         errors.append(
-            f"checkpoint preflight mode={checkpoint.get('mode')!r}, expected 'metadata_only'"
+            f"checkpoint preflight mode={checkpoint.get('mode')!r}, expected "
+            f"{expected_checkpoint_mode!r}"
         )
     submit_safe = checkpoint.get("submit_safe") is True
+    if expected_checkpoint_mode == "enforced_staged":
+        if checkpoint.get("stage") is not True:
+            errors.append("enforced_staged checkpoint preflight did not stage checkpoints")
+        if not submit_safe:
+            errors.append("enforced_staged checkpoint preflight is not submit-safe")
     episode_count = payload.get("episodes", 0)
     if episode_count not in (None, 0):
         errors.append(f"preflight reported nonzero episodes: {episode_count!r}")
@@ -433,7 +451,12 @@ def validate_preflight_payload(
     }
 
 
-def _preflight_command(config_path: str, output_root: Path, campaign_id: str) -> list[str]:
+def _preflight_command(
+    config_path: str,
+    output_root: Path,
+    campaign_id: str,
+    checkpoint_preflight_mode: str = "metadata_only",
+) -> list[str]:
     return [
         "uv",
         "run",
@@ -449,7 +472,7 @@ def _preflight_command(config_path: str, output_root: Path, campaign_id: str) ->
         "--mode",
         "preflight",
         "--checkpoint-preflight-mode",
-        "metadata_only",
+        checkpoint_preflight_mode,
         "--log-level",
         "ERROR",
     ]
@@ -462,11 +485,20 @@ def _run_preflights(
     blockers: list[str],
 ) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+    preflight_cfg = packet_config.get("preflight") or {}
+    checkpoint_preflight_mode = str(
+        preflight_cfg.get("checkpoint_preflight_mode", "metadata_only")
+    )
     for arm_key, radius_m in ARM_SPECS:
         config_path = str(packet_config["arm_configs"][arm_key])
         campaign_id = f"issue7198-{arm_key}"
         arm_output_root = output_root / "preflight" / arm_key
-        command = _preflight_command(config_path, arm_output_root, campaign_id)
+        command = _preflight_command(
+            config_path,
+            arm_output_root,
+            campaign_id,
+            checkpoint_preflight_mode,
+        )
         campaign_root = arm_output_root / campaign_id
         validate_path = campaign_root / "preflight" / "validate_config.json"
         base_record: dict[str, Any] = {
@@ -525,7 +557,11 @@ def _run_preflights(
         try:
             payload = json.loads(validate_path.read_text(encoding="utf-8"))
             validation = validate_preflight_payload(
-                payload, arm_key=arm_key, radius_m=radius_m, config_sha256=config_sha
+                payload,
+                arm_key=arm_key,
+                radius_m=radius_m,
+                config_sha256=config_sha,
+                expected_checkpoint_mode=checkpoint_preflight_mode,
             )
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             reason = f"{arm_key}: malformed validate_config.json: {exc}"
@@ -568,8 +604,20 @@ def _parse_route_output(text: str) -> dict[str, Any]:
     selected = re.search(r"^\s+selected:\s*(\S+)\s*$", text, re.MULTILINE)
     elapsed = re.search(r"^\s+- estimated elapsed\s+(\d+)s\s*$", text, re.MULTILINE)
     score = re.search(r"^\s+- score\s+([0-9.]+)\s*$", text, re.MULTILINE)
+    selected_route = selected.group(1) if selected else None
+    partition = None
+    sbatch_args = None
+    if selected_route:
+        for line in text.splitlines():
+            fields = line.split("\t")
+            if len(fields) >= 11 and fields[1] == selected_route:
+                partition = fields[3]
+                sbatch_args = fields[10]
+                break
     return {
-        "selected_route": selected.group(1) if selected else None,
+        "selected_route": selected_route,
+        "partition": partition,
+        "sbatch_args": sbatch_args,
         "estimated_elapsed_sec": int(elapsed.group(1)) if elapsed else None,
         "score": float(score.group(1)) if score else None,
         "status": "parsed" if selected else "unparsed",
@@ -644,6 +692,9 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
     queue_script = root_paths["queue_summary"]
     if queue_script.is_file():
         command = ["bash", str(queue_script), "--limit", "100"]
+        queue_issue = str(private_cfg.get("queue_issue", "")).strip()
+        if queue_issue:
+            command.extend(["--issue", queue_issue])
         result = _run(command, cwd=repo_root, timeout=60)
         stdout_path = output_root / "private_ops" / "queue_summary.txt"
         stderr_path = output_root / "private_ops" / "queue_summary.stderr.txt"
@@ -664,6 +715,24 @@ def _private_ops_snapshot(  # noqa: C901, PLR0912, PLR0915
             blockers.append(
                 f"private-ops queue has {summary.get('ready_entries')!r} ready entries; "
                 f"expected exactly {expected_ready}"
+            )
+        expected_submit_eligible = int(
+            private_cfg.get("queue_must_have_submit_eligible_entries", 0)
+        )
+        if summary.get("submit_eligible_entries") != expected_submit_eligible:
+            blockers.append(
+                f"private-ops queue has {summary.get('submit_eligible_entries')!r} "
+                f"submit-eligible entries; expected exactly {expected_submit_eligible}"
+            )
+        if summary.get("ready_but_submit_blocked") != 0:
+            blockers.append(
+                "private-ops queue has ready rows blocked on the submit contract: "
+                f"{summary.get('ready_but_submit_blocked')!r}"
+            )
+        if summary.get("active_ledger_jobs") != 0:
+            blockers.append(
+                "private-ops has active ledger jobs in the selected issue scope: "
+                f"{summary.get('active_ledger_jobs')!r}"
             )
 
     route_script = root_paths["route"]
@@ -719,40 +788,72 @@ def _submission_command(
 ) -> str:
     """Render a copyable submission template with an expandable results URI."""
     route = private_snapshot.get("route") or {}
+    private_cfg = packet_config.get("private_ops") or {}
     selected = route.get("selected_route") or "<selected-route>"
     cluster = str(selected).split(":", 1)[0]
+    partition = route.get("partition") or "<route-partition>"
     results_expr = "$" + "{ROBOT_SF_RADIUS_SWEEP_RESULTS_URI}/{job_id}"
-    command = shlex.join(
-        [
-            "bash",
-            "ops/jobs/scripts/submit_and_record.sh",
-            "--cluster",
-            cluster,
-            "--route-id",
-            str(selected),
-            "--partition",
-            "<route-partition>",
-            "--job-class",
-            str(packet_config["resources"]["job_class"]),
-            "--cpus",
-            str(packet_config["resources"]["cpus"]),
-            "--gpus",
-            str(packet_config["resources"]["gpus"]),
-            "--mem-gb",
-            str(packet_config["resources"]["mem_gb"]),
-            "--config",
-            "configs/benchmarks/issue_6642_radius_sweep_arm_<radius>.yaml",
-            "--public-issue",
-            "ll7/robot_sf_ll7#7198",
-            "--remote-results",
-            results_expr,
-            "--artifact-manifest",
-            artifact_manifest,
-            "--script",
-            "<remote-slurm-script>",
-        ]
-    )
-    return command.replace(shlex.quote(results_expr), results_expr, 1)
+    command_args = [
+        "bash",
+        "ops/jobs/scripts/submit_and_record.sh",
+        "--cluster",
+        cluster,
+        "--queue-id",
+        str(private_cfg.get("queue_id", "<queue-id>")),
+        "--route-id",
+        str(selected),
+        "--partition",
+        str(partition),
+        "--job-class",
+        str(packet_config["resources"]["job_class"]),
+        "--cpus",
+        str(packet_config["resources"]["cpus"]),
+        "--gpus",
+        str(packet_config["resources"]["gpus"]),
+        "--mem-gb",
+        str(packet_config["resources"]["mem_gb"]),
+        "--estimated-elapsed-sec",
+        str(route.get("estimated_elapsed_sec") or packet_config["resources"].get("estimated_elapsed_sec", "<elapsed-sec>")),
+        "--routing-score",
+        str(route.get("score") or "<routing-score>"),
+        "--job-name",
+        str(private_cfg.get("job_name", "<job-name>")),
+        "--campaign",
+        str(private_cfg.get("campaign", "<campaign>")),
+        "--config",
+        str(private_cfg.get("submission_config", DEFAULT_PACKET_CONFIG)),
+        "--public-issue",
+        f"ll7/robot_sf_ll7#{packet_config['campaign_issue']}",
+        "--remote-results",
+        results_expr,
+        "--local-results",
+        str(private_cfg.get("local_results", "output/issue6642-radius-sweep-{job_id}")),
+        "--public-repo",
+        "$ROBOT_SF_PUBLIC_REPO",
+        "--private-ops-repo",
+        "$ROBOT_SF_PRIVATE_OPS",
+        "--remote-submit-dir",
+        "$ROBOT_SF_PUBLIC_REPO",
+        "--expected-public-commit",
+        str(private_snapshot.get("candidate_commit") or "<candidate-commit>"),
+        "--artifact-manifest",
+        artifact_manifest,
+        "--artifact-contract",
+        str(private_cfg.get("artifact_contract", "<artifact-contract>")),
+        "--script",
+        str(private_cfg.get("submission_script", "<remote-slurm-script>")),
+        "--named-preflight-command",
+        str(private_cfg.get("named_preflight_command", "<named-preflight-command>")),
+    ]
+    route_sbatch_args = str(route.get("sbatch_args") or "")
+    if route_sbatch_args:
+        for arg in shlex.split(route_sbatch_args):
+            if not arg.startswith("--partition"):
+                command_args.extend(["--sbatch-arg", arg])
+    command = shlex.join(command_args)
+    for expression in (results_expr, "$ROBOT_SF_PUBLIC_REPO", "$ROBOT_SF_PRIVATE_OPS"):
+        command = command.replace(shlex.quote(expression), expression, 1)
+    return command
 
 
 def prepare_packet(  # noqa: PLR0915
@@ -868,6 +969,7 @@ def prepare_packet(  # noqa: PLR0915
 
     preflights = _run_preflights(repo_root, packet_config, output_root, blockers)
     private_ops = _private_ops_snapshot(repo_root, packet_config, output_root, blockers)
+    private_ops["candidate_commit"] = candidate["git_head"]
     remote_env = str(packet_config["artifacts"]["remote_results_uri_env"])
     remote_results_uri = os.environ.get(remote_env)
     if not remote_results_uri:

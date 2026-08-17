@@ -56,7 +56,9 @@ def _gate1_report() -> dict:
     }
 
 
-def _preflight_payload() -> dict:
+def _preflight_payload(
+    *, mode: str = "metadata_only", stage: bool = False, submit_safe: bool = False
+) -> dict:
     return {
         "schema_version": "benchmark-preflight-validate-config.v1",
         "campaign_id": "issue7198-r0p5",
@@ -77,11 +79,11 @@ def _preflight_payload() -> dict:
             "resolved_seeds": list(range(EXPECTED_SEED_RANGE[0], EXPECTED_SEED_RANGE[1] + 1))
         },
         "checkpoint_preflight": {
-            "mode": "metadata_only",
-            "stage": False,
+            "mode": mode,
+            "stage": stage,
             "checked": 5,
             "resolved": 5,
-            "submit_safe": False,
+            "submit_safe": submit_safe,
         },
         "episodes": 0,
     }
@@ -130,6 +132,35 @@ def test_preflight_passes_structure_but_metadata_only_is_not_submit_safe() -> No
     assert result["structural_status"] == "passed"
     assert result["checkpoint_preflight"]["submit_safe"] is False
     assert result["episodes"] == 0
+
+
+def test_enforced_staged_preflight_is_submit_safe() -> None:
+    """Verify only staged, checksum-verified checkpoint preparation can pass the submit gate."""
+    result = validate_preflight_payload(
+        _preflight_payload(mode="enforced_staged", stage=True, submit_safe=True),
+        arm_key="r0p5",
+        radius_m=0.5,
+        config_sha256="a" * 64,
+        expected_checkpoint_mode="enforced_staged",
+    )
+
+    assert result["structural_status"] == "passed"
+    assert result["checkpoint_preflight"]["mode"] == "enforced_staged"
+    assert result["checkpoint_preflight"]["submit_safe"] is True
+
+
+def test_enforced_staged_preflight_rejects_unstaged_checkpoint() -> None:
+    """Verify a mislabeled staged receipt cannot silently authorize submission."""
+    result = validate_preflight_payload(
+        _preflight_payload(mode="enforced_staged", stage=False, submit_safe=False),
+        arm_key="r0p5",
+        radius_m=0.5,
+        config_sha256="a" * 64,
+        expected_checkpoint_mode="enforced_staged",
+    )
+
+    assert result["structural_status"] == "blocked"
+    assert any("did not stage" in error for error in result["errors"])
 
 
 def test_preflight_rejects_any_episode_count() -> None:
@@ -202,6 +233,8 @@ def test_queue_summary_parser_captures_readiness_counts() -> None:
             [
                 "- queue_entries: 128",
                 "- ready_entries: 0",
+                "- submit_eligible_entries: 0",
+                "- ready_but_submit_blocked: 0",
                 "- blocked_or_inactive_entries: 128",
                 "- active_ledger_jobs: 0",
             ]
@@ -211,6 +244,8 @@ def test_queue_summary_parser_captures_readiness_counts() -> None:
     assert summary == {
         "queue_entries": 128,
         "ready_entries": 0,
+        "submit_eligible_entries": 0,
+        "ready_but_submit_blocked": 0,
         "blocked_or_inactive_entries": 128,
         "active_ledger_jobs": 0,
     }
@@ -220,6 +255,8 @@ def test_route_parser_preserves_static_estimate() -> None:
     """Verify route parsing tolerates indentation while retaining the selected route."""
     route = _parse_route_output(
         "explain:\n"
+        "rank\troute_id\tcluster\tpartition\tscore\test_elapsed_sec\tcpus\tgpus\tmem_gb\treasons\tsbatch_args\n"
+        "1\timech192:a30-cpu\timech192\ta30\t27.20\t45474\t40\t0\t155\t\t--partition=a30 --qos=a30-cpu\n"
         "   selected: imech192:a30-cpu\n"
         " why:\n"
         " - estimated elapsed 45474s\n"
@@ -228,6 +265,8 @@ def test_route_parser_preserves_static_estimate() -> None:
 
     assert route == {
         "selected_route": "imech192:a30-cpu",
+        "partition": "a30",
+        "sbatch_args": "--partition=a30 --qos=a30-cpu",
         "estimated_elapsed_sec": 45474,
         "score": 27.2,
         "status": "parsed",
@@ -246,6 +285,18 @@ def test_preflight_command_is_check_only_and_zero_episode() -> None:
     assert command[command.index("--mode") + 1] == "preflight"
     assert "--skip-publication-bundle" in command
     assert command[command.index("--checkpoint-preflight-mode") + 1] == "metadata_only"
+
+
+def test_enforced_staged_preflight_command_selects_submit_safe_mode() -> None:
+    """Verify the packet can render the enforced staged checkpoint command."""
+    command = _preflight_command(
+        "configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml",
+        Path("output/preflight/r0p5"),
+        "issue7198-r0p5",
+        "enforced_staged",
+    )
+
+    assert command[command.index("--checkpoint-preflight-mode") + 1] == "enforced_staged"
 
 
 def test_submission_command_preserves_expansion_and_custom_manifest_path() -> None:

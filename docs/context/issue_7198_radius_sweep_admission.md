@@ -56,15 +56,15 @@ the smallest next repair target and blockers preserves all reasons.
 The generator also runs the existing manifest checker and current Gate 1
 canary. It invokes the public camera-ready runner only with
 --mode preflight, --skip-publication-bundle, and
---checkpoint-preflight-mode metadata_only; this proves configuration and
-runtime binding structure but is intentionally not submit-safe until the
-separate staged-checkpoint gate succeeds. It verifies that no episode JSONL or
-Parquet files were emitted.
+--checkpoint-preflight-mode enforced_staged; this resolves and checksum-verifies
+the five declared checkpoint dependencies per arm before a packet can become
+submit-safe. It verifies that no episode JSONL or Parquet files were emitted.
 
 Private-ops inspection is read-only. The generator captures the queue summary
-and route evaluation, checks that the private checkout is clean, and records
-whether the durable results URI is configured. It never calls
-submit_and_record.sh.
+and route evaluation scoped to public issue #6642, requires exactly one
+submit-eligible queue row and no active ledger job in that scope, checks that the
+private checkout is clean, and records whether the durable results URI is
+configured. It never calls submit_and_record.sh.
 
 ## Verdict boundary
 

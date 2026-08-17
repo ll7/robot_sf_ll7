@@ -53,6 +53,47 @@ jobs:
           languages: python
 
       - name: Perform CodeQL analysis
+        id: codeql-analysis
         uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           category: "/language:python"
+          # Upload separately so a transient SARIF endpoint failure can be retried
+          # without retrying or masking the analysis itself.
+          upload: never
+
+      - name: Upload CodeQL SARIF (attempt 1)
+        id: upload-codeql-sarif-attempt-1
+        if: steps.codeql-analysis.outcome == 'success'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        with:
+          category: "/language:python"
+          sarif_file: ${{ steps.codeql-analysis.outputs.sarif-output }}
+
+      - name: Back off before CodeQL SARIF retry
+        if: >-
+          steps.codeql-analysis.outcome == 'success' &&
+          steps.upload-codeql-sarif-attempt-1.outcome == 'failure'
+        env:
+          CODEQL_SARIF_UPLOAD_BACKOFF_BASE: "15"
+          CODEQL_SARIF_UPLOAD_BACKOFF_CAP: "60"
+        run: scripts/dev/codeql_sarif_upload_retry.sh wait 2
+
+      - name: Upload CodeQL SARIF (attempt 2)
+        id: upload-codeql-sarif-attempt-2
+        if: >-
+          steps.codeql-analysis.outcome == 'success' &&
+          steps.upload-codeql-sarif-attempt-1.outcome == 'failure'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        with:
+          category: "/language:python"
+          sarif_file: ${{ steps.codeql-analysis.outputs.sarif-output }}
+
+      - name: Finalize CodeQL SARIF upload status
+        if: always()
+        env:
+          CODEQL_ANALYSIS_OUTCOME: ${{ steps.codeql-analysis.outcome }}
+          CODEQL_SARIF_UPLOAD_ATTEMPT_1_OUTCOME: ${{ steps.upload-codeql-sarif-attempt-1.outcome }}
+          CODEQL_SARIF_UPLOAD_ATTEMPT_2_OUTCOME: ${{ steps.upload-codeql-sarif-attempt-2.outcome }}
+        run: scripts/dev/codeql_sarif_upload_retry.sh finalize

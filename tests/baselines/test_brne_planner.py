@@ -75,6 +75,11 @@ def test_baseline_registry_contains_brne() -> None:
     assert get_baseline("brne") is BRNEPlanner
 
 
+def test_brne_wrap_angle_preserves_half_open_boundary() -> None:
+    """BRNE's compatibility wrapper keeps positive pi on the negative boundary."""
+    assert BRNEPlanner._wrap_angle(math.pi) == pytest.approx(-math.pi)
+
+
 # --- Config ---
 
 

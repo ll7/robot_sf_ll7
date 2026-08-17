@@ -17,5 +17,11 @@ def test_review_bot_routing_retries_transient_api_errors_and_is_idempotent() -> 
     assert "async function withGithubRetry(operation, description)" in workflow
     assert "failed after ${maxAttempts} attempts" in workflow
     assert "github.rest.issues.listLabelsOnIssue" in workflow
+    assert (
+        "await withGithubRetry(\n                  () => github.rest.issues.addLabels(" in workflow
+    )
+    assert (
+        "await withGithubRetry(\n                () => github.rest.issues.removeLabel(" in workflow
+    )
     assert "if (hasAutomaticLabel)" in workflow
     assert "error.status !== 404" in workflow

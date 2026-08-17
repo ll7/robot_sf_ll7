@@ -49,6 +49,49 @@ def test_successful_mergeable_pr_routes_to_review_for_merge_ready() -> None:
     assert recommendation["mutation_guardrails"]["auto_merge"] is False
 
 
+def test_blocked_snapshot_preflight_never_routes_to_merge_ready_review() -> None:
+    """A REST quota fallback row must stop before merge-ready review."""
+    pr = _base_pr(
+        preflight={
+            "status": "blocked",
+            "reasons": ["review_threads_unknown_graphql_quota"],
+            "review_threads": "unknown_graphql_quota",
+            "review_threads_admission": "fail_closed_unknown",
+        },
+        review_threads="unknown_graphql_quota",
+        review_threads_admission="fail_closed_unknown",
+    )
+
+    recommendation = classify_pr_action(pr, retry_state={"prs": {}})
+
+    assert recommendation["action"] == "stop_preflight_blocked"
+    assert "review_threads_unknown_graphql_quota" in recommendation["reasons"]
+
+
+def test_nested_incomplete_review_thread_snapshot_never_routes_to_merge_ready() -> None:
+    """Nested quota/error evidence must block merge-ready review on its own."""
+    for nested_status in ("unknown_graphql_quota", "error"):
+        recommendation = classify_pr_action(
+            _base_pr(review_thread_snapshot={"status": nested_status}),
+            retry_state={"prs": {}},
+        )
+
+        assert recommendation["action"] == "stop_preflight_blocked"
+
+
+def test_failed_ci_remains_diagnosable_when_review_preflight_is_unknown() -> None:
+    """Unavailable review evidence must not hide a concrete CI failure."""
+    pr = _base_pr(
+        checks={"overall": "failure", "by_conclusion": {"failure": 1}},
+        review_thread_snapshot={"status": "unknown_graphql_quota"},
+    )
+
+    recommendation = classify_pr_action(pr, retry_state={"prs": {}}, retry_budget=1)
+
+    assert recommendation["action"] == "diagnose_ci_failure"
+    assert recommendation["after_diagnosis_action"] == "retry_failed_checks"
+
+
 def test_unresolved_review_thread_routes_to_comment_processing() -> None:
     """Submitted unresolved review threads should take priority over green CI."""
     pr = _base_pr(review_thread_snapshot={"status": "ok", "unresolved": 1, "threads": []})

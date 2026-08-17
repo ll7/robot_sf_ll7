@@ -4,8 +4,7 @@
 Classifies PR state from compact snapshots and recommends one bounded action:
 stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
 refresh_snapshot, mark_ready_candidate, await_gate_verdict, reconcile_pr_metadata,
-await_changed_coverage,
-or no_action.
+await_changed_coverage, await_review_threads, or no_action.
 
 Every PolicyDecision also emits a high-level ``flow_decision`` — one of exactly
 ``stop``, ``continue``, ``reroute``, or ``escalate`` — for machine consumption.
@@ -61,6 +60,7 @@ VALID_ACTIONS = frozenset(
         "mark_ready_candidate",
         "await_gate_verdict",
         "await_changed_coverage",
+        "await_review_threads",
         "reconcile_pr_metadata",
         "no_action",
     }
@@ -76,6 +76,8 @@ VALID_STATES = frozenset(
         "missing_artifacts",
         "stale_worktree",
         "stale_merge_base",
+        "blocked_preflight",
+        "unknown_review_threads",
         "pending_gate_verdict",
         "pending_pr_metadata",
         "pending_changed_coverage",
@@ -495,6 +497,102 @@ def has_current_ordinary_base_policy(pr: dict[str, Any], head_sha: str) -> bool:
     return False
 
 
+def _base_state_after_policy(pr: dict[str, Any], head_sha: str) -> str | None:
+    """Apply the exact-head ordinary-CAS exception to base freshness once."""
+    base_state = _base_freshness_state(pr)
+    base_verdict, _, _ = _base_freshness_provenance(pr)
+    if (
+        base_state == "stale_merge_base"
+        and base_verdict == "stale"
+        and has_current_ordinary_base_policy(pr, head_sha)
+    ):
+        return None
+    return base_state
+
+
+def _head_preflight_state(pr: dict[str, Any]) -> str | None:
+    """Return a stale-head state from top-level or producer-shaped preflight data.
+
+    ``snapshot_pr_queue`` keeps the expected-head provenance inside the nested
+    ``preflight`` envelope.  Queue callers may also inject the legacy
+    top-level ``expected_head_sha``.  Normalize both shapes here so a stale
+    producer row cannot fall through to pending-CI or merge-readiness routing.
+    """
+    preflight = pr.get("preflight") if isinstance(pr.get("preflight"), dict) else {}
+    head_sha = str(pr.get("head_sha", "") or "")
+    expected_head_sha = str(pr.get("expected_head_sha", "") or "")
+    nested_head_sha = str(preflight.get("head_sha", "") or "")
+    nested_expected_head_sha = str(preflight.get("expected_head_sha", "") or "")
+    match_evidence = preflight.get("head_sha_matches_expected")
+    match_is_false = match_evidence is False or (
+        isinstance(match_evidence, str) and match_evidence.lower() == "false"
+    )
+
+    # An explicitly injected top-level expectation remains authoritative.
+    if expected_head_sha and head_sha and head_sha != expected_head_sha:
+        return "stale_worktree"
+
+    # The producer's boolean is direct evidence even when a compact row omits
+    # one of the SHA strings.  A false value is never safe to reinterpret as
+    # merely pending.
+    if match_is_false:
+        return "stale_worktree"
+
+    normalized_expected = expected_head_sha or nested_expected_head_sha
+    normalized_head = head_sha or nested_head_sha
+    if normalized_expected and normalized_head and normalized_head != normalized_expected:
+        return "stale_worktree"
+
+    # A stale producer status is itself a fail-closed head signal.  Base
+    # freshness is checked separately before this helper, so an authoritative
+    # nested base verdict still routes to ``stale_merge_base``.
+    if str(preflight.get("status", "") or "").lower() == "stale":
+        return "stale_worktree"
+    return None
+
+
+def _blocked_preflight_state(pr: dict[str, Any]) -> str | None:
+    """Keep blocked preflight evidence out of merge-ready routing."""
+    preflight = pr.get("preflight") if isinstance(pr.get("preflight"), dict) else {}
+    blocked_state = (
+        preflight.get("blocked_state") if isinstance(preflight.get("blocked_state"), dict) else {}
+    )
+    thread_snapshot = (
+        pr.get("review_thread_snapshot")
+        if isinstance(pr.get("review_thread_snapshot"), dict)
+        else {}
+    )
+    preflight_status = str(preflight.get("status", "") or "").lower()
+    review_threads = str(preflight.get("review_threads", pr.get("review_threads", "")) or "")
+    admission = str(
+        preflight.get(
+            "review_threads_admission",
+            pr.get("review_threads_admission", ""),
+        )
+        or ""
+    )
+    nested_review_status = str(thread_snapshot.get("status", "") or "")
+    raw_reasons = preflight.get("reasons", [])
+    reason_strings = (
+        [str(reason) for reason in raw_reasons]
+        if isinstance(raw_reasons, list)
+        else [str(raw_reasons)]
+    )
+    if str(blocked_state.get("status", "") or "").lower() == "blocked":
+        return "blocked_preflight"
+    quota_unknown = (
+        review_threads == "unknown_graphql_quota"
+        or admission == "fail_closed_unknown"
+        or nested_review_status == "unknown_graphql_quota"
+        or any("unknown_graphql_quota" in reason for reason in reason_strings)
+    )
+    if quota_unknown:
+        return "unknown_review_threads"
+    if preflight_status == "blocked" or (nested_review_status and nested_review_status != "ok"):
+        return "blocked_preflight"
+    return None
+
+
 def _merge_ready_state(
     pr: dict[str, Any],
     *,
@@ -520,14 +618,7 @@ def _merge_ready_state(
     """
     if "merge-ready" not in label_names or overall != "success":
         return None
-    base_state = _base_freshness_state(pr)
-    base_verdict, _, _ = _base_freshness_provenance(pr)
-    if (
-        base_state == "stale_merge_base"
-        and base_verdict == "stale"
-        and has_current_ordinary_base_policy(pr, head_sha)
-    ):
-        base_state = None
+    base_state = _base_state_after_policy(pr, head_sha)
     if base_state is not None:
         return base_state
     if pr.get("review_threads_admission") == "fail_closed_unknown":
@@ -564,16 +655,22 @@ def classify_pr_state(
     label_names = _label_names(pr)
     is_draft = bool(pr.get("draft", False))
     head_sha = str(pr.get("head_sha", ""))
-    expected = str(pr.get("expected_head_sha", ""))
     artifacts = pr.get("artifacts")
     if is_draft:
         return "no_action"
     if overall == "failure":
         return "failed_ci"
+    base_state = _base_state_after_policy(pr, head_sha)
+    if base_state is not None:
+        return base_state
+    head_state = _head_preflight_state(pr)
+    if head_state is not None:
+        return head_state
+    preflight_state = _blocked_preflight_state(pr)
+    if preflight_state is not None:
+        return preflight_state
     if overall == "pending":
         return "pending_ci"
-    if expected and head_sha and head_sha != expected:
-        return "stale_worktree"
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state
@@ -629,7 +726,9 @@ def _compute_flow_decision(
       - pending_pr_metadata -> continue (reconcile final title/body metadata)
       - pending_changed_coverage -> continue (obtain exact-head coverage proof)
       - ready_to_merge -> continue
-      - failed_ci, failed_validation, missing_artifacts, stale_worktree -> reroute
+      - unknown_review_threads -> continue (wait for a thread-capable snapshot)
+      - failed_ci, failed_validation, missing_artifacts, stale_worktree, stale_merge_base -> reroute
+      - blocked_preflight -> stop
       - no_action -> stop
     """
     if budget_exhausted:
@@ -815,6 +914,15 @@ def recommend_action(  # noqa: C901
                     f"current main SHA {current}; "
                     "PR must be rebased onto main"
                 ),
+                actions_remaining=remaining,
+            )
+        case "blocked_preflight":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason="snapshot preflight is blocked; inspect the blocking reason before retry",
                 actions_remaining=remaining,
             )
         case _:

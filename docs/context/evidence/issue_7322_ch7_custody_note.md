@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf_ll7#7322, 2026-08-17) - NEEDS-REVIEW -->
+
 # Issue #7322 Chapter 7 v2 custody note
 
 Terminal build status: `built_ready_for_admission_review`.

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
     _get_paginated_list,
     _parse_expected_heads,
@@ -18,6 +19,7 @@ from scripts.dev.stacked_prs import (
     merge_cascade,
     retarget_stack,
     summarize_check_runs,
+    summarize_merge_queue_gate,
     sync_stack,
 )
 
@@ -142,6 +144,158 @@ def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> Non
     assert pending["overall"] == "pending"
     assert failed["overall"] == "failure"
     assert missing["overall"] == "unknown"
+
+
+def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
+    head_sha = "a" * 40
+    older = {
+        "id": 1,
+        "name": "merge-queue-gate",
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-08-17T10:00:00Z",
+        "head_sha": head_sha,
+    }
+    newer_pending = {
+        **older,
+        "id": 2,
+        "status": "in_progress",
+        "conclusion": None,
+        "completed_at": None,
+        "started_at": "2026-08-17T11:00:00Z",
+    }
+
+    assert summarize_merge_queue_gate([], head_sha=head_sha)["status"] == "missing"
+    assert (
+        summarize_merge_queue_gate([older, newer_pending], head_sha=head_sha)["status"] == "pending"
+    )
+    assert (
+        summarize_merge_queue_gate([{**older, "head_sha": "b" * 40}], head_sha=head_sha)["status"]
+        == "mismatch"
+    )
+    assert summarize_merge_queue_gate(
+        [{key: value for key, value in older.items() if key != "head_sha"}],
+        head_sha=head_sha,
+    )["status"] == "malformed"
+    assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
+
+
+def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
+    from scripts.dev.pr_loop_policy import (
+        current_explicit_merge_hold_reasons,
+        has_current_accepted_gate_verdict,
+    )
+
+    head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+    trailer = f"gate-verdict: accepted @ {head_sha}"
+    assert current_explicit_merge_hold_reasons(
+        {
+            "labels": ["merge-ready: no"],
+            "reviews": [
+                {
+                    "authorAssociation": "OWNER",
+                    "state": "APPROVED",
+                    "body": "domain-approval: pending",
+                }
+            ],
+        }
+    ) == ["domain-approval:pending", "merge-ready:no"]
+
+    for state in ("DISMISSED", "CHANGES_REQUESTED", "PENDING"):
+        assert not has_current_accepted_gate_verdict(
+            {
+                "reviews": [
+                    {
+                        "authorAssociation": "OWNER",
+                        "state": state,
+                        "body": trailer,
+                    }
+                ]
+            },
+            head_sha,
+        )
+    assert has_current_accepted_gate_verdict(
+        {
+            "reviews": [
+                {
+                    "authorAssociation": "OWNER",
+                    "state": "APPROVED",
+                    "body": trailer,
+                }
+            ]
+        },
+        head_sha,
+    )
+
+
+def test_status_positive_control_requires_current_merge_queue_gate() -> None:
+    main_sha = "m" * 40
+    head_sha = "a" * 40
+    title = "feat: stack 1"
+    body = "body"
+    review_body = (
+        f"gate-verdict: accepted @ {head_sha}\n{metadata_trailer(metadata_digest(title, body))}"
+    )
+    payloads = {
+        "repos/owner/repo/git/ref/heads/main": {"object": {"sha": main_sha}},
+        "repos/owner/repo/pulls/1": {
+            **_pr_payload(
+                1,
+                head_ref="root",
+                head_sha=head_sha,
+                base_ref="main",
+                base_sha=main_sha,
+            ),
+            "title": title,
+            "body": body,
+        },
+        "repos/owner/repo/pulls/1/reviews?per_page=100": [
+            {
+                "author_association": "OWNER",
+                "state": "APPROVED",
+                "body": review_body,
+            }
+        ],
+        "repos/owner/repo/pulls/1/comments?per_page=100": [],
+        "repos/owner/repo/issues/1/comments?per_page=100": [],
+        f"repos/owner/repo/commits/{head_sha}/check-runs?per_page=100": {
+            "total_count": 2,
+            "check_runs": [
+                {
+                    "id": 1,
+                    "name": "CI",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": head_sha,
+                },
+                {
+                    "id": 2,
+                    "name": "merge-queue-gate",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": head_sha,
+                    "completed_at": "2026-08-17T11:00:00Z",
+                },
+            ],
+        },
+    }
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        return payloads[path], None
+
+    result = build_stack_status(
+        "owner/repo",
+        [1],
+        api=fake_api,
+        thread_fetcher=lambda number: (True, None),
+    )
+
+    entry = result["entries"][0]
+    assert entry["merge_queue_gate"]["status"] == "success"
+    assert entry["explicit_holds"] == []
+    assert entry["merge_ready"] is True
 
 
 def test_review_digest_changes_when_review_content_changes() -> None:

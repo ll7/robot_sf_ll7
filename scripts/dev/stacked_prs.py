@@ -45,6 +45,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.dev.merge_queue_gate import fetch_threads_resolved  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    current_explicit_merge_hold_reasons,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
@@ -57,6 +58,7 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 SCHEMA = "stacked_prs.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 SUCCESS_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
+MERGE_QUEUE_GATE_CHECK_NAME = "merge-queue-gate"
 REST_PAGE_SIZE = 100
 REST_PAGE_BUDGET = 100
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
@@ -356,6 +358,64 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def summarize_merge_queue_gate(
+    check_runs: list[dict[str, Any]], *, head_sha: str
+) -> dict[str, Any]:
+    """Require the newest exact-head Merge Queue Gate check context.
+
+    The check-runs endpoint is queried for the PR head commit, so the endpoint
+    itself supplies the exact-head scope.  When GitHub also returns a
+    ``head_sha`` on the run, verify it independently and fail closed on drift.
+    A prior successful run cannot satisfy a newer queued, failed, or mismatched
+    run because only the newest context is considered.
+    """
+    candidates = [
+        item
+        for item in check_runs
+        if str(item.get("name") or "").strip().lower() == MERGE_QUEUE_GATE_CHECK_NAME
+    ]
+    if not candidates:
+        return {
+            "status": "missing",
+            "name": MERGE_QUEUE_GATE_CHECK_NAME,
+            "head_sha": head_sha,
+            "exact_head": False,
+        }
+
+    def sort_key(item: dict[str, Any]) -> tuple[str, int]:
+        timestamp = str(item.get("completed_at") or item.get("started_at") or "")
+        try:
+            identifier = int(item.get("id", 0) or 0)
+        except (TypeError, ValueError):
+            identifier = 0
+        return timestamp, identifier
+
+    latest = max(candidates, key=sort_key)
+    reported_head = str(latest.get("head_sha") or "")
+    exact_head = bool(reported_head) and reported_head.lower() == head_sha.lower()
+    if not reported_head:
+        status = "malformed"
+    elif not exact_head:
+        status = "mismatch"
+    elif str(latest.get("status") or "").lower() != "completed":
+        status = "pending"
+    elif str(latest.get("conclusion") or "").lower() != "success":
+        status = "failure"
+    else:
+        status = "success"
+    return {
+        "status": status,
+        "name": str(latest.get("name") or MERGE_QUEUE_GATE_CHECK_NAME),
+        "head_sha": reported_head or head_sha,
+        "exact_head": exact_head,
+        "check_run_id": latest.get("id"),
+        "started_at": latest.get("started_at"),
+        "completed_at": latest.get("completed_at"),
+        "conclusion": latest.get("conclusion"),
+        "html_url": latest.get("html_url"),
+    }
+
+
 def _fetch_pr(
     repo: str, number: int, *, api: GhApi = _run_gh_api
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -487,6 +547,21 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
         reasons.append("mergeable_state_not_clean")
     if entry.get("checks", {}).get("overall") != "success":
         reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
+    for hold in entry.get("explicit_holds", []):
+        reasons.append(f"explicit_hold:{hold}")
+    merge_queue_gate = entry.get("merge_queue_gate", {})
+    gate_status = merge_queue_gate.get("status")
+    if gate_status == "missing":
+        reasons.append("missing_merge_queue_gate")
+    elif gate_status == "malformed":
+        reasons.append("malformed_merge_queue_gate")
+    elif gate_status == "mismatch":
+        reasons.append("merge_queue_gate_head_mismatch")
+    elif gate_status != "success":
+        reasons.append(f"merge_queue_gate_not_green:{gate_status or 'unknown'}")
+    for state in ("CHANGES_REQUESTED", "PENDING", "DISMISSED"):
+        if entry.get("review_states", {}).get(state, 0):
+            reasons.append(f"non_authoritative_review_state:{state.lower()}")
     if entry.get("requested_reviewer_count", 0) or entry.get("requested_team_count", 0):
         reasons.append("outstanding_requested_reviewers")
     if entry.get("review_threads", {}).get("status") != "resolved":
@@ -565,6 +640,11 @@ def build_stack_status(
         )
         metadata = metadata_digest(pr["title"], pr["body"])
         gate = _gate_status(pr, review_data, metadata=metadata)
+        hold_source = {
+            **pr,
+            "reviews": review_data["reviews"],
+            "comments": review_data["conversation_comments"],
+        }
         entry: dict[str, Any] = {
             "position": index,
             "pr": pr["number"],
@@ -583,6 +663,7 @@ def build_stack_status(
             "requested_reviewer_count": len(pr["requested_reviewers"]),
             "requested_team_count": len(pr["requested_teams"]),
             "checks": summarize_check_runs(check_runs),
+            "merge_queue_gate": summarize_merge_queue_gate(check_runs, head_sha=pr["head_sha"]),
             "pagination": {
                 **review_data["pagination"],
                 "check_runs": check_runs_pagination,
@@ -605,6 +686,7 @@ def build_stack_status(
                 "error": thread_error,
             },
             "metadata_digest": metadata,
+            "explicit_holds": current_explicit_merge_hold_reasons(hold_source),
             **gate,
         }
         entry["reasons"] = _entry_reasons(entry)

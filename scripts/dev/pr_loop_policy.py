@@ -100,6 +100,16 @@ _BASE_POLICY_RE = re.compile(
 )
 BASE_POLICY_RE = _BASE_POLICY_RE
 
+# Only repository-trusted authors can provide merge-control trailers.  Review
+# states that were withdrawn or are asking for changes must not keep an older
+# acceptance alive merely because the body still contains its trailer.
+TRUSTED_REVIEW_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+NON_AUTHORITATIVE_REVIEW_STATES = frozenset({"CHANGES_REQUESTED", "DISMISSED", "PENDING"})
+
+_EXPLICIT_MERGE_HOLD_RE = re.compile(
+    r"(?im)^\s*(?:[-*]\s*)?(merge-ready|domain-approval)\s*:\s*(no|pending)\s*$"
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PolicyDecision:
@@ -208,11 +218,74 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
     return texts
 
 
-_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+def authoritative_body_text(item: Any) -> str | None:
+    """Return a trusted current review/comment body, or ``None``.
+
+    Conversation comments have no review state and remain eligible when their
+    author association is trusted.  Review carriers are accepted only while
+    their current state is not withdrawn, pending, or changes-requested; an
+    unknown non-empty state is also rejected so malformed evidence fails closed.
+    """
+    if not isinstance(item, dict):
+        return None
+    association = str(item.get("author_association") or item.get("authorAssociation") or "").upper()
+    if association not in TRUSTED_REVIEW_ASSOCIATIONS:
+        return None
+    state = str(item.get("state") or "").upper()
+    if state in NON_AUTHORITATIVE_REVIEW_STATES:
+        return None
+    if state and state not in {"APPROVED", "COMMENTED"}:
+        return None
+    body = item.get("body")
+    return body if isinstance(body, str) and body else None
 
 
-def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
-    """Return comment/review body excerpts that may carry a gate-verdict trailer."""
+def current_explicit_merge_hold_reasons(pr: dict[str, Any]) -> list[str]:
+    """Return current trusted merge/domain holds in stable order.
+
+    Labels are live repository state.  Textual holds are read only from the
+    same trusted current review/comment carriers used by the gate-verdict
+    parser; stale or malformed carriers therefore cannot create or clear an
+    acceptance.
+    """
+    reasons: set[str] = set()
+    labels = pr.get("labels")
+    if isinstance(labels, list):
+        for label in labels:
+            name = label.get("name") if isinstance(label, dict) else label
+            normalized = str(name or "").strip().lower()
+            if normalized in {"merge-ready: no", "domain-approval: pending"}:
+                reasons.add(normalized.replace(" ", ""))
+
+    for key in ("reviews", "comments"):
+        entries = pr.get(key)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            body = authoritative_body_text(entry)
+            if body is None:
+                continue
+            for field, value in _EXPLICIT_MERGE_HOLD_RE.findall(body):
+                reasons.add(f"{field.lower()}:{value.lower()}")
+    return sorted(reasons)
+
+
+def _authoritative_raw_body_texts(pr: dict[str, Any]) -> list[str]:
+    """Return trusted bodies from raw review and conversation collections."""
+    texts: list[str] = []
+    for key in ("reviews", "comments"):
+        entries = pr.get(key)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            body = authoritative_body_text(entry)
+            if body is not None:
+                texts.append(body)
+    return texts
+
+
+def _authoritative_snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
+    """Return trusted bodies from compact review/comment snapshots."""
     texts: list[str] = []
     for key in ("comment_snapshot", "review_snapshot"):
         snapshot = pr.get(key)
@@ -224,14 +297,22 @@ def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
         for entry in latest:
             if not isinstance(entry, dict):
                 continue
-            association = str(
-                entry.get("author_association") or entry.get("authorAssociation") or ""
-            ).upper()
-            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
-                continue
-            if isinstance(entry.get("body_excerpt"), str):
-                texts.append(entry["body_excerpt"])
+            body = authoritative_body_text(
+                {
+                    "author_association": entry.get("author_association")
+                    or entry.get("authorAssociation"),
+                    "body": entry.get("body_excerpt"),
+                    "state": entry.get("state"),
+                }
+            )
+            if body is not None:
+                texts.append(body)
     return texts
+
+
+def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
+    """Return current trusted bodies that may carry a gate-control trailer."""
+    return _authoritative_raw_body_texts(pr) + _authoritative_snapshot_body_texts(pr)
 
 
 def _gate_verdict_texts(pr: dict[str, Any]) -> list[str]:

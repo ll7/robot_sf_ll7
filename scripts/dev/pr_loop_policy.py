@@ -32,6 +32,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +92,22 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_GATE_CARRIER_MARKER_RE = re.compile(r"gate-verdict\s*:", re.IGNORECASE)
+_AUTHORITY_CARRIER_MARKER_RE = re.compile(
+    r"gate-verdict\s*:|^[ \t]*(?:[-*>][ \t]*)?"
+    r"(?:merge-ready|domain-approval)\s*:",
+    re.IGNORECASE | re.MULTILINE,
+)
+_HOLD_DIRECTIVE_RE = re.compile(
+    r"^[ \t]*(?:[-*>][ \t]*)?"
+    r"(?P<key>merge-ready|domain-approval)\s*:\s*"
+    r"(?P<value>[^\s`]+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_HOLD_VALUES = {
+    "merge-ready": frozenset({"no", "false", "hold", "blocked", "pending"}),
+    "domain-approval": frozenset({"no", "false", "hold", "blocked", "pending", "required"}),
+}
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
@@ -208,6 +225,117 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
 _TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
 
 
+def _carrier_timestamp(entry: dict[str, Any]) -> str:
+    """Return the carrier's authoritative GitHub timestamp, if present."""
+    for key in ("submittedAt", "createdAt", "updatedAt", "submitted_at", "created_at"):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _carrier_timestamp_value(value: str) -> float | None:
+    """Return a comparable UTC timestamp, or None for malformed/missing data."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def _raw_authority_carriers(
+    pr: dict[str, Any],
+    *,
+    marker: re.Pattern[str],
+) -> list[dict[str, Any]]:
+    """Return trusted raw comments/reviews carrying an authority directive.
+
+    Raw carriers are retained by the live merge gate so the newest directive can
+    be selected before any compact extraction collapses history. If a carrier
+    has a malformed timestamp alongside timestamped carriers, it sorts newest;
+    that uncertainty therefore fails closed instead of reviving an older verdict.
+    """
+    carriers: list[dict[str, Any]] = []
+    sequence = 0
+    for key in ("comments", "reviews"):
+        items = pr.get(key)
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            sequence += 1
+            if not isinstance(entry, dict):
+                continue
+            association = str(
+                entry.get("authorAssociation") or entry.get("author_association") or ""
+            ).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if not isinstance(body, str) or not body or not marker.search(body):
+                continue
+            timestamp = _carrier_timestamp(entry)
+            carriers.append(
+                {
+                    "body": body,
+                    "timestamp": timestamp,
+                    "timestamp_value": _carrier_timestamp_value(timestamp),
+                    "sequence": sequence,
+                }
+            )
+    if not carriers:
+        return []
+    has_timestamped_carrier = any(item["timestamp_value"] is not None for item in carriers)
+    if not has_timestamped_carrier:
+        return sorted(carriers, key=lambda item: item["sequence"])
+    return sorted(
+        carriers,
+        key=lambda item: (
+            item["timestamp_value"] if item["timestamp_value"] is not None else float("inf"),
+            item["sequence"],
+        ),
+    )
+
+
+def _latest_raw_gate_carrier(pr: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the newest trusted raw gate-verdict carrier, if one exists."""
+    carriers = _raw_authority_carriers(pr, marker=_GATE_CARRIER_MARKER_RE)
+    return carriers[-1] if carriers else None
+
+
+def _hold_reason_from_body(body: str) -> str | None:
+    """Return the first explicit blocking merge/domain directive in a body."""
+    for match in _HOLD_DIRECTIVE_RE.finditer(body):
+        key = match.group("key").lower()
+        value = match.group("value").lower().rstrip(".,;:)")
+        if value in _HOLD_VALUES[key]:
+            return f"{key}:{value}"
+    return None
+
+
+def current_gate_hold_reason(pr: dict[str, Any], head_sha: str = "") -> str | None:
+    """Return the newest trusted explicit hold that blocks merge admission.
+
+    The PR body is deliberately excluded. A hold from a trusted comment/review
+    is observable even when the same carrier also records an accepted verdict;
+    the merge gate must not treat that verdict as stronger than an explicit
+    ``merge-ready: no`` or ``domain-approval: pending`` directive.
+    """
+    if not isinstance(pr, dict):
+        return None
+    carriers = _raw_authority_carriers(pr, marker=_AUTHORITY_CARRIER_MARKER_RE)
+    if carriers:
+        return _hold_reason_from_body(str(carriers[-1]["body"]))
+    for body in reversed(_snapshot_body_texts(pr)):
+        reason = _hold_reason_from_body(body)
+        if reason:
+            return reason
+    return None
+
+
 def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
     """Return comment/review body excerpts that may carry a gate-verdict trailer."""
     texts: list[str] = []
@@ -286,6 +414,12 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     """
     if not isinstance(pr, dict) or not head_sha:
         return False
+    latest_raw = _latest_raw_gate_carrier(pr)
+    if latest_raw is not None:
+        return any(
+            _sha_matches_head(match.group(1), head_sha)
+            for match in _GATE_VERDICT_RE.finditer(str(latest_raw["body"]))
+        )
     accepted = _accepted_gate_verdict_shas(pr)
     return any(_sha_matches_head(sha, head_sha) for sha in accepted)
 

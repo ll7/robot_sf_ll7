@@ -28,16 +28,18 @@ The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
 live PR (``--pr`` or ``--from-event`` for a ``merge_group`` payload), evaluates,
 prints the audit JSON, and appends a ``GITHUB_STEP_SUMMARY`` block. Native
-``merge_group`` evaluation always exits 0 on pass / 1 on fail (fail closed).
-Source-PR diagnostics may opt into ``--advisory`` so a truthfully failed audit
-does not present ordinary implementation CI as red.
+``merge_group`` and workflow source-PR evaluation always exit 0 on pass / 1 on
+fail (fail closed). Standalone diagnostic callers may still opt into
+``--advisory`` when they explicitly want a non-blocking audit; the checked-in
+workflow never does so.
 
 Why a separate gate instead of relying on labels alone: issue #6274 observed an
 external/parallel auto-merge path merging PRs without ``merge-ready`` or without
-a current exact-head gate verdict. This gate covers only native ``merge_group``
-events after the required-check configuration is active. It does not locate,
-alter, or prove coverage of a direct merge dispatcher; that remaining #6274
-work needs separate evidence before the issue can close.
+a current exact-head gate verdict. This gate covers native ``merge_group`` and
+source-PR events after the required-check configuration is active. It does not
+locate or alter arbitrary external merge dispatchers; the repository's
+canonical merge authority must still perform its own fresh exact-head preflight
+before CAS.
 """
 
 from __future__ import annotations
@@ -66,6 +68,7 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _rollup_status,
 )
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    current_gate_hold_reason,
     has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
@@ -130,6 +133,7 @@ class MergeGateAudit:
     thread_resolution: str
     reviewer_request_status: str
     merge_ready: bool
+    merge_hold_reason: str | None
     passed: bool
     reasons: list[str] = field(default_factory=list)
 
@@ -196,7 +200,7 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
-def _fail_closed_reasons(  # noqa: PLR0913
+def _fail_closed_reasons(  # noqa: PLR0913, C901
     *,
     draft: bool,
     merge_ready: bool,
@@ -207,6 +211,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     thread_resolution: str,
     reviewer_request_status: str,
     merge_group_head_binding: str,
+    merge_hold_reason: str | None,
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -218,6 +223,8 @@ def _fail_closed_reasons(  # noqa: PLR0913
         reasons.append("pr_is_draft")
     if not merge_ready:
         reasons.append("missing_merge_ready_label")
+    if merge_hold_reason:
+        reasons.append(f"explicit_merge_hold:{merge_hold_reason}")
     if ci_overall != "success":
         reasons.append(f"ci_not_green:{ci_overall}")
     if staleness_verdict == "stale":
@@ -312,6 +319,7 @@ def evaluate_merge_gate(
     gate_verdict_status = _gate_verdict_status(pr, head_sha)
     metadata_digest_value = str(pr.get("metadata_digest", "") or "")
     metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
+    merge_hold_reason = current_gate_hold_reason(pr, head_sha)
 
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
     if merge_group_head_sha:
@@ -354,6 +362,7 @@ def evaluate_merge_gate(
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
+            merge_hold_reason=merge_hold_reason,
         )
     )
     if not head_sha:
@@ -382,6 +391,7 @@ def evaluate_merge_gate(
         thread_resolution=thread_resolution,
         reviewer_request_status=reviewer_request_status,
         merge_ready=merge_ready,
+        merge_hold_reason=merge_hold_reason,
         passed=passed,
         reasons=reasons,
     )
@@ -649,6 +659,11 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
+        # Keep the raw trusted carriers so the policy can select the newest
+        # timestamped verdict/hold instead of falling back through a compact
+        # list of older accepted trailers.
+        "comments": payload.get("comments") if isinstance(payload.get("comments"), list) else [],
+        "reviews": payload.get("reviews") if isinstance(payload.get("reviews"), list) else [],
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
         # Each GitHub review request is an explicit request for review. Treat any

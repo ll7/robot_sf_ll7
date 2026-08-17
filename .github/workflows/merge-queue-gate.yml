@@ -17,11 +17,12 @@ name: Merge Queue Gate
 # requested-reviewer status) is
 # emitted to the job summary and stdout.
 #
-# Source-PR runs are advisory audits: they preserve failed reasons in the JSON
-# and job summary while exiting successfully, so admission readiness is not
-# misreported as failing implementation CI. Only `merge_group` runs fail closed.
-# To activate that queue-time behavior, add this job's status check ("Merge
-# Queue Gate / merge-queue-gate") to the merge queue's required status checks,
+# Source-PR runs are fail-closed authority checks as well as merge-group checks.
+# They are refreshed on source-head, label, reviewer-request, and review-state
+# mutations. The live snapshot reads both trusted comments and reviews, while
+# the direct merge authority performs the same preflight immediately before CAS.
+# To activate this behavior, add this job's status check ("Merge Queue Gate /
+# merge-queue-gate") to the merge queue's required status checks,
 # enable "Only merge non-failing pull requests", and enable "Require
 # conversation resolution before merging" in the branch-protection rules for
 # `main`. The workflow does not locate or control direct merge dispatchers that
@@ -31,17 +32,26 @@ name: Merge Queue Gate
 
 on:
   pull_request:
-    # Refresh the advisory audit only when merge-ready changes or a labeled
-    # source head changes. Queue-time enforcement is handled by merge_group.
     types:
+      - opened
+      - reopened
+      - ready_for_review
+      - converted_to_draft
       - labeled
       - unlabeled
       - synchronize
+      - review_requested
+      - review_request_removed
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+      - dismissed
   merge_group:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "Open PR number to evaluate (advisory; does not gate a merge)"
+        description: "Open PR number to evaluate with the merge authority"
         required: true
         type: string
 
@@ -58,16 +68,11 @@ concurrency:
 
 jobs:
   merge-queue-gate:
-    # Ordinary source PRs publish an advisory audit. Only native merge-group
-    # execution is fail-closed. Skip unrelated label and head churn.
     if: >-
       github.event_name == 'merge_group' ||
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-        (((github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
-          github.event.label.name == 'merge-ready') ||
-         (github.event.action == 'synchronize' &&
-          contains(github.event.pull_request.labels.*.name, 'merge-ready'))))
+      github.event_name == 'pull_request' ||
+      github.event_name == 'pull_request_review'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -94,7 +99,7 @@ jobs:
             merge_group)
               trusted_ref="$MERGE_GROUP_BASE_SHA"
               ;;
-            pull_request)
+            pull_request|pull_request_review)
               trusted_ref="$(resolve_branch_sha "$PULL_REQUEST_BASE_REF")"
               ;;
             workflow_dispatch)
@@ -133,14 +138,11 @@ jobs:
           set -euo pipefail
           if [[ -f scripts/dev/merge_queue_gate.py ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "available=false" >> "$GITHUB_OUTPUT"
-          if [[ "$EVENT_NAME" == "merge_group" ]]; then
-            echo "::error::Trusted base does not contain scripts/dev/merge_queue_gate.py; refusing the merge-group gate."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Trusted base does not contain scripts/dev/merge_queue_gate.py; refusing the $EVENT_NAME gate."
             exit 1
           fi
-          echo "::notice::Trusted base does not contain scripts/dev/merge_queue_gate.py; source-head evaluation is advisory and was skipped."
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -159,20 +161,20 @@ jobs:
             --json
 
       - name: Run merge-admission audit (source PR head)
-        if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
+        if: >-
+          (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') &&
+          steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          echo "::notice::Source-PR admission is advisory; merge_group remains fail-closed."
           python scripts/dev/merge_queue_gate.py \
             --pr "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
-            --advisory \
             --json
 
-      - name: Run merge-queue gate (advisory, workflow_dispatch)
+      - name: Run merge-queue gate (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -182,5 +184,4 @@ jobs:
           python scripts/dev/merge_queue_gate.py \
             --pr "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
-            --advisory \
             --json

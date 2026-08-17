@@ -258,10 +258,21 @@ def _validate_summary_training_contract(
         "seed": int(training["seed"]),
     }
     for field, expected in expected_scalars.items():
-        if summary.get(field) != expected:
-            raise RuntimeError(
-                f"{arm_id} recorded {field}={summary.get(field)!r}, expected {expected!r}"
-            )
+        observed = summary.get(field)
+        if isinstance(expected, float):
+            try:
+                observed_value = float(observed)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(f"{arm_id} recorded non-numeric {field}={observed!r}") from exc
+            matches = math.isfinite(observed_value) and observed_value == expected
+        else:
+            try:
+                observed_value = int(observed)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(f"{arm_id} recorded non-integer {field}={observed!r}") from exc
+            matches = observed_value == expected
+        if not matches:
+            raise RuntimeError(f"{arm_id} recorded {field}={observed!r}, expected {expected!r}")
 
     model_config = _mapping(summary.get("config"), label=f"{arm_id}.config")
     fixture = _mapping(config["fixture"], label="fixture")

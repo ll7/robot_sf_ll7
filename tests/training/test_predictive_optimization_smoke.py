@@ -82,8 +82,8 @@ def test_arm_summary_contract_rejects_effective_flag_drift(tmp_path: Path) -> No
         "amp": smoke._expected_amp_manifest(arm),
         "epochs": training["epochs"],
         "batch_size": training["batch_size"],
-        "learning_rate": training["lr"],
-        "weight_decay": training["weight_decay"],
+        "learning_rate": str(training["lr"]),
+        "weight_decay": str(training["weight_decay"]),
         "seed": training["seed"],
         "config": {
             "max_agents": fixture["max_agents"],

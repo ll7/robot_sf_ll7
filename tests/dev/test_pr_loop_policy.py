@@ -12,6 +12,7 @@ import pytest
 from scripts.dev.pr_loop_policy import (
     GATE_VERDICT_MIN_SHA_OVERLAP,
     VALID_ACTIONS,
+    VALID_STATES,
     PolicyDecision,
     _accepted_gate_verdict_shas,
     _review_state,
@@ -426,6 +427,20 @@ def test_stale_exact_head_precedes_quota_wait() -> None:
     )
     pr["review_threads"] = "unknown_graphql_quota"
     pr["review_threads_admission"] = "fail_closed_unknown"
+
+    assert classify_pr_state(pr) == "stale_worktree"
+
+
+def test_policy_contract_includes_unknown_review_thread_route() -> None:
+    """The fail-closed REST state must be part of the exported policy contract."""
+    assert "unknown_review_threads" in VALID_STATES
+    assert "await_review_threads" in VALID_ACTIONS
+
+
+def test_classify_uses_nested_expected_head_for_legacy_snapshots() -> None:
+    """Older snapshots with only preflight head binding must still reject stale heads."""
+    pr = _pr(106, head_sha="new-sha")
+    pr["preflight"] = {"expected_head_sha": "old-sha"}
 
     assert classify_pr_state(pr) == "stale_worktree"
 

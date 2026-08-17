@@ -32,7 +32,14 @@ def test_receipt_is_generated_and_verified_with_two_independent_builds(tmp_path:
     receipt_path = _generate(tmp_path)
 
     payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    sidecar = json.loads(
+        receipt_path.with_name(receipt_path.name + ".review.json").read_text(encoding="utf-8")
+    )
     assert payload["schema_version"] == "ch7-evidence-build-receipt.v1"
+    assert sidecar["artifact_path"] == receipt_path.name
+    assert sidecar["artifact_sha256"] == receipt_tool._sha256_file(receipt_path)
+    assert sidecar["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert sidecar["preserved_exact_bytes"] is True
     assert payload["package"]["admission_status"] == "not_admitted"
     assert payload["build"]["determinism"]["verified"] is True
     assert payload["build"]["independent_builds"][0] == {

@@ -5,6 +5,10 @@ package. It is deliberately separate from the package and from the future
 ``ch7-evidence-admission.v2`` receipt.
 """
 
+# evidence-writer-exempt: the receipt is an immutable, self-hashed one-line JSON artifact;
+# shared write_json would change its exact serialization and invalidate the integrity contract.
+# write_review_sidecar binds the exact bytes to the required generated-evidence marker.
+
 from __future__ import annotations
 
 import argparse
@@ -20,6 +24,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, ValidationError
 
+from robot_sf.evidence.writers import write_review_sidecar
 from scripts.analysis import build_ch7_evidence_package_v2 as builder
 from scripts.analysis import verify_ch7_evidence_admission as admission
 from scripts.analysis import verify_ch7_evidence_admission_v2 as admission_v2
@@ -447,6 +452,7 @@ def generate_receipt(
     _validate(receipt, "build receipt")
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_bytes(_canonical_bytes(receipt))
+    write_review_sidecar(receipt_path, repo_root=ROOT)
     return receipt
 
 

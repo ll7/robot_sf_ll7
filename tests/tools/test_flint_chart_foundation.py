@@ -100,6 +100,40 @@ def test_reversed_large_integer_uncertainty_fails_closed() -> None:
         build_surface(payload)
 
 
+@pytest.mark.parametrize("bad_value", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_uncertainty_fails_closed(bad_value: float) -> None:
+    """Non-finite Python float values cannot enter the numeric contract."""
+    payload = _payload()
+    for cells in (payload["canonical_cells"], payload["candidate_cells"]):
+        cells[0]["uncertainty"]["lower"] = bad_value
+
+    with pytest.raises(FlintChartContractError, match="must be a finite number"):
+        build_surface(payload)
+
+
+def test_unknown_source_durability_fails_closed() -> None:
+    """Only the explicit durable or synthetic durability classes are accepted."""
+    payload = _payload()
+    payload["source"]["durability"] = "unverified"
+
+    with pytest.raises(FlintChartContractError, match="durability"):
+        build_surface(payload)
+
+
+def test_unavailable_uncertainty_rejects_unknown_fields() -> None:
+    """Unavailable uncertainty remains a closed object contract."""
+    payload = _payload()
+    for cells in (payload["canonical_cells"], payload["candidate_cells"]):
+        cells[0]["uncertainty"] = {
+            "status": "unavailable",
+            "reason": "not supplied",
+            "confidence": 0.95,
+        }
+
+    with pytest.raises(FlintChartContractError, match="unsupported fields"):
+        build_surface(payload)
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -219,6 +253,15 @@ def test_figure_7_1_requires_uncertainty_and_direct_label_policy() -> None:
     assert surface["renderer_policy"]["requires_direct_labels"] is True
 
 
+def test_renderer_policy_optional_flags_must_be_boolean() -> None:
+    """Optional renderer requirements cannot be smuggled in as arbitrary values."""
+    payload = _payload()
+    payload["renderer_policy"]["requires_tie_preservation"] = "yes"
+
+    with pytest.raises(FlintChartContractError, match="must be a boolean"):
+        build_surface(payload)
+
+
 def test_atlas_rejects_duplicate_surface_context(tmp_path: Path) -> None:
     """A repeated release surface cannot create ambiguous atlas coverage."""
     surface = tmp_path / "surface.json"
@@ -237,6 +280,18 @@ def test_output_surface_mutation_cannot_claim_complete_population(tmp_path: Path
 
     with pytest.raises(FlintChartContractError, match="cells do not match display population"):
         build_atlas_manifest([path], atlas_id="mutated")
+
+
+@pytest.mark.parametrize("field", ["rank", "tie_group"])
+def test_atlas_rejects_output_cells_missing_required_metadata(tmp_path: Path, field: str) -> None:
+    """Atlas inputs must carry explicit null rank and tie-group fields."""
+    surface = build_surface(_payload())
+    surface["cells"][0].pop(field)
+    path = tmp_path / f"missing-{field}.surface.json"
+    write_json(path, surface)
+
+    with pytest.raises(FlintChartContractError, match="must include rank and tie_group"):
+        build_atlas_manifest([path], atlas_id="missing-output-metadata")
 
 
 @pytest.mark.parametrize(

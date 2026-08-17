@@ -9,11 +9,7 @@ VISUAL_TEST_DIR = Path(__file__).resolve().parent
 REPO_ROOT = VISUAL_TEST_DIR.parents[1]
 TESTS_ROOT = REPO_ROOT / "tests"
 SCHEMA_TEST_PATHS = tuple(
-    sorted(
-        path
-        for path in TESTS_ROOT.rglob("test_*.py")
-        if "schema_validation" in path.name
-    )
+    sorted(path for path in TESTS_ROOT.rglob("test_*.py") if "schema_validation" in path.name)
 )
 
 

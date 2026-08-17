@@ -10,6 +10,7 @@ written.
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -31,6 +32,7 @@ REDUCED_PUBLICATION_ATLAS_SCHEMA = "ch7-reduced-publication-atlas.v3"
 DEFAULT_CONFIG = Path("configs/analysis/ch7_evidence_package.v2.yaml")
 PORTFOLIO_CONFIG_PATH = Path("configs/analysis/ch7_worked_example_portfolio.v2.yaml")
 PORTFOLIO_CONFIG_SHA256 = "ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80d74f010"
+V1_PORTFOLIO_CONFIG_PATH = "configs/analysis/ch7_worked_example_portfolio.v1.yaml"
 SOURCE_PACKAGE_SHA256SUMS = "6807fdc9275133365812c8f51f51e057da6054f8dcaf77cb5fa8a32b08c4a87f"
 SOURCE_AUDIT_MEMBER = "audit/campaign_atlas.csv"
 SOURCE_AUDIT_SHA256 = "18768f5cf1d9f360487e9203fa1c538de136aaff240070ae3684b5243c44bc10"
@@ -281,6 +283,13 @@ def verify_v1_source_package(source_package: Path) -> dict[str, Any]:  # noqa: C
     reduced_atlas_sha = _sha256_file(reduced_atlas_path)
     if reduced_atlas_sha != SOURCE_REDUCED_ATLAS_SHA256:
         raise Ch7EvidencePackageV2Error("v1 source reduced atlas digest is not approved")
+    source_manifest = copy.deepcopy(manifest)
+    source_inputs = source_manifest.get("inputs")
+    if isinstance(source_inputs, dict):
+        source_portfolio = source_inputs.get("portfolio_config")
+        if isinstance(source_portfolio, dict):
+            source_portfolio["path"] = V1_PORTFOLIO_CONFIG_PATH
+
     return {
         "package_sha256sums_sha256": sums_sha,
         "manifest_sha256": _sha256_file(source_package / "manifest.json"),
@@ -288,7 +297,9 @@ def verify_v1_source_package(source_package: Path) -> dict[str, Any]:  # noqa: C
         "audit_member_sha256": audit_sha,
         "reduced_atlas_member": SOURCE_REDUCED_ATLAS_MEMBER,
         "reduced_atlas_member_sha256": reduced_atlas_sha,
-        "manifest": manifest,
+        # This is an enriched provenance view; ``manifest_sha256`` above remains the digest of
+        # the untouched frozen source manifest.
+        "manifest": source_manifest,
     }
 
 

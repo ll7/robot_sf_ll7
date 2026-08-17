@@ -77,6 +77,126 @@ def test_predictive_cost_configuration_rejects_unknown_keys() -> None:
         build_predictive_gaussian_human_cost_config({"lateral_sigma": 0.5})
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"enabled": 1}, "enabled must be boolean"),
+        ({"weight": float("nan")}, "weight must be finite"),
+        ({"weight": -1.0}, "weight must be non-negative"),
+        ({"longitudinal_sigma_m": 0.0}, "longitudinal_sigma_m must be positive"),
+        ({"lateral_sigma_m": 0.0}, "lateral_sigma_m must be positive"),
+        ({"forward_speed_gain": -1.0}, "forward_speed_gain must be non-negative"),
+        ({"stationary_heading_rad": float("nan")}, "stationary_heading_rad must be finite"),
+    ],
+)
+def test_predictive_cost_configuration_rejects_invalid_values(
+    kwargs: dict[str, object], message: str
+) -> None:
+    """Non-finite and non-physical tuning values fail closed."""
+
+    with pytest.raises(ValueError, match=message):
+        PredictiveGaussianHumanCostConfig(**kwargs)
+
+
+def test_predictive_cost_configuration_builds_and_serializes() -> None:
+    """Nested configuration parsing preserves explicit JSON-facing values."""
+
+    assert build_predictive_gaussian_human_cost_config(None).enabled is False
+    assert build_predictive_gaussian_human_cost_config({"weight": 2.0}).weight == 2.0
+    config = build_predictive_gaussian_human_cost_config(
+        {
+            "enabled": True,
+            "weight": 1,
+            "longitudinal_sigma_m": 0.7,
+            "lateral_sigma_m": 0.4,
+            "forward_speed_gain": 0.5,
+            "stationary_heading_rad": 0.25,
+        }
+    )
+    assert config.to_dict() == {
+        "enabled": True,
+        "weight": 1.0,
+        "longitudinal_sigma_m": 0.7,
+        "lateral_sigma_m": 0.4,
+        "forward_speed_gain": 0.5,
+        "stationary_heading_rad": 0.25,
+    }
+
+
+@pytest.mark.parametrize("payload", ["invalid", {"enabled": 1}])
+def test_predictive_cost_configuration_rejects_invalid_nested_payload(
+    payload: object,
+) -> None:
+    """Nested planner configuration remains strict about its container and types."""
+
+    with pytest.raises(ValueError):
+        build_predictive_gaussian_human_cost_config(payload)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("positions", "velocities", "message"),
+    [
+        (np.zeros(2), np.zeros((1, 2)), r"shape \(P, 2\)"),
+        (np.zeros((1, 2)), np.zeros((2, 2)), "match pedestrian_positions"),
+        (np.asarray([[np.nan, 0.0]]), np.zeros((1, 2)), "must be finite"),
+    ],
+)
+def test_predictive_cost_rejects_invalid_pedestrian_arrays(
+    positions: np.ndarray, velocities: np.ndarray, message: str
+) -> None:
+    """Pedestrian state must be a finite pair of aligned two-dimensional arrays."""
+
+    with pytest.raises(ValueError, match=message):
+        PredictiveGaussianHumanCost().evaluate(
+            np.asarray([0.0, 0.0]), positions, velocities, time_s=0.0
+        )
+
+
+@pytest.mark.parametrize(
+    ("robot_positions", "time_s", "message"),
+    [
+        (np.zeros((1, 3)), 0.0, r"shape \(2,\) or \(N, 2\)"),
+        (np.asarray([[np.nan, 0.0]]), 0.0, "robot_positions must be finite"),
+        (np.asarray([0.0, 0.0]), -1.0, "time_s must be finite and non-negative"),
+    ],
+)
+def test_predictive_cost_rejects_invalid_robot_inputs(
+    robot_positions: np.ndarray, time_s: float, message: str
+) -> None:
+    """Robot rollout points and prediction time must be finite and shaped."""
+
+    with pytest.raises(ValueError, match=message):
+        PredictiveGaussianHumanCost().evaluate(
+            robot_positions,
+            np.zeros((0, 2)),
+            np.zeros((0, 2)),
+            time_s=time_s,
+        )
+
+
+@pytest.mark.parametrize(
+    ("trajectory", "dt", "message"),
+    [
+        (np.zeros(2), 0.1, r"shape \(T, 2\) or \(N, T, 2\)"),
+        (np.zeros((0, 2)), 0.1, "one or more xy rollout points"),
+        (np.asarray([[np.nan, 0.0]]), 0.1, "robot_positions must be finite"),
+        (np.zeros((1, 2)), 0.0, "dt must be finite and positive"),
+    ],
+)
+def test_predictive_cost_rejects_invalid_trajectory_inputs(
+    trajectory: np.ndarray, dt: float, message: str
+) -> None:
+    """Trajectory evaluation fails closed for invalid shapes, values, and time steps."""
+
+    with pytest.raises(ValueError, match=message):
+        PredictiveGaussianHumanCost().evaluate_trajectory(
+            trajectory,
+            np.zeros((0, 2)),
+            np.zeros((0, 2)),
+            dt=dt,
+        )
+
+
 def test_mppi_enabled_cost_preserves_scalar_batch_parity() -> None:
     """The opt-in cost is included identically in scalar and batched rollouts."""
 

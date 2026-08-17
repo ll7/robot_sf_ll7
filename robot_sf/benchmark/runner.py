@@ -351,6 +351,21 @@ def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
 
+def _planner_metadata_diagnostics(planner: Any) -> dict[str, Any] | None:
+    """Return runtime diagnostics carried by a baseline metadata payload."""
+    metadata_fn = getattr(planner, "get_metadata", None)
+    if not callable(metadata_fn):
+        return None
+    try:
+        metadata = metadata_fn()
+    except Exception:  # pragma: no cover  # noqa: BLE001 - metadata must not break execution
+        return None
+    if not isinstance(metadata, Mapping):
+        return None
+    diagnostics = metadata.get("planner_diagnostics")
+    return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
+
+
 def _planner_runtime_diagnostics(planner: Any) -> dict[str, Any] | None:
     """Return child-process foresight and planner diagnostics as one payload."""
     payload = _planner_foresight_diagnostics(planner) or {}
@@ -362,6 +377,10 @@ def _planner_runtime_diagnostics(planner: Any) -> dict[str, Any] | None:
             diagnostics = None
         if isinstance(diagnostics, Mapping):
             payload["planner_diagnostics"] = dict(diagnostics)
+    else:
+        metadata_diagnostics = _planner_metadata_diagnostics(planner)
+        if metadata_diagnostics is not None:
+            payload["planner_diagnostics"] = metadata_diagnostics
     return payload or None
 
 
@@ -1423,10 +1442,15 @@ def _build_baseline_policy_fn(  # noqa: PLR0913
     policy_fn.close = _close_policy  # type: ignore[attr-defined]
     policy_fn._planner_close = _close_policy  # type: ignore[attr-defined]
     policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
-    if callable(getattr(planner, "diagnostics", None)):
+    has_metadata_diagnostics = isinstance(metadata.get("planner_diagnostics"), Mapping)
+    if step_runner is not None and (
+        callable(getattr(planner, "diagnostics", None)) or has_metadata_diagnostics
+    ):
         policy_fn.diagnostics = (  # type: ignore[attr-defined]
-            step_runner.diagnostics if step_runner is not None else adapter.diagnostics
+            step_runner.diagnostics
         )
+    elif callable(getattr(planner, "diagnostics", None)):
+        policy_fn.diagnostics = adapter.diagnostics  # type: ignore[attr-defined]
 
     return policy_fn
 

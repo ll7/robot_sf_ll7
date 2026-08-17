@@ -2823,6 +2823,51 @@ maps:
   validation:
     status: unchecked
     rule_ids: []
+- map_id: issue_5303_classic_group_crossing_medium_v2
+  path: svg_maps/issue_5303_classic_group_crossing_medium_v2.svg
+  source_sha256: 6ca72854707c8681a413eb931f31d3f9b1ba44d254c0989bbd53aae4d31b5d53
+  role: robot_runtime
+  capabilities:
+    robot_runtime: true
+    pedestrian_runtime: true
+    route_only: false
+    obstacle_source: true
+    benchmark_candidate: false
+  profile: robot_runtime
+  parser_metadata:
+    schema_version: parser-capability-metadata.v1
+    explicit_robot_spawn_zones: 1
+    explicit_robot_goal_zones: 1
+    explicit_ped_spawn_zones: 1
+    explicit_ped_goal_zones: 1
+    parsed_robot_spawn_zones: 1
+    parsed_robot_goal_zones: 1
+    parsed_ped_spawn_zones: 1
+    parsed_ped_goal_zones: 1
+    synthetic_robot_spawn_zones: 0
+    synthetic_robot_goal_zones: 0
+    synthetic_ped_spawn_zones: 0
+    synthetic_ped_goal_zones: 0
+    robot_routes: 1
+    ped_routes: 1
+    obstacle_count: 8
+    bounds_count: 4
+    ped_crowded_zones: 0
+    single_ped_start_markers: 1
+    single_ped_goal_markers: 1
+    single_pedestrian_definitions: 1
+    robot_route_only_mode: false
+    ped_route_only_mode: false
+    has_explicit_robot_runtime_zones: true
+    has_explicit_pedestrian_runtime_zones: true
+    has_robot_runtime_routes: true
+    has_pedestrian_runtime_routes: true
+    has_obstacles: true
+    parser_limitation_codes: []
+  limitations: []
+  validation:
+    status: unchecked
+    rule_ids: []
 - map_id: labeled_example
   path: svg_maps/labeled_example.svg
   source_sha256: 862c979be70fdcabd673b9403069c0aee527b28bb13796ac4e98f77ac9f1882d

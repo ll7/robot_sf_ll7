@@ -852,7 +852,7 @@ def _submission_command(
                 command_args.extend(["--sbatch-arg", arg])
     command = shlex.join(command_args)
     for expression in (results_expr, "$ROBOT_SF_PUBLIC_REPO", "$ROBOT_SF_PRIVATE_OPS"):
-        command = command.replace(shlex.quote(expression), expression, 1)
+        command = command.replace(shlex.quote(expression), expression)
     return command
 
 

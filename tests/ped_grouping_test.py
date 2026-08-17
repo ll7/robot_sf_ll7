@@ -124,6 +124,7 @@ def test_groups_as_lists_cache_invalidates_when_grouping_changes():
     assert after_leave is not after_join
     assert after_leave[-1] == [5]
 
+
 def test_can_remove_entire_group():
     """TODO docstring. Document this function."""
     removed_gid = 0

@@ -356,13 +356,65 @@ def test_policy_obs_uses_observed_pedestrian_payload() -> None:
 
     policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
 
-    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
-    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians_count"].tolist() == [1.0]
     assert original["pedestrians"]["positions"] == [[1.0, 0.0], [5.0, 0.0]]
+
+
+def test_policy_obs_pads_variable_observation_to_fixed_actor_capacity() -> None:
+    """Perception-limited actor counts must preserve fixed learned-policy shapes."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((4, 2), dtype=np.float32),
+            "velocities": np.zeros((4, 2), dtype=np.float32),
+            "count": np.asarray([4.0], dtype=np.float32),
+        },
+        "pedestrians_positions": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_velocities": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_count": np.asarray([4.0], dtype=np.float32),
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[9.0, 9.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    assert policy_obs["pedestrians"]["positions"].shape == (4, 2)
+    assert policy_obs["pedestrians"]["positions"].tolist() == [
+        [9.0, 9.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
+    assert policy_obs["pedestrians_positions"].shape == (4, 2)
+
+
+def test_policy_obs_rejects_observation_overflow() -> None:
+    """Observed actors beyond the learned-policy capacity must fail closed."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((1, 2), dtype=np.float32),
+            "velocities": np.zeros((1, 2), dtype=np.float32),
+        }
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[1.0, 0.0], [2.0, 0.0]],
+            "velocities": [[0.0, 0.0], [0.0, 0.0]],
+        }
+    }
+
+    with pytest.raises(ValueError, match="exceeds policy capacity"):
+        _apply_observed_pedestrians_to_policy_obs(original, perturbation)
 
 
 def test_trace_observation_payload_separates_ground_truth_and_observed() -> None:

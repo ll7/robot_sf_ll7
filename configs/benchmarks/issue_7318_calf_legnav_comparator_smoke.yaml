@@ -1,0 +1,22 @@
+schema_version: calf_legnav_comparator_config.v1
+issue: 7318
+
+# This is a one-seed, one-scenario diagnostic fixture. It is not benchmark evidence.
+candidate: ppo_issue791_best_v1
+candidate_registry: docs/context/policy_search/candidate_registry.yaml
+scenario_matrix: configs/scenarios/sets/issue_3320_occluded_emergence_live_replay.yaml
+scenario_name: issue_2756_occluded_emergence
+stage: smoke
+seed: 111
+horizon: 12
+dt_s: 0.1
+personal_space_radius_m: 1.5
+timeout_seconds: 180
+
+conditions:
+  perfect_perception:
+    ignore_fixture_visibility: true
+  sensor_limited:
+    position_noise_std_m: 0.15
+    position_noise_bound_m: 0.3
+    observation_perturbation_seed: 7318

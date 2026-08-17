@@ -306,6 +306,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
+* **[CALF/LegNav Comparator Diagnostic](./calf_legnav_comparator.md)** - One-seed paired ideal/perception-limited policy smoke with explicit source-transfer and metric-proxy boundaries
 * **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow

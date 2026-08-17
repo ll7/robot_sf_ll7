@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import yaml
 from loguru import logger
 
 try:
@@ -35,6 +34,7 @@ from scripts.training.imitation_env_contract import (
     make_training_contract_env,
     resolve_config_path,
 )
+from scripts.training.train_ppo import _load_expert_training_config_mapping
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -663,9 +663,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def load_ppo_finetuning_config(config_path: Path) -> PPOFineTuningConfig:
-    """Load and parse PPO fine-tuning configuration from YAML."""
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    base_dir = config_path.parent
+    """Load and parse PPO fine-tuning configuration from YAML.
+
+    Fine-tuning variants use the same recursive, deep-merge ``base_config``
+    contract as expert PPO configs. Keeping resolution in the canonical loader
+    ensures nested environment overrides and path-valued fields remain part of
+    the effective launch mapping instead of silently disappearing.
+    """
+    resolved_config_path = config_path.resolve()
+    raw = _load_expert_training_config_mapping(resolved_config_path)
+    base_dir = resolved_config_path.parent
 
     def _resolve_optional_path(name: str) -> Path | None:
         """Resolve an optional config path relative to the config file.

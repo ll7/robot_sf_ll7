@@ -15,6 +15,7 @@ from loguru import logger
 from shapely.geometry import LineString
 from shapely.prepared import prep
 
+from robot_sf.common.math_utils import wrap_angle_pi, wrap_angle_pi_array
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner.predictive_foresight import (
@@ -393,7 +394,7 @@ class SocNavObservationFusion:
         if self._last_heading is None or dt <= 0.0:
             angular_velocity = 0.0
         else:
-            delta = ((wrapped_heading - self._last_heading + np.pi) % (2.0 * np.pi)) - np.pi
+            delta = wrap_angle_pi(wrapped_heading - self._last_heading)
             angular_velocity = float(delta / dt)
         self._last_heading = float(wrapped_heading)
         return np.array([angular_velocity], dtype=np.float32)
@@ -423,7 +424,7 @@ class SocNavObservationFusion:
         fov_degrees = float(getattr(settings, "fov_degrees", 360.0))
         if fov_degrees < 360.0:
             bearings = np.arctan2(rel[:, 1], rel[:, 0])
-            deltas = ((bearings - robot_heading + np.pi) % (2.0 * np.pi)) - np.pi
+            deltas = wrap_angle_pi_array(bearings - robot_heading)
             visible &= np.abs(deltas) <= np.deg2rad(fov_degrees) / 2.0
 
         if bool(getattr(settings, "static_occlusion", False)):
@@ -706,7 +707,7 @@ class SocNavObservationFusion:
         map_size = np.minimum(map_size, position_cap)
 
         # Wrap heading to [-pi, pi] to stay within declared observation bounds
-        wrapped_heading = ((robot_pose[1] + np.pi) % (2 * np.pi)) - np.pi
+        wrapped_heading = wrap_angle_pi(float(robot_pose[1]))
         robot_speed = np.asarray(
             self.simulator.robots[self.robot_index].current_speed, dtype=np.float32
         )

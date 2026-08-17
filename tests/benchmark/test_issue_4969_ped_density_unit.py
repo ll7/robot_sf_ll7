@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from robot_sf.benchmark.cli import cli_main
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 
 if TYPE_CHECKING:
     from pathlib import Path

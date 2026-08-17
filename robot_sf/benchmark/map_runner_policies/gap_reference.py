@@ -11,8 +11,8 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner_policy_common import build_adapter_policy
-from robot_sf.benchmark.map_runner_policy_resolution import _build_socnav_config
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import build_adapter_policy
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import _build_socnav_config
 from robot_sf.benchmark.scenario_belief_policy_hook import (
     BELIEF_MODES,
     DEFAULT_FOV_DEGREES,

@@ -154,7 +154,7 @@
         "robot_sf/benchmark/runner.py:47",
         "robot_sf/benchmark/runner.py:53",
         "robot_sf/benchmark/scenario_generator.py:48",
-        "robot_sf/benchmark/scenario_schema.py:25",
+        "robot_sf/benchmark/scenario/scenario_schema.py:25",
         "robot_sf/benchmark/schema_validator.py:20",
         "robot_sf/benchmark/visualization.py:1191",
         "robot_sf/common/matplotlib_utils.py:62",

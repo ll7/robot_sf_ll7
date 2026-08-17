@@ -64,6 +64,7 @@ from robot_sf.benchmark.constants import (
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
 from robot_sf.benchmark.social_compliance import build_social_compliance_episode_block
+from robot_sf.common.math_utils import wrap_angle_pi_array
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -420,7 +421,7 @@ def _ped_turn_rate_magnitude(
     headings = np.arctan2(ped_vel[..., 1], ped_vel[..., 0])  # (T-1, K)
     heading_delta = np.diff(headings, axis=0)
     # Wrap to [-pi, pi] before dividing by dt.
-    heading_delta = (heading_delta + np.pi) % (2.0 * np.pi) - np.pi
+    heading_delta = wrap_angle_pi_array(heading_delta)
     turn_rate = np.abs(heading_delta / dt)
 
     speed_prev = np.linalg.norm(ped_vel[:-1], axis=2)

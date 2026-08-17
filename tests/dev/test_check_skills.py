@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 def _load_check_skills_module():
@@ -18,6 +21,264 @@ def _load_check_skills_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _documented_handoff(readme: str) -> tuple[dict[str, object], str]:
+    """Extract the README's flat handoff and resolver command blocks."""
+    start_marker = "<!-- handoff.v2-example:start -->"
+    end_marker = "<!-- handoff.v2-example:end -->"
+    start = readme.index(start_marker)
+    end = readme.index(end_marker, start)
+    yaml_start = readme.index("```yaml", start) + len("```yaml")
+    yaml_end = readme.index("```", yaml_start)
+    assert yaml_end < end
+    handoff = yaml.safe_load(readme[yaml_start:yaml_end])
+    assert isinstance(handoff, dict)
+    bash_start = readme.index("```bash", end) + len("```bash")
+    bash_end = readme.index("```", bash_start)
+    return handoff, readme[bash_start:bash_end]
+
+
+def _assert_flat_handoff_contract(handoff: dict[str, object]) -> None:
+    """Validate the documented identity and control fields independently of a resolver checkout."""
+    allowed_fields = {
+        "schema_version",
+        "handoff_type",
+        "task_id",
+        "provider",
+        "mode",
+        "goal",
+        "owned_paths",
+        "forbidden_actions",
+        "required_context",
+        "required_output",
+        "acceptance_gate",
+        "validation_commands",
+        "execution_mode",
+        "dependencies",
+        "budget",
+        "stop_conditions",
+        "side_effect_policy",
+        "max_depth",
+        "sync_barrier",
+    }
+    assert set(handoff) == allowed_fields
+    assert handoff["schema_version"] == "handoff.v2"
+    assert handoff["handoff_type"] == "request"
+    assert handoff["task_id"] == "ROBOTSF-EXAMPLE"
+    assert handoff["provider"] == "opencode_go"
+    assert handoff["mode"] == "issue_implementation"
+    assert handoff["execution_mode"] == "external_runtime"
+    for field in ("task_id", "provider", "mode", "goal"):
+        assert isinstance(handoff[field], str) and handoff[field].strip(), field
+    for field in (
+        "owned_paths",
+        "forbidden_actions",
+        "required_context",
+        "required_output",
+        "acceptance_gate",
+        "validation_commands",
+        "stop_conditions",
+    ):
+        value = handoff[field]
+        assert isinstance(value, list) and value, field
+        assert all(isinstance(item, str) and item.strip() for item in value), field
+    dependencies = handoff["dependencies"]
+    assert isinstance(dependencies, list)
+    assert all(isinstance(item, str) and item.strip() for item in dependencies)
+    required_output = handoff["required_output"]
+    assert isinstance(required_output, list)
+    assert required_output.count("final_status") == 1
+    budget = handoff["budget"]
+    assert isinstance(budget, dict)
+    assert set(budget) == {"runtime_minutes"}
+    assert budget["runtime_minutes"] == 30
+    assert isinstance(budget["runtime_minutes"], int)
+    assert not isinstance(budget["runtime_minutes"], bool)
+    side_effect_policy = handoff["side_effect_policy"]
+    assert isinstance(side_effect_policy, dict)
+    assert set(side_effect_policy) == {"remote_mutation", "local_edits"}
+    assert side_effect_policy == {"remote_mutation": False, "local_edits": True}
+    assert isinstance(side_effect_policy["remote_mutation"], bool)
+    assert isinstance(side_effect_policy["local_edits"], bool)
+    assert handoff["max_depth"] == 0
+    assert isinstance(handoff["max_depth"], int)
+    assert not isinstance(handoff["max_depth"], bool)
+    assert handoff["sync_barrier"] is None
+
+
+def _assert_cli_contract(command_block: str) -> None:
+    """Require only the production identity/head/output flags in the README command."""
+    assert "```" not in command_block
+    expected_fragments = {
+        "--task-id ROBOTSF-EXAMPLE": 1,
+        "--task-class issue_implementation": 1,
+        "--risk R1": 1,
+        '--handoff-file "$HANDOFF_FILE"': 1,
+        '--frozen-head "$TARGET_HEAD"': 1,
+        '--target-repo "$TARGET_REPO"': 1,
+        '--out "${TMPDIR:-/tmp}/robotsf-route-plan.json"': 1,
+    }
+    for fragment, expected_count in expected_fragments.items():
+        assert command_block.count(fragment) == expected_count, fragment
+    for flag in (
+        "--task-id",
+        "--task-class",
+        "--risk",
+        "--handoff-file",
+        "--frozen-head",
+        "--target-repo",
+        "--out",
+    ):
+        assert command_block.count(flag) == 1, flag
+    for redundant_flag in ("--prompt", "--owned-paths", "--validation"):
+        assert redundant_flag not in command_block, redundant_flag
+
+
+def _run_shared_resolver_if_available(
+    handoff: dict[str, object],
+    command_block: str,
+    target_repo: Path,
+    tmp_path: Path,
+) -> None:
+    """Run the documented argv contract only when an explicit resolver checkout is available."""
+    _assert_cli_contract(command_block)
+
+    if "CODEX_ROUTING_REPO" not in os.environ:
+        pytest.skip(
+            "flat handoff contract validated; set CODEX_ROUTING_REPO to run the shared resolver"
+        )
+    routing_repo_value = os.environ["CODEX_ROUTING_REPO"]
+    routing_repo = Path(routing_repo_value).expanduser().resolve()
+    resolver = routing_repo / "scripts/resolve-route.py"
+    assert resolver.is_file(), f"CODEX_ROUTING_REPO resolver missing: {resolver}"
+
+    frozen_head = subprocess.run(
+        ["git", "-C", str(target_repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    handoff_path = tmp_path / "handoff.v2.yaml"
+    handoff_path.write_text(yaml.safe_dump(handoff, sort_keys=False), encoding="utf-8")
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "CODEX_ROUTING_REPO": str(routing_repo),
+            "HANDOFF_FILE": str(handoff_path),
+            "TMPDIR": str(tmp_path),
+        }
+    )
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", command_block],
+        cwd=target_repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    route_plan_path = tmp_path / "robotsf-route-plan.json"
+    artifact = json.loads(route_plan_path.read_text(encoding="utf-8"))
+    assert artifact["schema_version"] == "route-plan.v1"
+    assert artifact["task_id"] == handoff["task_id"]
+    assert artifact["task_class"] == "issue_implementation"
+    assert artifact["risk"] == "R1"
+    assert artifact["repo_head"] == frozen_head
+    assert artifact["handoff_schema_version"] == "handoff.v2"
+    assert artifact["owned_paths"] == handoff["owned_paths"]
+    assert artifact["validation_commands"] == handoff["validation_commands"]
+
+
+def test_shared_route_planner_example_binds_reviewed_execution_contract() -> None:
+    """Parse the flat handoff and bind its identity/control fields to the CLI example."""
+    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+
+    assert '"$ROUTING_REPO/scripts/resolve-route.py"' in readme
+    assert "--task-id ROBOTSF-EXAMPLE" in readme
+    assert "--task-class issue_implementation" in readme
+    assert "--risk R1" in readme
+    assert '--frozen-head "$TARGET_HEAD"' in readme
+    assert '--target-repo "$TARGET_REPO"' in readme
+    assert "python3 ./scripts/resolve-route.py" not in readme
+    handoff, command_block = _documented_handoff(readme)
+    _assert_flat_handoff_contract(handoff)
+    _assert_cli_contract(command_block)
+
+
+def test_shared_route_planner_example_executes_shared_resolver_when_available(
+    tmp_path: Path,
+) -> None:
+    """Run the exact argv contract only with an explicit, deterministic resolver checkout."""
+    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+    target_repo = Path(__file__).parents[2]
+    handoff, command_block = _documented_handoff(readme)
+    _assert_flat_handoff_contract(handoff)
+    _run_shared_resolver_if_available(handoff, command_block, target_repo, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("__unknown__", True),
+        ("schema_version", "handoff.v1"),
+        ("handoff_type", "result"),
+        ("task_id", ""),
+        ("mode", "read_only_review"),
+        ("execution_mode", "in_turn"),
+        ("owned_paths", [123]),
+        ("dependencies", [""]),
+        ("required_output", ["final_status", "final_status"]),
+        ("stop_conditions", []),
+        ("budget", []),
+        ("budget", {"runtime_minutes": "30"}),
+        ("budget", {"runtime_minutes": 30, "repair_loops": 2}),
+        ("side_effect_policy", []),
+        ("side_effect_policy", {"remote_mutation": False, "local_edits": "true"}),
+        (
+            "side_effect_policy",
+            {"remote_mutation": False, "local_edits": True, "unexpected": False},
+        ),
+        ("max_depth", True),
+        ("max_depth", -1),
+        ("sync_barrier", {}),
+    ],
+    ids=[
+        "unknown-top-level-control",
+        "schema-version",
+        "handoff-type",
+        "empty-task-id",
+        "mode",
+        "execution-mode",
+        "non-string-owned-path",
+        "nonempty-dependencies-must-be-strings",
+        "duplicate-final-status",
+        "empty-stop-conditions",
+        "budget-type",
+        "budget-value-type",
+        "budget-unknown-key",
+        "side-effect-policy-type",
+        "side-effect-policy-value-type",
+        "side-effect-policy-unknown-key",
+        "boolean-max-depth",
+        "negative-max-depth",
+        "malformed-sync-barrier",
+    ],
+)
+def test_documented_handoff_rejects_malformed_or_unknown_controls(
+    field: str,
+    value: object,
+) -> None:
+    """Malformed or unknown v2 controls must fail the portable contract validator."""
+    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+    handoff, _ = _documented_handoff(readme)
+    if field == "__unknown__":
+        handoff["unexpected_control"] = value
+    else:
+        handoff[field] = value
+
+    with pytest.raises(AssertionError):
+        _assert_flat_handoff_contract(handoff)
 
 
 def test_read_yaml_fails_closed_for_empty_yaml(tmp_path: Path) -> None:
@@ -94,10 +355,13 @@ Use compact_worktree_snapshot.py and compact_ci_snapshot.py before broad worktre
 Pass ledger snapshot paths to workers, avoid repeating broad state polling, and run
 fresh live checks before issue claim, push, PR publication, label/project mutation,
 or merge-ready decisions.
-Spark sidecar routing supports gpt-5.3-codex-spark for tiny lookup, read-only review,
-docs cross-check, and issue/file surface mapping. Spark prompts must report files inspected,
-exact evidence, uncertainty, and recommended next prompt. Do not use Spark for GitHub mutation
-or shell-executable fallback.
+Resolve the provider/model through the shared model-routing pointer using the phase task class
+and current evidence state; do not select a model locally.
+Use the shared model-routing pointer before dispatching any delegated phase. It owns the current
+native tiers, evidenced escalation rule, and external provider budget alternatives. This skill
+must not duplicate a model inventory or maintain a local sidecar route table. Route selection is
+route evidence only; the controller still reviews artifacts, the diff, and validation locally
+before accepting work.
 """
     errors = check_skills._validate_artifact_first_contract(
         skill_path,
@@ -123,7 +387,7 @@ def test_artifact_first_contract_fails_when_missing_required_artifacts(tmp_path:
     assert any("artifact-first phrase requirement" in e for e in errors)
     assert any("worker-output limit requirement" in e for e in errors)
     assert any("active-ledger requirement" in e for e in errors)
-    assert any("Spark sidecar routing requirement" in e for e in errors)
+    assert any("shared model routing requirement" in e for e in errors)
 
 
 def test_artifact_first_contract_requires_canonical_result_markdown_case(
@@ -173,6 +437,21 @@ The active ledger records only issue number, next action, and cleanup.
     )
 
     assert any("active-ledger requirement" in e for e in errors)
+
+
+def test_active_routing_template_rejects_retired_spark_route(tmp_path: Path) -> None:
+    """Active templates must use the shared resolver instead of retired Spark routing."""
+    check_skills = _load_check_skills_module()
+    check_skills.REPO_ROOT = tmp_path
+    template = tmp_path / "thread-profile.md"
+    template.write_text(
+        "Track Spark usage-limit resets and retry that model after reset.\n",
+        encoding="utf-8",
+    )
+
+    errors = check_skills._validate_active_routing_template(template)
+
+    assert errors == ["thread-profile.md: active routing template contains retired Spark routing"]
 
 
 def test_goal_pr_review_contract_requires_compact_ci_snapshot_terms(tmp_path: Path) -> None:

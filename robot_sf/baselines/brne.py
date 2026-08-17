@@ -38,6 +38,7 @@ from robot_sf.baselines.interface import (
     is_observation_mapping,
     observation_from_mapping,
 )
+from robot_sf.common.math_utils import wrap_angle_pi
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -303,7 +304,7 @@ class BRNEPlanner:
         Returns:
             float: The wrapped angle in radians.
         """
-        return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+        return wrap_angle_pi(angle)
 
     @staticmethod
     def _summarize_control_candidates(

@@ -1,0 +1,10 @@
+{
+  "schema_version": "agent_figure_interpretation_source_fixture.v1",
+  "artifact_kind": "evaluation_artifact",
+  "packet_id": "unsupported_ranking",
+  "source_id": "issue-7030-frozen-figure-a",
+  "claim_boundary": "evaluation artifact only; not benchmark evidence",
+  "denominator_n": 24,
+  "availability_status": "available",
+  "execution_mode": "native"
+}

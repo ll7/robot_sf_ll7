@@ -368,7 +368,7 @@ observation-track metadata; see `model/registry.md` and
 ### One‑liner quality gates (CLI):
 
 ```bash
-uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero && uv run pytest -n auto tests
+uv run ruff check --fix . && uv run ruff format . && uvx ty@0.0.58 check . --exit-zero && uv run pytest -n auto tests
 ```
 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
@@ -2009,7 +2009,7 @@ Examples (copy‑ready):
 - Lint/format: Ruff
   - VS Code task “Ruff: Format and Fix” (keeps repo ruff‑clean with the expanded rule set; document exceptions with comments)
 - Type checking: ty
-  - VS Code task "Type Check (advisory)" (`uvx ty check . --exit-zero`; reports findings while
+  - VS Code task "Type Check (advisory)" (`uvx ty@0.0.58 check . --exit-zero`; reports findings while
     exiting zero for current compatibility)
   - Type findings are useful quality signals and should be fixed when practical, especially in
     substantially touched files or stable contracts such as public interfaces, benchmark schemas,

@@ -37,10 +37,10 @@ def test_vscode_typecheck_tasks_are_labeled_advisory() -> None:
     text = VSCODE_TASKS.read_text(encoding="utf-8")
     tasks = _load_vscode_tasks()
 
-    assert tasks["Type Check (advisory)"] == "uvx ty check . --exit-zero"
+    assert tasks["Type Check (advisory)"] == "uvx ty@0.0.58 check . --exit-zero"
     assert (
         tasks["Check Code Quality (Ruff + advisory ty)"]
-        == "uv run ruff check . && uvx ty check . --exit-zero"
+        == "uv run ruff check . && uvx ty@0.0.58 check . --exit-zero"
     )
     assert '"label": "Type Check",' not in text
     assert '"label": "Check Code Quality",' not in text

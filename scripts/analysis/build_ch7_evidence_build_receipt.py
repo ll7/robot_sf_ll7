@@ -6,8 +6,11 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from jsonschema import ValidationError
+
 from scripts.analysis.ch7_evidence_build_receipt import (
     DEFAULT_RECEIPT,
+    Ch7EvidenceBuildReceiptError,
     build_receipt,
 )
 
@@ -29,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
             output=args.output,
             source_commit=args.source_commit,
         )
-    except Exception as exc:  # noqa: BLE001 - CLI turns every provenance failure into exit 2
+    except (Ch7EvidenceBuildReceiptError, OSError, ValidationError) as exc:
         print(f"ch7 build receipt unavailable: {exc}")
         return 2
     print(

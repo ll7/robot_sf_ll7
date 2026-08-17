@@ -2056,7 +2056,9 @@ def _simulate_episode_with_policy(
             reached_goal_step = t + 1
             break
 
-    robot_policy.force_diagnostics = wrapper.diagnostics  # type: ignore[attr-defined]
+    diagnostics_fn = getattr(wrapper, "diagnostics", None)
+    if callable(diagnostics_fn):
+        robot_policy.force_diagnostics = diagnostics_fn  # type: ignore[attr-defined]
     return (
         robot_pos_traj,
         robot_vel_traj,

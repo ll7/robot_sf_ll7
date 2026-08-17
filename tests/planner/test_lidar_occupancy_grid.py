@@ -13,6 +13,78 @@ from robot_sf.planner.lidar_occupancy_grid import (
     lidar_rays_to_ego_occupancy_grid,
     sensor_fusion_to_grid_route_observation,
 )
+from robot_sf.planner.protocol import LocalPlannerProtocol
+
+
+class _RecordingGridRoute:
+    """Minimal wrapped planner for LiDAR lifecycle contract tests."""
+
+    def __init__(self) -> None:
+        self.reset_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+        self.close_calls = 0
+
+    def reset(self, *args: object, **kwargs: object) -> None:
+        """Record the reset call shape without adding planner behavior."""
+        self.reset_calls.append((args, kwargs))
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return a bounded command for adapter delegation tests."""
+        del observation
+        return 0.25, -0.1
+
+    def close(self) -> None:
+        """Record wrapped-resource cleanup."""
+        self.close_calls += 1
+
+
+class _SeedlessGridRoute:
+    """Legacy wrapped planner whose reset hook has no seed parameter."""
+
+    def __init__(self) -> None:
+        self.reset_calls = 0
+
+    def reset(self) -> None:
+        """Record a seedless reset call."""
+        self.reset_calls += 1
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return a stop command for lifecycle-only tests."""
+        del observation
+        return 0.0, 0.0
+
+
+class _PositionalSeedGridRoute:
+    """Legacy wrapped planner whose seed parameter is positional-only."""
+
+    def __init__(self) -> None:
+        self.reset_seeds: list[int | None] = []
+
+    def reset(self, seed: int | None = None, /) -> None:
+        """Record a positional seed call."""
+        self.reset_seeds.append(seed)
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return a stop command for lifecycle-only tests."""
+        del observation
+        return 0.0, 0.0
+
+
+class _FailingResetGridRoute:
+    """Seed-aware wrapped planner whose reset body raises once per call."""
+
+    def __init__(self) -> None:
+        self.reset_calls = 0
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Raise an implementation error after recording the single invocation."""
+        del seed
+        self.reset_calls += 1
+        raise TypeError("internal reset failure")
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        """Return a stop command for lifecycle-only tests."""
+        del observation
+        return 0.0, 0.0
 
 
 def test_lidar_ray_angles_match_range_sensor_endpoint_convention() -> None:
@@ -101,9 +173,68 @@ def test_lidar_grid_route_adapter_returns_bounded_command_and_diagnostics() -> N
     assert 0.0 <= linear <= 0.9
     assert abs(angular) <= 1.2
     assert diagnostics["status"] == "ok"
+    assert diagnostics["planner_type"] == "LidarOccupancyGridRouteAdapter"
     assert diagnostics["observation_level"] == "lidar_2d"
     assert diagnostics["runtime_inputs"] == ["drive_state", "rays"]
     assert "map" in diagnostics["forbidden_runtime_inputs_not_read"]
+
+
+def test_lidar_grid_route_adapter_satisfies_local_planner_protocol() -> None:
+    """The LiDAR grid adapter must expose the complete local-planner lifecycle."""
+    assert isinstance(
+        LidarOccupancyGridRouteAdapter(grid_route=_RecordingGridRoute()), LocalPlannerProtocol
+    )
+
+
+def test_lidar_grid_route_adapter_reset_preserves_supported_call_shapes() -> None:
+    """Seed-aware and seedless wrapped planners both retain compatible reset behavior."""
+    standard = _RecordingGridRoute()
+    LidarOccupancyGridRouteAdapter(grid_route=standard).reset(seed=17)
+    assert standard.reset_calls == [((), {"seed": 17})]
+
+    seedless = _SeedlessGridRoute()
+    LidarOccupancyGridRouteAdapter(grid_route=seedless).reset(seed=17)
+    assert seedless.reset_calls == 1
+
+    positional = _PositionalSeedGridRoute()
+    LidarOccupancyGridRouteAdapter(grid_route=positional).reset(seed=19)
+    assert positional.reset_seeds == [19]
+
+
+def test_lidar_grid_route_adapter_reset_does_not_retry_internal_type_error() -> None:
+    """A wrapped reset failure must not be invoked twice by compatibility fallback."""
+    wrapped = _FailingResetGridRoute()
+    adapter = LidarOccupancyGridRouteAdapter(grid_route=wrapped)
+
+    with pytest.raises(TypeError, match="internal reset failure"):
+        adapter.reset(seed=17)
+
+    assert wrapped.reset_calls == 1
+
+
+def test_lidar_grid_route_adapter_reset_clears_runtime_diagnostics() -> None:
+    """Reset must clear the last-run status and derived occupancy counters."""
+    adapter = LidarOccupancyGridRouteAdapter(grid_route=_RecordingGridRoute())
+    assert adapter.plan({"drive_state": np.zeros((1, 5), dtype=np.float32)}) == (0.0, 0.0)
+    assert adapter.diagnostics()["status"] == "not_available"
+
+    adapter.reset()
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["status"] == "not_run"
+    assert diagnostics["error"] is None
+    assert diagnostics["occupied_cells"] == 0
+
+
+def test_lidar_grid_route_adapter_close_delegates_once() -> None:
+    """Close must delegate to wrapped resources at most once."""
+    wrapped = _RecordingGridRoute()
+    adapter = LidarOccupancyGridRouteAdapter(grid_route=wrapped)
+
+    adapter.close()
+    adapter.close()
+
+    assert wrapped.close_calls == 1
 
 
 def test_lidar_grid_route_adapter_fails_closed_without_rays() -> None:

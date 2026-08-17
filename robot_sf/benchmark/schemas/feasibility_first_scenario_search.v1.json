@@ -1,0 +1,444 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.invalid/schemas/feasibility_first_scenario_search.v1.json",
+  "title": "Feasibility-first scenario search diagnostic",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_boundary",
+    "evidence_tier",
+    "config_sha256",
+    "seed_manifest",
+    "feasibility",
+    "comparison",
+    "candidates",
+    "governance",
+    "config"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "feasibility_first_scenario_search.v1"
+    },
+    "claim_boundary": {
+      "const": "diagnostic-only fixture protocol: feasibility rejection and risk-feature ordering; no simulator, planner, safety, or benchmark claim"
+    },
+    "evidence_tier": {
+      "const": "diagnostic-only"
+    },
+    "config_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "seed_manifest": {
+      "$ref": "#/$defs/seedManifest"
+    },
+    "feasibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "check_names",
+        "total_candidates",
+        "feasible_candidates",
+        "rejected_candidates",
+        "rejection_counts",
+        "invalid_candidates_excluded_from_safety_denominators"
+      ],
+      "properties": {
+        "check_names": {
+          "const": [
+            "kinematic_reachability",
+            "behavioral_consistency",
+            "geometry_traffic",
+            "simulator_validity"
+          ]
+        },
+        "total_candidates": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "feasible_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejection_counts": {
+          "$ref": "#/$defs/counts"
+        },
+        "invalid_candidates_excluded_from_safety_denominators": {
+          "const": true
+        }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_budget",
+        "criticality_threshold",
+        "existing_adversarial_baseline",
+        "methods",
+        "safety_event_severity"
+      ],
+      "properties": {
+        "sample_budget": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "criticality_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "existing_adversarial_baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "status", "reason", "claim_eligible"],
+          "properties": {
+            "id": {
+              "const": "existing_adversarial_random_sampler.v1"
+            },
+            "status": {
+              "const": "not_executed"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "claim_eligible": {
+              "const": false
+            }
+          }
+        },
+        "methods": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "seeded_uniform",
+            "risk_feedback_hierarchical_value"
+          ],
+          "properties": {
+            "seeded_uniform": {
+              "$ref": "#/$defs/methodSummary"
+            },
+            "risk_feedback_hierarchical_value": {
+              "$ref": "#/$defs/methodSummary"
+            }
+          }
+        },
+        "safety_event_severity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason"],
+          "properties": {
+            "status": {
+              "const": "unavailable"
+            },
+            "reason": {
+              "const": "fixture diagnostic does not execute a simulator"
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "simulator_executed",
+        "benchmark_evidence",
+        "campaign_approval_required",
+        "adapted_from_source_method",
+        "source_transfer_claim"
+      ],
+      "properties": {
+        "simulator_executed": {
+          "const": false
+        },
+        "benchmark_evidence": {
+          "const": false
+        },
+        "campaign_approval_required": {
+          "const": true
+        },
+        "adapted_from_source_method": {
+          "const": true
+        },
+        "source_transfer_claim": {
+          "const": false
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schema_version", "fixture"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_version": {
+          "const": "feasibility_first_scenario_search.v1"
+        },
+        "fixture": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "seedManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sampling_seed",
+        "candidate_seeds",
+        "candidate_ids_in_source_order"
+      ],
+      "properties": {
+        "sampling_seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidate_seeds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "candidate_ids_in_source_order": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "reason", "evidence"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "kinematic_reachability",
+            "behavioral_consistency",
+            "geometry_traffic",
+            "simulator_validity"
+          ]
+        },
+        "status": {
+          "enum": ["pass", "fail", "unavailable"]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["boolean", "number", "string", "null"]
+          }
+        }
+      }
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kinematic_criticality",
+        "controllability_risk",
+        "diversity"
+      ],
+      "properties": {
+        "kinematic_criticality": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "controllability_risk": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "diversity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "scenario_family",
+        "scenario_seed",
+        "control_hash",
+        "checks",
+        "value",
+        "feature_vector",
+        "candidate_controls",
+        "feasible",
+        "rejection_reasons"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "control_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "checks": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "allOf": [
+                {"$ref": "#/$defs/check"},
+                {"properties": {"name": {"const": "kinematic_reachability"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/check"},
+                {"properties": {"name": {"const": "behavioral_consistency"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/check"},
+                {"properties": {"name": {"const": "geometry_traffic"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/check"},
+                {"properties": {"name": {"const": "simulator_validity"}}}
+              ]
+            }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "value": {
+          "$ref": "#/$defs/value"
+        },
+        "feature_vector": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        },
+        "candidate_controls": {
+          "type": "object"
+        },
+        "feasible": {
+          "type": "boolean"
+        },
+        "rejection_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "methodSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected_candidate_ids",
+        "selected_count",
+        "valid_scenario_rate",
+        "discovery_yield",
+        "unique_scenario_families",
+        "mean_kinematic_criticality",
+        "mean_controllability_risk",
+        "mean_diversity",
+        "rejected_count",
+        "rejection_reasons"
+      ],
+      "properties": {
+        "selected_candidate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "selected_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "valid_scenario_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "discovery_yield": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unique_scenario_families": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mean_kinematic_criticality": {
+          "type": ["number", "null"]
+        },
+        "mean_controllability_risk": {
+          "type": ["number", "null"]
+        },
+        "mean_diversity": {
+          "type": ["number", "null"]
+        },
+        "rejected_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejection_reasons": {
+          "$ref": "#/$defs/counts"
+        }
+      }
+    }
+  }
+}

@@ -423,15 +423,14 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     assert pyproject["project"]["scripts"]["robot-sf-carla-replay-diagnostics"] == (
         "scripts.carla_bridge.diagnose_replay_semantics:main"
     )
-    hatch_tool = (
-        pyproject.get("tool", {}).get("hatchling") or pyproject.get("tool", {}).get("hatch")
+    hatch_tool = pyproject.get("tool", {}).get("hatchling") or pyproject.get("tool", {}).get(
+        "hatch"
     )
     assert hatch_tool is not None
     wheel_packages = hatch_tool["build"]["targets"]["wheel"]["packages"]
-    assert (
-        {"include": "robot_sf_carla_bridge"} in wheel_packages
-        or "robot_sf_carla_bridge" in wheel_packages
-    )
+    assert {
+        "include": "robot_sf_carla_bridge"
+    } in wheel_packages or "robot_sf_carla_bridge" in wheel_packages
     sdist_target = hatch_tool["build"]["targets"]["sdist"]
     sdist_includes = sdist_target.get("include", []) + sdist_target.get("only-include", [])
     assert "/robot_sf_carla_bridge" in sdist_includes or "robot_sf_carla_bridge" in sdist_includes

@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from typing import Any
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.ranking import compute_ranking, format_csv, format_markdown
 from robot_sf.benchmark.tie_aware_ranking import (
+    TieAwareRankingError,
+    _intervals_overlap_or_contact,
+    _normalise_item,
     build_tie_aware_ranking,
     render_tie_aware_summary,
 )
@@ -77,6 +82,25 @@ def test_intervals_separate_strict_order_from_non_identifiability() -> None:
     assert middle_low["reason"] == "interval_overlap_or_contact"
     assert high_low["relation"] == "non_identifiable"
     assert high_low["reason"] == "no_approved_pairwise_comparison_for_disjoint_marginal_intervals"
+
+
+def test_interval_guard_rejects_missing_bounds_fail_closed() -> None:
+    """Malformed internal interval state raises the contract error explicitly."""
+    item = _normalise_item(
+        {
+            "key": "item",
+            "score": 1.0,
+            "uncertainty": {"low": 0.5, "high": 1.5, "source": "fixture"},
+        },
+        0,
+    )
+    incomplete = replace(item, uncertainty_low=None)
+
+    with pytest.raises(
+        TieAwareRankingError,
+        match="interval comparison requires both uncertainty bounds",
+    ):
+        _intervals_overlap_or_contact(incomplete, item)
 
 
 def test_missing_support_and_excluded_rows_are_incomparable() -> None:

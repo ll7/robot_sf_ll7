@@ -165,6 +165,40 @@ def test_issue_forms_cover_common_backlog_lanes() -> None:
             assert marker in serialized, f"missing marker {marker!r} in {form_name}"
 
 
+def test_research_templates_use_canonical_evidence_vocabularies() -> None:
+    """Keep research templates aligned with the #1512 grade and tier enums."""
+
+    research_text = (TEMPLATE_DIR / "research.md").read_text(encoding="utf-8")
+    assert "evidence_grade:" in research_text
+    assert "evidence_tier:" in research_text
+    assert "observed, inferred, or proposal" in research_text
+
+    form = _load_form(TEMPLATE_DIR / "research-validation.yml")
+    fields = {
+        item["id"]: item
+        for item in form["body"]
+        if isinstance(item, dict) and "id" in item
+    }
+    assert fields["evidence_grade"]["attributes"]["options"] == [
+        "observed",
+        "inferred",
+        "proposal",
+    ]
+    assert fields["evidence_tier"]["attributes"]["options"] == [
+        "idea",
+        "launch_packet",
+        "preflight_valid",
+        "smoke",
+        "nominal",
+        "stress",
+        "full_matrix",
+        "analysis_only",
+        "synthesis",
+        "paper_grade",
+        "blocked",
+    ]
+
+
 def test_issue_form_config_keeps_existing_templates_available() -> None:
     """Verify adding issue forms does not disable existing Markdown templates."""
 

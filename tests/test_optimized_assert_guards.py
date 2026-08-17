@@ -21,6 +21,7 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
     import robot_sf.nav.svg_map_parser as svg
     from robot_sf.planner.dwa import DWAPlannerAdapter
+    from robot_sf.planner.guarded_ppo import GuardedPPOAdapter
     from robot_sf.planner.predictive_mppi import (
         PredictiveMPPIAdapter,
         build_predictive_mppi_config,
@@ -168,6 +169,13 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
         lambda: risk_dwa._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
+    guarded_ppo = GuardedPPOAdapter()
+    expect(
+        "guarded_ppo_obstacle_clearance_observation",
+        ValueError,
+        "Guarded PPO obstacle clearance requires observation when grid_payload is absent",
+        lambda: guarded_ppo._min_obstacle_clearance(np.zeros(2, dtype=float)),
+    )
 
     original_torch = socnav.torch
     planner = socnav.PredictionPlannerAdapter.__new__(socnav.PredictionPlannerAdapter)
@@ -257,6 +265,7 @@ _EXPECTED_MARKERS = (
     "PASS nmpc_social_occupancy_observation: ValueError",
     "PASS mppi_social_obstacle_clearance_observation: ValueError",
     "PASS risk_dwa_obstacle_clearance_observation: ValueError",
+    "PASS guarded_ppo_obstacle_clearance_observation: ValueError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
     "PASS route_goal: RuntimeError",
@@ -278,6 +287,7 @@ _EXPECTED_MESSAGES = (
     "NMPC Social occupancy cost requires observation when grid_payload is absent",
     "MPPI Social obstacle clearance requires observation when grid_payload is absent",
     "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
+    "Guarded PPO obstacle clearance requires observation when grid_payload is absent",
     "PyTorch is required for predictive model inference but is not available",
     "None start",
     "None goal",

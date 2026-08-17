@@ -20,7 +20,9 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
-from robot_sf.benchmark.map_runner_policy_resolution import _prediction_planner_metadata_overrides
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _prediction_planner_metadata_overrides,
+)
 
 AdapterBuilder: TypeAlias = Callable[[dict[str, Any], Any, dict[str, Any]], Any]  # noqa: UP040
 MetadataMutator: TypeAlias = Callable[[dict[str, Any], dict[str, Any]], None]  # noqa: UP040

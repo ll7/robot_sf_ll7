@@ -240,7 +240,7 @@ planner_roster:
       estimand_type: zero_shot_ood_robustness
       retraining_status: none_zero_shot_eval_only
       command_adapter_contract:
-        runtime_adapter: robot_sf.benchmark.map_runner_policy_actions.ppo_action_to_unicycle
+        runtime_adapter: robot_sf.benchmark.map_runner_policies.map_runner_policy_actions.ppo_action_to_unicycle
         configured_action_space: unicycle
         output_command_space: unicycle_vw
         normalization: none_physical_units

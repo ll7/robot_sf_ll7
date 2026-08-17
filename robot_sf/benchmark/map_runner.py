@@ -21,7 +21,6 @@ from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.sac import SACPlanner
 from robot_sf.baselines.sicnav import SICNavPlanner, build_sicnav_config
 from robot_sf.benchmark import map_runner_episode as _map_runner_episode_module
-from robot_sf.benchmark import map_runner_policy_resolution as _policy_resolution
 from robot_sf.benchmark import planner_command_contract as planner_commands
 from robot_sf.benchmark.algorithm_metadata import (
     enrich_algorithm_metadata,
@@ -134,29 +133,32 @@ from robot_sf.benchmark.map_runner_policies import gap_reference as _gap_referen
 from robot_sf.benchmark.map_runner_policies import goal as _goal_policy_builder
 from robot_sf.benchmark.map_runner_policies import group_avoidance as _group_avoidance_builder
 from robot_sf.benchmark.map_runner_policies import hybrid_global_rl as _hybrid_global_rl_builder
+from robot_sf.benchmark.map_runner_policies import (
+    map_runner_policy_resolution as _policy_resolution,
+)
 from robot_sf.benchmark.map_runner_policies import registry as _policy_builder_registry
 from robot_sf.benchmark.map_runner_policies import rule_and_grid as _rule_and_grid_builder
 from robot_sf.benchmark.map_runner_policies import safety_barrier as _safety_barrier_builder
 from robot_sf.benchmark.map_runner_policies import socnav_family as _socnav_family_builder
-from robot_sf.benchmark.map_runner_policy_actions import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     ppo_action_to_unicycle as _ppo_action_to_unicycle_impl,
 )
-from robot_sf.benchmark.map_runner_policy_actions import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_actions import (
     update_adapter_impact_metrics as _update_adapter_impact_metrics,
 )
-from robot_sf.benchmark.map_runner_policy_common import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import (
     build_adapter_policy as _build_adapter_policy,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     apply_direct_world_velocity_metadata as _apply_direct_world_velocity_metadata,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     attach_planner_reset as _attach_planner_reset,
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     holonomic_world_velocity_command as _holonomic_world_velocity_command,
 )
 from robot_sf.benchmark.map_runner_profile_metadata import (

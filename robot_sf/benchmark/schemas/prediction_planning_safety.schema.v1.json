@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/prediction_planning_safety.schema.v1.json",
+  "title": "Robot SF Prediction/Planning/Runtime Safety Diagnostic (v1)",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "evidence_tier",
+    "hard_floor_m",
+    "coverage_target",
+    "split_provenance",
+    "prediction_coverage",
+    "lanes",
+    "same_seed_comparison",
+    "fixture_case_counts",
+    "provenance",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "prediction_planning_safety.v1"
+    },
+    "evidence_tier": {
+      "const": "smoke/diagnostic"
+    },
+    "hard_floor_m": {
+      "type": "number",
+      "minimum": 0
+    },
+    "coverage_target": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1
+    },
+    "split_provenance": {
+      "type": "object",
+      "required": [
+        "fit_trace_ids",
+        "calibration_trace_ids",
+        "evaluation_trace_ids",
+        "pairwise_disjoint",
+        "identity_leakage_rejected"
+      ],
+      "properties": {
+        "fit_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "calibration_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "evaluation_trace_ids": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "pairwise_disjoint": {"const": true},
+        "identity_leakage_rejected": {"const": true}
+      },
+      "additionalProperties": true
+    },
+    "prediction_coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "horizon_step",
+          "calibration_count",
+          "evaluation_count",
+          "covered_count",
+          "miss_count",
+          "radius_status",
+          "coverage_target",
+          "status"
+        ],
+        "properties": {
+          "horizon_step": {"type": "integer", "minimum": 0},
+          "calibration_count": {"type": "integer", "minimum": 0},
+          "evaluation_count": {"type": "integer", "minimum": 0},
+          "covered_count": {"type": "integer", "minimum": 0},
+          "miss_count": {"type": "integer", "minimum": 0},
+          "radius_m": {"type": ["number", "null"], "minimum": 0},
+          "radius_status": {"enum": ["finite", "infinite", "unavailable"]},
+          "coverage_target": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1
+          },
+          "empirical_coverage": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "status": {"enum": ["available", "under_covered", "unavailable"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "lane_id",
+          "trace_count",
+          "unavailable_fields",
+          "event_counts"
+        ],
+        "properties": {
+          "lane_id": {"enum": ["baseline", "uncertainty_aware"]},
+          "trace_count": {"type": "integer", "minimum": 0},
+          "collision_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "near_miss_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "path_efficiency_mean": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+          "pedestrian_disruption_mean": {"type": ["number", "null"], "minimum": 0},
+          "unnecessary_braking_rate": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1
+          },
+          "unavailable_fields": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "event_counts": {
+            "type": "object",
+            "additionalProperties": {"type": "integer", "minimum": 0}
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "same_seed_comparison": {
+      "type": "object"
+    },
+    "fixture_case_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

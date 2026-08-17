@@ -282,10 +282,15 @@ def test_workflow_fails_closed_for_source_heads_and_review_mutations() -> None:
         "labeled",
         "unlabeled",
         "synchronize",
+        "edited",
         "review_requested",
         "review_request_removed",
     ):
         assert activity in workflow
+    pull_request_events = workflow.split("  pull_request:\n", maxsplit=1)[1].split(
+        "  pull_request_review:\n", maxsplit=1
+    )[0]
+    assert "      - edited\n" in pull_request_events
     for activity in ("submitted", "edited", "dismissed"):
         assert activity in workflow
     assert "issue_comment:" in workflow
@@ -338,6 +343,41 @@ def test_review_only_current_carrier_is_authoritative() -> None:
     }
 
     assert has_current_accepted_gate_verdict(pr, FULL_SHA) is True
+
+
+@pytest.mark.parametrize("state", ["CHANGES_REQUESTED", "PENDING"])
+def test_non_authoritative_review_state_cannot_authorize_current_head(state: str) -> None:
+    """A requested-change or pending review revokes its accepted carrier."""
+    pr = {
+        "reviews": [
+            {
+                "state": state,
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "submittedAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_dismissed_review_without_body_is_a_revocation_tombstone() -> None:
+    """A malformed dismissed review cannot leave an older acceptance live."""
+    pr = {
+        "reviews": [
+            {
+                "state": "DISMISSED",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "authorAssociation": "OWNER",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
 
 
 def test_dismissed_review_cannot_authorize_the_current_head() -> None:
@@ -398,6 +438,28 @@ def test_updated_timestamp_orders_an_edited_carrier_after_submission() -> None:
                 "body": "gate-verdict: accepted without an exact-head trailer",
             }
         ],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_updated_comment_timestamp_orders_an_edited_carrier_after_creation() -> None:
+    """An edited malformed comment supersedes an older accepted comment."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+            {
+                "createdAt": "2026-08-17T09:00:00Z",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": "gate-verdict: accepted without an exact-head trailer",
+            },
+        ],
+        "reviews": [],
     }
 
     assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False

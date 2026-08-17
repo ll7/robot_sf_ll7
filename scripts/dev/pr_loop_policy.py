@@ -231,6 +231,18 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
 
 
 _TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER"}
+_REVOKING_REVIEW_STATES = {
+    "CHANGES_REQUESTED",
+    "DISMISSED",
+    "PENDING",
+    "REQUEST_CHANGES",
+}
+_KNOWN_REVIEW_STATES = {
+    "",
+    "APPROVED",
+    "COMMENTED",
+    *_REVOKING_REVIEW_STATES,
+}
 
 
 def _carrier_timestamp(entry: dict[str, Any]) -> str:
@@ -264,6 +276,28 @@ def _carrier_timestamp_value(value: str) -> float | None:
     return parsed.timestamp()
 
 
+def _carrier_review_state(entry: dict[str, Any], key: str) -> tuple[str, bool, bool]:
+    """Return normalized review state plus revocation/validity flags."""
+    state = str(entry.get("state") or entry.get("reviewState") or "").upper()
+    revoked = key == "reviews" and state in _REVOKING_REVIEW_STATES
+    invalid = key == "reviews" and state not in _KNOWN_REVIEW_STATES
+    return state, revoked, invalid
+
+
+def _carrier_body(
+    entry: dict[str, Any], *, marker: re.Pattern[str], revoked: bool
+) -> str | None:
+    """Return a valid authority body, retaining bodyless revocation tombstones."""
+    body = entry.get("body")
+    if not isinstance(body, str):
+        return "" if revoked else None
+    if not body:
+        return "" if revoked else None
+    if not revoked and not marker.search(body):
+        return None
+    return body
+
+
 def _raw_authority_carriers(
     pr: dict[str, Any],
     *,
@@ -293,17 +327,19 @@ def _raw_authority_carriers(
             ).upper()
             if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
                 continue
-            state = str(entry.get("state") or "").upper()
-            body = entry.get("body")
-            if not isinstance(body, str):
-                continue
-            if not body or (state != "DISMISSED" and not marker.search(body)):
+            state, review_state_revoked, review_state_invalid = _carrier_review_state(
+                entry, key
+            )
+            body = _carrier_body(entry, marker=marker, revoked=review_state_revoked)
+            if body is None:
                 continue
             timestamp = _carrier_timestamp(entry)
             carriers.append(
                 {
                     "body": body,
                     "state": state,
+                    "review_state_revoked": review_state_revoked,
+                    "review_state_invalid": review_state_invalid,
                     "timestamp": timestamp,
                     "timestamp_value": _carrier_timestamp_value(timestamp),
                     "sequence": sequence,
@@ -451,7 +487,9 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
         ):
             return False
         latest_raw = raw_carriers[-1]
-        if latest_raw.get("state") == "DISMISSED":
+        if latest_raw.get("review_state_revoked") or latest_raw.get(
+            "review_state_invalid"
+        ):
             return False
         return any(
             match.group(1).lower() == head_sha.lower()

@@ -18,10 +18,10 @@ name: Merge Queue Gate
 # emitted to the job summary and stdout.
 #
 # Source-PR runs are fail-closed authority checks as well as merge-group checks.
-# They are refreshed on source-head, label, reviewer-request, review-state, and
-# issue-comment mutations. The live snapshot reads both trusted comments and
-# reviews, while the direct merge authority performs the same preflight
-# immediately before CAS.
+# They are refreshed on source-head, PR metadata, label, reviewer-request,
+# review-state, and issue-comment mutations. The live snapshot reads both
+# trusted comments and reviews, while the direct merge authority performs the
+# same preflight immediately before CAS.
 # To activate this behavior, add this job's status check ("Merge Queue Gate /
 # merge-queue-gate") to the merge queue's required status checks,
 # enable "Only merge non-failing pull requests", and enable "Require
@@ -41,6 +41,7 @@ on:
       - labeled
       - unlabeled
       - synchronize
+      - edited
       - review_requested
       - review_request_removed
   pull_request_review:

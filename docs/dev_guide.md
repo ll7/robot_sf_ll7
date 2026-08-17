@@ -580,14 +580,12 @@ before the queue auto-merges a PR:
 
 - **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
   the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
-  checkout credentials disabled; enforces the required check fail-closed at queue-time on
-  `merge_group`, and publishes non-blocking source-PR and `workflow_dispatch` audits). Source-PR
-  audits refresh when `merge-ready` is added or removed and when a labeled source head changes.
-  They preserve a truthful failed `passed` value and reasons in their audit while exiting zero, so
-  admission readiness is not misreported as failing implementation CI. If a source-head base
-  predates this gate file, the run records a notice and skips evaluation so the bootstrap PR can
-  merge; a queue-time run fails closed when the trusted implementation is unavailable. The
-  queue-time invocation independently validates the synthetic merge group.
+  checkout credentials disabled; enforces the gate fail-closed for source-PR and `merge_group`
+  events, and supports explicit `workflow_dispatch` audits). Source-PR runs refresh on source-head,
+  PR metadata, label, reviewer-request, review-state, and issue-comment mutations, and a failed
+  admission audit fails the status check with machine-readable reasons. If the trusted base does
+  not contain the gate implementation, the job fails closed instead of silently skipping the
+  audit. The queue-time invocation independently validates the synthetic merge group.
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer, and a current
@@ -615,7 +613,8 @@ before the queue auto-merges a PR:
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 
-**Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
+**Required maintainer toggle (cannot be done from a worktree).** The gate becomes a merge-admission
+control only after
 a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
 required status checks, enables **Only merge non-failing pull requests** (`ALLGREEN`), and enables
 **Require conversation resolution before merging** in the branch-protection rules for `main`
@@ -623,9 +622,8 @@ required status checks, enables **Only merge non-failing pull requests** (`ALLGR
 fails closed if the queue is configured as `HEADGREEN`. GitHub does not reliably create a fresh
 source-head Actions check when a reviewer resolves or reopens a thread; requiring conversation
 resolution therefore makes the gate's no-unresolved-threads condition binding at merge time.
-The source-PR audit is observational and is deliberately not a required status check; exact-head
-review evidence and all other admission conditions are re-evaluated by the fail-closed
-`merge_group` run.
+The source-PR run is also fail-closed, but exact-head review evidence and all other admission
+conditions are re-evaluated by the fail-closed `merge_group` run.
 Until these toggles are applied, the workflow does not provide the queue-side contract; the
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent

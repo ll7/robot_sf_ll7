@@ -134,3 +134,23 @@ source-row checksum. The v2 manifest publishes the `terminated`-to-`timeout`
 terminal-label mapping and `SHA256SUMS` covers the generated payload. The v2
 package remains `not_admitted`; a maintainer-owned
 `ch7-evidence-admission.v2` receipt is required before paper-facing use.
+
+### Outcome-free admission diagnostic
+
+Before domain review and durable source retrieval are available, validate a
+generated package without creating or accepting a receipt:
+
+```bash
+uv run python scripts/analysis/verify_ch7_evidence_admission_v2.py \
+  --package <package> \
+  --check-only
+```
+
+The command verifies the blocked manifest schema and payload checksums, reports
+the unresolved domain, receipt, and #7042 metric gates, and prints a
+receipt-shaped template with unresolved approval, source-registry, and
+retrieval fields. The template is explicitly `not_a_receipt` and is rejected
+by the admission schema; no `admission/receipt.json`, empirical outcome, or
+promotion decision is written. Run the command with `--receipt <receipt>` only
+after a maintainer-owned receipt exists and the package has independently
+crossed the domain and metric gates.

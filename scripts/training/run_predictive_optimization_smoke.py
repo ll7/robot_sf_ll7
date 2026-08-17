@@ -87,6 +87,9 @@ def _git_commit() -> str:
 
 def _validate_fixture(fixture: dict[str, Any]) -> None:
     """Validate the deterministic fixture dimensions."""
+    dataset_id = fixture.get("dataset_id")
+    if not isinstance(dataset_id, str) or not dataset_id.strip():
+        raise ValueError("fixture.dataset_id must be a non-empty string")
     _int(fixture.get("seed"), label="fixture.seed", minimum=0)
     _int(fixture.get("samples"), label="fixture.samples", minimum=64)
     _int(fixture.get("max_agents"), label="fixture.max_agents", minimum=1)
@@ -141,6 +144,36 @@ def _validate_arm(arm: dict[str, Any]) -> None:
     _int(arm.get("prefetch_factor"), label=f"arms[{arm_id}].prefetch_factor", minimum=1)
 
 
+def _validate_arm_semantics(arm: dict[str, Any]) -> None:
+    """Ensure each named arm changes only the flags declared by the contract."""
+    expected = {
+        "fp32_control": {
+            "num_workers": 0,
+            "pin_memory": False,
+            "persistent_workers": False,
+            "amp": False,
+        },
+        "fp32_loader": {
+            "num_workers": 2,
+            "pin_memory": True,
+            "persistent_workers": True,
+            "amp": False,
+        },
+        "amp_loader": {
+            "num_workers": 2,
+            "pin_memory": True,
+            "persistent_workers": True,
+            "amp": True,
+        },
+    }
+    arm_id = str(arm["id"])
+    for field, expected_value in expected[arm_id].items():
+        if arm[field] != expected_value:
+            raise ValueError(
+                f"arms[{arm_id}].{field} must be {expected_value!r}, got {arm[field]!r}"
+            )
+
+
 def _validate_config(config: dict[str, Any]) -> None:
     """Validate the frozen three-arm comparison contract."""
     if config.get("schema_version") != _CONFIG_SCHEMA:
@@ -158,7 +191,9 @@ def _validate_config(config: dict[str, Any]) -> None:
     if arm_ids != {"fp32_control", "fp32_loader", "amp_loader"}:
         raise ValueError("arms must contain exactly fp32_control, fp32_loader, and amp_loader")
     for arm_raw in arms:
-        _validate_arm(_mapping(arm_raw, label="arm"))
+        arm = _mapping(arm_raw, label="arm")
+        _validate_arm(arm)
+        _validate_arm_semantics(arm)
     if not any(_bool(_mapping(arm, label="arm").get("amp"), label="arm.amp") for arm in arms):
         raise ValueError("one arm must request AMP")
 
@@ -186,7 +221,7 @@ def _write_fixture(*, fixture: dict[str, Any], output_dir: Path) -> dict[str, An
     )
     manifest = {
         "schema_version": "predictive-training-fixture.v1",
-        "dataset_id": "issue_7254_predictive_fixture_v1",
+        "dataset_id": str(fixture["dataset_id"]),
         "generator": "scripts/training/run_predictive_optimization_smoke.py",
         "seed": seed,
         "arrays": {
@@ -276,18 +311,16 @@ def _arm_training_args(*, config: dict[str, Any], arm: dict[str, Any]) -> list[s
 def _finite_history(summary: dict[str, Any]) -> bool:
     """Return whether all required metric/timing fields are finite."""
     history = summary.get("history")
-    if not isinstance(history, list) or not history:
+    required_fields = (*_METRICS, *_TIMING_FIELDS, "train_steps", "val_steps")
+    if (
+        not isinstance(history, list)
+        or not history
+        or any(not isinstance(row, dict) for row in history)
+    ):
         return False
     return all(
-        math.isfinite(float(row[field]))
+        all(field in row and math.isfinite(float(row[field])) for field in required_fields)
         for row in history
-        if isinstance(row, dict)
-        for field in (*_METRICS, *_TIMING_FIELDS, "train_steps", "val_steps")
-        if field in row
-    ) and all(
-        all(field in row for field in (*_METRICS, *_TIMING_FIELDS, "train_steps", "val_steps"))
-        for row in history
-        if isinstance(row, dict)
     )
 
 

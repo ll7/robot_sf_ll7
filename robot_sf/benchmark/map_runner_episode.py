@@ -71,10 +71,10 @@ from robot_sf.benchmark.map_runner_native_command import (
     native_command_metadata_for_record,
 )
 from robot_sf.benchmark.map_runner_observations import normalize_xy_rows as _normalize_xy_rows
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
-from robot_sf.benchmark.map_runner_policy_resolution import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     _apply_planner_selector_v2_context,
     _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,

@@ -14,7 +14,7 @@
     "input_hashes": {
       "fixtures/flint/replay/canonical_report.json": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
     },
-    "durability": "durable_pinned"
+    "durability": "synthetic_fixture"
   },
   "display_population": [
     {"planner_key": "ppo", "scenario_family": "doorway"},

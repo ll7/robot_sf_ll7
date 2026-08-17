@@ -644,3 +644,91 @@ def test_maybe_encode_video_swallow_value_errors(
     )
 
     assert "video" not in record
+
+
+def test_runtime_diagnostics_helpers_cover_metadata_and_public_paths() -> None:
+    """Runtime diagnostics helpers should preserve public and metadata payloads."""
+
+    class _PublicPlanner:
+        def foresight_diagnostics(self) -> dict[str, object]:
+            return {"model_loaded": True}
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"planner_type": "public", "fallback": False}
+
+    class _MetadataPlanner:
+        def get_metadata(self) -> dict[str, object]:
+            return {
+                "planner_diagnostics": {
+                    "planner_type": "metadata",
+                    "fallback": True,
+                }
+            }
+
+    public = runner_mod._planner_runtime_diagnostics(_PublicPlanner())
+    assert public == {
+        "model_loaded": True,
+        "planner_diagnostics": {"planner_type": "public", "fallback": False},
+    }
+
+    metadata = runner_mod._planner_runtime_diagnostics(_MetadataPlanner())
+    assert metadata == {"planner_diagnostics": {"planner_type": "metadata", "fallback": True}}
+
+
+@pytest.mark.parametrize(
+    "planner",
+    [
+        SimpleNamespace(),
+        SimpleNamespace(get_metadata=lambda: None),
+        SimpleNamespace(get_metadata=lambda: {"other": "value"}),
+    ],
+)
+def test_metadata_diagnostics_helper_fails_closed_for_missing_payloads(planner: object) -> None:
+    """Missing or malformed metadata diagnostics should not break the worker."""
+    assert runner_mod._planner_metadata_diagnostics(planner) is None
+
+
+def test_metadata_diagnostics_helper_fails_closed_on_metadata_error() -> None:
+    """Metadata access errors should be treated as unavailable diagnostics."""
+
+    class _BrokenMetadataPlanner:
+        def get_metadata(self) -> object:
+            raise RuntimeError("metadata unavailable")
+
+    assert runner_mod._planner_metadata_diagnostics(_BrokenMetadataPlanner()) is None
+
+
+def test_runtime_diagnostics_helper_fails_closed_on_public_error() -> None:
+    """Public diagnostics errors should not abort a planner worker."""
+
+    class _BrokenPlanner:
+        def diagnostics(self) -> object:
+            raise ValueError("diagnostics unavailable")
+
+    assert runner_mod._planner_runtime_diagnostics(_BrokenPlanner()) is None
+
+
+def test_runtime_diagnostics_normalization_marks_fallback_and_splits_worker_payload() -> None:
+    """Fallback metadata and child-process diagnostics should remain observable."""
+    metadata: dict[str, object] = {"status": "ok"}
+    runner_mod._attach_runtime_diagnostics(
+        metadata,
+        "planner_diagnostics",
+        {"fallback": True, "fallback_reason": "inverse-square"},
+        fallback_planner_type="FastPysfWrapper",
+    )
+    assert metadata["status"] == "fallback"
+    assert metadata["fallback_reason"] == "inverse-square"
+    assert metadata["planner_diagnostics"]["fallback"] is True  # type: ignore[index]
+
+    process = runner_mod._PlannerStepProcess.__new__(runner_mod._PlannerStepProcess)
+    process._latest_foresight_diagnostics = None
+    process._latest_planner_diagnostics = None
+    process._set_runtime_diagnostics(
+        {
+            "model_loaded": False,
+            "planner_diagnostics": {"fallback": True},
+        }
+    )
+    assert process.foresight_diagnostics() == {"model_loaded": False}
+    assert process.diagnostics() == {"fallback": True}

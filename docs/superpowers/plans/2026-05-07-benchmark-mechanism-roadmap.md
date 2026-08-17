@@ -503,7 +503,7 @@ place the bullet near the other h500 notes (`issue_1044_h500_followup_benchmark_
 note's handoff:
 
 ```markdown
-* [Issue #1049 H500 Mechanism Pilot](issue_1049_h500_mechanism_pilot.md)
+* [Issue #1049 H500 Mechanism Pilot](../../context/issue_1049_h500_mechanism_pilot.md)
   records the selected fixed-vs-h500 trace cells, evidence commands, mechanism interpretation, and
   follow-up boundaries for the benchmark-mechanism roadmap.
 ```

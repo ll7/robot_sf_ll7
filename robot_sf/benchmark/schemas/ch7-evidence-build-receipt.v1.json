@@ -1,0 +1,461 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.example/schemas/ch7-evidence-build-receipt.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_hash", "payload"],
+  "properties": {
+    "schema_version": {
+      "const": "ch7-evidence-build-receipt.v1"
+    },
+    "receipt_hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "canonicalization", "hashed_object", "sha256"],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "strict-json-sort-keys-utf8-newline.v1"
+        },
+        "hashed_object": {
+          "const": "payload"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "issue",
+        "status",
+        "created_at",
+        "repository",
+        "package",
+        "implementation",
+        "inputs",
+        "environment",
+        "commands",
+        "determinism",
+        "check_only",
+        "admission_boundary"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "ch7-evidence-build-receipt.v1"
+        },
+        "issue": {
+          "const": 7410
+        },
+        "status": {
+          "const": "build_provenance_verified"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 20
+        },
+        "repository": {
+          "$ref": "#/$defs/repository"
+        },
+        "package": {
+          "$ref": "#/$defs/package"
+        },
+        "implementation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "builder",
+            "admission_verifier",
+            "receipt_checker",
+            "receipt_schema",
+            "package_schema"
+          ],
+          "properties": {
+            "builder": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "admission_verifier": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "receipt_checker": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "receipt_schema": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "package_schema": {
+              "$ref": "#/$defs/path_hash"
+            }
+          }
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["v2_config", "v2_portfolio", "frozen_v1"],
+          "properties": {
+            "v2_config": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "v2_portfolio": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "frozen_v1": {
+              "$ref": "#/$defs/frozen_v1"
+            }
+          }
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "commands": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["build", "check_only"],
+          "properties": {
+            "build": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            },
+            "check_only": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "determinism": {
+          "$ref": "#/$defs/determinism"
+        },
+        "check_only": {
+          "$ref": "#/$defs/check_only"
+        },
+        "admission_boundary": {
+          "$ref": "#/$defs/admission_boundary"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "path_hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_commit",
+        "source_tree",
+        "source_tree_definition",
+        "source_worktree_tracked_clean"
+      ],
+      "properties": {
+        "source_commit": {
+          "$ref": "#/$defs/commit"
+        },
+        "source_tree": {
+          "$ref": "#/$defs/commit"
+        },
+        "source_tree_definition": {
+          "const": "source-commit-tree-before-receipt.v1"
+        },
+        "source_worktree_tracked_clean": {
+          "const": true
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "directory_tree_sha256",
+        "payload_tree_sha256",
+        "tree_hash_definition",
+        "manifest_sha256",
+        "sha256sums_sha256",
+        "listed_members",
+        "manifest_status",
+        "admission_status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "directory_tree_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "payload_tree_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tree_hash_definition": {
+          "const": "relative-path-bytes-plus-SHA256SUMS.v1"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sha256sums_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "listed_members": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "manifest_status": {
+          "const": "blocked_pending_domain_approval"
+        },
+        "admission_status": {
+          "const": "not_admitted"
+        }
+      }
+    },
+    "frozen_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256sums_sha256",
+        "manifest_sha256",
+        "audit_member",
+        "audit_member_sha256",
+        "reduced_atlas_member",
+        "reduced_atlas_member_sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256sums_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "audit_member": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audit_member_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reduced_atlas_member": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reduced_atlas_member_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "uv_version", "project"],
+      "properties": {
+        "python": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implementation", "version", "executable"],
+          "properties": {
+            "implementation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executable": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "uv_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "requires_python", "pyproject", "lock"],
+          "properties": {
+            "name": {
+              "const": "robot_sf"
+            },
+            "requires_python": {
+              "const": ">=3.11"
+            },
+            "pyproject": {
+              "$ref": "#/$defs/path_hash"
+            },
+            "lock": {
+              "$ref": "#/$defs/path_hash"
+            }
+          }
+        }
+      }
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_tree_hashes",
+        "output_manifest_hashes",
+        "output_sha256sums_hashes",
+        "outputs_match"
+      ],
+      "properties": {
+        "output_tree_hashes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "output_manifest_hashes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "output_sha256sums_hashes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sha256"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "outputs_match": {
+          "const": true
+        }
+      }
+    },
+    "check_only": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "exit_code",
+        "result_schema",
+        "status",
+        "admission_status",
+        "admission_authorized",
+        "empirical_outcomes_admitted",
+        "receipt_created",
+        "blocker_codes",
+        "result_sha256"
+      ],
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "exit_code": {
+          "const": 0
+        },
+        "result_schema": {
+          "const": "ch7-evidence-admission-diagnostic.v1"
+        },
+        "status": {
+          "const": "blocked_pending_domain_approval"
+        },
+        "admission_status": {
+          "const": "not_admitted"
+        },
+        "admission_authorized": {
+          "const": false
+        },
+        "empirical_outcomes_admitted": {
+          "const": false
+        },
+        "receipt_created": {
+          "const": false
+        },
+        "blocker_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "result_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "admission_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "admission_receipt_created",
+        "domain_approval_claimed",
+        "paper_facing_use_authorized",
+        "benchmark_result_claimed",
+        "statement"
+      ],
+      "properties": {
+        "status": {
+          "const": "not_admitted"
+        },
+        "admission_receipt_created": {
+          "const": false
+        },
+        "domain_approval_claimed": {
+          "const": false
+        },
+        "paper_facing_use_authorized": {
+          "const": false
+        },
+        "benchmark_result_claimed": {
+          "const": false
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

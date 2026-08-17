@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner_policy_common import build_adapter_policy
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import build_adapter_policy
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,

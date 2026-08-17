@@ -420,6 +420,44 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
     assert [command[1] for command in commands] == ["issue", "pr", "pr"]
 
 
+def test_collect_live_state_uses_configured_rest_page_budget(monkeypatch) -> None:
+    """REST fallback discovery must use and record the caller's page budget."""
+    observed: dict[str, int] = {}
+
+    def fail_graphql(command: list[str]) -> Any:
+        raise gate.GateError("GraphQL: API rate limit already exceeded")
+
+    def closing_prs_rest(**kwargs: Any) -> list[dict[str, Any]]:
+        observed["closing"] = kwargs["max_pages"]
+        return []
+
+    def open_covering_prs_rest(**kwargs: Any) -> list[dict[str, Any]]:
+        observed["open"] = kwargs["max_pages"]
+        return []
+
+    monkeypatch.setattr(gate, "_json_command", fail_graphql)
+    monkeypatch.setattr(
+        gate,
+        "_issue_state_rest",
+        lambda **_: {"state": "OPEN", "updatedAt": "now", "closedAt": None},
+    )
+    monkeypatch.setattr(gate, "_closing_prs_rest", closing_prs_rest)
+    monkeypatch.setattr(gate, "_open_covering_prs_rest", open_covering_prs_rest)
+    monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
+    monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+
+    result = gate.collect_live_state(
+        repo="ll7/robot_sf_ll7",
+        issue=7033,
+        branch="feature/rest-fallback",
+        max_pr_pages=40,
+    )
+
+    assert observed == {"closing": 40, "open": 40}
+    assert result["rest_pr_page_budget"] == 40
+
+
 def test_collect_live_state_does_not_mask_graphql_auth_failure(monkeypatch) -> None:
     """GraphQL authentication failures must remain fail-closed instead of using REST."""
     monkeypatch.setattr(
@@ -597,9 +635,147 @@ def test_parser_exposes_capture_check_and_sync() -> None:
     """All three lifecycle actions remain discoverable from the CLI parser."""
     parser = gate._parser()
 
-    assert parser.parse_args(["capture", "--repo", "o/r", "--issue", "1"]).command == "capture"
-    assert parser.parse_args(["check", "--snapshot-path", "state.json"]).command == "check"
-    assert parser.parse_args(["sync", "--snapshot-path", "state.json", "--integrate"]).integrate
+    capture = parser.parse_args(
+        ["capture", "--repo", "o/r", "--issue", "1", "--max-pr-pages", "40"]
+    )
+    check = parser.parse_args(["check", "--snapshot-path", "state.json"])
+    sync = parser.parse_args(["sync", "--snapshot-path", "state.json", "--integrate"])
+
+    assert capture.command == "capture"
+    assert capture.max_pr_pages == 40
+    assert check.command == "check"
+    assert check.max_pr_pages is None
+    assert sync.integrate
+
+
+def test_capture_help_documents_repository_formats(capsys) -> None:
+    """Capture help must explain both explicit and local repository arguments."""
+    parser = gate._parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["capture", "--help"])
+
+    help_text = capsys.readouterr().out
+    assert "OWNER/REPO" in help_text
+    assert "ll7/robot_sf_ll7" in help_text
+    assert "local checkout path" in help_text
+
+
+def test_local_repository_argument_resolves_github_remote(tmp_path, monkeypatch) -> None:
+    """A local checkout path should become the normalized GitHub repository slug."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="git@github.com:ll7/robot_sf_ll7.git\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    assert gate._normalize_repo_argument(str(checkout), remote="origin") == "ll7/robot_sf_ll7"
+    assert commands == [["git", "-C", str(checkout.resolve()), "remote", "get-url", "origin"]]
+
+
+def test_capture_cli_stores_normalized_local_repository(tmp_path, monkeypatch, capsys) -> None:
+    """The documented local-path capture invocation must persist a repository slug."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    snapshot_path = tmp_path / "snapshot.json"
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        assert command == [
+            "git",
+            "-C",
+            str(checkout.resolve()),
+            "remote",
+            "get-url",
+            "origin",
+        ]
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="https://github.com/ll7/robot_sf_ll7.git\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **kwargs: _snapshot(repo=kwargs["repo"], issue=kwargs["issue"]),
+    )
+
+    assert (
+        gate.main(
+            [
+                "capture",
+                "--repo",
+                str(checkout),
+                "--issue",
+                "7206",
+                "--branch",
+                "issue-7206-prepublication-repo-format",
+                "--snapshot-path",
+                str(snapshot_path),
+            ]
+        )
+        == 0
+    )
+
+    capsys.readouterr()
+    assert json.loads(snapshot_path.read_text(encoding="utf-8"))["repo"] == "ll7/robot_sf_ll7"
+
+
+def test_repository_argument_preserves_explicit_slug() -> None:
+    """An explicit repository slug should not require local Git metadata."""
+    assert gate._normalize_repo_argument("ll7/robot_sf_ll7", remote="origin") == (
+        "ll7/robot_sf_ll7"
+    )
+    assert gate._normalize_repo_argument("github.example/ll7/robot_sf_ll7", remote="origin") == (
+        "github.example/ll7/robot_sf_ll7"
+    )
+
+
+def test_local_repository_argument_fails_before_github_reads(tmp_path, monkeypatch) -> None:
+    """A checkout without the requested remote must produce an actionable local error."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+
+    def fake_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command,
+            2,
+            stdout="",
+            stderr="fatal: No such remote 'origin'",
+        )
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    with pytest.raises(gate.GateError, match="pass an explicit OWNER/REPO"):
+        gate._normalize_repo_argument(str(checkout), remote="origin")
+
+
+def test_parser_rejects_non_positive_rest_page_budget() -> None:
+    """The CLI must reject a page budget that cannot make progress."""
+    parser = gate._parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["capture", "--repo", "o/r", "--issue", "1", "--max-pr-pages", "0"])
+
+
+def test_page_budget_reuses_snapshot_value_unless_overridden() -> None:
+    """Checks should preserve the capture budget while allowing an explicit refresh override."""
+    assert gate._effective_page_budget(None, snapshot={"rest_pr_page_budget": 40}) == 40
+    assert gate._effective_page_budget(60, snapshot={"rest_pr_page_budget": 40}) == 60
+
+    with pytest.raises(gate.GateError, match="invalid REST PR page budget"):
+        gate._effective_page_budget(None, snapshot={"rest_pr_page_budget": 0})
 
 
 def test_check_cli_writes_ready_decision(tmp_path, monkeypatch, capsys) -> None:

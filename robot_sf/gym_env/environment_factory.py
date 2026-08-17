@@ -14,9 +14,9 @@ Key Features
     ``video_path``, ``video_fps``), JSONL metadata kwargs, and telemetry kwargs
     map into focused option objects with documented precedence rules.
 * Determinism: optional ``seed`` seeds Python ``random``, NumPy, and PyTorch
-    (if available) plus ``PYTHONHASHSEED``; applied before environment class
-    construction. The applied seed is attached to the returned environment as
-    ``applied_seed``.
+    (if available) before environment class construction. The applied seed is attached
+    to the returned environment as ``applied_seed``. Python's hash seed is fixed at
+    interpreter startup and is not mutated by an in-process factory call.
 * Pedestrian divergence: pedestrian factory honors an explicit
     ``RecordingOptions(record=False)`` even if ``record_video=True`` convenience
     flag is passed (opt‑out preserved). Robot/image factories flip to True in
@@ -40,7 +40,6 @@ overhead (FR‑017). Rendering classes for image observations are imported lazil
 from __future__ import annotations
 
 import importlib
-import os
 import random
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
@@ -540,7 +539,7 @@ def make_robot_env(  # noqa: PLR0913
 
     Args:
         config: Optional pre-constructed config; a default instance is created if None.
-        seed: Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+        seed: Deterministic seed (Python random, NumPy, and PyTorch). Stored on
             the returned env as ``applied_seed``.
         peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             Use ``config.peds_have_static_obstacle_forces`` (obstacle forces) and
@@ -900,7 +899,7 @@ def make_crowd_sim_env(  # noqa: PLR0913
         config.video_path = video_path
     if video_fps is not None:
         config.video_fps = video_fps
-    env = CrowdSimEnv(config)
+    env = CrowdSimEnv(config, seed=seed)
     env.applied_seed = seed
     return env
 
@@ -908,9 +907,10 @@ def make_crowd_sim_env(  # noqa: PLR0913
 def _apply_global_seed(seed: int | None) -> None:
     """Apply a deterministic seed to all common RNG sources for reproducibility.
 
-    Ensures consistent behavior across Python's random module, NumPy, PyTorch (if
-    available), and hash-based randomization. Gracefully handles optional dependencies
-    to keep the lightweight factories accessible without unnecessary imports.
+    Ensures consistent behavior across Python's random module, NumPy, and PyTorch (if
+    available). Python's hash seed is fixed at interpreter startup and is intentionally
+    not mutated here. Gracefully handles optional dependencies to keep the lightweight
+    factories accessible without unnecessary imports.
 
     Args:
         seed: Seed value to apply; if None, this is a no-op (seeds already random).
@@ -919,7 +919,8 @@ def _apply_global_seed(seed: int | None) -> None:
         - Sets Python ``random`` seed.
         - Sets NumPy random seed (if available).
         - Sets PyTorch manual seeds and CUDA seeds (if available).
-        - Sets ``PYTHONHASHSEED`` environment variable.
+        - Does not mutate ``PYTHONHASHSEED``; changing that environment variable here
+          would not affect the current interpreter and would leak into later subprocesses.
 
     Note:
         Positioned at end of module to keep import block contiguous (PEP8).
@@ -937,7 +938,6 @@ def _apply_global_seed(seed: int | None) -> None:
             torch_mod.manual_seed(seed)
         if hasattr(torch_mod, "cuda") and hasattr(torch_mod.cuda, "manual_seed_all"):
             torch_mod.cuda.manual_seed_all(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
 
 
 def make_multi_robot_env(  # noqa: PLR0913
@@ -965,7 +965,7 @@ def make_multi_robot_env(  # noqa: PLR0913
     config : MultiRobotConfig | None
         Optional multi-robot configuration; default instance created if ``None``.
     seed : int | None
-        Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+        Deterministic seed (Python random, NumPy, and PyTorch). Stored on
         the returned environment and passed through reset metadata.
     reward_func : Callable | None
         Custom reward function applied to each agent; falls back to internal default.

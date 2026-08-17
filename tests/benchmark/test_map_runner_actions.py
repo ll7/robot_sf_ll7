@@ -1,11 +1,11 @@
-"""Tests for robot_sf.benchmark.map_runner_actions — action and kinematics helpers."""
+"""Tests for map-runner action and kinematics helpers."""
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner_actions import (
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     DEFAULT_KINEMATICS,
     command_xy_payload,
     robot_kinematics_label,

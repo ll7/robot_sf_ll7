@@ -147,6 +147,18 @@ def _extract_snapshot_outcome(
     accepted = None if accepted_raw is None else bool(accepted_raw)
     note_raw = snapshot.get("outcome")
     note = None if note_raw is None else str(note_raw)
+    if accepted is True and snapshot.get("route_evidence_only") is True:
+        contract = snapshot.get("chosen_output_contract") or snapshot.get("output_contract")
+        if (
+            snapshot.get("aggregation") != "confirmed"
+            or not isinstance(contract, dict)
+            or contract.get("status") != "usable"
+            or contract.get("aggregation") != "confirmed"
+        ):
+            return (
+                None,
+                "route evidence is incomplete; worker output and validation are not confirmed",
+            )
     return accepted, note
 
 

@@ -7,15 +7,15 @@ from pathlib import Path
 
 import yaml
 
+from robot_sf.benchmark.scenario.scenario_schema import (
+    validate_scenario_list,
+    validate_scenario_matrix_metadata,
+)
 from robot_sf.benchmark.scenario_belief_screening import (
     build_input_screening_report,
     build_screening_report,
     build_seed_sufficiency_handoff,
     classify_screened_decision,
-)
-from robot_sf.benchmark.scenario_schema import (
-    validate_scenario_list,
-    validate_scenario_matrix_metadata,
 )
 from robot_sf.training.scenario_loader import load_scenarios
 

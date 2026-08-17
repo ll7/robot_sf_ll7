@@ -52,3 +52,7 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     assert "Context index / memory note updated (yes/no/NA):" in text
     assert "Follow-up issue opened for deferred propagation (yes/no/NA):" in text
     assert "Not applicable because:" in text
+    assert (
+        "Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / "
+        "full_matrix / analysis_only / synthesis / paper_grade / blocked / docs-only / NA"
+    ) in text

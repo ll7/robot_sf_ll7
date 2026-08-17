@@ -387,23 +387,38 @@ uv run pytest --collect-only tests/bdd -q
 
 The pilot covers episode schema validation: a valid record passes, a malformed record is rejected.
 
-### Merge-race prevention (ADR — issue #5389)
+### Merge-race prevention (ADR — issues #5389 and #6272)
 
 **Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each
 green on its own merge-ref, broke main when both landed in a 3-second merge race. The red-main merge
 hold (#5385) stops breakage *stacking* once main is red, but nothing prevented the race itself: a
 PR's CI ran against a main that moved before the merge landed.
 
-**Decision: gate-side staleness check.** We adopt option 2 from the issue — a staleness rule that
-prevents merging a PR whose CI ran against a stale main:
+**Decision: risk-tiered gate-side integration.** Exact-head CI and review evidence remain mandatory,
+but unrelated movement on `main` does not force a full branch refresh for every ordinary PR. The
+repository uses the explicit `base_sensitive` marker-file selector from issue #5559:
+
+- **Selector**: `scripts/dev/base_sensitive_selector.py` and
+  `scripts/dev/check_base_sensitive_gates.py --pr <pr-number> --json` classify a complete changed-file
+  inventory as `base_sensitive` when it intersects a test file declaring the `base_sensitive` marker;
+  a missing inventory is `unknown` and fails closed.
+- **Base-sensitive path**: a `base_sensitive` PR must pass the existing workflow-run/base freshness
+  check and the focused `base_sensitive` subset against the current base before merge-ready admission.
+- **Ordinary path**: a trusted exact-head review may record
+  `base-policy: ordinary-cas @ <head-sha>` for a complete non-intersecting inventory. The guarded
+  merger then runs `scripts/dev/check_pr_current_base_cas.py` immediately before merging and still
+  uses `--match-head-commit`; it does not waive exact-head CI, review, metadata, thread, or branch
+  protection requirements.
+- **Unknown path**: missing selector, current-main, head, review-thread, or CAS provenance fails closed.
 
 - **Script**: `scripts/dev/check_pr_merge_staleness.py <pr-number>`.
-- **Integration**: the `gh-pr-merger` skill runs this check as preflight step 7 before any merge.
-- **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
-  code 1 and the merger skips the PR with a staleness report. The precise path reads the completed
-  workflow run's recorded `pull_requests[].base.sha`; when that provenance is unavailable, the
-  checker falls back to the PR base-vs-main comparison. The author must update the branch and
-  re-run CI before the PR becomes mergeable again. Because the installed `gh` version does not
+- **Integration**: the `gh-pr-merger` skill runs this check for the base-sensitive path and runs
+  `check_pr_current_base_cas.py` as the immediate final preflight for every guarded merge.
+- **Behavior**: the precise base-sensitive path reads the completed workflow run's recorded
+  `pull_requests[].base.sha`; when that provenance is unavailable, the checker fails closed rather
+  than inferring freshness. The ordinary path relies on the explicit selector plus the immediate CAS
+  check and the GitHub head compare-and-swap guard. The author must update the branch and re-run CI
+  before a base-sensitive PR becomes mergeable again. Because the installed `gh` version does not
   provide `gh pr update-branch`, use the guarded repository helper after recording the current
   head SHA. The drop-in `scripts/dev/update_pr_branch_safely.sh <number> --expected-head-sha <sha>`
   tries `gh`/`gh api` update-branch first and falls back to a lease-protected local rebase/push when
@@ -417,18 +432,20 @@ prevents merging a PR whose CI ran against a stale main:
   older REST-only `scripts/dev/update_pr_branch.py` is kept for environments where the REST
   `update-branch` endpoint works.
 
-**Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
-PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
-because:
+**Why not GitHub merge queue yet?** The native merge queue is the ideal solution — it re-validates
+each PR against the up-to-date prospective main before merging automatically. The repository has
+selected the bounded current-base subset plus CAS policy until the queue is configured because:
 
 1. It works immediately without enabling a repository-level feature that requires maintainer approval
    to toggle branch-protection settings.
-2. It provides the same merge-race guarantee at the cost of slightly more manual branch updates.
-3. It is easy to roll back — remove the preflight step from the skill and the script can be deleted.
+2. The explicit selector preserves the stronger current-base proof for the known snapshot,
+   fixture-hash, tuple-shape, and count-ratchet surfaces.
+3. It is easy to roll back to universal refresh if an attributable stale-base incident is observed;
+   see `docs/context/issue_6272_risk_tiered_stale_base_policy.md`.
 
-**When to revisit.** If the native merge queue becomes available and is enabled, the gate-side
-staleness check can be replaced by the queue's built-in re-validation, which is strictly stronger.
-The gate-side rule remains useful as a safety net for non-GitHub CI providers.
+**When to revisit.** If the native merge queue becomes available and is enabled, the ordinary CAS
+path can be replaced by the queue's built-in re-validation, which is strictly stronger. The
+base-sensitive gate remains useful as a safety net for non-GitHub CI providers.
 
 ### Pre-publication state refresh (issue #6916)
 

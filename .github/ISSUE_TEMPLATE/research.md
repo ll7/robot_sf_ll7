@@ -14,8 +14,21 @@ assignees: []
 **Hypothesis**
 <!-- What do we expect to find or prove? -->
 
-**Evidence grade / claim class**
-<!-- Mark observed, inferred, speculative, blocked, diagnostic-only, benchmark, or paper-facing. -->
+## Archetype / Evidence Metadata
+
+Canonical values are defined in [issue_1512_issue_archetypes.md](../../docs/context/issue_1512_issue_archetypes.md).
+
+**Archetype**
+<!-- Choose one canonical archetype from issue_1512_issue_archetypes.md. -->
+`archetype:`
+
+**Evidence grade**
+<!-- Choose exactly one: observed, inferred, or proposal. -->
+`evidence_grade:`
+
+**Evidence tier**
+<!-- Choose exactly one canonical tier: idea, launch_packet, preflight_valid, smoke, nominal, stress, full_matrix, analysis_only, synthesis, paper_grade, or blocked. -->
+`evidence_tier:`
 
 **Competing explanations**
 <!-- List plausible alternatives this work should distinguish, not just the preferred hypothesis. -->

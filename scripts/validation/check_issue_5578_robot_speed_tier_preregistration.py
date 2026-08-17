@@ -109,7 +109,7 @@ EXPECTED_CONTROL_FORMULAS = {
     "final_clip": "numpy_clip_to_env_action_space_low_high",
 }
 CAMPAIGN_RUNTIME_PATH = REPO_ROOT / "scripts/benchmark/run_fidelity_sensitivity_campaign.py"
-PPO_ADAPTER_PATH = REPO_ROOT / "robot_sf/benchmark/map_runner_policy_actions.py"
+PPO_ADAPTER_PATH = REPO_ROOT / "robot_sf/benchmark/map_runner_policies/map_runner_policy_actions.py"
 
 
 def _require(condition: bool, message: str) -> None:
@@ -572,7 +572,7 @@ def _validate_roster(payload: dict[str, Any]) -> None:
             adapter = _mapping(arm.get("command_adapter_contract"), "PPO command_adapter_contract")
             _require(
                 adapter.get("runtime_adapter")
-                == "robot_sf.benchmark.map_runner_policy_actions.ppo_action_to_unicycle",
+                == "robot_sf.benchmark.map_runner_policies.map_runner_policy_actions.ppo_action_to_unicycle",
                 "PPO runtime adapter drifted",
             )
             _require(

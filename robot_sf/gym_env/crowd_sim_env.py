@@ -52,8 +52,18 @@ class CrowdSimEnv(gym.Env):
 
     metadata = {"render_modes": [None, "human", "rgb_array"], "render_fps": 60}
 
-    def __init__(self, config: CrowdSimulationConfig | None = None):
-        """Create a crowd simulation environment."""
+    def __init__(self, config: CrowdSimulationConfig | None = None, *, seed: int | None = None):
+        """Create a crowd simulation environment.
+
+        Parameters
+        ----------
+        config:
+            Narrow crowd-simulation configuration. A default is created when omitted.
+        seed:
+            Optional constructor seed used for the initial map choice. This uses an
+            environment-local generator and never consumes the process-wide NumPy generator.
+            ``reset(seed=...)`` remains the canonical way to reseed an existing environment.
+        """
         super().__init__()
         self.config = config or CrowdSimulationConfig()
         if self.config.render_mode not in self.metadata["render_modes"]:
@@ -77,8 +87,9 @@ class CrowdSimEnv(gym.Env):
         self._sim_ui: SimulationView | None = None
         self._recording_file = None
         self._recording_path: Path | None = None
-        # Honor factory-level seeding before the first constructor-time map selection.
-        self._map_rng = np.random.default_rng(np.random.randint(0, np.iinfo(np.uint32).max))
+        # Keep constructor-time selection independent from the process-wide NumPy generator.
+        # Factories pass an explicit seed so their initial map choice remains reproducible.
+        self._map_rng = np.random.default_rng(seed)
 
         self._reset_simulator()
         self._sync_pedestrian_capacity()

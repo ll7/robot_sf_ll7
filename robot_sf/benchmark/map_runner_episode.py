@@ -38,14 +38,6 @@ from robot_sf.benchmark.latency.latency_stress import (
     LatencyStressProfile,
     not_available_latency_metrics,
 )
-from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
-from robot_sf.benchmark.map_runner_actions import (
-    policy_command_to_env_action as _policy_command_to_env_action,
-)
-from robot_sf.benchmark.map_runner_actions import robot_kinematics_label as _robot_kinematics_label
-from robot_sf.benchmark.map_runner_actions import robot_max_speed as _robot_max_speed
-from robot_sf.benchmark.map_runner_actions import stack_ped_positions as _stack_ped_positions
-from robot_sf.benchmark.map_runner_actions import vel_and_acc as _vel_and_acc
 from robot_sf.benchmark.map_runner_env import (
     apply_active_observation_mode_to_env_config as _apply_active_observation_mode_to_env_config,
 )
@@ -71,19 +63,35 @@ from robot_sf.benchmark.map_runner_native_command import (
     native_command_metadata_for_record,
 )
 from robot_sf.benchmark.map_runner_observations import normalize_xy_rows as _normalize_xy_rows
-from robot_sf.benchmark.map_runner_policy_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    policy_command_to_env_action as _policy_command_to_env_action,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_kinematics_label as _robot_kinematics_label,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    robot_max_speed as _robot_max_speed,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
+    stack_ped_positions as _stack_ped_positions,
+)
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import vel_and_acc as _vel_and_acc
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
 )
-from robot_sf.benchmark.map_runner_policy_resolution import (
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
     _apply_planner_selector_v2_context,
     _apply_scenario_uncertainty_envelope_config,
     _parse_algo_config,
     _resolve_policy_search_candidate_runtime,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_latency_profile as _load_latency_stress_profile,
 )
-from robot_sf.benchmark.map_runner_profile_metadata import (
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile,
 )
 from robot_sf.benchmark.map_runner_static_deadlock import (

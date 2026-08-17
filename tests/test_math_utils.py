@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from math import atan2, cos, isnan, pi, sin
 
+import numpy as np
 import pytest
 
 from robot_sf.common.math_utils import (
     clip_scalar,
     normalize_angle_atan2,
     wrap_angle_pi,
+    wrap_angle_pi_array,
     wrap_angle_pi_closed,
 )
 
@@ -27,6 +29,13 @@ from robot_sf.common.math_utils import (
 def test_wrap_angle_pi_matches_modulo_semantics(angle: float, expected: float) -> None:
     """Modulo wrapper keeps the historical half-open interval behavior."""
     assert wrap_angle_pi(angle) == pytest.approx(expected)
+
+
+def test_wrap_angle_pi_array_matches_scalar_boundary_semantics() -> None:
+    """Vectorized wrapper keeps the scalar helper's pinned boundary values."""
+    angles = np.array([0.0, pi, -pi, 3.0 * pi, -3.0 * pi, 4.0 * pi])
+    expected = np.array([0.0, -pi, -pi, -pi, -pi, 0.0])
+    assert wrap_angle_pi_array(angles) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(

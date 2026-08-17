@@ -1,0 +1,155 @@
+"""Scenario matrix JSON Schema loading and validation utilities.
+
+Provides programmatic validation for scenario matrices (YAML/JSON list of
+scenario dicts) used by the Social Navigation Benchmark runner.
+
+Public API:
+ - load_scenario_schema() -> dict
+ - validate_scenario_list(scenarios: list[dict]) -> list[dict]
+
+Each error dict contains at least:
+  { "index": int | null, "id": str | null, "error": str, "path": str }
+and may include a "details" field with structured info.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from robot_sf.common.json_pointer import json_pointer
+
+try:
+    from jsonschema import Draft7Validator
+except ImportError as e:  # pragma: no cover - jsonschema is project dependency
+    raise RuntimeError("jsonschema package is required for scenario validation") from e
+
+SCENARIO_MATRIX_SCHEMA_VERSION = "robot_sf.scenario_matrix.v1"
+# The schema data lives in the benchmark-wide versioned schema package, not beside this
+# scenario-domain implementation.
+SCHEMA_FILE = Path(__file__).parent.parent / "schemas" / "scenarios.schema.json"
+
+
+def load_scenario_schema() -> dict[str, Any]:
+    """Load the benchmark scenario schema from disk.
+
+    Returns:
+        Parsed JSON schema dict.
+    """
+    with SCHEMA_FILE.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def validate_scenario_list(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Validate a list of scenario dicts against the JSON Schema.
+
+    Returns a list of error dicts; empty when valid. Also checks for duplicate
+    scenario IDs and repeats>=1 constraint (also in schema, but kept defensively).
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of validation error dictionaries; empty list indicates valid input.
+    """
+    schema = load_scenario_schema()
+    item_schema = schema.get("items", {})
+    validator = Draft7Validator(item_schema)
+
+    errors: list[dict[str, Any]] = []
+
+    # Per-item schema validation (keep index alignment for better messages)
+    for i, s in enumerate(scenarios):
+        for err in validator.iter_errors(s):
+            path = json_pointer(err.path)
+            errors.append(
+                {
+                    "index": i,
+                    "id": s.get("id"),
+                    "error": err.message,
+                    "path": path,
+                },
+            )
+
+        # Defensive repeat check for clearer message
+        if "repeats" in s:
+            try:
+                if int(s["repeats"]) < 1:
+                    errors.append(
+                        {
+                            "index": i,
+                            "id": s.get("id"),
+                            "error": "repeats must be >= 1",
+                            "path": "/repeats",
+                        },
+                    )
+            except (ValueError, TypeError):
+                errors.append(
+                    {
+                        "index": i,
+                        "id": s.get("id"),
+                        "error": "repeats must be an integer",
+                        "path": "/repeats",
+                    },
+                )
+
+    # Duplicate id/name check across the list
+    seen: dict[str, int] = {}
+    for i, s in enumerate(scenarios):
+        sid = (
+            s.get("id")
+            if isinstance(s.get("id"), str)
+            else s.get("name")
+            if isinstance(s.get("name"), str)
+            else s.get("scenario_id")
+            if isinstance(s.get("scenario_id"), str)
+            else None
+        )
+        if isinstance(sid, str):
+            if sid in seen:
+                errors.append(
+                    {
+                        "index": i,
+                        "id": sid,
+                        "error": "duplicate id",
+                        "path": "/id",
+                        "details": {"first_index": seen[sid]},
+                    },
+                )
+            else:
+                seen[sid] = i
+
+    return errors
+
+
+def validate_scenario_matrix_metadata(payload: object) -> list[dict[str, Any]]:
+    """Validate optional top-level scenario-matrix metadata.
+
+    Returns:
+        list[dict[str, Any]]: Metadata validation errors, empty when supported or absent.
+    """
+    if not isinstance(payload, dict) or "schema_version" not in payload:
+        return []
+    schema_version = payload.get("schema_version")
+    if schema_version == SCENARIO_MATRIX_SCHEMA_VERSION:
+        return []
+    return [
+        {
+            "index": None,
+            "id": None,
+            "error": (
+                f"unsupported scenario matrix schema_version {schema_version!r}; "
+                f"expected {SCENARIO_MATRIX_SCHEMA_VERSION!r}"
+            ),
+            "path": "/schema_version",
+        }
+    ]
+
+
+__all__ = [
+    "SCENARIO_MATRIX_SCHEMA_VERSION",
+    "SCHEMA_FILE",
+    "load_scenario_schema",
+    "validate_scenario_list",
+    "validate_scenario_matrix_metadata",
+]

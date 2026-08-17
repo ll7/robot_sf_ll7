@@ -8,6 +8,7 @@ import json
 import os
 import random
 import subprocess
+import time
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -589,12 +590,12 @@ def _run_epoch(
                     assert scaler is not None
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, error_if_nonfinite=True)
                     optimizer.step()
 
         ade, fde = compute_ade_fde(
@@ -1046,6 +1047,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         weight_decay=float(args.weight_decay),
     )
 
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+
     use_amp = _resolve_amp_enabled(requested=bool(args.amp), device=device)
     scaler = torch.amp.GradScaler("cuda") if use_amp else None
     if use_amp:
@@ -1071,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     proxy_enabled = args.proxy_scenario_matrix is not None and int(args.proxy_every_epochs) > 0
 
     for epoch in range(1, int(args.epochs) + 1):
+        train_started = time.perf_counter()
         train_loss, train_ade, train_fde = _run_epoch(
             model=model,
             loader=train_loader,
@@ -1079,6 +1084,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             non_blocking=loader_settings.non_blocking,
             scaler=scaler,
         )
+        train_runtime_sec = float(time.perf_counter() - train_started)
+        val_started = time.perf_counter()
         val_loss, val_ade, val_fde = _run_epoch(
             model=model,
             loader=val_loader,
@@ -1087,6 +1094,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             non_blocking=loader_settings.non_blocking,
             scaler=scaler,
         )
+        val_runtime_sec = float(time.perf_counter() - val_started)
 
         row = {
             "epoch": float(epoch),
@@ -1096,6 +1104,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
             "val_loss": val_loss,
             "val_ade": val_ade,
             "val_fde": val_fde,
+            "train_runtime_sec": train_runtime_sec,
+            "val_runtime_sec": val_runtime_sec,
+            "train_steps": float(len(train_loader)),
+            "val_steps": float(len(val_loader)),
+            "train_examples": float(len(train_loader.dataset)),
+            "val_examples": float(len(val_loader.dataset)),
         }
         history.append(row)
 
@@ -1281,6 +1295,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
 
     finished_at_utc = datetime.now(UTC)
     total_runtime_sec = float((finished_at_utc - started_at_utc).total_seconds())
+    peak_cuda_memory_allocated_bytes = (
+        int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else None
+    )
+    peak_cuda_memory_reserved_bytes = (
+        int(torch.cuda.max_memory_reserved(device)) if device.type == "cuda" else None
+    )
 
     summary = {
         "contract_version": _CONTRACT_VERSION,
@@ -1290,6 +1310,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
         "started_at_utc": started_at_utc.isoformat(),
         "finished_at_utc": finished_at_utc.isoformat(),
         "total_runtime_sec": total_runtime_sec,
+        "peak_cuda_memory_allocated_bytes": peak_cuda_memory_allocated_bytes,
+        "peak_cuda_memory_reserved_bytes": peak_cuda_memory_reserved_bytes,
         "model_id": args.model_id,
         "dataset": str(args.dataset),
         "checkpoint": str(checkpoint_path),

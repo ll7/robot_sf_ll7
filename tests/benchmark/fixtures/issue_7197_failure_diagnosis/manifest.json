@@ -1,0 +1,85 @@
+{
+  "schema_version": "failure_diagnosis_fixture_manifest.v1",
+  "manifest_id": "issue-7197-deterministic-diagnosis-contract-fixtures",
+  "manifest_version": 1,
+  "purpose": "test-only manifest for source admission and metric-integrity contracts",
+  "claim_boundary": "No empirical diagnostic-accuracy or benchmark claim is established.",
+  "fixtures": [
+    {
+      "case_id": "collision_case",
+      "fixture_version": 1,
+      "source_trace_uri": "fixture://issue-7197/source-predicates.json#collision_case",
+      "source_trace_sha256": "c16aebf5ce9c1b72a5c78f18487c499a68fe69a214657f524fe84f92716ff90b",
+      "source_predicate_id": "collision",
+      "source_predicate_schema_version": "trace_failure_predicates.v1",
+      "review": {
+        "status": "reviewed",
+        "reviewer": "issue_7197_contract_test_review",
+        "adjudication_status": "adjudicated",
+        "independent_of_automated_diagnosis": true
+      },
+      "provenance": {
+        "status": "complete",
+        "excluded_from_training": true,
+        "excluded_from_prompt_development": true
+      }
+    },
+    {
+      "case_id": "near_miss_case",
+      "fixture_version": 1,
+      "source_trace_uri": "fixture://issue-7197/source-predicates.json#near_miss_case",
+      "source_trace_sha256": "4dd2cf37a5989885014a7d28e4f049c9772895bc06ab403224da47b66a70bff1",
+      "source_predicate_id": "clearance_critical_interaction",
+      "source_predicate_schema_version": "trace_failure_predicates.v1",
+      "review": {
+        "status": "reviewed",
+        "reviewer": "issue_7197_contract_test_review",
+        "adjudication_status": "adjudicated",
+        "independent_of_automated_diagnosis": true
+      },
+      "provenance": {
+        "status": "complete",
+        "excluded_from_training": true,
+        "excluded_from_prompt_development": true
+      }
+    },
+    {
+      "case_id": "low_progress_case",
+      "fixture_version": 1,
+      "source_trace_uri": "fixture://issue-7197/source-predicates.json#low_progress_case",
+      "source_trace_sha256": "705479c7e4f2b683aee9f44a24a23b909711fc35b95462e5a44cc1231bb770db",
+      "source_predicate_id": "low_progress",
+      "source_predicate_schema_version": "trace_failure_predicates.v1",
+      "review": {
+        "status": "reviewed",
+        "reviewer": "issue_7197_contract_test_review",
+        "adjudication_status": "adjudicated",
+        "independent_of_automated_diagnosis": true
+      },
+      "provenance": {
+        "status": "complete",
+        "excluded_from_training": true,
+        "excluded_from_prompt_development": true
+      }
+    },
+    {
+      "case_id": "oscillation_case",
+      "fixture_version": 1,
+      "source_trace_uri": "fixture://issue-7197/source-predicates.json#oscillation_case",
+      "source_trace_sha256": "a01a8e8ae673ab00b79641bdba3d539f8c4ef3325c986c0f8e4b979753068edb",
+      "source_predicate_id": "oscillatory_local_control",
+      "source_predicate_schema_version": "trace_failure_predicates.v1",
+      "review": {
+        "status": "reviewed",
+        "reviewer": "issue_7197_contract_test_review",
+        "adjudication_status": "adjudicated",
+        "independent_of_automated_diagnosis": true
+      },
+      "provenance": {
+        "status": "complete",
+        "excluded_from_training": true,
+        "excluded_from_prompt_development": true
+      }
+    }
+  ]
+}

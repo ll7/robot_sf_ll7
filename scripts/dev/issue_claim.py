@@ -14,7 +14,10 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_REMOTE = "origin"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -29,6 +32,14 @@ CLAIM_REF_RE = re.compile(r"^refs/heads/agent-claims/issue-(?P<issue>[1-9][0-9]*
 TERMINAL_RELEASE_REASONS = frozenset({"merged", "closed", "abandoned"})
 RECONCILIATION_LIMIT = 100
 PR_SNAPSHOT_LIMIT = 500
+PR_REST_PAGE_SIZE = 100
+GRAPHQL_REST_FALLBACK_MARKERS = (
+    "rate limit",
+    "projectcards",
+    "unknown field",
+    "doesn't exist on type",
+    "is unsupported",
+)
 
 
 @dataclass(frozen=True)
@@ -161,6 +172,19 @@ def build_all_pr_command(*, repo: str) -> list[str]:
     ]
 
 
+def build_open_pr_rest_command(*, repo: str, page: int = 1) -> list[str]:
+    """Build a bounded REST fallback for the open-PR coverage snapshot."""
+    if page <= 0:
+        raise ValueError("REST PR snapshot page must be positive")
+    return [
+        "gh",
+        "api",
+        f"repos/{repo}/pulls?state=open&per_page={PR_REST_PAGE_SIZE}&page={page}",
+        "--jq",
+        "[.[] | {number,body,title}]",
+    ]
+
+
 def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
     """Validate one open-PR row before using it for claim-release safety."""
     if not isinstance(row, dict):
@@ -182,33 +206,99 @@ def _validate_open_pr_row(row: Any, *, index: int) -> dict[str, Any]:
     }
 
 
-def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
-    """Parse one authoritative open-PR response for explicit issue coverage."""
+def build_all_pr_rest_command(*, repo: str, page: int = 1) -> list[str]:
+    """Build a bounded REST fallback for the all-state PR coverage snapshot."""
+    if page <= 0:
+        raise ValueError("REST PR snapshot page must be positive")
+    return [
+        "gh",
+        "api",
+        f"repos/{repo}/pulls?state=all&per_page={PR_REST_PAGE_SIZE}&page={page}",
+        "--jq",
+        (
+            '[.[] | {number,body,title,state:(if .merged_at then "MERGED" '
+            'elif .state == "open" then "OPEN" else "CLOSED" end)}]'
+        ),
+    ]
+
+
+def _decode_pr_pages(result: CommandResult, *, empty_error: str) -> tuple[list[Any], str | None]:
+    """Decode one or more JSON-array pages emitted by a REST snapshot command."""
     if result.returncode != 0:
-        return {
-            "ok": False,
-            "covering_prs": [],
-            "truncated": False,
-            "error": (result.stderr or result.stdout).strip(),
-        }
+        return [], (result.stderr or result.stdout).strip() or "PR snapshot failed"
     raw_payload = result.stdout.strip()
     if not raw_payload:
+        return [], empty_error
+
+    decoder = json.JSONDecoder()
+    pages: list[Any] = []
+    cursor = 0
+    while cursor < len(raw_payload):
+        while cursor < len(raw_payload) and raw_payload[cursor].isspace():
+            cursor += 1
+        if cursor >= len(raw_payload):
+            break
+        try:
+            page, next_cursor = decoder.raw_decode(raw_payload, cursor)
+        except json.JSONDecodeError as exc:
+            return [], str(exc)
+        if not isinstance(page, list):
+            return [], "PR snapshot page is not a list"
+        pages.extend(page)
+        cursor = next_cursor
+    return pages, None
+
+
+def _is_graphql_rest_fallback_error(result: CommandResult) -> bool:
+    """Return whether a known GraphQL quota/schema error permits REST fallback."""
+    if result.returncode == 0:
+        return False
+    error = f"{result.stderr}\n{result.stdout}".lower()
+    return "graphql" in error and any(marker in error for marker in GRAPHQL_REST_FALLBACK_MARKERS)
+
+
+def _run_bounded_pr_rest_snapshot(
+    *, repo: str, build_command: Callable[..., list[str]], empty_error: str
+) -> CommandResult:
+    """Fetch at most the configured PR page cap through the REST API."""
+    pages: list[Any] = []
+    last_command: list[str] = []
+    max_pages = (PR_SNAPSHOT_LIMIT + PR_REST_PAGE_SIZE - 1) // PR_REST_PAGE_SIZE
+    for page in range(1, max_pages + 1):
+        command = build_command(repo=repo, page=page)
+        result = _run(command)
+        last_command = command
+        page_payload, decode_error = _decode_pr_pages(result, empty_error=empty_error)
+        if decode_error is not None:
+            if result.returncode != 0:
+                return result
+            return CommandResult(
+                command=tuple(command),
+                returncode=1,
+                stdout="",
+                stderr=decode_error,
+            )
+        pages.extend(page_payload)
+        if len(page_payload) < PR_REST_PAGE_SIZE or len(pages) >= PR_SNAPSHOT_LIMIT:
+            break
+
+    return CommandResult(
+        command=tuple(last_command),
+        returncode=0,
+        stdout=json.dumps(pages),
+        stderr="",
+    )
+
+
+def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
+    """Parse one authoritative open-PR response for explicit issue coverage."""
+    payload, decode_error = _decode_pr_pages(result, empty_error="open PR response is empty")
+    if decode_error is not None:
         return {
             "ok": False,
             "covering_prs": [],
             "truncated": False,
-            "error": "open PR response is empty",
-        }
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError as exc:
-        return {"ok": False, "covering_prs": [], "truncated": False, "error": str(exc)}
-    if not isinstance(payload, list):
-        return {
-            "ok": False,
-            "covering_prs": [],
-            "truncated": False,
-            "error": "open PR response is not a list",
+            "error": decode_error,
         }
     target = int(issue_number)
     covering: set[int] = set()
@@ -233,6 +323,27 @@ def _open_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dic
         "truncated": len(payload) >= PR_SNAPSHOT_LIMIT,
         "error": None,
     }
+
+
+def _open_prs_covering_issue_with_fallback(*, repo: str, issue_number: int) -> dict[str, Any]:
+    """Read open PR coverage, falling back to REST only for known GraphQL failures."""
+    primary = _run(build_open_pr_command(repo=repo))
+    coverage = _open_prs_covering_issue(primary, issue_number=issue_number)
+    if coverage["ok"] or not _is_graphql_rest_fallback_error(primary):
+        coverage["source"] = "graphql"
+        return coverage
+
+    fallback = _open_prs_covering_issue(
+        _run_bounded_pr_rest_snapshot(
+            repo=repo,
+            build_command=build_open_pr_rest_command,
+            empty_error="open PR response is empty",
+        ),
+        issue_number=issue_number,
+    )
+    fallback["source"] = "rest_fallback"
+    fallback["fallback_reason"] = (primary.stderr or primary.stdout).strip()
+    return fallback
 
 
 def _parse_claim_snapshot(
@@ -362,40 +473,14 @@ def _validate_pr_snapshot_row(row: Any, *, index: int) -> dict[str, Any]:
 
 def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
     """Return open and terminal PRs that explicitly reference an issue."""
-    if result.returncode != 0:
+    payload, decode_error = _decode_pr_pages(result, empty_error="PR snapshot is empty")
+    if decode_error is not None:
         return {
             "ok": False,
             "open_prs": [],
             "terminal_prs": [],
             "truncated": False,
-            "error": (result.stderr or result.stdout).strip() or "PR snapshot failed",
-        }
-    raw_payload = result.stdout.strip()
-    if not raw_payload:
-        return {
-            "ok": False,
-            "open_prs": [],
-            "terminal_prs": [],
-            "truncated": False,
-            "error": "PR snapshot is empty",
-        }
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError as exc:
-        return {
-            "ok": False,
-            "open_prs": [],
-            "terminal_prs": [],
-            "truncated": False,
-            "error": str(exc),
-        }
-    if not isinstance(payload, list):
-        return {
-            "ok": False,
-            "open_prs": [],
-            "terminal_prs": [],
-            "truncated": False,
-            "error": "PR snapshot is not a list",
+            "error": decode_error,
         }
 
     open_prs: list[int] = []
@@ -429,6 +514,27 @@ def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict
     }
 
 
+def _all_prs_covering_issue_with_fallback(*, repo: str, issue_number: int) -> dict[str, Any]:
+    """Read all PR coverage, using REST only for known GraphQL failures."""
+    primary = _run(build_all_pr_command(repo=repo))
+    coverage = _all_prs_covering_issue(primary, issue_number=issue_number)
+    if coverage["ok"] or not _is_graphql_rest_fallback_error(primary):
+        coverage["source"] = "graphql"
+        return coverage
+
+    fallback = _all_prs_covering_issue(
+        _run_bounded_pr_rest_snapshot(
+            repo=repo,
+            build_command=build_all_pr_rest_command,
+            empty_error="PR snapshot is empty",
+        ),
+        issue_number=issue_number,
+    )
+    fallback["source"] = "rest_fallback"
+    fallback["fallback_reason"] = (primary.stderr or primary.stdout).strip()
+    return fallback
+
+
 def _classify_reconciliation_row(
     claim: dict[str, Any], *, issue: dict[str, Any], prs: dict[str, Any]
 ) -> dict[str, Any]:
@@ -440,6 +546,10 @@ def _classify_reconciliation_row(
         "issue_url": issue.get("url", ""),
         "covering_prs": [],
         "terminal_covering_prs": [],
+        "open_coverage_source": prs.get("open_source"),
+        "terminal_coverage_source": prs.get("terminal_source"),
+        "open_fallback_reason": prs.get("open_fallback_reason"),
+        "terminal_fallback_reason": prs.get("terminal_fallback_reason"),
         "safe_to_release": False,
         "classification": "state_unknown",
         "reason": "issue state unavailable or contradictory; retain the claim",
@@ -498,19 +608,19 @@ def _release_reconciled_claim(
     issue = _issue_state_from_result(
         _run(build_issue_state_command(issue_number, repo=repo)), issue_number=issue_number
     )
-    open_prs = _open_prs_covering_issue(
-        _run(build_open_pr_command(repo=repo)), issue_number=issue_number
-    )
-    terminal_prs = _all_prs_covering_issue(
-        _run(build_all_pr_command(repo=repo)), issue_number=issue_number
-    )
+    open_prs = _open_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
+    terminal_prs = _all_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
     prs = {
         "open_ok": open_prs.get("ok", False),
         "open_truncated": open_prs.get("truncated", False),
         "open_prs": open_prs.get("covering_prs", []),
+        "open_source": open_prs.get("source"),
+        "open_fallback_reason": open_prs.get("fallback_reason"),
         "terminal_ok": terminal_prs.get("ok", False),
         "terminal_truncated": terminal_prs.get("truncated", False),
         "terminal_prs": terminal_prs.get("terminal_prs", []),
+        "terminal_source": terminal_prs.get("source"),
+        "terminal_fallback_reason": terminal_prs.get("fallback_reason"),
     }
     fresh = _classify_reconciliation_row(row, issue=issue, prs=prs)
     if not fresh["safe_to_release"]:
@@ -578,6 +688,26 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
     if snapshot.get("ok") and claims:
         open_pr_snapshot = _run(build_open_pr_command(repo=repo))
         all_pr_snapshot = _run(build_all_pr_command(repo=repo))
+        open_pr_source = "graphql"
+        terminal_pr_source = "graphql"
+        open_pr_fallback_reason = None
+        terminal_pr_fallback_reason = None
+        if _is_graphql_rest_fallback_error(open_pr_snapshot):
+            open_pr_fallback_reason = (open_pr_snapshot.stderr or open_pr_snapshot.stdout).strip()
+            open_pr_snapshot = _run_bounded_pr_rest_snapshot(
+                repo=repo,
+                build_command=build_open_pr_rest_command,
+                empty_error="open PR response is empty",
+            )
+            open_pr_source = "rest_fallback"
+        if _is_graphql_rest_fallback_error(all_pr_snapshot):
+            terminal_pr_fallback_reason = (all_pr_snapshot.stderr or all_pr_snapshot.stdout).strip()
+            all_pr_snapshot = _run_bounded_pr_rest_snapshot(
+                repo=repo,
+                build_command=build_all_pr_rest_command,
+                empty_error="PR snapshot is empty",
+            )
+            terminal_pr_source = "rest_fallback"
 
         for claim in claims:
             issue_result = _run(build_issue_state_command(claim["issue"], repo=repo))
@@ -588,9 +718,13 @@ def reconcile_claims(  # noqa: C901 - bounded CLI orchestration with fail-closed
                 "open_ok": open_prs.get("ok", False),
                 "open_truncated": open_prs.get("truncated", False),
                 "open_prs": open_prs.get("covering_prs", []),
+                "open_source": open_pr_source,
+                "open_fallback_reason": open_pr_fallback_reason,
                 "terminal_ok": terminal_prs.get("ok", False),
                 "terminal_truncated": terminal_prs.get("truncated", False),
                 "terminal_prs": terminal_prs.get("terminal_prs", []),
+                "terminal_source": terminal_pr_source,
+                "terminal_fallback_reason": terminal_pr_fallback_reason,
             }
             row = _classify_reconciliation_row(claim, issue=issue, prs=prs)
             rows.append(row)
@@ -820,8 +954,11 @@ def release_issue(
             "reason": reason,
         }
 
-    open_prs = _run(build_open_pr_command(repo=repo))
-    coverage = _open_prs_covering_issue(open_prs, issue_number=issue_number)
+    coverage = _open_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
+    coverage_provenance = {
+        "coverage_source": coverage.get("source"),
+        "coverage_fallback_reason": coverage.get("fallback_reason"),
+    }
     if not coverage["ok"]:
         return {
             "schema": "issue_claim.v1",
@@ -839,6 +976,7 @@ def release_issue(
             "release_class": None,
             "reason": reason,
             "covering_prs": [],
+            **coverage_provenance,
         }
     if coverage.get("truncated"):
         return {
@@ -857,6 +995,7 @@ def release_issue(
             "release_class": None,
             "reason": reason,
             "covering_prs": coverage["covering_prs"],
+            **coverage_provenance,
         }
     if coverage["covering_prs"]:
         return {
@@ -875,6 +1014,7 @@ def release_issue(
             "release_class": None,
             "reason": reason,
             "covering_prs": coverage["covering_prs"],
+            **coverage_provenance,
         }
 
     result = _run(build_release_command(issue_number, remote=remote, expected_sha=observed_sha))
@@ -896,6 +1036,7 @@ def release_issue(
         "release_class": "terminal" if ok else None,
         "reason": reason,
         "covering_prs": [],
+        **coverage_provenance,
     }
 
 

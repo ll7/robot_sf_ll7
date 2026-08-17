@@ -61,6 +61,7 @@ class FakeGhProjectClient:
         self.created_fields: list[str] = []
         self.updated_numbers: list[tuple[str, str, str, float]] = []
         self.field_list_calls = 0
+        self.targeted_limits: list[int] = []
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return a stable fake project ID for update calls."""
@@ -94,6 +95,7 @@ class FakeGhProjectClient:
     ) -> list[dict]:
         """Simulate an exact issue query over the fake project items."""
 
+        self.targeted_limits.append(limit)
         for item in self._items:
             content = item.get("content") or {}
             if content.get("type") == "Issue" and content.get("number") == issue_number:
@@ -368,6 +370,7 @@ def test_sync_scores_targeted_finds_issue_beyond_default_limit() -> None:
     )
 
     assert [p.issue_number for p in previews] == [2299]
+    assert client.targeted_limits == [400]
     assert client.updated_numbers == [
         ("item-2299", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
     ]

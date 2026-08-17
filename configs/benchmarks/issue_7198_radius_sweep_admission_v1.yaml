@@ -1,0 +1,120 @@
+# Current-source Gate 2 admission packet contract for issue #7198 / #6642 / #6600.
+#
+# Plain-language summary: this is a reproducible, fail-closed preparation packet
+# for the three-arm collision-envelope radius sweep. It validates the closed Gate 1
+# receipt, freezes one candidate commit and all inputs, runs zero-episode preflights,
+# and records whether a maintainer may authorize submission. It never submits SLURM
+# work and never creates radius-sensitivity evidence.
+schema_version: issue-7198-radius-sweep-admission.v1
+issue: 7198
+campaign_issue: 6642
+parent_issue: 6600
+title: >-
+  Current-source Gate 2 radius-sweep admission packet for 0.5/0.8/1.0 m
+  over 14 planners, 48 scenario cells, and paper_eval_s30 seeds 111-140
+claim_boundary: >-
+  Preparation and admission evidence only. This packet is not a benchmark result,
+  radius-sensitivity result, realism result, sim-to-real result, or safety guarantee.
+  It authorizes no production compute. Degraded, fallback, failed, missing, duplicate,
+  unavailable, and provenance-invalid rows are excluded from evidence.
+
+manifest_config: configs/benchmarks/issue_6642_radius_sweep_manifest_v1.yaml
+arm_configs:
+  r0p5: configs/benchmarks/issue_6642_radius_sweep_arm_0p5m.yaml
+  r0p8: configs/benchmarks/issue_6642_radius_sweep_arm_0p8m.yaml
+  r1p0: configs/benchmarks/issue_6642_radius_sweep_arm_1p0m.yaml
+release_baseline_config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
+
+gate1:
+  report_schema: radius_binding_canary_report.v1
+  canary_schema: radius_binding_canary.v1
+  issue: 6641
+  parent_issue: 6600
+  scenario_id: francis2023_narrow_doorway
+  required_radii_m: [0.5, 0.8, 1.0]
+  required_surface_names:
+    - simulator_collision_geometry
+    - obstacle_pedestrian_contact_logic
+    - feasibility_oracle
+    - metric_metadata_and_output_rows
+    - planner_inputs
+  historical_receipt_sha256: 88ab630a555ce4a0a6e0b273e6808bc56bffbfa16c57ac3b579c97eb179d9922
+  historical_source_commit: 2910980fa7c49b726c3007c1f93aba6ec0b54d8e
+  current_canary_command: >-
+    uv run python scripts/benchmark/run_radius_binding_canary_issue_6641.py
+    --out-json {output_root}/gate1/radius_binding_canary_6641_current.json
+
+fixed_factors:
+  radii_m: [0.5, 0.8, 1.0]
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_count: 48
+  planner_count: 14
+  seed_set: paper_eval_s30
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124,
+    125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+  horizon: 600
+  dt: 0.1
+  kinematics: differential_drive
+  row_identity_dimensions: [radius_arm, planner_key, scenario_name, seed]
+  expected_rows_per_arm: 20160
+  expected_total_rows: 60480
+  immutable_commit_policy: pinned_at_launch_across_all_arms
+
+preflight:
+  entrypoint: scripts/tools/run_camera_ready_benchmark.py
+  mode: preflight
+  checkpoint_preflight_mode: metadata_only
+  submit_safe_checkpoint_mode: enforced_staged
+  skip_publication_bundle: true
+  expected_episode_count: 0
+  production_submission_authorized: false
+
+private_ops:
+  root_env: ROBOT_SF_PRIVATE_OPS
+  fallback_relative_path: ../robot_sf_ll7-private-ops
+  queue_summary_script: ops/jobs/scripts/queue_summary.sh
+  route_script: ops/jobs/scripts/route_job.py
+  preflight_script: ops/preflight/run_preflight.sh
+  submission_entrypoint: ops/jobs/scripts/submit_and_record.sh
+  queue_must_have_ready_entries: 1
+  route_job_class: headline_ci_cpu_matrix
+  route_cpus: 40
+  route_gpus: 0
+  route_mem_gb: 155
+  route_no_live: false
+  route_capacity_fill: true
+
+resources:
+  job_class: headline_ci_cpu_matrix
+  cpus: 40
+  gpus: 0
+  mem_gb: 155
+  workers: 32
+  estimated_output_rows: 60480
+
+artifacts:
+  local_packet_root: output/issue_7198_radius_sweep_admission
+  remote_results_uri_env: ROBOT_SF_RADIUS_SWEEP_RESULTS_URI
+  public_manifest_path: output/issue_7198_radius_sweep_admission/packet.json
+  retention_policy: >-
+    Retain the machine-readable packet, input checksum inventory, Gate 1 receipt,
+    preflight artifacts, and private-ops admission receipt in the durable campaign
+    results location before any authorized submission. Keep raw episode JSONL,
+    videos, and checkpoints outside git.
+
+missingness_policy:
+  evidence_exclusions:
+    - unavailable
+    - degraded
+    - fallback
+    - failed
+    - missing
+    - duplicate
+    - provenance_invalid
+  required_row_contract: complete_row_identities_or_explicit_fail_closed_missingness_ledger
+  missingness_ledger_required_before_submission: true
+
+verdict:
+  ready: ready_for_authorized_submission
+  blocked: blocked
+  never_authorizes_submission: true

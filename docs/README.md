@@ -310,6 +310,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
 * **[CALF/LegNav Comparator Diagnostic](./calf_legnav_comparator.md)** - One-seed paired ideal/perception-limited policy smoke with explicit source-transfer and metric-proxy boundaries
+* **[Prediction, Planning, and Runtime-Safety Diagnostic](./prediction_planning_safety_diagnostic.md)** - Fixture-only `prediction_planning_safety.v1` trace contract, split coverage, runtime event accounting, and claim boundary for issue #7317
 * **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow

@@ -38,10 +38,16 @@ PAYLOADS = {
         "Apache License\nVersion 2.0\n"
         "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n"
     ),
+    "third_party/socnavbench/LICENSING.yaml": (
+        "schema_version: robot_sf.third_party_licensing.v1\ndefault_license_spdx: MIT\n"
+    ),
+    "third_party/socnavbench/UPSTREAM.md": (
+        "https://github.com/CMU-TBD/SocNavBench\nCommit: 2724ea8\nLicense: MIT\n"
+    ),
     "THIRD_PARTY_NOTICES.md": (
         "# Third-party notices\nfast-pysf\nMIT License\nYuxiang Gao\n"
         "python-rvo2\nApache License, Version 2.0\nSocNavBench\nTBD) Lab\n"
-        "does not include model weights\n"
+        "Model artifacts are separately reviewed.\n"
     ),
     "third_party/python-rvo2/UPSTREAM.md": (
         "upstream_repository\nsource_archive_sha256\nLOCAL_CHANGES.patch\n"
@@ -153,4 +159,14 @@ def test_license_gate_rejects_noncanonical_payload_paths(tmp_path: Path) -> None
     _write_sdist(tmp_path / "robot_sf-0.0.0.tar.gz", decoy_payloads)
 
     with pytest.raises(DistributionLicenseError, match="missing root GPL license"):
+        check_distribution(tmp_path)
+
+
+def test_sdist_rejects_root_model_artifacts(tmp_path: Path) -> None:
+    """A source distribution must not silently redistribute tracked checkpoints."""
+    payloads = dict(PAYLOADS)
+    payloads["model/ppo/demo.zip"] = "checkpoint bytes"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(DistributionLicenseError, match="must not contain root model artifacts"):
         check_distribution(tmp_path)

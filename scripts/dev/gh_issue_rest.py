@@ -59,6 +59,10 @@ import subprocess
 import sys
 from typing import Any
 
+from scripts.dev._gh_rest import as_str as _as_str
+from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev._gh_rest import run_gh_api as _gh_api
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
@@ -128,57 +132,6 @@ def _gh_issue_view(
             stdout="",
             stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
         )
-
-
-def _gh_api(
-    path: str, *, params: list[str] | None = None, timeout: int = 30
-) -> subprocess.CompletedProcess:
-    """Run a ``gh api`` REST read and return the completed process.
-
-    Failures are returned (not raised) so callers can render clear errors. The
-    params list lets callers add ``--field``/``-q`` style ``gh api`` flags.
-    """
-    args = ["gh", "api", path]
-    if params:
-        args.extend(params)
-    try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
-    except FileNotFoundError:
-        # gh CLI not installed / not on PATH. Return a failed result instead of
-        # raising so callers keep the documented "returns error payload" contract.
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-
-
-def _parse_json(
-    result: subprocess.CompletedProcess, *, what: str
-) -> tuple[dict[str, Any] | list[Any] | None, str]:
-    """Parse JSON from a ``gh api`` result, returning ``(data, error)``.
-
-    On failure ``data`` is ``None`` and ``error`` is a human-readable message.
-    """
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return None, f"{what} failed: {detail}"
-    try:
-        return json.loads(result.stdout), ""
-    except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return None, f"{what} returned invalid JSON: {exc}; stdout snippet: {snippet!r}"
-
-
-def _as_str(raw: Any) -> str:
-    """Coerce a JSON value to ``str``, mapping explicit ``None`` to ``""``.
-
-    Guards against ``str(None) -> "None"`` when a REST field is present but
-    ``null`` (e.g. an issue with an empty body), while preserving valid falsy
-    values such as ``0`` or ``""``.
-    """
-    return "" if raw is None else str(raw)
 
 
 def _normalize_state(raw: Any) -> str:

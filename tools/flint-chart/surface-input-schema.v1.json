@@ -77,7 +77,7 @@
           "minProperties": 1,
           "additionalProperties": {"$ref": "#/$defs/sha256"}
         },
-        "durability": {"const": "durable_pinned"}
+        "durability": {"enum": ["durable_pinned", "synthetic_fixture"]}
       }
     },
     "populationItem": {

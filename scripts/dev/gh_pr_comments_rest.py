@@ -41,9 +41,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 from typing import Any
+
+from scripts.dev._gh_rest import as_str as _as_str
+from scripts.dev._gh_rest import gh_api_comments_get as _gh_api
+from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev._gh_rest import subprocess  # noqa: F401
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
@@ -53,44 +57,6 @@ COMMENTS_PAGE_SIZE = 100
 # comment fields exposed by scripts/dev/gh_issue_rest.py so PR and issue threads
 # render the same way.
 COMMENT_FIELDS = ("id", "user", "author_association", "created_at", "updated_at", "url", "body")
-
-
-def _gh_api(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """GET *path* through ``gh api``, returning failures for clear handling."""
-    args = ["gh", "api", path]
-    try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; PR comments were not read",
-        )
-
-
-def _parse_json(result: subprocess.CompletedProcess[str], *, what: str) -> tuple[Any, str]:
-    """Parse JSON from a ``gh api`` result, returning ``(data, error)``."""
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return None, f"{what} failed: {detail}"
-    try:
-        return json.loads(result.stdout), ""
-    except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return None, f"{what} returned invalid JSON: {exc}; stdout snippet: {snippet!r}"
-
-
-def _as_str(raw: Any) -> str:
-    """Coerce a JSON value to ``str``, mapping explicit ``None`` to ``""``."""
-    return "" if raw is None else str(raw)
 
 
 def _normalize_comment(raw: dict[str, Any]) -> dict[str, Any]:

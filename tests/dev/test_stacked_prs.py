@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.dev.stacked_prs import (
+    _get_paginated_list,
     _parse_expected_heads,
     _retarget_plan,
     _review_digest,
@@ -153,6 +154,98 @@ def test_review_digest_changes_when_review_content_changes() -> None:
     assert first != second
 
 
+def test_paginated_list_reads_full_first_page_and_records_provenance() -> None:
+    first_page = [{"id": index} for index in range(100)]
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        if len(calls) == 1:
+            return first_page, None
+        return [{"id": 100}], None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/pulls/1/reviews?per_page=100", api=fake_api
+    )
+
+    assert error is None
+    assert rows is not None and len(rows) == 101
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 100,
+        "row_count": 101,
+        "truncated": False,
+    }
+    assert calls == [
+        "repos/owner/repo/pulls/1/reviews?per_page=100",
+        "repos/owner/repo/pulls/1/reviews?per_page=100&page=2",
+    ]
+
+
+def test_paginated_list_accepts_check_run_object_envelope() -> None:
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        return {"total_count": 1, "check_runs": [{"id": 1, "name": "CI"}]}, None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/commits/sha/check-runs?per_page=100",
+        api=fake_api,
+        response_key="check_runs",
+    )
+
+    assert error is None
+    assert rows == [{"id": 1, "name": "CI"}]
+    assert pagination is not None and pagination["row_count"] == 1
+
+
+def test_paginated_list_rejects_malformed_page() -> None:
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        if path.endswith("page=2"):
+            return {"not": "a list"}, None
+        return [{"id": index} for index in range(100)], None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/pulls/1/comments?per_page=100", api=fake_api
+    )
+
+    assert rows is None
+    assert pagination is None
+    assert "was not a list" in (error or "")
+
+
+def test_paginated_list_fails_closed_at_page_budget() -> None:
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        calls.append(path)
+        return [{"id": len(calls)} for _ in range(100)], None
+
+    rows, pagination, error = _get_paginated_list(
+        "repos/owner/repo/issues/1/comments?per_page=100",
+        api=fake_api,
+        page_budget=2,
+    )
+
+    assert rows is None
+    assert pagination == {
+        "pages_read": 2,
+        "page_size": 100,
+        "page_budget": 2,
+        "row_count": 200,
+        "truncated": True,
+    }
+    assert "may be truncated" in (error or "")
+    assert len(calls) == 2
+
+
 def test_status_rejects_unknown_threads_without_remote_writes(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     """Status must expose thread uncertainty instead of treating it as green."""
     main_sha = "m" * 40
@@ -169,9 +262,10 @@ def test_status_rejects_unknown_threads_without_remote_writes(monkeypatch) -> No
         "repos/owner/repo/pulls/1/reviews?per_page=100": [],
         "repos/owner/repo/pulls/1/comments?per_page=100": [],
         "repos/owner/repo/issues/1/comments?per_page=100": [],
-        f"repos/owner/repo/commits/{root_sha}/check-runs?per_page=100": [
-            {"id": 1, "name": "CI", "status": "completed", "conclusion": "success"}
-        ],
+        f"repos/owner/repo/commits/{root_sha}/check-runs?per_page=100": {
+            "total_count": 1,
+            "check_runs": [{"id": 1, "name": "CI", "status": "completed", "conclusion": "success"}],
+        },
     }
 
     def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
@@ -187,6 +281,11 @@ def test_status_rejects_unknown_threads_without_remote_writes(monkeypatch) -> No
                 "conversation_comments": [],
                 "review_digest": "digest",
                 "review_states": {},
+                "pagination": {
+                    "reviews": {},
+                    "review_comments": {},
+                    "conversation_comments": {},
+                },
             },
             None,
         ),

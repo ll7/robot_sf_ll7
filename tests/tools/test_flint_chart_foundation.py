@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import jsonschema
@@ -49,6 +51,7 @@ def test_versioned_schemas_are_valid_and_fixture_surface_is_schema_valid() -> No
 
     assert surface["schema_version"] == SURFACE_SCHEMA_VERSION
     assert surface["render_status"] == "not_run"
+    assert surface["source"]["durability"] == "synthetic_fixture"
     assert list(jsonschema.Draft202012Validator(SURFACE_SCHEMA).iter_errors(surface)) == []
 
 
@@ -80,6 +83,81 @@ def test_large_integer_values_do_not_collapse_into_false_ties() -> None:
 
     assert surface["tie_groups"] == []
     assert all(cell["tie_group"] is None for cell in surface["cells"])
+
+
+def test_reversed_large_integer_uncertainty_fails_closed() -> None:
+    """Uncertainty bounds must use exact validated numeric values."""
+    payload = _payload()
+    for cells in (payload["canonical_cells"], payload["candidate_cells"]):
+        cells[0]["uncertainty"] = {
+            "status": "available",
+            "lower": 9_007_199_254_740_993,
+            "upper": 9_007_199_254_740_992,
+            "method": "adversarial_interval",
+        }
+
+    with pytest.raises(FlintChartContractError, match="must not exceed"):
+        build_surface(payload)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda payload: payload.update({"promotion_status": "admitted"}),
+        lambda payload: payload["source"].update({"verified": True}),
+        lambda payload: payload["source"]["artifact_catalog"].update({"verified": True}),
+        lambda payload: payload["metric"].update({"display_name": "Success"}),
+        lambda payload: payload["display_population"][0].update({"rank": 1}),
+        lambda payload: payload["canonical_cells"][0]["uncertainty"].update({"confidence": 0.95}),
+        lambda payload: payload["renderer_policy"].update({"promotion_status": "admitted"}),
+    ],
+)
+def test_surface_rejects_schema_unsupported_fields(mutation) -> None:
+    """Runtime validation must agree with every input schema object boundary."""
+    payload = _payload()
+    mutation(payload)
+
+    with pytest.raises(FlintChartContractError, match="unsupported fields"):
+        build_surface(payload)
+
+
+def test_duplicate_normalized_input_hash_paths_fail_closed() -> None:
+    """Whitespace normalization must not silently overwrite a provenance hash."""
+    payload = _payload()
+    digest = next(iter(payload["source"]["input_hashes"].values()))
+    payload["source"]["input_hashes"] = {
+        " fixtures/flint/release/canonical_report.json": digest,
+        "fixtures/flint/release/canonical_report.json": digest,
+    }
+
+    with pytest.raises(FlintChartContractError, match="duplicate normalized path"):
+        build_surface(payload)
+
+
+def test_synthetic_fixture_remains_analysis_only() -> None:
+    """Synthetic declarations remain distinguishable from durable pinned inputs."""
+    surface = build_surface(_payload())
+
+    assert surface["source"]["durability"] == "synthetic_fixture"
+    assert surface["render_status"] == "not_run"
+    assert surface["claim_boundary"].startswith("analysis-only")
+
+
+def test_surface_schema_requires_null_rank_and_exact_claim_boundary() -> None:
+    """The output schema must encode the same analysis-only invariants as runtime checks."""
+    surface = build_surface(_payload())
+
+    non_null_rank = copy.deepcopy(surface)
+    non_null_rank["cells"][0]["rank"] = 1
+    rank_errors = list(jsonschema.Draft202012Validator(SURFACE_SCHEMA).iter_errors(non_null_rank))
+    assert any(list(error.absolute_path) == ["cells", 0, "rank"] for error in rank_errors)
+
+    noncanonical_claim = copy.deepcopy(surface)
+    noncanonical_claim["claim_boundary"] = "promoted"
+    claim_errors = list(
+        jsonschema.Draft202012Validator(SURFACE_SCHEMA).iter_errors(noncanonical_claim)
+    )
+    assert any(list(error.absolute_path) == ["claim_boundary"] for error in claim_errors)
 
 
 def test_atlas_keeps_release_and_replay_contexts_separate(tmp_path: Path) -> None:
@@ -175,6 +253,10 @@ def test_output_surface_mutation_cannot_claim_complete_population(tmp_path: Path
             lambda surface: surface["cells"][0].update({"tie_group": None}),
             "cell tie references",
         ),
+        (
+            lambda surface: surface["renderer_policy"].update({"promotion_status": "admitted"}),
+            "unsupported fields",
+        ),
         (lambda surface: surface.update({"claim_boundary": "promoted"}), "analysis-only"),
     ],
 )
@@ -195,3 +277,31 @@ def test_payload_copy_is_independent() -> None:
     cloned = copy.deepcopy(original)
     cloned["metric"]["unit"] = "fraction"
     assert original == _payload()
+
+
+def test_surface_cli_rejects_unknown_promotion_metadata_without_output(tmp_path: Path) -> None:
+    """The real CLI must fail closed before writing a schema-invalid surface."""
+    payload = _payload()
+    payload["renderer_policy"]["promotion_status"] = "admitted"
+    input_path = tmp_path / "invalid-input.json"
+    output_path = tmp_path / "surface.json"
+    input_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/tools/build_flint_chart_surface.py",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output_path),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert not output_path.exists()
+    assert "unsupported fields" in result.stderr

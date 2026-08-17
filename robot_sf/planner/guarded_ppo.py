@@ -354,7 +354,6 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             float: Clearance in meters, or ``inf`` when unavailable.
         """
         if grid_payload is None:
-            # Observation required when grid_payload not provided
             if observation is None:
                 raise ValueError(
                     "Guarded PPO obstacle clearance requires observation "

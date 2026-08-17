@@ -11,9 +11,11 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 * `optuna_expert_ppo_issue_4019_demo.yaml` – Smoke-scale automated hyperparameter optimization (HPO) demo with explicit search space, cost bounds, and provenance output.
 * `bc_pretrain.yaml` – Behavioural cloning phase settings (optimizer, batch sizes, dataset references).
 * `ppo_finetune.yaml` – PPO fine-tuning schedule that resumes from a pre-trained checkpoint.
-* `bc_pretrain_issue_749_v10_warm_start.yaml` and
-  `ppo_finetune_issue_749_v10_warm_start.yaml` – Issue #749 BC warm-start PPO challenger launch
-  packet; see `docs/context/issue_749_bc_preinit_ppo_launch_packet.md` for the dataset collection,
+* `bc_pretrain_issue_749_v10_warm_start.yaml` and the
+  `ppo_finetune_issue_749_v10_warm_start.yaml` / `ppo_finetune_issue_1977_bc_warm_start_rerun.yaml`
+  pair – Issue #749/1977 BC warm-start PPO launch packets. Both fine-tuning variants inherit their
+  shared effective contract from `ppo_finetune_issue_749_warm_start_base.yaml`; see
+  `docs/context/issue_749_bc_preinit_ppo_launch_packet.md` for the dataset collection,
   artifact-persistence, and evaluation boundary.
 * `oracle_dataset_issue_1397_launch_packet.yaml` – pre-Slurm oracle-imitation dataset launch
   packet. Validate with

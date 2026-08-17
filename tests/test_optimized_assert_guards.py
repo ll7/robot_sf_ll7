@@ -15,6 +15,12 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
 
     import numpy as np
 
+    import robot_sf.benchmark.camera_ready._config as camera_ready_config
+    from robot_sf.benchmark.camera_ready._config import (
+        RadiusSweepBindingPreflightError,
+        _apply_radius_sweep_binding,
+    )
+    from robot_sf.benchmark.camera_ready._config_types import RadiusSweepConfig
     from robot_sf.baselines.ppo import PPOPlanner
     from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
     from robot_sf.feature_extractors.attention_extractor import MultiHeadAttention
@@ -177,6 +183,30 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
         lambda: guarded_ppo._min_obstacle_clearance(np.zeros(2, dtype=float)),
     )
 
+    radius_config = RadiusSweepConfig(
+        issue=6642,
+        parent_issue=6600,
+        arm_key="r0p5",
+        radius_m=0.5,
+        baseline_arm=False,
+        runtime_binding_status="bound_runtime",
+        binding_contract_version="radius_binding_canary.v1",
+        gate1_canary_issue=6641,
+        gate1_receipt_sha256="a" * 64,
+        gate1_source_commit="b" * 40,
+    )
+    original_radius_metadata = camera_ready_config._radius_binding_metadata
+    camera_ready_config._radius_binding_metadata = lambda _config: None
+    try:
+        expect(
+            "camera_ready_radius_binding_metadata",
+            RadiusSweepBindingPreflightError,
+            "radius-sweep binding metadata could not be constructed",
+            lambda: _apply_radius_sweep_binding([{"name": "s1"}], radius_config),
+        )
+    finally:
+        camera_ready_config._radius_binding_metadata = original_radius_metadata
+
     original_torch = socnav.torch
     planner = socnav.PredictionPlannerAdapter.__new__(socnav.PredictionPlannerAdapter)
     planner._baseline_predictor = None
@@ -266,6 +296,7 @@ _EXPECTED_MARKERS = (
     "PASS mppi_social_obstacle_clearance_observation: ValueError",
     "PASS risk_dwa_obstacle_clearance_observation: ValueError",
     "PASS guarded_ppo_obstacle_clearance_observation: ValueError",
+    "PASS camera_ready_radius_binding_metadata: RadiusSweepBindingPreflightError",
     "PASS predictive_pytorch_capability: RuntimeError",
     "PASS route_start: RuntimeError",
     "PASS route_goal: RuntimeError",
@@ -288,6 +319,7 @@ _EXPECTED_MESSAGES = (
     "MPPI Social obstacle clearance requires observation when grid_payload is absent",
     "Risk-DWA obstacle clearance requires observation when grid_payload is absent",
     "Guarded PPO obstacle clearance requires observation when grid_payload is absent",
+    "radius-sweep binding metadata could not be constructed",
     "PyTorch is required for predictive model inference but is not available",
     "None start",
     "None goal",

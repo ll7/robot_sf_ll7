@@ -539,7 +539,7 @@ def make_robot_env(  # noqa: PLR0913
 
     Args:
         config: Optional pre-constructed config; a default instance is created if None.
-        seed: Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+        seed: Deterministic seed (Python random, NumPy, and PyTorch). Stored on
             the returned env as ``applied_seed``.
         peds_have_obstacle_forces: Deprecated. Controls static obstacle forces for pedestrians.
             Use ``config.peds_have_static_obstacle_forces`` (obstacle forces) and
@@ -965,7 +965,7 @@ def make_multi_robot_env(  # noqa: PLR0913
     config : MultiRobotConfig | None
         Optional multi-robot configuration; default instance created if ``None``.
     seed : int | None
-        Deterministic seed (Python random, NumPy, PyTorch, hash seed). Stored on
+        Deterministic seed (Python random, NumPy, and PyTorch). Stored on
         the returned environment and passed through reset metadata.
     reward_func : Callable | None
         Custom reward function applied to each agent; falls back to internal default.

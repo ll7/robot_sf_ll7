@@ -47,6 +47,9 @@ _VALID_6944 = json.loads(
 _VALID_CH7 = json.loads(
     (FIXTURES_DIR / "ch7_visualization_causal_abstention.json").read_text(encoding="utf-8")
 )
+_VALID_6962 = json.loads(
+    (FIXTURES_DIR / "issue_6962_lane_formation_diagnostic.json").read_text(encoding="utf-8")
+)
 
 
 def _available_ch7_payload() -> dict:
@@ -118,6 +121,7 @@ class TestFixturesValid:
             ("issue_6474", _VALID_6474),
             ("issue_6944", _VALID_6944),
             ("ch7_visualization", _VALID_CH7),
+            ("issue_6962", _VALID_6962),
         ],
     )
     def test_fixture_passes_schema_validation(self, fixture_name: str, packet_dict: dict) -> None:
@@ -130,6 +134,7 @@ class TestFixturesValid:
             ("issue_6474", _VALID_6474),
             ("issue_6944", _VALID_6944),
             ("ch7_visualization", _VALID_CH7),
+            ("issue_6962", _VALID_6962),
         ],
     )
     def test_fixture_loads_as_typed_packet(self, fixture_name: str, packet_dict: dict) -> None:
@@ -147,14 +152,23 @@ class TestFixturesValid:
             sum(_VALID_6944["execution_mode"]["counts"].values())
             == _VALID_6944["population"]["included"]
         )
+        assert (
+            sum(_VALID_6962["execution_mode"]["counts"].values())
+            == _VALID_6962["population"]["included"]
+        )
 
     def test_source_refs_record_generation_provenance(self) -> None:
-        for source in _VALID_6474["sources"] + _VALID_6944["sources"] + _VALID_CH7["sources"]:
+        for source in (
+            _VALID_6474["sources"]
+            + _VALID_6944["sources"]
+            + _VALID_CH7["sources"]
+            + _VALID_6962["sources"]
+        ):
             assert source["commit"]
             assert source["tracked_commit"]
             assert source["command"]
 
-    @pytest.mark.parametrize("packet_dict", [_VALID_6474, _VALID_6944, _VALID_CH7])
+    @pytest.mark.parametrize("packet_dict", [_VALID_6474, _VALID_6944, _VALID_CH7, _VALID_6962])
     def test_metrics_bind_to_declared_source_artifacts(self, packet_dict: dict) -> None:
         source_ids = {source["source_id"] for source in packet_dict["sources"]}
         for metric in packet_dict["metrics"]:
@@ -189,6 +203,7 @@ class TestFixturesValid:
             "issue_6474_comfort_exposure_supported.json",
             "issue_6944_brne_candidate_transition_diagnostic.json",
             "ch7_visualization_causal_abstention.json",
+            "issue_6962_lane_formation_diagnostic.json",
         ],
     )
     def test_fixture_loads_from_disk(self, fixture_name: str) -> None:
@@ -197,10 +212,32 @@ class TestFixturesValid:
 
     def test_all_controlled_decision_outcomes_present(self) -> None:
         outcomes_seen: set[str] = set()
-        for fixture in [_VALID_6474, _VALID_6944, _VALID_CH7]:
+        for fixture in [_VALID_6474, _VALID_6944, _VALID_CH7, _VALID_6962]:
             for d in fixture["decisions"]:
                 outcomes_seen.add(d["outcome"])
-        assert outcomes_seen == {"supported", "not_supported", "unavailable"}
+        assert outcomes_seen == {"supported", "not_supported", "inconclusive", "unavailable"}
+
+    def test_issue_6962_fixture_binds_tracked_summary_values(self) -> None:
+        summary = json.loads(
+            (
+                Path(__file__).resolve().parents[2]
+                / "docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json"
+            ).read_text(encoding="utf-8")
+        )
+        metrics = {metric["metric_id"]: metric for metric in _VALID_6962["metrics"]}
+        assert metrics["lane_segregation_index_released_default_all_rows"][
+            "effect"
+        ] == pytest.approx(
+            summary["results"]["surface"]["released_default"]["lane_segregation_index_mean"]
+        )
+        assert metrics["lane_segregation_index_literature_typical_all_rows"][
+            "effect"
+        ] == pytest.approx(
+            summary["results"]["surface"]["literature_typical"]["lane_segregation_index_mean"]
+        )
+        assert metrics["clear_lane_hit_rate_max"]["effect"] == pytest.approx(
+            summary["results"]["surface"]["released_default"]["clear_hit_rate_max"]
+        )
 
     def test_deterministic_json_roundtrip(self, tmp_path: Path) -> None:
         out = tmp_path / "out.json"

@@ -11,6 +11,7 @@ path and SHA-256 digest without copying raw episode data.
 | `issue_6474_comfort_exposure_supported.json` | #6474 | `supported` |
 | `issue_6944_brne_candidate_transition_diagnostic.json` | #6944 | `not_supported` |
 | `ch7_visualization_causal_abstention.json` | #6792 | `unavailable` |
+| `issue_6962_lane_formation_diagnostic.json` | #6962 | `inconclusive` |
 
 ## Determinism
 

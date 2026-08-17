@@ -1,5 +1,17 @@
 # Context Retrieval Index
 
+Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
+with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
+compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The
+committed fixture is synthetic and is not normal-throughput or benchmark evidence:
+[issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md).
+
+Issue #6272 risk-tiered stale-base merge policy: explicit marker-file selection for
+base-sensitive changes, current-base subset validation, and trusted exact-head ordinary-path
+compare-and-swap evidence. Missing or unknown provenance remains fail-closed, and the note records
+the measurement boundary for a later normal-throughput observation window:
+[issue_6272_risk_tiered_stale_base_policy.md](issue_6272_risk_tiered_stale_base_policy.md).
+
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
 one campaign cell, preserves terminal-verdict denominators, and remains
@@ -47,6 +59,8 @@ same-commit paired batches and fail-closed target decisions. Two sequential runs
 were internally stable but disagreed: one measured 18.469% (`not_met`) and one
 8.327% (`met`); the profile remains opt-in and diagnostic only:
 [issue_6987_analysis_trace_overhead_2026-08-12/README.md](evidence/issue_6987_analysis_trace_overhead_2026-08-12/README.md).
+The linked reconciliation packet preserves both decisions and refuses a cross-receipt average
+when legacy cache/thread context is unavailable.
 
 Issue #5303 step 2b powered six-seed search-promotion preregistration (contract schema
 `issue_5303_search_promotion_contract.v2`, proposal/preflight only): the outcome-free
@@ -143,6 +157,13 @@ the configs are still not benchmark evidence and production compute remains bloc
 the remaining campaign gates:
 [issue_6642_radius_sweep_preparation.md](issue_6642_radius_sweep_preparation.md).
 
+Issue #7198 current-source Gate 2 admission packet: validates the closed Gate 1 receipt,
+freezes candidate inputs and checksums, runs zero-episode preflights for all three radius
+arms, and captures private queue/router evidence. It emits a fail-closed
+ready-for-authorization or blocked verdict without submitting production compute or making
+a radius-sensitivity claim:
+[issue_7198_radius_sweep_admission.md](issue_7198_radius_sweep_admission.md).
+
 Issue #6643 Gate 3 radius rank-stability analysis and durable evidence bundle for #6600:
 the analysis tooling is merged and fails closed, while the scientific analysis remains
 blocked until Gate 2 supplies complete row identities or a fail-closed missingness ledger.
@@ -156,6 +177,13 @@ projection, and versioned fixture-level report. The implementation is test-cover
 no scientific-result claim; the committed reference fixture remains blocked by its pending
 independent-review marker:
 [issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md).
+
+Issue #7197 deterministic diagnosis fixture admission: per-case source-predicate digests,
+independent-review and adjudication metadata, explicit training/prompt-development exclusions,
+reference-label leakage guards, and fail-closed invocation of the existing adapter and metric
+evaluator. The test-only source bundle proves contract integrity; the production reference
+fixture remains pending independent review:
+[issue_7197_failure_diagnosis_fixture_evaluation.md](issue_7197_failure_diagnosis_fixture_evaluation.md).
 
 Issue #6469 benchmark module reorganization plan: confirms the `robot_sf/util/` and
 `robot_sf/utils/` ghost directories carry no tracked files, and proposes domain-subdirectory

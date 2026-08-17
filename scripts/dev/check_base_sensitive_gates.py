@@ -25,11 +25,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+from scripts.dev.base_sensitive_selector import (
+    SELECTOR_VERSION,
+    classify_changed_files,
+    find_base_sensitive_test_files,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -83,21 +88,7 @@ def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any] | None:
 
 def _find_base_sensitive_test_files() -> list[Path]:
     """Find test files containing the base_sensitive marker."""
-    matches: list[Path] = []
-    ignored_dirs = {".git", ".venv", "venv", "build", "dist", "__pycache__", "third_party"}
-    for root, dirs, files in os.walk(REPO_ROOT):
-        dirs[:] = [directory for directory in dirs if directory not in ignored_dirs]
-        for filename in files:
-            if not (filename.startswith("test_") and filename.endswith(".py")):
-                continue
-            path = Path(root) / filename
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            if "base_sensitive" in text:
-                matches.append(path)
-    return sorted(matches)
+    return [REPO_ROOT / relative for relative in find_base_sensitive_test_files(REPO_ROOT)]
 
 
 def _get_pr_changed_files(pr_number: str) -> list[str] | None:
@@ -163,21 +154,27 @@ def check_pr_touches_base_sensitive(pr_number: str) -> dict[str, Any]:
       - changed_sensitive_files: list of relative paths
       - all_sensitive_files: full list of base-sensitive test files
     """
-    sensitive_files = {str(p.relative_to(REPO_ROOT)) for p in _find_base_sensitive_test_files()}
     changed = _get_pr_changed_files(pr_number)
-    if changed is None:
-        return {
-            "needs_gate": None,
-            "error": "Could not fetch PR changed files",
-            "changed_sensitive_files": [],
-            "all_sensitive_files": sorted(sensitive_files),
-        }
-
-    changed_sensitive = sorted(f for f in changed if f in sensitive_files)
+    selection = classify_changed_files(
+        changed,
+        sensitive_files=[
+            str(path.relative_to(REPO_ROOT)) for path in _find_base_sensitive_test_files()
+        ],
+    )
+    status = selection["status"]
     return {
-        "needs_gate": len(changed_sensitive) > 0,
-        "changed_sensitive_files": changed_sensitive,
-        "all_sensitive_files": sorted(sensitive_files),
+        "needs_gate": True
+        if status == "base_sensitive"
+        else False
+        if status == "ordinary"
+        else None,
+        "base_sensitivity": status,
+        "selector": SELECTOR_VERSION,
+        "changed_sensitive_files": selection["changed_sensitive_files"],
+        "all_sensitive_files": selection.get("all_sensitive_files", []),
+        "changed_files": selection["changed_files"],
+        "reason": selection["reason"],
+        **({"error": "Could not fetch PR changed files"} if status == "unknown" else {}),
     }
 
 

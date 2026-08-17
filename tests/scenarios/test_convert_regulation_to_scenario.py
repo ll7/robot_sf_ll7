@@ -9,7 +9,7 @@ These tests pin the three core behaviors required by issue #6054:
    compile cannot be read as scenario validity.
 3. Outputs marked as hypotheses until executed and reviewed.
 
-The schema-validity axis reuses ``robot_sf.benchmark.scenario_schema``; these
+The schema-validity axis reuses ``robot_sf.benchmark.scenario.scenario_schema``; these
 tests do not modify it.
 """
 
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.scenario_schema import (
+from robot_sf.benchmark.scenario.scenario_schema import (
     SCENARIO_MATRIX_SCHEMA_VERSION,
     validate_scenario_list,
     validate_scenario_matrix_metadata,

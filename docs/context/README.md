@@ -19,6 +19,10 @@ Exact-repeat execution-context provenance is documented in
 [issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md);
 it binds cross-host verdicts to numerical context without establishing a determinism result.
 
+The post-rollout stale-base observation contract is documented in
+[issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
+SHA-pinned workflow records and keeps missing or unknown attribution unavailable.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 
@@ -105,6 +109,8 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6272 risk-tiered stale-base merge policy:
+  [issue_6272_risk_tiered_stale_base_policy.md](issue_6272_risk_tiered_stale_base_policy.md)
 * Issue #6561 pedestrian desired-speed protocol:
   [issue_6561_pedestrian_speed_protocol.md](issue_6561_pedestrian_speed_protocol.md)
 * Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed
@@ -152,6 +158,8 @@ knowledge, not every transient iteration detail.
   [issue_6643_radius_rank_stability_gate3.md](issue_6643_radius_rank_stability_gate3.md)
 * Issue #6646 held-out diagnosis comparison infrastructure and fail-closed admission contract:
   [issue_6646_held_out_comparison_design.md](issue_6646_held_out_comparison_design.md)
+* Issue #7197 deterministic diagnosis fixture admission and source-leakage guard:
+  [issue_7197_failure_diagnosis_fixture_evaluation.md](issue_7197_failure_diagnosis_fixture_evaluation.md)
 * Issue #6871 diagnosis and execution report crosswalk:
   [issue_6871_report_crosswalk.md](issue_6871_report_crosswalk.md)
 * Issue #6875 camera-ready report crosswalk producer:

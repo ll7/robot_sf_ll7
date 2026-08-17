@@ -105,19 +105,21 @@ GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES = (
     "compact_worktree_snapshot.py",
     "compact_ci_snapshot.py",
 )
-GOAL_AUTOPILOT_SPARK_REQUIRED_PHRASES = (
-    "spark sidecar routing",
-    "gpt-5.3-codex-spark",
-    "tiny lookup",
-    "read-only review",
-    "docs cross-check",
-    "issue/file surface mapping",
-    "files inspected",
-    "exact evidence",
-    "uncertainty",
-    "recommended next prompt",
-    "github mutation",
-    "shell-executable fallback",
+GOAL_AUTOPILOT_SHARED_ROUTING_REQUIRED_PHRASES = (
+    "shared model-routing pointer",
+    "phase task class",
+    "current evidence state",
+    "do not select a model locally",
+    "current native tiers",
+    "evidenced escalation rule",
+    "external provider budget alternatives",
+    "must not duplicate a model inventory",
+    "local sidecar route table",
+    "route selection is route evidence only",
+    "controller still reviews artifacts",
+    "the diff",
+    "validation locally",
+    "before accepting work",
 )
 ROUTED_FAILURE_REQUIRED_PHRASES = (
     "terminal_state",
@@ -129,6 +131,12 @@ ROUTED_FAILURE_REQUIRED_PHRASES = (
     "status.txt",
     "validation.txt",
     "parent acceptance",
+)
+ACTIVE_ROUTING_TEMPLATES = (REPO_ROOT / "docs/templates/token_efficient_thread_profile.md",)
+RETIRED_SPARK_ROUTING_MARKERS = (
+    "spark usage-limit",
+    "gpt-5.3-codex-spark",
+    "spark sidecar routing",
 )
 
 
@@ -338,6 +346,16 @@ def _validate_generated_readme(registry: dict[str, Any], readme_text: str) -> li
     return []
 
 
+def _validate_active_routing_template(path: Path) -> list[str]:
+    """Reject retired model-specific routing in an active workflow template."""
+    lower = path.read_text(encoding="utf-8").lower()
+    if any(marker in lower for marker in RETIRED_SPARK_ROUTING_MARKERS):
+        return [
+            f"{path.relative_to(REPO_ROOT)}: active routing template contains retired Spark routing"
+        ]
+    return []
+
+
 def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text: str) -> list[str]:
     """Validate artifact-first delegated route contract text for selected skills."""
     if metadata.get("name") not in ARTIFACT_FIRST_SKILLS:
@@ -351,6 +369,7 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
             errors.append(f"{rel}: missing artifact-first requirement {filename!r}")
 
     lower = text.lower()
+    normalized = " ".join(lower.split())
     for phrase in ARTIFACT_FIRST_REQUIRED_PHRASES:
         if phrase not in lower:
             errors.append(f"{rel}: missing artifact-first phrase requirement {phrase!r}")
@@ -366,9 +385,9 @@ def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text
         for phrase in GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES:
             if phrase not in lower:
                 errors.append(f"{rel}: missing active-ledger requirement {phrase!r}")
-        for phrase in GOAL_AUTOPILOT_SPARK_REQUIRED_PHRASES:
-            if phrase not in lower:
-                errors.append(f"{rel}: missing Spark sidecar routing requirement {phrase!r}")
+        for phrase in GOAL_AUTOPILOT_SHARED_ROUTING_REQUIRED_PHRASES:
+            if phrase not in normalized:
+                errors.append(f"{rel}: missing shared model routing requirement {phrase!r}")
 
     if metadata.get("name") == "goal-pr-review":
         if not any(token in lower for token in GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS):
@@ -694,6 +713,8 @@ def main(argv: list[str] | None = None) -> int:
     errors.extend(_validate_non_skill_dirs())
     errors.extend(_validate_generated_readme(registry, readme_text))
     errors.extend(_find_broken_paths(README, readme_text))
+    for template in ACTIVE_ROUTING_TEMPLATES:
+        errors.extend(_validate_active_routing_template(template))
 
     registry_metadata = registry.get("skills", {})
     skill_names_on_disk: set[str] = set()

@@ -452,14 +452,14 @@ def test_main_complete_inventory_exits_nonzero_only_for_candidates(
         return ([_rest_issue(12, "simple issue")], complete_meta)
 
     def fake_prs(*, repo: str, max_pages: int) -> tuple[list[dict[str, object]], PaginationMeta]:
-        assert (repo, max_pages) == ("ll7/robot_sf_ll7", 20)
+        assert (repo, max_pages) == ("ll7/robot_sf_ll7", 50)
         return ([_rest_pr(91, "issue #12 done")], complete_meta)
 
     monkeypatch.setattr(open_issue_closure_audit, "fetch_open_issue_rows", fake_issues)
     monkeypatch.setattr(open_issue_closure_audit, "fetch_closed_pr_rows", fake_prs)
 
     exit_code = open_issue_closure_audit.main(
-        ["--repo", "ll7/robot_sf_ll7", "--max-issue-pages", "10", "--max-pr-pages", "20"]
+        ["--repo", "ll7/robot_sf_ll7", "--max-issue-pages", "10"]
     )
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 1

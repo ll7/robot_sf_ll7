@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 SCHEMA_VERSION = "routed_worker_manifest.v2"
+AGGREGATION_CONFIRMED = "confirmed"
+AGGREGATION_INCONCLUSIVE = "inconclusive"
+AGGREGATION_UNAVAILABLE = "unavailable"
+AGGREGATION_CONTRACT = "routed_worker_aggregation.v1"
+WORKER_OUTPUT_REQUIRED_ARTIFACTS = ("result_json", "result_md", "validation")
 ROUTE_EVIDENCE_WARNING = (
     "Wrapper success, zero exit, and manifest presence are route evidence only; "
     "they are not task acceptance. The orchestrator must still inspect the diff "
@@ -391,6 +396,102 @@ def _jsonable_presence(presence: dict[str, ArtifactPresence]) -> dict[str, dict[
     return {key: asdict(entry) for key, entry in presence.items()}
 
 
+def _artifact_is_non_empty(compact_artifacts: dict[str, Any], key: str) -> bool:
+    """Return whether a compact artifact is present and has non-empty evidence."""
+    artifact = compact_artifacts.get(key)
+    if not isinstance(artifact, dict) or artifact.get("present") is not True:
+        return False
+    size_bytes = artifact.get("size_bytes")
+    return size_bytes is None or (isinstance(size_bytes, int) and size_bytes > 0)
+
+
+def _explicit_useful_findings(attempt: dict[str, Any]) -> bool | None:
+    """Read an optional producer finding signal without inferring one from exit status."""
+    if "useful_findings" in attempt:
+        return bool(attempt["useful_findings"])
+    if "findings" not in attempt:
+        return None
+    findings = attempt["findings"]
+    if isinstance(findings, (list, tuple, set, dict)):
+        return bool(findings)
+    return bool(str(findings).strip())
+
+
+def _required_output_gaps(compact_artifacts: dict[str, Any]) -> list[str]:
+    """Return missing or empty compact artifacts required for aggregation."""
+    return [
+        f"missing_or_empty:{key}"
+        for key in WORKER_OUTPUT_REQUIRED_ARTIFACTS
+        if not _artifact_is_non_empty(compact_artifacts, key)
+    ]
+
+
+def _reported_output_gaps(attempt: dict[str, Any], *, useful_findings: bool | None) -> list[str]:
+    """Return explicit producer signals that make otherwise complete output unusable."""
+    if useful_findings is True:
+        return []
+    gaps: list[str] = []
+    for output_key in ("stdout", "output"):
+        output = attempt.get(output_key)
+        if isinstance(output, str) and not output.strip():
+            gaps.append("worker_output_empty")
+            break
+    stderr = attempt.get("stderr")
+    if isinstance(stderr, str) and any(
+        marker in stderr.lower()
+        for marker in ("permission denied", "operation not permitted", "headless command")
+    ):
+        gaps.append("permission_denied")
+    return gaps
+
+
+def classify_worker_output(
+    attempt: dict[str, Any],
+    *,
+    terminal_state: TerminalFailure | str | None,
+    compact_artifacts: dict[str, Any],
+) -> dict[str, Any]:
+    """Classify whether a route has usable worker evidence for parent aggregation.
+
+    A successful process exit is insufficient. The producer must expose non-empty result,
+    narrative, and validation artifacts. Explicit empty stdout, permission-denied stderr, or
+    an explicit no-findings signal keeps the aggregate inconclusive without storing raw output.
+    """
+    normalized_terminal = (
+        terminal_state.value if isinstance(terminal_state, TerminalFailure) else terminal_state
+    )
+    if normalized_terminal is None:
+        return {
+            "status": AGGREGATION_UNAVAILABLE,
+            "aggregation": AGGREGATION_UNAVAILABLE,
+            "reason": "terminal_state_unknown",
+            "missing_evidence": ["terminal_state_unknown"],
+        }
+    missing_evidence: list[str] = []
+    if normalized_terminal != TerminalFailure.NONE.value:
+        missing_evidence.append(f"terminal_state:{normalized_terminal}")
+
+    useful_findings = _explicit_useful_findings(attempt)
+    if useful_findings is False:
+        missing_evidence.append("useful_findings_absent")
+    missing_evidence.extend(_required_output_gaps(compact_artifacts))
+    missing_evidence.extend(_reported_output_gaps(attempt, useful_findings=useful_findings))
+
+    if missing_evidence:
+        return {
+            "status": AGGREGATION_INCONCLUSIVE,
+            "aggregation": AGGREGATION_INCONCLUSIVE,
+            "reason": missing_evidence[0],
+            "missing_evidence": list(dict.fromkeys(missing_evidence)),
+        }
+    return {
+        "status": "usable",
+        "aggregation": AGGREGATION_CONFIRMED,
+        "reason": "complete_worker_output_and_validation",
+        "missing_evidence": [],
+    }
+
+
 def build_routing_manifest(
     attempts: list[dict[str, Any]],
     *,
@@ -460,6 +561,11 @@ def build_routing_manifest(
                 has_run_dir=False,
             )
         scope_dict = asdict(scope_check) if scope_check is not None else None
+        output_contract = classify_worker_output(
+            attempt,
+            terminal_state=terminal_state,
+            compact_artifacts=compact_artifacts,
+        )
         manifest_attempts.append(
             {
                 "attempt_index": index,
@@ -471,6 +577,9 @@ def build_routing_manifest(
                 "artifact_paths": attempt.get("artifact_paths"),
                 "compact_artifacts": compact_artifacts,
                 "scope_check": scope_dict,
+                "aggregation": output_contract["aggregation"],
+                "aggregation_reason": output_contract["reason"],
+                "output_contract": output_contract,
             }
         )
 
@@ -487,6 +596,10 @@ def build_routing_manifest(
         "chosen_terminal_state": chosen_attempt["terminal_state"],
         "chosen_scope_check": chosen_attempt["scope_check"],
         "compact_artifacts": chosen_attempt["compact_artifacts"],
+        "aggregation_contract": AGGREGATION_CONTRACT,
+        "aggregation": chosen_attempt["aggregation"],
+        "aggregation_reason": chosen_attempt["aggregation_reason"],
+        "chosen_output_contract": chosen_attempt["output_contract"],
     }
 
 

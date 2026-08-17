@@ -6,6 +6,7 @@ import warnings
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
@@ -222,6 +223,45 @@ def test_nmpc_social_caches_absent_grid_payload_across_plan(monkeypatch) -> None
     planner.plan(observation)
 
     assert calls == 1
+
+
+def test_nmpc_social_obstacle_helpers_require_observation_without_grid_payload() -> None:
+    """Malformed obstacle helper calls fail explicitly instead of relying on ``assert``."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=1))
+    point = np.zeros(2, dtype=float)
+
+    with pytest.raises(
+        ValueError,
+        match="NMPC Social obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(point)
+
+    with pytest.raises(
+        ValueError,
+        match="NMPC Social occupancy cost requires observation when grid_payload is absent",
+    ):
+        planner._occupancy_cost(point)
+
+
+def test_nmpc_social_obstacle_helpers_accept_precomputed_grid_without_observation(
+    monkeypatch,
+) -> None:
+    """Precomputed grid payloads remain sufficient for both obstacle helper paths."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig())
+    grid = np.zeros((1, 3, 3), dtype=float)
+    grid[0, 1, 1] = 1.0
+    meta = {
+        "origin": np.asarray([-1.0, -1.0], dtype=float),
+        "resolution": np.asarray([1.0], dtype=float),
+        "size": np.asarray([3.0, 3.0], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([0], dtype=int),
+    }
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (1, 1))
+    payload = (grid, meta)
+
+    assert planner._min_obstacle_clearance(np.zeros(2), grid_payload=payload) == 0.0
+    assert planner._occupancy_cost(np.zeros(2), grid_payload=payload) == 1.0
 
 
 def test_nmpc_social_prioritizes_current_waypoint_until_close() -> None:

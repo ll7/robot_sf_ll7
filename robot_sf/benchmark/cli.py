@@ -88,15 +88,15 @@ from robot_sf.benchmark.report_table import format_latex_booktabs as _tbl_format
 from robot_sf.benchmark.report_table import format_markdown as _tbl_format_md
 from robot_sf.benchmark.report_table import to_json as _tbl_to_json
 from robot_sf.benchmark.runner import load_scenario_matrix, run_batch
+from robot_sf.benchmark.scenario.scenario_schema import (
+    validate_scenario_list,
+    validate_scenario_matrix_metadata,
+)
 from robot_sf.benchmark.scenario_flakiness import (
     DEFAULT_OBSERVATION_TRACK_MODE as _DEFAULT_FLAKINESS_TRACK_MODE,
 )
 from robot_sf.benchmark.scenario_flakiness import (
     compute_flakiness_audit as _compute_flakiness_audit,
-)
-from robot_sf.benchmark.scenario_schema import (
-    validate_scenario_list,
-    validate_scenario_matrix_metadata,
 )
 from robot_sf.benchmark.scenario_thumbnails import (
     resolve_scenario_label as _thumb_resolve_label,

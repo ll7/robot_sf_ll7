@@ -101,6 +101,35 @@ def test_dwa_config_builder_applies_explicit_acceleration_parameters() -> None:
     assert config.angular_samples == 6
 
 
+def test_dwa_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Malformed clearance calls fail explicitly when no payload source is supplied."""
+    planner = DWAPlannerAdapter()
+
+    with pytest.raises(
+        ValueError,
+        match="DWA obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+
+def test_dwa_obstacle_clearance_accepts_precomputed_grid_without_observation() -> None:
+    """A supplied grid payload remains sufficient without an observation mapping."""
+    planner = DWAPlannerAdapter()
+    grid = np.zeros((1, 3, 3), dtype=float)
+    grid[0, 1, 1] = 1.0
+    meta = {
+        "origin": np.asarray([-1.0, -1.0], dtype=float),
+        "resolution": np.asarray([1.0], dtype=float),
+        "size": np.asarray([3.0, 3.0], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([-1, -1, -1, 0], dtype=int),
+    }
+
+    assert (
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float), grid_payload=(grid, meta)) == 0.0
+    )
+
+
 def test_dwa_prediction_scoring_is_opt_in_in_canonical_configs() -> None:
     """Canonical DWA configs retain exact defaults and make forecasting explicit."""
     config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"

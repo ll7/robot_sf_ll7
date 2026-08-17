@@ -10,6 +10,17 @@ from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.planner.kinematics_model import KinematicsModel, resolve_benchmark_kinematics_model
 
 
+def _require_finite(name: str, value: float) -> float:
+    """Reject non-finite command-conversion inputs before numerical operations.
+
+    Returns:
+        float: The validated finite value.
+    """
+    if not np.isfinite(value):
+        raise ValueError(f"{name} must be finite, got {value!r}")
+    return value
+
+
 def ppo_action_to_unicycle(
     action: dict[str, Any],
     obs: dict[str, Any],
@@ -30,17 +41,17 @@ def ppo_action_to_unicycle(
         command_limits=cfg,
     )
     if "v" in action and "omega" in action:
+        v = _require_finite("v", float(action["v"]))
+        omega = _require_finite("omega", float(action["omega"]))
         if project_command:
-            v, omega = model.project((float(action["v"]), float(action["omega"])))
-        else:
-            v, omega = float(action["v"]), float(action["omega"])
+            v, omega = model.project((v, omega))
         return v, omega, "native"
 
     if "vx" not in action or "vy" not in action:
         raise ValueError(f"Unsupported PPO action payload: {action}")
 
-    vx = float(action["vx"])
-    vy = float(action["vy"])
+    vx = _require_finite("vx", float(action["vx"]))
+    vy = _require_finite("vy", float(action["vy"]))
     speed = float(np.hypot(vx, vy))
     if speed < 1e-9:
         if project_command:
@@ -57,8 +68,12 @@ def ppo_action_to_unicycle(
     heading = float(heading_arr[0]) if heading_arr.size > 0 else 0.0
     desired_heading = float(np.arctan2(vy, vx))
     heading_error = _normalize_heading(desired_heading - heading)
-    omega_max = float(cfg.get("omega_max", cfg.get("max_angular_speed", 1.0)))
-    omega_kp = float(cfg.get("omega_kp", cfg.get("heading_error_gain", 1.0)))
+    omega_max = _require_finite(
+        "omega_max", float(cfg.get("omega_max", cfg.get("max_angular_speed", 1.0)))
+    )
+    omega_kp = _require_finite(
+        "omega_kp", float(cfg.get("omega_kp", cfg.get("heading_error_gain", 1.0)))
+    )
     angular_velocity = float(np.clip(omega_kp * heading_error, -omega_max, omega_max))
     if project_command:
         v, omega = model.project((float(speed), angular_velocity))

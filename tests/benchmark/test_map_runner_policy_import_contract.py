@@ -9,16 +9,23 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "module_name",
+    ("module_name", "symbol_name"),
     (
-        "map_runner_policy_actions",
-        "map_runner_policy_common",
-        "map_runner_policy_metadata",
-        "map_runner_policy_resolution",
+        ("map_runner_policy_actions", "ppo_action_to_unicycle"),
+        ("map_runner_policy_common", "build_adapter_policy"),
+        ("map_runner_policy_metadata", "finalize_feasibility_metadata"),
+        ("map_runner_policy_resolution", None),
     ),
 )
-def test_legacy_policy_module_is_identity_alias(module_name: str) -> None:
-    """Historical flat imports resolve to the canonical package module object."""
+def test_legacy_policy_module_is_identity_alias(
+    module_name: str,
+    symbol_name: str | None,
+) -> None:
+    """Verify flat imports preserve module identity and representative public symbols.
+
+    This matters because external callers and pickled references still use the flat paths; a
+    non-identity alias would duplicate module state and break metadata wiring.
+    """
     legacy_name = f"robot_sf.benchmark.{module_name}"
     canonical_name = f"robot_sf.benchmark.map_runner_policies.{module_name}"
 
@@ -28,3 +35,5 @@ def test_legacy_policy_module_is_identity_alias(module_name: str) -> None:
     assert legacy is canonical
     assert sys.modules[legacy_name] is canonical
     assert canonical.__name__ == canonical_name
+    if symbol_name is not None:
+        assert getattr(legacy, symbol_name) is getattr(canonical, symbol_name)

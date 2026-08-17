@@ -105,6 +105,8 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Issue #6272 risk-tiered stale-base merge policy:
+  [issue_6272_risk_tiered_stale_base_policy.md](issue_6272_risk_tiered_stale_base_policy.md)
 * Issue #6561 pedestrian desired-speed protocol:
   [issue_6561_pedestrian_speed_protocol.md](issue_6561_pedestrian_speed_protocol.md)
 * Issue #6469 benchmark module reorganization plan (ghost `util`/`utils` confirmation and proposed

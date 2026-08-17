@@ -423,12 +423,18 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     assert pyproject["project"]["scripts"]["robot-sf-carla-replay-diagnostics"] == (
         "scripts.carla_bridge.diagnose_replay_semantics:main"
     )
-    hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
-    assert {"include": "robot_sf_carla_bridge"} in hatchling_packages
-    assert (
-        "/robot_sf_carla_bridge"
-        in pyproject["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
+    hatch_tool = (
+        pyproject.get("tool", {}).get("hatchling") or pyproject.get("tool", {}).get("hatch")
     )
+    assert hatch_tool is not None
+    wheel_packages = hatch_tool["build"]["targets"]["wheel"]["packages"]
+    assert (
+        {"include": "robot_sf_carla_bridge"} in wheel_packages
+        or "robot_sf_carla_bridge" in wheel_packages
+    )
+    sdist_target = hatch_tool["build"]["targets"]["sdist"]
+    sdist_includes = sdist_target.get("include", []) + sdist_target.get("only-include", [])
+    assert "/robot_sf_carla_bridge" in sdist_includes or "robot_sf_carla_bridge" in sdist_includes
 
 
 def test_export_t0_scenarios_main_rejects_parent_relative_paths(

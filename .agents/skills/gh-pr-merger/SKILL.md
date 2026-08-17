@@ -110,8 +110,10 @@ Before each merge operation, verify:
    reviewers. A distinct-account approval may be waived only under `goal-pr-review`'s documented
    single-account internal-review waiver.
 9. Branch protection rules on `main` allow merges from the current actor.
-10. The current head SHA exactly matches the SHA named in the `merge-ready` review evidence. A
-   single-account waiver never waives exact-head evidence; any head change requires re-review.
+10. The current head SHA exactly matches the SHA named in the `merge-ready` review evidence, and
+    that evidence carries an exact-head changed-line coverage verdict or a machine-readable
+    `changed-coverage: not-required @ <head_sha> reason=<code>` exception.
+    A single-account waiver never waives exact-head evidence; any head change requires re-review.
 
 If any preflight check fails, report the specific failure and do not merge.
 Do not retry preflight on the same PR without a state change.

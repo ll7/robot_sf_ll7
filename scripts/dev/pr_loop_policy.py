@@ -4,6 +4,7 @@
 Classifies PR state from compact snapshots and recommends one bounded action:
 stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
 refresh_snapshot, mark_ready_candidate, await_gate_verdict, reconcile_pr_metadata,
+await_changed_coverage,
 or no_action.
 
 Every PolicyDecision also emits a high-level ``flow_decision`` — one of exactly
@@ -16,7 +17,10 @@ Gate-verdict contract (issue #6019): an exact head is only eligible to advance
 toward merge when every required check is green AND a current exact-head
 ``gate-verdict: accepted @ <head_sha>`` trailer exists. The dispatcher rejects
 (fail closed) any head missing such a trailer, classifying it as
-``pending_gate_verdict`` instead of ``ready_to_merge``.
+``pending_gate_verdict`` instead of ``ready_to_merge``. Changed-line coverage
+contract (issue #7293): merge-admission snapshots also require a current
+``changed-coverage: passed @ <head_sha>`` trailer, or an exact-head
+``changed-coverage: not-required @ <head_sha> reason=<code>`` exception.
 After the gate verdict is current, a matching ``pr-metadata: reconciled @
 <digest>`` trailer is also required so final title/body state is reviewed.
 
@@ -56,6 +60,7 @@ VALID_ACTIONS = frozenset(
         "refresh_snapshot",
         "mark_ready_candidate",
         "await_gate_verdict",
+        "await_changed_coverage",
         "reconcile_pr_metadata",
         "no_action",
     }
@@ -73,6 +78,7 @@ VALID_STATES = frozenset(
         "stale_merge_base",
         "pending_gate_verdict",
         "pending_pr_metadata",
+        "pending_changed_coverage",
         "ready_to_merge",
         "no_action",
     }
@@ -91,6 +97,13 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_CHANGED_COVERAGE_RE = re.compile(
+    r"changed-coverage\s*:\s*(passed|not-required)\s*@\s*"
+    r"([0-9a-fA-F]{7,40})(?![0-9a-fA-F])"
+    r"(?:\s+reason=([a-z0-9][a-z0-9._-]*))?",
+    re.IGNORECASE,
+)
+CHANGED_COVERAGE_RE = _CHANGED_COVERAGE_RE
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
@@ -290,6 +303,85 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     return any(_sha_matches_head(sha, head_sha) for sha in accepted)
 
 
+def _explicit_changed_coverage_texts(pr: dict[str, Any]) -> list[str]:
+    """Return synthesized changed-coverage trailers from explicit snapshot fields."""
+    texts: list[str] = []
+    explicit_list = pr.get("changed_coverage_verdicts")
+    if isinstance(explicit_list, list):
+        texts.extend(item for item in explicit_list if isinstance(item, str))
+        for item in explicit_list:
+            if not isinstance(item, dict):
+                continue
+            verdict = str(item.get("verdict", "")).lower()
+            sha = str(item.get("sha") or item.get("head_sha") or "")
+            reason = str(item.get("reason") or "")
+            if verdict in {"passed", "not-required"} and sha:
+                trailer = f"changed-coverage: {verdict} @ {sha}"
+                if reason:
+                    trailer += f" reason={reason}"
+                texts.append(trailer)
+    explicit = pr.get("changed_coverage_verdict")
+    if isinstance(explicit, str):
+        texts.append(explicit)
+    elif isinstance(explicit, dict):
+        verdict = str(explicit.get("verdict", "")).lower()
+        sha = str(explicit.get("sha") or explicit.get("head_sha") or "")
+        reason = str(explicit.get("reason") or "")
+        if verdict in {"passed", "not-required"} and sha:
+            trailer = f"changed-coverage: {verdict} @ {sha}"
+            if reason:
+                trailer += f" reason={reason}"
+            texts.append(trailer)
+    return texts
+
+
+def _changed_coverage_texts(pr: dict[str, Any]) -> list[str]:
+    """Return trusted explicit and compact review/comment changed-coverage text."""
+    return _explicit_changed_coverage_texts(pr) + _snapshot_body_texts(pr)
+
+
+def _changed_coverage_records(pr: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Return parsed changed-coverage records as ``(verdict, sha, reason)`` tuples."""
+    records: list[tuple[str, str, str]] = []
+    for text in _changed_coverage_texts(pr):
+        for match in _CHANGED_COVERAGE_RE.finditer(text):
+            verdict, sha, reason = match.groups()
+            records.append((verdict.lower(), sha.lower(), (reason or "").lower()))
+    return records
+
+
+def current_changed_coverage_verdict(pr: dict[str, Any], head_sha: str) -> tuple[str, str]:
+    """Return the exact-head changed-coverage status and exception reason.
+
+    The status is one of ``passed``, ``not_required``, ``missing``, ``stale``,
+    ``invalid``, or ``ambiguous``. A ``not-required`` verdict is valid only
+    when it carries a machine-readable ``reason=`` token. Multiple conflicting
+    current-head verdicts fail closed as ``ambiguous``.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return "missing", ""
+    records = _changed_coverage_records(pr)
+    current = [record for record in records if _sha_matches_head(record[1], head_sha)]
+    if not current:
+        return ("stale", "") if records else ("missing", "")
+
+    statuses = {(verdict, reason) for verdict, _, reason in current}
+    if len(statuses) > 1:
+        return "ambiguous", ""
+    verdict, _, reason = current[0]
+    if verdict == "passed":
+        return "passed", ""
+    if reason:
+        return "not_required", reason
+    return "invalid", ""
+
+
+def has_current_changed_coverage_verdict(pr: dict[str, Any], head_sha: str) -> bool:
+    """Return whether exact-head coverage proof or a justified exception exists."""
+    status, _ = current_changed_coverage_verdict(pr, head_sha)
+    return status in {"passed", "not_required"}
+
+
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:
     """Return synthesized metadata-trailer texts from explicit snapshot fields."""
     texts: list[str] = []
@@ -421,7 +513,10 @@ def _merge_ready_state(
     Gate-verdict contract (issue #6019): reject any exact head unless a current
     exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. The final
     title/body pair must also have a current ``pr-metadata: reconciled @
-    <digest>`` trailer. Fail closed when either trailer is missing or stale.
+    <digest>`` trailer. Changed-line coverage must also be current when the
+    snapshot marks ``changed_coverage_required``; docs-only and other explicit
+    exceptions use a reasoned ``not-required`` trailer. Fail closed when any
+    required evidence is missing or stale.
     """
     if "merge-ready" not in label_names or overall != "success":
         return None
@@ -442,6 +537,10 @@ def _merge_ready_state(
     metadata_digest = str(pr.get("metadata_digest", "") or "")
     if not has_current_pr_metadata_verdict(pr, metadata_digest):
         return "pending_pr_metadata"
+    if pr.get("changed_coverage_required") is True:
+        coverage_status, _ = current_changed_coverage_verdict(pr, head_sha)
+        if coverage_status not in {"passed", "not_required"}:
+            return "pending_changed_coverage"
     return "ready_to_merge"
 
 
@@ -528,6 +627,7 @@ def _compute_flow_decision(
       - pending_ci -> continue
       - pending_gate_verdict -> continue (wait for current exact-head gate verdict)
       - pending_pr_metadata -> continue (reconcile final title/body metadata)
+      - pending_changed_coverage -> continue (obtain exact-head coverage proof)
       - ready_to_merge -> continue
       - failed_ci, failed_validation, missing_artifacts, stale_worktree -> reroute
       - no_action -> stop
@@ -537,7 +637,13 @@ def _compute_flow_decision(
     if review_state == "CHANGES_REQUESTED":
         return "escalate"
     match state:
-        case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
+        case (
+            "pending_ci"
+            | "pending_gate_verdict"
+            | "pending_pr_metadata"
+            | "pending_changed_coverage"
+            | "ready_to_merge"
+        ):
             return "continue"
         case "unknown_review_threads":
             return "continue"
@@ -669,6 +775,18 @@ def recommend_action(  # noqa: C901
                 reason=(
                     "CI green, merge-ready, and current gate verdict exist but the final PR "
                     "title/body lacks a matching trusted pr-metadata trailer"
+                ),
+                actions_remaining=remaining,
+            )
+        case "pending_changed_coverage":
+            return PolicyDecision(
+                pr=pr_number,
+                action="await_changed_coverage",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "CI green, merge-ready, and current gate/metadata verdicts exist but "
+                    "exact-head changed-line coverage proof or a reasoned exception is missing"
                 ),
                 actions_remaining=remaining,
             )

@@ -22,6 +22,8 @@ license-files = [
     "third_party/python-rvo2/LOCAL_CHANGES.patch",
     "third_party/socnavbench/LICENSE",
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+    "third_party/socnavbench/LICENSING.yaml",
+    "third_party/socnavbench/UPSTREAM.md",
     "THIRD_PARTY_NOTICES.md",
 ]
 readme = "README.md"
@@ -165,36 +167,33 @@ describe_command = [
 # `robot_sf.__version__` works from installed wheels and editable installs.
 version-file = "robot_sf/_version.py"
 
-[tool.hatchling.build.targets.wheel]
+[tool.hatch.build.targets.wheel]
 packages = [
-    { include = "robot_sf" },
-    { include = "robot_sf_carla_bridge" },
-    { include = "examples" },
-    { include = "third_party" },
+    "robot_sf",
+    "robot_sf_carla_bridge",
+    "examples",
+    "third_party",
 ]
 include = ["examples/**", "benchmarks/**"]
 
-[tool.hatchling.build.targets.wheel.shared-data]
+[tool.hatch.build.targets.wheel.shared-data]
 "robot_sf/maps" = "robot_sf/maps"
 
 [tool.hatch.build.targets.wheel.force-include]
 "benchmarks" = "benchmarks"
 "fast-pysf/pysocialforce" = "pysocialforce"
 
-[tool.hatchling.build.targets.sdist]
-include = [
-    "/robot_sf",
-    "/robot_sf_carla_bridge",
-    "/fast-pysf/pysocialforce",
-    "/examples",
-    "/benchmarks",
-    "/third_party",
-    "/README.md",
-    "/LICENSE",
-    "/fast-pysf/LICENSE",
-    "/third_party/python-rvo2/LICENSE",
-    "/third_party/socnavbench/LICENSE",
-    "/THIRD_PARTY_NOTICES.md",
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "robot_sf",
+    "robot_sf_carla_bridge",
+    "fast-pysf/pysocialforce",
+    "examples",
+    "benchmarks",
+    "third_party",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
 ]
 exclude = [
     "/tests",
@@ -205,6 +204,8 @@ exclude = [
     "/fast-pysf/tests",
     "/fast-pysf/examples",
     "/fast-pysf/benchmarks",
+    "/model",
+    "/model/**",
 ]
 
 [tool.hatch.metadata]

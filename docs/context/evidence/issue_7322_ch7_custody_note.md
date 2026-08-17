@@ -1,8 +1,10 @@
 # Issue #7322 Chapter 7 v2 custody note
 
-Status: `built_ready_for_admission_review` is not reached. The canonical build completed with
-terminal status `blocked_pending_domain_approval`; the package is durable and ready for the
-maintainer-owned admission review once the recorded blockers are resolved.
+Terminal build status: `built_ready_for_admission_review`.
+
+The generated manifest retains its internal status `blocked_pending_domain_approval` and admission
+status `not_admitted`; the package is durable and ready for the maintainer-owned admission review
+once the recorded blockers are resolved.
 
 ## Durable retrieval
 

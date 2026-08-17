@@ -6,14 +6,16 @@ name: Merge Queue Gate
 # not auto-merge a PR until this gate passes. It enforces the same fail-closed
 # preflight as the in-repository `gh-pr-merger` skill:
 # non-draft state, current `merge-ready` label, a current exact-head
-# `gate-verdict: accepted @ <head_sha>` trailer, and a current
-# `pr-metadata: reconciled @ <digest>` trailer for the live PR title/body, no
-# unresolved actionable review threads, and no outstanding explicitly requested reviewers. It also
-# requires the merge queue's "Only merge non-failing
+# `gate-verdict: accepted @ <head_sha>` trailer, a current
+# `pr-metadata: reconciled @ <digest>` trailer for the live PR title/body, and
+# exact-head changed-line coverage proof (`changed-coverage: passed @ <head_sha>`)
+# or a reasoned `not-required` exception. It also requires no unresolved
+# actionable review threads and no outstanding explicitly requested reviewers.
+# It also requires the merge queue's "Only merge non-failing
 # pull requests" (`ALLGREEN`) strategy so a passing tail entry cannot carry an
 # earlier ungated entry through a grouped merge. The audit record (evaluated
-# head/base SHAs, queue strategy, label set, metadata digest/status,
-# gate-verdict status, staleness verdict, CI conclusion, thread resolution, and
+# head/base SHAs, queue strategy, label set, metadata and changed-coverage
+# verdict status, staleness verdict, CI conclusion, thread resolution, and
 # requested-reviewer status) is
 # emitted to the job summary and stdout.
 #

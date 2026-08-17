@@ -16,9 +16,11 @@ from scripts.dev.pr_loop_policy import (
     _review_state,
     _sha_matches_head,
     classify_pr_state,
+    current_changed_coverage_verdict,
     evaluate_queue,
     format_text,
     has_current_accepted_gate_verdict,
+    has_current_changed_coverage_verdict,
     has_current_pr_metadata_verdict,
     load_manifest_artifacts,
     main,
@@ -618,6 +620,57 @@ def test_classify_green_merge_ready_with_stale_metadata_digest_rejected() -> Non
 
     assert has_current_pr_metadata_verdict(pr, str(pr["metadata_digest"])) is False
     assert classify_pr_state(pr) == "pending_pr_metadata"
+
+
+def test_changed_coverage_requires_exact_head_or_reasoned_exception() -> None:
+    """Admission policy rejects missing/stale coverage and accepts a reasoned exception."""
+    pr = _pr(
+        3020,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["changed_coverage_required"] = True
+
+    assert classify_pr_state(pr) == "pending_changed_coverage"
+    decision = recommend_action("pending_changed_coverage", pr_number=3020, actions_remaining=3)
+    assert decision.action == "await_changed_coverage"
+    assert decision.flow_decision == "continue"
+
+    pr["changed_coverage_verdicts"] = [f"changed-coverage: passed @ {FULL_SHA[:12]}"]
+    assert current_changed_coverage_verdict(pr, FULL_SHA) == ("passed", "")
+    assert has_current_changed_coverage_verdict(pr, FULL_SHA) is True
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+    pr["changed_coverage_verdicts"] = [
+        f"changed-coverage: not-required @ {FULL_SHA} reason=docs-only"
+    ]
+    assert current_changed_coverage_verdict(pr, FULL_SHA) == ("not_required", "docs-only")
+    assert has_current_changed_coverage_verdict(pr, FULL_SHA) is True
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_changed_coverage_stale_and_malformed_exceptions_fail_closed() -> None:
+    """A later head or reasonless exception cannot reuse the old admission proof."""
+    pr = _pr(
+        3021,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["changed_coverage_required"] = True
+    pr["changed_coverage_verdicts"] = [
+        "changed-coverage: passed @ deadbeef00000000000000000000000000000001"
+    ]
+    assert current_changed_coverage_verdict(pr, FULL_SHA) == ("stale", "")
+    assert classify_pr_state(pr) == "pending_changed_coverage"
+
+    pr["changed_coverage_verdicts"] = [f"changed-coverage: not-required @ {FULL_SHA}"]
+    assert current_changed_coverage_verdict(pr, FULL_SHA) == ("invalid", "")
+    assert has_current_changed_coverage_verdict(pr, FULL_SHA) is False
+    assert classify_pr_state(pr) == "pending_changed_coverage"
 
 
 def test_untrusted_metadata_trailer_cannot_admit_current_digest() -> None:
@@ -1640,7 +1693,8 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     long_prefix = "Detailed review feedback paragraph line. " * 6  # > 200 chars
     digest = metadata_digest("long body review PR", "")
     long_review_body = (
-        f"{long_prefix}\n\ngate-verdict: accepted @ {sha}\n\n{metadata_trailer(digest)}"
+        f"{long_prefix}\n\ngate-verdict: accepted @ {sha}\n\n"
+        f"{metadata_trailer(digest)}\n\nchanged-coverage: passed @ {sha}"
     )
 
     pr_raw = {
@@ -1681,6 +1735,7 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     # Verify trailer was extracted to gate_verdicts while body_excerpt was truncated
     assert pr_snapshot["base_freshness"]["verdict"] == "fresh"
     assert pr_snapshot["gate_verdicts"] == [f"gate-verdict: accepted @ {sha}"]
+    assert pr_snapshot["changed_coverage_verdicts"] == [f"changed-coverage: passed @ {sha}"]
     assert pr_snapshot["metadata_digest"] == digest
     assert pr_snapshot["metadata_verdicts"] == [metadata_trailer(digest)]
     excerpt = pr_snapshot["review_snapshot"]["latest"][0]["body_excerpt"]

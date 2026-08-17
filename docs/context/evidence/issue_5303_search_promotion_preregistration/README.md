@@ -242,3 +242,12 @@ method, objective, gates, denominator, uncertainty, null tests, decision rule, a
 `diagnostic_inconclusive` declaration are byte-identical to the pre-rename freeze. The
 re-freeze is a path/identity refresh only and does not re-preregister the design or authorize
 any promotion.
+
+## Outcome-free optimized-guard provenance refresh (2026-08-17)
+
+Issue #7231 replaced the v1 preflight's assertion-dependent certified-archive narrowing with
+explicit fail-closed control flow so the evidence gate remains present under Python `-O`.
+The raw preflight-module hash and derived contract/manifest hashes were refreshed. The frozen
+target, candidate space, budget, seeds, thresholds, decision rule, diagnostic boundary, and
+recertification receipt are unchanged; this is an implementation/provenance refresh only and
+does not authorize a campaign or promotion.

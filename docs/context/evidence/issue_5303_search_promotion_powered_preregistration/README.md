@@ -63,6 +63,15 @@ space, budget, estimator, gates, denominator, uncertainty, null tests, decision 
 and evidence boundary are unchanged; this refresh does not authorize execution or
 re-preregister the study's design.
 
+## Outcome-free optimized-guard provenance refresh (2026-08-17)
+
+Issue #7231 replaced the v2 preflight's assertion-dependent archive-path narrowing and
+terminal-result mapping narrowing with explicit fail-closed control flow. The raw powered
+preflight-module hash and derived contract/manifest hashes were refreshed. The frozen target,
+candidate space, six-seed budget, thresholds, result schema, downstream activation boundary,
+and evidence boundary are unchanged; this is an implementation/provenance refresh only and
+does not authorize a campaign, transfer, or promotion.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen family-disjoint design and matched candidate (64 per search seed per

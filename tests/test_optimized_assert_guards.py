@@ -9,9 +9,12 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     """
     from types import SimpleNamespace
+    from pathlib import Path
 
     import numpy as np
 
@@ -23,6 +26,13 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     from robot_sf.benchmark.camera_ready._config_types import RadiusSweepConfig
     from robot_sf.baselines.ppo import PPOPlanner
     from robot_sf.baselines.social_force import SFPlannerConfig, SocialForcePlanner
+    from robot_sf.benchmark.issue_5303_search_promotion_preregistration import (
+        preflight_issue_5303_contract,
+    )
+    from robot_sf.benchmark.issue_5303_search_promotion_preregistration_v2 import (
+        downstream_activation_errors,
+        preflight_issue_5303_powered_contract,
+    )
     from robot_sf.feature_extractors.attention_extractor import MultiHeadAttention
     from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
     import robot_sf.nav.svg_map_parser as svg
@@ -56,6 +66,23 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
             print(f"PASS {label}: {type(exc).__name__}: {exc}")
             return
         raise RuntimeError(f"{label}: expected {exc_type.__name__}, no exception raised")
+
+
+    for label, preflight in (
+        ("issue_5303_v1_preflight", preflight_issue_5303_contract),
+        ("issue_5303_v2_preflight", preflight_issue_5303_powered_contract),
+    ):
+        result = preflight(repo_root=Path.cwd())
+        if not result.ready:
+            raise RuntimeError(f"{label}: preflight blocked: {result.blockers}")
+        print(f"PASS {label}: ready")
+
+    terminal_mapping_errors = downstream_activation_errors(object())
+    if terminal_mapping_errors != ["terminal result must be a mapping"]:
+        raise RuntimeError(
+            "issue_5303_terminal_mapping: unexpected errors " f"{terminal_mapping_errors!r}"
+        )
+    print(f"PASS issue_5303_terminal_mapping: fail-closed: {terminal_mapping_errors[0]}")
 
 
     expect(
@@ -281,6 +308,9 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
 )
 
 _EXPECTED_MARKERS = (
+    "PASS issue_5303_v1_preflight: ready",
+    "PASS issue_5303_v2_preflight: ready",
+    "PASS issue_5303_terminal_mapping: fail-closed",
     "PASS attention_positive_heads: ValueError",
     "PASS attention_divisibility: ValueError",
     "PASS simulator_map_definition: TypeError",
@@ -304,6 +334,7 @@ _EXPECTED_MARKERS = (
 )
 
 _EXPECTED_MESSAGES = (
+    "terminal result must be a mapping",
     "num_heads must be positive, got 0",
     "embed_dim=8 must be divisible by num_heads=3",
     "map_def should be of type MapDefinition",
@@ -352,3 +383,19 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
         assert marker in combined_output
     for message in _EXPECTED_MESSAGES:
         assert message in combined_output
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py",
+        "robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py",
+    ),
+)
+def test_issue_5303_preregistration_modules_have_no_production_asserts(
+    relative_path: str,
+) -> None:
+    """Frozen evidence gates must not disappear when Python runs with ``-O``."""
+    module_path = Path(__file__).resolve().parents[1] / relative_path
+    tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
+    assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree))

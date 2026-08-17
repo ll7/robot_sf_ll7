@@ -105,6 +105,14 @@ def _with_base_freshness(
     return result
 
 
+def _with_base_policy(
+    result: dict[str, object], policy: str, *, head_sha: str
+) -> dict[str, object]:
+    """Attach trusted exact-head risk-tier policy evidence."""
+    result["base_policy"] = [f"base-policy: {policy} @ {head_sha}"]
+    return result
+
+
 def _apply_gate_verdict(result: dict[str, object], gate_verdict: object) -> None:
     """Embed a gate-verdict trailer into a PR dict in-place."""
     if not gate_verdict:
@@ -247,6 +255,23 @@ def test_classify_ready_to_merge() -> None:
     assert classify_pr_state(pr) == "ready_to_merge"
 
 
+def test_classify_unknown_review_threads_blocks_merge_ready() -> None:
+    """REST fallback snapshots cannot admit merge-ready while GraphQL-only threads are unknown."""
+    pr = _pr(
+        105,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    pr["review_threads_admission"] = "fail_closed_unknown"
+
+    assert classify_pr_state(pr) == "unknown_review_threads"
+    decision = recommend_action("unknown_review_threads", pr_number=105, actions_remaining=3)
+    assert decision.action == "await_review_threads"
+    assert decision.flow_decision == "continue"
+
+
 def test_classify_stale_merge_base() -> None:
     """Stale merge base should fail closed and not reach ready_to_merge."""
     pr = _with_merge_base(
@@ -337,6 +362,72 @@ def test_classify_base_freshness_stale_blocks_ready_to_merge() -> None:
         base_sha="old-base",
         current_main_sha="main-sha",
     )
+    assert classify_pr_state(pr) == "stale_merge_base"
+
+
+def test_classify_ordinary_stale_base_allows_merge_candidate_after_policy_selection() -> None:
+    """An exact-head ordinary selector permits the later guarded CAS path."""
+    pr = _with_base_policy(
+        _with_base_freshness(
+            _pr(
+                4008,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            verdict="stale",
+            base_sha="old-base",
+            current_main_sha="main-sha",
+        ),
+        "ordinary-cas",
+        head_sha=FULL_SHA,
+    )
+
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_classify_current_base_policy_does_not_bypass_stale_base() -> None:
+    """The sensitive/current-base selector cannot authorize a stale PR."""
+    pr = _with_base_policy(
+        _with_base_freshness(
+            _pr(
+                4009,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            verdict="stale",
+            base_sha="old-base",
+            current_main_sha="main-sha",
+        ),
+        "current-base",
+        head_sha=FULL_SHA,
+    )
+
+    assert classify_pr_state(pr) == "stale_merge_base"
+
+
+def test_classify_ordinary_policy_does_not_bypass_missing_base_provenance() -> None:
+    """An ordinary selector cannot turn unavailable base provenance into a pass."""
+    pr = _with_base_policy(
+        _with_base_freshness(
+            _pr(
+                4010,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            verdict="missing-base",
+            base_sha="",
+            current_main_sha="main-sha",
+        ),
+        "ordinary-cas",
+        head_sha=FULL_SHA,
+    )
+
     assert classify_pr_state(pr) == "stale_merge_base"
 
 

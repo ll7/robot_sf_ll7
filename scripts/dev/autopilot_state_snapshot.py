@@ -18,6 +18,8 @@ from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import _latest_check_runs
+from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
+from scripts.dev.routed_worker_manifest import classify_worker_output
 
 FAILURE_CONCLUSIONS = {
     "action_required",
@@ -48,6 +50,7 @@ ROUTE_TERMINAL_FAILURES = frozenset(
         "unavailable",
     }
 )
+ROUTE_TERMINAL_STATES = ROUTE_TERMINAL_FAILURES | {"none"}
 TOKEN_EFFICIENCY_ACTIONS = (
     "refresh this snapshot or the active ledger before reopening full skill/docs context",
     "prefer compact issue/PR/CI helpers before broad gh, git worktree, or rg output",
@@ -130,6 +133,14 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
             "missing_artifacts_known": False,
             "compact_artifacts_available": False,
             "scope_check": None,
+            "aggregation": "inconclusive",
+            "aggregation_reason": "malformed_attempt",
+            "output_contract": {
+                "status": "inconclusive",
+                "aggregation": "inconclusive",
+                "reason": "malformed_attempt",
+                "missing_evidence": ["malformed_attempt"],
+            },
             "malformed": True,
         }
 
@@ -141,6 +152,11 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
             if not isinstance(value, dict) or value.get("present") is not True:
                 missing_artifacts.append(str(key))
     terminal_state = attempt.get("terminal_state")
+    output_contract = classify_worker_output(
+        attempt,
+        terminal_state=terminal_state,
+        compact_artifacts=compact if isinstance(compact, dict) else {},
+    )
     return {
         "attempt_index": attempt.get("attempt_index"),
         "route": attempt.get("route"),
@@ -153,10 +169,15 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
         "missing_artifacts_known": compact_artifacts_available,
         "compact_artifacts_available": compact_artifacts_available,
         "scope_check": attempt.get("scope_check"),
+        "aggregation": output_contract["aggregation"],
+        "aggregation_reason": output_contract["reason"],
+        "output_contract": output_contract,
     }
 
 
-def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
+def route_manifest_snapshot(  # noqa: C901, PLR0912 - explicit fail-closed parser states
+    manifest_path: str | Path,
+) -> dict[str, Any]:
     """Load a compact route-failure handoff without reading raw worker logs."""
     path = Path(manifest_path).resolve(strict=False)
     base = {
@@ -181,6 +202,16 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
             "next_action": "inspect_route_manifest_path_and_route_artifacts",
         }
 
+    schema = raw.get("schema")
+    if schema != ROUTE_MANIFEST_SCHEMA:
+        return {
+            **base,
+            "status": "malformed",
+            "schema": schema,
+            "error": (f"route manifest schema must be {ROUTE_MANIFEST_SCHEMA!r}; got {schema!r}"),
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
+
     attempts = raw.get("attempted_routes")
     if not isinstance(attempts, list):
         return {
@@ -191,6 +222,18 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
             "next_action": "inspect_route_manifest_path_and_route_artifacts",
         }
     attempt_rows = [_route_attempt_snapshot(attempt) for attempt in attempts]
+    malformed_attempts = [row for row in attempt_rows if row.get("malformed")]
+    if malformed_attempts:
+        return {
+            **base,
+            "status": "malformed",
+            "schema": schema,
+            "route_evidence_only": raw.get("route_evidence_only"),
+            "chosen_route": raw.get("chosen_route"),
+            "chosen_run_dir": raw.get("chosen_run_dir"),
+            "error": "route manifest attempted_routes contains malformed attempt records",
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
     chosen_run_dir = raw.get("chosen_run_dir")
     chosen_terminal_state = raw.get("chosen_terminal_state")
     chosen: dict[str, Any] | None = None
@@ -203,13 +246,82 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
     if chosen_terminal_state is None and chosen is not None:
         chosen_terminal_state = chosen.get("terminal_state")
 
-    failed_attempts = [
-        row for row in attempt_rows if row.get("terminal_state") in ROUTE_TERMINAL_FAILURES
+    terminal_states = [
+        row.get("terminal_state") for row in attempt_rows if row.get("terminal_state") is not None
     ]
-    return {
+    if chosen_terminal_state is not None:
+        terminal_states.append(chosen_terminal_state)
+    invalid_terminal_states = [
+        state
+        for state in terminal_states
+        if not isinstance(state, str) or state not in ROUTE_TERMINAL_STATES
+    ]
+    if invalid_terminal_states:
+        return {
+            **base,
+            "status": "malformed",
+            "schema": schema,
+            "route_evidence_only": raw.get("route_evidence_only"),
+            "chosen_route": raw.get("chosen_route"),
+            "chosen_run_dir": chosen_run_dir,
+            "chosen_terminal_state": chosen_terminal_state,
+            "error": (
+                "route manifest contains unsupported terminal_state values: "
+                f"{sorted({repr(state) for state in invalid_terminal_states})!r}"
+            ),
+            "next_action": "inspect_route_manifest_path_and_route_artifacts",
+        }
+
+    missing_terminal_state = any(row.get("terminal_state") is None for row in attempt_rows)
+    no_attempts = not attempt_rows
+    missing_terminal_state = missing_terminal_state or no_attempts
+    chosen_attempt_missing_terminal = chosen is not None and chosen.get("terminal_state") is None
+    normalized_attempt_rows = [
+        (
+            {
+                **row,
+                "terminal_state": "unavailable",
+                "failure_class": "missing_terminal_state",
+            }
+            if row.get("terminal_state") is None
+            else row
+        )
+        for row in attempt_rows
+    ]
+    if chosen is not None:
+        chosen = next(
+            (row for row in normalized_attempt_rows if row.get("run_dir") == chosen.get("run_dir")),
+            chosen,
+        )
+    if chosen_attempt_missing_terminal and chosen is not None:
+        chosen_terminal_state = chosen.get("terminal_state")
+    elif chosen_terminal_state is None and chosen is not None:
+        chosen_terminal_state = chosen.get("terminal_state")
+
+    failed_attempts = [
+        row
+        for row in normalized_attempt_rows
+        if row.get("terminal_state") in ROUTE_TERMINAL_FAILURES
+    ]
+    incomplete_output_attempts = [
+        row for row in normalized_attempt_rows if row.get("aggregation") == "inconclusive"
+    ]
+    chosen_output_contract = chosen.get("output_contract") if chosen else None
+    aggregation = chosen.get("aggregation", "inconclusive") if chosen else "inconclusive"
+    aggregation_reason = (
+        chosen.get("aggregation_reason", "no_chosen_route") if chosen else "no_chosen_route"
+    )
+    reported_aggregation = raw.get("aggregation")
+    if missing_terminal_state:
+        aggregation = "unavailable"
+        aggregation_reason = "terminal_state_unknown"
+    elif reported_aggregation == "confirmed" and aggregation != "confirmed":
+        aggregation = "inconclusive"
+        aggregation_reason = "reported_confirmed_without_usable_worker_output"
+    snapshot = {
         **base,
-        "status": "ok",
-        "schema": raw.get("schema"),
+        "status": "unavailable" if missing_terminal_state else "ok",
+        "schema": schema,
         "route_evidence_only": raw.get("route_evidence_only"),
         "chosen_route": raw.get("chosen_route"),
         "chosen_run_dir": chosen_run_dir,
@@ -224,10 +336,22 @@ def route_manifest_snapshot(manifest_path: str | Path) -> dict[str, Any]:
         "chosen_scope_check": chosen.get("scope_check")
         if chosen
         else raw.get("chosen_scope_check"),
+        "aggregation_contract": raw.get("aggregation_contract"),
+        "aggregation": aggregation,
+        "aggregation_reason": aggregation_reason,
+        "chosen_output_contract": chosen_output_contract,
         "failed_attempts": failed_attempts,
+        "incomplete_output_attempts": incomplete_output_attempts,
         "attempt_count": len(attempt_rows),
         "next_action": "inspect_parent_diff_and_run_local_validation",
     }
+    if no_attempts:
+        snapshot["error"] = "route manifest contains no attempted routes"
+        snapshot["next_action"] = "inspect_route_manifest_path_and_route_artifacts"
+    elif missing_terminal_state:
+        snapshot["error"] = "route manifest attempt is missing terminal_state"
+        snapshot["next_action"] = "inspect_route_manifest_path_and_route_artifacts"
+    return snapshot
 
 
 def _git_text(command: list[str], *, name: str) -> tuple[str, dict[str, Any], str | None]:
@@ -413,7 +537,17 @@ def controller_checkpoint(
     generated_paths = (git.get("compact_status") or {}).get("generated_paths_present", [])
     route_failures = route_failures or []
     route_failure_count = sum(
-        len(row.get("failed_attempts", [])) for row in route_failures if isinstance(row, dict)
+        max(
+            len(row.get("failed_attempts", [])),
+            len(row.get("incomplete_output_attempts", [])),
+        )
+        for row in route_failures
+        if isinstance(row, dict)
+    )
+    route_incomplete_output_count = sum(
+        len(row.get("incomplete_output_attempts", []))
+        for row in route_failures
+        if isinstance(row, dict)
     )
     next_action = "continue_from_snapshot"
     if errors:
@@ -449,6 +583,7 @@ def controller_checkpoint(
         "prs": pr_next_actions,
         "route_failure_manifest_count": len(route_failures),
         "route_failure_attempt_count": route_failure_count,
+        "route_incomplete_output_attempt_count": route_incomplete_output_count,
         "token_efficiency": {
             "parent_output_limit_lines": 200,
             "compact_first": True,

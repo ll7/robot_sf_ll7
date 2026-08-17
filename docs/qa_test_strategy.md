@@ -34,6 +34,11 @@ rerun boundaries, and diagnostic-only evidence status. `main` currently has no
 GitHub branch-protection required-status-check configuration, so
 `reproducibility-check` is not presently merge-blocking; any future branch-protection
 change must explicitly decide whether the standalone job becomes required.
+The follow-up `reproducibility-check-reconciliation` job has narrowly scoped `checks: write`
+permission and is also outside the `ci` aggregate. It can repair only a pending check-run for the
+exact successful reproducibility job and verifies the REST read-back; failed jobs, mismatched
+identities, and hosted API errors are not converted into success. Its uploaded report is diagnostic
+evidence, not benchmark or merge evidence.
 
 ---
 

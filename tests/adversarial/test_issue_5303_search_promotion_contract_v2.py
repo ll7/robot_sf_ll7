@@ -743,6 +743,11 @@ def test_downstream_activation_gates() -> None:
     assert downstream_activation_errors({"decision": "promote"})
 
 
+def test_downstream_activation_rejects_non_mapping_after_schema_validation() -> None:
+    """The activation gate remains explicitly fail-closed for non-mapping payloads."""
+    assert downstream_activation_errors(object()) == ["terminal result must be a mapping"]
+
+
 # ---------------------------------------------------------------------------
 # 7. Outcome-free sensitivity analysis (exact enumeration)
 # ---------------------------------------------------------------------------

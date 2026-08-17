@@ -355,6 +355,26 @@ def test_issue_749_warm_start_configs_define_env_contract():
     assert fine_tune_config.dataset_id == bc_config.dataset_id
 
 
+def test_issue_6484_finetune_variants_preserve_effective_mapping():
+    """Warm-start variants inherit one shared launch contract and retain identities."""
+    from dataclasses import asdict
+
+    from scripts.training.train_ppo_with_pretrained_policy import load_ppo_finetuning_config
+
+    repo_root = Path(__file__).resolve().parents[2]
+    config_dir = repo_root / "configs/training/ppo_imitation"
+    original = load_ppo_finetuning_config(config_dir / "ppo_finetune_issue_749_v10_warm_start.yaml")
+    rerun = load_ppo_finetuning_config(
+        config_dir / "ppo_finetune_issue_1977_bc_warm_start_rerun.yaml"
+    )
+
+    original_mapping = asdict(original)
+    rerun_mapping = asdict(rerun)
+    assert original_mapping.pop("run_id") == "issue_749_ppo_finetune_v10_warm_start"
+    assert rerun_mapping.pop("run_id") == "issue_1977_ppo_finetune_v10_warm_start_rerun"
+    assert rerun_mapping == original_mapping
+
+
 def test_collect_trajectories_filters_to_policy_observation_space(tmp_path, monkeypatch):
     """Collector should drop current extra observation keys before replaying old PPO policies."""
     from scripts.training import collect_expert_trajectories as collector

@@ -137,8 +137,10 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             float: Clearance in meters (`inf` when unavailable/no nearby obstacle).
         """
         if grid_payload is None:
-            # Observation required when grid_payload not provided
-            assert observation is not None
+            if observation is None:
+                raise ValueError(
+                    "Risk-DWA obstacle clearance requires observation when grid_payload is absent"
+                )
             grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None:
             return float("inf")

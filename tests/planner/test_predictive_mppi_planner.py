@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.predictive_mppi import (
     PredictiveMPPIAdapter,
@@ -191,6 +192,37 @@ def test_predictive_mppi_prefers_obstacle_channel_for_clearance(monkeypatch) -> 
     monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
 
     clearance = planner._min_obstacle_clearance(np.asarray([0.0, 0.0], dtype=float), _obs())
+    assert clearance == float("inf")
+
+
+def test_predictive_mppi_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Malformed clearance calls fail explicitly when no payload source is supplied."""
+    cfg = build_predictive_mppi_config({"sample_count": 8, "iterations": 1})
+    planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "Predictive MPPI obstacle clearance requires observation when grid_payload is absent"
+        ),
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+
+def test_predictive_mppi_obstacle_clearance_accepts_grid_without_observation(monkeypatch) -> None:
+    """A supplied grid payload remains sufficient without an observation mapping."""
+    cfg = build_predictive_mppi_config({"obstacle_threshold": 0.5})
+    planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
+
+    grid = np.zeros((2, 5, 5), dtype=float)
+    grid[0, 2, 2] = 1.0
+    meta = {"resolution": [0.5], "channel_indices": [1, 0, -1, 0]}
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
+
+    clearance = planner._min_obstacle_clearance(
+        np.asarray([0.0, 0.0], dtype=float),
+        grid_payload=(grid, meta),
+    )
     assert clearance == float("inf")
 
 

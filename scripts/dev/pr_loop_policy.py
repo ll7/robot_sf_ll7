@@ -91,6 +91,11 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_BASE_POLICY_RE = re.compile(
+    r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
+    re.IGNORECASE,
+)
+BASE_POLICY_RE = _BASE_POLICY_RE
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +379,30 @@ def _base_freshness_state(pr: dict[str, Any]) -> str | None:
     return None
 
 
+def _base_policy_texts(pr: dict[str, Any]) -> list[str]:
+    """Return explicit and trusted review evidence for the risk-tiered base policy."""
+    texts: list[str] = []
+    explicit = pr.get("base_policy")
+    if isinstance(explicit, str):
+        texts.append(explicit)
+    elif isinstance(explicit, list):
+        texts.extend(item for item in explicit if isinstance(item, str))
+    texts.extend(_snapshot_body_texts(pr))
+    return texts
+
+
+def has_current_ordinary_base_policy(pr: dict[str, Any], head_sha: str) -> bool:
+    """Return whether trusted exact-head evidence selects the ordinary CAS path."""
+    if not isinstance(pr, dict) or not head_sha:
+        return False
+    for text in _base_policy_texts(pr):
+        for match in _BASE_POLICY_RE.finditer(text):
+            policy, sha = match.groups()
+            if policy.lower() == "ordinary-cas" and _sha_matches_head(sha, head_sha):
+                return True
+    return False
+
+
 def _merge_ready_state(
     pr: dict[str, Any],
     *,
@@ -383,10 +412,11 @@ def _merge_ready_state(
 ) -> str | None:
     """Return the merge-readiness state for a green, merge-ready PR, or None.
 
-    Stale merge base (issue #6269/#7021): when snapshot provenance says the PR
-    base is stale, missing, or cannot be compared with current main, fail closed
-    as ``stale_merge_base`` so the PR is never marked ``ready_to_merge`` without
-    an up-to-date, verified base.
+    Risk-tiered stale base (issue #6272): missing or unavailable snapshot
+    provenance, and stale base-sensitive PRs, fail closed as
+    ``stale_merge_base``. A stale ordinary PR may proceed only when trusted
+    exact-head evidence records ``base-policy: ordinary-cas @ <head_sha>``;
+    the guarded merger then performs the immediate current-main CAS.
 
     Gate-verdict contract (issue #6019): reject any exact head unless a current
     exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. The final
@@ -396,8 +426,17 @@ def _merge_ready_state(
     if "merge-ready" not in label_names or overall != "success":
         return None
     base_state = _base_freshness_state(pr)
+    base_verdict, _, _ = _base_freshness_provenance(pr)
+    if (
+        base_state == "stale_merge_base"
+        and base_verdict == "stale"
+        and has_current_ordinary_base_policy(pr, head_sha)
+    ):
+        base_state = None
     if base_state is not None:
         return base_state
+    if pr.get("review_threads_admission") == "fail_closed_unknown":
+        return "unknown_review_threads"
     if not has_current_accepted_gate_verdict(pr, head_sha):
         return "pending_gate_verdict"
     metadata_digest = str(pr.get("metadata_digest", "") or "")
@@ -499,6 +538,8 @@ def _compute_flow_decision(
         return "escalate"
     match state:
         case "pending_ci" | "pending_gate_verdict" | "pending_pr_metadata" | "ready_to_merge":
+            return "continue"
+        case "unknown_review_threads":
             return "continue"
         case (
             "failed_ci"
@@ -628,6 +669,18 @@ def recommend_action(  # noqa: C901
                 reason=(
                     "CI green, merge-ready, and current gate verdict exist but the final PR "
                     "title/body lacks a matching trusted pr-metadata trailer"
+                ),
+                actions_remaining=remaining,
+            )
+        case "unknown_review_threads":
+            return PolicyDecision(
+                pr=pr_number,
+                action="await_review_threads",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "REST fallback cannot refresh GraphQL-only review threads; "
+                    "retry after the GraphQL quota resets"
                 ),
                 actions_remaining=remaining,
             )

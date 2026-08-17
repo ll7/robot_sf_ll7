@@ -167,6 +167,24 @@ def test_risk_dwa_obstacle_and_ttc_branches(monkeypatch) -> None:
     ) == float("inf")
 
 
+def test_risk_dwa_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Risk-DWA must retain its caller precondition under optimized Python."""
+    planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig())
+
+    with pytest.raises(
+        ValueError,
+        match="Risk-DWA obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+    grid = np.zeros((1, 4, 4), dtype=float)
+    meta = {"resolution": [0.5]}
+    assert planner._min_obstacle_clearance(
+        np.zeros(2, dtype=float),
+        grid_payload=(grid, meta),
+    ) == float("inf")
+
+
 def test_risk_dwa_stops_at_goal() -> None:
     """Risk-DWA should stop when already within goal tolerance."""
     planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig(goal_tolerance=0.3))

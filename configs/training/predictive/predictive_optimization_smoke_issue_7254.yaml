@@ -1,0 +1,60 @@
+schema_version: predictive-optimization-smoke.v1
+issue: 7254
+
+output:
+  root: output/issue_7254_predictive_optimization_smoke
+
+# This is a deterministic, non-degenerate training fixture. It is not a benchmark
+# dataset and must not be promoted as policy or paper evidence.
+fixture:
+  seed: 7254
+  dataset_id: issue_7254_predictive_fixture_v1
+  samples: 512
+  max_agents: 3
+  input_dim: 4
+  horizon_steps: 8
+
+training:
+  epochs: 4
+  batch_size: 64
+  lr: 0.0003
+  weight_decay: 0.00001
+  val_split: 0.25
+  seed: 7254
+  hidden_dim: 32
+  message_passing_steps: 1
+
+# The tolerance rule is frozen before arm outcomes are inspected. The control
+# repeat's maximum pairwise delta is multiplied by 3, with a 1e-3 absolute floor.
+comparison:
+  warmup_epochs: 1
+  control_dispersion_multiplier: 3.0
+  minimum_abs_tolerance: 0.001
+  metrics:
+    - train_loss
+    - val_loss
+    - val_ade
+    - val_fde
+
+arms:
+  - id: fp32_control
+    repeats: 2
+    num_workers: 0
+    pin_memory: false
+    persistent_workers: false
+    prefetch_factor: 2
+    amp: false
+  - id: fp32_loader
+    repeats: 2
+    num_workers: 2
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+    amp: false
+  - id: amp_loader
+    repeats: 2
+    num_workers: 2
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+    amp: true

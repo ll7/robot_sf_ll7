@@ -686,6 +686,15 @@ reconciliation does not rerun source CI, but it invalidates prior final-state re
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
 
+If the final verification read observes a concurrent external write, the helper returns
+`status: conflict` with the previous, desired, and observed metadata digests plus any available
+head SHAs. It also returns the stable `next_action`
+`refresh_live_metadata_and_exact_head_review`, `policy_state: pending_pr_metadata`, and
+`policy_action: refresh_snapshot`. Treat `prior_review_reuse: forbidden` as binding: refresh the
+live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
+retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
+successful reconciliation.
+
 ### Reusable dev scripts
 
 Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex

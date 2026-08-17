@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
+from scripts.dev.pr_loop_policy import metadata_conflict_handoff
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title
 
 if TYPE_CHECKING:
@@ -95,6 +96,15 @@ def _decode_object(
     if not isinstance(response, dict):
         return None, f"{operation} response was not an object"
     return response, None
+
+
+def _head_sha(payload: dict[str, Any]) -> str | None:
+    """Return a live PR head SHA when the REST payload provides one."""
+    head = payload.get("head")
+    if isinstance(head, dict) and isinstance(head.get("sha"), str) and head["sha"]:
+        return head["sha"]
+    value = payload.get("head_sha")
+    return value if isinstance(value, str) and value else None
 
 
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
@@ -179,6 +189,7 @@ def reconcile_pr_metadata(  # noqa: C901
                 current_body = ""
             if not isinstance(current_body, str):
                 return {"status": "error", "error": "PR metadata read returned a malformed body"}
+            current_head_sha = _head_sha(current)
 
             desired_digest = metadata_digest(title, body)
             current_digest = metadata_digest(current_title, current_body)
@@ -232,7 +243,7 @@ def reconcile_pr_metadata(  # noqa: C901
                     if isinstance(observed_title, str) and isinstance(observed_body, str)
                     else None
                 )
-                return {
+                conflict = {
                     "status": "conflict",
                     "error": (
                         "PR metadata changed during reconciliation; refusing to claim success"
@@ -240,7 +251,11 @@ def reconcile_pr_metadata(  # noqa: C901
                     **base_result,
                     "changed": True,
                     "observed_metadata_digest": observed_digest,
+                    "previous_head_sha": current_head_sha,
+                    "observed_head_sha": _head_sha(verified),
                 }
+                conflict.update(metadata_conflict_handoff(conflict))
+                return conflict
             return {
                 "status": "ok",
                 **base_result,

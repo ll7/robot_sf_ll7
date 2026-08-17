@@ -12,10 +12,11 @@ Design goals:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pysocialforce as pysf
+from loguru import logger
 from pysocialforce import forces as pf_forces
 
 if TYPE_CHECKING:
@@ -52,6 +53,51 @@ class FastPysfWrapper:
         # Named caches for precomputed force grids. Each cache is a dict with
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).
         self._force_grid_caches: dict[str, dict] = {}
+        self._diagnostics: dict[str, Any] = {
+            "planner_type": type(self).__name__,
+            "fallback": False,
+            "fallback_count": 0,
+            "fallback_reason": None,
+            "fallback_reasons": {},
+        }
+        self._warned_fallback_reasons: set[str] = set()
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return a JSON-safe copy of force-kernel fallback diagnostics.
+
+        Fallbacks preserve the historical force output for compatibility, but
+        they are not equivalent benchmark execution. The ledger therefore
+        records whether a fallback occurred, its first stable reason, and the
+        count for every reason observed during this wrapper's lifetime.
+
+        Returns:
+            Mapping with the planner type and fallback counters/reasons.
+        """
+        payload = dict(self._diagnostics)
+        payload["fallback_reasons"] = dict(self._diagnostics["fallback_reasons"])
+        return payload
+
+    def _record_fallback(self, reason: str, exc: BaseException | None = None) -> None:
+        """Record and warn about one force-kernel fallback.
+
+        Warnings are emitted once per stable reason to avoid flooding force
+        field and benchmark logs, while diagnostics retain every occurrence.
+        """
+        self._diagnostics["fallback"] = True
+        self._diagnostics["fallback_count"] += 1
+        reasons = self._diagnostics["fallback_reasons"]
+        reasons[reason] = reasons.get(reason, 0) + 1
+        if self._diagnostics["fallback_reason"] is None:
+            self._diagnostics["fallback_reason"] = reason
+
+        if reason not in self._warned_fallback_reasons:
+            exception_type = type(exc).__name__ if exc is not None else "unavailable"
+            logger.warning(
+                "FastPysfWrapper force fallback reason={} exception_type={}",
+                reason,
+                exception_type,
+            )
+            self._warned_fallback_reasons.add(reason)
 
     def _ped_positions_and_velocities(self) -> tuple[np.ndarray, np.ndarray]:
         """Return arrays (N,2) positions and velocities for all pedestrians.
@@ -140,7 +186,8 @@ class FastPysfWrapper:
                 finite = np.isfinite(speeds) & (speeds > 0)
                 if np.any(finite):
                     max_speed = float(speeds[finite].mean())
-        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+            self._record_fallback("max_speed_default", exc)
             max_speed = 1.0
         return max_speed
 
@@ -179,7 +226,8 @@ class FastPysfWrapper:
                 f_y *= factor
                 total[0] += f_x
                 total[1] += f_y
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                self._record_fallback("social_force_inverse_square", exc)
                 d = p - other_pos
                 r = np.linalg.norm(d)
                 if r > 1e-6:
@@ -213,7 +261,8 @@ class FastPysfWrapper:
                 )
                 forces[i, 0] = force_x * factor
                 forces[i, 1] = force_y * factor
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                self._record_fallback("social_force_batch_pointwise", exc)
                 forces[i] = self._compute_social_force_at_point(point)
         return forces
 
@@ -241,8 +290,8 @@ class FastPysfWrapper:
                 total += np.array([fx, fy], dtype=float) * float(
                     self.sim.config.obstacle_force_config.factor,
                 )
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
-                # ignore obstacle errors
+            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                self._record_fallback("obstacle_force_dropped", exc)
                 pass
         return total
 
@@ -265,7 +314,8 @@ class FastPysfWrapper:
                 float(self.sim.peds.agent_radius),
             )
             return forces * float(self.sim.config.obstacle_force_config.factor)
-        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+            self._record_fallback("obstacle_force_batch_pointwise", exc)
             return np.asarray(
                 [self._compute_obstacle_force_at_point(point) for point in points],
                 dtype=float,
@@ -290,8 +340,10 @@ class FastPysfWrapper:
                         fn(p, robot_state, getattr(self.sim, "scene", None)),
                         dtype=float,
                     )
-                except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+                except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                    self._record_fallback("robot_force_zero", exc)
                     return np.zeros(2, dtype=float)
+        self._record_fallback("robot_force_unavailable")
         return np.zeros(2, dtype=float)
 
     # --- public API ---

@@ -1,0 +1,46 @@
+{
+  "collision_case": {
+    "predicate_id": "collision",
+    "time_interval_s": [1.0, 1.5],
+    "steps": [10, 15],
+    "involved_actors": ["robot", "ped_0"],
+    "scenario_family": "issue_7197_fixture",
+    "planner_id": "fixture_planner",
+    "evidence_fields": {"event": "contact"},
+    "severity": "critical",
+    "validity_status": "valid"
+  },
+  "near_miss_case": {
+    "predicate_id": "clearance_critical_interaction",
+    "time_interval_s": [2.5, 3.5],
+    "steps": [25, 35],
+    "involved_actors": ["robot", "ped_1"],
+    "scenario_family": "issue_7197_fixture",
+    "planner_id": "fixture_planner",
+    "evidence_fields": {"distance_m": 0.35},
+    "severity": "medium",
+    "validity_status": "valid"
+  },
+  "low_progress_case": {
+    "predicate_id": "low_progress",
+    "time_interval_s": [4.0, 6.0],
+    "steps": [40, 60],
+    "involved_actors": ["robot"],
+    "scenario_family": "issue_7197_fixture",
+    "planner_id": "fixture_planner",
+    "evidence_fields": {"progress_m": 0.02},
+    "severity": "medium",
+    "validity_status": "valid"
+  },
+  "oscillation_case": {
+    "predicate_id": "oscillatory_local_control",
+    "time_interval_s": [7.0, 8.0],
+    "steps": [70, 80],
+    "involved_actors": ["robot"],
+    "scenario_family": "issue_7197_fixture",
+    "planner_id": "fixture_planner",
+    "evidence_fields": {"direction_reversals": 4},
+    "severity": "medium",
+    "validity_status": "valid"
+  }
+}

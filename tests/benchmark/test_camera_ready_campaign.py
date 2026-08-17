@@ -67,7 +67,9 @@ from robot_sf.benchmark.camera_ready_campaign import (
     write_campaign_report,
 )
 from robot_sf.benchmark.campaign.campaign_runtime_preflight import CampaignScenarioMapPreflightError
-from robot_sf.benchmark.map_runner_profile_metadata import load_synthetic_actuation_profile
+from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
+    load_synthetic_actuation_profile,
+)
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.synthetic_actuation import (
     CALIBRATED_ACTUATION_REQUIRED_PROVENANCE_FIELDS,

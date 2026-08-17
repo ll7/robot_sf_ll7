@@ -1,0 +1,9 @@
+schema_version: feasibility_first_scenario_search.v1
+claim_boundary: >-
+  diagnostic-only fixture protocol: feasibility rejection and risk-feature ordering;
+  no simulator, planner, safety, or benchmark claim
+fixture: issue_7315_v1
+baseline: existing_adversarial_random_sampler.v1
+sampling_seed: 7315
+sample_budget: 4
+criticality_threshold: 0.6

@@ -15,8 +15,8 @@ import numpy as np
 import yaml
 
 from robot_sf.benchmark.aggregate import read_jsonl
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.scenario_generator import generate_scenario
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
 from scripts.demo.run_robot_sf_smoke import run_demo
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -7,6 +7,10 @@ This package decomposes the historically monolithic ``_build_policy`` dispatcher
 registry of these builders before falling through to its remaining inline branches.
 
 The first migrated family is the built-in goal/simple policy (#3400).
+
+Shared map-runner action/kinematics, learned action-conversion, policy-construction, metadata, and
+runtime-resolution helpers also live here; their historical flat imports remain identity-preserving
+compatibility aliases during the namespace migration (#7227, #7237, #7243).
 """
 
 from __future__ import annotations

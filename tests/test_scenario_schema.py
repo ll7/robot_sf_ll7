@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from robot_sf.benchmark.cli import cli_main
-from robot_sf.benchmark.scenario_schema import (
+from robot_sf.benchmark.scenario.scenario_schema import (
     SCHEMA_FILE,
     load_scenario_schema,
     validate_scenario_list,
@@ -24,6 +24,15 @@ def test_scenario_schema_file_uses_canonical_schemas_directory():
     assert SCHEMA_FILE.exists()
     assert not SCHEMA_FILE.parent.with_name("schema").joinpath("scenarios.schema.json").exists()
     assert load_scenario_schema()["$id"] == "https://ll7.github.io/robot_sf/scenarios.schema.json"
+
+
+def test_legacy_scenario_schema_import_is_identity_preserving():
+    """Keep the historical flat module path bound to the canonical scenario module."""
+    import robot_sf.benchmark.scenario.scenario_schema as canonical
+    import robot_sf.benchmark.scenario_schema as legacy
+
+    assert legacy is canonical
+    assert legacy.SCHEMA_FILE == canonical.SCHEMA_FILE
 
 
 def test_validate_scenario_list_success():

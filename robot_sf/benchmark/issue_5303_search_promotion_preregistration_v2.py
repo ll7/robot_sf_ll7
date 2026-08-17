@@ -879,7 +879,8 @@ def downstream_activation_errors(
     errors = validate_terminal_result(payload, expected_contract_sha256=expected_contract_sha256)
     if errors:
         return errors
-    assert isinstance(payload, dict)
+    if not isinstance(payload, dict):
+        return ["terminal result must be a mapping"]
     if payload.get("decision") != "promote":
         errors.append(
             f"downstream activation requires decision 'promote', got {payload.get('decision')!r}"
@@ -1267,12 +1268,11 @@ def preflight_issue_5303_powered_contract(  # noqa: C901, PLR0912, PLR0915
         or root / DEFAULT_RECEIPT_PATH
     )
     certified_archive_resolved = _resolve(root, entry_gate.get("certified_archive_path"))
-    checks["certified_archive_exists"] = bool(
-        certified_archive_resolved and certified_archive_resolved.is_file()
+    checks["certified_archive_exists"] = (
+        certified_archive_resolved is not None and certified_archive_resolved.is_file()
     )
     certified_archive_file_hash: str | None = None
-    if checks["certified_archive_exists"]:
-        assert certified_archive_resolved is not None
+    if certified_archive_resolved is not None and certified_archive_resolved.is_file():
         certified_archive_file_hash = sha256_file(certified_archive_resolved)
         metadata["certified_archive_file_sha256"] = certified_archive_file_hash
         checks["certified_archive_file_hash_matches_contract"] = (
@@ -1285,6 +1285,7 @@ def preflight_issue_5303_powered_contract(  # noqa: C901, PLR0912, PLR0915
                 f"recomputed={certified_archive_file_hash!r})"
             )
     else:
+        checks["certified_archive_exists"] = False
         checks["certified_archive_file_hash_matches_contract"] = False
         if certified_archive_resolved is None:
             blockers.append("entry_gate.certified_archive_path must be a non-empty path")

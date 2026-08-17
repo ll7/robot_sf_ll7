@@ -20,11 +20,14 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
-from scripts.dev.pr_loop_policy import GATE_VERDICT_RE
+from scripts.dev.pr_loop_policy import BASE_POLICY_RE, GATE_VERDICT_RE
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_ACTIVE_LIMIT = 20
+REST_PAGE_SIZE = 100
+REST_ACTIVE_MAX_PAGES = 100
+REST_ENRICHMENT_MAX_PAGES = 10
 REVIEW_SUMMARY_LIMIT = 4
 COMMENT_SUMMARY_LIMIT = 4
 COMMENT_BODY_LIMIT = 180
@@ -184,15 +187,16 @@ def _rest_open_pr_list(*, repo: str, limit: int) -> tuple[list[dict[str, Any]], 
 
     The active queue normally uses ``gh pr list`` because it returns the compact GraphQL shape
     directly.  When that call is blocked by GraphQL quota, REST can still enumerate open PRs.  A
-    result that fills the requested limit remains marked truncated because REST cannot prove that
-    no additional page exists without consuming another page request.
+    result that fills the requested limit from a full page remains marked truncated because REST
+    cannot prove that no additional page exists without consuming another page request. When the
+    final page is short, the complete result is known even if the caller requested more rows. A
+    finite page budget keeps an accidentally huge ``--limit`` from causing unbounded API calls.
     """
     requested_limit = max(int(limit), 1)
-    page_size = min(requested_limit, 100)
-    page = 1
+    page_size = min(requested_limit, REST_PAGE_SIZE)
     rows: list[dict[str, Any]] = []
     last_page_size = 0
-    while len(rows) < requested_limit:
+    for page in range(1, REST_ACTIVE_MAX_PAGES + 1):
         payload = _rest_api_get(
             f"pulls?state=open&per_page={page_size}&page={page}",
             repo=repo,
@@ -203,9 +207,163 @@ def _rest_open_pr_list(*, repo: str, limit: int) -> tuple[list[dict[str, Any]], 
         rows.extend(payload)
         if len(payload) < page_size:
             break
-        page += 1
-    truncated = len(rows) >= requested_limit and last_page_size >= page_size
+        if len(rows) >= requested_limit:
+            break
+    truncated = len(rows) > requested_limit or (
+        last_page_size >= page_size
+        and (len(rows) >= requested_limit or page >= REST_ACTIVE_MAX_PAGES)
+    )
     return rows[:requested_limit], truncated
+
+
+def _rest_paginated_list(path: str, *, repo: str) -> tuple[list[dict[str, Any]], str]:
+    """Read a bounded REST list without accepting a partial page silently.
+
+    Returns ``(rows, "ok")`` when a short page proves completion. A malformed or failed page
+    returns ``([], "error")`` and exhausting the page budget returns ``([], "truncated")``;
+    both failure states intentionally discard partial rows so downstream summaries cannot look
+    complete when they are not.
+    """
+    rows: list[dict[str, Any]] = []
+    for page in range(1, REST_ENRICHMENT_MAX_PAGES + 1):
+        payload = _rest_api_get(
+            f"{path}?per_page={REST_PAGE_SIZE}&page={page}",
+            repo=repo,
+        )
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            return [], "error"
+        rows.extend(payload)
+        if len(payload) < REST_PAGE_SIZE:
+            return rows, "ok"
+    return [], "truncated"
+
+
+def _rest_check_total_count(
+    payload: dict[str, Any], previous: int | None
+) -> tuple[int | None, str | None]:
+    """Validate one check-runs total and keep it stable across REST pages."""
+    raw_total_count = payload.get("total_count")
+    if raw_total_count is None:
+        return previous, None
+    if isinstance(raw_total_count, bool) or not isinstance(raw_total_count, int):
+        return previous, "error"
+    if raw_total_count < 0 or (previous is not None and raw_total_count != previous):
+        return previous, "error"
+    return raw_total_count, None
+
+
+def _rest_paginated_check_runs(head_sha: str, *, repo: str) -> tuple[list[dict[str, Any]], str]:
+    """Read check runs for one exact head through bounded REST pagination."""
+    rows: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, REST_ENRICHMENT_MAX_PAGES + 1):
+        payload = _rest_api_get(
+            f"commits/{head_sha}/check-runs?per_page={REST_PAGE_SIZE}&page={page}",
+            repo=repo,
+        )
+        if not isinstance(payload, dict):
+            return [], "error"
+        page_rows = payload.get("check_runs")
+        if not isinstance(page_rows, list) or not all(isinstance(item, dict) for item in page_rows):
+            return [], "error"
+        total_count, total_count_error = _rest_check_total_count(payload, total_count)
+        if total_count_error is not None:
+            return [], total_count_error
+        rows.extend(page_rows)
+        if total_count is not None and len(rows) > total_count:
+            return [], "error"
+        if total_count is not None and len(rows) >= total_count:
+            return rows[:total_count], "ok"
+        if len(page_rows) < REST_PAGE_SIZE:
+            if total_count is not None and len(rows) < total_count:
+                return [], "truncated"
+            return rows, "ok"
+    return [], "truncated"
+
+
+def _rest_fallback_row_error(
+    number: int,
+    *,
+    error_kind: str,
+    error: str,
+) -> dict[str, Any]:
+    """Return a fail-closed row while preserving REST route provenance."""
+    return {
+        "number": number,
+        "status": "error",
+        "error_kind": error_kind,
+        "error": error,
+        "data_source": "rest_fallback_graphql_quota",
+        "route_evidence_only": True,
+        "review_threads": "unknown_graphql_quota",
+        "review_threads_admission": "fail_closed_unknown",
+    }
+
+
+def _rest_review_payloads(number: int, *, repo: str) -> tuple[list[dict[str, Any]], str]:
+    """Fetch and normalize REST review pages."""
+    reviews_raw, status = _rest_paginated_list(f"pulls/{number}/reviews", repo=repo)
+    return [
+        {
+            "state": str(review.get("state", "UNKNOWN") or "UNKNOWN"),
+            "authorAssociation": str(review.get("author_association", "") or ""),
+            "author": {"login": _author_login(review.get("user"))},
+            "submittedAt": str(review.get("submitted_at", "") or ""),
+            "createdAt": str(review.get("created_at", "") or ""),
+            "updatedAt": str(review.get("updated_at", "") or ""),
+            "body": review.get("body", ""),
+        }
+        for review in reviews_raw
+    ], status
+
+
+def _rest_comment_payloads(number: int, *, repo: str) -> tuple[list[dict[str, Any]], str]:
+    """Fetch and normalize REST conversation-comment pages."""
+    comments_raw, status = _rest_paginated_list(f"issues/{number}/comments", repo=repo)
+    return [
+        {
+            "authorAssociation": str(comment.get("author_association", "") or ""),
+            "author": {"login": _author_login(comment.get("user"))},
+            "createdAt": str(comment.get("created_at", "") or ""),
+            "updatedAt": str(comment.get("updated_at", "") or ""),
+            "body": comment.get("body", ""),
+        }
+        for comment in comments_raw
+    ], status
+
+
+def _rest_check_rollup(head_sha: str, *, repo: str) -> tuple[list[dict[str, Any]], str]:
+    """Fetch and normalize check runs bound to one exact REST head SHA."""
+    check_runs, status = _rest_paginated_check_runs(head_sha, repo=repo)
+    check_name_counts: dict[str, int] = {}
+    for run in check_runs:
+        name = str(run.get("name", "") or "")
+        check_name_counts[name] = check_name_counts.get(name, 0) + 1
+    workflow_cache: dict[str, tuple[str, str]] = {}
+    rollup: list[dict[str, Any]] = []
+    for run in check_runs:
+        name = str(run.get("name", "") or "")
+        workflow_id = ""
+        workflow_name = ""
+        if check_name_counts.get(name, 0) > 1:
+            workflow_id, workflow_name = _rest_check_run_workflow_identity(
+                run,
+                repo=repo,
+                cache=workflow_cache,
+            )
+        rollup.append(
+            {
+                "__typename": "CheckRun",
+                "name": name,
+                "status": str(run.get("status", "") or ""),
+                "conclusion": run.get("conclusion") or "",
+                "detailsUrl": str(run.get("details_url", "") or ""),
+                "startedAt": str(run.get("started_at", "") or ""),
+                "workflowId": workflow_id,
+                "workflowName": workflow_name,
+            }
+        )
+    return rollup, status
 
 
 def _rest_check_run_workflow_identity(
@@ -403,68 +561,24 @@ def _fetch_pr_rest(
     """
     pull = _rest_api_get(f"pulls/{number}", repo=repo)
     if not isinstance(pull, dict):
-        return {
-            "number": number,
-            "status": "error",
-            "error_kind": "graphql_quota_exhausted",
-            "error": "GraphQL quota exhausted and REST pull fallback failed",
-        }
-    head = pull.get("head") or {}
-    base = pull.get("base") or {}
-    head_sha = str(head.get("sha", "") or "")
-    base_sha = str(base.get("sha", "") or "")
-    reviews_raw = _rest_api_get(f"pulls/{number}/reviews", repo=repo)
-    reviews = [
-        {
-            "state": str(review.get("state", "UNKNOWN") or "UNKNOWN"),
-            "authorAssociation": str(review.get("author_association", "") or ""),
-            "body": review.get("body", ""),
-        }
-        for review in (reviews_raw if isinstance(reviews_raw, list) else [])
-        if isinstance(review, dict)
-    ]
-    comments_raw = _rest_api_get(f"issues/{number}/comments", repo=repo)
-    comments = [
-        {
-            "authorAssociation": str(comment.get("author_association", "") or ""),
-            "body": comment.get("body", ""),
-        }
-        for comment in (comments_raw if isinstance(comments_raw, list) else [])
-        if isinstance(comment, dict)
-    ]
-    checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs", repo=repo)
-    check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
-    check_name_counts: dict[str, int] = {}
-    for run in check_runs:
-        if isinstance(run, dict):
-            name = str(run.get("name", "") or "")
-            check_name_counts[name] = check_name_counts.get(name, 0) + 1
-    workflow_cache: dict[str, tuple[str, str]] = {}
-    rollup: list[dict[str, Any]] = []
-    for run in check_runs:
-        if not isinstance(run, dict):
-            continue
-        name = str(run.get("name", "") or "")
-        workflow_id = ""
-        workflow_name = ""
-        if check_name_counts.get(name, 0) > 1:
-            workflow_id, workflow_name = _rest_check_run_workflow_identity(
-                run,
-                repo=repo,
-                cache=workflow_cache,
-            )
-        rollup.append(
-            {
-                "__typename": "CheckRun",
-                "name": name,
-                "status": str(run.get("status", "") or ""),
-                "conclusion": run.get("conclusion") or "",
-                "detailsUrl": str(run.get("details_url", "") or ""),
-                "startedAt": str(run.get("started_at", "") or ""),
-                "workflowId": workflow_id,
-                "workflowName": workflow_name,
-            }
+        return _rest_fallback_row_error(
+            number,
+            error_kind="graphql_quota_exhausted",
+            error="GraphQL quota exhausted and REST pull fallback failed",
         )
+    head = pull.get("head")
+    if not isinstance(head, dict) or not isinstance(head.get("sha"), str) or not head.get("sha"):
+        return _rest_fallback_row_error(
+            number,
+            error_kind="rest_payload_malformed",
+            error="REST pull response did not contain a non-empty head SHA",
+        )
+    base = pull.get("base")
+    head_sha = head["sha"]
+    base_sha = str(base.get("sha", "") or "") if isinstance(base, dict) else ""
+    reviews, reviews_status = _rest_review_payloads(number, repo=repo)
+    comments, comments_status = _rest_comment_payloads(number, repo=repo)
+    rollup, checks_status = _rest_check_rollup(head_sha, repo=repo)
     pr_dict = {
         "number": pull.get("number", number),
         "title": str(pull.get("title", "") or ""),
@@ -488,15 +602,24 @@ def _fetch_pr_rest(
         expected_head_sha=expected_head_sha,
     )
     payload["data_source"] = "rest_fallback_graphql_quota"
+    payload["rest_enrichment"] = {
+        "reviews": reviews_status,
+        "comments": comments_status,
+        "checks": checks_status,
+    }
     payload["review_threads"] = "unknown_graphql_quota"
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
     preflight = payload.get("preflight")
     if isinstance(preflight, dict):
         reasons = preflight.setdefault("reasons", [])
+        for endpoint, status in payload["rest_enrichment"].items():
+            if status != "ok" and isinstance(reasons, list):
+                reasons.append(f"rest_{endpoint}_{status}")
         if isinstance(reasons, list) and "review_threads_unknown_graphql_quota" not in reasons:
             reasons.append("review_threads_unknown_graphql_quota")
         preflight["status"] = "blocked"
+        preflight["rest_enrichment"] = payload["rest_enrichment"]
         preflight["review_threads"] = "unknown_graphql_quota"
         preflight["review_threads_admission"] = "fail_closed_unknown"
     payload["next_action"] = "inspect_blocking_preflight"
@@ -839,6 +962,31 @@ def _extract_gate_verdicts(pr: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(verdicts))
 
 
+def _extract_base_policies(pr: dict[str, Any]) -> list[str]:
+    """Extract trusted exact-head base-policy selectors from reviews/comments."""
+    policies: list[str] = []
+    explicit = pr.get("base_policy")
+    if isinstance(explicit, str):
+        policies.append(explicit)
+    elif isinstance(explicit, list):
+        policies.extend(item for item in explicit if isinstance(item, str))
+
+    for items in (pr.get("reviews"), pr.get("comments")):
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            association = str(entry.get("authorAssociation", "")).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if not isinstance(body, str):
+                continue
+            policies.extend(match.group(0) for match in BASE_POLICY_RE.finditer(body))
+    return list(dict.fromkeys(policies))
+
+
 def _extract_metadata_verdicts(pr: dict[str, Any]) -> list[str]:  # noqa: C901
     """Extract trusted final title/body reconciliation trailers."""
     verdicts: list[str] = []
@@ -926,11 +1074,13 @@ def _pr_payload_from_dict(
         "labels": labels,
         "head_branch": pr.get("headRefName", ""),
         "head_sha": head_sha,
+        "expected_head_sha": expected_head_sha,
         "base_freshness": base_freshness,
         "mergeable": mergeable,
         "checks": checks,
         "reviews": reviews,
         "gate_verdicts": gate_verdicts,
+        "base_policy": _extract_base_policies(pr),
         "metadata_digest": metadata_digest_value,
         "metadata_verdicts": metadata_verdicts,
         "review_snapshot": _review_snapshot(pr),
@@ -987,7 +1137,12 @@ def fetch_pr(
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
-            return _fetch_pr_rest(number, repo=repo, expected_head_sha=expected_head_sha)
+            return _fetch_pr_rest(
+                number,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                current_main_sha=current_main_sha,
+            )
         return {
             "number": number,
             "status": "error",
@@ -1041,7 +1196,12 @@ def _active_snapshot_envelope(
     return payload
 
 
-def _active_rest_fallback_error(*, repo: str, error: str) -> dict[str, Any]:
+def _active_rest_fallback_error(
+    *,
+    repo: str,
+    error: str,
+    error_kind: str = "graphql_quota_exhausted",
+) -> dict[str, Any]:
     """Return a bounded active-snapshot error for an unusable REST fallback."""
     return {
         "schema": SCHEMA_VERSION,
@@ -1062,7 +1222,7 @@ def _active_rest_fallback_error(*, repo: str, error: str) -> dict[str, Any]:
         "prs": [
             {
                 "status": "error",
-                "error_kind": "graphql_quota_exhausted",
+                "error_kind": error_kind,
                 "error": error,
             }
         ],
@@ -1097,25 +1257,24 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
                 for listed_pr in listed:
                     number = listed_pr.get("number")
                     if isinstance(number, bool) or not isinstance(number, int) or number < 1:
-                        return _active_snapshot_envelope(
+                        return _active_rest_fallback_error(
                             repo=repo,
-                            prs=[
-                                {
-                                    "status": "error",
-                                    "error_kind": "rest_payload_malformed",
-                                    "error": "REST active PR list contained a row without an integer number",
-                                }
-                            ],
-                            truncated=False,
-                            truncation_note="",
+                            error_kind="rest_payload_malformed",
+                            error="REST active PR list contained a row without an integer number",
                         )
                     head = listed_pr.get("head")
                     head_sha = head.get("sha") if isinstance(head, dict) else ""
+                    if not isinstance(head_sha, str) or not head_sha:
+                        return _active_rest_fallback_error(
+                            repo=repo,
+                            error_kind="rest_payload_malformed",
+                            error="REST active PR list contained a row without a non-empty head SHA",
+                        )
                     prs.append(
                         _fetch_pr_rest(
                             number,
                             repo=repo,
-                            expected_head_sha=str(head_sha or ""),
+                            expected_head_sha=head_sha,
                             current_main_sha=current_main_sha,
                         )
                     )

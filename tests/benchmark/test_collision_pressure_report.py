@@ -10,6 +10,7 @@ import pytest
 if TYPE_CHECKING:
     from pathlib import Path
 
+from robot_sf.benchmark.collision import collision_pressure_report
 from robot_sf.benchmark.collision.collision_pressure_report import (
     CollisionPressureReportError,
     build_collision_pressure_report,
@@ -117,6 +118,21 @@ def test_missing_ledger_is_an_explicit_exclusion() -> None:
     assert report["denominator"]["eligible_episode_count"] == 1
     assert report["selection"]["excluded_row_count"] == 1
     assert report["selection"]["exclusion_counts"] == {"missing_event_ledger": 1}
+
+
+def test_internal_ledger_guard_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An impossible post-validation ledger state raises explicitly."""
+    monkeypatch.setattr(collision_pressure_report, "_ledger_from_row", lambda _row: None)
+    monkeypatch.setattr(collision_pressure_report, "_ledger_exclusion_reason", lambda _ledger: None)
+
+    with pytest.raises(
+        CollisionPressureReportError,
+        match="selected row is missing an auditable event ledger",
+    ):
+        collision_pressure_report._select_rows(
+            [{"episode_id": "episode-1", "scenario_family": "family_a"}],
+            ["family_a"],
+        )
 
 
 def test_missing_family_is_an_explicit_exclusion() -> None:

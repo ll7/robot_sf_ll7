@@ -124,15 +124,6 @@ def test_groups_as_lists_cache_invalidates_when_grouping_changes():
     assert after_leave is not after_join
     assert after_leave[-1] == [5]
 
-
-# def test_can_reassign_pedestrians_to_existing_group():
-#     ped_ids, old_gid, target_gid = {0, 1, 2}, 0, 1
-#     groups = init_groups()
-#     groups.reassign_pedestrians(target_gid, ped_ids)
-#     assert contains_none(groups.groups[old_gid], ped_ids)
-#     assert contains_all(groups.groups[target_gid], ped_ids)
-
-
 def test_can_remove_entire_group():
     """TODO docstring. Document this function."""
     removed_gid = 0

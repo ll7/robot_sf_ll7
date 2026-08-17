@@ -140,6 +140,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Goal-Driven Agent Loops](./context/goal_driven_agent_loops_2026-05-13.md)** - Shared contract for autonomous issue discovery, issue implementation, PR review, and user-in-the-loop issue audit skills
 * **[Artifact Evidence Vocabulary](./context/artifact_evidence_vocabulary.md)** - Shared issue/PR vocabulary for exploratory outputs, durable evidence, release artifacts, benchmark claims, and paper-facing claims
+* **[Issue #7030 Agent Figure Interpretation Evaluation](./context/issue_7030_agent_figure_interpretation_eval.md)** - Digest-pinned fixture replay, aggregate scoring, critical-error examples, and explicit boundaries before independent workflow review
 * **[Question-First Experiment Registry](../experiments/README.md)** - Register experiment intent, canonical configs, expected artifacts, and validation gates before launching runs
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts

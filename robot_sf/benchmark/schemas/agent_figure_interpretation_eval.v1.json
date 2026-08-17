@@ -50,6 +50,26 @@
         "null_overclaim": {"type": "integer", "minimum": 0}
       }
     },
+    "aggregate_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_status_counts",
+        "dimension_scores",
+        "critical_error_counts",
+        "critical_failure_examples",
+        "reviewer_accounting",
+        "workflow_variants"
+      ],
+      "properties": {
+        "case_status_counts": {"$ref": "#/$defs/case_status_counts"},
+        "dimension_scores": {"$ref": "#/$defs/dimension_scores"},
+        "critical_error_counts": {"$ref": "#/$defs/critical_error_counts"},
+        "critical_failure_examples": {"$ref": "#/$defs/critical_failure_examples"},
+        "reviewer_accounting": {"$ref": "#/$defs/reviewer_summary"},
+        "workflow_variants": {"$ref": "#/$defs/workflow_variants"}
+      }
+    },
     "cases": {
       "type": "array",
       "items": {
@@ -278,6 +298,161 @@
     }
   },
   "$defs": {
+    "critical_error_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unavailable_to_zero",
+        "denominator_loss",
+        "wrong_pairing_resampling",
+        "fallback_degraded_promotion",
+        "causal_overclaim",
+        "unsupported_ranking",
+        "null_overclaim"
+      ],
+      "properties": {
+        "unavailable_to_zero": {"type": "integer", "minimum": 0},
+        "denominator_loss": {"type": "integer", "minimum": 0},
+        "wrong_pairing_resampling": {"type": "integer", "minimum": 0},
+        "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
+        "causal_overclaim": {"type": "integer", "minimum": 0},
+        "unsupported_ranking": {"type": "integer", "minimum": 0},
+        "null_overclaim": {"type": "integer", "minimum": 0}
+      }
+    },
+    "case_status_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clean", "failed"],
+      "properties": {
+        "clean": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "dimension_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_count", "passed_count", "failed_count", "pass_rate"],
+      "properties": {
+        "case_count": {"type": "integer", "minimum": 0},
+        "passed_count": {"type": "integer", "minimum": 0},
+        "failed_count": {"type": "integer", "minimum": 0},
+        "pass_rate": {
+          "anyOf": [
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "dimension_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_denominator",
+        "estimand_unit",
+        "stats_multiplicity",
+        "visual_semantics",
+        "caption_accuracy",
+        "evidence_tier_availability",
+        "claim_boundary",
+        "correction_usefulness"
+      ],
+      "properties": {
+        "source_denominator": {"$ref": "#/$defs/dimension_summary"},
+        "estimand_unit": {"$ref": "#/$defs/dimension_summary"},
+        "stats_multiplicity": {"$ref": "#/$defs/dimension_summary"},
+        "visual_semantics": {"$ref": "#/$defs/dimension_summary"},
+        "caption_accuracy": {"$ref": "#/$defs/dimension_summary"},
+        "evidence_tier_availability": {"$ref": "#/$defs/dimension_summary"},
+        "claim_boundary": {"$ref": "#/$defs/dimension_summary"},
+        "correction_usefulness": {"$ref": "#/$defs/dimension_summary"}
+      }
+    },
+    "critical_failure_examples": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unavailable_to_zero",
+        "denominator_loss",
+        "wrong_pairing_resampling",
+        "fallback_degraded_promotion",
+        "causal_overclaim",
+        "unsupported_ranking",
+        "null_overclaim"
+      ],
+      "properties": {
+        "unavailable_to_zero": {"$ref": "#/$defs/packet_id_list"},
+        "denominator_loss": {"$ref": "#/$defs/packet_id_list"},
+        "wrong_pairing_resampling": {"$ref": "#/$defs/packet_id_list"},
+        "fallback_degraded_promotion": {"$ref": "#/$defs/packet_id_list"},
+        "causal_overclaim": {"$ref": "#/$defs/packet_id_list"},
+        "unsupported_ranking": {"$ref": "#/$defs/packet_id_list"},
+        "null_overclaim": {"$ref": "#/$defs/packet_id_list"}
+      }
+    },
+    "packet_id_list": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "reviewer_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewed_case_count",
+        "adjudication_complete_case_count",
+        "disagreement_count",
+        "mean_agreement_rate"
+      ],
+      "properties": {
+        "status": {"enum": ["not_available", "partial", "available"]},
+        "reviewed_case_count": {"type": "integer", "minimum": 0},
+        "adjudication_complete_case_count": {"type": "integer", "minimum": 0},
+        "disagreement_count": {"type": "integer", "minimum": 0},
+        "mean_agreement_rate": {
+          "anyOf": [
+            {"type": "number", "minimum": 0, "maximum": 1},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "workflow_variants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "paired_case_count",
+        "baseline_case_count",
+        "packet_constrained_case_count",
+        "mean_aggregate_score_delta",
+        "critical_error_count_delta",
+        "packet_constrained_reduces_critical_errors",
+        "packet_constrained_preserves_source_fidelity"
+      ],
+      "properties": {
+        "status": {"enum": ["not_available", "partial", "available"]},
+        "paired_case_count": {"type": "integer", "minimum": 0},
+        "baseline_case_count": {"type": "integer", "minimum": 0},
+        "packet_constrained_case_count": {"type": "integer", "minimum": 0},
+        "mean_aggregate_score_delta": {
+          "anyOf": [
+            {"type": "number", "minimum": -1, "maximum": 1},
+            {"type": "null"}
+          ]
+        },
+        "critical_error_count_delta": {
+          "anyOf": [{"type": "integer"}, {"type": "null"}]
+        },
+        "packet_constrained_reduces_critical_errors": {
+          "anyOf": [{"type": "boolean"}, {"type": "null"}]
+        },
+        "packet_constrained_preserves_source_fidelity": {
+          "anyOf": [{"type": "boolean"}, {"type": "null"}]
+        }
+      }
+    },
     "variant_summary": {
       "type": "object",
       "additionalProperties": false,

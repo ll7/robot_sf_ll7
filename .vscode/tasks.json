@@ -74,14 +74,14 @@
 		{
 			"label": "Check Code Quality (Ruff + advisory ty)",
 			"type": "shell",
-			"command": "uv run ruff check . && uvx ty check . --exit-zero",
+			"command": "uv run ruff check . && uvx ty@0.0.58 check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
 		},
 		{
 			"label": "Type Check (advisory)",
 			"type": "shell",
-			"command": "uvx ty check . --exit-zero",
+			"command": "uvx ty@0.0.58 check . --exit-zero",
 			"problemMatcher": [],
 			"group": "test"
 		},
@@ -135,6 +135,6 @@
 				"focus": false,
 				"panel": "shared"
 			}
-		},
+		}
 	]
 }

@@ -11,7 +11,7 @@ scenario config, and reports validity on three distinct axes:
    scenario.
 2. ``schema_validity``       - does the generated scenario matrix satisfy the
    ``robot_sf.scenario_matrix.v1`` JSON Schema via
-   ``robot_sf.benchmark.scenario_schema`` (reused, not rewritten). This is about
+   ``robot_sf.benchmark.scenario.scenario_schema`` (reused, not rewritten). This is about
    the *shape* of the config, not whether the scenario behaves as intended.
 3. ``scenario_validity``     - explicitly NOT assessed by this tool. Only
    execution through the benchmark runner plus human review can establish
@@ -46,7 +46,7 @@ from typing import Any
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.scenario_schema import (
+from robot_sf.benchmark.scenario.scenario_schema import (
     SCENARIO_MATRIX_SCHEMA_VERSION,
     validate_scenario_list,
     validate_scenario_matrix_metadata,

@@ -513,3 +513,57 @@ def test_manifest_success_does_not_imply_acceptance(tmp_path: Path) -> None:
     assert data["attempted_routes"][0]["terminal_state"] == "none"
     assert data["route_evidence_only"] is True
     assert data["compact_artifacts"]["result_json"]["present"] is True
+    assert data["aggregation"] == "confirmed"
+    assert data["chosen_output_contract"]["status"] == "usable"
+
+
+def test_manifest_empty_output_and_permission_denial_stay_inconclusive(tmp_path: Path) -> None:
+    """A clean exit cannot confirm a route when output is empty or permission-denied."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-empty"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"provider": "antigravity"},
+                "returncode": 0,
+                "failure_class": "none",
+                "run_dir": ".git/codex-agent-runs/run-empty",
+                "stdout": "",
+                "stderr": "headless command permission denied",
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    assert data["attempted_routes"][0]["terminal_state"] == "none"
+    assert data["aggregation"] == "inconclusive"
+    assert data["aggregation_reason"] == "worker_output_empty"
+    assert data["chosen_output_contract"]["missing_evidence"] == [
+        "worker_output_empty",
+        "permission_denied",
+    ]
+
+
+def test_manifest_explicit_no_findings_stays_inconclusive(tmp_path: Path) -> None:
+    """An explicit producer no-findings signal cannot be promoted by artifact presence."""
+    repo = _init_repo(tmp_path / "repo")
+    run_dir = repo / ".git" / "codex-agent-runs" / "run-no-findings"
+    _write_artifacts(run_dir, ALL_ARTIFACTS)
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"provider": "qwen"},
+                "returncode": 0,
+                "failure_class": "none",
+                "run_dir": ".git/codex-agent-runs/run-no-findings",
+                "useful_findings": False,
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    assert data["aggregation"] == "inconclusive"
+    assert data["aggregation_reason"] == "useful_findings_absent"

@@ -167,6 +167,24 @@ def test_risk_dwa_obstacle_and_ttc_branches(monkeypatch) -> None:
     ) == float("inf")
 
 
+def test_risk_dwa_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Risk-DWA must retain its caller precondition under optimized Python."""
+    planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig())
+
+    with pytest.raises(
+        ValueError,
+        match="Risk-DWA obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+    grid = np.zeros((1, 4, 4), dtype=float)
+    meta = {"resolution": [0.5]}
+    assert planner._min_obstacle_clearance(
+        np.zeros(2, dtype=float),
+        grid_payload=(grid, meta),
+    ) == float("inf")
+
+
 def test_risk_dwa_stops_at_goal() -> None:
     """Risk-DWA should stop when already within goal tolerance."""
     planner = RiskDWAPlannerAdapter(RiskDWAPlannerConfig(goal_tolerance=0.3))
@@ -304,6 +322,42 @@ def test_mppi_obstacle_clearance_extracts_direct_payload_once(monkeypatch) -> No
     clearance = planner._min_obstacle_clearance(np.asarray([0.0, 0.0]), _obs())
 
     assert clearance == 0.5
+
+
+def test_mppi_obstacle_clearance_requires_observation_without_grid_payload() -> None:
+    """Malformed clearance calls fail explicitly instead of relying on ``assert``."""
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(sample_count=1, iterations=1, horizon_steps=1)
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="MPPI Social obstacle clearance requires observation when grid_payload is absent",
+    ):
+        planner._min_obstacle_clearance(np.zeros(2, dtype=float))
+
+
+def test_mppi_obstacle_clearance_accepts_precomputed_grid_without_observation(monkeypatch) -> None:
+    """A supplied grid payload remains sufficient without an observation mapping."""
+    planner = MPPISocialPlannerAdapter(MPPISocialConfig())
+    grid = np.zeros((1, 5, 5), dtype=float)
+    grid[0, 2, 2] = 1.0
+    meta = {
+        "origin": np.asarray([-1.0, -1.0], dtype=float),
+        "resolution": np.asarray([0.5], dtype=float),
+        "size": np.asarray([2.5, 2.5], dtype=float),
+        "use_ego_frame": np.asarray([0.0], dtype=float),
+        "channel_indices": np.asarray([0], dtype=int),
+    }
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
+
+    assert (
+        planner._min_obstacle_clearance(
+            np.zeros(2, dtype=float),
+            grid_payload=(grid, meta),
+        )
+        == 0.0
+    )
 
 
 def test_mppi_progress_escape_breaks_stall() -> None:

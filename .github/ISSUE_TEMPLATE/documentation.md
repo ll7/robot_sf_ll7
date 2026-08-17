@@ -67,7 +67,7 @@ assignees: []
 - [ ] Documentation is clear and well-structured.
 - [ ] Examples are working and tested.
 - [ ] Documentation is linked from the relevant entry points.
-- [ ] Markdown linting passes.
+- [ ] The repository's documentation/evidence integrity check passes.
 
 ## Success Metrics
 
@@ -77,7 +77,8 @@ assignees: []
 
 ## Validation / Testing
 
-- [ ] Confirm the docs build or markdown lint passes.
+- [ ] Run `python scripts/dev/check_docs_evidence_integrity.py --full`.
+- [ ] Run `uv run python scripts/validation/check_docs_proof_consistency.py --check-evidence-catalog`.
 - [ ] Verify code examples run if included.
 - [ ] Check that updated docs are linked from the docs index.
 

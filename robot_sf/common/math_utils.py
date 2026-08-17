@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from math import atan2, cos, pi, sin
 
+import numpy as np
+
 
 def clip_scalar(value: float, lower: float, upper: float) -> float:
     """Clip a scalar value to inclusive bounds without NumPy dispatch.
@@ -31,6 +33,21 @@ def wrap_angle_pi(angle: float) -> float:
         float: Wrapped angle in radians.
     """
     return float((float(angle) + pi) % (2.0 * pi) - pi)
+
+
+def wrap_angle_pi_array(angle: np.ndarray | float) -> np.ndarray:
+    """Wrap scalar or array values to the ``[-pi, pi)`` interval.
+
+    This is the vectorized counterpart to :func:`wrap_angle_pi`.  It keeps the
+    NumPy remainder semantics needed by array-valued planner and metric paths
+    while giving those paths the same documented boundary convention as the
+    scalar helper.
+
+    Returns:
+        np.ndarray: Wrapped values with the input shape.
+    """
+    values = np.asarray(angle, dtype=float)
+    return (values + pi) % (2.0 * pi) - pi
 
 
 def wrap_angle_pi_closed(angle: float) -> float:

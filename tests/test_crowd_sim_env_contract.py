@@ -175,6 +175,47 @@ def test_make_crowd_sim_env_seed_controls_constructor_map_selection(monkeypatch)
     assert seed_123_ids[0] != seed_456_ids[0]
 
 
+def test_crowd_sim_env_constructor_does_not_consume_global_numpy_rng(monkeypatch):
+    """Constructor-time map setup must not advance the caller's NumPy RNG."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+
+    np.random.seed(7281)
+    expected_next = np.random.random()
+    np.random.seed(7281)
+
+    env = CrowdSimEnv(_config())
+    try:
+        actual_next = np.random.random()
+    finally:
+        env.close()
+
+    assert actual_next == expected_next
+
+
+def test_crowd_sim_env_reset_seed_reproduces_map_after_direct_construction(monkeypatch):
+    """Direct construction followed by a seeded reset must select the same map."""
+    monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)
+
+    def selected_map_id(seed: int) -> str | None:
+        env = CrowdSimEnv(
+            _config(
+                map_id=None,
+                sim_config=SimulationSettings(
+                    sim_time_in_secs=0.2,
+                    time_per_step_in_secs=0.1,
+                    max_total_pedestrians=2,
+                ),
+            )
+        )
+        try:
+            _, info = env.reset(seed=seed)
+            return info["map_id"]
+        finally:
+            env.close()
+
+    assert selected_map_id(7281) == selected_map_id(7281)
+
+
 def test_crowd_sim_env_render_rgb_array_uses_lazy_view(monkeypatch):
     """RGB rendering should lazily create a view and return the captured frame."""
     monkeypatch.setattr(crowd_sim_env, "Simulator", FakeSimulator)

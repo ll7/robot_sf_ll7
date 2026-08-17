@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.issue_provenance import SCENARIO_BELIEF_DESIGN_PARENT_ISSUE
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.sensor.socnav_observation import _map_position_cap
 
 SCENARIO_BELIEF_SCHEMA_VERSION = "scenario-belief.v1"
@@ -1045,4 +1046,4 @@ def _wrap_angle(value: float) -> float:
     Returns:
         float: Wrapped angle in radians.
     """
-    return float(((value + np.pi) % (2.0 * np.pi)) - np.pi)
+    return wrap_angle_pi(value)

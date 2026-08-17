@@ -735,6 +735,26 @@ def test_guarded_ppo_obstacle_clearance_helper_branches() -> None:
     assert 1.0 < clearance < 1.2
 
 
+def test_guarded_ppo_obstacle_clearance_requires_observation_without_grid_payload(
+    monkeypatch,
+) -> None:
+    """Malformed clearance calls fail explicitly and supplied grids bypass observation."""
+    guard = GuardedPPOAdapter(fallback_adapter=_FallbackAdapter((0.0, 0.0)))
+    point = np.asarray([0.0, 0.0], dtype=float)
+
+    with pytest.raises(
+        ValueError,
+        match="Guarded PPO obstacle clearance requires observation when grid_payload is absent",
+    ):
+        guard._min_obstacle_clearance(point)
+
+    grid = np.zeros((1, 5, 5), dtype=float)
+    meta = {"resolution": [0.5]}
+    monkeypatch.setattr(guard, "_preferred_channel", lambda _meta: 0)
+    monkeypatch.setattr(guard, "_world_to_grid", lambda *_args, **_kwargs: None)
+    assert guard._min_obstacle_clearance(point, grid_payload=(grid, meta)) == 0.0
+
+
 def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
     """No-ped scenes should pass through PPO, and unsafe tie cases should stop."""
     clear_guard = GuardedPPOAdapter(

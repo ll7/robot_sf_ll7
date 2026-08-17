@@ -338,12 +338,15 @@ uv run python scripts/dev/check_prepublication_state.py capture \
   --repo ll7/robot_sf_ll7 --issue <number> --branch <head-branch> \
   --base-ref origin/main \
   --snapshot-path output/validation/prepublication/<head-branch>.json
+# For a large merged-PR history, add --max-pr-pages <positive-integer> to capture.
 uv run python scripts/dev/check_prepublication_state.py check \
   --snapshot-path output/validation/prepublication/<head-branch>.json
 uv run python scripts/tools/project_priority_score.py sync --owner ll7 --project-number 5
 ```
 
 `check_prepublication_state.py` is the remote-state companion to local readiness stamps. It
+accepts an explicit `OWNER/REPO` value or a local checkout path for `capture --repo`; local paths
+are resolved through the selected Git remote and stored as normalized repository slugs.
 refreshes `origin/main`, records the exact base, remote-branch, and local-HEAD SHAs, and checks
 that the claimed issue remains open and has not gained a new explicit same-repository covering PR
 or merged closing PR. A `ready` result is the only publication-permitting result; `superseded` and
@@ -352,7 +355,8 @@ manual merge), a fresh readiness run, and a new snapshot. The integration path u
 merges and never resets or deletes the worktree. Under exhausted GraphQL quota, the gate may record
 an auditable REST source for issue state, open-covering-PR, or closing-PR discovery in
 `remote_state_sources`; auth, malformed-response, and truncated-inventory failures still block
-publication.
+publication. The shared REST fallback currently reads up to 50 pages of 100 pull requests; a cap
+hit remains blocked rather than authorizing from a partial inventory.
 
 ## What This Note Does Not Replace
 

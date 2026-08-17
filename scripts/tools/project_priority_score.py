@@ -525,37 +525,93 @@ class GhProjectClient:
     ) -> list[dict[str, Any]]:
         """Return one issue-backed item through the project query surface.
 
-        Older GitHub CLI versions reject the Projects ``--query`` flag even
-        though newer versions advertise it. Use the portable bounded list
-        surface instead, then exact-match the issue number locally. If the
-        bounded result reaches its cap without finding the issue, fail closed
-        because the exact match may have been truncated.
+        Newer GitHub CLI/API combinations support a server-side Projects
+        ``--query`` filter. Older CLI versions reject that flag, so the helper
+        falls back to the portable bounded list surface. Both paths exact-match
+        the issue number locally, and both fail closed when a capped result
+        could have omitted the target.
         """
 
         if limit <= 0:
             raise ValueError("limit must be positive")
+
+        try:
+            payload = self._run_project_command(
+                "item-list",
+                owner=owner,
+                project_number=project_number,
+                extra_args=(
+                    "--limit",
+                    str(limit),
+                    "--query",
+                    f"is:issue {issue_number}",
+                ),
+                as_json=True,
+            )
+        except RuntimeError as exc:
+            if not self._is_unsupported_item_query_error(exc):
+                raise
+        else:
+            return self._select_exact_issue_item(
+                list(payload["items"]),
+                issue_number=issue_number,
+                limit=limit,
+                context=f"gh project item-list query for issue #{issue_number}",
+            )
+
         payload = self._run_project_command(
             "item-list",
             owner=owner,
             project_number=project_number,
-            extra_args=(
-                "--limit",
-                str(limit),
-            ),
+            extra_args=("--limit", str(limit)),
             as_json=True,
         )
         items = list(payload["items"])
+        return self._select_exact_issue_item(
+            items,
+            issue_number=issue_number,
+            limit=limit,
+            context=f"gh project item-list bounded lookup for issue #{issue_number}",
+        )
+
+    @staticmethod
+    def _is_unsupported_item_query_error(error: RuntimeError) -> bool:
+        """Recognize CLI/API query incompatibility without hiding real failures."""
+
+        details = str(error).lower()
+        return any(
+            marker in details
+            for marker in (
+                "unknown flag: --query",
+                "unknown option: --query",
+                "flag provided but not defined: --query",
+                "unknown argument: --query",
+                "unknown argument query",
+                "unknown field 'query'",
+                'unknown field "query"',
+                "does not support --query",
+                "does not support query",
+                "unsupported query",
+            )
+        )
+
+    @staticmethod
+    def _select_exact_issue_item(
+        items: list[dict[str, Any]],
+        *,
+        issue_number: int,
+        limit: int,
+        context: str,
+    ) -> list[dict[str, Any]]:
+        """Return an exact issue match or fail closed on a possibly capped list."""
+
         for item in items:
             content = item.get("content")
             if isinstance(content, dict) and content.get("type") == "Issue":
                 if content.get("number") == issue_number:
                     return [item]
 
-        assert_not_truncated(
-            items,
-            limit=limit,
-            context=f"gh project item-list bounded lookup for issue #{issue_number}",
-        )
+        assert_not_truncated(items, limit=limit, context=context)
         return []
 
     def update_number_field(
@@ -733,6 +789,7 @@ def sync_scores(
             owner=options.owner,
             project_number=options.project_number,
             issue_number=options.issue_number,
+            limit=options.limit,
         )
     else:
         # Unscoped sync keeps the explicit truncation protection: a full project

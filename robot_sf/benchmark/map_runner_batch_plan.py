@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner_actions import (
+from robot_sf.benchmark.map_runner_identity import _select_seeds
+from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     scenario_robot_kinematics_label,
 )
-from robot_sf.benchmark.map_runner_identity import _select_seeds
 
 if TYPE_CHECKING:
     from pathlib import Path

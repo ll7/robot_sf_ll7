@@ -129,6 +129,28 @@ def test_measurement_does_not_hide_a_failed_batch_behind_the_aggregate(
     assert receipt["source_issue"] == 6972
 
 
+def test_measurement_records_reconciliation_execution_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Future receipts record order, warm-up/cache, and thread context explicitly."""
+
+    _patch_deterministic_fixture(monkeypatch, elapsed_seconds=[1.0] * 8)
+
+    receipt = measurement.measure(samples=1, warmups=1, batches=2)
+
+    assert receipt["execution_context"] == {
+        "execution_order": "alternating off/on, then on/off by batch",
+        "warmup_state": {"warmups_per_arm_per_batch": 1, "excluded_from_timing": True},
+        "cache_state": {
+            "process_warmup": "per_arm_per_batch",
+            "external_cache": "uncontrolled",
+        },
+        "numerical_thread_settings": {
+            key: measurement.os.environ.get(key) for key in measurement.THREAD_SETTING_KEYS
+        },
+    }
+
+
 def test_measurement_blocks_target_decision_on_integrity_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

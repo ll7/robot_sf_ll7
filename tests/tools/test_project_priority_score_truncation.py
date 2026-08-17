@@ -64,13 +64,10 @@ def test_item_list_passes_below_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(items) == 2
 
 
-def test_targeted_lookup_finds_issue_beyond_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`item_list_until_issue` finds an issue past the truncation cap cheaply.
-
-    Issue #5870: a project with more items than the default cap must not force a
-    full untruncated page for a targeted ``--issue-number`` lookup. The helper
-    uses a portable bounded project list and verifies the exact issue number.
-    """
+def test_targeted_lookup_uses_server_query_when_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A supported CLI query locates an exact issue without a full project scan."""
 
     calls: list[list[str]] = []
 
@@ -86,11 +83,73 @@ def test_targeted_lookup_finds_issue_beyond_cap(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(subprocess, "run", _fake_run)
     client = GhProjectClient()
     found = client.item_list_until_issue(owner="ll7", project_number=5, issue_number=250, limit=25)
-    assert len(found) == 1
+
     assert found[0]["content"]["number"] == 250
     assert len(calls) == 1
-    assert "--query" not in calls[0]
+    assert calls[0][calls[0].index("--query") + 1] == "is:issue 250"
     assert calls[0][calls[0].index("--limit") + 1] == "25"
+
+
+def test_targeted_lookup_falls_back_when_query_flag_is_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Older CLIs use the bounded exact-match fallback without weakening safety.
+
+    Issue #5870: a project with more items than the default cap must not force a
+    full untruncated page for a targeted ``--issue-number`` lookup. The helper
+    first tries the newer query surface, then uses a portable bounded project
+    list when the CLI rejects ``--query``.
+    """
+
+    calls: list[list[str]] = []
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if "--query" in args:
+            raise subprocess.CalledProcessError(
+                1,
+                args,
+                output="",
+                stderr="unknown flag: --query",
+            )
+        items = [{"id": "item250", "content": {"type": "Issue", "number": 250}}]
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout=json.dumps({"items": items}), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    client = GhProjectClient()
+    found = client.item_list_until_issue(owner="ll7", project_number=5, issue_number=250, limit=25)
+    assert len(found) == 1
+    assert found[0]["content"]["number"] == 250
+    assert len(calls) == 2
+    assert "--query" in calls[0]
+    assert "--query" not in calls[1]
+    assert calls[1][calls[1].index("--limit") + 1] == "25"
+
+
+def test_targeted_lookup_does_not_hide_non_query_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authentication and other command failures remain fail-closed errors."""
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            1,
+            args,
+            output="",
+            stderr="authentication failed",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    with pytest.raises(RuntimeError, match="authentication failed"):
+        GhProjectClient().item_list_until_issue(
+            owner="ll7", project_number=5, issue_number=250, limit=25
+        )
 
 
 def test_targeted_lookup_missing_issue_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:

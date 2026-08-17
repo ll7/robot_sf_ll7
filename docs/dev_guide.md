@@ -432,6 +432,69 @@ repository uses the explicit `base_sensitive` marker-file selector from issue #5
   older REST-only `scripts/dev/update_pr_branch.py` is kept for environments where the REST
   `update-branch` endpoint works.
 
+### Stacked PR orchestration (issue #7345)
+
+Use `scripts/dev/stacked_prs.py` for a stack ordered from root to tip. The helper is a guarded
+coordinator for branch/base-ref mechanics; it does not replace the exact-head review, metadata,
+thread, CI, or branch-protection gates described above. All mutating operations are dry-run by
+default, and `--apply` requires an `PR=SHA` guard for every PR in the supplied stack.
+
+Inspect the live stack before changing it:
+
+```bash
+uv run python scripts/dev/stacked_prs.py status \
+  --prs <root-pr> <child-pr> <tip-pr> --json
+```
+
+The status record reports each head/base ref and SHA, current check-run conclusions (older
+superseded runs are excluded), review digest, requested reviewers, review-thread resolution,
+exact-head verdict, final PR metadata digest, and whether the current stack alignment is
+merge-ready. Unknown review-thread state is never treated as green.
+
+To align a stack, preview the desired root `-> main` and child `-> parent-source-branch` changes,
+then apply them only with the exact heads captured from the same snapshot:
+
+```bash
+uv run python scripts/dev/stacked_prs.py retarget \
+  --prs <root-pr> <child-pr> --json
+uv run python scripts/dev/stacked_prs.py retarget --apply \
+  --prs <root-pr> <child-pr> \
+  --expected-head <root-pr>=<root-sha> \
+  --expected-head <child-pr>=<child-sha> --json
+```
+
+For local branch synchronization, use a clean linked worktree. The command fetches the base and
+stack branches, merges the preceding remote branch into each branch in order, and pushes ordinary
+(non-force) updates. It restores the worktree's original branch after an applied run:
+
+```bash
+uv run python scripts/dev/stacked_prs.py sync \
+  --worktree /path/to/linked/worktree \
+  --branches <root-branch> <child-branch> <tip-branch> --json
+uv run python scripts/dev/stacked_prs.py sync --apply \
+  --worktree /path/to/linked/worktree \
+  --branches <root-branch> <child-branch> <tip-branch> --json
+```
+
+`merge-cascade` squash-merges only the current green root with GitHub's exact-head merge guard.
+After the merge it verifies whether GitHub automatically retargeted the next PR to `main`. If not,
+it explicitly retargets that PR, verifies the result, and stops until the base change has fresh CI
+and exact-head review evidence. Re-run the command for the next PR; it never blindly merges a child
+against a stale pre-merge base:
+
+```bash
+uv run python scripts/dev/stacked_prs.py merge-cascade --apply \
+  --prs <root-pr> <child-pr> <tip-pr> \
+  --expected-head <root-pr>=<root-sha> \
+  --expected-head <child-pr>=<child-sha> \
+  --expected-head <tip-pr>=<tip-sha> --json
+```
+
+Do not run `sync --apply`, `retarget --apply`, or `merge-cascade --apply` concurrently against the
+same branch/PR. Refresh the status snapshot and expected heads after any external push, retarget,
+merge, or review change. The helper does not force-push, resolve conflicts, bypass requested
+reviewers, or delete branches.
+
 **Why not GitHub merge queue yet?** The native merge queue is the ideal solution — it re-validates
 each PR against the up-to-date prospective main before merging automatically. The repository has
 selected the bounded current-base subset plus CAS policy until the queue is configured because:

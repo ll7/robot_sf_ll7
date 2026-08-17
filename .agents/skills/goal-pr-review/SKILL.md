@@ -152,9 +152,13 @@ deterministically:
 | --- | --- | --- |
 | `pending_ci` | `wait_ci` | `awaiting_ci` |
 | `failed_ci` | `inspect_failed_ci` | `fixing` if the failure is a fixable regression on a writable branch, else `blocked_external` |
+| `failed_validation` | `verify_artifacts` | `fixing` if the validation failure is actionable on a writable branch, else `blocked_external` |
 | `missing_artifacts` | `verify_artifacts` | `under_review` |
 | `stale_worktree` | `refresh_snapshot` | `under_review` (re-snapshot the advanced head before deciding) |
 | `stale_merge_base` | `refresh_snapshot` or record the bounded ordinary selector | `under_review` until exact-head base policy proof is current |
+| `blocked_preflight` | `no_action` | `blocked_external` until the blocking preflight condition is resolved |
+| `unknown_review_threads` | `await_review_threads` | `awaiting_reviewer` until a thread-capable snapshot is available |
+| `pending_gate_verdict` | `await_gate_verdict` | `awaiting_reviewer` until current exact-head gate evidence is present |
 | `pending_pr_metadata` | `reconcile_pr_metadata` | `under_review` until the final title/body digest is reconciled and re-reviewed |
 | `ready_to_merge` | `mark_ready_candidate` | `merge_ready` only after the full proof bar in `## Proof and Validation` closes; otherwise `under_review` |
 | `no_action` | `no_action` | keep the current state (`awaiting_reviewer`, `blocked_external`, `deferred_scope`, or `closed_out`) |
@@ -193,9 +197,11 @@ triage, apply the machine-checkable state policy:
 uv run python -m scripts.dev.pr_loop_policy --snapshot <queue-snapshot.json> --json
 ```
 
-The policy classifies each PR into `pending_ci`, `failed_ci`, `missing_artifacts`,
-`stale_worktree`, `pending_pr_metadata`, `ready_to_merge`, or `no_action` and recommends one bounded action
-under the loop budget. Use the policy decision to avoid ad-hoc state inspection.
+The policy classifies each PR into `pending_ci`, `failed_ci`, `failed_validation`,
+`missing_artifacts`, `stale_worktree`, `stale_merge_base`, `blocked_preflight`,
+`unknown_review_threads`, `pending_gate_verdict`, `pending_pr_metadata`, `ready_to_merge`,
+or `no_action` and recommends one bounded action under the loop budget. Use the policy decision
+to avoid ad-hoc state inspection.
 
 For PR babysitting or handoff, prefer the conservative one-shot babysitter snapshot:
 

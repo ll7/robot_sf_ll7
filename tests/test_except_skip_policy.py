@@ -50,7 +50,7 @@ def test_no_pytest_skip_inside_broad_except_handler():
                         "test-level skip policy instead)"
                     )
 
-    assert not offenders, "Found prohibited except -> pytest.skip patterns:\n" + "\n".join(
+    assert not offenders, "Found prohibited broad-except skip-mask patterns:\n" + "\n".join(
         offenders
     )
 

@@ -493,6 +493,9 @@ def test_extended_evaluation_output_matches_schema() -> None:
         "claim_boundary": "fixture replay only; no benchmark claims",
         "case_count": 1,
         "critical_error_counts": dict.fromkeys(CRITICAL_ERROR_KINDS, 0),
+        "aggregate_summary": eval_mod._aggregate_summary(
+            [case], dict.fromkeys(CRITICAL_ERROR_KINDS, 0)
+        ),
         "cases": [case],
     }
     schema = _result_schema()
@@ -506,6 +509,15 @@ def test_manifest_report_with_aggregate_summary_matches_schema() -> None:
 
     jsonschema.Draft202012Validator.check_schema(schema)
     jsonschema.validate(evaluate_manifest(MANIFEST), schema)
+
+
+def test_schema_requires_aggregate_summary() -> None:
+    report = evaluate_manifest(MANIFEST)
+    report.pop("aggregate_summary")
+
+    jsonschema.Draft202012Validator.check_schema(_result_schema())
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(report, _result_schema())
 
 
 @pytest.mark.parametrize(

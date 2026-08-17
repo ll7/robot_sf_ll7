@@ -11,6 +11,7 @@
     "claim_boundary",
     "case_count",
     "critical_error_counts",
+    "aggregate_summary",
     "cases"
   ],
   "properties": {

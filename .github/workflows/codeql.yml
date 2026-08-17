@@ -56,3 +56,13 @@ jobs:
         uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           category: "/language:python"
+          output: codeql-results
+          upload: never
+
+      - name: Upload CodeQL SARIF with bounded retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+        run: bash scripts/ci/upload_codeql_sarif_retry.sh codeql-results

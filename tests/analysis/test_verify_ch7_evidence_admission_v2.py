@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -113,6 +114,30 @@ def test_check_only_rejects_semantically_tampered_atlas_with_updated_checksum(
     with pytest.raises(
         verifier.Ch7EvidenceAdmissionV2Error,
         match="cell identity differs from the portfolio",
+    ):
+        verifier.diagnose_v2_package(package)
+
+
+def test_check_only_rejects_csv_cell_identity_drift_with_updated_checksum(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=package)
+    atlas_path = package / "publication/reduced_atlas.csv"
+    with atlas_path.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        fieldnames = reader.fieldnames or []
+        rows = list(reader)
+    rows[0]["panel"] = "cross_mechanism"
+    with atlas_path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    builder._write_checksums(package)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="CSV cell identity differs from the portfolio",
     ):
         verifier.diagnose_v2_package(package)
 

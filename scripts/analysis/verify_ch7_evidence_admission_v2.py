@@ -186,7 +186,7 @@ def _verify_atlas_json(
     package: Path,
     expected_projection: Mapping[str, Any],
     excluded: Sequence[Mapping[str, Any]],
-) -> int:
+) -> set[tuple[str, str, str]]:
     """Verify the atlas JSON and return its expected cell count."""
 
     atlas = _read_object(package / "publication/reduced_atlas.json", "v2 reduced atlas")
@@ -214,7 +214,11 @@ def _verify_atlas_json(
         for cell in cells
         if isinstance(cell, Mapping)
     }
-    if actual_cells != expected_cells:
+    if (
+        actual_cells != expected_cells
+        or len(cells) != len(expected_cells)
+        or len(actual_cells) != len(cells)
+    ):
         raise Ch7EvidenceAdmissionV2Error("v2 atlas cell identity differs from the portfolio")
     excluded_names = {item["metric"] for item in excluded}
     for cell in cells:
@@ -226,11 +230,13 @@ def _verify_atlas_json(
             )
         if any(metric not in cell for metric in V2_SAFE_METRICS):
             raise Ch7EvidenceAdmissionV2Error("v2 atlas cell is missing a safe metric")
-    return len(expected_cells)
+    return expected_cells
 
 
 def _verify_atlas_csv(
-    package: Path, expected_cell_count: int, excluded: Sequence[Mapping[str, Any]]
+    package: Path,
+    expected_cells: set[tuple[str, str, str]],
+    excluded: Sequence[Mapping[str, Any]],
 ) -> None:
     """Verify that the CSV projection carries the same safe-metric boundary."""
 
@@ -244,9 +250,16 @@ def _verify_atlas_csv(
             rows = list(reader)
     except (OSError, csv.Error) as exc:
         raise Ch7EvidenceAdmissionV2Error("v2 reduced atlas CSV is unreadable") from exc
-    if len(rows) != expected_cell_count:
+    if len(rows) != len(expected_cells):
         raise Ch7EvidenceAdmissionV2Error(
             "v2 reduced atlas CSV cell count differs from the portfolio"
+        )
+    actual_cells = {
+        (row.get("panel"), row.get("scenario_id"), row.get("planner_key")) for row in rows
+    }
+    if actual_cells != expected_cells or len(actual_cells) != len(rows):
+        raise Ch7EvidenceAdmissionV2Error(
+            "v2 reduced atlas CSV cell identity differs from the portfolio"
         )
     if excluded_names.intersection(fieldnames):
         raise Ch7EvidenceAdmissionV2Error("v2 reduced atlas CSV contains an excluded metric")
@@ -261,8 +274,8 @@ def _verify_atlas_projection(
 ) -> None:
     """Verify the JSON and CSV projections against the canonical contract."""
 
-    expected_cell_count = _verify_atlas_json(package, expected_projection, excluded)
-    _verify_atlas_csv(package, expected_cell_count, excluded)
+    expected_cells = _verify_atlas_json(package, expected_projection, excluded)
+    _verify_atlas_csv(package, expected_cells, excluded)
 
 
 def _verify_projection_binding(

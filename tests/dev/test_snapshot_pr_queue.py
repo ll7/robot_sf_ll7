@@ -85,6 +85,30 @@ def test_base_freshness_stale_blocks_merge_ready_action() -> None:
     assert pr["next_action"] == "refresh_pr_base_before_review_or_merge"
 
 
+def test_snapshot_preserves_trusted_exact_head_base_policy() -> None:
+    """Queue policy can consume the selector recorded in trusted review evidence."""
+    pr_data = _base_freshness_pr()
+    head_sha = "a" * 40
+    pr_data["headRefOid"] = head_sha
+    pr_data["reviews"] = [
+        {
+            "state": "COMMENTED",
+            "authorAssociation": "OWNER",
+            "body": f"base-policy: ordinary-cas @ {head_sha}",
+        }
+    ]
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="old-base",
+        current_main_sha="main-sha",
+        default_number=7021,
+        expected_head_sha=head_sha,
+    )
+
+    assert pr["base_policy"] == [f"base-policy: ordinary-cas @ {head_sha}"]
+
+
 def test_base_freshness_missing_base_blocks_merge_ready_action() -> None:
     """Missing PR base provenance is unverifiable and must fail closed."""
     pr = _pr_payload_from_dict(

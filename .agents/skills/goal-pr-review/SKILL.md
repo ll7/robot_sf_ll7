@@ -154,6 +154,7 @@ deterministically:
 | `failed_ci` | `inspect_failed_ci` | `fixing` if the failure is a fixable regression on a writable branch, else `blocked_external` |
 | `missing_artifacts` | `verify_artifacts` | `under_review` |
 | `stale_worktree` | `refresh_snapshot` | `under_review` (re-snapshot the advanced head before deciding) |
+| `stale_merge_base` | `refresh_snapshot` or record the bounded ordinary selector | `under_review` until exact-head base policy proof is current |
 | `pending_pr_metadata` | `reconcile_pr_metadata` | `under_review` until the final title/body digest is reconciled and re-reviewed |
 | `ready_to_merge` | `mark_ready_candidate` | `merge_ready` only after the full proof bar in `## Proof and Validation` closes; otherwise `under_review` |
 | `no_action` | `no_action` | keep the current state (`awaiting_reviewer`, `blocked_external`, `deferred_scope`, or `closed_out`) |
@@ -211,6 +212,13 @@ helper is route evidence only and does not perform GitHub-visible writes.
    `scripts/dev/gh_pr_body_rest.py --reconcile`. Treat an unchanged result as a valid no-op; a
    changed title is justified only when scope, intent, type, or issue linkage changed.
 5. Validate per required tier, including the PR title/body contract after reconciliation.
+   For any PR whose declared base is older than current `main`, run
+   `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --json` against the exact
+   head. If the selector is `base_sensitive`, refresh onto current `main`, rerun the focused subset,
+   and keep the normal stale-base hold until that proof is current. If the selector is `ordinary`,
+   include `base-policy: ordinary-cas @ <head-sha>` in the trusted exact-head review evidence; the
+   guarded merger will perform the immediate current-main CAS before merging. Missing or unknown
+   selector evidence remains blocked.
 6. Re-query unresolved review threads after push, metadata reconciliation, and verification before resolving anything, especially
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
@@ -291,6 +299,8 @@ Apply minimum tier by change surface:
 - linked issue contract and intended design satisfied, or intentionally narrowed with explicit
   rationale, `Refs #<parent>`, an open parent, and linked successor issues,
 - scope matches contract and tests and CI proof are current for reviewed SHA,
+- stale-base handling is explicit: current-base subset proof for `base_sensitive` changes, or
+  trusted exact-head `ordinary-cas` evidence for the final current-main compare-and-swap path,
 - unresolved actionable review threads closed via GitHub review-thread resolution, with any
   single-account waiver recorded for the exact reviewed SHA,
 - artifacts from `output/` are durably represented or explicitly excluded,

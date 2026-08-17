@@ -296,11 +296,16 @@ def test_workflow_fails_closed_for_source_heads_and_review_mutations() -> None:
     assert "issue_comment:" in workflow
     for activity in ("created", "edited", "deleted"):
         assert activity in workflow
-    assert "PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number" in workflow
+    assert (
+        "PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number" in workflow
+    )
     assert "github.event.issue.number" in workflow
     assert "github.event.issue.pull_request != null" in workflow
-    assert 'pulls/$PR_NUMBER' in workflow
-    assert "merge-queue-gate-${{ github.event.pull_request.number || github.event.issue.number" in workflow
+    assert "pulls/$PR_NUMBER" in workflow
+    assert (
+        "merge-queue-gate-${{ github.event.pull_request.number || github.event.issue.number"
+        in workflow
+    )
     assert "Run merge-admission audit (source PR head)" in workflow
     assert "Source-PR admission is advisory; merge_group remains fail-closed." not in workflow
     assert "--advisory" not in workflow

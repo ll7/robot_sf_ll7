@@ -284,9 +284,7 @@ def _carrier_review_state(entry: dict[str, Any], key: str) -> tuple[str, bool, b
     return state, revoked, invalid
 
 
-def _carrier_body(
-    entry: dict[str, Any], *, marker: re.Pattern[str], revoked: bool
-) -> str | None:
+def _carrier_body(entry: dict[str, Any], *, marker: re.Pattern[str], revoked: bool) -> str | None:
     """Return a valid authority body, retaining bodyless revocation tombstones."""
     body = entry.get("body")
     if not isinstance(body, str):
@@ -327,9 +325,7 @@ def _raw_authority_carriers(
             ).upper()
             if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
                 continue
-            state, review_state_revoked, review_state_invalid = _carrier_review_state(
-                entry, key
-            )
+            state, review_state_revoked, review_state_invalid = _carrier_review_state(entry, key)
             body = _carrier_body(entry, marker=marker, revoked=review_state_revoked)
             if body is None:
                 continue
@@ -482,26 +478,17 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     )
     raw_carriers = _raw_authority_carriers(pr, marker=_GATE_CARRIER_MARKER_RE)
     if raw_carrier_fields_present:
-        if not raw_carriers or any(
-            item["timestamp_value"] is None for item in raw_carriers
-        ):
+        if not raw_carriers or any(item["timestamp_value"] is None for item in raw_carriers):
             return False
         latest_raw = raw_carriers[-1]
-        if latest_raw.get("review_state_revoked") or latest_raw.get(
-            "review_state_invalid"
-        ):
+        if latest_raw.get("review_state_revoked") or latest_raw.get("review_state_invalid"):
             return False
         return any(
             match.group(1).lower() == head_sha.lower()
-            for match in _EXACT_GATE_VERDICT_RE.finditer(
-                str(latest_raw["body"])
-            )
+            for match in _EXACT_GATE_VERDICT_RE.finditer(str(latest_raw["body"]))
         )
     accepted = _accepted_gate_verdict_shas(pr)
-    return any(
-        len(sha) == 40 and sha.lower() == head_sha.lower()
-        for sha in accepted
-    )
+    return any(len(sha) == 40 and sha.lower() == head_sha.lower() for sha in accepted)
 
 
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:

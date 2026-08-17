@@ -167,6 +167,15 @@ auth, malformed, or truncated payloads.
 
 ## Merge Workflow
 
+For a root-to-tip stack, `scripts/dev/stacked_prs.py merge-cascade` is the guarded coordinator for
+the sequential mechanics. It requires `--apply` plus an exact `--expected-head PR=SHA` for every
+stack entry, performs only a squash merge, verifies the remote merged state, and checks whether
+GitHub automatically retargeted the next PR to `main`. If the next base changed or needs explicit
+retargeting, it stops with a fresh-CI handoff; rerun the full merger preflight after CI and exact-head
+review evidence are current. Never use it to bypass this skill's `merge-ready`, metadata, thread,
+requested-reviewer, base-policy, or branch-protection checks, and never run stack mutations
+concurrently against the same PR or branch.
+
 1. List open PRs with `merge-ready` label:
    ```bash
    gh pr list --state open --label merge-ready --json number,title,headRefName,baseRefName,mergeable,statusCheckRollup

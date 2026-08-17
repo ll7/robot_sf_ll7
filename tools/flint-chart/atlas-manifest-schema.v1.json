@@ -16,7 +16,9 @@
   "properties": {
     "schema_version": {"const": "flint-chart-atlas-manifest.v1"},
     "atlas_id": {"type": "string", "minLength": 1},
-    "claim_boundary": {"type": "string", "minLength": 1},
+    "claim_boundary": {
+      "const": "analysis-only candidate surface; not a promoted figure, benchmark result, evidence admission, or dissertation claim"
+    },
     "renderer_policy": {
       "type": "object",
       "additionalProperties": false,
@@ -95,7 +97,7 @@
           "minProperties": 1,
           "additionalProperties": {"$ref": "#/$defs/sha256"}
         },
-        "durability": {"const": "durable_pinned"}
+        "durability": {"enum": ["durable_pinned", "synthetic_fixture"]}
       }
     },
     "metric": {

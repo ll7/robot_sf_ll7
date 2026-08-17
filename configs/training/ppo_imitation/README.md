@@ -11,6 +11,11 @@ This directory hosts configuration files used by the expert-policy, trajectory c
 * `optuna_expert_ppo_issue_4019_demo.yaml` – Smoke-scale automated hyperparameter optimization (HPO) demo with explicit search space, cost bounds, and provenance output.
 * `bc_pretrain.yaml` – Behavioural cloning phase settings (optimizer, batch sizes, dataset references).
 * `ppo_finetune.yaml` – PPO fine-tuning schedule that resumes from a pre-trained checkpoint.
+* `expert_ppo_issue_403_grid*.yaml` – Issue #403 grid/SocNav expert-PPO variants. They inherit
+  the shared feature, environment, convergence, evaluation, and tracking contract from
+  `expert_ppo_issue_403_grid_base.yaml` while keeping robot capability, seed policy, run budget,
+  and hold-out choices explicit. Resolved-config equivalence is covered in
+  `tests/integration/test_train_expert_ppo.py`.
 * `bc_pretrain_issue_749_v10_warm_start.yaml` and the
   `ppo_finetune_issue_749_v10_warm_start.yaml` / `ppo_finetune_issue_1977_bc_warm_start_rerun.yaml`
   pair – Issue #749/1977 BC warm-start PPO launch packets. Both fine-tuning variants inherit their

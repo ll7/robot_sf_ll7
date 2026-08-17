@@ -10,6 +10,8 @@ body:
       value: |
         Use this form for research-validation work that needs a clear hypothesis, evidence grade,
         artifact policy, and executable validation path before implementation starts.
+        Use the canonical archetype, evidence grade, and evidence tier values defined in
+        docs/context/issue_1512_issue_archetypes.md.
         Research issues should preferably explain what claim boundary, hypothesis, negative
         result, synthesis decision, or durable experiment blocker they are meant to change. Treat
         that as adapted guidance, not a hard requirement for every small support issue.
@@ -82,7 +84,25 @@ body:
       options:
         - observed
         - inferred
-        - speculative
+        - proposal
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence_tier
+    attributes:
+      label: Evidence tier
+      description: Which canonical evidence tier describes the current evidence boundary?
+      options:
+        - idea
+        - launch_packet
+        - preflight_valid
+        - smoke
+        - nominal
+        - stress
+        - full_matrix
+        - analysis_only
+        - synthesis
+        - paper_grade
         - blocked
     validations:
       required: true

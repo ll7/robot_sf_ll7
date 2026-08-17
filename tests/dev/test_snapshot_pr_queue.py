@@ -11,6 +11,8 @@ from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
     _pr_payload_from_dict,
+    _rest_open_pr_list,
+    _rest_paginated_check_runs,
     main,
     snapshot_active_prs,
     snapshot_prs,
@@ -998,6 +1000,75 @@ def test_is_graphql_quota_error_detection() -> None:
     assert not _is_graphql_quota_error("")
 
 
+@pytest.mark.parametrize(
+    ("page_two_size", "expected_truncated"),
+    [(50, False), (51, True), (100, True)],
+)
+def test_rest_open_pr_list_paginates_and_reports_overfetch_truncation(
+    page_two_size: int, expected_truncated: bool
+) -> None:
+    """REST active discovery distinguishes a complete short page from discarded overfetch."""
+    page_one = [{"number": number} for number in range(100)]
+    page_two = [{"number": number} for number in range(page_two_size)]
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del timeout
+        assert repo == "ll7/robot_sf_ll7"
+        if path.endswith("page=1"):
+            return page_one
+        if path.endswith("page=2"):
+            return page_two
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    with patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get) as mock_rest:
+        rows, truncated = _rest_open_pr_list(repo="ll7/robot_sf_ll7", limit=150)  # type: ignore[misc]
+
+    assert len(rows) == 150
+    assert truncated is expected_truncated
+    assert mock_rest.call_count == 2
+    assert mock_rest.call_args_list[0].args[0] == "pulls?state=open&per_page=100&page=1"
+    assert mock_rest.call_args_list[1].args[0] == "pulls?state=open&per_page=100&page=2"
+
+
+def test_rest_check_runs_rejects_short_page_before_total_count() -> None:
+    """An inconsistent REST count must not be accepted as a complete check snapshot."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._rest_api_get",
+        return_value={"total_count": 2, "check_runs": []},
+    ):
+        rows, status = _rest_paginated_check_runs("head-sha", repo="ll7/robot_sf_ll7")
+
+    assert rows == []
+    assert status == "truncated"
+
+
+def test_rest_check_runs_rejects_contradictory_total_count() -> None:
+    """REST totals that cannot contain the returned rows must fail closed."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._rest_api_get",
+        return_value={"total_count": 1, "check_runs": [{"name": "ci"}, {"name": "ci-2"}]},
+    ):
+        rows, status = _rest_paginated_check_runs("head-sha", repo="ll7/robot_sf_ll7")
+
+    assert rows == []
+    assert status == "error"
+
+
+def test_rest_open_pr_list_has_a_page_budget() -> None:
+    """An extreme active-list limit cannot turn REST fallback into unbounded requests."""
+    page = [{"number": number} for number in range(100)]
+
+    with (
+        patch("scripts.dev.snapshot_pr_queue.REST_ACTIVE_MAX_PAGES", 2),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", return_value=page) as mock_rest,
+    ):
+        rows, truncated = _rest_open_pr_list(repo="ll7/robot_sf_ll7", limit=250)  # type: ignore[misc]
+
+    assert len(rows) == 200
+    assert truncated is True
+    assert mock_rest.call_count == 2
+
+
 def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     """A GraphQL quota failure switches to REST and marks the snapshot fail-closed."""
     pull = {
@@ -1035,9 +1106,15 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["review_threads_admission"] == "fail_closed_unknown"
     assert payload["head_sha"] == "abc"
     assert payload["preflight"]["head_sha_matches_expected"] is True
+    assert payload["expected_head_sha"] == "abc"
     assert payload["preflight"]["status"] == "blocked"
     assert "review_threads_unknown_graphql_quota" in payload["preflight"]["reasons"]
     assert payload["next_action"] == "inspect_blocking_preflight"
+    assert payload["rest_enrichment"] == {
+        "reviews": "ok",
+        "comments": "ok",
+        "checks": "ok",
+    }
     assert payload["title"] == "demo"
     assert "merge-ready" in payload["labels"]
     assert payload["checks"]["overall"] == "success"
@@ -1070,9 +1147,10 @@ def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> N
                 "base": {"sha": "main-sha"},
                 "mergeable_state": "clean",
             }
-        if path.endswith("/reviews") or path.endswith("/comments"):
+        endpoint = path.split("?", 1)[0]
+        if endpoint.endswith("/reviews") or endpoint.endswith("/comments"):
             return []
-        if path.startswith("commits/") and path.endswith("/check-runs"):
+        if endpoint.startswith("commits/") and endpoint.endswith("/check-runs"):
             return {
                 "check_runs": [
                     {
@@ -1135,6 +1213,212 @@ def test_snapshot_active_prs_rest_list_failure_has_no_fabricated_rows() -> None:
             "error": "GraphQL quota exhausted and REST open-PR list fallback failed",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("row", "expected_error"),
+    [
+        (
+            {"number": 0, "head": {"sha": "head-sha"}},
+            "REST active PR list contained a row without an integer number",
+        ),
+        (
+            {"number": 42},
+            "REST active PR list contained a row without a non-empty head SHA",
+        ),
+    ],
+)
+def test_snapshot_active_prs_malformed_rest_row_preserves_provenance(
+    row: dict[str, object], expected_error: str
+) -> None:
+    """Malformed REST inventory must fail closed without dropping its route evidence."""
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del repo, timeout
+        if path == "branches/main":
+            return {"commit": {"sha": "main-sha"}}
+        if path == "pulls?state=open&per_page=20&page=1":
+            return [row]
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        payload = snapshot_active_prs(repo="ll7/robot_sf_ll7", limit=20)
+
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["route_evidence_only"] is True
+    assert payload["review_threads_admission"] == "fail_closed_unknown"
+    assert payload["prs"] == [
+        {
+            "status": "error",
+            "error_kind": "rest_payload_malformed",
+            "error": expected_error,
+        }
+    ]
+
+
+def test_fetch_pr_rest_paginates_enrichment_and_preserves_provenance() -> None:
+    """REST reviews, comments, and checks must not silently stop at GitHub's page size."""
+    pull = {
+        "number": 42,
+        "title": "paged enrichment",
+        "state": "OPEN",
+        "draft": False,
+        "labels": [],
+        "html_url": "https://x/42",
+        "head": {"ref": "fix", "sha": "rest-head"},
+        "base": {"sha": "main-sha"},
+        "mergeable_state": "clean",
+    }
+    reviews_page_one = [
+        {
+            "state": "APPROVED",
+            "author_association": "OWNER",
+            "user": {"login": "reviewer"},
+            "submitted_at": "2026-07-01T00:00:00Z",
+            "body": "approved",
+        }
+        for _ in range(100)
+    ]
+    reviews_page_two = [
+        {
+            "state": "COMMENTED",
+            "author_association": "MEMBER",
+            "user": {"login": "reviewer-final"},
+            "submitted_at": "2026-07-02T00:00:00Z",
+            "body": "follow-up",
+        }
+    ]
+    comments_page_one = [
+        {
+            "author_association": "MEMBER",
+            "user": {"login": "commenter"},
+            "created_at": "2026-07-01T00:00:00Z",
+            "body": "note",
+        }
+        for _ in range(100)
+    ]
+    comments_page_two = [
+        {
+            "author_association": "OWNER",
+            "user": {"login": "commenter-final"},
+            "created_at": "2026-07-02T00:00:00Z",
+            "body": "latest note",
+        }
+    ]
+    checks_page_one = [
+        {
+            "name": f"ci-{index}",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-01T00:00:00Z",
+        }
+        for index in range(100)
+    ]
+    checks_page_two = [
+        {
+            "name": "ci-final",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-07-02T00:00:00Z",
+        }
+    ]
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del repo, timeout
+        if path == "pulls/42":
+            return pull
+        if path == "pulls/42/reviews?per_page=100&page=1":
+            return reviews_page_one
+        if path == "pulls/42/reviews?per_page=100&page=2":
+            return reviews_page_two
+        if path == "issues/42/comments?per_page=100&page=1":
+            return comments_page_one
+        if path == "issues/42/comments?per_page=100&page=2":
+            return comments_page_two
+        if path == "commits/rest-head/check-runs?per_page=100&page=1":
+            return {"total_count": 101, "check_runs": checks_page_one}
+        if path == "commits/rest-head/check-runs?per_page=100&page=2":
+            return {"total_count": 101, "check_runs": checks_page_two}
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get) as mock_rest,
+    ):
+        payload = fetch_pr(
+            42,
+            repo="ll7/robot_sf_ll7",
+            current_main_sha="main-sha",
+            expected_head_sha="rest-head",
+        )
+
+    assert payload["rest_enrichment"] == {
+        "reviews": "ok",
+        "comments": "ok",
+        "checks": "ok",
+    }
+    assert payload["review_snapshot"]["total"] == 101
+    assert payload["review_snapshot"]["latest"][0]["author"] == "reviewer-final"
+    assert payload["review_snapshot"]["latest"][0]["submitted_at"] == "2026-07-02T00:00:00Z"
+    assert payload["comment_snapshot"]["total"] == 101
+    assert payload["comment_snapshot"]["latest"][0]["author"] == "commenter-final"
+    assert payload["checks"]["total"] == 101
+    assert payload["expected_head_sha"] == "rest-head"
+    assert mock_rest.call_count == 7
+
+
+def test_fetch_pr_rest_fails_closed_on_unusable_enrichment_page() -> None:
+    """A failed REST enrichment endpoint remains visible and cannot look complete."""
+    pull = {
+        "number": 42,
+        "title": "incomplete enrichment",
+        "state": "OPEN",
+        "draft": False,
+        "labels": [],
+        "head": {"ref": "fix", "sha": "rest-head"},
+        "base": {"sha": "main-sha"},
+        "mergeable_state": "clean",
+    }
+
+    def rest_get(path: str, *, repo: str, timeout: int = 45):  # type: ignore[no-untyped-def]
+        del repo, timeout
+        if path == "pulls/42":
+            return pull
+        if path.startswith("pulls/42/reviews?"):
+            return None
+        if path.startswith("issues/42/comments?"):
+            return []
+        if path.startswith("commits/rest-head/check-runs?"):
+            return None
+        raise AssertionError(f"unexpected REST path: {path}")
+
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get),
+    ):
+        payload = fetch_pr(42, repo="ll7/robot_sf_ll7", current_main_sha="main-sha")
+
+    assert payload["rest_enrichment"] == {
+        "reviews": "error",
+        "comments": "ok",
+        "checks": "error",
+    }
+    assert "rest_reviews_error" in payload["preflight"]["reasons"]
+    assert "rest_checks_error" in payload["preflight"]["reasons"]
+    assert payload["checks"]["overall"] == "pending"
+    assert payload["preflight"]["status"] == "blocked"
 
 
 def test_fetch_pr_rest_suppresses_duplicate_cancelled_run_with_actions_metadata() -> None:

@@ -1,0 +1,42 @@
+{
+  "schema_version": "artifact_provenance_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "run_commit_sha": "75c8c51b9d9bbd544dd49763662c80360a2788a2",
+  "artifact_root": "output/review_issue7254_corrected_final",
+  "location": "worktree-local ignored output; compact manifest promoted to tracked evidence",
+  "tracked_compact_evidence": [
+    "docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/README.md",
+    "docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/summary.json",
+    "docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/artifact_provenance.json"
+  ],
+  "artifacts": [
+    {
+      "path": "output/review_issue7254_corrected_final/comparison.json",
+      "classification": "non-evidence-local-only",
+      "role": "complete local comparison output with absolute worktree paths",
+      "sha256": "5c421ede97b8252f2722afc3ffd6f36b4fec8e455d83a7d63b17ec71f0b5a6ed",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/review_issue7254_corrected_final/comparison.md",
+      "classification": "non-evidence-local-only",
+      "role": "local human-readable diagnostic rendering",
+      "sha256": "ce92dd3da7a288682c98b32f777915dfac6f394f3fb41c23432ea92877958be8",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/review_issue7254_corrected_final/dataset/predictive_fixture.npz",
+      "classification": "ignored-cache",
+      "role": "reproducible 512-row smoke fixture; digest is recorded in summary.json",
+      "sha256": "8b8f30ca85a493805277c2b12ae8390dedf60fc9671e8427974e7e2d7bdcd434",
+      "durable_retrieval_pointer": null
+    },
+    {
+      "path": "output/review_issue7254_corrected_final/runs/{fp32_control,fp32_loader,amp_loader}/repeat_{01,02}/{predictive_model.pt,trainer.log,training_summary.json}",
+      "classification": "non-evidence-local-only",
+      "role": "raw checkpoints, logs, and per-run summaries; not required for source-controlled handoff",
+      "durable_retrieval_pointer": null
+    }
+  ],
+  "policy": "Do not cite or depend on local output artifacts as durable evidence beyond the tracked compact manifest until a retrieval pointer and metadata are recorded."
+}

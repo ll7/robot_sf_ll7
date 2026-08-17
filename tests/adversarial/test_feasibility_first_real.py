@@ -134,7 +134,9 @@ def _fake_evaluator(
     )
 
 
-def test_real_manifest_pipeline_writes_schema_valid_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_real_manifest_pipeline_writes_schema_valid_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """The config-first pipeline should preserve native rows and validate its report."""
     monkeypatch.setattr(real, "production_candidate_evaluator", lambda: _fake_evaluator)
 
@@ -157,7 +159,9 @@ def test_real_manifest_pipeline_writes_schema_valid_report(monkeypatch: pytest.M
         real.validate_real_report(invalid)
 
 
-def test_real_manifest_pipeline_preserves_pipeline_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_real_manifest_pipeline_preserves_pipeline_exception(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """A production-pipeline exception remains an unavailable, schema-valid row."""
 
     def _raise(*_args: Any, **_kwargs: Any) -> CandidateEvaluation:
@@ -181,8 +185,14 @@ def test_hash_and_path_helpers_are_stable(tmp_path: Path) -> None:
 
     assert real._sha256_bytes(b"fixture") == real._sha256_file(input_path)
     assert real._canonical_sha256({"b": 2, "a": 1}) == real._canonical_sha256({"a": 1, "b": 2})
-    assert real._repo_relative(_MANIFEST) == "configs/benchmarks/issue_7340_feasibility_first_real_manifest_v1.yaml"
-    assert real._resolve_input_path(str(_MANIFEST), config_path=tmp_path / "config.yaml", field="x") == _MANIFEST
+    assert (
+        real._repo_relative(_MANIFEST)
+        == "configs/benchmarks/issue_7340_feasibility_first_real_manifest_v1.yaml"
+    )
+    assert (
+        real._resolve_input_path(str(_MANIFEST), config_path=tmp_path / "config.yaml", field="x")
+        == _MANIFEST
+    )
     with pytest.raises(real.RealManifestError, match="x"):
         real._resolve_input_path("missing.yaml", config_path=tmp_path / "config.yaml", field="x")
 
@@ -193,7 +203,10 @@ def test_hash_and_path_helpers_are_stable(tmp_path: Path) -> None:
         (lambda payload: payload.update({"unknown": True}), "unknown fields"),
         (lambda payload: payload.pop("policy"), "missing fields"),
         (lambda payload: payload.update({"baseline": "other"}), "baseline"),
-        (lambda payload: payload["domain_approval"].update({"status": "approved"}), "domain_approval"),
+        (
+            lambda payload: payload["domain_approval"].update({"status": "approved"}),
+            "domain_approval",
+        ),
         (lambda payload: payload.update({"candidate_pool_budget": 0}), "candidate_pool_budget"),
         (lambda payload: payload.update({"sample_budget": 5}), "sample_budget"),
         (lambda payload: payload.update({"criticality_threshold": 2.0}), "criticality_threshold"),
@@ -280,29 +293,32 @@ def test_behavior_check_and_simulator_check_fail_closed(tmp_path: Path) -> None:
     record_path.write_text(json.dumps({"status": "success", "termination_reason": "goal"}) + "\n")
     evaluation.episode_record_path = record_path
     evaluation.failure_attribution = FailureAttribution(
-        "attributed", "success", [], {"execution_mode": "native", "availability_status": "available"}
+        "attributed",
+        "success",
+        [],
+        {"execution_mode": "native", "availability_status": "available"},
     )
-    passed, runtime = real._simulator_check(
-        evaluation, certification_status=_certification()
-    )
+    passed, runtime = real._simulator_check(evaluation, certification_status=_certification())
     assert passed.status == "pass"
     assert runtime["record_status"] == "success"
 
     evaluation.failure_attribution = FailureAttribution(
-        "attributed", "unknown", [], {"execution_mode": "fallback", "availability_status": "available"}
+        "attributed",
+        "unknown",
+        [],
+        {"execution_mode": "fallback", "availability_status": "available"},
     )
-    unavailable, _runtime = real._simulator_check(
-        evaluation, certification_status=_certification()
-    )
+    unavailable, _runtime = real._simulator_check(evaluation, certification_status=_certification())
     assert unavailable.status == "unavailable"
 
     evaluation.failure_attribution = FailureAttribution(
-        "attributed", "unknown", [], {"execution_mode": "native", "availability_status": "available"}
+        "attributed",
+        "unknown",
+        [],
+        {"execution_mode": "native", "availability_status": "available"},
     )
     evaluation.episode_record_path = tmp_path / "missing_episode.jsonl"
-    failed, _runtime = real._simulator_check(
-        evaluation, certification_status=_certification()
-    )
+    failed, _runtime = real._simulator_check(evaluation, certification_status=_certification())
     assert failed.status == "fail"
 
 
@@ -314,9 +330,7 @@ def test_method_summary_and_candidate_record_preserve_denominators() -> None:
         "candidate-1": {"execution_mode": "native", "primary_failure": "collision"},
         "candidate-2": {"execution_mode": "adapter", "primary_failure": "timeout"},
     }
-    summary = real._method_summary(
-        [first, second], budget=2, threshold=0.2, runtime_by_id=runtime
-    )
+    summary = real._method_summary([first, second], budget=2, threshold=0.2, runtime_by_id=runtime)
     assert summary["selected_count"] == 2
     assert summary["valid_scenario_rate"] == 1.0
     assert summary["safety_event_severity"]["denominator"] == 2

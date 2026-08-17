@@ -43,9 +43,6 @@ checkpoints, and fixture remain ignored worktree-local output as documented in
 
 ## Reproduction
 
-```bash
-scripts/dev/run_worktree_shared_venv.sh -- uv run python \
-  scripts/training/run_predictive_optimization_smoke.py \
-  --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml \
-  --output-root output/review_issue7254_corrected_final
-```
+Run `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py`
+with `--config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml` and a
+fresh `--output-root`; the complete command is preserved in `summary.json`.

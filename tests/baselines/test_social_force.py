@@ -2,6 +2,7 @@
 
 import json
 import math
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -288,6 +289,24 @@ class TestSocialForcePlanner:
         config_str = json.dumps(metadata["config"])
         assert isinstance(config_str, str)
         assert "ammv_diagnostics" not in metadata
+
+    def test_metadata_surfaces_fast_pysf_fallbacks(self, planner):
+        """Social-force metadata must carry wrapper fallback provenance."""
+        wrapper = Mock()
+        wrapper.diagnostics.return_value = {
+            "planner_type": "FastPysfWrapper",
+            "fallback": True,
+            "fallback_count": 1,
+            "fallback_reason": "obstacle_force_dropped",
+            "fallback_reasons": {"obstacle_force_dropped": 1},
+        }
+        planner._wrapper = wrapper
+
+        metadata = planner.get_metadata()
+
+        assert metadata["status"] == "fallback"
+        assert metadata["fallback_reason"] == "obstacle_force_dropped"
+        assert metadata["planner_diagnostics"]["fallback"] is True
 
     def test_ammv_aware_term_changes_enabled_action_and_metadata(self):
         """AMMV enabled should produce different action and populate metadata diagnostics."""

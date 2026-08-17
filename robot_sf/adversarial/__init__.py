@@ -21,6 +21,32 @@ from robot_sf.adversarial.config import (
     SearchRunResult,
     SearchSpaceConfig,
 )
+from robot_sf.adversarial.feasibility_first import (
+    CHECK_NAMES,
+    FeasibilityCandidate,
+    FeasibilityCheck,
+    FeasibilityFirstError,
+    HierarchicalScenarioValue,
+    build_comparison_report,
+    build_fixture_candidates,
+    rank_feasible_candidates,
+    run_fixture_diagnostic,
+    sample_risk_feedback,
+    sample_seeded_uniform,
+    validate_report,
+)
+from robot_sf.adversarial.feasibility_first import (
+    CLAIM_BOUNDARY as FEASIBILITY_FIRST_CLAIM_BOUNDARY,
+)
+from robot_sf.adversarial.feasibility_first import (
+    EVIDENCE_TIER as FEASIBILITY_FIRST_EVIDENCE_TIER,
+)
+from robot_sf.adversarial.feasibility_first import (
+    EXISTING_BASELINE_ID as FEASIBILITY_FIRST_EXISTING_BASELINE_ID,
+)
+from robot_sf.adversarial.feasibility_first import (
+    SCHEMA_VERSION as FEASIBILITY_FIRST_SCHEMA_VERSION,
+)
 from robot_sf.adversarial.manifest_quality import (
     MANIFEST_QUALITY_SCHEMA_VERSION,
     ManifestsQualitySummary,
@@ -98,6 +124,11 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "ADVERSARIAL_CANDIDATE_QUALITY_SCHEMA",
+    "CHECK_NAMES",
+    "FEASIBILITY_FIRST_CLAIM_BOUNDARY",
+    "FEASIBILITY_FIRST_EVIDENCE_TIER",
+    "FEASIBILITY_FIRST_EXISTING_BASELINE_ID",
+    "FEASIBILITY_FIRST_SCHEMA_VERSION",
     "MANIFEST_QUALITY_SCHEMA_VERSION",
     "AdversarialScenarioManifest",
     "BatchCertification",
@@ -107,8 +138,12 @@ __all__ = [
     "CandidateEvaluation",
     "CandidateSpec",
     "CoordinateRefinementSampler",
+    "FeasibilityCandidate",
+    "FeasibilityCheck",
+    "FeasibilityFirstError",
     "GeneratorInfo",
     "GridSpec",
+    "HierarchicalScenarioValue",
     "ManifestCategory",
     "ManifestsQualitySummary",
     "MultiPedAdversarialConfig",
@@ -130,6 +165,8 @@ __all__ = [
     "SeedSensitivitySummary",
     "SourceLineage",
     "ValidationRecord",
+    "build_comparison_report",
+    "build_fixture_candidates",
     "build_manifest",
     "build_multi_ped_adversarial_robot_config",
     "certify_candidate_batch",
@@ -147,14 +184,19 @@ __all__ = [
     "multi_ped_config_to_single_pedestrian_definitions",
     "production_candidate_evaluator",
     "production_qd_evaluator",
+    "rank_feasible_candidates",
     "run_adversarial_search",
+    "run_fixture_diagnostic",
     "run_map_elites",
     "run_seed_sensitivity",
+    "sample_risk_feedback",
+    "sample_seeded_uniform",
     "summarize_adversarial_manifest_quality",
     "summarize_adversarial_manifest_quality_records",
     "validate_candidate_manifest",
     "validate_manifest_payload",
     "validate_multi_ped_runtime_plausibility",
+    "validate_report",
     "write_manifest_yaml",
     "write_qd_archive",
 ]

@@ -357,7 +357,7 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-08-17T21:20:54Z",
+  "generated_at": "2026-08-17T21:40:38Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

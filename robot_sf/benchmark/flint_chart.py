@@ -51,6 +51,18 @@ def _mapping(value: Any, *, name: str) -> Mapping[str, Any]:
     return value
 
 
+def _reject_unexpected(
+    value: Mapping[str, Any],
+    *,
+    allowed: set[str],
+    name: str,
+) -> None:
+    """Reject fields that are not part of the versioned object contract."""
+    unexpected = set(value) - allowed
+    if unexpected:
+        raise FlintChartContractError(f"{name} contains unsupported fields: {sorted(unexpected)!r}")
+
+
 def _string(value: Any, *, name: str) -> str:
     """Return a non-empty string."""
     if not isinstance(value, str) or not value.strip():
@@ -62,8 +74,7 @@ def _finite_number(value: Any, *, name: str) -> int | float:
     """Return a finite JSON number, excluding booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise FlintChartContractError(f"{name} must be a finite number")
-    number = float(value)
-    if not math.isfinite(number):
+    if isinstance(value, float) and not math.isfinite(value):
         raise FlintChartContractError(f"{name} must be a finite number")
     return value
 
@@ -137,6 +148,18 @@ def _validate_source(source: Mapping[str, Any]) -> dict[str, Any]:
     Returns:
         Normalized source metadata.
     """
+    _reject_unexpected(
+        source,
+        allowed={
+            "context",
+            "source_commit",
+            "release_id",
+            "artifact_catalog",
+            "input_hashes",
+            "durability",
+        },
+        name="source",
+    )
     context = _string(source.get("context"), name="source.context")
     if context not in {"release", "replay"}:
         raise FlintChartContractError("source.context must be 'release' or 'replay'")
@@ -145,20 +168,29 @@ def _validate_source(source: Mapping[str, Any]) -> dict[str, Any]:
         raise FlintChartContractError("source.source_commit must be a full 40-character commit")
     release_id = _string(source.get("release_id"), name="source.release_id")
     catalog = _mapping(source.get("artifact_catalog"), name="source.artifact_catalog")
+    _reject_unexpected(
+        catalog,
+        allowed={"path", "sha256"},
+        name="source.artifact_catalog",
+    )
     catalog_path = _string(catalog.get("path"), name="source.artifact_catalog.path")
     catalog_sha = _sha256(catalog.get("sha256"), name="source.artifact_catalog.sha256")
     raw_hashes = _mapping(source.get("input_hashes"), name="source.input_hashes")
     if not raw_hashes:
         raise FlintChartContractError("source.input_hashes must not be empty")
-    input_hashes = {
-        _string(path, name="source.input_hashes path"): _sha256(
-            digest, name=f"source.input_hashes[{path}]"
-        )
-        for path, digest in raw_hashes.items()
-    }
+    input_hashes: dict[str, str] = {}
+    for path, digest in raw_hashes.items():
+        normalized_path = _string(path, name="source.input_hashes path")
+        if normalized_path in input_hashes:
+            raise FlintChartContractError(
+                f"source.input_hashes contains duplicate normalized path {normalized_path!r}"
+            )
+        input_hashes[normalized_path] = _sha256(digest, name=f"source.input_hashes[{path}]")
     durability = _string(source.get("durability"), name="source.durability")
-    if durability != "durable_pinned":
-        raise FlintChartContractError("source.durability must be 'durable_pinned'")
+    if durability not in {"durable_pinned", "synthetic_fixture"}:
+        raise FlintChartContractError(
+            "source.durability must be 'durable_pinned' or 'synthetic_fixture'"
+        )
     return {
         "context": context,
         "source_commit": commit,
@@ -178,13 +210,19 @@ def _validate_uncertainty(value: Any, *, name: str) -> dict[str, Any]:
     uncertainty = _mapping(value, name=name)
     status = _string(uncertainty.get("status"), name=f"{name}.status")
     if status == "available":
+        _reject_unexpected(
+            uncertainty,
+            allowed={"status", "lower", "upper", "method"},
+            name=name,
+        )
         lower = _finite_number(uncertainty.get("lower"), name=f"{name}.lower")
         upper = _finite_number(uncertainty.get("upper"), name=f"{name}.upper")
-        if float(lower) > float(upper):
+        if _exact_number(lower) > _exact_number(upper):
             raise FlintChartContractError(f"{name}.lower must not exceed {name}.upper")
         method = _string(uncertainty.get("method"), name=f"{name}.method")
         return {"status": status, "lower": lower, "upper": upper, "method": method}
     if status == "unavailable":
+        _reject_unexpected(uncertainty, allowed={"status", "reason"}, name=name)
         reason = _string(uncertainty.get("reason"), name=f"{name}.reason")
         return {"status": status, "reason": reason}
     raise FlintChartContractError(f"{name}.status must be 'available' or 'unavailable'")
@@ -197,22 +235,21 @@ def _validate_cell(value: Any, *, name: str) -> dict[str, Any]:
         Normalized result cell.
     """
     cell = _mapping(value, name=name)
-    allowed_fields = {
-        "planner_key",
-        "scenario_family",
-        "value",
-        "denominator",
-        "exposure_definition",
-        "exclusions",
-        "uncertainty",
-        "capability_track",
-        "evidence_status",
-    }
-    unexpected_fields = set(cell) - allowed_fields
-    if unexpected_fields:
-        raise FlintChartContractError(
-            f"{name} contains unsupported fields: {sorted(unexpected_fields)!r}"
-        )
+    _reject_unexpected(
+        cell,
+        allowed={
+            "planner_key",
+            "scenario_family",
+            "value",
+            "denominator",
+            "exposure_definition",
+            "exclusions",
+            "uncertainty",
+            "capability_track",
+            "evidence_status",
+        },
+        name=name,
+    )
     planner_key = _string(cell.get("planner_key"), name=f"{name}.planner_key")
     scenario_family = _string(cell.get("scenario_family"), name=f"{name}.scenario_family")
     exclusions = cell.get("exclusions")
@@ -270,6 +307,11 @@ def _population_keys(value: Any) -> list[tuple[str, str]]:
     keys: set[tuple[str, str]] = set()
     for index, item in enumerate(value):
         population_item = _mapping(item, name=f"display_population[{index}]")
+        _reject_unexpected(
+            population_item,
+            allowed={"planner_key", "scenario_family"},
+            name=f"display_population[{index}]",
+        )
         key = (
             _string(
                 population_item.get("planner_key"), name=f"display_population[{index}].planner_key"
@@ -361,6 +403,18 @@ def _validate_renderer_policy(
         Normalized renderer policy.
     """
     policy = _mapping(value, name="renderer_policy")
+    _reject_unexpected(
+        policy,
+        allowed={
+            "canonical_renderer",
+            "tie_policy",
+            "source_context_separation",
+            "requires_uncertainty",
+            "requires_direct_labels",
+            "requires_tie_preservation",
+        },
+        name="renderer_policy",
+    )
     canonical_renderer = _string(
         policy.get("canonical_renderer"), name="renderer_policy.canonical_renderer"
     )
@@ -375,8 +429,24 @@ def _validate_renderer_policy(
         )
     if policy.get("source_context_separation") is not True:
         raise FlintChartContractError("renderer_policy.source_context_separation must be true")
+    optional_boolean_fields = (
+        "requires_uncertainty",
+        "requires_direct_labels",
+        "requires_tie_preservation",
+    )
+    for field in optional_boolean_fields:
+        if field in policy and not isinstance(policy[field], bool):
+            raise FlintChartContractError(f"renderer_policy.{field} must be a boolean")
     _validate_figure_policy(policy, figure_id=figure_id, cells=cells)
-    return dict(policy)
+    normalized = {
+        "canonical_renderer": canonical_renderer,
+        "tie_policy": tie_policy,
+        "source_context_separation": True,
+    }
+    normalized.update(
+        {field: policy[field] for field in optional_boolean_fields if field in policy}
+    )
+    return normalized
 
 
 def _validate_metric(value: Any, *, name: str) -> dict[str, str]:
@@ -386,6 +456,7 @@ def _validate_metric(value: Any, *, name: str) -> dict[str, str]:
         Normalized metric descriptor.
     """
     metric = _mapping(value, name=name)
+    _reject_unexpected(metric, allowed={"id", "unit"}, name=name)
     return {
         "id": _string(metric.get("id"), name=f"{name}.id"),
         "unit": _string(metric.get("unit"), name=f"{name}.unit"),
@@ -439,6 +510,22 @@ def build_surface(payload: Mapping[str, Any]) -> dict[str, Any]:
     Returns:
         Normalized surface candidate document.
     """
+    payload = _mapping(payload, name="surface input")
+    _reject_unexpected(
+        payload,
+        allowed={
+            "schema_version",
+            "surface_id",
+            "figure_id",
+            "metric",
+            "source",
+            "display_population",
+            "canonical_cells",
+            "candidate_cells",
+            "renderer_policy",
+        },
+        name="surface input",
+    )
     if payload.get("schema_version") != SURFACE_INPUT_SCHEMA_VERSION:
         raise FlintChartContractError(f"schema_version must be {SURFACE_INPUT_SCHEMA_VERSION!r}")
     surface_id = _string(payload.get("surface_id"), name="surface_id")
@@ -492,7 +579,9 @@ def _index_output_cells(value: Any, *, name: str) -> dict[tuple[str, str], dict[
     normalized: list[dict[str, Any]] = []
     for index, raw_cell in enumerate(value):
         cell = dict(_mapping(raw_cell, name=f"{name}[{index}]"))
-        if cell.get("rank") is not None:
+        if "rank" not in cell or "tie_group" not in cell:
+            raise FlintChartContractError(f"{name}[{index}] must include rank and tie_group fields")
+        if cell["rank"] is not None:
             raise FlintChartContractError(f"{name}[{index}].rank must remain null")
         tie_group = cell.get("tie_group")
         if tie_group is not None:
@@ -575,12 +664,11 @@ def _normalize_tie_groups(
     observed_groups: dict[str, dict[str, Any]] = {}
     for index, raw_group in enumerate(value):
         group = _mapping(raw_group, name=f"{name}[{index}]")
-        allowed_fields = {"group_id", "scenario_family", "value", "members"}
-        unexpected_fields = set(group) - allowed_fields
-        if unexpected_fields:
-            raise FlintChartContractError(
-                f"{name}[{index}] contains unsupported fields: {sorted(unexpected_fields)!r}"
-            )
+        _reject_unexpected(
+            group,
+            allowed={"group_id", "scenario_family", "value", "members"},
+            name=f"{name}[{index}]",
+        )
         group_id = _string(group.get("group_id"), name=f"{name}[{index}].group_id")
         if group_id in observed_groups:
             raise FlintChartContractError(f"{name} contains duplicate group {group_id!r}")
@@ -634,6 +722,18 @@ def _validate_surface_coverage(
         Normalized complete-coverage metadata.
     """
     coverage = _mapping(value, name=name)
+    _reject_unexpected(
+        coverage,
+        allowed={
+            "status",
+            "expected_cells",
+            "actual_cells",
+            "missing_cells",
+            "duplicate_cells",
+            "dropped_cells",
+        },
+        name=name,
+    )
     if coverage.get("status") != "complete":
         raise FlintChartContractError(f"{name}: status must be complete")
     if (
@@ -661,6 +761,11 @@ def _validate_surface_parity(value: Any, *, name: str, expected_cells: int) -> d
         Normalized passed-parity metadata.
     """
     parity = _mapping(value, name=name)
+    _reject_unexpected(
+        parity,
+        allowed={"status", "compared_cells", "compared_fields", "missing_cells", "extra_cells"},
+        name=name,
+    )
     if parity.get("status") != "passed":
         raise FlintChartContractError(f"{name}: status must be passed")
     if parity.get("compared_cells") != expected_cells:
@@ -684,6 +789,26 @@ def _validate_surface_document(surface: Mapping[str, Any], *, path: Path) -> dic
     Returns:
         Normalized fields needed to build one atlas entry.
     """
+    _reject_unexpected(
+        surface,
+        allowed={
+            "schema_version",
+            "surface_id",
+            "figure_id",
+            "metric",
+            "source_context",
+            "source",
+            "display_population",
+            "coverage",
+            "cells",
+            "tie_groups",
+            "parity",
+            "renderer_policy",
+            "render_status",
+            "claim_boundary",
+        },
+        name=str(path),
+    )
     if surface.get("schema_version") != SURFACE_SCHEMA_VERSION:
         raise FlintChartContractError(f"{path}: unsupported surface schema")
     surface_id = _string(surface.get("surface_id"), name=f"{path}.surface_id")

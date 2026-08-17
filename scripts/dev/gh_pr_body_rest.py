@@ -34,13 +34,15 @@ import fcntl
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
+from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
+from scripts.dev._gh_rest import subprocess
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title
 
 if TYPE_CHECKING:
@@ -68,63 +70,6 @@ def _metadata_write_lock(repo: str, number: int) -> Iterator[None]:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     except OSError as exc:
         raise RuntimeError(f"could not acquire PR metadata writer lock {lock_path}: {exc}") from exc
-
-
-def _gh_api_patch(
-    path: str, payload: dict[str, str], *, timeout: int = 30
-) -> subprocess.CompletedProcess[str]:
-    """Patch *path* through ``gh api``, returning failures for clear handling."""
-    args = ["gh", "api", "--method", "PATCH", path, "--input", "-"]
-    try:
-        return subprocess.run(
-            args,
-            input=json.dumps(payload),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; body update was not verified",
-        )
-
-
-def _gh_api_get(path: str, *, timeout: int = 30) -> subprocess.CompletedProcess[str]:
-    """Fetch *path* through ``gh api``, returning failures for clear handling."""
-    args = ["gh", "api", path]
-    try:
-        return subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=f"gh api timed out after {timeout} seconds; PR metadata was not verified",
-        )
 
 
 def _read_body_file(body_file: Path) -> tuple[str | None, str | None]:

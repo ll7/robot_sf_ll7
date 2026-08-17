@@ -205,7 +205,7 @@ from robot_sf.benchmark.result_provenance import (
 from robot_sf.benchmark.result_provenance import (
     write_result_provenance_manifest as _write_result_provenance_manifest,
 )
-from robot_sf.benchmark.scenario_schema import validate_scenario_list
+from robot_sf.benchmark.scenario.scenario_schema import validate_scenario_list
 from robot_sf.benchmark.schema_validator import load_schema
 from robot_sf.benchmark.tracking_precision_contract import (
     normalize_tracking_precision_spec,

@@ -10,7 +10,12 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-__all__ = ["scenario_coverage", "scenario_failure_cause", "scenario_staging"]  # noqa: F822 - lazy submodules
+__all__ = [  # noqa: F822 - names are resolved lazily by __getattr__
+    "scenario_coverage",
+    "scenario_failure_cause",
+    "scenario_schema",
+    "scenario_staging",
+]
 _MODULE_NAMES = frozenset(__all__)
 
 

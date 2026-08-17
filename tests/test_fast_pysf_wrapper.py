@@ -1,9 +1,12 @@
 """TODO docstring. Document this module."""
 
+from unittest.mock import Mock
+
 import numpy as np
 import pytest
 from pysocialforce import Simulator
 
+from robot_sf.sim import fast_pysf_wrapper as wrapper_module
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 
 
@@ -136,6 +139,143 @@ def test_get_forces_at_points_matches_pointwise_without_pedestrians():
     assert np.linalg.norm(obstacle_only[0]) > 0, (
         "Obstacle force must remain active without pedestrians"
     )
+
+
+def test_social_force_fallback_is_logged_and_recorded(monkeypatch):
+    """A scalar social-force failure remains compatible but is observable."""
+    sim = make_no_obstacle_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("forced social-force failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "social_force_ped_ped", fail)
+
+    result = wrapper._compute_social_force_at_point(np.array([2.0, 0.0]))
+
+    assert result.shape == (2,)
+    assert np.all(np.isfinite(result))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "social_force_inverse_square"
+    assert diagnostics["fallback_reasons"] == {"social_force_inverse_square": 2}
+    assert warning.call_count == 1
+
+
+def test_max_speed_fallback_is_logged_and_recorded(monkeypatch):
+    """A malformed max-speed payload exposes the historical 1 m/s default."""
+    sim = make_no_obstacle_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    class BrokenSpeedArray:
+        def __array__(self, dtype=None):
+            raise ValueError("forced max-speed failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(sim.peds, "max_speeds", BrokenSpeedArray())
+
+    result = wrapper._compute_desired_force(np.array([0.0, 0.0]), [1.0, 0.0])
+
+    assert result[0] == pytest.approx(2.0)
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "max_speed_default"
+    assert diagnostics["fallback_reasons"] == {"max_speed_default": 1}
+    assert warning.call_count == 1
+
+
+def test_obstacle_force_fallback_is_logged_and_recorded(monkeypatch):
+    """An obstacle-kernel failure remains a zero contribution but is visible."""
+    sim = make_simple_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("forced obstacle-force failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force", fail)
+
+    result = wrapper._compute_obstacle_force_at_point(np.array([0.5, 0.0]))
+
+    np.testing.assert_array_equal(result, np.zeros(2))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "obstacle_force_dropped"
+    assert diagnostics["fallback_reasons"] == {"obstacle_force_dropped": 1}
+    assert warning.call_count == 1
+
+
+def test_robot_force_fallback_is_logged_and_recorded(monkeypatch):
+    """A robot-kernel failure remains zero-valued but is visible."""
+    sim = make_no_obstacle_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("forced robot-force failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "robot_force", fail, raising=False)
+
+    result = wrapper._compute_robot_force_at_point(np.array([0.5, 0.0]), {})
+
+    np.testing.assert_array_equal(result, np.zeros(2))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "robot_force_zero"
+    assert diagnostics["fallback_reasons"] == {"robot_force_zero": 1}
+    assert warning.call_count == 1
+
+
+def test_unavailable_robot_force_is_logged_and_recorded(monkeypatch):
+    """Requesting an unsupported robot kernel must not silently drop the term."""
+    sim = make_no_obstacle_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    for name in ("robot_force", "robot_interaction_force_on_point", "force_robot"):
+        monkeypatch.delattr(wrapper_module.pf_forces, name, raising=False)
+
+    result = wrapper._compute_robot_force_at_point(np.array([0.5, 0.0]), {})
+
+    np.testing.assert_array_equal(result, np.zeros(2))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "robot_force_unavailable"
+    assert diagnostics["fallback_reasons"] == {"robot_force_unavailable": 1}
+    assert warning.call_count == 1
+
+
+def test_batched_kernel_fallbacks_are_logged_and_recorded(monkeypatch):
+    """Batched kernel failures expose their pointwise compatibility paths."""
+    sim = make_simple_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("forced batch-kernel failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "social_force_single_ped", fail)
+    monkeypatch.setattr(wrapper_module.pf_forces, "all_obstacle_forces", fail)
+
+    result = wrapper.get_forces_at_points([[0.5, 0.0], [1.5, 0.0]])
+
+    assert result.shape == (2, 2)
+    assert np.all(np.isfinite(result))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reasons"] == {
+        "social_force_batch_pointwise": 2,
+        "obstacle_force_batch_pointwise": 1,
+    }
+    assert diagnostics["fallback_count"] == 3
+    assert warning.call_count == 2
 
 
 def test_wrapper_init_raises_value_error_for_negative_agents(monkeypatch):

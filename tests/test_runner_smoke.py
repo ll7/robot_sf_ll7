@@ -104,6 +104,52 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     assert reloaded["episode_id"] == record["episode_id"]
 
 
+def test_runner_surfaces_child_planner_fallback_diagnostics(monkeypatch):
+    """Forked baseline diagnostics must preserve FastPysfWrapper fallback state."""
+
+    class FallbackWrapper:
+        """Small wrapper double that models one observed force-kernel fallback."""
+
+        def __init__(self, _sim):
+            pass
+
+        def get_forces_at(self, *_args, **_kwargs):
+            return np.zeros(2, dtype=float)
+
+        def diagnostics(self):
+            return {
+                "planner_type": "FastPysfWrapper",
+                "fallback": True,
+                "fallback_count": 1,
+                "fallback_reason": "social_force_inverse_square",
+                "fallback_reasons": {"social_force_inverse_square": 1},
+            }
+
+    monkeypatch.setattr(
+        "robot_sf.baselines.social_force.FastPysfWrapper",
+        FallbackWrapper,
+    )
+    scenario = {
+        "id": "smoke-social-force-fallback",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+    }
+
+    record = run_episode(
+        scenario, seed=123, horizon=1, dt=0.1, record_forces=False, algo="social_force"
+    )
+
+    assert record["algorithm_metadata"]["status"] == "fallback"
+    diagnostics = record["algorithm_metadata"]["planner_diagnostics"]
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "social_force_inverse_square"
+
+
 def test_run_batch_analysis_trace_telemetry_is_provenance_bound(tmp_path: Path) -> None:
     """The opt-in non-map trace carries reset state, telemetry, and its artifact hash."""
 

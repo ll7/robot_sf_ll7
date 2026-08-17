@@ -30,7 +30,10 @@ Explain how to migrate from legacy environment factory usage to the explicit, op
 env = make_robot_env(seed=42)
 print(env.applied_seed)  # 42
 ```
-Sequence: Python `random.seed`, NumPy `np.random.seed`, optional Torch `manual_seed`, set `PYTHONHASHSEED`.
+Sequence: Python `random.seed`, NumPy `np.random.seed`, and optional Torch `manual_seed`.
+The factory does not mutate `PYTHONHASHSEED`: Python fixes that hash seed at interpreter startup,
+so changing the environment in-process would not affect the current interpreter and would leak into
+later subprocesses.
 
 ## Precedence Rules (Robot/Image)
 1. Explicit options override convenience booleans.

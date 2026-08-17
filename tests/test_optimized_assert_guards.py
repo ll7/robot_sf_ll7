@@ -13,6 +13,7 @@ import pytest
 
 _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     """
+    from dataclasses import replace
     from types import SimpleNamespace
     from pathlib import Path
 
@@ -32,6 +33,11 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     from robot_sf.benchmark.issue_5303_search_promotion_preregistration_v2 import (
         downstream_activation_errors,
         preflight_issue_5303_powered_contract,
+    )
+    from robot_sf.benchmark.tie_aware_ranking import (
+        TieAwareRankingError,
+        _intervals_overlap_or_contact,
+        _normalise_item,
     )
     from robot_sf.feature_extractors.attention_extractor import MultiHeadAttention
     from robot_sf.nav.occupancy_grid import GridConfig, OccupancyGrid
@@ -83,6 +89,23 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
             "issue_5303_terminal_mapping: unexpected errors " f"{terminal_mapping_errors!r}"
         )
     print(f"PASS issue_5303_terminal_mapping: fail-closed: {terminal_mapping_errors[0]}")
+
+    tie_item = _normalise_item(
+        {
+            "key": "item",
+            "score": 1.0,
+            "uncertainty": {"low": 0.5, "high": 1.5, "source": "fixture"},
+        },
+        0,
+    )
+    expect(
+        "tie_aware_interval_bounds",
+        TieAwareRankingError,
+        "interval comparison requires both uncertainty bounds",
+        lambda: _intervals_overlap_or_contact(
+            replace(tie_item, uncertainty_low=None), tie_item
+        ),
+    )
 
 
     expect(
@@ -311,6 +334,7 @@ _EXPECTED_MARKERS = (
     "PASS issue_5303_v1_preflight: ready",
     "PASS issue_5303_v2_preflight: ready",
     "PASS issue_5303_terminal_mapping: fail-closed",
+    "PASS tie_aware_interval_bounds: TieAwareRankingError",
     "PASS attention_positive_heads: ValueError",
     "PASS attention_divisibility: ValueError",
     "PASS simulator_map_definition: TypeError",
@@ -335,6 +359,7 @@ _EXPECTED_MARKERS = (
 
 _EXPECTED_MESSAGES = (
     "terminal result must be a mapping",
+    "interval comparison requires both uncertainty bounds",
     "num_heads must be positive, got 0",
     "embed_dim=8 must be divisible by num_heads=3",
     "map_def should be of type MapDefinition",
@@ -390,12 +415,13 @@ def test_converted_guards_survive_python_optimized_mode() -> None:
     (
         "robot_sf/benchmark/issue_5303_search_promotion_preregistration.py",
         "robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py",
+        "robot_sf/benchmark/tie_aware_ranking.py",
     ),
 )
-def test_issue_5303_preregistration_modules_have_no_production_asserts(
+def test_scoped_production_modules_have_no_production_asserts(
     relative_path: str,
 ) -> None:
-    """Frozen evidence gates must not disappear when Python runs with ``-O``."""
+    """Scoped production guards must not disappear when Python runs with ``-O``."""
     module_path = Path(__file__).resolve().parents[1] / relative_path
     tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
     assert not any(isinstance(node, ast.Assert) for node in ast.walk(tree))

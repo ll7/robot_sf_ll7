@@ -23,6 +23,10 @@ from scripts.analysis import build_ch7_evidence_package_v2 as package_builder
 from scripts.analysis import verify_ch7_evidence_admission as package_admission
 from scripts.analysis import verify_ch7_evidence_admission_v2 as package_diagnostic
 
+# evidence-writer-exempt: this receipt is a hash-bound canonical JSON artifact;
+# shared write_json would change its byte representation and self-hash. Its same-PR
+# review sidecar carries the required AI-GENERATED NEEDS-REVIEW marker.
+
 RECEIPT_SCHEMA_VERSION = "ch7-evidence-build-receipt.v1"
 ISSUE = 7410
 PACKAGE_ISSUE = 7087

@@ -18,10 +18,22 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     assert "pull_request" in trigger
     paths = set(trigger["pull_request"]["paths"])
     expected_paths = {
+        "pyproject.toml",
+        "uv.lock",
+        "fast-pysf/pyproject.toml",
+        "fast-pysf/uv.lock",
         "third_party/python-rvo2/pyproject.toml",
         "third_party/python-rvo2/setup.py",
         "third_party/python-rvo2/requirements.txt",
+        "third_party/python-rvo2/LICENSE",
+        "third_party/python-rvo2/UPSTREAM.md",
+        "third_party/python-rvo2/LOCAL_CHANGES.patch",
+        "third_party/socnavbench/LICENSE",
+        "third_party/socnavbench/LICENSES/Apache-2.0.txt",
         "third_party/socnavbench/LICENSING.yaml",
+        "third_party/socnavbench/UPSTREAM.md",
+        "scripts/tools/check_dependency_license_inventory.py",
+        "tests/tools/test_check_dependency_license_inventory.py",
     }
     assert expected_paths <= paths
 
@@ -42,3 +54,31 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
         "GPL-3.0-only",
         "GPL-3.0-or-later",
     }
+
+
+def test_packaging_workflow_covers_archive_license_and_provenance_inputs() -> None:
+    """Archive checks must rerun when any shipped legal/provenance input changes."""
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load(
+        (root / ".github" / "workflows" / "packaging-extras.yml").read_text(encoding="utf-8")
+    )
+    trigger = workflow.get("on") or workflow[True]
+    paths = set(trigger["pull_request"]["paths"])
+    expected_paths = {
+        "pyproject.toml",
+        "uv.lock",
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.md",
+        "fast-pysf/LICENSE",
+        "third_party/python-rvo2/LICENSE",
+        "third_party/python-rvo2/UPSTREAM.md",
+        "third_party/python-rvo2/LOCAL_CHANGES.patch",
+        "third_party/socnavbench/LICENSE",
+        "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+        "third_party/socnavbench/LICENSING.yaml",
+        "third_party/socnavbench/UPSTREAM.md",
+        "scripts/tools/check_distribution_licenses.py",
+        "tests/tools/test_check_distribution_licenses.py",
+        ".github/workflows/packaging-extras.yml",
+    }
+    assert expected_paths <= paths

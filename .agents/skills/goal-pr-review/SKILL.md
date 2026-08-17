@@ -226,8 +226,10 @@ helper is route evidence only and does not perform GitHub-visible writes.
 8. After the full proof bar closes, reconcile the final title/body one more time and compute its
    exact metadata digest. Then post an exact-head review-evidence comment by submitting a GitHub
    COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA, the
-   validation, findings disposition, any single-account waiver, and
-   `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
+   validation, the exact-head changed-line coverage verdict (or a machine-readable
+   `changed-coverage: not-required @ <head_sha> reason=<code>` exception), findings disposition,
+   any single-account waiver, and `pr-metadata: reconciled @ <digest>` alongside
+   `gate-verdict: accepted @ <head_sha>`. Then update
    `merge-ready`. The
    review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
    does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the

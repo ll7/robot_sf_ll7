@@ -80,3 +80,56 @@ def test_blocked_builder_output_cannot_cross_the_v2_admission_boundary(tmp_path:
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
     with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="review sidecars|admitted"):
         verifier.verify_v2_admission(output, tmp_path / "receipt.json")
+
+
+def test_check_only_diagnoses_blocked_package_and_builds_template(tmp_path: Path) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
+
+    diagnostic = verifier.diagnose_v2_package(output)
+
+    assert diagnostic["status"] == "blocked_pending_domain_approval"
+    assert diagnostic["admission_status"] == "not_admitted"
+    assert diagnostic["package"]["sha256sums_sha256"] == verifier._sha256_file(
+        output / "SHA256SUMS"
+    )
+    assert diagnostic["diagnostics"]["package_checksums_verified"] is True
+    assert diagnostic["diagnostics"]["receipt_created"] is False
+    assert {blocker["code"] for blocker in diagnostic["diagnostics"]["blockers"]} == {
+        "domain_approval_pending",
+        "external_admission_receipt_required",
+        "metric_semantics_blocked_issue_7042",
+    }
+
+    template = diagnostic["receipt_template"]
+    assert template["template_status"] == "not_a_receipt"
+    assert template["package"] == diagnostic["package"]
+    assert (
+        template["source"]["portfolio_config_sha256"]
+        == diagnostic["source"]["portfolio_config_sha256"]
+    )
+    assert template["source"]["source_registry_sha256"] is None
+    assert template["approval"]["decision"] is None
+    assert template["retrieval"]["source_package_key"] is None
+    assert not (output / "admission/receipt.json").exists()
+
+
+def test_check_only_template_is_rejected_as_an_admission_receipt(tmp_path: Path) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
+    template = verifier.diagnose_v2_package(output)["receipt_template"]
+
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="validation failed"):
+        verifier._validate(template, verifier.RECEIPT_SCHEMA, "v2 admission receipt")
+
+
+def test_check_only_cli_emits_a_machine_readable_diagnostic(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
+
+    assert verifier.main(["--package", str(output), "--check-only"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "ch7-evidence-admission-diagnostic.v1"
+    assert payload["diagnostics"]["admission_authorized"] is False

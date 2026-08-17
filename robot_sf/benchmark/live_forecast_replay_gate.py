@@ -56,6 +56,7 @@ from robot_sf.benchmark.pedestrian_forecast import (
 )
 from robot_sf.common.forecast_variants import FORECAST_VARIANT_CHOICES
 from robot_sf.common.issue_provenance import LIVE_FORECAST_REPLAY_GATE_CONTRACT_ISSUE
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.errors import RobotSfError
 from robot_sf.gym_env.unified_config import EnvSettings
 from robot_sf.nav.baseline_probabilistic_predictor import BaselineProbabilisticPredictor
@@ -794,9 +795,7 @@ def run_variant_closed_loop_replay(
         # Integrate forward for the next step, unless this is the last frame.
         if step_index < len(trace.frames) - 1:
             step_dt_s = _frame_step_dt_s(trace, step_index, dt_s)
-            robot_heading = float(
-                (robot_heading + angular_velocity * step_dt_s + np.pi) % (2.0 * np.pi) - np.pi
-            )
+            robot_heading = wrap_angle_pi(robot_heading + angular_velocity * step_dt_s)
             robot_position = robot_position + np.array(
                 [np.cos(robot_heading), np.sin(robot_heading)], dtype=float
             ) * (linear_velocity * step_dt_s)

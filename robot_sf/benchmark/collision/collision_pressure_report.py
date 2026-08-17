@@ -172,7 +172,8 @@ def _select_rows(
         if reason is not None:
             exclusions.append(_exclusion(index, key, reason))
             continue
-        assert ledger is not None
+        if ledger is None:
+            raise CollisionPressureReportError("selected row is missing an auditable event ledger")
         selected.append((key, family, ledger))
     return selected, exclusions
 

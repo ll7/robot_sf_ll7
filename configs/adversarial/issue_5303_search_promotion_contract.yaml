@@ -119,7 +119,9 @@ input_provenance:
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
     - id: preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preregistration.py
-      sha256: 16a193ea5047273202474182ef13aac0ff916e563165d5ea7d7e3fc2311f5f73
+      # Refreshed after the outcome-free optimized-mode evidence-gate hardening
+      # in #7231; frozen design fields and the diagnostic boundary are unchanged.
+      sha256: d51d9d20f187955095eea406d0d290af1ae6baeafbeba4822a080def84b2e791
     - id: contract_check_cli
       path: scripts/tools/check_issue_5303_search_promotion_preregistration.py
       sha256: 112a4c5ff0b8fd19f43ba34bc750344c193a218c8d1903a0eb837359b53f4bd5

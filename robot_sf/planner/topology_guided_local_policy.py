@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleCandidate,
@@ -1276,7 +1277,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
             if float(np.linalg.norm(waypoint_vec)) <= _EPS
             else float(np.arctan2(waypoint_vec[1], waypoint_vec[0]))
         )
-        tangent_error = float((tangent_heading - heading + np.pi) % (2.0 * np.pi) - np.pi)
+        tangent_error = wrap_angle_pi(tangent_heading - heading)
         turn_in_place_error = max(
             float(self.topology_config.topology_command_turn_in_place_error), 0.0
         )
@@ -1290,9 +1291,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                     0.5 * np.cos(tangent_heading) + 0.5 * np.cos(waypoint_heading),
                 )
             )
-            desired_heading_error = float(
-                (blended_heading - heading + np.pi) % (2.0 * np.pi) - np.pi
-            )
+            desired_heading_error = wrap_angle_pi(blended_heading - heading)
             alignment = max(0.0, float(np.cos(desired_heading_error)))
             desired_linear = min(
                 float(speed_cap),

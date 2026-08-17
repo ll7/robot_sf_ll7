@@ -69,6 +69,19 @@ def test_surface_is_deterministic_and_preserves_exact_ties_without_rank() -> Non
     assert all(cell["rank"] is None for cell in first["cells"])
 
 
+def test_large_integer_values_do_not_collapse_into_false_ties() -> None:
+    """Adjacent schema-valid integers remain distinct tie values."""
+    payload = _payload()
+    for cells in (payload["canonical_cells"], payload["candidate_cells"]):
+        cells[0]["value"] = 9_007_199_254_740_992
+        cells[1]["value"] = 9_007_199_254_740_993
+
+    surface = build_surface(payload)
+
+    assert surface["tie_groups"] == []
+    assert all(cell["tie_group"] is None for cell in surface["cells"])
+
+
 def test_atlas_keeps_release_and_replay_contexts_separate(tmp_path: Path) -> None:
     """The atlas accepts the same surface id only when contexts remain separate."""
     release = tmp_path / "release.surface.json"

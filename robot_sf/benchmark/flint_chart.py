@@ -14,6 +14,7 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -65,6 +66,20 @@ def _finite_number(value: Any, *, name: str) -> int | float:
     if not math.isfinite(number):
         raise FlintChartContractError(f"{name} must be a finite number")
     return value
+
+
+def _exact_number(value: int | float) -> Decimal:
+    """Return a decimal key without collapsing large validated integers."""
+    if isinstance(value, int):
+        return Decimal(value)
+    return Decimal(str(value))
+
+
+def _canonical_number(value: Decimal) -> int | float:
+    """Return a stable JSON number for an exact decimal tie value."""
+    if value == value.to_integral_value():
+        return int(value)
+    return float(value)
 
 
 def _sha256(value: Any, *, name: str) -> str:
@@ -385,9 +400,10 @@ def _add_tie_metadata(
     Returns:
         Mapping with normalized ``cells`` and ``tie_groups`` lists.
     """
-    by_family: dict[str, dict[float, list[tuple[str, str]]]] = {}
+    by_family: dict[str, dict[Decimal, list[tuple[str, str]]]] = {}
     for key, cell in cells.items():
-        by_family.setdefault(key[1], {}).setdefault(float(cell["value"]), []).append(key)
+        value = _exact_number(cell["value"])
+        by_family.setdefault(key[1], {}).setdefault(value, []).append(key)
     tie_group_by_key: dict[tuple[str, str], str] = {}
     tie_groups: list[dict[str, Any]] = []
     for family, value_groups in sorted(by_family.items()):
@@ -404,7 +420,7 @@ def _add_tie_metadata(
                 {
                     "group_id": group_id,
                     "scenario_family": family,
-                    "value": value,
+                    "value": _canonical_number(value),
                     "members": [list(key) for key in sorted_keys],
                 }
             )

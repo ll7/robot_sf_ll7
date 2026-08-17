@@ -55,11 +55,12 @@ changes.
   issue/PR head SHA, skill file modification time, or explicit stale-state
   trigger changes.
 - `route_cache` keeps quota and invocation facts close to the active work:
-  Spark usage-limit resets, failed helper flags, the exact bounded CI monitor
-  command, and the current fallback worker. Reuse it before retrying a route.
-  If a Codex app subagent spawn fails because the model quota is exhausted,
-  record the reset time immediately, close the handle when possible, and do not
-  retry that model during the same phase.
+  the shared resolver decision and receipt, observed provider availability or
+  reset facts, failed helper flags, the exact bounded CI monitor command, and
+  the current fallback worker. Reuse it before retrying a route. If a Codex app
+  subagent spawn fails because its quota is exhausted, record the reset time,
+  close the handle when possible, and do not retry that route during the same
+  phase. Thread noise triggers tightening or rotation, not model escalation.
 - `delegation_artifacts` are route evidence, not task acceptance. Codex still
   inspects the diff, verifies changed files, and runs the selected validation.
 - `output_budget` should return the result, changed files, validation status,

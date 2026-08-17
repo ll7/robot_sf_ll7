@@ -10,8 +10,9 @@ an artifact, admit evidence, or edit a dissertation claim.
 
 `surface-input-schema.v1.json` describes a surface input containing:
 
-- a durable pinned source context (`release` or `replay`), full source commit,
-  release/bundle identity, artifact-catalog hash, and input hashes;
+- a source context (`release` or `replay`), full source commit, release/bundle
+  identity, artifact-catalog hash, input hashes, and an explicit durability
+  classification (`durable_pinned` or `synthetic_fixture`);
 - an explicit planner-by-scenario-family display population;
 - canonical and candidate cells with value, denominator, exposure definition,
   exclusions, uncertainty, capability track, and evidence status; and
@@ -27,7 +28,8 @@ fails closed. The output is marked `render_status: not_run`.
 surface files and produces `atlas-manifest-schema.v1.json`. Release and replay
 surfaces remain separate entries, including when they share a surface id.
 Every input surface must already report complete population coverage and passed
-canonical parity.
+canonical parity. Candidate surfaces carry `render_status: not_run`; only the
+atlas manifest carries the fixed `promotion_status: not_admitted` field.
 
 Example commands:
 
@@ -44,7 +46,14 @@ uv run python scripts/tools/build_flint_chart_atlas_manifest.py \
 
 The fixture inputs are synthetic/public-safe contract fixtures. They are not a
 pinned Flint release or replay bundle and cannot support a dissertation,
-benchmark, ranking, or scientific claim. Downstream promotion additionally
-requires a real durable input bundle, deterministic Flint export, provenance
-sidecars, Robot-SF figure QA, print-scale and accessibility checks, and an
-explicit per-surface admission decision.
+benchmark, ranking, or scientific claim. The builder validates required
+provenance declarations and digest/commit syntax only; it does not resolve a
+commit, read an artifact catalog, or verify referenced input hashes. Downstream
+promotion additionally requires a real `durable_pinned` input bundle with
+verified provenance, deterministic Flint export, provenance sidecars, Robot-SF
+figure QA, print-scale and accessibility checks, and an explicit per-surface
+admission decision.
+
+Numeric contract: Python integers from JSON are preserved exactly. JSON decimal
+values use the standard-library binary64 float representation; lossless
+arbitrary-precision decimal semantics are not claimed by this v1 contract.

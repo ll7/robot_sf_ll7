@@ -28,7 +28,7 @@ def _shell_quote(path: Path) -> str:
 
 def _timer_test_environment(fake_bin: Path) -> dict[str, str]:
     """Provide only the runtime tools needed by the shell helper and its timer."""
-    for command_name in ("bash", "date", "dirname", "grep", "sleep"):
+    for command_name in ("bash", "date", "dirname", "grep", "mktemp", "rm", "sleep"):
         command_path = shutil.which(command_name)
         assert command_path, f"{command_name} is required for this test"
         os.symlink(command_path, fake_bin / command_name)
@@ -142,6 +142,54 @@ esac
     assert "install -y --no-install-recommends libgl1" not in log_text
 
 
+def test_ci_install_headless_packages_falls_back_to_official_mirror_after_timeout(
+    tmp_path: Path,
+) -> None:
+    """An unavailable hosted-runner mirror should not block official Ubuntu packages."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log_path = tmp_path / "commands.log"
+
+    _write_executable(
+        fake_bin / "dpkg-query",
+        "#!/usr/bin/env bash\nexit 1\n",
+    )
+    _write_executable(
+        fake_bin / "sudo",
+        f'#!/usr/bin/env bash\nprintf \'sudo %s\\n\' "$*" >> {_shell_quote(log_path)}\n"$@"\n',
+    )
+    _write_executable(
+        fake_bin / "apt-get",
+        f"""#!/usr/bin/env bash
+printf 'apt-get %s\\n' "$*" >> {_shell_quote(log_path)}
+if [[ "$*" == *' update' ]]; then
+  if [[ "$*" == *'Dir::Etc::sourcelist='* ]]; then
+    exit 0
+  fi
+  exit 124
+fi
+""",
+    )
+
+    env = _timer_test_environment(fake_bin)
+    env["CI_HEADLESS_APT_MIRROR_FALLBACK_TIMEOUT_SECONDS"] = "1"
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning=apt_update_official_mirror_fallback" in result.stdout
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "Dir::Etc::sourcelist=" in log_text
+    assert "Dir::Etc::sourceparts=-" in log_text
+    assert "install -y --no-install-recommends poppler-utils" in log_text
+
+
 def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_path: Path) -> None:
     """A slow apt update fails before the outer CI step timeout with actionable context."""
     fake_bin = tmp_path / "bin"
@@ -159,6 +207,9 @@ def test_ci_install_headless_packages_reports_update_timeout_with_context(tmp_pa
         fake_bin / "apt-get",
         "#!/usr/bin/env bash\n"
         "if [[ \"$*\" == *' update' ]]; then\n"
+        "  if [[ \"$*\" == *'Dir::Etc::sourcelist='* ]]; then\n"
+        "    exit 100\n"
+        "  fi\n"
         "  echo 'Get:1 https://archive.ubuntu.com/ubuntu noble InRelease'\n"
         "  sleep 2\n"
         "fi\n",

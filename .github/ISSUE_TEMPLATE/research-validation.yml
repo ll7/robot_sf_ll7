@@ -16,6 +16,46 @@ body:
         Prefer the smallest issue that can produce one discriminating diagnostic table, trace,
         decision, or experiment. Blocked and diagnostic-only outcomes are valid research results
         when the claim boundary stays explicit.
+  - type: dropdown
+    id: archetype
+    attributes:
+      label: Archetype
+      description: Choose exactly one canonical issue archetype from docs/context/issue_1512_issue_archetypes.md.
+      options:
+        - blocked-asset
+        - preflight
+        - slurm-execution
+        - analysis
+        - synthesis
+        - workflow
+        - docs
+        - benchmark-campaign
+        - training-campaign
+        - implementation
+        - test
+        - refactor
+        - data
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence_tier
+    attributes:
+      label: Evidence tier
+      description: Choose exactly one canonical evidence tier from docs/context/issue_1512_issue_archetypes.md.
+      options:
+        - idea
+        - launch_packet
+        - preflight_valid
+        - smoke
+        - nominal
+        - stress
+        - full_matrix
+        - analysis_only
+        - synthesis
+        - paper_grade
+        - blocked
+    validations:
+      required: true
   - type: textarea
     id: goal
     attributes:

@@ -667,6 +667,30 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+**Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
+the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
+fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
+and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
+`--head-sha` values. The same checker used by local readiness emits a `changed-coverage.v1`
+artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
+and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
+`not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
+changed-head mismatch, malformed diff/artifact evidence, or an incomplete check-run query is a
+blocker. A pure-deletion file with a valid coverage row and no new-file line numbers is reported as
+`100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
+`not_required` verdict is only for a head with no executable Python changes in the configured
+coverage scope, and remains observable in the artifact rather than being inferred from a skipped
+job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+be proven by a core-only shard.
+
+The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
+output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
+`scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
+missing, pending, failed, malformed, or stale result. The existing `coverage-gate` absolute-floor
+and baseline checks continue to run on main/manual/merge-group full-suite events; they do not
+substitute for the changed-line proof. Direct merge dispatchers must consume the same exact-head
+check before their CAS step (tracked separately by #7407).
+
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
 non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the

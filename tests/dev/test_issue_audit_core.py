@@ -1066,6 +1066,94 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
     assert readback["verified"]["missing_removals"] == []
 
 
+def test_apply_treats_absent_label_delete_as_idempotent() -> None:
+    """An already-absent label is not a failed mutation and is read back."""
+    calls: list[tuple[list[str], str | None]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append((args, input_text))
+        if args[:3] == ["api", "-X", "DELETE"]:
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "gh: Label does not exist (HTTP 404)",
+            )
+        if args[:2] == ["api", "repos/ll7/robot_sf_ll7/issues/107"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps({"state": "open", "labels": [{"name": "state:running"}]}),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {args}")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 107,
+                "value": "state:ready",
+                "reason": "active work selects running",
+                "evidence": ["open PR #904"],
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is True
+    assert result["applied"] == []
+    assert result["already_applied"][0]["skipped_reason"] == "already_absent"
+    assert result["failures"] == []
+    assert result["counts"] == {
+        "planned": 1,
+        "applied": 0,
+        "already_applied": 1,
+        "failed": 0,
+    }
+    assert result["readback"][0]["verified"]["missing_removals"] == []
+    assert len(calls) == 2
+
+
+def test_apply_keeps_unrelated_label_404_as_failure() -> None:
+    """An issue or endpoint 404 must not be mistaken for an absent label."""
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert args[:3] == ["api", "-X", "DELETE"]
+        return subprocess.CompletedProcess(args, 1, "", "gh: Not Found (HTTP 404)")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 108,
+                "value": "state:ready",
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["already_applied"] == []
+    assert len(result["failures"]) == 1
+    assert result["counts"] == {
+        "planned": 1,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+    }
+
+
 def test_incomplete_plan_fails_closed_before_mutation() -> None:
     """Incomplete plans are rejected before any mutation can be attempted."""
     plan = {

@@ -80,7 +80,11 @@ artifacts:
 
 provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7
+  # Immutable historical placeholder; release 0.0.3 has no DOI (issue #7445). The
+  # doi_correction_record below supersedes its meaning; the placeholder is not rewritten.
   doi: 10.5281/zenodo.<record-id>
+  doi_correction_record: docs/context/evidence/issue_4364_release_0_0_3_post1/release_0_0_3_doi_correction.v1.json
+  reproduction_status: not_run
 
 citation_path: ../../../CITATION.cff
 release_checklist_path: ../../../docs/RELEASE.md

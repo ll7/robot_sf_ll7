@@ -93,6 +93,7 @@ DEFAULT_BASELINE = Path("scripts/validation/evidence_registry_baseline.json")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
+DEFAULT_REVIEW_COMPANION = Path("scripts/validation/evidence_registry_baseline_review.yaml")
 REVIEW_TEMPLATE_SCHEMA = "evidence_registry_baseline_review_delta.v1"
 
 
@@ -713,6 +714,13 @@ def _write_baseline(
         )
         if template_path.resolve() == baseline_path.resolve():
             print("ERROR: --review-template must differ from --baseline.", file=sys.stderr)
+            return 2
+        if template_path.resolve() == (repo_root / DEFAULT_REVIEW_COMPANION).resolve():
+            print(
+                "ERROR: --review-template must target a separate file; refusing to overwrite "
+                f"the human review companion at {template_path.resolve()}.",
+                file=sys.stderr,
+            )
             return 2
         if not baseline_path.exists():
             print(

@@ -388,6 +388,32 @@ def test_cli_write_can_emit_review_companion_template(tmp_path: Path) -> None:
     assert [entry["path"] for entry in review["reviewed_baseline_increases"]] == ["old.json"]
     assert ratchet.load_baseline(baseline)["summary"]["total_findings"] == 3
 
+    companion = tmp_path / "scripts" / "validation" / "evidence_registry_baseline_review.yaml"
+    companion.parent.mkdir(parents=True)
+    companion.write_text("sentinel: preserve\n", encoding="utf-8")
+    blocked = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--review-template",
+            str(companion),
+            "--report",
+            str(current_report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert blocked.returncode == 2
+    assert "human review companion" in blocked.stderr
+    assert companion.read_text(encoding="utf-8") == "sentinel: preserve\n"
+
 
 def test_cli_rejects_review_template_without_baseline_refresh(tmp_path: Path) -> None:
     """The review-template output cannot be requested on a read-only check."""

@@ -1217,6 +1217,30 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/README.md
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/README.md.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/checksums.sha256
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/checksums.sha256.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/summary.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/summary.json.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md
   status: evidence
   freshness: evidence

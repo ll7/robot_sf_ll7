@@ -31,7 +31,8 @@ The gate:
   nested prior-policy checkpoint is covered);
 - downloads and checksum-verifies each registry artifact into the durable
   cache (`stage=True`);
-- writes a per-arm staging report (`submit_safe=true` on success);
+- writes a per-arm staging report (`submit_safe=true` only when at least one
+  checkpoint reference is covered and every reference is present or staged);
 - exits `3` (fail-closed; do not submit) on any unresolvable or corrupt
   checkpoint, naming the planner key, model id, config path, and remedy.
 
@@ -53,7 +54,8 @@ uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
   `stageable_remote`.
 - `enforced_staged` (`--stage`): downloads and checksum-verifies every registry
   artifact. The submit/sbatch wrapper must use this mode. After a successful
-  run, `submit_safe` is `true`.
+  run with a non-empty reference set, `submit_safe` is `true`; a `0/0` or
+  no-reference result remains `submit_safe=false`.
 
 `prepare_campaign_preflight(checkpoint_preflight_mode="enforced_staged")`
 exposes the same branch for callers that want the staging step inside the

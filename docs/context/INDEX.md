@@ -21,16 +21,17 @@ the measurement boundary for a later normal-throughput observation window:
 
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
-one campaign cell, preserves terminal-verdict denominators, and remains
-metadata-only until trace export and renderer provenance are reviewed:
+one campaign cell, preserves terminal-verdict denominators, and now composes
+diagnostic PNG/SVG/PDF/caption outputs with checksums without admitting
+scientific evidence:
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md).
 
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
 plus the shared `robot_sf.research.representative_selection` rule that the
 emergent-phenomena campaign, its figures, and its replay videos all call
-instead of carrying private copies, without trace execution or evidence
-admission:
+instead of carrying private copies, plus the diagnostic h600 trace pin for
+retained trace-series conversion, without evidence admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
 Issue #7030 agent figure interpretation evaluation: digest-pinned fixture replay

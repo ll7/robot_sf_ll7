@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 SCHEMA_VERSION = "worktree_hygiene_snapshot.v1"
-RETIREMENT_SCHEMA_VERSION = "worktree_retirement_plan.v1"
+RETIREMENT_SCHEMA_VERSION = "worktree_retirement_plan.v2"
 ISSUE_REFERENCE_RE = re.compile(r"(?i)(?:#|issue[-_ /:#]+)(?P<number>[1-9][0-9]*)\b")
 PROTECTED_BRANCHES = frozenset({"main", "master"})
 PULL_REQUEST_QUERY_LIMIT = 500
@@ -70,6 +71,11 @@ ArtifactLookup = Callable[["WorktreeHygiene"], list["ArtifactRootInspection"]]
 RETIREMENT_PRESERVE = "preserve"
 RETIREMENT_REVIEW = "review"
 RETIREMENT_REMOVABLE = "removable"
+RETIREMENT_PLAN_COMPLETE = "complete"
+RETIREMENT_PLAN_INCOMPLETE = "incomplete"
+RETIREMENT_PLAN_NEEDS_REVIEW = "needs_review"
+DEFAULT_RETIREMENT_WORKTREE_BUDGET = 256
+DEFAULT_RETIREMENT_TIME_BUDGET_SECONDS = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +196,33 @@ class RetirementEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class RetirementProgress:
+    """Machine-readable completion and budget counters for retirement planning."""
+
+    terminal_status: str
+    total_worktrees: int
+    selected_worktrees: int
+    processed_worktrees: int
+    unprocessed_worktrees: int
+    worktree_budget: int | None
+    time_budget_seconds: float | None
+    branch_lookup_calls: int
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class RetirementInventory:
+    """Bounded local inventory used to build a retirement plan."""
+
+    total_worktrees: int
+    current_worktree: str | None
+    worktrees_truncated: bool
+    rows: list[WorktreeHygiene]
+    skipped: list[tuple[WorktreeHygiene, str]]
+    errors: list[str]
+
+
+@dataclass(frozen=True, slots=True)
 class RetirementPlan:
     """Read-only preservation-aware worktree retirement plan."""
 
@@ -203,6 +236,7 @@ class RetirementPlan:
     review: list[str]
     worktrees: list[RetirementAssessment]
     errors: list[str]
+    progress: RetirementProgress
 
 
 def _run_command(
@@ -654,6 +688,51 @@ def _build_retirement_projection(
     )
 
 
+def _unknown_worktree_row(
+    row: dict[str, str],
+    current_path: Path,
+) -> WorktreeHygiene:
+    """Represent a row whose local state could not be inspected within the budget."""
+    path = row.get("path", "")
+    branch = row.get("branch", "")
+    return WorktreeHygiene(
+        path=path,
+        branch=branch,
+        head_sha=row.get("head_sha", ""),
+        is_current=bool(path) and Path(path).resolve() == current_path.resolve(),
+        is_detached=row.get("detached") == "true" or not branch,
+        dirty_entries=-1,
+        upstream=None,
+        ahead=None,
+        behind=None,
+        issues=["status_unavailable"],
+    )
+
+
+def _build_bounded_worktrees(
+    rows: list[dict[str, str]],
+    current_path: Path,
+    *,
+    worktree_budget: int | None,
+    deadline: float | None,
+) -> tuple[list[WorktreeHygiene], list[tuple[WorktreeHygiene, str]]]:
+    """Build worktree rows until a count or wall-clock budget is exhausted."""
+    if worktree_budget is not None and worktree_budget < 1:
+        raise ValueError("worktree_budget must be at least 1 or None")
+
+    built: list[WorktreeHygiene] = []
+    skipped: list[tuple[WorktreeHygiene, str]] = []
+    for row in rows:
+        if worktree_budget is not None and len(built) >= worktree_budget:
+            skipped.append((_unknown_worktree_row(row, current_path), "worktree budget exhausted"))
+            continue
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped.append((_unknown_worktree_row(row, current_path), "time budget exhausted"))
+            continue
+        built.append(_build_row(row, current_path))
+    return built, skipped
+
+
 def _repo_status() -> RepoStatus | None:
     """Build optional status for the current checkout."""
     status = _run_command(["git", "status", "--short", "--branch"])
@@ -1045,6 +1124,22 @@ def assess_retirement(
     )
 
 
+def _unprocessed_retirement_assessment(
+    row: WorktreeHygiene,
+    reason: str,
+) -> RetirementAssessment:
+    """Return a review-only assessment for a row skipped by the scan budget."""
+    return RetirementAssessment(
+        path=row.path,
+        branch=row.branch,
+        head_sha=row.head_sha,
+        decision=RETIREMENT_REVIEW,
+        coverage="unavailable",
+        reasons=[reason],
+        issue_numbers=_issue_numbers(row.branch),
+    )
+
+
 def _retirement_pull_request_context(
     repo_path: Path,
     pull_requests: list[dict[str, Any]] | None,
@@ -1107,30 +1202,93 @@ def _retirement_evidence_for_row(
     )
 
 
-def build_retirement_plan(
+def _prepare_retirement_inventory(
     *,
-    include_all_worktrees: bool = False,
-    worktree_limit: int = 40,
-    filters: list[str] | None = None,
-    snapshot: HygieneSnapshot | None = None,
-    pull_requests: list[dict[str, Any]] | None = None,
-    pull_request_error: str | None = None,
-    active_claims: dict[int, str] | None = None,
-    claims_error: str | None = None,
-) -> RetirementPlan:
-    """Build a read-only preservation-aware retirement projection."""
-    snapshot = snapshot or build_snapshot(
-        include_all_worktrees=include_all_worktrees,
-        worktree_limit=worktree_limit,
-        filters=filters,
-    )
-    errors = list(snapshot.errors)
-    if snapshot.worktrees_truncated:
-        errors.append(
-            "worktree inventory truncated; use --include-all-worktrees for complete planning"
+    include_all_worktrees: bool,
+    worktree_limit: int,
+    filters: list[str],
+    snapshot: HygieneSnapshot | None,
+    worktree_budget: int | None,
+    deadline: float | None,
+) -> RetirementInventory:
+    """Build the bounded local portion of a retirement plan."""
+    if snapshot is not None:
+        rows = list(snapshot.worktrees)
+        skipped: list[tuple[WorktreeHygiene, str]] = []
+        if worktree_budget is not None and len(rows) > worktree_budget:
+            skipped = [(row, "worktree budget exhausted") for row in rows[worktree_budget:]]
+            rows = rows[:worktree_budget]
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped.extend((row, "time budget exhausted") for row in rows)
+            rows = []
+        return RetirementInventory(
+            total_worktrees=snapshot.total_worktrees,
+            current_worktree=snapshot.current_worktree,
+            worktrees_truncated=snapshot.worktrees_truncated,
+            rows=rows,
+            skipped=skipped,
+            errors=list(snapshot.errors),
         )
 
-    repo_path = Path.cwd().resolve()
+    current_path = Path.cwd().resolve()
+    result = _run_command(["git", "worktree", "list", "--porcelain"])
+    if result.returncode != 0:
+        return RetirementInventory(
+            total_worktrees=0,
+            current_worktree=None,
+            worktrees_truncated=False,
+            rows=[],
+            skipped=[],
+            errors=["failed to list worktrees"],
+        )
+
+    parsed = _parse_worktree_porcelain(result.stdout)
+    filtered = [row for row in parsed if _matches_filters(row, filters)]
+    selected = filtered if include_all_worktrees else filtered[:worktree_limit]
+    rows, skipped = _build_bounded_worktrees(
+        selected,
+        current_path,
+        worktree_budget=worktree_budget,
+        deadline=deadline,
+    )
+    current_worktree = next(
+        (
+            row["path"]
+            for row in parsed
+            if row.get("path") and Path(row["path"]).resolve() == current_path
+        ),
+        None,
+    )
+    return RetirementInventory(
+        total_worktrees=len(parsed),
+        current_worktree=current_worktree,
+        worktrees_truncated=len(selected) < len(filtered),
+        rows=rows,
+        skipped=skipped,
+        errors=[],
+    )
+
+
+def _classify_retirement_rows(
+    *,
+    rows: list[WorktreeHygiene],
+    skipped: list[tuple[WorktreeHygiene, str]],
+    repo_path: Path,
+    pull_requests: list[dict[str, Any]] | None,
+    pull_request_error: str | None,
+    active_claims: dict[int, str] | None,
+    claims_error: str | None,
+    deadline: float | None,
+) -> tuple[list[RetirementAssessment], list[tuple[WorktreeHygiene, str]], list[str], int]:
+    """Classify rows while preserving any that exceed the remaining time budget."""
+    errors: list[str] = []
+    if not rows:
+        return (
+            [_unprocessed_retirement_assessment(row, reason) for row, reason in skipped],
+            skipped,
+            [reason for _, reason in skipped],
+            0,
+        )
     (
         pull_requests,
         pull_request_error,
@@ -1143,17 +1301,25 @@ def build_retirement_plan(
     if claims_error:
         errors.append(claims_error)
 
-    assessments: list[RetirementAssessment] = []
-    branch_pull_request_cache: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
-    for row in snapshot.worktrees:
+    cache: dict[str, tuple[list[dict[str, Any]], str | None]] = {}
+    assessments_by_path: dict[str, RetirementAssessment] = {}
+    assessed_rows: list[WorktreeHygiene] = []
+    branch_lookup_calls = 0
+    for index, row in enumerate(rows):
+        if deadline is not None and time.monotonic() >= deadline:
+            skipped.extend((pending, "time budget exhausted") for pending in rows[index:])
+            break
+        had_cached_branch = row.branch in cache
         row_pull_requests, row_pull_request_error, row_pr_errors = _pull_requests_for_row(
             repo_path,
             row,
             pull_requests=pull_requests,
             pull_request_error=pull_request_error,
             use_branch_fallback=use_branch_fallback,
-            cache=branch_pull_request_cache,
+            cache=cache,
         )
+        if use_branch_fallback and row.branch and not had_cached_branch:
+            branch_lookup_calls += 1
         evidence, evidence_errors = _retirement_evidence_for_row(
             row,
             pull_requests=row_pull_requests,
@@ -1163,19 +1329,109 @@ def build_retirement_plan(
         )
         errors.extend(row_pr_errors)
         errors.extend(evidence_errors)
-        assessments.append(assess_retirement(row, evidence))
+        assessments_by_path[row.path] = assess_retirement(row, evidence)
+        assessed_rows.append(row)
 
+    for row, reason in skipped:
+        assessments_by_path[row.path] = _unprocessed_retirement_assessment(row, reason)
+        errors.append(reason)
+    ordered_rows = [*assessed_rows, *(row for row, _ in skipped)]
+    return (
+        [assessments_by_path[row.path] for row in ordered_rows],
+        skipped,
+        errors,
+        branch_lookup_calls,
+    )
+
+
+def build_retirement_plan(  # noqa: PLR0913 - preserves the public injected-state contract
+    *,
+    include_all_worktrees: bool = False,
+    worktree_limit: int = 40,
+    worktree_budget: int | None = DEFAULT_RETIREMENT_WORKTREE_BUDGET,
+    time_budget_seconds: float | None = DEFAULT_RETIREMENT_TIME_BUDGET_SECONDS,
+    filters: list[str] | None = None,
+    snapshot: HygieneSnapshot | None = None,
+    pull_requests: list[dict[str, Any]] | None = None,
+    pull_request_error: str | None = None,
+    active_claims: dict[int, str] | None = None,
+    claims_error: str | None = None,
+) -> RetirementPlan:
+    """Build a read-only preservation-aware retirement projection.
+
+    The retirement path owns its inventory construction so ``--include-all-worktrees`` cannot
+    spend an unbounded amount of time building an ordinary snapshot before the retirement budget
+    is applied. Rows that do not fit the budget are retained as review-only assessments.
+    """
+    if worktree_budget is not None and worktree_budget < 1:
+        raise ValueError("worktree_budget must be at least 1 or None")
+    if time_budget_seconds is not None and time_budget_seconds < 0:
+        raise ValueError("time_budget_seconds must be non-negative or None")
+
+    started = time.monotonic()
+    deadline = started + time_budget_seconds if time_budget_seconds is not None else None
+    inventory = _prepare_retirement_inventory(
+        include_all_worktrees=include_all_worktrees,
+        worktree_limit=worktree_limit,
+        filters=filters or [],
+        snapshot=snapshot,
+        worktree_budget=worktree_budget,
+        deadline=deadline,
+    )
+    rows = inventory.rows
+    skipped = list(inventory.skipped)
+    if deadline is not None and time.monotonic() >= deadline:
+        skipped.extend((row, "time budget exhausted") for row in rows)
+        rows = []
+
+    assessments, skipped, classification_errors, branch_lookup_calls = _classify_retirement_rows(
+        rows=rows,
+        skipped=skipped,
+        repo_path=Path.cwd().resolve(),
+        pull_requests=pull_requests,
+        pull_request_error=pull_request_error,
+        active_claims=active_claims,
+        claims_error=claims_error,
+        deadline=deadline,
+    )
+    errors = list(inventory.errors) + classification_errors
+    if inventory.worktrees_truncated:
+        errors.append(
+            "worktree inventory truncated; use --include-all-worktrees for complete planning"
+        )
+    if skipped:
+        errors.append("retirement scan incomplete: unprocessed worktrees are review-only")
+    selected_count = len(assessments)
+    terminal_status = (
+        RETIREMENT_PLAN_INCOMPLETE
+        if skipped
+        else RETIREMENT_PLAN_NEEDS_REVIEW
+        if errors
+        else RETIREMENT_PLAN_COMPLETE
+    )
+    elapsed = round(time.monotonic() - started, 3)
     return RetirementPlan(
         schema=RETIREMENT_SCHEMA_VERSION,
-        total_worktrees=snapshot.total_worktrees,
-        included_worktrees=snapshot.included_worktrees,
-        worktrees_truncated=snapshot.worktrees_truncated,
-        current_worktree=snapshot.current_worktree,
+        total_worktrees=inventory.total_worktrees,
+        included_worktrees=selected_count,
+        worktrees_truncated=inventory.worktrees_truncated,
+        current_worktree=inventory.current_worktree,
         removeable=[row.path for row in assessments if row.decision == "removeable"],
         preserve=[row.path for row in assessments if row.decision == "preserve"],
         review=[row.path for row in assessments if row.decision == "review"],
-        worktrees=assessments,
-        errors=errors,
+        worktrees=list(assessments),
+        errors=list(dict.fromkeys(errors)),
+        progress=RetirementProgress(
+            terminal_status=terminal_status,
+            total_worktrees=inventory.total_worktrees,
+            selected_worktrees=selected_count,
+            processed_worktrees=selected_count - len(skipped),
+            unprocessed_worktrees=len(skipped),
+            worktree_budget=worktree_budget,
+            time_budget_seconds=time_budget_seconds,
+            branch_lookup_calls=branch_lookup_calls,
+            elapsed_seconds=elapsed,
+        ),
     )
 
 
@@ -1323,9 +1579,18 @@ def format_retirement_plan(plan: RetirementPlan) -> str:
         f"  Total worktrees: {plan.total_worktrees}",
         f"  Included worktrees: {plan.included_worktrees}",
         f"  Truncated: {plan.worktrees_truncated}",
+        f"  Terminal status: {plan.progress.terminal_status}",
         f"  Removeable: {len(plan.removeable)}",
         f"  Preserve: {len(plan.preserve)}",
         f"  Review: {len(plan.review)}",
+        "  Progress: "
+        f"selected={plan.progress.selected_worktrees} "
+        f"processed={plan.progress.processed_worktrees} "
+        f"unprocessed={plan.progress.unprocessed_worktrees} "
+        f"worktree_budget={plan.progress.worktree_budget} "
+        f"time_budget_s={plan.progress.time_budget_seconds} "
+        f"branch_lookup_calls={plan.progress.branch_lookup_calls} "
+        f"elapsed_s={plan.progress.elapsed_seconds}",
     ]
     for row in plan.worktrees:
         lines.append(
@@ -1375,6 +1640,24 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "This never deletes worktrees."
         ),
     )
+    parser.add_argument(
+        "--worktree-budget",
+        type=int,
+        default=DEFAULT_RETIREMENT_WORKTREE_BUDGET,
+        help=(
+            "Maximum number of worktrees to fully inspect in a retirement plan. "
+            "Rows beyond this budget are review-only."
+        ),
+    )
+    parser.add_argument(
+        "--time-budget-seconds",
+        type=float,
+        default=DEFAULT_RETIREMENT_TIME_BUDGET_SECONDS,
+        help=(
+            "Maximum wall-clock seconds for retirement inventory and classification. "
+            "Rows beyond this budget are review-only."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -1386,6 +1669,8 @@ def main(argv: list[str] | None = None) -> int:
             plan = build_retirement_plan(
                 include_all_worktrees=args.include_all_worktrees,
                 worktree_limit=args.worktree_limit,
+                worktree_budget=args.worktree_budget,
+                time_budget_seconds=args.time_budget_seconds,
                 filters=args.filters,
             )
             if args.json:

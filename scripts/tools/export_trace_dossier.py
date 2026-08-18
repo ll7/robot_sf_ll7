@@ -10,20 +10,20 @@ provenance manifest and checksums.  It does not run a simulation or admit benchm
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
+from typing import Any
 
 import yaml
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
     SimulationTraceExportValidationError,
+    SimulationTraceNormalizationError,
     simulation_trace_export_from_dict,
 )
 from robot_sf.benchmark.candidate_trace_resolution import resolve_episode_source
@@ -40,10 +40,33 @@ from robot_sf.benchmark.release_protocol import (
 from robot_sf.evidence.writers import sha256_file, write_json, write_sha256sums
 from scripts.tools.build_simulation_trace_export import (
     build_simulation_trace_export_with_receipt,
+    normalize_simulation_trace_export,
 )
 
 TRACE_DOSSIER_MANIFEST_SCHEMA_VERSION = "trace_dossier_export_manifest.v1"
 TRACE_IDENTITY_RECEIPT_SCHEMA_VERSION = "simulation_trace_export.identity_receipt.v1"
+TRACE_SERIES_SCHEMA_VERSIONS = frozenset(
+    {
+        "issue-4848-trace-series.v1",
+        "issue-4891-trace-series.v1",
+    }
+)
+_TRACE_SERIES_FIELDS = frozenset(
+    {"schema_version", "metadata", "frames", "derived_rows", "review_marker"}
+)
+_TRACE_SERIES_FRAME_FIELDS = frozenset({"step", "time_s", "robot", "pedestrians", "planner", "rl"})
+_TRACE_SERIES_PEDESTRIAN_FIELDS = frozenset(
+    {
+        "id",
+        "position",
+        "velocity",
+        "radius",
+        "track_confidence",
+        "visibility_evidence_reason",
+        "visibility_evidence_status",
+        "visibility_state",
+    }
+)
 
 
 class TraceDossierExportError(ValueError):
@@ -164,6 +187,201 @@ def _trace_identity_matches(
     )
 
 
+def _trace_series_identity(
+    payload: Mapping[str, Any],
+    *,
+    scenario_id: str,
+    planner_id: str,
+    seed: int,
+    episode_id: str,
+) -> tuple[str, Mapping[str, Any]]:
+    """Validate and return trace-series schema and metadata identity."""
+    source_schema = payload.get("schema_version")
+    if source_schema not in TRACE_SERIES_SCHEMA_VERSIONS:
+        raise TraceDossierExportError(
+            f"unsupported trace-series schema: {source_schema!r}; "
+            f"supported schemas are {sorted(TRACE_SERIES_SCHEMA_VERSIONS)!r}"
+        )
+    unknown_fields = sorted(set(payload) - _TRACE_SERIES_FIELDS)
+    if unknown_fields:
+        raise TraceDossierExportError(
+            "trace-series payload has unallowlisted field(s): "
+            + ", ".join(repr(field) for field in unknown_fields)
+        )
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise TraceDossierExportError("trace-series metadata must be a JSON object")
+    identity = (
+        metadata.get("scenario_id"),
+        metadata.get("planner"),
+        metadata.get("seed"),
+        metadata.get("episode_id"),
+    )
+    if identity != (scenario_id, planner_id, seed, episode_id) or type(identity[2]) is not int:
+        raise TraceDossierExportError(
+            "trace-series metadata identity does not match requested scenario/planner/seed/episode"
+        )
+    return str(source_schema), metadata
+
+
+def _trace_series_pedestrian(
+    raw_pedestrian: Any,
+    *,
+    frame_index: int,
+    pedestrian_index: int,
+) -> dict[str, Any]:
+    """Normalize one legacy pedestrian object for the typed trace schema."""
+    context = f"trace-series frames[{frame_index}].pedestrians[{pedestrian_index}]"
+    if not isinstance(raw_pedestrian, Mapping):
+        raise TraceDossierExportError(f"{context} must be an object")
+    unknown_fields = sorted(set(raw_pedestrian) - _TRACE_SERIES_PEDESTRIAN_FIELDS)
+    if unknown_fields:
+        raise TraceDossierExportError(
+            f"{context} has unallowlisted field(s): "
+            + ", ".join(repr(field) for field in unknown_fields)
+        )
+    pedestrian = copy.deepcopy(dict(raw_pedestrian))
+    actor_id = pedestrian.get("id")
+    if isinstance(actor_id, bool) or not isinstance(actor_id, (int, str)):
+        raise TraceDossierExportError(f"{context}.id must be a string or integer")
+    pedestrian["id"] = str(actor_id)
+    return pedestrian
+
+
+def _trace_series_frame(raw_frame: Any, *, frame_index: int) -> dict[str, Any]:
+    """Normalize one legacy frame, moving top-level RL state under planner."""
+    context = f"trace-series frames[{frame_index}]"
+    if not isinstance(raw_frame, Mapping):
+        raise TraceDossierExportError(f"{context} must be an object")
+    unknown_fields = sorted(set(raw_frame) - _TRACE_SERIES_FRAME_FIELDS)
+    if unknown_fields:
+        raise TraceDossierExportError(
+            f"{context} has unallowlisted field(s): "
+            + ", ".join(repr(field) for field in unknown_fields)
+        )
+    frame = copy.deepcopy(dict(raw_frame))
+    planner = frame.get("planner")
+    if not isinstance(planner, Mapping):
+        raise TraceDossierExportError(f"{context}.planner must be an object")
+    if "rl" in frame:
+        rl = frame.pop("rl")
+        if not isinstance(rl, Mapping):
+            raise TraceDossierExportError(f"{context}.rl must be an object")
+        if "rl" in planner:
+            raise TraceDossierExportError(f"{context}.planner.rl is ambiguous")
+        planner = dict(planner)
+        planner["rl"] = rl
+        frame["planner"] = planner
+    pedestrians = frame.get("pedestrians")
+    if not isinstance(pedestrians, list):
+        raise TraceDossierExportError(f"{context}.pedestrians must be an array")
+    frame["pedestrians"] = [
+        _trace_series_pedestrian(
+            pedestrian,
+            frame_index=frame_index,
+            pedestrian_index=pedestrian_index,
+        )
+        for pedestrian_index, pedestrian in enumerate(pedestrians)
+    ]
+    return frame
+
+
+def _trace_series_frames(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Validate frame/derived-row alignment and return normalized frames."""
+    frames = payload.get("frames")
+    if not isinstance(frames, list) or not frames:
+        raise TraceDossierExportError("trace-series frames must be a non-empty array")
+    derived_rows = payload.get("derived_rows")
+    if not isinstance(derived_rows, list) or len(derived_rows) != len(frames):
+        raise TraceDossierExportError(
+            "trace-series derived_rows must be a non-empty array aligned with frames"
+        )
+    normalized_frames: list[dict[str, Any]] = []
+    for index, raw_frame in enumerate(frames):
+        row = derived_rows[index]
+        if not isinstance(raw_frame, Mapping) or not isinstance(row, Mapping):
+            raise TraceDossierExportError(
+                f"trace-series frame and derived row {index} must be objects"
+            )
+        if row.get("step") != raw_frame.get("step") or row.get("time_s") != raw_frame.get("time_s"):
+            raise TraceDossierExportError(
+                f"trace-series derived_rows[{index}] is not aligned with its frame"
+            )
+        normalized_frames.append(_trace_series_frame(raw_frame, frame_index=index))
+    return normalized_frames
+
+
+def _trace_series_source_payload(
+    payload: Mapping[str, Any],
+    *,
+    source_path: Path,
+    scenario_id: str,
+    planner_id: str,
+    seed: int,
+    episode_id: str,
+    source_sha256: str,
+    provenance: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Convert one retained trace-series bundle into the typed trace contract.
+
+    The legacy bundles contain renderer-specific derived rows and a few
+    visibility fields.  Only the recorded per-step frame state is promoted to
+    ``simulation_trace_export.v1``; derived rows are checked for step/time
+    alignment but are not silently copied into the canonical trace.
+    """
+    source_schema, metadata = _trace_series_identity(
+        payload,
+        scenario_id=scenario_id,
+        planner_id=planner_id,
+        seed=seed,
+        episode_id=episode_id,
+    )
+    normalized_frames = _trace_series_frames(payload)
+
+    typed_payload: dict[str, Any] = {
+        "schema_version": SIMULATION_TRACE_EXPORT_SCHEMA_VERSION,
+        "trace_id": (f"{scenario_id}:{episode_id}:seed-{seed}:source-{source_sha256[:12]}"),
+        "source": {
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "planner_id": planner_id,
+            "episode_id": episode_id,
+            "generated_by": (f"scripts/tools/export_trace_dossier.py; source={source_path.name}"),
+        },
+        "evidence_boundary": "analysis_workbench_only",
+        "coordinate_frame": "world",
+        "units": {
+            "position": "m",
+            "heading": "rad",
+            "time": "s",
+            "velocity": "m/s",
+        },
+        "frames": normalized_frames,
+    }
+    conversion_provenance = dict(provenance)
+    conversion_provenance.update(
+        {
+            "source_format": "trace_series",
+            "source_schema_version": source_schema,
+            "transformation": "trace_series_to_simulation_trace_export",
+        }
+    )
+    for metadata_key in ("campaign_id", "campaign_job", "git_commit"):
+        value = metadata.get(metadata_key)
+        if value not in (None, ""):
+            conversion_provenance[f"trace_series_{metadata_key}"] = value
+    try:
+        normalized, receipt = normalize_simulation_trace_export(
+            typed_payload,
+            source=source_path,
+            source_sha256=source_sha256,
+            provenance=conversion_provenance,
+        )
+    except (SimulationTraceNormalizationError, SimulationTraceExportValidationError) as exc:
+        raise TraceDossierExportError(f"trace-series conversion failed: {exc}") from exc
+    return normalized, receipt
+
+
 def _trace_source_payload(
     source_path: Path,
     *,
@@ -205,6 +423,20 @@ def _trace_source_payload(
                 "provenance": dict(provenance),
             }
             return payload, receipt
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_version") in TRACE_SERIES_SCHEMA_VERSIONS
+        ):
+            return _trace_series_source_payload(
+                payload,
+                source_path=source_path,
+                scenario_id=scenario_id,
+                planner_id=planner_id,
+                seed=seed,
+                episode_id=episode_id,
+                source_sha256=source_sha256,
+                provenance=provenance,
+            )
 
     try:
         return build_simulation_trace_export_with_receipt(

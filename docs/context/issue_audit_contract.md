@@ -214,7 +214,12 @@ interactive skill without guessing:
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,
 enforces a mutation budget, uses REST for issue/label writes, and reads every
-touched issue back. Project changes are intentionally absent.
+touched issue back. A repeated `remove_label` for a label that is already
+absent is recorded in the additive `already_applied` result bucket with
+`skipped_reason: already_absent`; it is not a failure, but the issue still
+goes through readback. The apply result also exposes `counts` for planned,
+applied, already-applied, and failed operations. Other 404s remain failures.
+Project changes are intentionally absent.
 
 ## Decision envelope
 

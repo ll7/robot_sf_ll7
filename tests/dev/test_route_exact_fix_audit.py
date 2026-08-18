@@ -65,6 +65,15 @@ def test_build_review_queue_rejects_partial_source_report() -> None:
         route_exact_fix_audit.build_review_queue(_report(complete=False))
 
 
+def test_build_review_queue_rejects_malformed_candidate_rows() -> None:
+    """Missing candidate identity fields cannot be routed as exact-fix evidence."""
+    report = _report()
+    report["issues"][0]["title"] = ""
+
+    with pytest.raises(route_exact_fix_audit.InputContractError, match="missing a title"):
+        route_exact_fix_audit.build_review_queue(report)
+
+
 def test_build_review_queue_marks_explicit_evidence_ready_but_keeps_review_gate() -> None:
     """Complete exact-fix fields make a packet reviewable, not auto-disposable."""
     evidence = {

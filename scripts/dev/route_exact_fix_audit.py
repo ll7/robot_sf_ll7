@@ -113,6 +113,23 @@ def _validate_covering_pr(raw_pr: object, *, issue_number: int) -> dict[str, Any
     }
 
 
+def _validate_source_issue(raw_issue: object) -> tuple[int, Mapping[str, Any]]:
+    """Validate one candidate row before it enters the review queue."""
+    if not isinstance(raw_issue, Mapping):
+        raise InputContractError("source report issue rows must be objects")
+    issue_number = _positive_int(raw_issue.get("number"), field="source issue number")
+    if not _nonempty_text(raw_issue.get("title")):
+        raise InputContractError(f"issue #{issue_number} is missing a title")
+    if not _nonempty_text(raw_issue.get("url")):
+        raise InputContractError(f"issue #{issue_number} is missing a URL")
+    labels = raw_issue.get("active_labels")
+    if not isinstance(labels, list) or any(not isinstance(label, str) for label in labels):
+        raise InputContractError(f"issue #{issue_number} active_labels must be a string list")
+    if raw_issue.get("classification") != "merged_reference_needs_exact_fix_review":
+        raise InputContractError(f"issue #{issue_number} is not an exact-fix hygiene candidate")
+    return issue_number, raw_issue
+
+
 def _evidence_record(raw: object, *, issue_number: int) -> dict[str, str]:
     """Validate optional explicit exact-fix evidence for one issue."""
     if raw is None:
@@ -185,11 +202,10 @@ def build_review_queue(
     """Build a no-write exact-fix queue from a complete hygiene report."""
     report = _validate_report(report)
     evidence_by_issue = _evidence_index(evidence)
-    source_issue_numbers = {
-        _positive_int(raw_issue.get("number"), field="source issue number")
-        for raw_issue in report["issues"]
-        if isinstance(raw_issue, Mapping)
-    }
+    validated_issues = [_validate_source_issue(raw_issue) for raw_issue in report["issues"]]
+    source_issue_numbers = {number for number, _ in validated_issues}
+    if len(source_issue_numbers) != len(validated_issues):
+        raise InputContractError("source report repeats an issue number")
     unknown_evidence = sorted(set(evidence_by_issue) - source_issue_numbers)
     if unknown_evidence:
         numbers = ", ".join(f"#{number}" for number in unknown_evidence)
@@ -197,12 +213,7 @@ def build_review_queue(
             f"evidence manifest names issues absent from the source report: {numbers}"
         )
     candidates: list[dict[str, Any]] = []
-    for raw_issue in report["issues"]:
-        if not isinstance(raw_issue, Mapping):
-            raise InputContractError("source report issue rows must be objects")
-        issue_number = _positive_int(raw_issue.get("number"), field="source issue number")
-        if raw_issue.get("classification") != "merged_reference_needs_exact_fix_review":
-            raise InputContractError(f"issue #{issue_number} is not an exact-fix hygiene candidate")
+    for issue_number, raw_issue in validated_issues:
         raw_prs = raw_issue.get("merged_prs")
         if not isinstance(raw_prs, list) or not raw_prs:
             raise InputContractError(f"issue #{issue_number} has no verified merged PR reference")

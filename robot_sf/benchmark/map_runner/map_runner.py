@@ -494,6 +494,7 @@ _STRICT_LEARNED_POLICY_PROFILES = {"baseline-safe", "paper-baseline"}
 _PPO_ALLOWED_OBS_MODES = {"vector", "dict", "native_dict", "multi_input"}
 _PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
 _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
+_PPO_BENCHMARK_METADATA_KEYS = frozenset({"profile", "provenance", "quality_gate"})
 
 _default_robot_command_space = planner_commands.default_robot_command_space
 _init_feasibility_metadata = planner_commands.init_feasibility_metadata
@@ -1237,7 +1238,13 @@ def _build_ppo_policy(  # noqa: C901
         tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
     """
     paper_ready, paper_reason = _enforce_ppo_paper_profile(algo_config)
-    ppo_planner = PPOPlanner(algo_config, seed=None)
+    # These fields belong to map-runner admission and evidence metadata, not to the
+    # planner's typed runtime config. Keep the planner boundary fail-closed for every
+    # other unknown key while removing only metadata owned by this caller.
+    ppo_config = {
+        key: value for key, value in algo_config.items() if key not in _PPO_BENCHMARK_METADATA_KEYS
+    }
+    ppo_planner = PPOPlanner(ppo_config, seed=None)
     ppo_obs_mode = _resolve_planner_obs_mode(ppo_planner, "vector")
     if hasattr(ppo_planner, "get_metadata"):
         planner_meta = ppo_planner.get_metadata()

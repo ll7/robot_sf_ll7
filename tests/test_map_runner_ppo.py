@@ -114,6 +114,33 @@ def test_build_policy_ppo_accepts_unicycle_action(monkeypatch):
     assert callable(getattr(policy, "_planner_close", None))
 
 
+def test_build_policy_ppo_strips_benchmark_metadata_before_planner(monkeypatch):
+    """PPO admission metadata must not cross the typed planner config boundary."""
+    instances = []
+
+    def _make_planner(config, *, seed=None):
+        planner = _DummyPPOPlanner(config, seed=seed)
+        instances.append(planner)
+        return planner
+
+    monkeypatch.setattr(map_runner, "PPOPlanner", _make_planner)
+    policy, meta = map_runner._build_policy(
+        "ppo",
+        {
+            "profile": "experimental",
+            "provenance": {"source": "fixture"},
+            "quality_gate": {"status": "diagnostic"},
+            "test_action": {"v": 0.3, "omega": 0.0},
+        },
+    )
+
+    policy(_sample_obs())
+    assert instances[-1].config == {"test_action": {"v": 0.3, "omega": 0.0}}
+    assert meta["profile"] == "experimental"
+    assert meta["provenance"] == {"source": "fixture"}
+    assert meta["quality_gate"] == {"status": "diagnostic"}
+
+
 def test_build_policy_ppo_converts_velocity_to_unicycle(monkeypatch):
     """Ensure velocity-vector PPO outputs are converted to unicycle commands."""
     monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)

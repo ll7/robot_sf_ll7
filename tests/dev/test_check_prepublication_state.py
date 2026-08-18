@@ -856,3 +856,119 @@ def test_sync_success_marks_post_integration_self_comparison(tmp_path, monkeypat
     assert output["decision"] == "ready"
     assert output["reason"] == "remote_state_integrated"
     assert output["comparison"] == "self_snapshot_after_integration"
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: undeclared/mismatched stack ancestry blocks pre-PR publication
+# ---------------------------------------------------------------------------
+
+
+def test_undeclared_stack_ancestry_blocks_pre_publication() -> None:
+    """An undeclared non-main ancestry must block publication before PR creation."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(ancestry={"state": "undeclared_stack"}))
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "undeclared_stack_ancestry"
+    assert result["ancestry"]["state"] == "undeclared_stack"
+
+
+def test_mismatched_declaration_blocks_pre_publication() -> None:
+    """A mismatched stack declaration must fail closed before PR creation."""
+    result = gate.evaluate_state(
+        _snapshot(), _snapshot(ancestry={"state": "mismatched_declaration"})
+    )
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "undeclared_stack_ancestry"
+
+
+def test_invalidated_parent_blocks_pre_publication() -> None:
+    """A closed-unmerged/rewritten parent must fail closed before PR creation."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(ancestry={"state": "parent_invalidated"}))
+
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "undeclared_stack_ancestry"
+
+
+def test_declared_stack_does_not_block_publication() -> None:
+    """A declared stack may be published, though it is never independently mergeable."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(ancestry={"state": "stacked"}))
+
+    assert result["decision"] == "ready"
+    assert result["reason"] == "remote_state_unchanged"
+
+
+def test_clean_ancestry_does_not_block_publication() -> None:
+    """A clean ancestry block leaves publication-ready evidence intact."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(ancestry={"state": "clean"}))
+
+    assert result["decision"] == "ready"
+    assert result["reason"] == "remote_state_unchanged"
+
+
+def test_ancestry_block_without_state_is_not_a_blocker() -> None:
+    """A malformed/empty ancestry block must not invent a blocking reason."""
+    result = gate.evaluate_state(_snapshot(), _snapshot(ancestry={"error": "boom"}))
+
+    assert result["decision"] == "ready"
+
+
+def test_capture_parser_exposes_declaration_text() -> None:
+    """The capture CLI accepts the canonical stack declaration text."""
+    parser = gate._parser()
+
+    captured = parser.parse_args(
+        [
+            "capture",
+            "--repo",
+            "o/r",
+            "--issue",
+            "1",
+            "--declaration-text",
+            "## Stack Declaration\nparent_pr: #2\nparent_head: " + "a" * 40,
+        ]
+    )
+
+    assert captured.declaration_text is not None
+    assert "parent_pr" in captured.declaration_text
+
+
+def test_collect_live_state_records_ancestry_block(monkeypatch) -> None:
+    """Live collection records the ancestry classification into the snapshot."""
+    from scripts.dev.stack_ancestry import ancestry_state
+
+    monkeypatch.setattr(
+        gate,
+        "collect_ancestry_facts",
+        lambda **_: (
+            {
+                "main_tip_sha": "b" * 40,
+                "merge_base_sha": "a" * 40,
+                "commits": ["foreign work (#9999)", "intended work"],
+                "changed_paths": ["foreign.py", "own.py"],
+            },
+            None,
+        ),
+    )
+    monkeypatch.setattr(gate, "_git_output", lambda *_: "c" * 40)
+    monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+    monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(
+        gate,
+        "_json_command",
+        lambda command: {"state": "OPEN", "updatedAt": "now", "closedAt": None},
+    )
+    monkeypatch.setattr(gate, "_closing_prs", lambda **_: [])
+    monkeypatch.setattr(gate, "_open_covering_prs", lambda **_: [])
+
+    snapshot = gate.collect_live_state(
+        repo="ll7/robot_sf_ll7",
+        issue=6916,
+        branch="feature/fresh-state",
+        declaration_text="## Stack Declaration\nparent_pr: #9999\nparent_head: " + "a" * 40,
+    )
+
+    assert snapshot["ancestry"]["state"] == "stacked"
+    assert snapshot["ancestry"]["declared_parent"] == 9999
+    assert snapshot["ancestry"]["unexpected_paths"] == ["foreign.py", "own.py"]
+    assert ancestry_state is not None

@@ -68,13 +68,11 @@ def test_visuals_manifest_videos_disabled(tmp_path):
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"
     assert reports.exists(), "reports directory should exist"
-    # Video manifest expected once implementation is added
     video_manifest = reports / "video_artifacts.json"
-    # TDD expectation: file should exist after implementation
-    if video_manifest.exists():  # allow pre-implementation pass as xfail-like behavior
-        data = _read_json(video_manifest)
-        assert all(a.get("status") == "skipped" for a in data), data
-        assert any("disabled" in (a.get("note") or "") for a in data)
+    assert video_manifest.exists(), "video artifact manifest is required"
+    data = _read_json(video_manifest)
+    assert all(a.get("status") == "skipped" for a in data), data
+    assert any("disabled" in (a.get("note") or "") for a in data)
 
 
 @pytest.mark.slow
@@ -88,7 +86,7 @@ def test_visuals_manifest_smoke_mode(tmp_path):
     run_full_benchmark(cfg)
     reports = Path(cfg.output_root) / "reports"
     video_manifest = reports / "video_artifacts.json"
-    if video_manifest.exists():
-        data = _read_json(video_manifest)
-        assert all(a.get("status") == "skipped" for a in data)
-        assert any("smoke" in (a.get("note") or "") for a in data)
+    assert video_manifest.exists(), "video artifact manifest is required"
+    data = _read_json(video_manifest)
+    assert all(a.get("status") == "skipped" for a in data)
+    assert any("smoke" in (a.get("note") or "") for a in data)

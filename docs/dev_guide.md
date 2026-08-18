@@ -154,7 +154,19 @@ env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
 
 The optional-dependency preflight uses import-spec probes without importing project code. A
 `missing_optional` result is setup evidence and should not be confused with a changed-code
-collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
+collection or runtime failure. The docs-proof wrapper checks the `core` profile before invoking
+`uv run`; the shared-venv wrapper checks that profile by default and accepts an explicit profile
+when the command needs optional packages:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
+```
+
+If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
+`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
+lightweight Python-only environment from being reused as if it were a synchronized dependency
+profile. `--standalone` remains available only for commands whose no-project-import boundary is
+verified.
 
 ### Local CI scratch capacity
 
@@ -2773,6 +2785,16 @@ evidence, benchmark/reporting gates, generated artifacts, CI/release policy, or 
 paths, and recommended for multi-agent or multi-run tasks.
 
 - [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
+
+### Issue #5303 checker authority
+
+The only current entry point for the promotion-capable search contract is the powered,
+side-effect-free v2 checker:
+`uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py` (and its pure
+`--identities` mode). The historical three-seed v1 contract and timing-control paths remain
+available only to reproduce their pinned diagnostic artifacts; they cannot authorize promotion,
+execution, or transfer work. Current operational code and documentation must not invoke either
+v1 checker path.
 
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.

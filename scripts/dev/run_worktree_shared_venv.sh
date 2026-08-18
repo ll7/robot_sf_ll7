@@ -24,10 +24,12 @@ to PYTHONPATH, while still reusing the shared environment for third-party depend
 Options:
   --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to an
                          initialized current-worktree .venv, otherwise the main checkout .venv.
+  --profile NAME         Dependency import profile checked before the command. Defaults to core;
+                         use all-extras (or a named pyproject extra) when the command needs it.
   --scratch-dir PATH     Use PATH for temporary files and default uv/XDG caches for this run.
   --standalone           Run a command that is verified not to import project packages. This skips
-                         the project-source freshness check and does not prepend the worktree root
-                         to PYTHONPATH.
+                         the dependency-profile and project-source checks and does not prepend the
+                         worktree root to PYTHONPATH.
   --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source already takes
                          precedence over any reused installed copy. Also accepted via
                          ROBOT_SF_VENV_FRESHNESS_CHECK=skip.
@@ -119,6 +121,7 @@ configure_scratch_dir() {
 }
 
 venv_override=""
+dependency_profile="core"
 skip_freshness=""
 standalone=""
 scratch_dir="${ROBOT_SF_CI_SCRATCH_DIR:-}"
@@ -131,6 +134,14 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       venv_override="$2"
+      shift 2
+      ;;
+    --profile)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "--profile requires a dependency profile name." >&2
+        exit 2
+      fi
+      dependency_profile="$2"
       shift 2
       ;;
     --scratch-dir)
@@ -199,6 +210,22 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
   echo "Shared virtualenv not found or incomplete: $venv_path" >&2
   echo "Create it with 'uv sync --all-extras' in the owning checkout, or use a local .venv." >&2
   exit 2
+fi
+
+check_dependency_profile() {
+  local report
+  if ! report="$("$venv_path/bin/python" \
+    "$repo_root/scripts/dev/check_worktree_optional_deps.py" \
+    --profile "$dependency_profile" 2>&1)"; then
+    echo "ERROR: shared-venv dependency profile '$dependency_profile' is incomplete in $venv_path." >&2
+    printf '%s\n' "$report" >&2
+    echo "Run 'cd $repo_root && scripts/dev/bootstrap_worktree.sh', then rerun this command." >&2
+    return 2
+  fi
+}
+
+if [[ -z "$standalone" ]]; then
+  check_dependency_profile
 fi
 
 check_shared_venv_freshness() {

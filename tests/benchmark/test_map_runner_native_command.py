@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark import map_runner_native_command as nc
-from robot_sf.benchmark.map_runner_native_command import (
+from robot_sf.benchmark.map_runner.map_runner_native_command import (
     NativeCommandContractError,
     NativeCommandStepError,
     _NoProgressDeadlockDetector,
@@ -437,7 +437,7 @@ class TestNativeCommandPolicyBuilder:
 
 def test_native_command_smoke_produces_schema_valid_row(tmp_path: Path) -> None:
     """Run one native-command episode end-to-end and assert the new diagnostics fields."""
-    from robot_sf.benchmark.map_runner import run_map_batch
+    from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
     map_file = (
         Path(__file__).resolve().parents[2] / "maps" / "svg_maps" / "planner_sanity_open.svg"

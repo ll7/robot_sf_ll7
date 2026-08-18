@@ -330,7 +330,7 @@ def test_frozen_blind_corner_route_cannot_report_collision_free_when_clearance_n
     certifier this route is ``geometrically_infeasible`` and never reports
     ``inflated_collision_free_path=True`` while the full-polyline clearance is negative.
     """
-    pytest.importorskip("robot_sf.benchmark.map_runner")
+    pytest.importorskip("robot_sf.benchmark.map_runner.map_runner")
     from robot_sf.scenario_certification.feasibility_oracle import (
         ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
         _replan_astar_path,

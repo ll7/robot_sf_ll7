@@ -30,7 +30,7 @@ from typing import Any
 import yaml
 
 from robot_sf.baselines.brne import BRNE_PINNED_SHA
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from robot_sf.benchmark.map_runner_env import apply_pedestrian_reactivity_to_env_config
+from robot_sf.benchmark.map_runner.map_runner_env import apply_pedestrian_reactivity_to_env_config
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
 

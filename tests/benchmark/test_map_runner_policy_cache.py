@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.map_runner import map_runner
 
 
 def test_cached_policy_is_reset_between_episodes_and_closed_after_arm(

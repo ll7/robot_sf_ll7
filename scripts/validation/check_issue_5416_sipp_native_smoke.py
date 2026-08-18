@@ -22,7 +22,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.analysis.analyze_issue_5416_sipp_four_geometry import build_analysis
 from scripts.validation.check_issue_5416_sipp_four_geometry_packet import (

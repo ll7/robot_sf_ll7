@@ -1,10 +1,10 @@
-"""Tests for robot_sf.benchmark.map_runner_batch_plan — batch-planning helpers."""
+"""Tests for robot_sf.benchmark.map_runner.map_runner_batch_plan — batch-planning helpers."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_seed_jobs,
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,

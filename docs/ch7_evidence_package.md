@@ -154,3 +154,26 @@ by the admission schema; no `admission/receipt.json`, empirical outcome, or
 promotion decision is written. Run the command with `--receipt <receipt>` only
 after a maintainer-owned receipt exists and the package has independently
 crossed the domain and metric gates.
+
+### Deterministic build receipt (#7410)
+
+The durable build receipt
+[`issue_7410_ch7_evidence_build_receipt.v1.json`](context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json)
+records the exact v2 source bindings, build commit/tree, builder and verifier hashes, Python/uv
+and lockfile identity, two independent output-tree hashes, package manifest/checksum hashes, and
+the successful outcome-free `--check-only` result. It is adjacent to the v2 package because the
+package and its `SHA256SUMS` are immutable; review-only `.review.json` sidecars are excluded from
+the recorded payload-tree hash.
+
+Generate it only after the canonical builder code and schema are committed, then verify it from a
+clean checkout with:
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_build_receipt_v1.py \
+  --receipt docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json \
+  --check-only
+```
+
+The receipt's self-hash covers canonical JSON with only `#/integrity` excluded. This is build
+provenance, not an admission receipt, domain approval, publication authorization, benchmark result,
+or paper-facing evidence. The separate `ch7-evidence-admission.v2` receipt remains required.

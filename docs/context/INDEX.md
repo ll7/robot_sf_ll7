@@ -26,11 +26,24 @@ instead of carrying private copies, without trace execution or evidence
 admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
+Issue #7030 agent figure interpretation evaluation: digest-pinned fixture replay
+with per-dimension aggregate scores, exact critical-error examples, reviewer
+coverage, and explicit `not_available` workflow-comparison states. The current
+corpus is diagnostic-only and makes no model, benchmark, paper, or dissertation
+claim:
+[issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md).
+
 Issue #6792 Chapter 7 evidence admission packet: immutable `ch7-evidence-package.v1` payload,
 trusted source-registry approval, and the separate `ch7-evidence-admission.v1` receipt. The
 package remains blocked until the author approves the exact digest; no trajectory or causal claim
 is promoted:
 [issue_6792_ch7_admission_execution_packet.md](issue_6792_ch7_admission_execution_packet.md).
+
+Issue #7410 Chapter 7 v2 build receipt: exact source/tool/environment bindings, two independent
+canonical output-tree hashes, and an outcome-free `--check-only` result for the collision-excluded
+package. The receipt is build provenance only; it is not domain approval, admission, publication,
+benchmark, or paper-facing evidence:
+[evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
 
 Issue #7128 exact-repeat execution context: a dependency-free,
 `benchmark_execution_context.v1` block and digest that binds CPU, platform,

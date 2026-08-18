@@ -15,6 +15,11 @@ The deterministic representative selector is documented in
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md); it selects a future
 trace-dossier representative only and does not establish benchmark evidence.
 
+The fixture-only agent figure interpretation evaluator is documented in
+[issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md);
+it reports aggregate scoring and workflow-variant availability without establishing model or
+scientific results.
+
 Exact-repeat execution-context provenance is documented in
 [issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md);
 it binds cross-host verdicts to numerical context without establishing a determinism result.

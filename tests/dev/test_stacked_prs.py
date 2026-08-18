@@ -10,7 +10,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.dev.stacked_prs import (
+    _entry_reasons,
     _get_paginated_list,
+    _merge_pr,
     _parse_expected_heads,
     _retarget_plan,
     _review_digest,
@@ -67,7 +69,17 @@ def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) ->
         "base_sha": "b" * 40,
         "merge_ready": True,
         "reasons": [],
-        "checks": {"overall": "success"},
+        "checks": {
+            "overall": "success",
+            "merge_queue_gate": {
+                "context": "valid",
+                "name": "merge-queue-gate",
+                "workflow_name": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+            },
+        },
+        "merge_hold_reason": None,
     }
 
 
@@ -142,6 +154,117 @@ def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> Non
     assert pending["overall"] == "pending"
     assert failed["overall"] == "failure"
     assert missing["overall"] == "unknown"
+
+
+def test_check_summary_tracks_the_latest_merge_queue_gate_context() -> None:
+    """A newer failed gate run must supersede an older successful run."""
+    summary = summarize_check_runs(
+        [
+            {
+                "id": 1,
+                "name": "merge-queue-gate",
+                "workflowName": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T10:00:00Z",
+            },
+            {
+                "id": 2,
+                "name": "merge-queue-gate",
+                "workflowName": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "failure",
+                "completed_at": "2026-08-17T11:00:00Z",
+            },
+        ]
+    )
+
+    assert summary["merge_queue_gate"] == {
+        "context": "valid",
+        "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": None,
+        "completed_at": "2026-08-17T11:00:00Z",
+        "html_url": None,
+    }
+
+
+def test_check_summary_fails_closed_for_malformed_merge_queue_gate() -> None:
+    """A malformed gate carrier cannot be mistaken for a successful check."""
+    summary = summarize_check_runs(
+        [
+            {
+                "id": 3,
+                "name": "merge-queue-gate",
+                "workflowName": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ]
+    )
+
+    assert summary["merge_queue_gate"]["context"] == "malformed"
+
+
+def _ready_reason_entry() -> dict[str, Any]:
+    """Build an entry that is green except for the dimension under test."""
+    return {
+        "state": "open",
+        "draft": False,
+        "mergeable": True,
+        "mergeable_state": "clean",
+        "checks": {
+            "overall": "success",
+            "merge_queue_gate": {
+                "context": "valid",
+                "name": "merge-queue-gate",
+                "workflow_name": "Merge Queue Gate",
+                "status": "completed",
+                "conclusion": "success",
+            },
+        },
+        "requested_reviewer_count": 0,
+        "requested_team_count": 0,
+        "review_threads": {"status": "resolved"},
+        "labels": ["merge-ready"],
+        "gate_verdict": "accepted",
+        "metadata_verdict": "accepted",
+        "base_alignment": "aligned",
+        "merge_hold_reason": None,
+    }
+
+
+def test_entry_reasons_require_the_live_merge_queue_gate_context() -> None:
+    """Aggregate CI plus a trailer is insufficient without the required check."""
+    entry = _ready_reason_entry()
+    entry["checks"]["merge_queue_gate"] = {
+        "context": "missing",
+        "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
+        "status": "missing",
+        "conclusion": None,
+    }
+
+    assert "merge_queue_gate_check_missing" in _entry_reasons(entry)
+
+
+def test_entry_reasons_require_a_successful_current_gate_run() -> None:
+    """A pending or failed gate result cannot authorize the direct CAS path."""
+    entry = _ready_reason_entry()
+    entry["checks"]["merge_queue_gate"]["status"] = "in_progress"
+    entry["checks"]["merge_queue_gate"]["conclusion"] = None
+
+    assert "merge_queue_gate_not_success" in _entry_reasons(entry)
+
+
+def test_entry_reasons_preserve_the_canonical_explicit_hold() -> None:
+    """A trusted merge/domain hold blocks even otherwise green evidence."""
+    entry = _ready_reason_entry()
+    entry["merge_hold_reason"] = "merge-ready:no"
+
+    assert "explicit_merge_hold:merge-ready:no" in _entry_reasons(entry)
 
 
 def test_review_digest_changes_when_review_content_changes() -> None:
@@ -412,6 +535,50 @@ def test_merge_cascade_requires_all_exact_heads_before_mutating(monkeypatch) -> 
     result = merge_cascade("owner/repo", [1], apply=True, api=fake_api)
 
     assert result["status"] == "blocked"
+    assert calls == []
+
+
+def test_merge_pr_rejects_missing_live_gate_before_cas() -> None:
+    """The final merge seam must not trust a hand-built entry without the gate."""
+    entry = _ready_entry(1, head_ref="root", head_sha="a" * 40, base_ref="main")
+    entry["checks"].pop("merge_queue_gate")
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(method: str, path: str, body: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append((method, path))
+        return {}, None
+
+    merged, error = _merge_pr(
+        "owner/repo",
+        entry,
+        expected_head="a" * 40,
+        api=fake_api,
+    )
+
+    assert merged is None
+    assert error == "live merge-queue-gate check is missing"
+    assert calls == []
+
+
+def test_merge_pr_rejects_explicit_hold_before_cas() -> None:
+    """A current canonical hold must survive through the final CAS guard."""
+    entry = _ready_entry(1, head_ref="root", head_sha="a" * 40, base_ref="main")
+    entry["merge_hold_reason"] = "domain-approval:pending"
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(method: str, path: str, body: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append((method, path))
+        return {}, None
+
+    merged, error = _merge_pr(
+        "owner/repo",
+        entry,
+        expected_head="a" * 40,
+        api=fake_api,
+    )
+
+    assert merged is None
+    assert error == "explicit merge hold: domain-approval:pending"
     assert calls == []
 
 

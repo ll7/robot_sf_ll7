@@ -951,6 +951,97 @@ def test_radius_report_rejects_historical_v1_without_v2_blocks() -> None:
         validate_radius_sensitivity_payload(payload)
 
 
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("not_object", "must be a JSON object"),
+        ("unknown_schema", "schema_version must be"),
+        ("missing_field", "missing fields"),
+        ("contract_not_object", "paired_inference_contract must be an object"),
+        ("contract_schema", "paired_inference_contract schema_version must be"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_v2_envelopes(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 report envelope and inference contract fail closed."""
+    payload: object = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "not_object":
+        payload = None
+    else:
+        assert isinstance(payload, dict)
+        if case == "unknown_schema":
+            payload["schema_version"] = "radius_rank_stability.unknown"
+        elif case == "missing_field":
+            payload.pop("claim_boundary")
+        elif case == "contract_not_object":
+            payload["paired_inference_contract"] = None
+        elif case == "contract_schema":
+            payload["paired_inference_contract"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("paired_not_object", "paired_changes must be an object"),
+        ("metric_not_object", r"paired_changes\['success'\] must be an object"),
+        ("changes_not_list", "must be a list"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_containers(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 paired-change containers must retain their JSON shapes."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "paired_not_object":
+        payload["paired_changes"] = None
+    else:
+        metric = next(iter(payload["paired_changes"]))
+        by_radius = payload["paired_changes"][metric]
+        radius = next(iter(by_radius))
+        if case == "metric_not_object":
+            payload["paired_changes"][metric] = []
+        else:
+            by_radius[radius] = {}
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("change_not_object", "must be an object"),
+        ("support_not_object", "require support diagnostics"),
+        ("support_schema", "paired support schema_version must"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_entries(
+    case: str,
+    match: str,
+) -> None:
+    """Each v2 paired change must carry versioned support diagnostics."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    metric = next(iter(payload["paired_changes"]))
+    by_radius = payload["paired_changes"][metric]
+    radius = next(iter(by_radius))
+    changes = by_radius[radius]
+    if case == "change_not_object":
+        changes[0] = None
+    elif case == "support_not_object":
+        changes[0]["support"] = None
+    else:
+        changes[0]["support"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
 def test_radius_evidence_bundle_pins_v2_report_schema() -> None:
     """The bundle provenance version records the report envelope it accepts."""
     report = analyze_radius_sensitivity(None)
@@ -971,6 +1062,29 @@ def test_radius_evidence_bundle_pins_v2_report_schema() -> None:
     legacy["schema_version"] = RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1
     with pytest.raises(ValueError, match="bundle now pins the v2 report envelope"):
         validate_radius_evidence_bundle_provenance(legacy)
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (None, "must be a JSON object"),
+        ({"schema_version": "unknown"}, "schema_version must be"),
+        (
+            {
+                "schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+                "report_schema_version": "radius_rank_stability.v1",
+            },
+            "report_schema_version must be",
+        ),
+    ],
+)
+def test_radius_bundle_validator_rejects_unsupported_provenance(
+    payload: object,
+    match: str,
+) -> None:
+    """Bundle provenance must pin the current bundle and report envelopes."""
+    with pytest.raises(ValueError, match=match):
+        validate_radius_evidence_bundle_provenance(payload)  # type: ignore[arg-type]
 
 
 def test_analyze_radius_sensitivity_end_to_end_verdicts() -> None:

@@ -35,7 +35,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from scripts.dev.pr_metadata import extract_metadata_digests
+from scripts.dev.pr_metadata import extract_metadata_digests, has_not_ready_body_narrative
 from scripts.dev.route_efficiency_report import (
     EXPECTED_ARTIFACT_KEYS,
     has_validation_success,
@@ -588,6 +588,9 @@ def _merge_ready_state(
         return "pending_gate_verdict"
     metadata_digest = str(pr.get("metadata_digest", "") or "")
     if not has_current_pr_metadata_verdict(pr, metadata_digest):
+        return "pending_pr_metadata"
+    body_text = str(pr.get("body") or "")
+    if has_not_ready_body_narrative(body_text):
         return "pending_pr_metadata"
     return "ready_to_merge"
 

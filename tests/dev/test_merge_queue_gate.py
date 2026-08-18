@@ -732,3 +732,89 @@ def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
 
     assert excinfo.value.code == 2
     assert "--advisory is valid only with --pr" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "stale_body, expected_sentinel",
+    [
+        (
+            "The PR remains unapproved and not merge-ready pending independent exact-head review and current hosted checks.",
+            "not merge-ready",
+        ),
+        (
+            "This branch remains unapproved pending independent review.",
+            "remains unapproved",
+        ),
+        (
+            "WIP: do not merge yet.",
+            "do not merge",
+        ),
+        (
+            "The change is unapproved and not merge-ready.",
+            "unapproved and not merge-ready",
+        ),
+    ],
+)
+def test_evaluate_merge_gate_fails_closed_on_stale_not_ready_body_narrative(
+    stale_body: str,
+    expected_sentinel: str,
+) -> None:
+    """A merge-ready PR carrying unapproved/not-ready narrative sentinels fails closed."""
+    title = "fix: valid title"
+    digest = metadata_digest(title, stale_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": stale_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is False
+    assert "stale_not_ready_body_narrative" in audit.reasons
+    assert audit.body_narrative_status == "stale"
+    assert any(expected_sentinel.lower() in s.lower() for s in audit.body_not_ready_sentinels)
+
+
+def test_evaluate_merge_gate_passes_with_clean_body_narrative() -> None:
+    """A merge-ready PR carrying clean reconciliation narrative passes the gate."""
+    title = "fix: valid title"
+    clean_body = (
+        "## Summary\n\nAll review comments addressed and PR verified ready.\n\n"
+        f"pr-metadata: reconciled @ {metadata_digest(title, 'clean')}"
+    )
+    digest = metadata_digest(title, clean_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": clean_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.reasons == []
+    assert audit.body_narrative_status == "clean"
+    assert audit.body_not_ready_sentinels == []

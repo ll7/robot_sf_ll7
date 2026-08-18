@@ -425,10 +425,12 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     )
     hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
     assert {"include": "robot_sf_carla_bridge"} in hatchling_packages
-    assert (
-        "/robot_sf_carla_bridge"
-        in pyproject["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
-    )
+    sdist_includes = pyproject["tool"].get("hatch", {}).get("build", {}).get("targets", {}).get(
+        "sdist", {}
+    ).get("include", []) or pyproject["tool"].get("hatchling", {}).get("build", {}).get(
+        "targets", {}
+    ).get("sdist", {}).get("include", [])
+    assert "/robot_sf_carla_bridge" in sdist_includes
 
 
 def test_export_t0_scenarios_main_rejects_parent_relative_paths(

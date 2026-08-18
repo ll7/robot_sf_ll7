@@ -71,7 +71,11 @@ from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
-from scripts.dev.pr_metadata import metadata_digest, metadata_trailer  # noqa: E402
+from scripts.dev.pr_metadata import (  # noqa: E402
+    find_not_ready_body_sentinels,
+    metadata_digest,
+    metadata_trailer,
+)
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
     _extract_gate_verdicts,
     _extract_metadata_verdicts,
@@ -132,6 +136,8 @@ class MergeGateAudit:
     reviewer_request_status: str
     merge_ready: bool
     passed: bool
+    body_narrative_status: str = "clean"
+    body_not_ready_sentinels: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -197,23 +203,40 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
-def _fail_closed_reasons(  # noqa: PLR0913
+def _metadata_verdict_reason(status: str) -> str | None:
+    """Return fail-closed reason for metadata verdict status, or None when accepted."""
+    if status == "accepted":
+        return None
+    return "stale_pr_metadata_verdict" if status == "stale" else "missing_pr_metadata_verdict"
+
+
+def _thread_resolution_reason(status: str) -> str | None:
+    """Return fail-closed reason for thread resolution status, or None when resolved."""
+    if status == "resolved":
+        return None
+    return "unresolved_review_threads" if status == "unresolved" else "review_threads_not_evaluated"
+
+
+def _reviewer_request_reason(status: str) -> str | None:
+    """Return fail-closed reason for reviewer request status, or None when clear."""
+    if status == "clear":
+        return None
+    return (
+        "outstanding_requested_reviewers"
+        if status == "requested"
+        else "requested_reviewers_not_evaluated"
+    )
+
+
+def _core_preflight_reasons(
     *,
     draft: bool,
     merge_ready: bool,
     ci_overall: str,
     staleness_verdict: str,
     gate_verdict_status: str,
-    metadata_verdict_status: str,
-    thread_resolution: str,
-    reviewer_request_status: str,
-    merge_group_head_binding: str,
 ) -> list[str]:
-    """Collect fail-closed reasons for one gate evaluation.
-
-    Any non-empty reason list means the gate must fail closed. The order is
-    stable so audit records are comparable across runs and machines.
-    """
+    """Collect core preflight gate failure reasons."""
     reasons: list[str] = []
     if draft:
         reasons.append("pr_is_draft")
@@ -225,27 +248,86 @@ def _fail_closed_reasons(  # noqa: PLR0913
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
         reasons.append("missing_exact_head_gate_verdict")
-    if metadata_verdict_status != "accepted":
-        reasons.append(
-            "stale_pr_metadata_verdict"
-            if metadata_verdict_status == "stale"
-            else "missing_pr_metadata_verdict"
-        )
+    return reasons
+
+
+def _fail_closed_reasons(  # noqa: PLR0913
+    *,
+    draft: bool,
+    merge_ready: bool,
+    ci_overall: str,
+    staleness_verdict: str,
+    gate_verdict_status: str,
+    metadata_verdict_status: str,
+    thread_resolution: str,
+    reviewer_request_status: str,
+    merge_group_head_binding: str,
+    body_not_ready_sentinels: list[str] | None = None,
+) -> list[str]:
+    """Collect fail-closed reasons for one gate evaluation.
+
+    Any non-empty reason list means the gate must fail closed. The order is
+    stable so audit records are comparable across runs and machines.
+    """
+    reasons = _core_preflight_reasons(
+        draft=draft,
+        merge_ready=merge_ready,
+        ci_overall=ci_overall,
+        staleness_verdict=staleness_verdict,
+        gate_verdict_status=gate_verdict_status,
+    )
+
+    meta_reason = _metadata_verdict_reason(metadata_verdict_status)
+    if meta_reason:
+        reasons.append(meta_reason)
+
+    if merge_ready and body_not_ready_sentinels:
+        reasons.append("stale_not_ready_body_narrative")
     if merge_group_head_binding == "mismatch":
         reasons.append("merge_group_head_sha_mismatch")
-    if thread_resolution != "resolved":
-        reasons.append(
-            "unresolved_review_threads"
-            if thread_resolution == "unresolved"
-            else "review_threads_not_evaluated"
-        )
-    if reviewer_request_status != "clear":
-        reasons.append(
-            "outstanding_requested_reviewers"
-            if reviewer_request_status == "requested"
-            else "requested_reviewers_not_evaluated"
-        )
+
+    thread_reason = _thread_resolution_reason(thread_resolution)
+    if thread_reason:
+        reasons.append(thread_reason)
+
+    rev_reason = _reviewer_request_reason(reviewer_request_status)
+    if rev_reason:
+        reasons.append(rev_reason)
+
     return reasons
+
+
+def _resolve_narrative_status(body_text: str, sentinels: list[str]) -> str:
+    """Return narrative status classification for PR body."""
+    if not body_text:
+        return "empty"
+    return "stale" if sentinels else "clean"
+
+
+def _resolve_staleness_verdict(base_sha: str, main_sha: str) -> str:
+    """Return base staleness verdict against current main."""
+    if base_sha and main_sha:
+        return "fresh" if base_sha == main_sha else "stale"
+    return "not_applicable"
+
+
+def _resolve_bool_status(value: bool | None, true_name: str, false_name: str) -> str:
+    """Map a tri-state bool/None to standard status string."""
+    if value is True:
+        return true_name
+    if value is False:
+        return false_name
+    return "not_evaluated"
+
+
+def _resolve_merge_group_binding(
+    merge_group_head_sha: str, head_sha: str, queue_merging_strategy: str
+) -> tuple[str, str]:
+    """Resolve merge group head binding and normalized strategy."""
+    if not merge_group_head_sha:
+        return "not_applicable", "not_applicable"
+    binding = "match" if _merge_group_head_matches(merge_group_head_sha, head_sha) else "mismatch"
+    return binding, str(queue_merging_strategy or "unknown").upper()
 
 
 def evaluate_merge_gate(
@@ -261,40 +343,6 @@ def evaluate_merge_gate(
     """Evaluate the merge-queue gate for one PR snapshot.
 
     Pure function: no side effects, no GitHub calls. Fail-closed by design.
-
-    Inputs:
-      pr: compact PR snapshot. Recognized fields: ``head_sha`` (required for a
-        pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``, plus any
-        gate-verdict carrier fields understood by
-        ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
-        ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
-        ``metadata_digest`` and trusted ``metadata_verdicts``, and
-        ``reviewers_requested`` when supplied by the live snapshot.
-      main_sha: current ``main`` HEAD SHA. When both ``base_sha`` and
-        ``main_sha`` are present and differ, the gate fails closed as stale. When
-        either is absent, staleness is reported as ``not_applicable`` (the merge
-        queue constructs a fresh base, so this is the normal queue-time path).
-      ci_overall: authoritative CI conclusion (``success`` / ``failure`` /
-        ``pending`` / ``unknown``). When ``None``, falls back to
-        ``pr["checks"]["overall"]``; when still empty, the CI dimension is
-        treated as unknown and fails closed.
-      threads_resolved: ``True`` when all actionable review threads are resolved,
-        ``False`` when at least one remains unresolved, ``None`` when not
-        evaluated (fails closed; the runtime CLI supplies a definitive value and
-        fails closed on a query error).
-      reviewers_requested: ``True`` when one or more explicitly requested
-        reviewers remain, ``False`` when no reviewer request remains, ``None``
-        when not evaluated (fails closed; the runtime CLI always supplies a
-        definitive value).
-      merge_group_head_sha: source-head SHA encoded in a canonical
-        ``merge_group.head_ref``. When provided, it must prefix-match the live
-        PR head SHA; any mismatch fails closed so a queue ref cannot be rebound
-        to a newer or unrelated PR head.
-
-    Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
-    ``reasons``. The audit always records the evaluated head SHA, base SHA, label
-    set, gate-verdict and metadata-verdict statuses, staleness verdict, CI
-    conclusion, and thread resolution so the decision is inspectable.
     """
     head_sha = str(pr.get("head_sha", "") or "")
     labels = _label_names(pr)
@@ -303,6 +351,10 @@ def evaluate_merge_gate(
     draft = draft_value is True
     merge_ready = "merge-ready" in labels
     base_sha = str(pr.get("base_sha", "") or "")
+
+    body_text = str(pr.get("body") or "")
+    body_not_ready_sentinels = find_not_ready_body_sentinels(body_text)
+    body_narrative_status = _resolve_narrative_status(body_text, body_not_ready_sentinels)
 
     if ci_overall is None:
         ci_overall = str((pr.get("checks") or {}).get("overall", "") or "")
@@ -315,33 +367,13 @@ def evaluate_merge_gate(
     metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
 
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
-    if merge_group_head_sha:
-        merge_group_head_binding = (
-            "match" if _merge_group_head_matches(merge_group_head_sha, head_sha) else "mismatch"
-        )
-        queue_merging_strategy = str(queue_merging_strategy or "unknown").upper()
-    else:
-        merge_group_head_binding = "not_applicable"
-        queue_merging_strategy = "not_applicable"
+    merge_group_head_binding, queue_strategy = _resolve_merge_group_binding(
+        merge_group_head_sha, head_sha, queue_merging_strategy
+    )
 
-    if base_sha and main_sha:
-        staleness_verdict = "fresh" if base_sha == main_sha else "stale"
-    else:
-        staleness_verdict = "not_applicable"
-
-    if threads_resolved is True:
-        thread_resolution = "resolved"
-    elif threads_resolved is False:
-        thread_resolution = "unresolved"
-    else:
-        thread_resolution = "not_evaluated"
-
-    if reviewers_requested is True:
-        reviewer_request_status = "requested"
-    elif reviewers_requested is False:
-        reviewer_request_status = "clear"
-    else:
-        reviewer_request_status = "not_evaluated"
+    staleness_verdict = _resolve_staleness_verdict(base_sha, main_sha)
+    thread_resolution = _resolve_bool_status(threads_resolved, "resolved", "unresolved")
+    reviewer_request_status = _resolve_bool_status(reviewers_requested, "requested", "clear")
 
     reasons = ["draft_state_unavailable"] if not draft_state_valid else []
     reasons.extend(
@@ -355,12 +387,13 @@ def evaluate_merge_gate(
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
+            body_not_ready_sentinels=body_not_ready_sentinels,
         )
     )
     if not head_sha:
         reasons.insert(0, "missing_head_sha")
-    if queue_merging_strategy not in {"not_applicable", "ALLGREEN"}:
-        reasons.append(f"unsafe_merge_queue_strategy:{queue_merging_strategy}")
+    if queue_strategy not in {"not_applicable", "ALLGREEN"}:
+        reasons.append(f"unsafe_merge_queue_strategy:{queue_strategy}")
 
     passed = not reasons
 
@@ -370,7 +403,7 @@ def evaluate_merge_gate(
         head_sha=head_sha,
         merge_group_head_sha=merge_group_head_sha,
         merge_group_head_binding=merge_group_head_binding,
-        queue_merging_strategy=queue_merging_strategy,
+        queue_merging_strategy=queue_strategy,
         base_sha=base_sha,
         main_sha=str(main_sha or ""),
         labels=labels,
@@ -384,6 +417,8 @@ def evaluate_merge_gate(
         reviewer_request_status=reviewer_request_status,
         merge_ready=merge_ready,
         passed=passed,
+        body_narrative_status=body_narrative_status,
+        body_not_ready_sentinels=body_not_ready_sentinels,
         reasons=reasons,
     )
 
@@ -648,6 +683,7 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
         "draft": draft_value,
         "head_sha": str(payload.get("headRefOid") or ""),
         "metadata_digest": metadata_digest(title, body),
+        "body": body,
         "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
@@ -840,11 +876,17 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
         f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
+        f"- body narrative status: `{audit.body_narrative_status}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
         f"- requested-reviewer status: `{audit.reviewer_request_status}`",
     ]
+    if audit.body_not_ready_sentinels:
+        lines.append(
+            f"- stale body sentinels: `{', '.join(audit.body_not_ready_sentinels)}` "
+            "(run `gh_pr_body_rest.py --reconcile` to update)"
+        )
     if audit.reasons:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")
     lines.append("")
@@ -971,6 +1013,7 @@ def _self_test() -> int:
         draft: bool = False,
         base_sha: str = "",
         ci_overall: str | None = None,
+        body: str = "final body",
     ) -> dict[str, Any]:
         pr: dict[str, Any] = {
             "number": 6274,
@@ -978,8 +1021,9 @@ def _self_test() -> int:
             "labels": list(labels),
             "draft": draft,
             "base_sha": base_sha,
+            "body": body,
         }
-        digest = metadata_digest("merge queue gate self-test", "final body")
+        digest = metadata_digest("merge queue gate self-test", body)
         pr["metadata_digest"] = digest
         if ci_overall is not None:
             pr["checks"] = {"overall": ci_overall}
@@ -1023,6 +1067,29 @@ def _self_test() -> int:
     expect(
         audit.gate_verdict_status == "accepted",
         "scenario3: gate-verdict status must be accepted",
+    )
+
+    # Stale body narrative: merge-ready PR carrying unapproved/not-ready narrative -> fail.
+    unapproved_body = (
+        "The PR remains unapproved and not merge-ready pending independent "
+        "exact-head review and current hosted checks."
+    )
+    audit = evaluate_merge_gate(
+        _pr(
+            labels=["merge-ready"],
+            gate_verdict_sha=full_sha,
+            body=unapproved_body,
+            ci_overall="success",
+        ),
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    expect(
+        not audit.passed
+        and "stale_not_ready_body_narrative" in audit.reasons
+        and audit.body_narrative_status == "stale"
+        and len(audit.body_not_ready_sentinels) > 0,
+        "stale-narrative: PR with 'not merge-ready' / 'remains unapproved' body must fail closed",
     )
 
     # Stale head: gate-verdict for a different SHA -> fail (exact-head contract).

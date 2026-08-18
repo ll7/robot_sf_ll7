@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # this PR adds the result-interpretation packet module.
 # Keep this explicit so a new direct child fails the audit until it is
 # deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 295
+EXPECTED_DIRECT_CHILD_COUNT = 296
 
 
 @pytest.fixture(scope="module")

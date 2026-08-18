@@ -21,6 +21,8 @@ own index so you never fall straight into issue-specific context notes.
   planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
 - 🔬 **[Research & Benchmark Guide](./research-guide.md)** — benchmark semantics, evidence grading,
   scenario certification, release protocol, provenance discipline.
+- 🧭 **[Feasibility-First Scenario Search](./feasibility_first_scenario_search.md)** — fixture-only
+  rejection accounting and deterministic risk-feature ordering for adversarial research.
 - 🔎 **[Provenance-first case workbench](./case_workbench.md)** — deterministic case discovery,
   author admission, synchronized review, and reduced publication figures.
 - 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation
@@ -138,6 +140,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Goal-Driven Agent Loops](./context/goal_driven_agent_loops_2026-05-13.md)** - Shared contract for autonomous issue discovery, issue implementation, PR review, and user-in-the-loop issue audit skills
 * **[Artifact Evidence Vocabulary](./context/artifact_evidence_vocabulary.md)** - Shared issue/PR vocabulary for exploratory outputs, durable evidence, release artifacts, benchmark claims, and paper-facing claims
+* **[Issue #7030 Agent Figure Interpretation Evaluation](./context/issue_7030_agent_figure_interpretation_eval.md)** - Digest-pinned fixture replay, aggregate scoring, critical-error examples, and explicit boundaries before independent workflow review
 * **[Question-First Experiment Registry](../experiments/README.md)** - Register experiment intent, canonical configs, expected artifacts, and validation gates before launching runs
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
@@ -193,6 +196,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 403 Grid PPO Training Runbook](./training/issue_403_grid_training.md)** - Step-by-step training for the grid+SocNav PPO expert.
 * **[PPO num_envs Benchmark (imech156-u)](./training/ppo_num_envs_benchmark_imech156u.md)** - Host utilization, throughput, and stability benchmark for PPO `num_envs` sizing on imech156-u.
 * **[Predictive Planner Training Runbook](./training/predictive_planner_training.md)** - Data collection, training, proxy selection, and benchmark evaluation workflow for `prediction_planner`.
+* **[Leakage-Safe Parametric Curriculum Diagnostic](./parametric_curriculum_diagnostic.md)** - Fixture-only curriculum manifests, deterministic replay, and fail-closed train/evaluation leakage checks.
 * **[Issue #1138 Predictive Obstacle Feature Schema](./context/issue_1138_predictive_obstacle_features_schema.md)** - Stable six-value obstacle-feature contract, sentinel behavior, and map-derived lifecycle follow-up for predictive planner inputs
 * **[BR-07 Evening Run: Predictive Planner Refresh](./training/br07_predictive_evening_run.md)** - Reproducible evening-run checklist for predictive planner refresh, evaluation, and promotion artifacts.
 * **[Issue 708 Main-Based PPO Retrain Campaign](./context/issue_708_main_based_ppo_retrain_campaign.md)** - Final no-promotion recommendation for the issue-708 PPO campaign family, plus the original retrain config, SLURM submission path, deterministic eval surface, and provenance record.
@@ -306,6 +310,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
+* **[Prediction, Planning, and Runtime-Safety Diagnostic](./prediction_planning_safety_diagnostic.md)** - Fixture-only `prediction_planning_safety.v1` trace contract, split coverage, runtime event accounting, and claim boundary for issue #7317
 * **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow
@@ -319,6 +324,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Local Navigation Benchmark Gap Analysis (2026-01-14)](./dev/benchmark_plan_2026-01-14.md)** - Current-state inventory, missing pieces, and open questions for local planner benchmarking
 * **[Prediction Planner Baseline](./baselines/prediction_planner.md)** - High-level model description, benchmark role, configuration, and citation/provenance notes
 * **[Prediction-Aware MPC Planner](./baselines/prediction_mpc.md)** - Experimental constant-velocity prediction-MPC local planner, config, smoke command, and claim boundary
+* **[Predictive Planner Baseline Diagnostic](./predictive_baseline_diagnostic.md)** - Same-seed MPPI human-cost and NMPC/CBF smoke contract; diagnostic-only
 * **[Dynamic Window Approach Baseline](./baselines/dwa.md)** - Classical acceleration-window local planner, canonical parameters, and experimental claim boundary
 * **[Prediction Planner Literature Audit](./context/prediction_planner_literature_audit.md)** - Source-backed audit of implementation lineage, benchmark evidence, literature-positioning boundaries, and current claim limits
 * **[Issue #592 Hybrid Obstacle-Context Predictor Design](./context/issue_592_hybrid_obstacle_predictor_design.md)** - Feature-baseline-first plan for obstacle-conditioned predictive models, with config-first experiment path and benchmark proof gates

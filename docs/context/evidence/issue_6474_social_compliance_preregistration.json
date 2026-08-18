@@ -105,6 +105,34 @@
     "familywise_alpha": 0.05,
     "rule": "Stepwise Holm-Bonferroni adjusted p-values across the 15 exposed planner-pair-by-metric-family decisions. No unapproved composite social-compliance ranking is produced."
   },
+  "result_interpretation_contract": {
+    "metrics": {
+      "comfort_exposure_person_s": {
+        "unit": "person_seconds",
+        "denominator": "pedestrian_steps",
+        "null_value": 0.0,
+        "support_threshold": {
+          "kind": "full_paired_seed_scenario_count"
+        }
+      }
+    },
+    "uncertainty": {
+      "method": "percentile_bootstrap_95_ci"
+    },
+    "multiplicity": {
+      "method": "holm_stepdown",
+      "n_comparisons": 15
+    },
+    "comparator_direction": "comparison_minus_reference",
+    "population": {
+      "total": 540,
+      "included": 540,
+      "execution_mode_counts": {
+        "native": 180,
+        "adapter": 360
+      }
+    }
+  },
   "claim_boundary": {
     "target_claim": "Estimate within-simulator planner-pair differences for the versioned social-compliance metric families (comfort_exposure and any other available families).",
     "comparators": "goal (native), social_force (adapter), orca (adapter).",

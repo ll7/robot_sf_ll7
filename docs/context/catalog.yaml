@@ -112,6 +112,18 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7322_ch7_evidence_package_v2
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7322_ch7_custody_note.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_7047_ch7_portfolio_companion_binding.v1.json
   status: evidence
   freshness: evidence
@@ -1204,6 +1216,30 @@ entries:
 - path: docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json
   status: evidence
   freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/README.md
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/README.md.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/checksums.sha256
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/checksums.sha256.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/summary.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/summary.json.review.json
+  status: evidence
+  freshness: dated
   area: benchmark_evidence
 - path: docs/context/evidence/issue_1554_slurm_evidence_2026-06-30/README.md
   status: evidence
@@ -5172,3 +5208,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence

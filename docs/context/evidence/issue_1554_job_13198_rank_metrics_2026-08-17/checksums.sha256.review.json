@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_1554_job_13198_rank_metrics_2026-08-17/checksums.sha256",
+  "artifact_sha256": "61ec339fd045c172c41721e98781ecae8824bfe56eced57697bc859ce7d638d1",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

@@ -220,7 +220,7 @@ Use repository-root-relative paths in PRs, issue comments, docs, and agent respo
 comments with Markdown-heavy bodies, do not pass body inline through the shell; use
 `scripts/dev/gh_comment.sh`, `gh issue/pr comment --body-file`, or REST JSON input.
 
-For batching, GraphQL quota, Project #5 metadata, Spark sidecar routing, and autonomous stop guard
+For batching, GraphQL quota, Project #5 metadata, shared model routing, and autonomous stop guard
 details, read `docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Planning And Communication

@@ -15,6 +15,7 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 - [Maintainer Values And Hard Contracts](./maintainer_values.md) — honest, transparent, reproducible
   progress; exploration labels; uncertainty and validation policy.
 - [Research Reporting](./research_reporting.md) — how to report research results conservatively.
+- [Leakage-safe parametric curriculum diagnostic](./parametric_curriculum_diagnostic.md) — fixture-only hashed manifests, deterministic replay, and leakage checks.
 - [Context Retrieval Index](./context/INDEX.md) — retrieval-first catalog for context-note entry
   points and status rules.
 
@@ -22,6 +23,9 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 
 - [Benchmark Runner And Metrics](./benchmark.md) — episode schema, aggregation, metrics suite
   (collisions, comfort exposure, SNQI), and validation hooks.
+- [Prediction, Planning, and Runtime-Safety Diagnostic](./prediction_planning_safety_diagnostic.md)
+  — fixture-only `prediction_planning_safety.v1` trace contract, split coverage, event accounting,
+  and claim boundary for issue #7317.
 - [Benchmark Spec](./benchmark_spec.md) — formal benchmark specification.
 - [Metrics Specification](./dev/issues/social-navigation-benchmark/metrics_spec.md) — formal metric
   definitions, including per-pedestrian force quantiles.
@@ -47,6 +51,8 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 
 - [Scenario Certification](./scenario_certification.md) — machine-readable validity, feasibility,
   stress-only, and hard-but-solvable certificates.
+- [Feasibility-First Scenario Search](./feasibility_first_scenario_search.md) — fixture-only
+  rejection accounting and deterministic risk-feature ordering for issue #7315.
 - [Scenario Contracts](./scenario_contracts.md) — validate authored scenario-intent contracts.
 - [Scenario Perturbation Manifest](./scenario_perturbation_manifest.md) — perturbation coverage.
 - [Scenario Thumbnails](./scenario_thumbnails.md) — per-scenario thumbnails and montage grids.
@@ -62,6 +68,7 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
   headline suitability classification.
 - [Prediction Planner Baseline](./baselines/prediction_planner.md) — model description and provenance.
 - [Prediction-Aware MPC Planner](./baselines/prediction_mpc.md) — experimental predictive planner.
+- [Predictive Planner Baseline Diagnostic](./predictive_baseline_diagnostic.md) — same-seed MPPI human-cost and NMPC/CBF smoke contract; diagnostic-only.
 - [Dynamic Window Approach Baseline](./baselines/dwa.md) — classical acceleration-window planner.
 - [Guarded PPO Baseline](./baselines/guarded_ppo.md) — safety-aware challenger profile.
 - [Baselines Overview](./dev/baselines/README.md) — available baseline planners index.

@@ -178,10 +178,10 @@ An optional evidence manifest can provide the five explicit fields for a later m
     {
       "number": 123,
       "covering_pr": 456,
-      "named_symbol": "scripts/example.py:apply_fix",
+      "named_symbol": "scripts/dev/route_exact_fix_audit.py:build_review_queue",
       "failure_signature": "ValueError: stale label",
-      "failing_file_line": "scripts/example.py:42",
-      "regression_proof": "tests/dev/test_example.py::test_stale_label",
+      "failing_file_line": "scripts/dev/route_exact_fix_audit.py:202",
+      "regression_proof": "tests/dev/test_route_exact_fix_audit.py::test_build_review_queue_routes_without_authorizing_a_disposition",
       "current_main_sha": "<40-hex-main-sha>"
     }
   ]

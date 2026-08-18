@@ -14,12 +14,12 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 7322
-latest_reviewed_date: 2026-08-17
+latest_reconciliation_issue: 7411
+latest_reviewed_date: 2026-08-18
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 423
+refreshed_baseline_total_findings: 424
 refreshed_baseline_files_with_findings: 94
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
@@ -111,6 +111,13 @@ decision_summary: >-
   heuristic; both findings are explicitly dispositioned below and the refreshed baseline grows
   from 419 findings across 91 files to 421 findings across 93 files. The package remains
   blocked_pending_domain_approval / not_admitted and is not paper-facing evidence.
+  Chapter 7 source-registry addendum (issue #7411): the required v2 source-registry binding changes
+  the builder, verifier, and package schema hashes recorded by the historical #7410 build receipt.
+  The receipt remains an immutable pre-registry provenance record; rewriting it in place would
+  destroy its historical custody boundary. Its three artifact_hash_mismatch findings are therefore
+  explicitly baselined as diagnostic provenance bookkeeping. A future current-head build receipt
+  may be generated under a new versioned path without changing the #7411 custody or admission
+  boundary.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -273,6 +280,15 @@ reviewed_files:
       artifact resolution. The source package and its member hashes are independently verified by
       the v2 builder and the custody note; retain the exact generated view and baseline this
       reviewed non-claim finding rather than mutating the package schema.
+  - path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The #7410 receipt is an immutable pre-#7411 build-provenance record. This PR intentionally
+      changes the builder, verifier, and package schema it records while preserving the receipt
+      bytes, so its three stale tool-source digests are historical provenance bookkeeping rather
+      than a benchmark or admission claim. A new versioned current-head receipt can be generated
+      separately; no in-place receipt rewrite is authorized by #7411.
   # Added 2026-08-05: these S10 metadata-only preflight packets were newly added to the baseline
   # by #6776 and therefore belong under reviewed_files, not reviewed_baseline_increases.
   - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json

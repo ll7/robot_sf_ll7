@@ -412,6 +412,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **`goal-pr-review` skill hardened for concurrent review lanes.** Added a
+  concurrent-writers contract (active-writer window, advisory `review-claim`
+  marker, content-identical head-move rule, label sweeps as authoritative,
+  successor/superset detection), a shared-main baseline check before per-PR CI
+  diagnosis (`shared_main_blocked`), a `decision-required` triage taxonomy with an
+  `author_decision` parking state and a bounded decision-packet format, body
+  narrative/SHA-binding checks ahead of `merge-ready` (refs #7448, #7491), and a
+  shared resource budget (API quota, runner starvation, tmpfs worktrees). Terminal
+  states are now part of the output contract. Docs-only; no runtime behavior changed.
+
 * **Issue #7086 representative-run rule de-duplicated into one shared utility.** The rule that
   decides which seed stands in for a whole campaign cell — majority-verdict pool, weaker-label
   tie-break, median primary order parameter, lower seed on an exact tie — was implemented twice,

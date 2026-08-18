@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
+from scripts.dev.github_quota import parse_rate_limit_payload  # noqa: E402
+from scripts.dev.pr_metadata import metadata_digest, validate_pr_title  # noqa: E402
 
 FAILURE_CONCLUSIONS = {
     "failure",
@@ -36,6 +40,9 @@ _ACTIONS_JOB_URL_RE = re.compile(
 )
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
 _WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
+STABILITY_SNAPSHOT_SCHEMA = "pr_stability_snapshot.v1"
+_RETRY_AFTER_RE = re.compile(r"retry-after\s*[:=]\s*(\d+)", re.IGNORECASE)
+_RESUME_MONITOR_ARGS = "--poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200"
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -202,6 +209,79 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def _rest_api_get_detailed(path: str, *, timeout: int = 45) -> tuple[Any, str]:
+    """Fetch one explicit REST path, returning ``(payload, error_text)``.
+
+    Unlike :func:`_rest_api_get`, the gh error text is preserved so quota-blocked
+    calls can be distinguished from ordinary failures without an extra request.
+    """
+    result = _gh(["api", path], timeout=timeout)
+    if result.returncode != 0:
+        return None, result.stderr.strip() or f"gh api exited with code {result.returncode}"
+    try:
+        return json.loads(result.stdout), ""
+    except json.JSONDecodeError:
+        return None, f"gh api returned invalid JSON for {path}"
+
+
+def _is_rate_limit_error_text(text: str) -> bool:
+    """Return whether gh error text indicates REST/GraphQL rate-limit exhaustion."""
+    lowered = (text or "").lower()
+    return "rate limit" in lowered or "rate_limit" in lowered or "too many requests" in lowered
+
+
+def _parse_retry_after(text: str) -> int | None:
+    """Parse the first ``Retry-After`` seconds value from gh output, best-effort."""
+    match = _RETRY_AFTER_RE.search(text or "")
+    if match is None:
+        return None
+    try:
+        return max(0, int(match.group(1)))
+    except ValueError:
+        return None
+
+
+def _fetch_rate_limit_info() -> dict[str, Any]:
+    """Return bounded REST/GraphQL quota state without consuming quota.
+
+    ``gh api rate_limit`` does not count against the API quota. When it is
+    unavailable (for example a secondary rate limit), a ``Retry-After`` value
+    from the gh error output supplies a bounded resume hint; otherwise the
+    source is ``unavailable`` and callers stay fail-closed. Never retries.
+    """
+    result = _gh(["api", "rate_limit"])
+    if result.returncode == 0:
+        try:
+            snapshot = parse_rate_limit_payload(json.loads(result.stdout))
+        except json.JSONDecodeError:
+            snapshot = None
+        if snapshot is not None and snapshot.status == "ok":
+            return {
+                "source": "gh_api_rate_limit",
+                "graphql_remaining": snapshot.graphql_remaining,
+                "graphql_reset_epoch_seconds": snapshot.graphql_reset_at,
+                "core_remaining": snapshot.core_remaining,
+                "core_reset_epoch_seconds": snapshot.core_reset_at,
+            }
+    retry_after = _parse_retry_after(result.stderr) or _parse_retry_after(result.stdout)
+    if retry_after is not None:
+        return {"source": "retry_after", "retry_after_seconds": retry_after}
+    return {"source": "unavailable"}
+
+
+def _rate_limit_resume_hint(info: dict[str, Any], now: int) -> tuple[int | None, int | None]:
+    """Return ``(min_delay_seconds, resume_epoch_seconds)`` from rate-limit info."""
+    reset = info.get("core_reset_epoch_seconds") or info.get("graphql_reset_epoch_seconds")
+    retry_after = info.get("retry_after_seconds")
+    min_delay: int | None = None
+    if reset is not None:
+        min_delay = max(0, int(reset) - now)
+    elif retry_after is not None:
+        min_delay = max(0, int(retry_after))
+    resume_epoch = int(reset) if reset is not None else None
+    return min_delay, resume_epoch
 
 
 def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
@@ -451,8 +531,21 @@ def _gh_view_error_payload(
     returncode: int,
     *,
     retry: GraphQLRetryOutcome | None = None,
+    allow_rest_fallback: bool = True,
 ) -> dict[str, Any]:
     """Map a failed GraphQL-backed PR read to a truthful payload."""
+    if not allow_rest_fallback:
+        if _is_graphql_quota_error(stderr):
+            error_kind = "graphql_quota_exhausted"
+        elif retry is not None and retry.exhausted:
+            error_kind = "graphql_transient_exhausted"
+        else:
+            error_kind = "graphql_read_failed"
+        return {
+            "status": "error",
+            "error_kind": error_kind,
+            "error": stderr or f"gh returned exit code {returncode}",
+        }
     if _is_graphql_quota_error(stderr):
         return _fetch_ci_status_rest(pr_number)
     if retry is not None and retry.exhausted:
@@ -464,9 +557,19 @@ def _gh_view_error_payload(
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
 
+def _ci_retry_kwargs(max_attempts: int | None) -> dict[str, Any]:
+    """Build retry options while preserving the normal monitor defaults."""
+    if max_attempts is None:
+        return {"timeout": 30}
+    return {"timeout": 30, "max_attempts": max(1, int(max_attempts))}
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
+    *,
+    max_attempts: int | None = None,
+    allow_rest_fallback: bool = True,
 ) -> dict[str, Any]:
     """Fetch combined CI status for a PR.
 
@@ -489,7 +592,7 @@ def _fetch_ci_status(
             "--json",
             "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
         ],
-        timeout=30,
+        **_ci_retry_kwargs(max_attempts),
     )
     result = retry.result
     if result.returncode != 0:
@@ -499,6 +602,7 @@ def _fetch_ci_status(
             stderr,
             result.returncode,
             retry=retry,
+            allow_rest_fallback=allow_rest_fallback,
         )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
@@ -705,6 +809,416 @@ def _monitor_terminal_reason(
     return terminal_reason
 
 
+@dataclass(frozen=True)
+class StabilitySnapshotEvidence:
+    """Live exact-head evidence evaluated by the pure snapshot evaluator."""
+
+    observed_head_sha: str
+    observed_main_sha: str
+    base_sha: str
+    base_ref: str
+    observed_metadata_digest: str
+    ci_overall: str
+    ci_pending_reason: str
+    expected_head_sha: str
+    expected_main_sha: str
+    expected_metadata_digest: str
+
+
+def _resolve_ci_state(overall: str, pending_reason: str) -> str:
+    """Classify a CI rollup with a distinct status-propagation-lag state."""
+    if overall == "success":
+        return "success"
+    if overall == "failure":
+        return "failure"
+    if overall == "pending":
+        if pending_reason == "status_propagation_lag":
+            return "status_propagation_lag"
+        return "pending"
+    return "unknown"
+
+
+def _snapshot_resume_command(
+    status: str,
+    *,
+    reasons: list[str],
+    evidence: StabilitySnapshotEvidence,
+    pr: str,
+    desired_hint: str = "",
+    min_delay_seconds: int | None = None,
+) -> dict[str, Any]:
+    """Return the smallest safe resume command for a snapshot status.
+
+    Route evidence only: the command never retries automatically and never
+    authorizes a merge. Movement invalidation always resumes with a fresh
+    snapshot against the observed values; pending/lag states resume with the
+    bounded CI monitor (exit code 2 until checks settle).
+    """
+    if status == "stable":
+        return {"command": None, "reason": "none", "min_delay_seconds": None}
+    head = evidence.observed_head_sha or "<observed-head-sha>"
+    main = evidence.observed_main_sha or "<observed-main-sha>"
+    digest = evidence.observed_metadata_digest or "<observed-digest>"
+    snapshot_cmd = (
+        f"scripts/dev/check_pr_ci_status.py {pr} --stability-snapshot --json "
+        f"--expected-head-sha {head} --expected-main-sha {main} "
+        f"--expected-metadata-digest {digest}"
+    )
+    if status == "changed":
+        if "metadata_digest_changed" in reasons and desired_hint:
+            return {
+                "command": (
+                    f"scripts/dev/gh_pr_body_rest.py {pr} --reconcile {desired_hint} "
+                    f"&& {snapshot_cmd}"
+                ),
+                "reason": "reconcile_metadata_then_rerun",
+                "min_delay_seconds": None,
+            }
+        return {
+            "command": snapshot_cmd,
+            "reason": "refresh_expecteds_and_rerun",
+            "min_delay_seconds": None,
+        }
+    if status in {"pending", "status_propagation_lag"}:
+        return {
+            "command": (
+                f"scripts/dev/check_pr_ci_status.py {pr} --json "
+                f"--expected-head-sha {head} {_RESUME_MONITOR_ARGS}"
+            ),
+            "reason": "bounded_ci_wait",
+            "min_delay_seconds": None,
+        }
+    if status == "quota_blocked":
+        return {
+            "command": snapshot_cmd,
+            "reason": "rest_rate_limit_reset",
+            "min_delay_seconds": min_delay_seconds,
+        }
+    return {"command": snapshot_cmd, "reason": "rerun_after_fix", "min_delay_seconds": None}
+
+
+def _snapshot_status(reasons: list[str], ci_state: str) -> str:
+    """Resolve the snapshot status with movement invalidation taking precedence."""
+    if reasons:
+        return "changed"
+    if ci_state == "failure":
+        return "failure"
+    if ci_state == "status_propagation_lag":
+        return "status_propagation_lag"
+    if ci_state == "pending":
+        return "pending"
+    if ci_state == "success":
+        return "stable"
+    return "error"
+
+
+def evaluate_stability_snapshot(
+    evidence: StabilitySnapshotEvidence,
+    *,
+    pr: str,
+    repo: str,
+    head_read_race: bool = False,
+    desired_metadata_digest: str = "",
+    desired_hint: str = "",
+) -> dict[str, Any]:
+    """Evaluate a live exact-head snapshot against expected evidence (pure).
+
+    Movement of the head, current main, or metadata digest invalidates the
+    snapshot with the observed values and a resume command; the snapshot never
+    retries automatically and never authorizes a merge.
+    """
+    reasons: list[str] = []
+    head_matches: bool | None = None
+    main_matches: bool | None = None
+    digest_matches: bool | None = None
+    if evidence.expected_head_sha:
+        head_matches = bool(evidence.observed_head_sha) and (
+            evidence.observed_head_sha == evidence.expected_head_sha
+        )
+        if not head_matches:
+            reasons.append("head_sha_changed")
+    if evidence.expected_main_sha:
+        main_matches = bool(evidence.observed_main_sha) and (
+            evidence.observed_main_sha == evidence.expected_main_sha
+        )
+        if not main_matches:
+            reasons.append("main_sha_changed")
+    if evidence.expected_metadata_digest:
+        digest_matches = bool(evidence.observed_metadata_digest) and (
+            evidence.observed_metadata_digest == evidence.expected_metadata_digest
+        )
+        if not digest_matches:
+            reasons.append("metadata_digest_changed")
+    if head_read_race:
+        reasons.append("head_sha_read_race")
+
+    ci_state = _resolve_ci_state(evidence.ci_overall, evidence.ci_pending_reason)
+    status = _snapshot_status(reasons, ci_state)
+
+    metadata_evidence: dict[str, Any] = {
+        "observed_digest": evidence.observed_metadata_digest,
+        "expected_digest": evidence.expected_metadata_digest or None,
+        "digest_matches": digest_matches,
+    }
+    if desired_metadata_digest:
+        metadata_evidence["desired_digest"] = desired_metadata_digest
+
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": status,
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "head_sha": evidence.observed_head_sha,
+        "expected_head_sha": evidence.expected_head_sha or None,
+        "head_sha_matches": head_matches,
+        "main_sha": evidence.observed_main_sha,
+        "expected_main_sha": evidence.expected_main_sha or None,
+        "main_sha_matches": main_matches,
+        "base_sha": evidence.base_sha or None,
+        "base_ref": evidence.base_ref,
+        "metadata": metadata_evidence,
+        "ci_state": ci_state,
+        "invalidated": bool(reasons),
+        "invalidated_reasons": reasons,
+        "resume": _snapshot_resume_command(
+            status,
+            reasons=reasons,
+            evidence=evidence,
+            pr=pr,
+            desired_hint=desired_hint,
+        ),
+    }
+
+
+def _quota_blocked_snapshot(
+    pr: str,
+    repo: str,
+    *,
+    diagnostic: str,
+    rate_limit: dict[str, Any] | None = None,
+    expected_head_sha: str = "",
+    expected_main_sha: str = "",
+    expected_metadata_digest: str = "",
+) -> dict[str, Any]:
+    """Build the quota-blocked snapshot with a bounded resume time and no retry."""
+    info = rate_limit if rate_limit is not None else _fetch_rate_limit_info()
+    min_delay, resume_epoch = _rate_limit_resume_hint(info, int(time.time()))
+    head = expected_head_sha or "<observed-head-sha>"
+    main = expected_main_sha or "<observed-main-sha>"
+    digest = expected_metadata_digest or "<observed-digest>"
+    command = (
+        f"scripts/dev/check_pr_ci_status.py {pr} --stability-snapshot --json "
+        f"--expected-head-sha {head} --expected-main-sha {main} "
+        f"--expected-metadata-digest {digest}"
+    )
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": "quota_blocked",
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "error": diagnostic,
+        "rate_limit": info,
+        "resume": {
+            "command": command,
+            "reason": "rest_rate_limit_reset",
+            "min_delay_seconds": min_delay,
+            "resume_epoch_seconds": resume_epoch,
+        },
+    }
+
+
+def _read_text_file(path: Path) -> tuple[str | None, str | None]:
+    """Read a UTF-8 text file, returning ``(text, error)``."""
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except OSError as exc:
+        return None, f"could not read {path}: {exc}"
+
+
+def _snapshot_error_payload(pr: str, repo: str, message: str) -> dict[str, Any]:
+    """Build the fail-closed snapshot error payload."""
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": "error",
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "error": message,
+    }
+
+
+def _desired_metadata_evidence(
+    *,
+    metadata_title: str | None,
+    metadata_body_file: Path | None,
+    pr: str,
+    repo: str,
+) -> tuple[str, str, dict[str, Any] | None]:
+    """Return ``(desired_digest, desired_hint, error_payload)`` for a desired metadata pair."""
+    if metadata_title is None and metadata_body_file is None:
+        return "", "", None
+    title = metadata_title or ""
+    title_error = validate_pr_title(title)
+    if title_error:
+        return "", "", _snapshot_error_payload(pr, repo, title_error)
+    if metadata_body_file is None:
+        body = ""
+    else:
+        body, body_error = _read_text_file(metadata_body_file)
+        if body_error:
+            return "", "", _snapshot_error_payload(pr, repo, body_error)
+        assert body is not None
+    hint = f"--title {shlex.quote(title)} --body-file {shlex.quote(str(metadata_body_file))}"
+    return metadata_digest(title, body), hint, None
+
+
+def _fetch_stability_snapshot(
+    pr: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    expected_main_sha: str,
+    expected_metadata_digest: str,
+    metadata_title: str | None = None,
+    metadata_body_file: Path | None = None,
+) -> dict[str, Any]:
+    """Fetch one deterministic exact-head stability snapshot (route evidence only).
+
+    The snapshot reads the live CI status, the live PR title/body/base, the
+    current ``main`` SHA, and the REST quota state exactly once each. It never
+    polls, never retries automatically, and never mutates anything.
+    """
+    if not repo:
+        owner, name = _git_remote_owner_name()
+        repo = f"{owner}/{name}" if owner and name else ""
+    if not repo:
+        return _snapshot_error_payload(
+            pr,
+            "",
+            "repository could not be derived from the git remote; pass --repo owner/name",
+        )
+
+    # Snapshot mode is intentionally a single read.  The normal monitor keeps
+    # its bounded transient retry and REST fallback behavior, but using either
+    # here would mix evidence from different time windows and violate the
+    # route-evidence contract.
+    ci = _fetch_ci_status(pr, max_attempts=1, allow_rest_fallback=False)
+    if ci.get("status") == "error":
+        error_text = str(ci.get("error", "") or "")
+        quota_kinds = {"graphql_quota_exhausted"}
+        if ci.get("error_kind") in quota_kinds or _is_rate_limit_error_text(error_text):
+            return _quota_blocked_snapshot(
+                pr,
+                repo,
+                diagnostic=error_text,
+                expected_head_sha=expected_head_sha,
+                expected_main_sha=expected_main_sha,
+                expected_metadata_digest=expected_metadata_digest,
+            )
+        return _snapshot_error_payload(pr, repo, error_text or "CI status read failed")
+
+    desired_digest, desired_hint, metadata_error = _desired_metadata_evidence(
+        metadata_title=metadata_title,
+        metadata_body_file=metadata_body_file,
+        pr=pr,
+        repo=repo,
+    )
+    if metadata_error is not None:
+        return metadata_error
+
+    rate_limit = _fetch_rate_limit_info()
+    pull, pull_error = _rest_api_get_detailed(f"repos/{repo}/pulls/{pr}")
+    main_payload, main_error = _rest_api_get_detailed(f"repos/{repo}/branches/main")
+    error_text = " ".join(text for text in (pull_error, main_error) if text).strip()
+    if pull_error or main_error:
+        if _is_rate_limit_error_text(error_text):
+            return _quota_blocked_snapshot(
+                pr,
+                repo,
+                diagnostic=error_text,
+                rate_limit=rate_limit,
+                expected_head_sha=expected_head_sha,
+                expected_main_sha=expected_main_sha,
+                expected_metadata_digest=expected_metadata_digest,
+            )
+        payload = _snapshot_error_payload(pr, repo, error_text or "live PR/main read failed")
+        payload["rate_limit"] = rate_limit
+        return payload
+
+    pull = pull if isinstance(pull, dict) else {}
+    head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+    observed_head = str(head.get("sha", "") or "")
+    observed_digest = metadata_digest(
+        str(pull.get("title", "") or ""), str(pull.get("body", "") or "")
+    )
+    commit = main_payload.get("commit") if isinstance(main_payload, dict) else None
+    observed_main = str(commit.get("sha", "") or "") if isinstance(commit, dict) else ""
+
+    ci_head = str(ci.get("head_sha", "") or "")
+    head_read_race = bool(ci_head) and ci_head != observed_head
+
+    evidence = StabilitySnapshotEvidence(
+        observed_head_sha=observed_head,
+        observed_main_sha=observed_main,
+        base_sha=str(base.get("sha", "") or ""),
+        base_ref=str(base.get("ref", "") or ""),
+        observed_metadata_digest=observed_digest,
+        ci_overall=str(ci.get("checks", {}).get("overall", "") or ""),
+        ci_pending_reason=str(ci.get("checks", {}).get("pending_reason", "") or ""),
+        expected_head_sha=expected_head_sha,
+        expected_main_sha=expected_main_sha,
+        expected_metadata_digest=expected_metadata_digest,
+    )
+    result = evaluate_stability_snapshot(
+        evidence,
+        pr=pr,
+        repo=repo,
+        head_read_race=head_read_race,
+        desired_metadata_digest=desired_digest,
+        desired_hint=desired_hint,
+    )
+    result["checks"] = ci.get("checks", {})
+    result["reviews"] = ci.get("reviews", {})
+    result["rate_limit"] = rate_limit
+    if ci.get("data_source"):
+        result["data_source"] = ci["data_source"]
+    remaining = rate_limit.get("core_remaining")
+    if remaining is not None and remaining <= 0 and result["status"] == "stable":
+        result["warning"] = (
+            "REST quota exhausted; evidence is fresh but resume commands fail until reset"
+        )
+    return result
+
+
+def _validate_expected_main_sha(expected_main_sha: str) -> str | None:
+    """Return an error message when ``--expected-main-sha`` is not a full 40-hex SHA."""
+    if not expected_main_sha:
+        return None
+    if len(expected_main_sha) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", expected_main_sha):
+        return (
+            "--expected-main-sha must be the full 40-hex SHA, got "
+            f"{len(expected_main_sha)} chars ({expected_main_sha!r}); "
+            "short prefixes are not accepted"
+        )
+    return None
+
+
+def _validate_expected_metadata_digest(expected_digest: str) -> str | None:
+    """Return an error when ``--expected-metadata-digest`` is not a 64-hex SHA-256 digest."""
+    if not expected_digest:
+        return None
+    if len(expected_digest) != 64 or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest):
+        return (
+            "--expected-metadata-digest must be the full 64-hex SHA-256 digest, got "
+            f"{len(expected_digest)} chars ({expected_digest!r}); "
+            "short prefixes are not accepted"
+        )
+    return None
+
+
 def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
     """Fail closed when the observed PR head SHA diverges from the expected one.
 
@@ -753,7 +1267,28 @@ def _preflight_validate(
             "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
             "or pass the same value to both"
         )
-    return _validate_expected_head_sha(args.expected_head_sha)
+    head_error = _validate_expected_head_sha(args.expected_head_sha)
+    if head_error:
+        return head_error
+    if args.stability_snapshot:
+        if args.poll_attempts > 1 or args.backoff > 0 or args.max_wall_seconds is not None:
+            parser.error(
+                "--stability-snapshot is a single-read snapshot that never polls; "
+                "remove --poll-attempts > 1, --backoff, or --max-wall-seconds"
+            )
+        if (args.metadata_title is None) != (args.metadata_body_file is None):
+            parser.error("--metadata-title and --metadata-body-file must be provided together")
+        main_error = _validate_expected_main_sha(args.expected_main_sha)
+        if main_error:
+            return main_error
+        return _validate_expected_metadata_digest(args.expected_metadata_digest)
+    if args.expected_main_sha or args.expected_metadata_digest:
+        parser.error(
+            "--expected-main-sha and --expected-metadata-digest require --stability-snapshot"
+        )
+    if args.metadata_title is not None or args.metadata_body_file is not None:
+        parser.error("--metadata-title and --metadata-body-file require --stability-snapshot")
+    return None
 
 
 def _bounded_sleep_seconds(
@@ -840,6 +1375,78 @@ def _poll_ci_status(
     return data
 
 
+def _print_snapshot_result(data: dict[str, Any]) -> int:
+    """Print one snapshot JSON document and return its exit code.
+
+    Exit codes: 0 stable, 1 changed/failure/error, 2 inconclusive
+    (pending/status-propagation-lag/quota-blocked; resume later).
+    """
+    print(json.dumps(data))
+    status = data.get("status")
+    if status == "stable":
+        return 0
+    if status in {"changed", "failure", "error"}:
+        return 1
+    return 2
+
+
+def _fetch_data(args: argparse.Namespace, pr: str) -> tuple[dict[str, Any], int]:
+    """Fetch CI status or the stability snapshot, returning ``(data, attempts)``."""
+    if args.stability_snapshot:
+        return (
+            _fetch_stability_snapshot(
+                pr,
+                repo=args.repo,
+                expected_head_sha=args.expected_head_sha,
+                expected_main_sha=args.expected_main_sha,
+                expected_metadata_digest=args.expected_metadata_digest,
+                metadata_title=args.metadata_title,
+                metadata_body_file=args.metadata_body_file,
+            ),
+            1,
+        )
+    attempts = max(1, args.poll_attempts)
+    return (
+        _poll_ci_status(
+            pr,
+            attempts=attempts,
+            poll_interval=args.poll_interval,
+            backoff=args.backoff,
+            json_output=args.json,
+            expected_head_sha=args.expected_head_sha,
+            max_wall_seconds=args.max_wall_seconds,
+        ),
+        attempts,
+    )
+
+
+def _emit_ci_result(data: dict[str, Any], args: argparse.Namespace, attempts: int) -> int:
+    """Print CI data and return the exit code (0 success / 1 failure / 2 pending-timeout)."""
+    if args.stability_snapshot:
+        return _print_snapshot_result(data)
+    if data.get("status") == "error":
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
+        return 1
+
+    if attempts == 1:
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
+
+    # Non-zero exit when CI is failing; pending checks are cache/backoff-safe.
+    overall = data.get("checks", {}).get("overall")
+    if overall == "failure":
+        return 1
+    if attempts > 1 and overall == "pending":
+        return 2
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point: check CI status and print results."""
     epilog = """\
@@ -854,6 +1461,18 @@ so uv will not create or prompt for a per-worktree .venv.
 `--max-wall-seconds` gives long-running agents a non-interactive local stop path;
 exit code 2 means checks were still pending locally, not that remote GitHub checks
 were cancelled or failed.
+
+Exact-head stability snapshot (issue #7523), route evidence only:
+
+  scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \\
+      <pr-number> --stability-snapshot --json \\
+      --expected-head-sha <head-sha> --expected-main-sha <current-main-sha> \\
+      --expected-metadata-digest <64-hex> --repo ll7/robot_sf_ll7
+
+The snapshot is one deterministic read of head/main/metadata-digest/CI/quota
+state; it never retries automatically and never authorizes a merge. Snapshot exit
+codes: 0 stable, 1 changed/failure/error, 2 inconclusive
+(pending/status-propagation-lag/quota-blocked; resume later).
 """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -900,6 +1519,42 @@ were cancelled or failed.
         help="optional PR head SHA guard; stale heads return error without claiming readiness",
     )
     parser.add_argument(
+        "--stability-snapshot",
+        action="store_true",
+        default=False,
+        help=(
+            "emit one deterministic exact-head stability snapshot (schema "
+            "pr_stability_snapshot.v1) covering head/main/metadata-digest/CI/quota "
+            "route evidence; single read, never polls, never mutates"
+        ),
+    )
+    parser.add_argument(
+        "--repo",
+        default="",
+        help="owner/name REST target (default: derive from the origin git remote)",
+    )
+    parser.add_argument(
+        "--expected-main-sha",
+        default="",
+        help="optional current-main SHA guard for --stability-snapshot",
+    )
+    parser.add_argument(
+        "--expected-metadata-digest",
+        default="",
+        help="optional 64-hex title/body metadata digest guard for --stability-snapshot",
+    )
+    parser.add_argument(
+        "--metadata-title",
+        default=None,
+        help="desired final title for --stability-snapshot metadata comparison",
+    )
+    parser.add_argument(
+        "--metadata-body-file",
+        type=Path,
+        default=None,
+        help="desired final body file for --stability-snapshot metadata comparison",
+    )
+    parser.add_argument(
         "--max-wall-seconds",
         type=_non_negative_float,
         default=None,
@@ -917,16 +1572,7 @@ were cancelled or failed.
 
     try:
         pr = _resolve_pr_number(pr_number)
-        attempts = max(1, args.poll_attempts)
-        data = _poll_ci_status(
-            pr,
-            attempts=attempts,
-            poll_interval=args.poll_interval,
-            backoff=args.backoff,
-            json_output=args.json,
-            expected_head_sha=args.expected_head_sha,
-            max_wall_seconds=args.max_wall_seconds,
-        )
+        data, attempts = _fetch_data(args, pr)
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
         return 1
@@ -937,27 +1583,7 @@ were cancelled or failed.
         )
         return 1
 
-    if data.get("status") == "error":
-        if args.json:
-            print(json.dumps(data))
-        else:
-            print(_format_human(data))
-        return 1
-
-    if attempts == 1:
-        if args.json:
-            print(json.dumps(data))
-        else:
-            print(_format_human(data))
-
-    # Non-zero exit when CI is failing; pending checks are cache/backoff-safe.
-    overall = data.get("checks", {}).get("overall")
-    if overall == "failure":
-        return 1
-    if attempts > 1 and overall == "pending":
-        return 2
-
-    return 0
+    return _emit_ci_result(data, args, attempts)
 
 
 if __name__ == "__main__":

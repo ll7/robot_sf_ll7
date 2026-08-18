@@ -28,6 +28,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the recorder CLI parser."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -257,6 +260,7 @@ def _git_commit() -> str:
             ["git", "rev-parse", "HEAD"],
             text=True,
             stderr=subprocess.DEVNULL,
+            cwd=_REPOSITORY_ROOT,
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"

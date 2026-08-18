@@ -65,7 +65,7 @@ entries: `producer`, `preregistration`, `evidence_contract`, `analysis`,
 admission is `producer`, `preregistration`, `evidence_contract`, `analysis`,
 and `artifact`; each must be explicitly required and passed. `result_packet`
 is optional only when the generic #7029 validator is unavailable. The bounded
-#6474 fixture remains a compatibility fixture and is not a production launch
+Issue #6474 fixture remains a compatibility fixture and is not a production launch
 admission.
 
 Each entry records `status` (`passed`, `unavailable`, `failed`, or `not_run`)

@@ -1,0 +1,44 @@
+{
+  "schema": "sha_carrier_scenarios.v1",
+  "regression_for": "issue #7448",
+  "note": "Exact-head SHA carrier admission scenarios for the fail-closed write guard. Each scenario names a body text, the live head SHA the write would be checked against, and the expected number of invalid carriers. The admission rule is equality to the live head; every other carrier fails closed.",
+  "_live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+  "scenarios": [
+    {
+      "name": "exact_match",
+      "live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "body": "## Summary\n\nValidated at the exact head.\n\n- gate-verdict: accepted @ a1b2c3d4e5f60718293a4b5c6d7e8f9001020304\n- Exact head: a1b2c3d4e5f60718293a4b5c6d7e8f9001020304\n",
+      "expected_invalid": 0
+    },
+    {
+      "name": "stale_real_commit",
+      "live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "body": "## Summary\n\n- base-policy: ordinary-cas @ deadbeef00000000000000000000000000000001\n",
+      "expected_invalid": 1
+    },
+    {
+      "name": "non_existent_fabricated_sha",
+      "live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "body": "## Summary\n\n- gate-verdict: accepted @ a1b2c3d4e0000000000000000000000000000000\n",
+      "expected_invalid": 1
+    },
+    {
+      "name": "abbreviated_sha",
+      "live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "body": "## Summary\n\n- Exact head: a1b2c3d4e5f6\n",
+      "expected_invalid": 1
+    },
+    {
+      "name": "quoted_historical_evidence",
+      "live_head": "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+      "body": "## Summary\n\n> Previous exact-head review:\n>\n> `gate-verdict: accepted @ 0000000000000000000000000000000000000000`\n",
+      "expected_invalid": 1
+    },
+    {
+      "name": "concurrent_head_movement",
+      "live_head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "body": "## Summary\n\n- gate-verdict: accepted @ a1b2c3d4e5f60718293a4b5c6d7e8f9001020304\n",
+      "expected_invalid": 1
+    }
+  ]
+}

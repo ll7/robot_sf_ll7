@@ -25,6 +25,30 @@ def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> 
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
+def _exact_changed_coverage_response(
+    *, head_sha: str = FULL_SHA, status: str = "completed", conclusion: str | None = "success"
+) -> MagicMock:
+    """Build the exact-head REST check-run response used by live gate fixtures."""
+    return _gh_response(
+        stdout=json.dumps(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "id": 7001,
+                        "name": "changed-coverage-gate",
+                        "head_sha": head_sha,
+                        "status": status,
+                        "conclusion": conclusion,
+                        "started_at": "2026-08-18T01:00:00Z",
+                        "completed_at": "2026-08-18T01:01:00Z" if status == "completed" else None,
+                    }
+                ],
+            }
+        )
+    )
+
+
 def _raw_pr(
     *,
     body: str = "",
@@ -39,7 +63,14 @@ def _raw_pr(
         "isDraft": False,
         "headRefOid": FULL_SHA,
         "labels": [{"name": "merge-ready"}],
-        "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+        "statusCheckRollup": [
+            {"status": "COMPLETED", "conclusion": "SUCCESS"},
+            {
+                "name": "changed-coverage-gate",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
         "comments": [
             {
                 "body": metadata_trailer(metadata_digest("merge queue test PR", "final body")),
@@ -97,6 +128,7 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr())),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -144,6 +176,7 @@ def test_fetch_pr_snapshot_records_outstanding_requested_reviewer() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -176,6 +209,7 @@ def test_fetch_pr_snapshot_ignores_superseded_failed_check_run() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -208,6 +242,7 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -246,11 +281,102 @@ def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
     assert error is None
     assert snapshot["checks"] == {"overall": expected}
+
+
+def test_fetch_pr_snapshot_binds_changed_coverage_to_exact_head() -> None:
+    """A passing coverage check on a later or unrelated SHA cannot prove this head."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(head_sha="b" * 40),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["changed_coverage"]["status"] == "stale"
+    audit = evaluate_merge_gate(snapshot, main_sha="base_sha", threads_resolved=True)
+    assert audit.passed is False
+    assert "changed_coverage_proof_stale" in audit.reasons
+
+
+def test_fetch_pr_snapshot_requires_a_changed_coverage_check() -> None:
+    """A missing exact-head changed-coverage check remains a merge blocker."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["changed_coverage"]["status"] == "missing"
+    audit = evaluate_merge_gate(snapshot, main_sha="base_sha", threads_resolved=True)
+    assert audit.passed is False
+    assert "changed_coverage_proof_missing" in audit.reasons
+
+
+def test_fetch_pr_snapshot_rejects_incomplete_exact_head_check_runs() -> None:
+    """A paginated check-run response cannot silently omit a newer proof."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "total_count": 2,
+                        "check_runs": [
+                            {
+                                "id": 7001,
+                                "name": "changed-coverage-gate",
+                                "head_sha": FULL_SHA,
+                                "status": "completed",
+                                "conclusion": "success",
+                            }
+                        ],
+                    }
+                )
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "incomplete" in error
+
+
+def test_evaluate_merge_gate_accepts_current_changed_coverage_proof() -> None:
+    """A successful changed-coverage check must bind to the evaluated PR head."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.changed_coverage_status == "success"
+    assert audit.changed_coverage_head_sha == FULL_SHA
 
 
 def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
@@ -315,6 +441,7 @@ def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) ->
                 stdout=json.dumps(_raw_pr(body=f"{long_prefix}\n\n{trailer}", carrier=carrier))
             ),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -336,6 +463,7 @@ def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(carrier: str) 
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -592,6 +720,7 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -624,6 +753,7 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -671,6 +801,7 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -690,6 +821,7 @@ def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> No
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
             _gh_response(returncode=1, stderr="main ref unavailable"),
         ]
         exit_code = main(["--pr", "42", "--repo", "owner/repo"])

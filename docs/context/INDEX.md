@@ -39,6 +39,12 @@ package remains blocked until the author approves the exact digest; no trajector
 is promoted:
 [issue_6792_ch7_admission_execution_packet.md](issue_6792_ch7_admission_execution_packet.md).
 
+Issue #7410 Chapter 7 v2 build receipt: exact source/tool/environment bindings, two independent
+canonical output-tree hashes, and an outcome-free `--check-only` result for the collision-excluded
+package. The receipt is build provenance only; it is not domain approval, admission, publication,
+benchmark, or paper-facing evidence:
+[evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
+
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
 release-cell-only claim boundary:

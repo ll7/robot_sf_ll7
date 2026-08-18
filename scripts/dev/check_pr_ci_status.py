@@ -13,9 +13,14 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
-from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 
 FAILURE_CONCLUSIONS = {
     "failure",

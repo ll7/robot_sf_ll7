@@ -425,6 +425,22 @@ def test_fetch_threads_resolved_rejects_partial_graphql_errors() -> None:
     assert "incomplete" in error
 
 
+def test_fetch_threads_resolved_retries_transient_graphql_and_fails_closed() -> None:
+    """The merge gate never treats an exhausted GraphQL outage as thread-free."""
+    with (
+        patch(
+            "scripts.dev.merge_queue_gate._gh",
+            side_effect=[_gh_response(returncode=1, stderr="HTTP 503 Service Unavailable")] * 3,
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        resolved_state, error = fetch_threads_resolved(42, repo="owner/repo")
+
+    assert resolved_state is None
+    assert error is not None
+    assert "after 3 attempts" in error
+
+
 @pytest.mark.parametrize(
     "payload",
     [

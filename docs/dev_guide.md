@@ -185,7 +185,11 @@ The inventory covers ignored generated `output/`, the uv cache, repository workt
 and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
 evidence before pruning `output/`; remove only clean, pushed Git worktrees with
 `git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
-automated cleanup is performed.
+automated cleanup is performed. Each existing candidate is sized with a five-second per-path
+timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
+diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
+machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
+not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -19,6 +20,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 DEFAULT_MINIMUM_FREE_BYTES = 2 * 1024**3
+DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS = 5.0
 RECLAIM_CATEGORIES = {
     "output": "ignored generated output; preserve durable evidence before pruning",
     "uv-cache": "dependency cache; review active uv processes before clearing",
@@ -55,8 +57,19 @@ class ReclaimEntry:
     category: str
     exists: bool
     bytes: int | None
+    size_status: str
+    size_reason: str | None
     status: str
     guidance: str
+
+
+@dataclass(frozen=True)
+class DirectorySizeResult:
+    """The bounded result of sizing one reclaim candidate."""
+
+    bytes: int | None
+    status: str
+    reason: str | None = None
 
 
 def _positive_integer(value: str, *, option: str) -> int:
@@ -66,6 +79,16 @@ def _positive_integer(value: str, *, option: str) -> int:
         raise ValueError(f"{option} must be a non-negative integer (got {value!r})") from exc
     if parsed < 0:
         raise ValueError(f"{option} must be a non-negative integer (got {value!r})")
+    return parsed
+
+
+def _positive_float(value: str, *, option: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"{option} must be a positive number (got {value!r})") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{option} must be a positive number (got {value!r})")
     return parsed
 
 
@@ -144,22 +167,39 @@ def inspect_capacity(
     )
 
 
-def _directory_size_bytes(path: Path) -> int | None:
-    """Return a portable, read-only size estimate for one candidate directory."""
+def _directory_size_bytes(
+    path: Path, *, timeout_seconds: float = DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS
+) -> DirectorySizeResult:
+    """Return a bounded, read-only size estimate for one candidate directory."""
 
     try:
         result = subprocess.run(
-            ["du", "-sk", str(path)],
+            ["du", "-sk", "--", str(path)],
             check=True,
             capture_output=True,
             text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return DirectorySizeResult(
+            bytes=None,
+            status="timeout",
+            reason=f"du exceeded the {timeout_seconds:g}s per-path timeout",
         )
     except (OSError, subprocess.CalledProcessError):
-        return None
+        return DirectorySizeResult(
+            bytes=None,
+            status="unavailable",
+            reason="du could not determine the candidate size",
+        )
     fields = result.stdout.split()
     if not fields or not fields[0].isdigit():
-        return None
-    return int(fields[0]) * 1024
+        return DirectorySizeResult(
+            bytes=None,
+            status="unavailable",
+            reason="du returned an unparseable size",
+        )
+    return DirectorySizeResult(bytes=int(fields[0]) * 1024, status="ok")
 
 
 def _shm_candidates(shm_root: Path) -> Iterable[Path]:
@@ -203,19 +243,49 @@ def build_reclaim_inventory(
     repo_root: Path,
     *,
     shm_root: Path = Path("/dev/shm"),
-    size_fn: Callable[[Path], int | None] = _directory_size_bytes,
+    size_fn: Callable[[Path], int | DirectorySizeResult | None] | None = None,
+    size_timeout_seconds: float = DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS,
 ) -> list[ReclaimEntry]:
     """Build a dry-run inventory; this function has no filesystem mutations."""
+
+    if not math.isfinite(size_timeout_seconds) or size_timeout_seconds <= 0:
+        raise ValueError("size_timeout_seconds must be a positive finite number")
 
     inventory: list[ReclaimEntry] = []
     for path, category in reclaim_candidates(repo_root, shm_root=shm_root):
         exists = path.exists()
+        if not exists:
+            size = DirectorySizeResult(
+                bytes=None,
+                status="absent",
+                reason="candidate path does not exist",
+            )
+        else:
+            measured = (
+                _directory_size_bytes(path, timeout_seconds=size_timeout_seconds)
+                if size_fn is None
+                else size_fn(path)
+            )
+            if isinstance(measured, DirectorySizeResult):
+                size = measured
+            elif measured is None:
+                size = DirectorySizeResult(
+                    bytes=None,
+                    status="unavailable",
+                    reason="size provider returned no result",
+                )
+            elif isinstance(measured, int) and not isinstance(measured, bool):
+                size = DirectorySizeResult(bytes=measured, status="ok")
+            else:
+                raise TypeError("size_fn must return an integer, None, or DirectorySizeResult")
         inventory.append(
             ReclaimEntry(
                 path=str(path),
                 category=category,
                 exists=exists,
-                bytes=size_fn(path) if exists else None,
+                bytes=size.bytes,
+                size_status=size.status,
+                size_reason=size.reason,
                 status="review" if exists else "absent",
                 guidance=RECLAIM_CATEGORIES[category],
             )
@@ -250,9 +320,14 @@ def _render_text(capacity: CapacityResult, inventory: list[ReclaimEntry]) -> str
         lines.extend(("", "Manual reclaim inventory (dry-run; nothing is deleted):"))
         for entry in inventory:
             size = _human_bytes(entry.bytes) if entry.exists else "absent"
-            lines.append(f"- [{entry.status}] {entry.path} ({size}; {entry.category})")
+            lines.append(
+                f"- [{entry.status}] {entry.path} ({size}; {entry.category}; "
+                f"size={entry.size_status})"
+            )
             if entry.exists:
                 lines.append(f"  guidance: {entry.guidance}")
+            if entry.size_reason:
+                lines.append(f"  size reason: {entry.size_reason}")
     return "\n".join(lines)
 
 
@@ -275,6 +350,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--inventory", action="store_true", help="show manual reclaim candidates")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--shm-root", type=Path, default=Path("/dev/shm"))
+    parser.add_argument(
+        "--size-timeout-seconds",
+        type=str,
+        default=str(DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS),
+        help=(
+            "per-candidate inventory size timeout; defaults to "
+            f"{DEFAULT_DIRECTORY_SIZE_TIMEOUT_SECONDS:g} seconds"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="emit machine-readable evidence")
     return parser
 
@@ -293,9 +377,22 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    try:
+        size_timeout_seconds = _positive_float(
+            args.size_timeout_seconds, option="--size-timeout-seconds"
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
     capacity = inspect_capacity(args.path, minimum)
     inventory = (
-        build_reclaim_inventory(args.repo_root, shm_root=args.shm_root) if args.inventory else []
+        build_reclaim_inventory(
+            args.repo_root,
+            shm_root=args.shm_root,
+            size_timeout_seconds=size_timeout_seconds,
+        )
+        if args.inventory
+        else []
     )
     if args.json:
         payload = {

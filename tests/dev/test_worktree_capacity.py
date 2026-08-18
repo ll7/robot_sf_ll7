@@ -58,8 +58,78 @@ def test_reclaim_inventory_is_descriptive_only(tmp_path: Path) -> None:
 
     assert {entry.category for entry in inventory} >= {"output", "worktrees", "shared-memory"}
     assert all(entry.guidance and entry.status in {"review", "absent"} for entry in inventory)
+    assert all(entry.size_status in {"ok", "absent"} for entry in inventory)
     after = sorted(path.relative_to(tmp_path).as_posix() for path in tmp_path.rglob("*"))
     assert after == before
+
+
+def test_directory_size_reports_success_with_bounded_command(monkeypatch, tmp_path: Path) -> None:
+    completed = subprocess.CompletedProcess(
+        args=["du"], returncode=0, stdout="4\t/path\n", stderr=""
+    )
+    calls: list[dict[str, object]] = []
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append({"args": args, **kwargs})
+        return completed
+
+    monkeypatch.setattr(capacity.subprocess, "run", fake_run)
+
+    result = capacity._directory_size_bytes(tmp_path, timeout_seconds=1.5)
+
+    assert result == capacity.DirectorySizeResult(bytes=4096, status="ok")
+    assert calls[0]["timeout"] == 1.5
+    assert calls[0]["args"] == (["du", "-sk", "--", str(tmp_path)],)
+
+
+def test_directory_size_reports_timeout_without_hanging(monkeypatch, tmp_path: Path) -> None:
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd="du", timeout=0.01)
+
+    monkeypatch.setattr(capacity.subprocess, "run", fake_run)
+
+    result = capacity._directory_size_bytes(tmp_path, timeout_seconds=0.01)
+
+    assert result.bytes is None
+    assert result.status == "timeout"
+    assert "0.01s" in (result.reason or "")
+
+
+def test_directory_size_reports_unavailable_without_claiming_zero(
+    monkeypatch, tmp_path: Path
+) -> None:
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise OSError("du missing")
+
+    monkeypatch.setattr(capacity.subprocess, "run", fake_run)
+
+    result = capacity._directory_size_bytes(tmp_path)
+
+    assert result == capacity.DirectorySizeResult(
+        bytes=None,
+        status="unavailable",
+        reason="du could not determine the candidate size",
+    )
+
+
+def test_inventory_preserves_timeout_and_unavailable_evidence(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "output").mkdir()
+
+    def size_fn(path: Path) -> capacity.DirectorySizeResult:
+        if path == repo / "output":
+            return capacity.DirectorySizeResult(bytes=None, status="timeout", reason="test timeout")
+        return capacity.DirectorySizeResult(
+            bytes=None, status="unavailable", reason="test unavailable"
+        )
+
+    inventory = capacity.build_reclaim_inventory(repo, size_fn=size_fn, shm_root=tmp_path / "shm")
+    output_entry = next(entry for entry in inventory if entry.path == str(repo / "output"))
+
+    assert output_entry.bytes is None
+    assert output_entry.size_status == "timeout"
+    assert output_entry.size_reason == "test timeout"
 
 
 def test_capacity_cli_emits_json_and_inventory(tmp_path: Path) -> None:
@@ -78,6 +148,8 @@ def test_capacity_cli_emits_json_and_inventory(tmp_path: Path) -> None:
             str(repo),
             "--shm-root",
             str(tmp_path / "missing-shm"),
+            "--size-timeout-seconds",
+            "0.01",
             "--json",
         ],
         cwd=REPO_ROOT,
@@ -91,6 +163,7 @@ def test_capacity_cli_emits_json_and_inventory(tmp_path: Path) -> None:
     assert payload["capacity"]["status"] == "pass"
     assert payload["capacity"]["requested_path"].endswith("new-worktree")
     assert isinstance(payload["inventory"], list)
+    assert all("size_status" in entry and "size_reason" in entry for entry in payload["inventory"])
 
 
 def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:

@@ -58,7 +58,9 @@ This avoids one full virtual environment per worker. Use
 `scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is
 explicitly required; inspect reclaim candidates with
 `scripts/dev/check_worktree_capacity.py --inventory` before manually pruning
-ignored output, caches, or scratch worktrees.
+ignored output, caches, or scratch worktrees. Inventory sizing is bounded to five seconds per
+candidate by default; use `--size-timeout-seconds N` to choose another positive timeout. A timeout
+or unavailable size is explicit evidence, not a claim that the path is empty.
 
 When using the linked-worktree bootstrap helper for a training or vectorized-environment
 (VecEnv) validation path, name the required optional dependency explicitly:

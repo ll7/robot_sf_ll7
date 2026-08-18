@@ -97,6 +97,8 @@ def test_check_only_diagnoses_blocked_package_and_builds_template(tmp_path: Path
         output / "SHA256SUMS"
     )
     assert diagnostic["diagnostics"]["package_checksums_verified"] is True
+    assert diagnostic["diagnostics"]["source_registry_verified"] is True
+    assert len(diagnostic["source"]["source_registry_sha256"]) == 64
     assert diagnostic["diagnostics"]["receipt_created"] is False
     assert {blocker["code"] for blocker in diagnostic["diagnostics"]["blockers"]} == {
         "domain_approval_pending",

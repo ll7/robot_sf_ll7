@@ -664,10 +664,12 @@ artifact containing the base/head binding, event, coverage-artifact SHA-256, thr
 and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
 `not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
 changed-head mismatch, malformed diff/artifact evidence, or an incomplete check-run query is a
-blocker. A `not_required` verdict is only for a head with no executable Python changes in the
-configured coverage scope, and remains observable in the artifact rather than being inferred from
-a skipped job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra
-change cannot be proven by a core-only shard.
+blocker. A pure-deletion file with a valid coverage row and no new-file line numbers is reported as
+`100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
+`not_required` verdict is only for a head with no executable Python changes in the configured
+coverage scope, and remains observable in the artifact rather than being inferred from a skipped
+job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+be proven by a core-only shard.
 
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
 output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;

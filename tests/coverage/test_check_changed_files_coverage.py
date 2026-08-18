@@ -105,6 +105,20 @@ def test_changed_line_coverage_treats_non_executable_edits_as_covered() -> None:
     assert scope == "changed executable lines 0/0"
 
 
+def test_empty_changed_lines_with_coverage_row_are_fully_covered() -> None:
+    """Pure deletions have no new executable lines and therefore pass at 100 percent."""
+    coverage, scope, changed, covered, missing = _changed_line_coverage_details(
+        file_data={"executed_lines": [10], "missing_lines": [20]},
+        changed_lines=set(),
+    )
+
+    assert coverage == 100.0
+    assert scope == "changed executable lines 0/0"
+    assert changed == []
+    assert covered == []
+    assert missing == []
+
+
 def test_changed_line_coverage_fails_closed_on_malformed_file_data() -> None:
     """A coverage row without executable-line arrays cannot prove changed coverage."""
     coverage, scope, changed, covered, missing = _changed_line_coverage_details(

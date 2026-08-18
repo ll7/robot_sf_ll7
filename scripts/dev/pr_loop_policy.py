@@ -99,6 +99,61 @@ _BASE_POLICY_RE = re.compile(
     re.IGNORECASE,
 )
 BASE_POLICY_RE = _BASE_POLICY_RE
+_EXACT_HEAD_RE = re.compile(
+    r"exact\s+head\s*:\s*([0-9a-fA-F]{7,40})\b",
+    re.IGNORECASE,
+)
+EXACT_HEAD_RE = _EXACT_HEAD_RE
+
+
+@dataclass(frozen=True, slots=True)
+class ShaCarrier:
+    """One exact-head SHA carrier parsed from PR metadata text.
+
+    ``kind`` is one of ``gate-verdict``, ``base-policy``, or ``exact-head``;
+    ``sha`` is the hex carrier as written, lowercased; ``full`` is True only
+    for the 40-hex form that can be checked against a live head.
+    """
+
+    kind: str
+    sha: str
+    full: bool
+
+
+def extract_sha_carriers(text: str) -> list[ShaCarrier]:
+    """Extract exact-head SHA carriers from a PR metadata text blob.
+
+    Covers the three canonical trailer forms: ``gate-verdict: accepted @
+    <sha>``, ``base-policy: (ordinary-cas|current-base) @ <sha>``, and
+    ``Exact head: <sha>``. Surrounding markdown/code fences are tolerated so
+    quoted historical evidence is still surfaced for fail-closed validation.
+    Carriers are returned in document order with the SHA as written.
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    carriers: list[ShaCarrier] = []
+    for match in _GATE_VERDICT_RE.finditer(text):
+        raw = match.group(1)
+        carriers.append(ShaCarrier(kind="gate-verdict", sha=raw.lower(), full=len(raw) == 40))
+    for match in _BASE_POLICY_RE.finditer(text):
+        raw = match.group(2)
+        carriers.append(ShaCarrier(kind="base-policy", sha=raw.lower(), full=len(raw) == 40))
+    for match in _EXACT_HEAD_RE.finditer(text):
+        raw = match.group(1)
+        carriers.append(ShaCarrier(kind="exact-head", sha=raw.lower(), full=len(raw) == 40))
+    return carriers
+
+
+def invalid_sha_carriers(carriers: list[ShaCarrier], live_head_sha: str) -> list[ShaCarrier]:
+    """Return the carrier subset that fails the live-head admission rule.
+
+    Admission rule (issue #7448): a carrier admits only when it carries the
+    full 40-hex SHA equal to the live head, case-insensitively. Abbreviated
+    carriers, carriers naming a different commit, and carriers with no
+    comparable live head all fail closed.
+    """
+    live_head = live_head_sha.lower()
+    return [carrier for carrier in carriers if not carrier.full or carrier.sha != live_head]
 
 
 @dataclass(frozen=True, slots=True)

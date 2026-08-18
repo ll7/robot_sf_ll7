@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 SCHEMA = "benchmark-namespace-residual-inventory.v1"
 BENCHMARK_ROOT = "robot_sf/benchmark"
+CLASSIFICATION_MANIFEST = Path(__file__).with_name(
+    "benchmark_namespace_classification_manifest.v1.json"
+)
 TRACKED_SOURCE_SCOPES = ("robot_sf", "scripts", "tests", "examples")
 TEXT_REFERENCE_SCOPES = ("robot_sf", "scripts", "tests", "examples", "docs")
 ISSUE_RECONCILIATION_REFS = ("#6905", "#6469", "#7250", "#7279", "#7331")
@@ -99,7 +102,59 @@ class Reference:
     detail: str
 
 
+<<<<<<< HEAD
 def _git(repo_root: Path, *args: str, check: bool = True) -> str:
+=======
+def _load_classification_manifest() -> frozenset[str]:
+    """Load the explicit direct-child classification ledger."""
+    try:
+        payload = json.loads(CLASSIFICATION_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise InventoryError(
+            f"cannot read benchmark namespace classification manifest {CLASSIFICATION_MANIFEST}: {exc}"
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema") != "benchmark-namespace-classification.v1"
+    ):
+        raise InventoryError(
+            f"invalid benchmark namespace classification manifest schema: {CLASSIFICATION_MANIFEST}"
+        )
+    names = payload.get("direct_children")
+    if not isinstance(names, list) or not all(isinstance(name, str) and name for name in names):
+        raise InventoryError(
+            f"benchmark namespace classification manifest must contain non-empty direct_children names: {CLASSIFICATION_MANIFEST}"
+        )
+    if len(names) != len(set(names)):
+        raise InventoryError(
+            f"benchmark namespace classification manifest contains duplicate direct_children names: {CLASSIFICATION_MANIFEST}"
+        )
+    return frozenset(names)
+
+
+def _validate_classification_manifest(units: Iterable[Unit]) -> None:
+    """Require one explicit classification row for every current direct child."""
+    actual = {unit.name for unit in units}
+    expected = _load_classification_manifest()
+    missing = sorted(actual - expected)
+    stale = sorted(expected - actual)
+    if missing or stale:
+        findings = []
+        if missing:
+            findings.append(
+                f"missing classification rows for direct children: {', '.join(missing)}"
+            )
+        if stale:
+            findings.append(
+                f"stale classification rows for removed direct children: {', '.join(stale)}"
+            )
+        raise InventoryError(
+            "benchmark namespace classification manifest drift; " + "; ".join(findings)
+        )
+
+
+def _git(repo_root: Path, *args: str) -> str:
+>>>>>>> 17541f92a (fix(dev): require explicit namespace classifications (#7507))
     """Run a read-only git command and return stripped stdout."""
     result = subprocess.run(
         ["git", "-C", str(repo_root), *args],
@@ -512,6 +567,7 @@ def build_inventory(  # noqa: C901 - assembles one complete deterministic report
     units_list = _direct_units(repo_root)
     if not units_list:
         raise InventoryError("no tracked direct benchmark children found")
+    _validate_classification_manifest(units_list)
     units = {unit.name: unit for unit in units_list}
     ast_references, graph = _ast_references(repo_root, units)
     text_references = _grep_references(repo_root, units)

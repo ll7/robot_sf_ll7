@@ -379,6 +379,70 @@ def test_decision_request_after_canonical_ruling_reopens_gate() -> None:
     assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
 
 
+def test_canonical_ruling_uses_timestamp_not_input_comment_order() -> None:
+    """A newer ruling suppresses an older prompt even when REST rows are reversed."""
+    issue = _issue(7410)
+    issue["comments"] = [
+        {
+            "body": "ll7/robot_sf_ll7#7410: hold-artifact-rows",
+            "created_at": "2026-08-18T10:00:00Z",
+        },
+        {
+            "body": "Owner decision required: choose the disposition.",
+            "created_at": "2026-08-18T09:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is False
+    assert classification.mutations == ()
+
+
+def test_incomplete_comment_order_does_not_suppress_decision_prompt() -> None:
+    """An untimestamped source cannot be treated as later ruling evidence."""
+    issue = _issue(7414)
+    issue["comments"] = [
+        {"body": "ll7/robot_sf_ll7#7414: hold-artifact-rows"},
+        {
+            "body": "Owner decision required: choose the disposition.",
+            "created_at": "2026-08-18T09:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
+def test_copied_example_ruling_line_does_not_suppress_decision_prompt() -> None:
+    """An exact ruling copied under an example marker is not a live ruling."""
+    issue = _issue(7415, body="Owner decision required: choose the disposition.")
+    issue["comments"] = [
+        {
+            "body": (
+                "Example copied ruling (do not apply):\nll7/robot_sf_ll7#7415: hold-artifact-rows"
+            ),
+            "created_at": "2026-08-18T10:00:00Z",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
 def test_wrong_quoted_or_malformed_ruling_does_not_suppress_decision() -> None:
     """Only an exact same-issue ruling line is terminal decision evidence."""
     issue = _issue(7412, body="Owner decision required: choose the release disposition.")

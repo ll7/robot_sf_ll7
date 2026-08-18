@@ -110,6 +110,22 @@ def _git(repo_root: Path, *args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+def _git_symbolic_ref(repo_root: Path) -> str:
+    """Return the current branch ref or an explicit marker for detached HEAD."""
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "symbolic-ref", "--short", "-q", "HEAD"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip() or "DETACHED"
+    if result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip():
+        return "DETACHED"
+    detail = result.stderr.strip() or f"exit status {result.returncode}"
+    raise InventoryError(f"cannot resolve current Git ref: {detail}")
+
+
 def _tracked_paths(repo_root: Path, pathspecs: Iterable[str]) -> list[str]:
     """Return tracked paths matching pathspecs in lexical order."""
     output = _git(repo_root, "ls-files", "--", *pathspecs)
@@ -690,15 +706,7 @@ def build_inventory(  # noqa: C901 - assembles one complete deterministic report
             "repository": "ll7/robot_sf_ll7",
             "root": BENCHMARK_ROOT,
             "commit": _git(repo_root, "rev-parse", "HEAD"),
-            "ref": _git(
-                repo_root,
-                "symbolic-ref",
-                "--short",
-                "-q",
-                "HEAD",
-                check=False,
-            )
-            or "DETACHED",
+            "ref": _git_symbolic_ref(repo_root),
             "clean": not dirty,
             "tracked_python_file_count": tracked_python_count,
         },

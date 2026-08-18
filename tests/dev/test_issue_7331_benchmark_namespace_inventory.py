@@ -89,6 +89,61 @@ def test_serialized_outputs_are_deterministic(inventory: dict[str, object]) -> N
     ) == audit_benchmark_namespace.render_markdown(second)
 
 
+def test_detached_worktree_uses_explicit_reference(tmp_path: Path) -> None:
+    """A detached linked worktree still emits a complete fail-closed inventory."""
+    detached_root = tmp_path / "detached-worktree"
+    created = False
+    try:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                "worktree",
+                "add",
+                "--detach",
+                str(detached_root),
+                "HEAD",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        created = True
+        expected_commit = subprocess.run(
+            ["git", "-C", str(detached_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        json_path = tmp_path / "detached_namespace_inventory.json"
+        markdown_path = tmp_path / "detached_namespace_inventory.md"
+        result = audit_benchmark_namespace.main(
+            [
+                "--repo-root",
+                str(detached_root),
+                "--json",
+                str(json_path),
+                "--markdown",
+                str(markdown_path),
+            ]
+        )
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    finally:
+        if created:
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "worktree", "remove", str(detached_root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+    assert result == 0
+    assert payload["source"]["ref"] == "DETACHED"
+    assert payload["source"]["commit"] == expected_commit
+    assert payload["recommendation"]["code"] == "pause_no_low_risk_cluster"
+
+
 def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     """The issue-scoped CLI emits both required report forms."""
     json_path = tmp_path / "namespace_inventory.json"

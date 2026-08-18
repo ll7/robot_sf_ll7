@@ -10,6 +10,8 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.research_answerability import (
+    DECISION_REQUIRED_PROOF_SURFACES,
+    PROOF_BINDING_SCHEMA,
     PROOF_SURFACES,
     answerability_from_manifest,
     evaluate_answerability,
@@ -38,6 +40,19 @@ def _proof_contract() -> dict[str, object]:
         name: {"status": "passed", "required": True} for name in PROOF_SURFACES
     }
     return contract
+
+
+def _proof_binding() -> dict[str, str]:
+    """Return a deterministic synthetic identity for strict evaluator tests."""
+    return {
+        "schema_version": PROOF_BINDING_SCHEMA,
+        "campaign_id": "issue_6474_fixture",
+        "source_manifest": "tests/fixtures/research_answerability/issue_6474_bounded.json",
+        "campaign_config": "configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml",
+        "manifest_sha256": "a" * 64,
+        "config_sha256": "b" * 64,
+        "proof_digest": "c" * 64,
+    }
 
 
 def test_example_contract_is_diagnostic_only() -> None:
@@ -116,6 +131,44 @@ def test_all_required_proof_surfaces_pass() -> None:
 
     assert result.state == "answerable"
     assert not any("proof surfaces" in warning for warning in result.warnings)
+
+
+def test_strict_admission_requires_claim_specific_proof_floor() -> None:
+    """Production admission cannot make every claim-critical surface optional."""
+    contract = _proof_contract()
+    contract["proof_binding"] = _proof_binding()
+    for surface in DECISION_REQUIRED_PROOF_SURFACES:
+        contract["proof_surfaces"][surface] = {
+            "status": "unavailable",
+            "required": False,
+            "unavailable_reason": "declared optional in a malicious manifest",
+        }
+
+    result = evaluate_answerability(contract, enforce_admission_proof=True)
+
+    assert result.state == "blocked_missing_proof"
+    assert any(surface in result.reasons[0] for surface in DECISION_REQUIRED_PROOF_SURFACES)
+
+
+def test_strict_admission_requires_verified_proof_binding() -> None:
+    """A passed declarative proof set cannot authorize without exact input identity."""
+    contract = _proof_contract()
+
+    result = evaluate_answerability(contract, enforce_admission_proof=True)
+
+    assert result.state == "blocked_missing_proof"
+    assert "proof_binding" in result.reasons[0]
+
+
+def test_optional_fallback_producer_remains_visible_as_warning() -> None:
+    """Optional fallback/degraded producers cannot disappear from the answerability report."""
+    contract = json.loads(ISSUE_6474_FIXTURE.read_text(encoding="utf-8"))
+    contract["producers"][1].update({"status": "blocked", "execution_mode": "fallback"})
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "answerable"
+    assert any("secondary_realism_metric" in warning for warning in result.warnings)
 
 
 @pytest.mark.parametrize(

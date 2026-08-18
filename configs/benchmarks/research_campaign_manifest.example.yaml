@@ -223,6 +223,7 @@ validation:
       kind: manifest_rows
     analysis:
       kind: command
+      validator_id: pytest_contract
       command:
         - uv
         - run

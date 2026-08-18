@@ -11,7 +11,9 @@ shell-expansion path.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -20,7 +22,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.artifact_catalog import validate_artifact_catalog
+from robot_sf.benchmark.artifact_catalog import load_artifact_catalog, validate_artifact_catalog
 from robot_sf.benchmark.research_answerability import PROOF_SURFACES
 from scripts.validation.check_preregistration_inference_contract import (
     InferenceContractError,
@@ -37,6 +39,10 @@ _CHECK_KINDS = {
     "result_packet",
 }
 _MAX_OUTPUT_CHARS = 1200
+_MAX_VALIDATOR_TIMEOUT_SECONDS = 120.0
+_REGISTERED_VALIDATOR_IDS = {"pytest_contract"}
+_PYTEST_FLAGS = {"-q", "-v", "--disable-warnings"}
+_SHA256_RE = r"^[0-9a-f]{64}$"
 
 
 class AnswerabilityProofError(ValueError):
@@ -67,6 +73,114 @@ def _tail(value: str) -> str:
     return value[-_MAX_OUTPUT_CHARS:]
 
 
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest for one proof input file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _decision_capable(manifest: Mapping[str, Any]) -> bool:
+    """Return whether this collection is for decision-capable admission."""
+    answerability = manifest.get("answerability")
+    if not isinstance(answerability, Mapping):
+        return False
+    design = answerability.get("design")
+    return isinstance(design, Mapping) and design.get("mode") == "decision_capable"
+
+
+def _file_identity_failure(
+    spec: Mapping[str, Any],
+    *,
+    path: Path,
+    repo_root: Path,
+    required: bool,
+    kind: str,
+    decision_capable: bool,
+) -> dict[str, Any] | None:
+    """Return a failed result when a required decision proof lacks a digest."""
+    if not (decision_capable and required):
+        return None
+    expected = spec.get("sha256")
+    if not isinstance(expected, str) or not re.fullmatch(_SHA256_RE, expected.lower()):
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason=f"{kind} proof requires an expected 64-hex sha256 digest",
+            path=str(path.relative_to(repo_root)),
+        )
+    try:
+        actual = _sha256_file(path)
+    except OSError as exc:
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason=f"could not hash {kind} proof input: {exc}",
+            path=str(path.relative_to(repo_root)),
+        )
+    if actual != expected.lower():
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason=f"{kind} proof input sha256 does not match its declared digest",
+            path=str(path.relative_to(repo_root)),
+            expected_sha256=expected.lower(),
+            actual_sha256=actual,
+        )
+    return None
+
+
+def _validate_registered_command(  # noqa: C901
+    command: list[str], *, spec: Mapping[str, Any], field: str
+) -> tuple[float, str | None]:
+    """Validate one bounded command against the registered CPU-only test adapter."""
+    validator_id = spec.get("validator_id")
+    if validator_id not in _REGISTERED_VALIDATOR_IDS:
+        raise AnswerabilityProofError(
+            f"{field}.validator_id must be one of {sorted(_REGISTERED_VALIDATOR_IDS)}"
+        )
+    is_pytest = command[:3] == ["uv", "run", "pytest"] or (
+        len(command) >= 3 and command[0] == sys.executable and command[1:3] == ["-m", "pytest"]
+    )
+    if not is_pytest:
+        raise AnswerabilityProofError(
+            f"{field}.command must use the registered pytest validator without shell execution"
+        )
+    paths: list[str] = []
+    for item in command[3:]:
+        if item.startswith("-"):
+            if item not in _PYTEST_FLAGS:
+                raise AnswerabilityProofError(
+                    f"{field}.command contains an unsupported pytest flag: {item}"
+                )
+            continue
+        path = Path(item)
+        if path.is_absolute() or ".." in path.parts or path.parts[:1] != ("tests",):
+            raise AnswerabilityProofError(
+                f"{field}.command test paths must stay under tests/: {item}"
+            )
+        if path.suffix != ".py":
+            raise AnswerabilityProofError(
+                f"{field}.command test paths must name Python files: {item}"
+            )
+        paths.append(item)
+    if not paths:
+        raise AnswerabilityProofError(f"{field}.command must name at least one tests/*.py path")
+    timeout = spec.get("timeout_seconds", _MAX_VALIDATOR_TIMEOUT_SECONDS)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise AnswerabilityProofError(f"{field}.timeout_seconds must be a number")
+    if not 0 < float(timeout) <= _MAX_VALIDATOR_TIMEOUT_SECONDS:
+        raise AnswerabilityProofError(
+            f"{field}.timeout_seconds must be in (0, {_MAX_VALIDATOR_TIMEOUT_SECONDS}]"
+        )
+    return float(timeout), str(validator_id)
+
+
 def _result(
     *,
     status: str,
@@ -91,8 +205,10 @@ def _run_command(
     repo_root: Path,
     required: bool,
     kind: str,
+    timeout_seconds: float,
+    validator_id: str,
 ) -> dict[str, Any]:
-    """Run one argv command and classify its exit status fail-closed."""
+    """Run one registered argv validator with a bounded wall-clock timeout."""
     try:
         completed = subprocess.run(
             command,
@@ -100,6 +216,19 @@ def _run_command(
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason=f"registered validator exceeded {timeout_seconds:g}s timeout",
+            command=command,
+            validator_id=validator_id,
+            timeout_seconds=timeout_seconds,
+            stdout_excerpt=_tail(str(exc.stdout or "")),
+            stderr_excerpt=_tail(str(exc.stderr or "")),
         )
     except OSError as exc:
         return _result(
@@ -108,6 +237,8 @@ def _run_command(
             kind=kind,
             reason=f"could not execute proof command: {exc}",
             command=command,
+            validator_id=validator_id,
+            timeout_seconds=timeout_seconds,
         )
     if completed.returncode == 0:
         return _result(
@@ -115,6 +246,8 @@ def _run_command(
             required=required,
             kind=kind,
             command=command,
+            validator_id=validator_id,
+            timeout_seconds=timeout_seconds,
             returncode=completed.returncode,
             stdout_excerpt=_tail(completed.stdout),
             stderr_excerpt=_tail(completed.stderr),
@@ -125,6 +258,8 @@ def _run_command(
         kind=kind,
         reason=f"proof command exited with status {completed.returncode}",
         command=command,
+        validator_id=validator_id,
+        timeout_seconds=timeout_seconds,
         returncode=completed.returncode,
         stdout_excerpt=_tail(completed.stdout),
         stderr_excerpt=_tail(completed.stderr),
@@ -132,10 +267,24 @@ def _run_command(
 
 
 def _run_preregistration(
-    spec: Mapping[str, Any], *, repo_root: Path, required: bool
+    spec: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    required: bool,
+    decision_capable: bool,
 ) -> dict[str, Any]:
     """Invoke the public inference-contract checker for one YAML path."""
     path = _repo_relative_path(repo_root, spec.get("path"), "preregistration.path")
+    identity_failure = _file_identity_failure(
+        spec,
+        path=path,
+        repo_root=repo_root,
+        required=required,
+        kind="preregistration",
+        decision_capable=decision_capable,
+    )
+    if identity_failure is not None:
+        return identity_failure
     try:
         summary = check_yaml_file(path, repo_root=repo_root)
     except (OSError, InferenceContractError, ValueError, yaml.YAMLError) as exc:
@@ -156,10 +305,24 @@ def _run_preregistration(
 
 
 def _run_artifact_catalog(
-    spec: Mapping[str, Any], *, repo_root: Path, required: bool
+    spec: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    required: bool,
+    decision_capable: bool,
 ) -> dict[str, Any]:
     """Invoke the typed artifact-catalog validator."""
     path = _repo_relative_path(repo_root, spec.get("path"), "artifact_catalog.path")
+    identity_failure = _file_identity_failure(
+        spec,
+        path=path,
+        repo_root=repo_root,
+        required=required,
+        kind="artifact_catalog",
+        decision_capable=decision_capable,
+    )
+    if identity_failure is not None:
+        return identity_failure
     try:
         issues = validate_artifact_catalog(path)
     except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
@@ -179,6 +342,30 @@ def _run_artifact_catalog(
             path=str(path.relative_to(repo_root)),
             issues=[{"path": issue.path, "message": issue.message} for issue in issues],
         )
+    if decision_capable and required:
+        try:
+            catalog = load_artifact_catalog(path)
+        except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind="artifact_catalog",
+                reason=f"could not load artifact identity: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
+        claim_boundaries = [entry.claim_boundary.lower() for entry in catalog.artifacts]
+        diagnostic_tokens = ("fixture", "diagnostic", "not benchmark")
+        if any(
+            any(token in boundary for token in diagnostic_tokens) for boundary in claim_boundaries
+        ):
+            return _result(
+                status="failed",
+                required=required,
+                kind="artifact_catalog",
+                reason="diagnostic or fixture-only artifact catalog cannot authorize decision admission",
+                path=str(path.relative_to(repo_root)),
+                catalog_id=catalog.catalog_id,
+            )
     return _result(
         status="passed",
         required=required,
@@ -189,10 +376,24 @@ def _run_artifact_catalog(
 
 
 def _run_result_packet(
-    spec: Mapping[str, Any], *, repo_root: Path, required: bool
+    spec: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    required: bool,
+    decision_capable: bool,
 ) -> dict[str, Any]:
     """Use the merged result-packet validator when available, otherwise abstain."""
     path = _repo_relative_path(repo_root, spec.get("path"), "result_packet.path")
+    identity_failure = _file_identity_failure(
+        spec,
+        path=path,
+        repo_root=repo_root,
+        required=required,
+        kind="result_packet",
+        decision_capable=decision_capable,
+    )
+    if identity_failure is not None:
+        return identity_failure
     try:
         module = importlib.import_module("robot_sf.benchmark.result_interpretation_packet")
     except ModuleNotFoundError as exc:
@@ -295,12 +496,36 @@ def _run_surface(  # noqa: C901
         raise AnswerabilityProofError(
             f"validation.answerability_proof.{surface}.kind must be one of {sorted(_CHECK_KINDS)}"
         )
+    decision_capable = _decision_capable(manifest)
+    if (
+        decision_capable
+        and required
+        and kind != "durable_path"
+        and spec.get("proof_class") != "decision_capable"
+    ):
+        return _result(
+            status="failed",
+            required=required,
+            kind=str(kind),
+            reason=(
+                "required decision-capable proof must declare proof_class=decision_capable; "
+                "diagnostic-only or unclassified proof cannot authorize admission"
+            ),
+        )
     if kind == "command":
+        command = _argv(spec.get("command"), f"validation.answerability_proof.{surface}.command")
+        timeout_seconds, validator_id = _validate_registered_command(
+            command,
+            spec=spec,
+            field=f"validation.answerability_proof.{surface}",
+        )
         return _run_command(
-            _argv(spec.get("command"), f"validation.answerability_proof.{surface}.command"),
+            command,
             repo_root=repo_root,
             required=required,
             kind=kind,
+            timeout_seconds=timeout_seconds,
+            validator_id=validator_id,
         )
     if kind == "evidence_contract":
         contract_id = spec.get("contract_id")
@@ -319,13 +544,30 @@ def _run_surface(  # noqa: C901
             repo_root=repo_root,
             required=required,
             kind=kind,
+            timeout_seconds=_MAX_VALIDATOR_TIMEOUT_SECONDS,
+            validator_id="evidence_contract",
         )
     if kind == "preregistration":
-        return _run_preregistration(spec, repo_root=repo_root, required=required)
+        return _run_preregistration(
+            spec,
+            repo_root=repo_root,
+            required=required,
+            decision_capable=decision_capable,
+        )
     if kind == "artifact_catalog":
-        return _run_artifact_catalog(spec, repo_root=repo_root, required=required)
+        return _run_artifact_catalog(
+            spec,
+            repo_root=repo_root,
+            required=required,
+            decision_capable=decision_capable,
+        )
     if kind == "result_packet":
-        return _run_result_packet(spec, repo_root=repo_root, required=required)
+        return _run_result_packet(
+            spec,
+            repo_root=repo_root,
+            required=required,
+            decision_capable=decision_capable,
+        )
     if kind == "durable_path":
         return _run_durable_path(spec, repo_root=repo_root, required=required)
     if build_rows is None:
@@ -350,6 +592,14 @@ def _run_surface(  # noqa: C901
             required=required,
             kind=kind,
             reason="manifest-row producer emitted no rows",
+        )
+    if decision_capable:
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason="manifest-row proof is diagnostic_only and cannot authorize decision admission",
+            row_count=len(rows),
         )
     return _result(status="passed", required=required, kind=kind, row_count=len(rows))
 
@@ -378,6 +628,7 @@ def collect_answerability_proof(  # noqa: C901
     repo_root: Path,
     execute: bool,
     build_rows: Callable[[Mapping[str, Any]], list[dict[str, Any]]] | None = None,
+    proof_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Collect proof results for all six answerability surfaces.
 
@@ -452,11 +703,14 @@ def collect_answerability_proof(  # noqa: C901
             manifest=manifest,
             build_rows=build_rows,
         )
-    return {
+    report: dict[str, Any] = {
         "executed": execute,
         "surfaces": surfaces,
         "status": "completed" if execute else "not_run",
     }
+    if proof_binding is not None:
+        report["binding"] = dict(proof_binding)
+    return report
 
 
 def apply_proof_results(
@@ -491,6 +745,9 @@ def apply_proof_results(
         updated_surfaces[surface] = entry
     if updated_surfaces:
         updated["proof_surfaces"] = updated_surfaces
+    binding = proof_report.get("binding")
+    if isinstance(binding, Mapping):
+        updated["proof_binding"] = copy.deepcopy(dict(binding))
     return updated
 
 

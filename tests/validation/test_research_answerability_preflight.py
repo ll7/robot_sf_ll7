@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import copy
-import json
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.research_answerability import PROOF_SURFACES, answerability_from_manifest
 from scripts.validation.research_answerability_preflight import (
+    AnswerabilityProofError,
     apply_proof_results,
     collect_answerability_proof,
 )
@@ -52,8 +53,10 @@ def test_manifest_row_and_command_checks_execute_without_shell() -> None:
     manifest = _manifest()
     manifest["validation"]["answerability_proof"]["analysis"]["command"] = [
         sys.executable,
-        "-c",
-        "raise SystemExit(0)",
+        "-m",
+        "pytest",
+        "tests/benchmark/test_research_campaign_manifest_contract.py",
+        "-q",
     ]
 
     report = collect_answerability_proof(
@@ -66,6 +69,38 @@ def test_manifest_row_and_command_checks_execute_without_shell() -> None:
     assert report["surfaces"]["producer"]["status"] == "passed"
     assert report["surfaces"]["analysis"]["status"] == "passed"
     assert report["surfaces"]["analysis"]["returncode"] == 0
+
+
+def test_command_proof_rejects_unregistered_shell_validator() -> None:
+    """Proof admission cannot execute an arbitrary shell or campaign command."""
+    manifest = _manifest()
+    manifest["validation"]["answerability_proof"]["analysis"]["command"] = [
+        "/bin/sh",
+        "-c",
+        "echo unsafe",
+    ]
+
+    with pytest.raises(AnswerabilityProofError, match="registered pytest validator"):
+        collect_answerability_proof(
+            manifest,
+            repo_root=REPO_ROOT,
+            execute=True,
+            build_rows=lambda value: [{"campaign_id": value["campaign"]["id"]}],
+        )
+
+
+def test_command_proof_timeout_is_bounded() -> None:
+    """Registered validators cannot opt into an unbounded timeout."""
+    manifest = _manifest()
+    manifest["validation"]["answerability_proof"]["analysis"]["timeout_seconds"] = 121
+
+    with pytest.raises(AnswerabilityProofError, match="timeout_seconds"):
+        collect_answerability_proof(
+            manifest,
+            repo_root=REPO_ROOT,
+            execute=True,
+            build_rows=lambda value: [{"campaign_id": value["campaign"]["id"]}],
+        )
 
 
 def test_public_preregistration_and_artifact_validators_are_composed() -> None:
@@ -212,12 +247,15 @@ def test_require_answerable_runs_proof_and_fails_closed_without_decision_design(
     assert not (tmp_path / "packet" / "summary.json").exists()
 
 
-def test_require_answerable_accepts_complete_local_proof_chain(tmp_path: Path) -> None:
-    """A complete typed chain can pass without launching a campaign."""
+def test_require_answerable_rejects_unbound_diagnostic_proof_chain(tmp_path: Path) -> None:
+    """A fixture and dry-run chain cannot satisfy strict decision admission."""
     manifest = _manifest()
     answerability = manifest["answerability"]
     answerability["design"]["mode"] = "decision_capable"
     answerability["artifacts"]["durability_status"] = "ready"
+    manifest["scenario_suite"]["campaign_config"] = (
+        "configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml"
+    )
     for surface in PROOF_SURFACES:
         answerability["proof_surfaces"][surface] = {
             "status": "unavailable",
@@ -236,7 +274,15 @@ def test_require_answerable_accepts_complete_local_proof_chain(tmp_path: Path) -
         },
         "analysis": {
             "kind": "command",
-            "command": [sys.executable, "-c", "raise SystemExit(0)"],
+            "validator_id": "pytest_contract",
+            "command": [
+                sys.executable,
+                "-m",
+                "pytest",
+                "tests/benchmark/test_research_campaign_manifest_contract.py",
+                "-q",
+            ],
+            "proof_class": "decision_capable",
         },
         "artifact": {
             "kind": "artifact_catalog",
@@ -261,15 +307,7 @@ def test_require_answerable_accepts_complete_local_proof_chain(tmp_path: Path) -
         check=False,
     )
 
-    assert completed.returncode == 0, completed.stderr
-    summary = json.loads((tmp_path / "packet" / "summary.json").read_text(encoding="utf-8"))
-    assert summary["answerability"]["state"] == "answerable"
-    assert summary["answerability_proof"]["surfaces"]["result_packet"]["status"] == ("unavailable")
-    assert summary["answerability_proof"]["surfaces"]["evidence_contract"]["status"] == ("passed")
-    resolved = json.loads(
-        (tmp_path / "packet" / "manifest_resolved.json").read_text(encoding="utf-8")
-    )
-    assert (
-        resolved["manifest"]["answerability"]["proof_surfaces"]["evidence_contract"]["status"]
-        == "passed"
-    )
+    assert completed.returncode == 2
+    assert "answerability gate requires state=answerable" in completed.stderr
+    assert "blocked_missing_proof" in completed.stderr or "diagnostic_only" in completed.stderr
+    assert not (tmp_path / "packet" / "summary.json").exists()

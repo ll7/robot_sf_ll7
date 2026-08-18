@@ -105,6 +105,28 @@ def test_evaluate_research_manifest_answerability_requires_proof_surface_declara
         evaluate_research_manifest_answerability(manifest_path)
 
 
+def test_evaluate_research_manifest_answerability_rejects_config_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Strict admission must bind the proof manifest to the requested camera config."""
+    manifest_path = _copy_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    manifest["scenario_suite"]["campaign_config"] = (
+        "configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml"
+    )
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(ManifestError, match="does not match the camera-ready config"):
+        evaluate_research_manifest_answerability(
+            manifest_path,
+            expected_campaign_config=(
+                REPO_ROOT / "configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml"
+            ),
+        )
+
+
 def test_run_research_campaign_manifest_requires_claim_boundary(tmp_path: Path) -> None:
     """A manifest without a claim boundary must fail before writing evidence."""
     manifest_path = _copy_manifest(tmp_path)

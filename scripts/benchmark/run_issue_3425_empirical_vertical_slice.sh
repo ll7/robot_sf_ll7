@@ -53,7 +53,12 @@ if [[ "${RUN_CAMPAIGN:-0}" != "1" ]]; then
 fi
 
 echo "== [#3425] run bounded benchmark campaign =="
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config "$CAMPAIGN_CONFIG" \
-  --campaign-id "$CAMPAIGN_ID" \
+CAMPAIGN_RUN_ARGS=(
+  --config "$CAMPAIGN_CONFIG"
+  --campaign-id "$CAMPAIGN_ID"
   --output-root "$OUTPUT_ROOT"
+  --research-manifest "$RESEARCH_MANIFEST"
+  --require-answerable
+)
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  "${CAMPAIGN_RUN_ARGS[@]}"

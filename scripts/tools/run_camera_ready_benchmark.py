@@ -160,8 +160,9 @@ def _research_answerability_block(
     manifest_path: Path | None,
     require_answerable: bool,
     mode: str,
+    expected_campaign_config: Path,
 ) -> dict[str, Any] | None:
-    """Return a fail-closed result when a required research gate cannot pass."""
+    """Return an admission receipt or a fail-closed result for a research gate."""
     if not require_answerable:
         return None
     if manifest_path is None:
@@ -178,6 +179,7 @@ def _research_answerability_block(
             report = evaluate_research_manifest_answerability(
                 manifest_path,
                 execute_validation=True,
+                expected_campaign_config=expected_campaign_config,
             )
         except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
             reason = f"research answerability admission could not be evaluated: {exc}"
@@ -194,13 +196,31 @@ def _research_answerability_block(
             proof = report.get("answerability_proof")
             if not isinstance(proof, dict):
                 proof = {}
-            if answerability.get("state") == "answerable":
-                return None
             reasons = answerability.get("reasons")
             reason = (
                 "research answerability gate requires state=answerable, got "
                 f"{answerability.get('state', 'unknown')}: {reasons}"
             )
+            if answerability.get("state") == "answerable":
+                binding = proof.get("binding")
+                if isinstance(binding, dict) and binding.get("proof_digest"):
+                    return {
+                        "mode": mode,
+                        "status": "research_answerability_admitted",
+                        "status_reason": "exact manifest/config/proof binding passed",
+                        "research_manifest": str(manifest_path),
+                        "answerability": answerability,
+                        "answerability_proof": proof,
+                        "benchmark_success": False,
+                        "evidence_status": "not_run",
+                    }
+                reason = "answerability admission omitted its exact proof binding"
+                answerability = {
+                    **answerability,
+                    "state": "blocked_missing_proof",
+                    "decision_capable": False,
+                    "reasons": [reason],
+                }
     return {
         "mode": mode,
         "status": "research_answerability_blocked",
@@ -232,13 +252,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cfg = load_campaign_config(args.config)
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
-    result = _research_answerability_block(
+    research_admission = _research_answerability_block(
         manifest_path=args.research_manifest,
         require_answerable=args.require_answerable,
         mode=args.mode,
+        expected_campaign_config=args.config,
     )
-    if result is not None:
-        print(json.dumps(result, indent=2))
+    if research_admission is not None and research_admission.get("status") != (
+        "research_answerability_admitted"
+    ):
+        print(json.dumps(research_admission, indent=2))
         return 2
 
     try:
@@ -315,6 +338,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "fallback_or_degraded_rows": 0,
             },
         }
+    if result is None:
+        result = {}
+    if research_admission is not None:
+        result["research_answerability_admission"] = research_admission
     print(json.dumps(result, indent=2))
     if args.mode == "preflight" and result.get("status") not in {
         "orca_preflight_failed",

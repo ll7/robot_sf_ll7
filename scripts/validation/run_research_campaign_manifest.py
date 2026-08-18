@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import subprocess
 import sys
@@ -225,8 +226,10 @@ def _validate_manifest(
 def _evaluate_manifest_answerability(
     manifest: dict[str, Any],
     *,
+    manifest_path: Path,
     options: RunnerOptions,
     require_proof_surfaces: bool = False,
+    expected_campaign_config: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Evaluate one manifest through the shared proof collector and gate.
 
@@ -242,14 +245,33 @@ def _evaluate_manifest_answerability(
     )
     _validate_manifest(manifest, options=base_options)
 
+    answerability_contract = manifest.get("answerability")
+    design = (
+        answerability_contract.get("design") if isinstance(answerability_contract, dict) else None
+    )
+    enforce_admission_proof = (
+        isinstance(design, dict)
+        and design.get("mode") == "decision_capable"
+        and (options.require_answerable or require_proof_surfaces)
+    )
+    proof_binding = (
+        _build_proof_binding(
+            manifest_path,
+            manifest,
+            expected_campaign_config=expected_campaign_config,
+        )
+        if enforce_admission_proof
+        else None
+    )
+
     proof_report = collect_answerability_proof(
         manifest,
         repo_root=_repo_root(),
         execute=options.execute_validation or options.require_answerable,
         build_rows=_build_rows,
+        proof_binding=proof_binding,
     )
     evaluated_manifest = manifest
-    answerability_contract = manifest.get("answerability")
     if isinstance(answerability_contract, dict):
         if (options.require_answerable or require_proof_surfaces) and "proof_surfaces" not in (
             answerability_contract
@@ -260,7 +282,18 @@ def _evaluate_manifest_answerability(
         updated_contract = apply_proof_results(answerability_contract, proof_report)
         evaluated_manifest = dict(manifest)
         evaluated_manifest["answerability"] = updated_contract
-    answerability = answerability_from_manifest(evaluated_manifest)
+    if proof_binding is not None:
+        surfaces = proof_report.get("surfaces", {})
+        if isinstance(surfaces, dict):
+            proof_binding = dict(proof_binding)
+            proof_binding["proof_digest"] = _proof_digest(proof_binding, surfaces)
+            proof_report["binding"] = proof_binding
+            if isinstance(evaluated_manifest.get("answerability"), dict):
+                evaluated_manifest["answerability"]["proof_binding"] = dict(proof_binding)
+    answerability = answerability_from_manifest(
+        evaluated_manifest,
+        enforce_admission_proof=enforce_admission_proof,
+    )
     _validate_manifest(
         manifest,
         options=options,
@@ -273,6 +306,7 @@ def evaluate_research_manifest_answerability(
     manifest_path: Path,
     *,
     execute_validation: bool = True,
+    expected_campaign_config: Path | None = None,
 ) -> dict[str, Any]:
     """Evaluate a manifest for a production admission caller without writing output.
 
@@ -283,12 +317,14 @@ def evaluate_research_manifest_answerability(
     manifest = _load_manifest(manifest_path)
     evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
         manifest,
+        manifest_path=manifest_path,
         options=RunnerOptions(
             execute_validation=execute_validation,
             require_configured_outputs=False,
             require_answerable=False,
         ),
         require_proof_surfaces=True,
+        expected_campaign_config=expected_campaign_config,
     )
     return {
         "source_manifest": str(manifest_path),
@@ -342,6 +378,63 @@ def _git_commit() -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+
+
+def _sha256_file(path: Path) -> str:
+    """Return a file digest used to bind admission to immutable inputs."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_proof_binding(
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    *,
+    expected_campaign_config: Path | None,
+) -> dict[str, Any]:
+    """Build the exact manifest/config identity used by decision admission."""
+    root = _repo_root()
+    scenario_suite = manifest.get("scenario_suite")
+    if not isinstance(scenario_suite, dict):
+        raise ManifestError("scenario_suite.campaign_config is required for decision admission")
+    declared_config = scenario_suite.get("campaign_config")
+    if not isinstance(declared_config, str) or not declared_config.strip():
+        raise ManifestError("scenario_suite.campaign_config is required for decision admission")
+    config_rel = _posix_path(declared_config.strip(), "scenario_suite.campaign_config")
+    config_path = root / config_rel
+    if not config_path.is_file():
+        raise ManifestError(f"scenario_suite.campaign_config does not exist: {config_path}")
+    if expected_campaign_config is not None:
+        expected_path = expected_campaign_config
+        if not expected_path.is_absolute():
+            expected_path = root / expected_path
+        if expected_path.resolve() != config_path.resolve():
+            raise ManifestError(
+                "research manifest campaign_config does not match the camera-ready config: "
+                f"{config_rel} != {expected_path}"
+            )
+    try:
+        manifest_sha256 = _sha256_file(manifest_path)
+    except OSError as exc:
+        raise ManifestError(f"could not hash source research manifest: {exc}") from exc
+    return {
+        "schema_version": "research_answerability_proof_binding.v1",
+        "campaign_id": str(manifest["campaign"]["id"]),
+        "source_manifest": str(manifest_path),
+        "campaign_config": str(config_rel),
+        "manifest_sha256": manifest_sha256,
+        "config_sha256": _sha256_file(config_path),
+    }
+
+
+def _proof_digest(binding: dict[str, Any], surfaces: dict[str, Any]) -> str:
+    """Hash the exact proof results together with their input identity."""
+    payload = {"binding": binding, "surfaces": surfaces}
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _build_rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -567,6 +660,7 @@ def run(manifest_path: Path, output_dir: Path, *, options: RunnerOptions) -> dic
     manifest = _load_manifest(manifest_path)
     evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
         manifest,
+        manifest_path=manifest_path,
         options=options,
     )
 

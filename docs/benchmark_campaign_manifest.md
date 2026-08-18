@@ -61,21 +61,35 @@ declare them as success values.
 
 Decision-capable manifests should add all six `answerability.proof_surfaces`
 entries: `producer`, `preregistration`, `evidence_contract`, `analysis`,
-`artifact`, and `result_packet`. Each entry records `status` (`passed`,
-`unavailable`, `failed`, or `not_run`) and whether the surface is `required`.
-An unavailable surface must include `unavailable_reason`; required surfaces
-must be `passed` before admission. Optional unavailable surfaces remain visible
-warnings and do not become zero-valued evidence. Optional failed and not-run
-surfaces are warnings as well.
+`artifact`, and `result_packet`. The claim-specific minimum for production
+admission is `producer`, `preregistration`, `evidence_contract`, `analysis`,
+and `artifact`; each must be explicitly required and passed. `result_packet`
+is optional only when the generic #7029 validator is unavailable. The bounded
+#6474 fixture remains a compatibility fixture and is not a production launch
+admission.
+
+Each entry records `status` (`passed`, `unavailable`, `failed`, or `not_run`)
+and whether the surface is `required`. An unavailable surface must include
+`unavailable_reason`; required surfaces must be `passed` before admission.
+Optional unavailable, failed, and not-run surfaces remain visible warnings and
+do not become zero-valued evidence. Optional fallback, degraded, blocked, or
+missing producers are also retained as warnings.
 
 The runner can execute typed checks from
 `validation.answerability_proof` when `--execute-validation` or
 `--require-answerable` is supplied. Supported checks invoke the public
 preregistration and artifact-catalog validators, the evidence-contract CLI,
 the merged result-packet loader when available, a manifest-row producer check,
-or an argv-style command. Commands are never passed through a shell. A
-missing generic result-packet validator is recorded as `unavailable`; it is
-not replaced by an issue-specific or heuristic checker.
+or the registered `pytest_contract` validator. Registered commands are argv
+only, restricted to repository `tests/*.py` paths, and bounded by a 120-second
+timeout. A missing generic result-packet validator is recorded as
+`unavailable`; it is not replaced by an issue-specific or heuristic checker.
+
+Strict admission attaches `answerability.proof_binding` with the source
+manifest SHA-256, the declared camera configuration path and SHA-256, and a
+digest of the exact proof results. Required file-backed proof specs must carry
+the expected input SHA-256, and fixture/diagnostic-only artifact catalogs or
+dry-run manifest rows cannot satisfy a decision-capable proof surface.
 
 The `durable_path` adapter is deliberately not an artifact admission proof:
 path existence alone cannot establish tracked retention or checksum identity.
@@ -95,7 +109,11 @@ uv run python scripts/tools/run_camera_ready_benchmark.py \
 ```
 
 The launcher evaluates the manifest before camera-ready preflight or episode
-execution and does not submit compute. Readiness-only callers may omit
+execution and does not submit compute. A successful gated invocation persists
+the exact answerability receipt and proof binding in its JSON result. The
+issue #3425 wrapper carries `--research-manifest` and `--require-answerable`
+on both preflight and actual run commands, so the gate is re-evaluated after
+any intervening manifest/config mutation. Readiness-only callers may omit
 `--require-answerable`; the existing packet runner remains the owner of packet
 generation.
 

@@ -169,7 +169,7 @@ def test_main_research_answerability_gate_blocks_before_preflight(
     monkeypatch.setattr(
         run_camera_ready_benchmark,
         "evaluate_research_manifest_answerability",
-        lambda path, execute_validation: {
+        lambda path, execute_validation, expected_campaign_config: {
             "source_manifest": str(path),
             "answerability": {
                 "state": "diagnostic_only",
@@ -206,6 +206,76 @@ def test_main_research_answerability_gate_blocks_before_preflight(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "research_answerability_blocked"
     assert payload["answerability"]["state"] == "diagnostic_only"
+
+
+def test_main_persists_exact_answerability_admission_receipt(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """A passing gate is retained in the camera-ready result for downstream audit."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda path, execute_validation, expected_campaign_config: {
+            "source_manifest": str(path),
+            "answerability": {
+                "state": "answerable",
+                "decision_capable": True,
+                "reasons": [],
+                "warnings": [],
+            },
+            "answerability_proof": {
+                "executed": execute_validation,
+                "binding": {"proof_digest": "a" * 64},
+                "surfaces": {},
+            },
+        },
+    )
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: {
+            "campaign_id": "cid",
+            "campaign_root": tmp_path / "out" / "cid",
+            "validate_config_path": tmp_path / "validate.json",
+            "preview_scenarios_path": tmp_path / "preview.json",
+            "matrix_summary_json_path": tmp_path / "matrix.json",
+            "matrix_summary_csv_path": tmp_path / "matrix.csv",
+            "amv_coverage_json_path": tmp_path / "amv.json",
+            "amv_coverage_md_path": tmp_path / "amv.md",
+            "comparability_json_path": None,
+            "comparability_md_path": None,
+        },
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+        ]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["research_answerability_admission"]["status"] == (
+        "research_answerability_admitted"
+    )
+    assert (
+        payload["research_answerability_admission"]["answerability_proof"]["binding"][
+            "proof_digest"
+        ]
+        == "a" * 64
+    )
 
 
 def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) -> None:

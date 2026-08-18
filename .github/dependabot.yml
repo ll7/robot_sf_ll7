@@ -11,7 +11,31 @@ updates:
     commit-message:
       prefix: "deps"
     groups:
-      python-minor-patch:
+      developer-tooling:
+        applies-to: "version-updates"
+        patterns:
+          - "black"
+          - "isort"
+          - "mypy"
+          - "pre-commit"
+          - "pylint"
+          - "pytest"
+          - "pytest-*"
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      serialization-data:
+        applies-to: "version-updates"
+        patterns:
+          - "orjson"
+        update-types:
+          - "minor"
+          - "patch"
+      experiment-integrations:
+        applies-to: "version-updates"
+        patterns:
+          - "wandb"
         update-types:
           - "minor"
           - "patch"
@@ -35,6 +59,7 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions:
+        applies-to: "version-updates"
         patterns:
           - "*"
         update-types:

@@ -37,7 +37,17 @@
       "properties": {
         "name": {"const": "trace_dossier_renderer"},
         "version": {"type": "string", "minLength": 1},
-        "command": {"type": "string", "minLength": 1}
+        "command": {"type": "string", "minLength": 1},
+        "figure_size_inches": {
+          "type": "array",
+          "prefixItems": [
+            {"type": "number", "exclusiveMinimum": 0},
+            {"type": "number", "exclusiveMinimum": 0}
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        }
       }
     },
     "outputs": {
@@ -46,6 +56,33 @@
       "required": ["png"],
       "properties": {
         "png": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "svg": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "pdf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "caption": {
           "type": "object",
           "additionalProperties": false,
           "required": ["path", "sha256"],

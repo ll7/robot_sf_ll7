@@ -17,6 +17,7 @@ from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 BENCHMARK_PROTOCOL_VERSION = "0.1.0"
+DIAGNOSTIC_RELEASE_MATURITY = "diagnostic"
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -486,7 +487,10 @@ def _validate_release_campaign_contract(
     problems: list[str],
 ) -> None:
     """Validate paper-facing and kinematics contract alignment."""
-    if not cfg.paper_facing:
+    if manifest.maturity == DIAGNOSTIC_RELEASE_MATURITY:
+        if cfg.paper_facing:
+            problems.append("diagnostic release canonical config must be paper_facing: false")
+    elif not cfg.paper_facing:
         problems.append("canonical campaign config must be paper_facing: true")
     if (
         manifest.expected_paper_profile_version is not None

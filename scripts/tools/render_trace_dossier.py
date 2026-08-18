@@ -28,6 +28,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", type=Path, required=True, help="Output PNG dossier path.")
     parser.add_argument(
+        "--svg",
+        type=Path,
+        default=None,
+        help="Optional deterministic SVG dossier path; supply with --pdf and --caption.",
+    )
+    parser.add_argument(
+        "--pdf",
+        type=Path,
+        default=None,
+        help="Optional deterministic PDF dossier path; supply with --svg and --caption.",
+    )
+    parser.add_argument(
+        "--caption",
+        type=Path,
+        default=None,
+        help="Optional Markdown caption path; supply with --svg and --pdf.",
+    )
+    parser.add_argument(
         "--manifest",
         type=Path,
         required=True,
@@ -55,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
         result = render_trace_dossier(
             args.trace,
             output_png=args.output,
+            output_svg=args.svg,
+            output_pdf=args.pdf,
+            caption_path=args.caption,
             manifest_path=args.manifest,
             command=command,
         )
@@ -67,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
     print(f"wrote trace dossier {result.png_path}")
+    if result.svg_path is not None:
+        print(f"wrote trace dossier {result.svg_path}")
+    if result.pdf_path is not None:
+        print(f"wrote trace dossier {result.pdf_path}")
+    if result.caption_path is not None:
+        print(f"wrote trace dossier caption {result.caption_path}")
     print(f"wrote trace dossier manifest {result.manifest_path}")
     return 0
 

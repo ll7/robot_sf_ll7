@@ -26,10 +26,10 @@
     {
       "source_id": "lane_formation_context",
       "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md",
-      "sha256": "003f5618a471513c2484c52b267a2d095534730b873e86b8840373169cec6386",
+      "sha256": "20bd9fbd09e2d7045dac6e442abe160bbd236d72872853d2d9579783114c38f2",
       "kind": "context_note",
       "commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
-      "tracked_commit": "746d2402708d97fb09eabfe053349bfb7b88c0a6",
+      "tracked_commit": "12b9cc2c34ff40ccfc43390fa876aa5afa8fbeac",
       "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
       "description": "Claim boundary, protocol, limitations, reference-control closeout, and next discriminating research direction."
     },

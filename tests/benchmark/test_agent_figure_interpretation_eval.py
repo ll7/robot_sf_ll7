@@ -72,6 +72,51 @@ def test_clean_output_has_all_dimension_scores_and_no_critical_errors() -> None:
     assert not any(clean["critical_errors"].values())
 
 
+def test_manifest_summary_preserves_dimension_and_failure_evidence() -> None:
+    summary = evaluate_manifest(MANIFEST)["aggregate_summary"]
+
+    assert summary["case_status_counts"] == {"clean": 1, "failed": 7}
+    assert summary["dimension_scores"]["source_denominator"] == {
+        "case_count": 8,
+        "passed_count": 7,
+        "failed_count": 1,
+        "pass_rate": pytest.approx(7 / 8),
+    }
+    assert summary["critical_failure_examples"]["causal_overclaim"] == ["causal_overclaim"]
+    assert summary["critical_failure_examples"]["null_overclaim"] == ["null_overclaim"]
+    assert summary["reviewer_accounting"]["status"] == "not_available"
+    assert summary["workflow_variants"]["status"] == "not_available"
+
+
+def test_manifest_summary_aggregates_paired_workflow_variants(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    packet_path = root / "clean.json"
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    reference = copy.deepcopy(packet["reference"])
+    baseline = copy.deepcopy(reference)
+    baseline["claim_boundary"]["causal_claim_allowed"] = True
+    packet["interpretation_variants"] = {
+        "baseline": baseline,
+        "packet_constrained": reference,
+    }
+    packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
+
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["sha256"] = eval_mod.sha256_file(packet_path)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    summary = evaluate_manifest(manifest_path)["aggregate_summary"]
+    variants = summary["workflow_variants"]
+
+    assert variants["status"] == "partial"
+    assert variants["paired_case_count"] == 1
+    assert variants["mean_aggregate_score_delta"] == pytest.approx(1 / 8)
+    assert variants["critical_error_count_delta"] == -1
+    assert variants["packet_constrained_reduces_critical_errors"] is True
+    assert variants["packet_constrained_preserves_source_fidelity"] is True
+
+
 @pytest.mark.parametrize(
     ("packet_id", "critical_kind"),
     [
@@ -448,12 +493,31 @@ def test_extended_evaluation_output_matches_schema() -> None:
         "claim_boundary": "fixture replay only; no benchmark claims",
         "case_count": 1,
         "critical_error_counts": dict.fromkeys(CRITICAL_ERROR_KINDS, 0),
+        "aggregate_summary": eval_mod._aggregate_summary(
+            [case], dict.fromkeys(CRITICAL_ERROR_KINDS, 0)
+        ),
         "cases": [case],
     }
     schema = _result_schema()
 
     jsonschema.Draft202012Validator.check_schema(schema)
     jsonschema.validate(report, schema)
+
+
+def test_manifest_report_with_aggregate_summary_matches_schema() -> None:
+    schema = _result_schema()
+
+    jsonschema.Draft202012Validator.check_schema(schema)
+    jsonschema.validate(evaluate_manifest(MANIFEST), schema)
+
+
+def test_schema_requires_aggregate_summary() -> None:
+    report = evaluate_manifest(MANIFEST)
+    report.pop("aggregate_summary")
+
+    jsonschema.Draft202012Validator.check_schema(_result_schema())
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(report, _result_schema())
 
 
 @pytest.mark.parametrize(
@@ -499,6 +563,7 @@ def test_cli_help_and_fixture_only_replay() -> None:
     result = json.loads(replay.stdout)
     assert result["status"] == "evaluation_artifacts_only"
     assert result["case_count"] == 8
+    assert result["aggregate_summary"]["workflow_variants"]["status"] == "not_available"
 
 
 def test_no_external_provider_path() -> None:

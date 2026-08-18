@@ -127,6 +127,12 @@ Policy caveats:
   checksum-covered, but remains `blocked_pending_domain_approval` / `not_admitted`; see the
   [custody note](issue_7322_ch7_custody_note.md) for retrieval, provenance, and blockers.
 
+- `issue_7322_ch7_evidence_package_v2_1/`: additive post-ruling refresh of the v2 package. It
+  preserves the original v2 directory as an immutable historical baseline, binds the frozen #7042
+  collision/SNQI exclusion, and remains `blocked_pending_domain_approval` / `not_admitted` until a
+  maintainer-owned admission receipt exists. See the [custody note](issue_7322_ch7_custody_note.md)
+  for exact hashes and the reproduction command.
+
 - `issue_7410_ch7_evidence_build_receipt.v1.json`: adjacent, durable build provenance for the v2
   package. It binds the canonical source/tool/environment inputs and two independent output-tree
   hashes; it is explicitly not an admission receipt or benchmark/paper evidence.

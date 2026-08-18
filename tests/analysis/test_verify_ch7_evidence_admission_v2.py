@@ -17,6 +17,10 @@ SOURCE_PACKAGE = (
 DURABLE_V2_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
 )
+FROZEN_CONFIG_PATH = Path(__file__).parents[2] / "configs/analysis/ch7_evidence_package.v2.1.yaml"
+DURABLE_REFRESH_PACKAGE = (
+    Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2_1"
+)
 
 
 def _valid_receipt() -> dict[str, object]:
@@ -146,3 +150,39 @@ def test_check_only_cli_emits_a_machine_readable_diagnostic(
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "ch7-evidence-admission-diagnostic.v1"
     assert payload["diagnostics"]["admission_authorized"] is False
+
+
+def test_post_ruling_check_only_removes_superseded_metric_blocker(tmp_path: Path) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE,
+        output=output,
+        config_path=FROZEN_CONFIG_PATH,
+    )
+
+    diagnostic = verifier.diagnose_v2_package(output)
+
+    assert diagnostic["status"] == "blocked_pending_domain_approval"
+    assert diagnostic["admission_status"] == "not_admitted"
+    assert diagnostic["diagnostics"]["receipt_created"] is False
+    assert {blocker["code"] for blocker in diagnostic["diagnostics"]["blockers"]} == {
+        "domain_approval_pending",
+        "external_admission_receipt_required",
+    }
+
+
+def test_check_only_verifies_durable_refresh_review_sidecars() -> None:
+    diagnostic = verifier.diagnose_v2_package(DURABLE_REFRESH_PACKAGE)
+
+    assert diagnostic["diagnostics"]["package_checksums_verified"] is True
+    assert diagnostic["diagnostics"]["receipt_created"] is False
+    assert diagnostic["diagnostics"]["blockers"] == [
+        {
+            "code": "domain_approval_pending",
+            "reason": "v2 domain approval is outside the package builder and verifier",
+        },
+        {
+            "code": "external_admission_receipt_required",
+            "reason": "a maintainer-owned ch7-evidence-admission.v2 receipt is required",
+        },
+    ]

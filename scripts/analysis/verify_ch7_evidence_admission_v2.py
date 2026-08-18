@@ -117,12 +117,14 @@ def _receipt_template(
 def diagnose_v2_package(package: Path) -> dict[str, Any]:
     """Check a blocked v2 package without creating or accepting an admission receipt."""
 
+    require_review_sidecars = any(
+        path.is_file() and path.name.endswith(".review.json") for path in package.rglob("*")
+    )
     try:
         sums_sha, _listed = admission._verify_members(
             package,
             label="Chapter 7 v2 evidence package",
-            require_review_sidecars=False,
-            allow_review_sidecars=True,
+            require_review_sidecars=require_review_sidecars,
         )
     except admission.Ch7EvidenceAdmissionError as exc:
         raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
@@ -161,7 +163,12 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
         },
     ]
     excluded = manifest["metrics"]["excluded"]
-    if any(item.get("issue") == 7042 for item in excluded if isinstance(item, Mapping)):
+    exclusion_reasons = [
+        str(item.get("reason", "")).lower()
+        for item in excluded
+        if isinstance(item, Mapping) and item.get("issue") == 7042
+    ]
+    if any("frozen #7042 ruling" not in reason for reason in exclusion_reasons):
         blockers.append(
             {
                 "code": "metric_semantics_excluded_issue_7042",

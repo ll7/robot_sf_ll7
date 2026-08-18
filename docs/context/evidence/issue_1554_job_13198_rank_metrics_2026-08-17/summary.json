@@ -1,0 +1,44 @@
+{
+  "schema": "robot-sf-retained-analysis-diagnostic.v1",
+  "status": "diagnostic-only",
+  "scientific_outcome": "inconclusive",
+  "claim_boundary": "Identity and metric-coverage diagnostics only; no planner ranking, benchmark, dissertation, manuscript, or paper-facing claim.",
+  "provenance": {
+    "queue_campaign": "issue1554_job13198_analysis_rank_metrics_20260817",
+    "source_job_id": 13198,
+    "diagnostic_job_id": 14494,
+    "supporting_job_ids": [14483, 14485],
+    "public_commit": "0acda10dc38f427009721c04cc9771f89f479366",
+    "config": "configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml",
+    "terminal_scheduler_state": "COMPLETED",
+    "exit_code": "0:0",
+    "derived_exit_code": "0:0",
+    "preserved_artifact": "wandb://ll7/robot_sf/campaign-issue1554_job13198_analysis_rank_metrics_20260817:v0",
+    "preserved_manifest_digest": "sha256:bc7cd0c2a29366f82a26694829679b2eab99b7090f4c9241edddbfd3ec8fb9d1"
+  },
+  "scope": {
+    "primary_episode_rows": 16143,
+    "adjacent_rank_rows": 25920,
+    "planner_keys": [
+      "goal",
+      "hybrid_rule_v3_fast_progress_static_escape",
+      "orca",
+      "ppo",
+      "prediction_planner",
+      "sacadrl",
+      "scenario_adaptive_hybrid_orca_v1",
+      "social_force",
+      "socnav_sampling"
+    ],
+    "rank_identity_complete": true,
+    "rank_claim_status": "diagnostic_only_pending_3216",
+    "research_admission": "blocked_pending_3216"
+  },
+  "metric_coverage": {
+    "clearance": {"row_level_numeric_rows": 0, "summary_level_numeric_rows": 19, "status": "summary_only"},
+    "low_progress": {"row_level_numeric_rows": 0, "summary_level_numeric_rows": 19, "status": "summary_only"},
+    "min_distance": {"row_level_numeric_rows": 0, "summary_level_numeric_rows": 10, "status": "summary_only"},
+    "timeout": {"row_level_numeric_rows": 0, "summary_level_numeric_rows": 0, "status": "missing"}
+  },
+  "next_proof": "Run #3216 rank-stability validation and restore source-level timeout/metric completeness before any ranking or benchmark admission."
+}

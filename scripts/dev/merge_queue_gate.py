@@ -302,10 +302,7 @@ def _is_ci_paths_ignored(path: str) -> bool:
     markdown_pattern, docs_pattern = CI_PATHS_IGNORE_PATTERNS
     return bool(normalized) and (
         (markdown_pattern == "**/*.md" and normalized.endswith(".md"))
-        or (
-            docs_pattern == "docs/**"
-            and (normalized == "docs" or normalized.startswith("docs/"))
-        )
+        or (docs_pattern == "docs/**" and (normalized == "docs" or normalized.startswith("docs/")))
     )
 
 

@@ -215,6 +215,31 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
+def _metadata_verdict_reason(status: str) -> str | None:
+    """Return fail-closed reason for metadata verdict status, or None when accepted."""
+    if status == "accepted":
+        return None
+    return "stale_pr_metadata_verdict" if status == "stale" else "missing_pr_metadata_verdict"
+
+
+def _thread_resolution_reason(status: str) -> str | None:
+    """Return fail-closed reason for thread resolution status, or None when resolved."""
+    if status == "resolved":
+        return None
+    return "unresolved_review_threads" if status == "unresolved" else "review_threads_not_evaluated"
+
+
+def _reviewer_request_reason(status: str) -> str | None:
+    """Return fail-closed reason for reviewer request status, or None when clear."""
+    if status == "clear":
+        return None
+    return (
+        "outstanding_requested_reviewers"
+        if status == "requested"
+        else "requested_reviewers_not_evaluated"
+    )
+
+
 def _core_preflight_reasons(
     *,
     draft: bool,
@@ -254,6 +279,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     draft: bool,
     merge_ready: bool,
     ci_overall: str,
+    changed_coverage_status: str,
     staleness_verdict: str,
     gate_verdict_status: str,
     metadata_verdict_status: str,
@@ -261,6 +287,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     reviewer_request_status: str,
     merge_group_head_binding: str,
     body_not_ready_sentinels: list[str] | None = None,
+    ancestry_state: str = "",
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -271,6 +298,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
         draft=draft,
         merge_ready=merge_ready,
         ci_overall=ci_overall,
+        changed_coverage_status=changed_coverage_status,
         staleness_verdict=staleness_verdict,
         gate_verdict_status=gate_verdict_status,
     )
@@ -330,7 +358,7 @@ def _resolve_merge_group_binding(
     return binding, str(queue_merging_strategy or "unknown").upper()
 
 
-def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913 - explicit fail-closed admission dimensions.
+def evaluate_merge_gate(  # noqa: PLR0913 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",

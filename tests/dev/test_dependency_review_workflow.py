@@ -7,6 +7,18 @@ from pathlib import Path
 import yaml
 
 
+def _dependency_review_step(workflow: dict[str, object]) -> dict[str, object]:
+    """Find the dependency-review action without relying on step position."""
+    steps = workflow["jobs"]["review"]["steps"]  # type: ignore[index]
+    matches = [
+        step
+        for step in steps
+        if step.get("uses", "").split("@", maxsplit=1)[0] == "actions/dependency-review-action"
+    ]
+    assert len(matches) == 1, f"expected one dependency-review action, got {len(matches)}"
+    return matches[0]
+
+
 def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     """Dependency-review changes must include the vendored package manifests."""
     root = Path(__file__).resolve().parents[2]
@@ -25,7 +37,17 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     }
     assert expected_paths <= paths
 
-    allow_licenses = workflow["jobs"]["review"]["steps"][-1]["with"]["allow-licenses"]
+    steps = workflow["jobs"]["review"]["steps"]  # type: ignore[index]
+    dependency_review_step = _dependency_review_step(workflow)
+    dependency_review_index = steps.index(dependency_review_step)
+    later_steps = steps[dependency_review_index + 1 :]
+    assert later_steps, "evidence steps must remain covered by this regression"
+    assert any(
+        step.get("uses", "").split("@", maxsplit=1)[0] == "actions/upload-artifact"
+        for step in later_steps
+    ), "the test must exercise a workflow with later artifact steps"
+
+    allow_licenses = dependency_review_step["with"]["allow-licenses"]  # type: ignore[index]
     allowed = {item.strip() for item in allow_licenses.split(",")}
     assert allowed == {
         "Apache-2.0",

@@ -263,6 +263,22 @@ def _git(repo_root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _git_symbolic_ref(repo_root: Path) -> str:
+    """Return the current symbolic ref, or an empty string for detached HEAD."""
+    command = ["git", "-C", str(repo_root), "symbolic-ref", "--short", "-q", "HEAD"]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode == 1:
+        return ""
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+    return result.stdout.strip()
+
+
 def _tracked_python_files(repo_root: Path, source_root: Path) -> list[Path]:
     """Return tracked Python files below ``source_root`` in lexical order."""
     relative_root = source_root.relative_to(repo_root).as_posix()
@@ -424,7 +440,7 @@ def build_inventory(repo_root: Path, source_root: Path) -> dict[str, Any]:
             "repository": repo_root.name,
             "root": source_root.relative_to(repo_root).as_posix(),
             "commit": _git(repo_root, "rev-parse", "HEAD"),
-            "ref": _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD") or "DETACHED",
+            "ref": _git_symbolic_ref(repo_root) or "DETACHED",
             "clean": not dirty,
             "tracked_python_file_count": len(tracked_files),
         },

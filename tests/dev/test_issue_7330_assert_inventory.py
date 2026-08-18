@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,21 @@ def test_json_and_markdown_rendering_is_deterministic() -> None:
     assert audit_production_asserts.render_markdown(
         first
     ) == audit_production_asserts.render_markdown(second)
+
+
+def test_detached_source_reports_detached_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An exact detached-main snapshot is a supported inventory source."""
+    original_run = audit_production_asserts.subprocess.run
+
+    def fake_run(command: list[str], *args: object, **kwargs: object) -> object:
+        if command[-4:] == ["symbolic-ref", "--short", "-q", "HEAD"]:
+            return subprocess.CompletedProcess(command, 1, "", "")
+        return original_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(audit_production_asserts.subprocess, "run", fake_run)
+    payload = audit_production_asserts.build_inventory(REPO_ROOT, SOURCE_ROOT)
+
+    assert payload["source"]["ref"] == "DETACHED"
 
 
 def test_unknown_assertion_fails_closed() -> None:

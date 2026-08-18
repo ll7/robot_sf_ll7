@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -14,14 +15,20 @@ from scripts.dev.pr_loop_policy import (
     VALID_ACTIONS,
     VALID_STATES,
     PolicyDecision,
+    ReviewClaim,
     ShaCarrier,
     _accepted_gate_verdict_shas,
+    _has_decision_packet_heading,
+    _parse_review_claim_marker,
+    _review_claim_released_shas,
     _review_state,
     _sha_matches_head,
+    active_review_claim,
     classify_pr_state,
     evaluate_queue,
     extract_sha_carriers,
     format_text,
+    has_author_decision_packet,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
     invalid_sha_carriers,
@@ -78,6 +85,75 @@ def _pr(
     if artifacts is not None:
         result["artifacts"] = artifacts
     _apply_gate_verdict(result, gate_verdict)
+    return result
+
+
+# Fixed evaluation instant for the issue #7508 marker tests, so claim expiry is
+# deterministic without monkeypatching global time.
+NOW_UTC = datetime(2026, 8, 18, 12, 0, 0, tzinfo=UTC)
+FUTURE_UTC = "2026-08-18T13:30:00Z"
+PAST_UTC = "2026-08-18T11:00:00Z"
+
+
+def _with_review_claim(
+    result: dict[str, object],
+    *,
+    lane: str = "lane-a",
+    sha: str | None = None,
+    until: str = FUTURE_UTC,
+    association: str = "COLLABORATOR",
+    author: str = "lane-a-bot",
+) -> dict[str, object]:
+    """Attach a trusted ``review-claim: <lane> @ <sha> until <UTC>`` comment."""
+    claimed = sha if sha is not None else str(result.get("head_sha", ""))
+    result["comments"] = [
+        {
+            "author": author,
+            "authorAssociation": association,
+            "createdAt": "2026-08-18T12:00:00Z",
+            "body": f"review-claim: {lane} @ {claimed} until {until}",
+        }
+    ]
+    return result
+
+
+def _with_released_review_claim(
+    result: dict[str, object], *, sha: str | None = None, association: str = "COLLABORATOR"
+) -> dict[str, object]:
+    """Attach a released ``review-claim: released @ <sha>`` comment."""
+    claimed = sha if sha is not None else str(result.get("head_sha", ""))
+    result["comments"] = [
+        {
+            "author": "lane-a-bot",
+            "authorAssociation": association,
+            "createdAt": "2026-08-18T12:00:00Z",
+            "body": f"review-claim: released @ {claimed}",
+        }
+    ]
+    return result
+
+
+def _with_decision_packet(
+    result: dict[str, object],
+    *,
+    association: str = "OWNER",
+    author: str = "reviewer-bot",
+    body: str = "### Decision packet\nShould we merge this lane?",
+    in_review: bool = False,
+) -> dict[str, object]:
+    """Attach a trusted ``### Decision packet`` comment at the PR head."""
+    entry: dict[str, object] = {
+        "author": author,
+        "authorAssociation": association,
+        "createdAt": "2026-08-18T12:00:00Z",
+        "body": body,
+    }
+    if in_review:
+        entry["state"] = "COMMENTED"
+        entry["submittedAt"] = "2026-08-18T12:00:00Z"
+        result["reviews"] = [entry]
+    else:
+        result["comments"] = [entry]
     return result
 
 
@@ -676,6 +752,289 @@ def test_classify_error_status_is_no_action() -> None:
     """Error status PRs should classify as no_action."""
     pr = {"number": 107, "status": "error", "error": "gh failed"}
     assert classify_pr_state(pr) == "no_action"
+
+
+# ---------------------------------------------------------------------------
+# Issue #7508: review-claim -> active_writer
+# ---------------------------------------------------------------------------
+
+
+def test_active_writer_parks_on_unexpired_trusted_review_claim() -> None:
+    """An unexpired review-claim from another lane parks the PR as active_writer."""
+    pr = _with_review_claim(
+        _pr(7500, overall="success", labels=["merge-ready"], head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=FUTURE_UTC,
+    )
+    state = classify_pr_state(pr, now=NOW_UTC)
+    assert state == "active_writer"
+    decision = recommend_action(state, pr_number=7500, actions_remaining=3)
+    assert decision.action == "no_action"
+    assert decision.flow_decision == "stop"
+    assert "review-claim" in decision.reason
+
+
+def test_active_writer_untrusted_marker_does_not_park() -> None:
+    """A contributor-authored review-claim must not park the PR."""
+    pr = _with_review_claim(
+        _pr(7501, overall="success", head_sha=FULL_SHA),
+        association="CONTRIBUTOR",
+        sha=FULL_SHA,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_released_review_claim_clears_active_writer() -> None:
+    """``review-claim: released @ <head>`` clears the claim regardless of head."""
+    pr = _pr(7502, overall="success", head_sha=FULL_SHA)
+    _with_review_claim(pr, lane="lane-a", sha=FULL_SHA, until=FUTURE_UTC)
+    _with_released_review_claim(pr, sha=FULL_SHA)
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_expired_review_claim_does_not_park() -> None:
+    """A claim whose ``until`` is in the past does not park the PR."""
+    pr = _with_review_claim(
+        _pr(7503, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=PAST_UTC,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_review_claim_expiry_at_equality_is_expired() -> None:
+    """``now == until`` counts as expiry (now >= until clears the claim)."""
+    exact = "2026-08-18T12:00:00Z"
+    pr = _with_review_claim(
+        _pr(7504, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=exact,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_review_claim_head_mismatch_does_not_park() -> None:
+    """A claim bound to a different head SHA does not park the current head."""
+    other_sha = "deadbeef00000000000000000000000000000001"
+    pr = _with_review_claim(
+        _pr(7505, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=other_sha,
+        until=FUTURE_UTC,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_unparseable_review_claim_expiry_fails_closed() -> None:
+    """A claim with an unparseable timestamp is treated as expired, not parked."""
+    pr = _with_review_claim(
+        _pr(7506, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until="not-a-timestamp",
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "active_writer"
+
+
+def test_review_claim_in_review_body_parks() -> None:
+    """A review body can carry the claim just like a conversation comment."""
+    pr = _pr(7507, overall="success", head_sha=FULL_SHA)
+    pr["reviews"] = [
+        {
+            "state": "COMMENTED",
+            "author": "lane-a-bot",
+            "authorAssociation": "COLLABORATOR",
+            "submittedAt": "2026-08-18T12:00:00Z",
+            "body": f"review-claim: lane-a @ {FULL_SHA} until {FUTURE_UTC}",
+        }
+    ]
+    assert classify_pr_state(pr, now=NOW_UTC) == "active_writer"
+
+
+def test_active_review_claim_helper_reports_lane_and_expiry() -> None:
+    """The pure helper returns the claim with lane and parsed expiry."""
+    pr = _with_review_claim(
+        _pr(7508, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=FUTURE_UTC,
+    )
+    claim = active_review_claim(pr, FULL_SHA, NOW_UTC)
+    assert isinstance(claim, ReviewClaim)
+    assert claim.lane == "lane-a"
+    assert claim.sha == FULL_SHA
+    assert claim.expires_at is not None
+    assert claim.expires_at == datetime(2026, 8, 18, 13, 30, 0, tzinfo=UTC)
+
+
+def test_parse_review_claim_marker_roundtrip() -> None:
+    """Marker parsing normalizes the lane, SHA, and UTC expiry."""
+    claim = _parse_review_claim_marker(
+        f"review-claim: Lane-B @ {FULL_SHA.upper()} until 2026-08-18T13:30:00+00:00"
+    )
+    assert claim is not None
+    assert claim.lane == "lane-b"
+    assert claim.sha == FULL_SHA
+    assert claim.expires_at == datetime(2026, 8, 18, 13, 30, 0, tzinfo=UTC)
+    assert _parse_review_claim_marker("no marker here") is None
+    assert _parse_review_claim_marker("") is None
+
+
+def test_review_claim_released_shas_collects_markers() -> None:
+    """Released-marker extraction returns lowercased SHAs."""
+    body = f"review-claim: released @ {FULL_SHA.upper()}\nother text"
+    assert _review_claim_released_shas(body) == {FULL_SHA}
+    assert _review_claim_released_shas("no release") == set()
+
+
+# ---------------------------------------------------------------------------
+# Issue #7508: decision-required + Decision packet -> author_decision
+# ---------------------------------------------------------------------------
+
+
+def test_author_decision_parks_on_live_head_decision_packet() -> None:
+    """decision-required + a live-head Decision packet parks as author_decision."""
+    pr = _with_decision_packet(
+        _pr(7510, overall="success", labels=["decision-required"], head_sha=FULL_SHA)
+    )
+    state = classify_pr_state(pr, now=NOW_UTC)
+    assert state == "author_decision"
+    assert state != "blocked_preflight"
+    decision = recommend_action(state, pr_number=7510, actions_remaining=3)
+    assert decision.action == "no_action"
+    assert decision.flow_decision == "stop"
+    assert "Decision packet" in decision.reason
+
+
+def test_author_decision_requires_the_label() -> None:
+    """A Decision packet without the decision-required label is not parked."""
+    pr = _with_decision_packet(_pr(7511, overall="success", head_sha=FULL_SHA))
+    assert classify_pr_state(pr, now=NOW_UTC) != "author_decision"
+
+
+def test_author_decision_requires_a_decision_packet() -> None:
+    """The decision-required label alone must not park the PR."""
+    pr = _pr(7512, overall="success", labels=["decision-required"], head_sha=FULL_SHA)
+    assert has_author_decision_packet(pr, FULL_SHA) is False
+    assert classify_pr_state(pr, now=NOW_UTC) != "author_decision"
+
+
+def test_author_decision_review_body_at_live_head() -> None:
+    """A Decision packet inside a review body bound to the live head parks."""
+    pr = _with_decision_packet(
+        _pr(7513, overall="success", labels=["decision-required"], head_sha=FULL_SHA),
+        in_review=True,
+        body=f"### Decision packet\nShould we split this PR?\ngate-verdict: accepted @ {FULL_SHA}",
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) == "author_decision"
+
+
+def test_author_decision_review_body_at_stale_head_does_not_park() -> None:
+    """A packet review naming a stale head SHA is not at the live head."""
+    other_sha = "deadbeef00000000000000000000000000000001"
+    pr = _with_decision_packet(
+        _pr(7514, overall="success", labels=["decision-required"], head_sha=FULL_SHA),
+        in_review=True,
+        body=f"### Decision packet\nSplit?\ngate-verdict: accepted @ {other_sha}",
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "author_decision"
+
+
+def test_author_decision_untrusted_packet_does_not_park() -> None:
+    """A contributor-authored Decision packet must not park the PR."""
+    pr = _with_decision_packet(
+        _pr(7515, overall="success", labels=["decision-required"], head_sha=FULL_SHA),
+        association="CONTRIBUTOR",
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) != "author_decision"
+
+
+def test_has_decision_packet_heading_matches() -> None:
+    """The heading matcher recognizes the canonical packet heading only."""
+    assert _has_decision_packet_heading("### Decision packet\nQuestion?") is True
+    assert _has_decision_packet_heading("## Decision packet") is False
+    assert _has_decision_packet_heading("no heading") is False
+    assert _has_decision_packet_heading("") is False
+
+
+# ---------------------------------------------------------------------------
+# Issue #7508: precedence and regressions
+# ---------------------------------------------------------------------------
+
+
+def test_active_writer_precedes_blocked_preflight() -> None:
+    """A live review-claim parks the PR even when preflight is blocked."""
+    pr = _with_review_claim(
+        _pr(7520, overall="success", head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=FUTURE_UTC,
+    )
+    pr["preflight"] = {"status": "blocked", "reasons": ["missing_authority"]}
+    assert classify_pr_state(pr, now=NOW_UTC) == "active_writer"
+
+
+def test_author_decision_precedes_blocked_preflight() -> None:
+    """An author decision parks the PR even when preflight is blocked."""
+    pr = _with_decision_packet(
+        _pr(7521, overall="success", labels=["decision-required"], head_sha=FULL_SHA)
+    )
+    pr["preflight"] = {"status": "blocked", "reasons": ["missing_authority"]}
+    assert classify_pr_state(pr, now=NOW_UTC) == "author_decision"
+
+
+def test_active_writer_precedes_pending_ci_and_ready_merge() -> None:
+    """A live review-claim parks even a green merge-ready head."""
+    pr = _with_review_claim(
+        _pr(
+            7522,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=FUTURE_UTC,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) == "active_writer"
+
+
+def test_draft_with_live_review_claim_stays_no_action() -> None:
+    """Draft PRs remain no_action before marker classification."""
+    pr = _with_review_claim(
+        _pr(7523, overall="pending", draft=True, head_sha=FULL_SHA),
+        lane="lane-a",
+        sha=FULL_SHA,
+        until=FUTURE_UTC,
+    )
+    assert classify_pr_state(pr, now=NOW_UTC) == "no_action"
+
+
+def test_marker_states_are_in_valid_states_contract() -> None:
+    """The new parking states are part of the exported policy contract."""
+    assert "active_writer" in VALID_STATES
+    assert "author_decision" in VALID_STATES
+
+
+def test_evaluate_queue_parks_active_writer() -> None:
+    """Queue evaluation parks an active_writer PR with no_action."""
+    prs = [
+        _with_review_claim(
+            _pr(7524, overall="success", head_sha=FULL_SHA),
+            lane="lane-a",
+            sha=FULL_SHA,
+            until=FUTURE_UTC,
+        )
+    ]
+    result = evaluate_queue(prs, max_actions=3, now=NOW_UTC)
+    decision = result["decisions"][0]
+    assert decision["state"] == "active_writer"
+    assert decision["action"] == "no_action"
+    assert decision["flow_decision"] == "stop"
 
 
 def test_classify_non_dict_input() -> None:

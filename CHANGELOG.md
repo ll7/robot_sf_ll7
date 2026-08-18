@@ -422,6 +422,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shared resource budget (API quota, runner starvation, tmpfs worktrees). Terminal
   states are now part of the output contract. Docs-only; no runtime behavior changed.
 
+* **issue #7508 `pr_loop_policy` machine-recognizes the review-claim and
+  author-decision markers.** The policy classifier now parks a PR as
+  `active_writer` when a trusted (OWNER/MEMBER/COLLABORATOR) comment carries an
+  unexpired, unreleased `review-claim: <lane> @ <head> until <UTC>` marker bound
+  to the live head, and as `author_decision` when the `decision-required` label
+  is paired with a live-head `### Decision packet` comment — both distinct from
+  the generic `blocked_preflight` state and both recommended `no_action` /
+  `stop`. `review-claim: released @ <head>`, expiry (`now >= until`), and head
+  movement clear a claim. The marker helpers take an explicit `now` instant for
+  deterministic testing and the CLI defaults to the current UTC time. The
+  not-ready-sentinel half (merge-ready present while the body carries a
+  not-ready sentence) remains tracked in issue #7491 and is intentionally not
+  implemented here. Workflow/tooling only; no benchmark, planner, or evidence
+  claim.
+
 * **Issue #7086 representative-run rule de-duplicated into one shared utility.** The rule that
   decides which seed stands in for a whole campaign cell — majority-verdict pool, weaker-label
   tie-break, median primary order parameter, lower seed on an exact tie — was implemented twice,

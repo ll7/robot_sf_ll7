@@ -724,6 +724,38 @@ def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
     return False
 
 
+def _validate_expected_head_sha(expected_head_sha: str) -> str | None:
+    """Return an error message when ``--expected-head-sha`` is not a full 40-hex SHA.
+
+    A short prefix or other malformed value is rejected up front so the monitor reports a clear
+    format error instead of a spurious "PR head SHA changed" on the first poll (issue #7505).
+    """
+    if not expected_head_sha:
+        return None
+    if len(expected_head_sha) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", expected_head_sha):
+        return (
+            "--expected-head-sha must be the full 40-hex SHA, got "
+            f"{len(expected_head_sha)} chars ({expected_head_sha!r}); short prefixes are not accepted"
+        )
+    return None
+
+
+def _preflight_validate(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> str | None:
+    """Return an exit-1 preflight error message, or None when arguments are acceptable.
+
+    A conflicting PR number still raises SystemExit(2) via ``parser.error``, matching prior behavior.
+    """
+    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
+        parser.error(
+            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
+            "or pass the same value to both"
+        )
+    return _validate_expected_head_sha(args.expected_head_sha)
+
+
 def _bounded_sleep_seconds(
     poll_interval: float,
     wall_deadline: float | None,
@@ -877,11 +909,10 @@ were cancelled or failed.
         ),
     )
     args = parser.parse_args(argv)
-    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
-        parser.error(
-            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
-            "or pass the same value to both"
-        )
+    preflight_error = _preflight_validate(args, parser)
+    if preflight_error is not None:
+        print(f"error: {preflight_error}", file=sys.stderr)
+        return 1
     pr_number = args.pr_number_option or args.pr_number
 
     try:

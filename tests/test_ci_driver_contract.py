@@ -640,6 +640,23 @@ def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
     assert "/fast-pysf/pysocialforce" in sdist_includes
 
 
+def test_wheel_target_uses_hatch_namespace_without_inert_hatchling_block() -> None:
+    """The wheel target must live under tool.hatch and must not carry an inert tool.hatchling block."""
+    project = _pyproject()
+    wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+
+    assert "force-include" in wheel
+
+    hatchling_wheel = (
+        project.get("tool", {})
+        .get("hatchling", {})
+        .get("build", {})
+        .get("targets", {})
+        .get("wheel", {})
+    )
+    assert not hatchling_wheel
+
+
 def test_source_distribution_excludes_model_artifacts() -> None:
     """Keep model weights outside the source-distribution boundary (issue #7297)."""
     sdist = _pyproject()["tool"]["hatch"]["build"]["targets"]["sdist"]

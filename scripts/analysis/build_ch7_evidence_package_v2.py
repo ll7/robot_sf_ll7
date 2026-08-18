@@ -26,6 +26,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from scripts.analysis import build_ch7_evidence_package as v1
 from scripts.analysis import verify_ch7_evidence_admission as admission
+from scripts.analysis import verify_ch7_source_registry as source_registry
 
 PACKAGE_SCHEMA = "ch7-evidence-package.v2"
 REDUCED_PUBLICATION_ATLAS_SCHEMA = "ch7-reduced-publication-atlas.v3"
@@ -580,6 +581,14 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
     output = output.resolve()
     if output == source_package or source_package in output.parents:
         raise Ch7EvidencePackageV2Error("v2 output must not be the v1 source package or its child")
+    try:
+        registry_binding = source_registry.verify_source_registry(
+            repository_root=Path(__file__).parents[2]
+        )
+    except source_registry.SourceRegistryError as exc:
+        raise Ch7EvidencePackageV2Error(
+            f"canonical Chapter 7 source registry verification failed: {exc.status}: {exc}"
+        ) from exc
     _load_portfolio_contract(config)
     source = verify_v1_source_package(source_package)
     rows = _read_audit_rows(source_package)
@@ -693,6 +702,7 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                 "v1_reduced_atlas_member": source["reduced_atlas_member"],
                 "v1_reduced_atlas_member_sha256": source["reduced_atlas_member_sha256"],
             },
+            "source_registry": registry_binding,
             "inputs": {
                 "portfolio_config": {
                     "path": PORTFOLIO_CONFIG_PATH.as_posix(),

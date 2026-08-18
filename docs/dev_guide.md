@@ -2740,6 +2740,16 @@ paths, and recommended for multi-agent or multi-run tasks.
 
 - [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
 
+### Issue #5303 checker authority
+
+The only current entry point for the promotion-capable search contract is the powered,
+side-effect-free v2 checker:
+`uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py` (and its pure
+`--identities` mode). The historical three-seed v1 contract and timing-control paths remain
+available only to reproduce their pinned diagnostic artifacts; they cannot authorize promotion,
+execution, or transfer work. Current operational code and documentation must not invoke either
+v1 checker path.
+
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.
 - Run focused tests that cover modified paths (for example `uv run pytest tests/dev/test_snapshot_pr_queue.py`).

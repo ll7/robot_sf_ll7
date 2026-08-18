@@ -222,7 +222,118 @@ def evaluate_manifest(manifest_path: Path) -> dict[str, Any]:
         "claim_boundary": EXPECTED_REPORT_CLAIM_BOUNDARY,
         "case_count": len(case_results),
         "critical_error_counts": critical_counts,
+        "aggregate_summary": _aggregate_summary(case_results, critical_counts),
         "cases": case_results,
+    }
+
+
+def _aggregate_summary(
+    case_results: list[dict[str, Any]], critical_counts: dict[str, int]
+) -> dict[str, Any]:
+    """Summarize the fixture corpus without collapsing critical errors.
+
+    The summary is deliberately descriptive. It reports per-dimension pass
+    rates, exact critical-error examples, reviewer coverage, and the status of
+    any paired workflow variants. It does not choose a preferred workflow or
+    promote a fixture result to benchmark evidence.
+
+    Returns:
+        Deterministic corpus-level evaluation metadata.
+    """
+
+    case_status_counts = {"clean": 0, "failed": 0}
+    dimension_pass_counts = dict.fromkeys(DIMENSIONS, 0)
+    critical_failure_examples = {kind: [] for kind in CRITICAL_ERROR_KINDS}
+
+    for case in case_results:
+        status = case["status"]
+        if status in case_status_counts:
+            case_status_counts[status] += 1
+        for score in case["scores"]:
+            if score["passed"]:
+                dimension_pass_counts[score["dimension"]] += 1
+        for kind in CRITICAL_ERROR_KINDS:
+            if case["critical_errors"][kind]:
+                critical_failure_examples[kind].append(case["packet_id"])
+
+    case_count = len(case_results)
+    dimension_scores = {
+        dimension: {
+            "case_count": case_count,
+            "passed_count": passed_count,
+            "failed_count": case_count - passed_count,
+            "pass_rate": passed_count / case_count if case_count else None,
+        }
+        for dimension, passed_count in dimension_pass_counts.items()
+    }
+
+    reviewer_records = [
+        case["reviewer_accounting"]
+        for case in case_results
+        if case.get("reviewer_accounting") is not None
+    ]
+    reviewer_status = (
+        "not_available"
+        if not reviewer_records
+        else "available"
+        if len(reviewer_records) == case_count
+        else "partial"
+    )
+    reviewer_summary = {
+        "status": reviewer_status,
+        "reviewed_case_count": len(reviewer_records),
+        "adjudication_complete_case_count": sum(
+            1 for record in reviewer_records if record["adjudication_complete"]
+        ),
+        "disagreement_count": sum(record["disagreement_count"] for record in reviewer_records),
+        "mean_agreement_rate": (
+            sum(record["agreement_rate"] for record in reviewer_records) / len(reviewer_records)
+            if reviewer_records
+            else None
+        ),
+    }
+
+    variant_records = [
+        case["interpretation_variant_comparison"]
+        for case in case_results
+        if case.get("interpretation_variant_comparison") is not None
+    ]
+    if not variant_records:
+        workflow_variants = {
+            "status": "not_available",
+            "paired_case_count": 0,
+            "baseline_case_count": 0,
+            "packet_constrained_case_count": 0,
+            "mean_aggregate_score_delta": None,
+            "critical_error_count_delta": None,
+            "packet_constrained_reduces_critical_errors": None,
+            "packet_constrained_preserves_source_fidelity": None,
+        }
+    else:
+        deltas = [record["delta"] for record in variant_records]
+        workflow_variants = {
+            "status": "available" if len(variant_records) == case_count else "partial",
+            "paired_case_count": len(variant_records),
+            "baseline_case_count": len(variant_records),
+            "packet_constrained_case_count": len(variant_records),
+            "mean_aggregate_score_delta": sum(delta["aggregate_score"] for delta in deltas)
+            / len(deltas),
+            "critical_error_count_delta": sum(delta["critical_error_count"] for delta in deltas),
+            "packet_constrained_reduces_critical_errors": all(
+                delta["packet_constrained_reduces_critical_errors"] for delta in deltas
+            ),
+            "packet_constrained_preserves_source_fidelity": all(
+                delta["packet_constrained_preserves_source_fidelity"] for delta in deltas
+            ),
+        }
+
+    return {
+        "case_status_counts": case_status_counts,
+        "dimension_scores": dimension_scores,
+        "critical_error_counts": critical_counts,
+        "critical_failure_examples": critical_failure_examples,
+        "reviewer_accounting": reviewer_summary,
+        "workflow_variants": workflow_variants,
     }
 
 

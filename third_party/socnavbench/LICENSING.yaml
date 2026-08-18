@@ -24,8 +24,11 @@ upstream_files:
   - metrics/cost_functions.py
   - metrics/cost_utils.py
   - mp_env/__init__.py
+  - mp_env/map_utils.py
   - mp_env/mp_env.py
   - mp_env/render/__init__.py
+  - mp_env/render/rotation_utils.py
+  - mp_env/render/swiftshader_renderer.py
   - objectives/angle_distance.py
   - objectives/goal_distance.py
   - objectives/objective_function.py
@@ -43,6 +46,7 @@ upstream_files:
   - planners/planner.py
   - planners/sampling_planner.py
   - sbpd/__init__.py
+  - sbpd/sbpd.py
   - sbpd/sbpd_renderer.py
   - simulators/sim_state.py
   - systems/dubins_3d.py

@@ -122,7 +122,14 @@ def _changed_files(base: str, repo_root: Path, *, head: str = "HEAD") -> list[Pa
         Repository-relative paths changed in the comparison.
     """
     output = _run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"{base}...{head}"],
+        [
+            "git",
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMRT",
+            "--find-renames=50%",
+            f"{base}...{head}",
+        ],
         cwd=repo_root,
     )
     files = [Path(line.strip()) for line in output.splitlines() if line.strip()]
@@ -666,9 +673,8 @@ def _changed_line_numbers(
             "diff",
             "--unified=0",
             "--diff-filter=ACMRT",
+            "--find-renames=50%",
             f"{base}...{head}",
-            "--",
-            path.as_posix(),
         ],
         cwd=repo_root,
         capture_output=True,
@@ -682,8 +688,18 @@ def _changed_line_numbers(
         )
 
     changed: set[int] = set()
+    in_target_file = False
     new_line: int | None = None
     for line in proc.stdout.splitlines():
+        if line.startswith("diff --git "):
+            # A rename-aware diff has no path limiter, so track which file the
+            # current hunk belongs to (issue #7552): the "b/" side is the new path.
+            target = line.split(" b/", 1)[1] if " b/" in line else ""
+            in_target_file = target == path.as_posix()
+            new_line = None
+            continue
+        if not in_target_file:
+            continue
         hunk_match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
         if hunk_match:
             new_line = int(hunk_match.group(1))

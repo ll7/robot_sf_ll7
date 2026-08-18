@@ -19,8 +19,8 @@ latest_reviewed_date: 2026-08-17
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 421
-refreshed_baseline_files_with_findings: 93
+refreshed_baseline_total_findings: 423
+refreshed_baseline_files_with_findings: 94
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -295,6 +295,13 @@ reviewed_files:
       (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
       class as the other dangling_commit entries; recorded here rather than rewriting the
       producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
+  - path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      Drift introduced by merged PR #7525 (accept reviewed sidecars in v2 diagnostics), which
+      changed the build-receipt artifact hashes after the prior baseline. Not remediated by the
+      #7548 wording reconciliation; grandfathered pending receipt regeneration.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

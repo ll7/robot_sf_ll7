@@ -28,11 +28,13 @@ to `NA` and state why.
 
 Use the canonical evidence-tier values from
 `docs/context/issue_1512_issue_archetypes.md`. `docs-only` and `NA` are no-claim PR exceptions;
-explain the exception when using either value.
+record them in `Evidence applicability` and explain the exception. Leave `Evidence tier` blank
+when the change makes no evidence claim.
 
 - Target claim / hypothesis / blocker this should affect:
 - Comparator or baseline, if applicable:
-- Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / full_matrix / analysis_only / synthesis / paper_grade / blocked / docs-only / NA
+- Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / full_matrix / analysis_only / synthesis / paper_grade / blocked
+- Evidence applicability: evidence-bearing / docs-only / NA
 - Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
 - Decision or stop rule, if applicable:
 - Parent issue, claim map, registry, context note, or synthesis surface to update:

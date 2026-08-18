@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-from scripts.tools.issue_template_audit import SECTION_ORDER
+from scripts.tools.issue_template_audit import (
+    SECTION_ORDER,
+    VALID_EVIDENCE_GRADES,
+    VALID_EVIDENCE_TIERS,
+    audit_archetype_metadata,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
@@ -89,20 +94,9 @@ CANONICAL_ARCHETYPES = (
     "refactor",
     "data",
 )
-CANONICAL_EVIDENCE_TIERS = (
-    "idea",
-    "launch_packet",
-    "preflight_valid",
-    "smoke",
-    "nominal",
-    "stress",
-    "full_matrix",
-    "analysis_only",
-    "synthesis",
-    "paper_grade",
-    "blocked",
-)
-CANONICAL_EVIDENCE_GRADES = ("observed", "inferred", "proposal")
+CANONICAL_EVIDENCE_TIERS = VALID_EVIDENCE_TIERS
+CANONICAL_EVIDENCE_GRADES = VALID_EVIDENCE_GRADES
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "issue_templates"
 
 
 def _load_template(path: Path) -> tuple[dict[str, object], str]:
@@ -211,6 +205,19 @@ def test_research_templates_use_canonical_evidence_vocabulary() -> None:
     }
     assert tuple(fields["evidence_grade"]["attributes"]["options"]) == CANONICAL_EVIDENCE_GRADES
     assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
+
+
+def test_rendered_research_and_pr_fixtures_keep_fields_machine_readable() -> None:
+    """Exercise normalized rendered bodies for form and docs-only PR submissions."""
+
+    rendered_issue = (FIXTURE_DIR / "research_validation_rendered.md").read_text(encoding="utf-8")
+    assert audit_archetype_metadata(rendered_issue).findings == ()
+    assert "### Evidence grade\nobserved" in rendered_issue
+
+    rendered_pr = (FIXTURE_DIR / "pr_docs_only_rendered.md").read_text(encoding="utf-8")
+    assert "- Evidence tier:\n" in rendered_pr
+    assert "- Evidence applicability: docs-only\n" in rendered_pr
+    assert "- Evidence tier: docs-only" not in rendered_pr
 
 
 def test_every_issue_template_collects_canonical_issue_metadata() -> None:

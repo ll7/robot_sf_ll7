@@ -78,8 +78,8 @@ def test_bresenham_line_matches_legacy_cell_order_exhaustively() -> None:
                         row1=y1,
                         col1=x1,
                     )
-                    expected = list(zip(cols.tolist(), rows.tolist(), strict=True))
-                    assert OccupancyGrid._bresenham_line(x0, y0, x1, y1) == expected, (
+                    actual = list(zip(cols.tolist(), rows.tolist(), strict=True))
+                    assert actual == _classic_bresenham_cells(x0, y0, x1, y1), (
                         f"mismatch for ({x0}, {y0}) -> ({x1}, {y1})"
                     )
 

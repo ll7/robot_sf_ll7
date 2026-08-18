@@ -154,7 +154,11 @@ input_provenance:
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099
     - id: powered_scenario_template
       path: configs/adversarial/issue_5303_classic_group_crossing_medium_v2.yaml
-      sha256: 0d12a63933168ea88e2afd05cfaeddb99e863bd4d528d671434f17b9b3d9b66f
+      # Refreshed after the issue #7400 scoped-map repair. The group-crossing geometry,
+      # candidate identity, timing bindings, budgets, gates, and evidence boundary are
+      # unchanged; only the template's map reference is provenance-bound to the dedicated
+      # marker-bearing projection so the shared canonical map remains route-only.
+      sha256: b40930ae37095a5d1684738408a387ba2062c4c1ffc7ba63391ab8c04df77663
     - id: powered_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preregistration_v2.py
       # Refreshed after the outcome-free optimized-mode evidence-gate hardening

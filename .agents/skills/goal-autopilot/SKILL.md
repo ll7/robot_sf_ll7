@@ -211,6 +211,9 @@ Record at start:
 - Coordination: implementation selection must use the `goal-issue-implementation` issue claim
   protocol (`uv run python scripts/dev/issue_claim.py acquire <issue-number>`) before branching so
   concurrent runs on different PCs do not implement the same issue.
+  The acquire command performs the shared WIP admission check; a capacity or evidence block is
+  terminal for that candidate until capacity is released. Do not bypass it with a direct ref or
+  local-only claim.
 
 Do not ask for extra confirmation after this preflight.
 

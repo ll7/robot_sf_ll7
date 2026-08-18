@@ -636,6 +636,13 @@ def test_main_returns_failure_when_acquire_push_fails(monkeypatch: pytest.Monkey
 
     def fake_run(command: list[str]) -> issue_claim.CommandResult:
         calls.append(command)
+        if any(part.endswith("/wip_capacity.py") for part in command):
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout='{"decision":"allow"}\n',
+                stderr="",
+            )
         if command[0:2] == ["git", "rev-parse"]:
             return issue_claim.CommandResult(
                 command=tuple(command),
@@ -654,6 +661,33 @@ def test_main_returns_failure_when_acquire_push_fails(monkeypatch: pytest.Monkey
 
     assert issue_claim.main(["acquire", "123"]) == 1
     assert calls[-1][0:4] == ["gh", "api", "-X", "POST"]
+
+
+def test_acquire_stops_before_source_resolution_when_wip_is_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Capacity rejection must happen before resolving or creating the claim ref."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        assert any(part.endswith("/wip_capacity.py") for part in command)
+        return issue_claim.CommandResult(
+            command=tuple(command),
+            returncode=2,
+            stdout='{"decision":"block","blockers":[{"reason":"wip_limit_full"}]}\n',
+            stderr="",
+        )
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.acquire_issue(
+        124, repo="ll7/robot_sf_ll7", remote="origin", source_ref="origin/main"
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"] == "wip_capacity_blocked"
+    assert len(calls) == 1
 
 
 def test_open_pr_coverage_detects_ref_in_title(monkeypatch: pytest.MonkeyPatch) -> None:

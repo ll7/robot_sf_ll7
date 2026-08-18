@@ -25,6 +25,9 @@ classified.
 - Branch corresponds to a single clear issue scope.
 - Issue contract and PR diff match (or deferred work is captured by follow-up issues).
 - Current branch head differs from stale readiness stamps (freshness required).
+- Repository WIP capacity is proven for the proposed issue immediately before publication:
+  `python3 scripts/dev/pr_open_preflight.py --issue <number> --mode policy --json`.
+  A `block` result, incomplete queue/claim evidence, or a competing owner stops publication.
 
 Freshness check:
 - `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main --require-clean-tree`
@@ -52,14 +55,16 @@ Remote-state check (issue #6916):
 ## Workflow
 
 1. Confirm branch/issue alignment.
-2. Capture and verify the remote-state baseline before spending readiness/CI time.
-3. Verify scope completion and linked issue status.
-4. Sync latest `origin/main`, then rebase/merge according to repo policy.
-5. Recheck readiness freshness post-sync and rerun the remote-state check immediately before
+2. Run the WIP admission preflight above before spending readiness/CI time. Keep the JSON result
+   with the handoff; it is the machine-readable counted/excluded-lane snapshot for this PR.
+3. Capture and verify the remote-state baseline before spending readiness/CI time.
+4. Verify scope completion and linked issue status.
+5. Sync latest `origin/main`, then rebase/merge according to repo policy.
+6. Recheck readiness freshness post-sync and rerun the remote-state check immediately before
    publication.
-6. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
-7. Run the review audit checklist for changed workflow/skill area.
-8. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
+7. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
+8. Run the review audit checklist for changed workflow/skill area.
+9. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
    - For evidence-producing PRs, fill `Downstream Propagation` instead of leaving it implicit.
      Check the parent issue, claim map or benchmark report, leaderboard or artifact catalog,
      registry or config index, context index or memory note, and follow-up issue rows.
@@ -67,7 +72,7 @@ Remote-state check (issue #6916):
      omission is intentional and reviewable.
    - Recent example: PR #2044 promoted compact trace-viewer screenshot evidence and updated the
      context index/catalog so the visual proof survived worktree cleanup.
-9. Open a ready PR by default using
+10. Open a ready PR by default using
    `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
    intentional handoff with incomplete validation, unresolved scope, or another clearly documented
@@ -85,7 +90,7 @@ Remote-state check (issue #6916):
     `uv run python scripts/dev/gh_pr_label_rest.py remove <number> --label <name> --repo ll7/robot_sf_ll7`
     instead of `gh pr edit --add-label` / `gh issue edit --label` which route through the same
     deprecated Projects Classic GraphQL path.
-10. Keep parent issue open unless repository policy indicates closure wording in PR description.
+11. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules
 

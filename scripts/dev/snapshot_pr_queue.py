@@ -36,6 +36,13 @@ REVIEW_THREAD_LIMIT = 12
 REVIEW_THREAD_COMMENT_LIMIT = 2
 ROUTE_HEALTH_STATUSES = ("healthy", "stale", "blocked", "unknown")
 SCHEMA_VERSION = "pr_queue_snapshot.v2"
+ISSUE_COVERAGE_REFERENCE = re.compile(
+    r"(?i)\b(?:refs?|references?|close(?:s|d)?|fix(?:es|ed)?|"
+    r"resolve(?:s|d)?|implement(?:s|ed)?)\s*:?\s*`?#(?P<issue>[1-9][0-9]*)\b`?"
+)
+ISSUE_TITLE_REFERENCE = re.compile(
+    r"(?i)(?:\(#(?P<parent>[1-9][0-9]*)\)|\bissue\s*#?\s*(?P<issue>[1-9][0-9]*))"
+)
 BLOCKING_LABELS = frozenset(
     {
         "blocked",
@@ -77,6 +84,20 @@ def _shorten_text(value: Any, *, limit: int) -> str:
     if limit <= 3:
         return "." * max(limit, 0)
     return text[: limit - 3].rstrip() + "..."
+
+
+def _issue_references(pr: dict[str, Any]) -> list[int]:
+    """Project explicit issue ownership references into the compact queue snapshot."""
+    text = f"{pr.get('title', '')}\n{pr.get('body', '')}"
+    covered = [int(match.group("issue")) for match in ISSUE_COVERAGE_REFERENCE.finditer(text)]
+    if covered:
+        return list(dict.fromkeys(covered))
+    result: list[int] = []
+    for match in ISSUE_TITLE_REFERENCE.finditer(str(pr.get("title", ""))):
+        value = match.group("parent") or match.group("issue")
+        if value:
+            result.append(int(value))
+    return list(dict.fromkeys(result))
 
 
 def _author_login(author: Any) -> str:
@@ -1168,6 +1189,7 @@ def _pr_payload_from_dict(
         "status": "ok",
         "title": title,
         "state": pr.get("state", ""),
+        "issue_references": _issue_references(pr),
         "draft": is_draft,
         "url": pr.get("url", ""),
         "labels": labels,

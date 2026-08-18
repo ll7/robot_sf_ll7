@@ -526,6 +526,11 @@ Use the minimum required tier for changed surfaces:
 Before PR creation, rerun freshness gate after latest `origin/main` sync.
 Do not use stale validation as proof.
 
+Before PR creation, run `python3 scripts/dev/pr_open_preflight.py --issue <number> --mode policy
+--json`. This is the shared WIP admission decision; do not publish when it reports a block or
+unknown queue/claim evidence. Use `scripts/dev/start_worktree.sh` for new linked worktrees so the
+same decision occurs before checkout and environment creation.
+
 For issue-to-PR publication, also use `scripts/dev/check_prepublication_state.py`: capture the
 issue/base/remote-branch/local-HEAD baseline before expensive readiness, then run `check` immediately
 before opening the PR. Treat `superseded` and `blocked` as stops, and treat `refresh-required` as

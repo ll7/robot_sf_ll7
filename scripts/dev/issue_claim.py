@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -102,6 +103,26 @@ def build_acquire_command(issue_number: int, *, repo: str, sha: str) -> list[str
         f"ref={claim_ref(issue_number)}",
         "-f",
         f"sha={sha}",
+    ]
+
+
+def build_wip_capacity_command(
+    issue_number: int, *, repo: str, remote: str, mode: str = "policy"
+) -> list[str]:
+    """Build the read-only WIP admission command used before claim creation."""
+    script = str(Path(__file__).with_name("wip_capacity.py"))
+    return [
+        sys.executable,
+        script,
+        "--repo",
+        repo,
+        "--remote",
+        remote,
+        "--mode",
+        mode,
+        "--proposed-issue",
+        str(issue_number),
+        "--json",
     ]
 
 
@@ -827,8 +848,60 @@ def status_issue(issue_number: int, *, remote: str) -> dict[str, Any]:
     )
 
 
-def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str) -> dict[str, Any]:
+def acquire_issue(
+    issue_number: int,
+    *,
+    repo: str,
+    remote: str,
+    source_ref: str,
+    wip_mode: str = "policy",
+) -> dict[str, Any]:
     """Try to create the claim ref and return a machine-readable result."""
+    if wip_mode not in {"policy", "enforce", "report-only"}:
+        return {
+            "schema": "issue_claim.v1",
+            "action": "acquire",
+            "ok": False,
+            "claimed": False,
+            "issue": issue_number,
+            "repo": repo,
+            "remote": remote,
+            "error": "invalid_wip_mode",
+        }
+
+    capacity_result = _run(
+        build_wip_capacity_command(issue_number, repo=repo, remote=remote, mode=wip_mode)
+    )
+    try:
+        capacity_payload = json.loads(capacity_result.stdout)
+    except json.JSONDecodeError:
+        capacity_payload = None
+    capacity_allowed = isinstance(capacity_payload, dict) and capacity_payload.get("decision") in {
+        "allow",
+        "report_only",
+        "snapshot",
+    }
+    if wip_mode != "report-only" and (
+        capacity_result.returncode != 0
+        or not isinstance(capacity_payload, dict)
+        or not capacity_allowed
+    ):
+        return {
+            "schema": "issue_claim.v1",
+            "action": "acquire",
+            "ok": False,
+            "claimed": False,
+            "issue": issue_number,
+            "repo": repo,
+            "remote": remote,
+            "source_ref": source_ref,
+            "command": list(capacity_result.command),
+            "stdout": capacity_result.stdout.strip(),
+            "stderr": capacity_result.stderr.strip(),
+            "error": "wip_capacity_blocked",
+            "wip_preflight": capacity_payload,
+        }
+
     source_result = _run(build_resolve_source_command(source_ref=source_ref))
     if source_result.returncode != 0:
         return {
@@ -845,6 +918,7 @@ def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str)
             "stdout": source_result.stdout.strip(),
             "stderr": source_result.stderr.strip(),
             "error": "source_ref_resolution_failed",
+            "wip_preflight": capacity_payload,
         }
 
     sha = source_result.stdout.strip()
@@ -870,6 +944,7 @@ def acquire_issue(issue_number: int, *, repo: str, remote: str, source_ref: str)
             "claim_ref_already_exists_or_create_ref_failed; run status to inspect the current owner "
             "signal and skip this issue unless the claim is confirmed stale"
         ),
+        "wip_preflight": capacity_payload,
     }
 
 
@@ -1053,6 +1128,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Local ref to push when acquiring the claim. Defaults to origin/main.",
     )
     parser.add_argument(
+        "--wip-mode",
+        choices=("policy", "enforce", "report-only"),
+        default="policy",
+        help="WIP admission mode for acquire; policy uses configs/workflow/wip_policy.json.",
+    )
+    parser.add_argument(
         "--reason",
         choices=sorted(TERMINAL_RELEASE_REASONS),
         help="Terminal lifecycle reason required when releasing a claimed ref.",
@@ -1098,6 +1179,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=args.repo,
             remote=args.remote,
             source_ref=args.source_ref,
+            wip_mode=args.wip_mode,
         )
     else:
         payload = release_issue(

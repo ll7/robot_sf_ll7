@@ -106,18 +106,28 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Use the canonical WIP-gated creation command from the main checkout. It evaluates the complete
+PR/claim snapshot before `git worktree add`; a full or unknown queue therefore creates neither a
+checkout nor its environment:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
+scripts/dev/start_worktree.sh --issue 123 \
+  --branch issue-123-short-description \
   "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+  --source-ref origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The policy contract is [`configs/workflow/wip_policy.json`](../configs/workflow/wip_policy.json).
+`scripts/dev/wip_capacity.py` consumes `snapshot_pr_queue.v2` and `pr_loop_policy.py`, reports
+counted and excluded lanes, and fails closed on truncated or unavailable evidence. Use
+`--mode report-only` only for a bounded observation window; it must never be described as proven
+capacity. Issue claims and PR publication use the same evaluator through
+`scripts/dev/issue_claim.py acquire` and `scripts/dev/pr_open_preflight.py`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into

@@ -68,6 +68,23 @@ def test_base_freshness_fresh_preserves_merge_ready_action() -> None:
     assert pr["next_action"] == "merge_readiness_local_check"
 
 
+def test_snapshot_projects_issue_ownership_references_for_wip_admission() -> None:
+    """Compact rows retain body-only issue ownership without copying the full PR body."""
+    raw = _base_freshness_pr(number=7461)
+    raw["title"] = "fix: preflight capacity"
+    raw["body"] = "Refs #7476"
+
+    pr = _pr_payload_from_dict(
+        raw,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=7461,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["issue_references"] == [7476]
+
+
 def test_base_freshness_stale_blocks_merge_ready_action() -> None:
     """A stale PR base must route to branch refresh before review or merge readiness."""
     pr = _pr_payload_from_dict(

@@ -1,0 +1,41 @@
+{
+  "schema": "wip_capacity_policy.v1",
+  "default_mode": "enforce",
+  "limits": {
+    "implementation": 3,
+    "campaign_operations": 2
+  },
+  "campaign_labels": [
+    "campaign",
+    "needs-campaign",
+    "slurm",
+    "resource:slurm",
+    "type:benchmark",
+    "routing:needs-compute",
+    "routing:compute-routed"
+  ],
+  "implementation_priority_labels": [
+    "priority:0",
+    "priority:1"
+  ],
+  "count_unknown_priority": true,
+  "counted_pr_states": [
+    "active_writer",
+    "pending_ci",
+    "failed_ci",
+    "failed_validation",
+    "missing_artifacts",
+    "stale_worktree",
+    "unknown_review_threads",
+    "pending_gate_verdict",
+    "pending_pr_metadata",
+    "ready_to_merge"
+  ],
+  "parked_pr_states": [
+    "author_decision",
+    "blocked_preflight",
+    "stale_merge_base",
+    "no_action"
+  ],
+  "rollback_mode": "report-only"
+}

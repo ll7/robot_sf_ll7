@@ -14,6 +14,8 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 class _DummyPPOPlanner:
     """Test double for PPO planner integration in map runner."""
 
+    test_action: ClassVar[dict[str, float]] = {"v": 0.5, "omega": 0.0}
+
     def __init__(self, config, *, seed=None):
         self.config = dict(config)
         self.seed = seed
@@ -24,7 +26,7 @@ class _DummyPPOPlanner:
     def step(self, _obs):
         """Return the configured action and retain the received observation."""
         self.last_obs = _obs
-        return self.config.get("test_action", {"v": 0.5, "omega": 0.0})
+        return dict(self.test_action)
 
     def close(self):
         """Mark the dummy planner as closed."""
@@ -98,12 +100,18 @@ def _sample_obs(heading: float = 0.0) -> dict:
     }
 
 
+def _patch_ppo(monkeypatch, action: dict[str, float]) -> None:
+    """Patch the PPO double and its deterministic action for one test."""
+    monkeypatch.setattr(_DummyPPOPlanner, "test_action", action)
+    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+
+
 def test_build_policy_ppo_accepts_unicycle_action(monkeypatch):
     """Ensure PPO map policy accepts native unicycle outputs."""
-    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    _patch_ppo(monkeypatch, {"v": 0.7, "omega": -0.2})
     policy, meta = map_runner._build_policy(
         "ppo",
-        {"test_action": {"v": 0.7, "omega": -0.2}},
+        {},
     )
 
     action_v, action_w = policy(_sample_obs())
@@ -117,6 +125,7 @@ def test_build_policy_ppo_accepts_unicycle_action(monkeypatch):
 def test_build_policy_ppo_strips_benchmark_metadata_before_planner(monkeypatch):
     """PPO admission metadata must not cross the typed planner config boundary."""
     instances = []
+    _patch_ppo(monkeypatch, {"v": 0.3, "omega": 0.0})
 
     def _make_planner(config, *, seed=None):
         planner = _DummyPPOPlanner(config, seed=seed)
@@ -127,15 +136,17 @@ def test_build_policy_ppo_strips_benchmark_metadata_before_planner(monkeypatch):
     policy, meta = map_runner._build_policy(
         "ppo",
         {
+            "obs_mode": "dict",
             "profile": "experimental",
             "provenance": {"source": "fixture"},
             "quality_gate": {"status": "diagnostic"},
-            "test_action": {"v": 0.3, "omega": 0.0},
+            "allow_testing_algorithms": True,
+            "allow_fallback": True,
         },
     )
 
     policy(_sample_obs())
-    assert instances[-1].config == {"test_action": {"v": 0.3, "omega": 0.0}}
+    assert instances[-1].config == {"obs_mode": "dict"}
     assert meta["profile"] == "experimental"
     assert meta["provenance"] == {"source": "fixture"}
     assert meta["quality_gate"] == {"status": "diagnostic"}
@@ -143,11 +154,10 @@ def test_build_policy_ppo_strips_benchmark_metadata_before_planner(monkeypatch):
 
 def test_build_policy_ppo_converts_velocity_to_unicycle(monkeypatch):
     """Ensure velocity-vector PPO outputs are converted to unicycle commands."""
-    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    _patch_ppo(monkeypatch, {"vx": 1.0, "vy": 0.0})
     policy, _ = map_runner._build_policy(
         "ppo",
         {
-            "test_action": {"vx": 1.0, "vy": 0.0},
             "v_max": 0.8,
             "omega_max": 0.5,
         },
@@ -160,10 +170,10 @@ def test_build_policy_ppo_converts_velocity_to_unicycle(monkeypatch):
 
 def test_build_policy_ppo_rejects_unknown_action_payload(monkeypatch):
     """Reject malformed PPO action payloads lacking known action keys."""
-    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    _patch_ppo(monkeypatch, {"foo": 1.0})
     policy, _ = map_runner._build_policy(
         "ppo",
-        {"test_action": {"foo": 1.0}},
+        {},
     )
 
     with pytest.raises(ValueError, match="Unsupported PPO action payload"):
@@ -172,10 +182,10 @@ def test_build_policy_ppo_rejects_unknown_action_payload(monkeypatch):
 
 def test_build_policy_ppo_adapter_impact_updates_metadata(monkeypatch):
     """PPO adapter-impact counters should mutate the returned metadata in-place."""
-    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    _patch_ppo(monkeypatch, {"v": 0.4, "omega": 0.1})
     policy, meta = map_runner._build_policy(
         "ppo",
-        {"test_action": {"v": 0.4, "omega": 0.1}},
+        {},
         adapter_impact_eval=True,
     )
 
@@ -220,12 +230,11 @@ def test_obs_to_ppo_format_preserves_heading_for_unicycle_fallback():
 
 def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
     """Dict obs mode should pass the raw SocNav structured observation through to PPO."""
-    monkeypatch.setattr(map_runner, "PPOPlanner", _DummyPPOPlanner)
+    _patch_ppo(monkeypatch, {"v": 0.3, "omega": 0.0})
     policy, _ = map_runner._build_policy(
         "ppo",
         {
             "obs_mode": "dict",
-            "test_action": {"v": 0.3, "omega": 0.0},
         },
     )
 
@@ -236,11 +245,11 @@ def test_build_policy_ppo_dict_mode_passes_raw_observation(monkeypatch):
     assert action_v == pytest.approx(0.3)
     assert action_w == pytest.approx(0.0)
     # Validate passthrough by rebuilding policy and checking last_obs on dummy planner.
-    dummy = _DummyPPOPlanner({"obs_mode": "dict", "test_action": {"v": 0.3, "omega": 0.0}})
+    dummy = _DummyPPOPlanner({"obs_mode": "dict"})
     monkeypatch.setattr(map_runner, "PPOPlanner", lambda *_args, **_kwargs: dummy)
     policy2, _ = map_runner._build_policy(
         "ppo",
-        {"obs_mode": "dict", "test_action": {"v": 0.3, "omega": 0.0}},
+        {"obs_mode": "dict"},
     )
     policy2(obs)
     assert dummy.last_obs is obs

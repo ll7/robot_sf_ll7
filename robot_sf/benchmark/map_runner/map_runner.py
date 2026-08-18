@@ -494,13 +494,28 @@ _STRICT_LEARNED_POLICY_PROFILES = {"baseline-safe", "paper-baseline"}
 _PPO_ALLOWED_OBS_MODES = {"vector", "dict", "native_dict", "multi_input"}
 _PPO_ALLOWED_ACTION_SPACES = {"velocity", "unicycle"}
 _PPO_WARN_ROBOT_KINEMATICS = {"holonomic", "omni", "omnidirectional"}
-_PPO_BENCHMARK_METADATA_KEYS = frozenset({"profile", "provenance", "quality_gate"})
 
 _default_robot_command_space = planner_commands.default_robot_command_space
 _init_feasibility_metadata = planner_commands.init_feasibility_metadata
 _planner_kinematics_compatibility = planner_commands.planner_kinematics_compatibility
 _project_with_feasibility = planner_commands.project_with_feasibility
 _validate_planner_contract = planner_commands.validate_planner_contract
+
+
+def _ppo_planner_config(algo_config: dict[str, Any]) -> dict[str, Any]:
+    """Keep only typed PPO runtime fields when crossing the map-runner boundary.
+
+    Benchmark admission, provenance, and adapter controls intentionally share the
+    algorithm config mapping, but they are not constructor fields on
+    :class:`PPOPlannerConfig`. Filtering against the dataclass keeps that planner
+    boundary fail-closed for unknown runtime keys while preserving the original
+    mapping for map-runner metadata and gates.
+
+    Returns:
+        The subset of ``algo_config`` accepted by ``PPOPlannerConfig``.
+    """
+    allowed = {field.name for field in fields(PPOPlannerConfig)}
+    return {key: value for key, value in algo_config.items() if key in allowed}
 
 
 _load_synthetic_actuation_profile = _load_synthetic_actuation_profile_impl
@@ -1238,12 +1253,7 @@ def _build_ppo_policy(  # noqa: C901
         tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
     """
     paper_ready, paper_reason = _enforce_ppo_paper_profile(algo_config)
-    # These fields belong to map-runner admission and evidence metadata, not to the
-    # planner's typed runtime config. Keep the planner boundary fail-closed for every
-    # other unknown key while removing only metadata owned by this caller.
-    ppo_config = {
-        key: value for key, value in algo_config.items() if key not in _PPO_BENCHMARK_METADATA_KEYS
-    }
+    ppo_config = _ppo_planner_config(algo_config)
     ppo_planner = PPOPlanner(ppo_config, seed=None)
     ppo_obs_mode = _resolve_planner_obs_mode(ppo_planner, "vector")
     if hasattr(ppo_planner, "get_metadata"):
@@ -1514,8 +1524,7 @@ def _build_guarded_ppo_policy(  # noqa: C901, PLR0915
     Returns:
         tuple[Callable, dict[str, Any]]: Policy callable and enriched metadata.
     """
-    ppo_allowed = {field.name for field in fields(PPOPlannerConfig)}
-    ppo_config = {key: value for key, value in algo_config.items() if key in ppo_allowed}
+    ppo_config = _ppo_planner_config(algo_config)
     ppo_planner = PPOPlanner(ppo_config, seed=None)
     guard_adapter = GuardedPPOAdapter(
         config=build_guarded_ppo_config(algo_config),

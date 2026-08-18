@@ -1706,3 +1706,177 @@ def test_main_keeps_status_propagation_lag_fail_closed(
     assert payloads[-1]["monitor"]["pending_reason"] == "status_propagation_lag"
     assert payloads[-1]["monitor"]["diagnostic"] == "check_run_stale_job_success"
     assert payloads[-1]["monitor"]["terminal_reason"] == "status_propagation_lag"
+
+
+def test_fetch_ci_status_reports_actions_queue_age_and_manual_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale setup gate reports age and exact-head-safe, non-executed recovery commands."""
+    payload = {
+        "number": 7000,
+        "title": "queued gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "queued-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "fast-feedback (1)",
+                "workflowName": "CI",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/123": {
+            "status": "in_progress",
+            "conclusion": None,
+            "created_at": "1970-01-01T00:00:00Z",
+            "run_started_at": "1970-01-01T00:00:10Z",
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/456": {
+            "status": "queued",
+            "conclusion": None,
+            "started_at": None,
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7000", actions_stale_after_seconds=900)
+
+    lifecycle = data["checks"]["actions_lifecycle"]
+    assert lifecycle["by_phase"] == {"setup": 1}
+    assert lifecycle["stale_count"] == 1
+    warning = data["checks"]["age_warnings"][0]
+    assert warning["age_seconds"] == 990
+    assert warning["age_source"] == "workflow_started_at"
+    assert warning["exact_head_sha_matches"] is True
+    assert data["checks"]["pending_reason"] == "actions_gate_age"
+    assert data["checks"]["diagnostic"] == "actions_gate_queue_age"
+    recovery = data["checks"]["recovery"]
+    assert recovery["action"] == "inspect_then_cancel_or_replace"
+    assert recovery["mutation_authorized"] is False
+    stale_run = recovery["stale_runs"][0]
+    assert stale_run["cancel_command"] == "gh run cancel 123"
+    assert stale_run["replacement_command"] == "gh run rerun 123"
+
+
+def test_actions_recovery_blocks_mutation_when_run_head_is_not_proven(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale run with an unmatching head must not receive cancel/rerun commands."""
+    payload = {
+        "number": 7001,
+        "title": "wrong head gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "wrong-head-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/124/job/457",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {
+                "status": "queued",
+                "created_at": "1970-01-01T00:00:00Z",
+                "head_sha": "not-the-pr-head",
+            }
+            if path == "actions/runs/124"
+            else {"status": "queued", "conclusion": None}
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7001", actions_stale_after_seconds=900)
+
+    stale_run = data["checks"]["recovery"]["stale_runs"][0]
+    assert stale_run["exact_head_sha_matches"] is False
+    assert stale_run["cancel_command"] is None
+    assert stale_run["replacement_command"] is None
+
+
+def test_fetch_ci_status_identifies_superseded_exact_head_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Superseded runs expose their replacement without changing fail-closed CI semantics."""
+    payload = {
+        "number": 7002,
+        "title": "replacement gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "replacement-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "1970-01-01T00:00:01Z",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/125/job/458",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "1970-01-01T00:00:02Z",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/126/job/459",
+            },
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {
+                "status": "queued",
+                "created_at": "1970-01-01T00:00:02Z",
+                "head_sha": FULL_SHA,
+            }
+            if path == "actions/runs/126"
+            else {"status": "queued", "conclusion": None}
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7002", actions_stale_after_seconds=10_000)
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["superseded"] == 1
+    superseded = data["checks"]["superseded_runs"][0]
+    assert superseded["run_id"] == 125
+    assert superseded["replacement"]["run_id"] == 126
+    assert superseded["reason"] == "newer_same_workflow_job"
+    assert data["checks"]["recovery"]["action"] == "wait_for_replacement"

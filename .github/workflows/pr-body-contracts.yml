@@ -53,3 +53,11 @@ jobs:
             --require-substantive-body \
             --require-open-issues \
             --advisory
+
+      - name: Validate exact-head provenance
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/pr_body_provenance.py \
+            --github-event-path "$GITHUB_EVENT_PATH" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --json

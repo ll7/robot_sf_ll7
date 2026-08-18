@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
+from scripts.dev.pr_body_provenance import extract_sha_carriers, validate_sha_carriers
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title
 
 if TYPE_CHECKING:
@@ -97,6 +98,38 @@ def _decode_object(
     return response, None
 
 
+def _validate_incoming_body(
+    number: int,
+    body: str,
+    *,
+    repo: str,
+    current: dict[str, Any] | None = None,
+) -> str | None:
+    """Reject fabricated full-SHA provenance before a PR metadata write."""
+
+    if not extract_sha_carriers(body):
+        return None
+
+    if current is None:
+        current_result = _gh_api_get(f"repos/{repo}/pulls/{number}")
+        current, current_error = _decode_object(current_result, operation="PR provenance read")
+        if current_error:
+            return current_error
+        assert current is not None
+
+    head = current.get("head")
+    if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
+        return "PR provenance read returned a malformed live head SHA"
+    errors = validate_sha_carriers(
+        body,
+        live_head_sha=head["sha"],
+        repo_root=Path.cwd(),
+    )
+    if errors:
+        return "PR body provenance validation failed: " + "; ".join(errors)
+    return None
+
+
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Update PR *number* from *body_file* and verify the REST response.
 
@@ -112,6 +145,9 @@ def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) ->
 
     try:
         with _metadata_write_lock(repo, number):
+            provenance_error = _validate_incoming_body(number, body, repo=repo)
+            if provenance_error:
+                return {"status": "error", "error": provenance_error}
             result = _gh_api_patch(f"repos/{repo}/pulls/{number}", {"body": body})
             if result.returncode != 0:
                 detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
@@ -179,6 +215,14 @@ def reconcile_pr_metadata(  # noqa: C901
                 current_body = ""
             if not isinstance(current_body, str):
                 return {"status": "error", "error": "PR metadata read returned a malformed body"}
+            provenance_error = _validate_incoming_body(
+                number,
+                body,
+                repo=repo,
+                current=current,
+            )
+            if provenance_error:
+                return {"status": "error", "error": provenance_error}
 
             desired_digest = metadata_digest(title, body)
             current_digest = metadata_digest(current_title, current_body)

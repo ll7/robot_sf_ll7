@@ -98,6 +98,48 @@ def test_update_pr_body_fails_closed_on_timeout(tmp_path: Path) -> None:
     assert "not verified" in result["error"]
 
 
+def test_update_pr_body_accepts_live_exact_head_carrier(tmp_path: Path) -> None:
+    """A body writer may record the live PR head even when it is not local yet."""
+    live_sha = "0123456789abcdef0123456789abcdef01234567"
+    body_file = tmp_path / "body.md"
+    body_file.write_text(f"gate-verdict: accepted @ {live_sha}\n", encoding="utf-8")
+    response = {
+        "body": body_file.read_text(encoding="utf-8"),
+        "html_url": "https://example/pr/5220",
+    }
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"head": {"sha": live_sha}}))
+        mock_patch.return_value = _proc(stdout=json.dumps(response))
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "ok"
+    mock_get.assert_called_once_with("repos/ll7/robot_sf_ll7/pulls/5220")
+    mock_patch.assert_called_once()
+
+
+def test_update_pr_body_rejects_fabricated_exact_head_before_patch(tmp_path: Path) -> None:
+    """A full SHA absent from Git and unlike the live head cannot be written."""
+    live_sha = "0123456789abcdef0123456789abcdef01234567"
+    fabricated_sha = "fedcba9876543210fedcba9876543210fedcba98"
+    body_file = tmp_path / "body.md"
+    body_file.write_text(f"Exact head: {fabricated_sha}\n", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+        patch("scripts.dev.pr_body_provenance.git_object_type", return_value=None),
+    ):
+        mock_get.return_value = _proc(stdout=json.dumps({"head": {"sha": live_sha}}))
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "provenance validation failed" in result["error"]
+    assert fabricated_sha in result["error"]
+    mock_patch.assert_not_called()
+
+
 def test_cli_prints_compact_success_json(tmp_path: Path, capsys) -> None:
     """The command-line contract is a single machine-readable success result."""
     body_file = tmp_path / "body.md"

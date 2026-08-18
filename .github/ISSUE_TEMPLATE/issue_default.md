@@ -9,11 +9,11 @@ assignees: []
 ## Goal / Problem
 
 **Task type**
-- bugfix / feature / refactor / experiment / docs / other
+<!-- Use the canonical archetype field below; this heading is retained for context only. -->
 
 ## Archetype Metadata
 
-<!-- Allowed values: docs/context/issue_1512_issue_archetypes.md -->
+<!-- Choose exactly one archetype and one evidence_tier from docs/context/issue_1512_issue_archetypes.md. -->
 ```yaml
 archetype:
 evidence_tier:

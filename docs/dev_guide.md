@@ -2640,6 +2640,13 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 Use the following templates for specific tasks.
 
+Every issue template collects the canonical `archetype` and `evidence_tier` metadata defined in
+the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown templates provide
+the metadata block near the top of the issue body; YAML issue forms expose both fields as required
+dropdowns. Use exactly one value from each enum and add repository-relative paths under
+`linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
+without rewriting existing issue bodies or changing labels and project fields.
+
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:
   [research validation](../.github/ISSUE_TEMPLATE/research-validation.yml),

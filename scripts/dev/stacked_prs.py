@@ -534,31 +534,24 @@ def _gate_status(
     }
 
 
-def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
-    """Return deterministic fail-closed readiness reasons for one stack entry."""
-    reasons: list[str] = []
-    if entry.get("state") != "open":
-        reasons.append("pull_request_not_open")
-    if entry.get("draft") is True:
-        reasons.append("pull_request_is_draft")
-    if entry.get("mergeable") is not True:
-        reasons.append("mergeable_state_unknown_or_false")
-    if entry.get("mergeable_state") != "clean":
-        reasons.append("mergeable_state_not_clean")
-    if entry.get("checks", {}).get("overall") != "success":
-        reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
-    for hold in entry.get("explicit_holds", []):
-        reasons.append(f"explicit_hold:{hold}")
+def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return fail-closed reasons for the exact-head Merge Queue Gate evidence."""
     merge_queue_gate = entry.get("merge_queue_gate", {})
     gate_status = merge_queue_gate.get("status")
     if gate_status == "missing":
-        reasons.append("missing_merge_queue_gate")
-    elif gate_status == "malformed":
-        reasons.append("malformed_merge_queue_gate")
-    elif gate_status == "mismatch":
-        reasons.append("merge_queue_gate_head_mismatch")
-    elif gate_status != "success":
-        reasons.append(f"merge_queue_gate_not_green:{gate_status or 'unknown'}")
+        return ["missing_merge_queue_gate"]
+    if gate_status == "malformed":
+        return ["malformed_merge_queue_gate"]
+    if gate_status == "mismatch":
+        return ["merge_queue_gate_head_mismatch"]
+    if gate_status != "success":
+        return [f"merge_queue_gate_not_green:{gate_status or 'unknown'}"]
+    return []
+
+
+def _review_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return fail-closed reasons for review and metadata evidence."""
+    reasons: list[str] = []
     for state in ("CHANGES_REQUESTED", "PENDING", "DISMISSED"):
         if entry.get("review_states", {}).get(state, 0):
             reasons.append(f"non_authoritative_review_state:{state.lower()}")
@@ -576,6 +569,26 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
         reasons.append("missing_exact_head_gate_verdict")
     if entry.get("metadata_verdict") != "accepted":
         reasons.append("missing_current_pr_metadata_verdict")
+    return reasons
+
+
+def _entry_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return deterministic fail-closed readiness reasons for one stack entry."""
+    reasons: list[str] = []
+    if entry.get("state") != "open":
+        reasons.append("pull_request_not_open")
+    if entry.get("draft") is True:
+        reasons.append("pull_request_is_draft")
+    if entry.get("mergeable") is not True:
+        reasons.append("mergeable_state_unknown_or_false")
+    if entry.get("mergeable_state") != "clean":
+        reasons.append("mergeable_state_not_clean")
+    if entry.get("checks", {}).get("overall") != "success":
+        reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
+    for hold in entry.get("explicit_holds", []):
+        reasons.append(f"explicit_hold:{hold}")
+    reasons.extend(_merge_queue_gate_reasons(entry))
+    reasons.extend(_review_reasons(entry))
     if entry.get("base_alignment") != "aligned":
         reasons.append("stack_base_not_aligned")
     return reasons

@@ -173,10 +173,13 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
         summarize_merge_queue_gate([{**older, "head_sha": "b" * 40}], head_sha=head_sha)["status"]
         == "mismatch"
     )
-    assert summarize_merge_queue_gate(
-        [{key: value for key, value in older.items() if key != "head_sha"}],
-        head_sha=head_sha,
-    )["status"] == "malformed"
+    assert (
+        summarize_merge_queue_gate(
+            [{key: value for key, value in older.items() if key != "head_sha"}],
+            head_sha=head_sha,
+        )["status"]
+        == "malformed"
+    )
     assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
 
 

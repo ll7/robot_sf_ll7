@@ -105,6 +105,7 @@ VALID_STATES = frozenset(
         "active_writer",
         "author_decision",
         "stacked_not_independently_mergeable",
+        "merged_externally",
         "ready_to_merge",
         "no_action",
     }
@@ -883,6 +884,16 @@ def _preflight_state_before_pending(
     return None
 
 
+def _lifecycle_state(pr: dict[str, Any]) -> str | None:
+    """Return the terminal lifecycle route for a PR snapshot, if applicable."""
+    lifecycle_state = str(pr.get("state", "")).upper()
+    if lifecycle_state == "MERGED" or pr.get("merged_at"):
+        return "merged_externally"
+    if lifecycle_state == "CLOSED":
+        return "no_action"
+    return None
+
+
 def classify_pr_state(
     pr: dict[str, Any],
     *,
@@ -900,7 +911,9 @@ def classify_pr_state(
     ``stacked_not_independently_mergeable`` is checked before failed-CI and
     merge-readiness, so a PR with undeclared/mismatched/invalidated/declared
     non-``main`` ancestry can never be treated as independently mergeable.
-    Draft/closed/error PRs still return ``no_action`` first, exactly as before.
+    Draft/closed/error PRs still return ``no_action`` first, while a snapshot
+    that records a merge returns ``merged_externally`` so the caller can emit a
+    distinct no-action handoff rather than re-reviewing it.
     The not-ready-sentinel half (merge-ready present while the body carries a
     not-ready sentence) is tracked separately in issue #7491 and intentionally
     not implemented here.
@@ -915,6 +928,9 @@ def classify_pr_state(
     status = str(pr.get("status", ""))
     if status == "error":
         return "no_action"
+    lifecycle_state = _lifecycle_state(pr)
+    if lifecycle_state is not None:
+        return lifecycle_state
     checks = pr.get("checks") or {}
     overall = str(checks.get("overall", ""))
     label_names = _label_names(pr)
@@ -995,7 +1011,7 @@ def _compute_flow_decision(
       - ready_to_merge -> continue
       - unknown_review_threads -> continue (wait for a thread-capable snapshot)
       - failed_ci, failed_validation, missing_artifacts, stale_worktree, stale_merge_base -> reroute
-      - active_writer, author_decision, blocked_preflight -> stop (parked)
+      - active_writer, author_decision, blocked_preflight, merged_externally -> stop (parked)
       - stacked_not_independently_mergeable -> stop (parked; parent must merge first)
       - no_action -> stop
     """
@@ -1209,6 +1225,18 @@ def recommend_action(  # noqa: C901, PLR0912
                     "non-main ancestry is present (undeclared, mismatched, invalidated, "
                     "or a declared stack); park until the parent merges and the branch is "
                     "re-evaluated against current main"
+                ),
+                actions_remaining=remaining,
+            )
+        case "merged_externally":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "PR merged externally while in the review queue; do not post review evidence "
+                    "or apply merge-ready"
                 ),
                 actions_remaining=remaining,
             )

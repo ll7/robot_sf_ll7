@@ -22,6 +22,55 @@ def _mock_labels_payload(*names: str) -> str:
 class TestAddLabel:
     """Tests for the add_label helper function."""
 
+    def test_merge_ready_requires_matching_open_head(self) -> None:
+        """The merge-ready write performs the exact-head preflight first."""
+        head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={"status": "ok"},
+            ) as mock_guard,
+            patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                _proc(stdout=json.dumps({"name": "merge-ready"})),
+                _proc(stdout=_mock_labels_payload("merge-ready")),
+            ]
+            result = add_label(
+                5220,
+                "merge-ready",
+                repo="ll7/robot_sf_ll7",
+                expected_head_sha=head_sha,
+            )
+
+        assert result["status"] == "ok"
+        mock_guard.assert_called_once_with(
+            5220,
+            repo="ll7/robot_sf_ll7",
+            expected_head_sha=head_sha,
+            operation="merge_ready_label",
+        )
+
+    def test_merge_ready_stale_state_skips_post(self) -> None:
+        """A merged or moved PR must not receive a merge-ready label write."""
+        stale = {
+            "status": "review_skipped_stale_state",
+            "reason": "pr_not_open",
+            "observed_state": "MERGED",
+        }
+        with (
+            patch("scripts.dev.gh_pr_label_rest.guard_pr_write", return_value=stale),
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            result = add_label(
+                5220,
+                "merge-ready",
+                expected_head_sha="a1b2c3d4e5f60718293a4b5c6d7e8f9001020304",
+            )
+
+        assert result == stale
+        mock_post.assert_not_called()
+
     def test_adds_label_via_rest_endpoint_and_verifies(self) -> None:
         """The helper must POST JSON labels[] and verify via re-read."""
         with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:

@@ -154,3 +154,16 @@ def test_license_gate_rejects_noncanonical_payload_paths(tmp_path: Path) -> None
 
     with pytest.raises(DistributionLicenseError, match="missing root GPL license"):
         check_distribution(tmp_path)
+
+
+def test_license_gate_rejects_model_artifacts_in_source_distribution(tmp_path: Path) -> None:
+    """A source archive must not smuggle model artifacts past the license gate."""
+    payloads = dict(PAYLOADS)
+    payloads["model/run_043.zip"] = "checkpoint bytes"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="forbidden source-distribution model artifact members",
+    ):
+        check_distribution(tmp_path)

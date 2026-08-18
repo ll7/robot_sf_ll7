@@ -20,6 +20,10 @@ The fixture-only agent figure interpretation evaluator is documented in
 it reports aggregate scoring and workflow-variant availability without establishing model or
 scientific results.
 
+Exact-repeat execution-context provenance is documented in
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md);
+it binds cross-host verdicts to numerical context without establishing a determinism result.
+
 The post-rollout stale-base observation contract is documented in
 [issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
 SHA-pinned workflow records and keeps missing or unknown attribution unavailable.
@@ -131,6 +135,8 @@ knowledge, not every transient iteration detail.
 * Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
 * Issue #6103 / Issue #3275 same-planner held-out contract:
   [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md)
+* Issue #6318 Open Dreamer model-quality gate:
+  [issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md)
 * Issue #4932 data-driven scenario generation:
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:

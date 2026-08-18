@@ -10,11 +10,11 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062;
-# this PR adds the result-interpretation packet module.
+# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062,
+# the result-interpretation packet module, and the trace-dossier package added by #7114.
 # Keep this explicit so a new direct child fails the audit until it is
 # deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 295
+EXPECTED_DIRECT_CHILD_COUNT = 296
 
 
 @pytest.fixture(scope="module")
@@ -64,6 +64,10 @@ def test_known_facades_and_clusters_are_classified(inventory: dict[str, object])
     assert rows["result_interpretation_packet.py"]["compatibility_action"] == (
         "no_compatibility_action"
     )
+    assert rows["trace_dossier_package.py"]["classification"] == (
+        "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
+    )
+    assert rows["trace_dossier_package.py"]["compatibility_action"] == ("no_compatibility_action")
     assert rows["__init__.py"]["classification"] == "canonical_top_level_facade_api"
 
 

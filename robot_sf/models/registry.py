@@ -416,6 +416,11 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     return True
 
 
+def _utc_now() -> datetime:
+    """Return the current timezone-aware UTC time for retry calculations."""
+    return datetime.now(UTC)
+
+
 def _retry_after_seconds(error: HTTPError, *, now: datetime | None = None) -> float | None:
     """Parse a non-negative ``Retry-After`` delay from one HTTP error.
 
@@ -473,6 +478,7 @@ def _stream_download_url(
     backoff_seconds: float = DEFAULT_GITHUB_DOWNLOAD_BACKOFF_SECONDS,
     max_backoff_seconds: float = DEFAULT_GITHUB_DOWNLOAD_MAX_BACKOFF_SECONDS,
     sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], datetime] = _utc_now,
 ) -> None:
     """Stream a URL to a local target path atomically.
 
@@ -501,7 +507,7 @@ def _stream_download_url(
             except HTTPError as exc:
                 if not _is_retryable_github_download_error(exc) or attempt >= max_attempts:
                     raise
-                retry_after = _retry_after_seconds(exc)
+                retry_after = _retry_after_seconds(exc, now=clock())
                 delay = min(
                     max_backoff_seconds,
                     retry_after if retry_after is not None else backoff_seconds * attempt,

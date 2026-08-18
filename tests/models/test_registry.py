@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.error import HTTPError
@@ -446,6 +448,64 @@ def test_github_release_download_uses_bounded_backoff_for_missing_or_malformed_r
     assert sleeps == [0.5, 1.0]
     assert not target.exists()
     assert list(target.parent.glob("*.part")) == []
+
+
+@pytest.mark.parametrize(
+    ("retry_delta", "expected_delay"),
+    [(timedelta(seconds=45), 45.0), (timedelta(seconds=-5), 0.0)],
+    ids=["future-date", "past-date"],
+)
+def test_retry_after_http_date_uses_injected_clock(
+    monkeypatch, tmp_path: Path, retry_delta: timedelta, expected_delay: float
+) -> None:
+    """HTTP-date retry headers honor a deterministic clock, including past dates."""
+    current = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
+    target = tmp_path / "cache" / "model.zip"
+    target.parent.mkdir(parents=True)
+    sleeps: list[float] = []
+    calls: list[int] = []
+
+    class _Response:
+        def __init__(self) -> None:
+            self._done = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._done:
+                return b""
+            self._done = True
+            return b"checkpoint"
+
+    def fake_urlopen(url: str, *, timeout: int):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise HTTPError(
+                url,
+                429,
+                "rate limited",
+                {"Retry-After": format_datetime(current + retry_delta, usegmt=True)},
+                None,
+            )
+        return _Response()
+
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    registry._stream_download_url(
+        "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip",
+        target,
+        max_attempts=2,
+        max_backoff_seconds=30.0,
+        sleep=sleeps.append,
+        clock=lambda: current,
+    )
+
+    assert calls == [60, 60]
+    assert sleeps == [min(expected_delay, 30.0)]
+    assert target.read_bytes() == b"checkpoint"
 
 
 def test_github_release_cache_reuses_only_matching_sha256(monkeypatch, tmp_path: Path) -> None:

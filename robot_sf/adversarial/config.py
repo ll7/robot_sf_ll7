@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 #: materialization agree on which dimensions must be runtime-effective.
 PROMOTION_TIMING_DIMENSIONS: tuple[str, ...] = ("spawn_time_s", "pedestrian_delay_s")
 
+# A candidate pedestrian can either follow the sampled robot route (the historical
+# adversarial-search behavior) or retain the route authored by the scenario template.
+PEDESTRIAN_ROUTE_MODES: tuple[str, ...] = ("candidate", "template")
+
 
 @dataclass(frozen=True)
 class Pose2D:
@@ -388,6 +392,7 @@ class SearchSpaceConfig:
     scenario_seed: RangeConfig = field(default_factory=lambda: RangeConfig(1.0, 1.0))
     min_start_goal_distance_m: float = 0.25
     pedestrian_id: str | None = None
+    pedestrian_route_mode: str = "candidate"
     # ``None`` denotes a programmatic config, where the dataclass fields are the source of
     # truth. ``from_mapping`` records the actual YAML keys so a defaulted timing range cannot
     # be mistaken for a declared frozen promotion dimension by the readiness preflight.
@@ -438,6 +443,12 @@ class SearchSpaceConfig:
         if not isinstance(pedestrian, dict):
             raise ValueError("search-space pedestrian section must be a mapping")
         pedestrian_id = str(pedestrian.get("id") or "").strip() or None
+        pedestrian_route_mode = str(pedestrian.get("route_mode") or "candidate").strip().lower()
+        if pedestrian_route_mode not in PEDESTRIAN_ROUTE_MODES:
+            raise ValueError(
+                "search-space pedestrian.route_mode must be one of: "
+                + ", ".join(PEDESTRIAN_ROUTE_MODES)
+            )
 
         config = cls(
             start_x=_range("start_x"),
@@ -450,6 +461,7 @@ class SearchSpaceConfig:
             scenario_seed=_range("scenario_seed", (1.0, 1.0)),
             min_start_goal_distance_m=float(constraints.get("min_start_goal_distance_m", 0.25)),
             pedestrian_id=pedestrian_id,
+            pedestrian_route_mode=pedestrian_route_mode,
             # Explicit nulls use the same default parsing path as omitted optional variables,
             # but they are not declarations that can satisfy the promotion preflight.
             _declared_variables=frozenset(
@@ -551,7 +563,18 @@ class SearchSpaceConfig:
                 "scenario_seed": self.scenario_seed.to_json(),
             },
             "constraints": {"min_start_goal_distance_m": self.min_start_goal_distance_m},
-            "pedestrian": {"id": self.pedestrian_id} if self.pedestrian_id else {},
+            "pedestrian": (
+                {
+                    "id": self.pedestrian_id,
+                    **(
+                        {"route_mode": self.pedestrian_route_mode}
+                        if self.pedestrian_route_mode != "candidate"
+                        else {}
+                    ),
+                }
+                if self.pedestrian_id
+                else {}
+            ),
         }
 
 

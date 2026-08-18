@@ -206,6 +206,12 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6318 Step 3 model-quality gate: config-first held-out prediction checks for the clean-room
+latent dynamics, reward, and continuation heads against persistence and a deterministic diagnostic
+MLP reference; the committed preview is intentionally blocked by train/holdout insufficiency and
+the gate makes no SAC, benchmark, or paper-facing claim:
+[issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md).
+
 Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
 preflight configuration and its explicit no-result boundary:
 [issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).

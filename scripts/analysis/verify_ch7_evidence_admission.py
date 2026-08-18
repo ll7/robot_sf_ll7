@@ -164,7 +164,11 @@ def _reject_special_entries(root: Path, *, label: str) -> None:
 
 
 def _verify_members(
-    root: Path, *, label: str, require_review_sidecars: bool = True
+    root: Path,
+    *,
+    label: str,
+    require_review_sidecars: bool = True,
+    allow_review_sidecars: bool = False,
 ) -> tuple[str, list[str]]:
     root = root.resolve()
     sums_path = root / "SHA256SUMS"
@@ -187,7 +191,7 @@ def _verify_members(
         raise Ch7EvidenceAdmissionError(f"{label} SHA256SUMS lists missing files: {missing}")
     if extra:
         raise Ch7EvidenceAdmissionError(f"{label} contains unlisted files: {extra}")
-    if require_review_sidecars:
+    if require_review_sidecars or (allow_review_sidecars and sidecars):
         _verify_review_sidecars(root, sidecars, listed, sums_path, label=label)
     elif sidecars:
         raise Ch7EvidenceAdmissionError(

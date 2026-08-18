@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.dev import worktree_hygiene_snapshot as snapshot
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _result(stdout: str = "", stderr: str = "", returncode: int = 0):
@@ -116,6 +113,23 @@ def test_run_command_preserves_timeout_result(monkeypatch) -> None:
 
     assert result.returncode == 124
     assert result.stderr == "command timed out after 30 seconds"
+
+
+def test_run_command_caps_subprocess_timeout_at_deadline(monkeypatch) -> None:
+    """A retirement deadline bounds one slow subprocess, not only the row loop."""
+    calls: dict[str, object] = {}
+
+    def fake_run(args, **kwargs):
+        calls.update(kwargs)
+        return _result()
+
+    monkeypatch.setattr(snapshot.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+
+    result = snapshot._run_command(["git", "status"], timeout=30, deadline=101.5)
+
+    assert result.returncode == 0
+    assert calls["timeout"] == pytest.approx(1.5)
 
 
 def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
@@ -512,8 +526,8 @@ def test_build_retirement_plan_reports_remote_errors_without_removal(
         worktrees=[row],
         errors=[],
     )
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(
         snapshot=hygiene,
@@ -526,6 +540,194 @@ def test_build_retirement_plan_reports_remote_errors_without_removal(
     assert plan.removeable == []
     assert plan.review == [row.path]
     assert len(plan.errors) == 2
+
+
+def test_build_retirement_plan_budget_marks_unprocessed_rows_review(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A worktree budget preserves every row that was not fully inspected."""
+    row_a = _hygiene_row(path=str(tmp_path / "worktree-a"), branch="feature-a")
+    row_b = _hygiene_row(path=str(tmp_path / "worktree-b"), branch="feature-b")
+    hygiene = snapshot.HygieneSnapshot(
+        schema=snapshot.SCHEMA_VERSION,
+        current_worktree=str(tmp_path / "main"),
+        total_worktrees=2,
+        included_worktrees=2,
+        worktrees_truncated=False,
+        filters=[],
+        issue_counts={},
+        repo_status=None,
+        worktrees=[row_a, row_b],
+        errors=[],
+    )
+    pr = {
+        "number": 1,
+        "state": "MERGED",
+        "headRefName": row_a.branch,
+        "headRefOid": row_a.head_sha,
+        "title": "feature A",
+        "body": "",
+    }
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
+
+    plan = snapshot.build_retirement_plan(
+        snapshot=hygiene,
+        worktree_budget=1,
+        time_budget_seconds=60,
+        pull_requests=[pr],
+        active_claims={},
+    )
+
+    assert plan.progress.terminal_status == snapshot.RETIREMENT_PLAN_INCOMPLETE
+    assert plan.progress.total_worktrees == 2
+    assert plan.progress.selected_worktrees == 2
+    assert plan.progress.processed_worktrees == 1
+    assert plan.progress.unprocessed_worktrees == 1
+    assert plan.review == [row_b.path]
+    assert plan.worktrees[-1].reasons == ["worktree budget exhausted"]
+    assert any("retirement scan incomplete" in error for error in plan.errors)
+
+
+def test_build_retirement_plan_caches_fallback_branch_lookups(monkeypatch, tmp_path: Path) -> None:
+    """Fallback PR queries run once per unique branch, not once per worktree."""
+    rows = [
+        _hygiene_row(path=str(tmp_path / "a"), branch="feature-a"),
+        _hygiene_row(path=str(tmp_path / "b"), branch="feature-b"),
+        _hygiene_row(path=str(tmp_path / "c"), branch="feature-a"),
+    ]
+    hygiene = snapshot.HygieneSnapshot(
+        schema=snapshot.SCHEMA_VERSION,
+        current_worktree=str(tmp_path / "main"),
+        total_worktrees=3,
+        included_worktrees=3,
+        worktrees_truncated=False,
+        filters=[],
+        issue_counts={},
+        repo_status=None,
+        worktrees=rows,
+        errors=[],
+    )
+    calls: list[str] = []
+
+    def fake_query_head(_repo: Path, branch: str, **_kwargs):
+        calls.append(branch)
+        return [
+            {
+                "number": 1,
+                "state": "MERGED",
+                "headRefName": branch,
+                "headRefOid": "abc1234",
+                "title": "feature",
+                "body": "",
+            }
+        ], None
+
+    monkeypatch.setattr(
+        snapshot,
+        "_load_pull_request_rows",
+        lambda _repo, **_kwargs: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
+    )
+    monkeypatch.setattr(snapshot, "_query_head_pull_requests", fake_query_head)
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
+
+    plan = snapshot.build_retirement_plan(
+        snapshot=hygiene,
+        active_claims={},
+        time_budget_seconds=60,
+    )
+
+    assert sorted(calls) == ["feature-a", "feature-b"]
+    assert plan.progress.branch_lookup_calls == 2
+    assert plan.progress.processed_worktrees == 3
+    assert plan.progress.unprocessed_worktrees == 0
+    assert len(plan.removeable) == 3
+
+
+def test_include_all_retirement_plan_applies_budget_during_inventory(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The all-worktree path stops before constructing rows beyond its budget."""
+    worktree_paths = [tmp_path / name for name in ("a", "b", "c")]
+    for path in worktree_paths:
+        path.mkdir()
+    rows = [(str(path), f"feature-{path.name}", f"head-{path.name}") for path in worktree_paths]
+    porcelain = "\n\n".join(
+        f"worktree {path}\nHEAD {head}\nbranch refs/heads/{branch}" for path, branch, head in rows
+    )
+    seen_cwds: list[str | None] = []
+
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30, **kwargs):
+        del timeout, kwargs
+        if args == ["git", "worktree", "list", "--porcelain"]:
+            return _result(porcelain)
+        seen_cwds.append(cwd)
+        if cwd == str(worktree_paths[2]):
+            raise AssertionError("budgeted inventory inspected an unprocessed row")
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result(f"origin/feature-{Path(cwd).name}\n")
+        if args == [
+            "git",
+            "rev-list",
+            "--left-right",
+            "--count",
+            f"HEAD...origin/feature-{Path(cwd).name}",
+        ]:
+            return _result("0\t0\n")
+        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
+    pull_requests = [
+        {
+            "number": index,
+            "state": "MERGED",
+            "headRefName": branch,
+            "headRefOid": head,
+            "title": "feature",
+            "body": "",
+        }
+        for index, (_path, branch, head) in enumerate(rows, start=1)
+    ]
+
+    plan = snapshot.build_retirement_plan(
+        include_all_worktrees=True,
+        worktree_budget=2,
+        time_budget_seconds=60,
+        pull_requests=pull_requests,
+        active_claims={},
+    )
+
+    assert plan.total_worktrees == 3
+    assert plan.included_worktrees == 3
+    assert plan.progress.processed_worktrees == 2
+    assert plan.progress.unprocessed_worktrees == 1
+    assert plan.review == [str(worktree_paths[2])]
+    assert str(worktree_paths[2]) not in seen_cwds
+
+
+def test_retirement_cli_accepts_scan_budgets() -> None:
+    """Budget controls are explicit and machine-discoverable through the CLI parser."""
+    args = snapshot._parse_args(
+        [
+            "--retirement-plan",
+            "--include-all-worktrees",
+            "--worktree-budget",
+            "2",
+            "--time-budget-seconds",
+            "1.5",
+        ]
+    )
+
+    assert args.retirement_plan is True
+    assert args.include_all_worktrees is True
+    assert args.worktree_budget == 2
+    assert args.time_budget_seconds == 1.5
 
 
 def test_build_retirement_plan_falls_back_to_branch_pr_query(monkeypatch, tmp_path: Path) -> None:
@@ -554,12 +756,16 @@ def test_build_retirement_plan_falls_back_to_branch_pr_query(monkeypatch, tmp_pa
     monkeypatch.setattr(
         snapshot,
         "_load_pull_request_rows",
-        lambda _repo: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
+        lambda _repo, **_kwargs: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
     )
-    monkeypatch.setattr(snapshot, "_query_head_pull_requests", lambda _repo, _branch: ([pr], None))
-    monkeypatch.setattr(snapshot, "_load_active_claims", lambda _repo: ({}, None))
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(
+        snapshot,
+        "_query_head_pull_requests",
+        lambda _repo, _branch, **_kwargs: ([pr], None),
+    )
+    monkeypatch.setattr(snapshot, "_load_active_claims", lambda _repo, **_kwargs: ({}, None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(snapshot=hygiene)
 

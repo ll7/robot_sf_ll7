@@ -7,12 +7,22 @@ from pathlib import Path
 
 VISUAL_TEST_DIR = Path(__file__).resolve().parent
 REPO_ROOT = VISUAL_TEST_DIR.parents[1]
-SCHEMA_TEST_PATHS = tuple(sorted(VISUAL_TEST_DIR.glob("test_*_schema_validation.py")))
+TESTS_ROOT = REPO_ROOT / "tests"
+SCHEMA_TEST_PATHS = tuple(
+    sorted(path for path in TESTS_ROOT.rglob("test_*.py") if "schema_validation" in path.name)
+)
 
 
 def test_visual_schema_tests_require_declared_jsonschema_dependency():
-    """Visual schema tests should fail clearly if the declared dependency is missing."""
+    """All schema-validation tests should use the declared dependency policy."""
     offenders: list[str] = []
+
+    relative_paths = {path.relative_to(REPO_ROOT).as_posix() for path in SCHEMA_TEST_PATHS}
+    assert {
+        "tests/visuals/test_schema_validation_dependency_policy.py",
+        "tests/test_snqi/test_jsonschema_validation.py",
+        "tests/unit/test_schema_validation.py",
+    }.issubset(relative_paths)
 
     for path in SCHEMA_TEST_PATHS:
         tree = ast.parse(path.read_text(encoding="utf-8"))

@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 import pytest
 
+from robot_sf._execution_context import execution_context_digest
 from robot_sf.baselines import is_runnable_algo
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
@@ -184,6 +185,17 @@ def test_environment_fingerprint_has_required_fields():
     assert env["cpu_only"] is True
     assert env["workers"] == 1
     assert len(env["lockfile_sha256"]) == 64
+    assert env["execution_context_sha256"] == execution_context_digest(env["execution_context"])
+    assert set(env["execution_context"]) >= {
+        "schema_version",
+        "cpu_model",
+        "platform",
+        "python_version",
+        "numpy_version",
+        "numba_version",
+        "thread_env",
+    }
+    assert env["public_machine_id"].startswith("host-")
 
 
 # --- _check_manifest_from_bundle --------------------------------------------

@@ -295,7 +295,11 @@ def test_superseded_cancelled_run_recommends_wait_ci_not_diagnose() -> None:
         "data": {
             "repository": {
                 "pullRequest": {
-                    "reviewThreads": {"totalCount": 0, "nodes": []},
+                    "reviewThreads": {
+                        "totalCount": 0,
+                        "pageInfo": {"hasNextPage": False},
+                        "nodes": [],
+                    },
                 }
             }
         }

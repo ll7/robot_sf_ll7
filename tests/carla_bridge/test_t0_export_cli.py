@@ -396,7 +396,7 @@ def test_check_carla_availability_main_require_passes_when_available(
 
 
 def test_export_t0_cli_is_packaged_as_project_script() -> None:
-    """Project metadata should expose the CLI and include the bridge package."""
+    """Project metadata exposes the CLI and keeps the bridge on the supported sdist path."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert pyproject["project"]["scripts"]["robot-sf-export-carla-t0"] == (
@@ -423,12 +423,13 @@ def test_export_t0_cli_is_packaged_as_project_script() -> None:
     assert pyproject["project"]["scripts"]["robot-sf-carla-replay-diagnostics"] == (
         "scripts.carla_bridge.diagnose_replay_semantics:main"
     )
-    hatchling_packages = pyproject["tool"]["hatchling"]["build"]["targets"]["wheel"]["packages"]
-    assert {"include": "robot_sf_carla_bridge"} in hatchling_packages
-    assert (
-        "/robot_sf_carla_bridge"
-        in pyproject["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
-    )
+    build_targets = pyproject["tool"]["hatch"]["build"]["targets"]
+    wheel = build_targets["wheel"]
+    sdist = build_targets["sdist"]
+    assert "force-include" in wheel
+    assert "hatchling" not in pyproject["tool"]
+    assert "/robot_sf_carla_bridge" in sdist["include"]
+    assert (ROOT / "robot_sf_carla_bridge" / "__init__.py").is_file()
 
 
 def test_export_t0_scenarios_main_rejects_parent_relative_paths(

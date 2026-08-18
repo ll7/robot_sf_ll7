@@ -17,7 +17,9 @@ from robot_sf.benchmark.radius_rank_stability import (
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_NAMES,
     RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+    RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1,
     RADIUS_RANK_STABILITY_SCHEMA,
+    RADIUS_RANK_STABILITY_SCHEMA_V1,
     REQUIRED_CLAIM_BOUNDARY_PHRASES,
     VERDICT_INVALID,
     VERDICT_NON_IDENTIFIABLE,
@@ -28,8 +30,10 @@ from robot_sf.benchmark.radius_rank_stability import (
     _radius_key,
     analyze_metric_rank_stability,
     analyze_radius_sensitivity,
+    build_analysis_provenance_payload,
     build_evidence_provenance,
     build_missingness_ledger,
+    build_paired_inference_contract,
     compute_family_transitions,
     compute_paired_changes,
     decide_radius_verdict,
@@ -38,6 +42,8 @@ from robot_sf.benchmark.radius_rank_stability import (
     render_propagation_comment,
     render_verdict_comment,
     sweep_summary_available,
+    validate_radius_evidence_bundle_provenance,
+    validate_radius_sensitivity_payload,
     write_evidence_bundle,
 )
 
@@ -490,7 +496,7 @@ def test_paired_changes_with_observations_are_deterministic() -> None:
             "orca": {"success": {"111": 0.9, "112": 0.85, "113": 0.95, "114": 0.9, "115": 0.88}}
         },
         "0.5": {
-            "orca": {"success": {"111": 0.8, "112": 0.75, "113": 0.85, "114": 0.8, "115": 0.78}}
+            "orca": {"success": {"111": 0.8, "112": 0.77, "113": 0.82, "114": 0.81, "115": 0.79}}
         },
     }
     summary = _sweep_summary(_stable_tables(), paired=paired)
@@ -502,12 +508,80 @@ def test_paired_changes_with_observations_are_deterministic() -> None:
     )
     orca_first = next(c for c in first[0.5] if c.planner == "orca")
     orca_second = next(c for c in second[0.5] if c.planner == "orca")
-    assert orca_first.delta == pytest.approx(-0.1)
+    assert orca_first.delta == pytest.approx(-0.098)
     assert orca_first.ci_low == pytest.approx(orca_second.ci_low)
     assert orca_first.ci_high == pytest.approx(orca_second.ci_high)
     assert orca_first.ci_low <= orca_first.delta <= orca_first.ci_high
     assert orca_first.n_pairs == 5
     assert orca_first.reason is None
+    assert orca_first.support.status == "ok"
+    assert orca_first.support.overlapping_seed_count == 5
+    assert orca_first.support.finite_pair_count == 5
+    assert orca_first.support.distinct_finite_deltas > 1
+    assert orca_first.support.delta_basis == "paired_finite_mean"
+
+
+def test_paired_changes_zero_width_support_is_degenerate() -> None:
+    """Identical paired deltas are diagnostic, not a falsely precise interval."""
+    paired = {
+        "1.0": {"orca": {"success": {"111": 0.9, "112": 0.85, "113": 0.95, "114": 0.9}}},
+        "0.5": {"orca": {"success": {"111": 0.8, "112": 0.75, "113": 0.85, "114": 0.8}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+    assert orca.delta == pytest.approx(-0.1)
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+    assert orca.n_pairs == 4
+    assert orca.reason == "single_distinct_finite_delta"
+    assert orca.support.status == "degenerate_support"
+    assert orca.support.distinct_finite_deltas == 1
+    assert orca.support.delta_basis == "paired_finite_mean"
+
+
+def test_paired_changes_quantizes_practically_identical_deltas() -> None:
+    """Tiny binary-float differences do not create a spurious support interval."""
+    paired = {
+        "1.0": {"orca": {"success": {"111": 0.8, "112": 0.85}}},
+        "0.5": {"orca": {"success": {"111": 0.7, "112": 0.7500000000004}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+
+    assert orca.support.status == "degenerate_support"
+    assert orca.support.distinct_finite_deltas == 1
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+    assert orca.support.delta_basis == "paired_finite_mean"
+
+
+def test_paired_changes_report_malformed_observations_separately_from_missing() -> None:
+    """Malformed metric mappings are not mislabeled as absent paired data."""
+    paired = {
+        "1.0": {"orca": {"success": ["not-a-seed-map"]}},
+        "0.5": {"orca": {"success": {}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+
+    assert orca.support.status == "insufficient_support"
+    assert orca.reason == "malformed_paired_observations"
+    assert orca.support.delta_basis == "aggregate_table_difference"
 
 
 def test_paired_changes_preserve_seed_alignment_when_values_are_nonfinite() -> None:
@@ -525,6 +599,184 @@ def test_paired_changes_preserve_seed_alignment_when_values_are_nonfinite() -> N
     orca = next(change for change in changes[0.5] if change.planner == "orca")
     assert orca.delta == pytest.approx(-0.1)
     assert orca.n_pairs == 2
+    assert orca.support.baseline_seed_count == 2
+    assert orca.support.radius_seed_count == 3
+    assert orca.support.overlapping_seed_count == 2
+    assert orca.support.finite_pair_count == 2
+    assert orca.support.dropped_nonfinite_pair_count == 0
+    assert orca.support.status == "degenerate_support"
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+
+
+def test_paired_changes_report_nonfinite_support_without_interval() -> None:
+    """Non-finite overlap is counted and excluded without emitting an interval."""
+    paired = {
+        "1.0": {"orca": {"success": {"111": 0.9, "112": 0.85, "113": 0.95}}},
+        "0.5": {"orca": {"success": {"111": 0.8, "112": float("nan"), "113": 0.85}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+    assert orca.delta == pytest.approx(-0.1)
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+    assert orca.n_pairs == 2
+    assert orca.reason == "single_distinct_finite_delta"
+    assert orca.support.to_dict() == {
+        "schema_version": "radius_paired_support_diagnostics.v2",
+        "baseline_seed_count": 3,
+        "radius_seed_count": 3,
+        "overlapping_seed_count": 3,
+        "finite_pair_count": 2,
+        "dropped_nonfinite_pair_count": 1,
+        "distinct_finite_deltas": 1,
+        "status": "degenerate_support",
+        "reason": "single_distinct_finite_delta",
+        "delta_basis": "paired_finite_mean",
+    }
+
+
+def test_paired_changes_insufficient_support_has_no_inferential_interval() -> None:
+    """One finite pair is diagnostic only and cannot look like a bootstrap interval."""
+    paired = {
+        "1.0": {"orca": {"success": {"111": 0.9, "112": 0.85}}},
+        "0.5": {"orca": {"success": {"111": 0.8, "113": 0.7}}},
+    }
+    changes = compute_paired_changes(
+        _sweep_summary(_stable_tables(), paired=paired),
+        "success",
+        baseline_radius=_BASELINE,
+        radii=_RADII,
+    )
+    orca = next(change for change in changes[0.5] if change.planner == "orca")
+    assert orca.delta == pytest.approx(-0.05)
+    assert orca.ci_low is None
+    assert orca.ci_high is None
+    assert orca.support.status == "insufficient_support"
+    assert orca.support.reason == "insufficient_finite_paired_observations"
+    assert orca.support.delta_basis == "aggregate_table_difference"
+
+
+def test_radius_report_serializes_reproducible_paired_inference_contract() -> None:
+    """The report records all paired-bootstrap parameters and a deterministic digest."""
+    report = analyze_radius_sensitivity(
+        _sweep_summary(_stable_tables()),
+        n_resamples=257,
+        seed=456,
+        alpha=0.1,
+    )
+    payload = report.to_dict()
+    contract = payload["paired_inference_contract"]
+    assert (
+        contract
+        == build_paired_inference_contract(
+            n_resamples=257,
+            seed=456,
+            alpha=0.1,
+        ).to_dict()
+    )
+    assert contract["estimator"] == "mean_paired_delta"
+    assert contract["contrast"] == "radius_metric_minus_baseline_metric_by_planner"
+    assert contract["resampling_unit"] == "paired_seed"
+    assert contract["interval_method"] == "percentile_bootstrap"
+    assert contract["alpha"] == 0.1
+    assert contract["confidence_level"] == pytest.approx(0.9)
+    assert contract["requested_resamples"] == 257
+    assert contract["rng_algorithm"] == "python_random.Random_mt19937"
+    assert contract["seed"] == 456
+    assert contract["delta_distinctness_rule"] == "round_to_nearest_1e-12"
+    assert len(str(contract["digest"])) == 64
+
+    paired_change = payload["paired_changes"]["success"]["0.5"][0]
+    assert paired_change["support"]["status"] == "degenerate_support"
+
+
+def test_paired_inference_contract_digest_tracks_reproducibility_parameters() -> None:
+    """Seed, resamples, alpha, and method are part of the digest input."""
+    baseline = build_paired_inference_contract(n_resamples=1000, seed=123, alpha=0.05)
+    changed_seed = build_paired_inference_contract(n_resamples=1000, seed=124, alpha=0.05)
+    changed_resamples = build_paired_inference_contract(n_resamples=999, seed=123, alpha=0.05)
+    changed_alpha = build_paired_inference_contract(n_resamples=1000, seed=123, alpha=0.1)
+    changed_method = build_paired_inference_contract(
+        n_resamples=1000,
+        seed=123,
+        alpha=0.05,
+        interval_method="studentized_bootstrap",
+    )
+    assert (
+        len(
+            {
+                baseline.digest,
+                changed_seed.digest,
+                changed_resamples.digest,
+                changed_alpha.digest,
+                changed_method.digest,
+            }
+        )
+        == 5
+    )
+
+
+def test_radius_report_serialization_is_byte_stable() -> None:
+    """Identical inputs and contract serialize to identical canonical JSON bytes."""
+    summary = _sweep_summary(_stable_tables())
+    first = json.dumps(
+        analyze_radius_sensitivity(summary, n_resamples=33, seed=9).to_dict(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    second = json.dumps(
+        analyze_radius_sensitivity(summary, n_resamples=33, seed=9).to_dict(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    changed = json.dumps(
+        analyze_radius_sensitivity(summary, n_resamples=33, seed=10).to_dict(),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    assert first == second
+    assert first != changed
+
+
+def test_paired_inference_contract_rejects_malformed_metadata() -> None:
+    """Malformed inference parameters fail before a misleading report can be emitted."""
+    with pytest.raises(ValueError, match="n_resamples"):
+        build_paired_inference_contract(n_resamples=0, seed=123)
+    with pytest.raises(ValueError, match="n_resamples"):
+        build_paired_inference_contract(n_resamples=1.5, seed=123)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="seed"):
+        build_paired_inference_contract(n_resamples=1000, seed=True)
+    with pytest.raises(ValueError, match="seed"):
+        build_paired_inference_contract(n_resamples=1000, seed=1.5)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="alpha"):
+        build_paired_inference_contract(n_resamples=1000, seed=123, alpha=1.0)
+    with pytest.raises(ValueError, match="interval_method"):
+        build_paired_inference_contract(n_resamples=1000, seed=123, interval_method="")
+
+
+def test_paired_changes_reject_unimplemented_interval_method() -> None:
+    """A contract cannot label percentile output as an unsupported method."""
+    contract = build_paired_inference_contract(
+        n_resamples=1000,
+        seed=123,
+        interval_method="studentized_bootstrap",
+    )
+    with pytest.raises(ValueError, match="unsupported interval_method"):
+        compute_paired_changes(
+            {},
+            "success",
+            baseline_radius=_BASELINE,
+            radii=_RADII,
+            n_resamples=1000,
+            seed=123,
+            inference_contract=contract,
+        )
 
 
 # --- family transitions ----------------------------------------------------
@@ -673,6 +925,8 @@ def test_analyze_radius_sensitivity_report_schema() -> None:
     report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))
     payload = report.to_dict()
     assert payload["schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    assert RADIUS_RANK_STABILITY_SCHEMA == "radius_rank_stability.v2"
+    validate_radius_sensitivity_payload(payload)
     assert payload["baseline_radius_m"] == 1.0
     assert payload["radii_m"] == [0.5, 0.8, 1.0]
     assert payload["scenario_cell_count"] == 48
@@ -680,6 +934,157 @@ def test_analyze_radius_sensitivity_report_schema() -> None:
     for phrase in REQUIRED_CLAIM_BOUNDARY_PHRASES:
         assert phrase in payload["claim_boundary"]
     assert report.verdict.verdict == VERDICT_STABLE
+
+
+def test_radius_report_rejects_historical_v1_without_v2_blocks() -> None:
+    """A legacy v1 payload is rejected instead of being upgraded implicitly."""
+    report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))
+    payload = report.to_dict()
+    payload["schema_version"] = RADIUS_RANK_STABILITY_SCHEMA_V1
+    payload.pop("paired_inference_contract")
+    for by_radius in payload["paired_changes"].values():
+        for changes in by_radius.values():
+            for change in changes:
+                change.pop("support")
+
+    with pytest.raises(ValueError, match="historical v1 payloads are not reinterpreted"):
+        validate_radius_sensitivity_payload(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("not_object", "must be a JSON object"),
+        ("unknown_schema", "schema_version must be"),
+        ("missing_field", "missing fields"),
+        ("contract_not_object", "paired_inference_contract must be an object"),
+        ("contract_schema", "paired_inference_contract schema_version must be"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_v2_envelopes(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 report envelope and inference contract fail closed."""
+    payload: object = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "not_object":
+        payload = None
+    else:
+        assert isinstance(payload, dict)
+        if case == "unknown_schema":
+            payload["schema_version"] = "radius_rank_stability.unknown"
+        elif case == "missing_field":
+            payload.pop("claim_boundary")
+        elif case == "contract_not_object":
+            payload["paired_inference_contract"] = None
+        elif case == "contract_schema":
+            payload["paired_inference_contract"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("paired_not_object", "paired_changes must be an object"),
+        ("metric_not_object", r"paired_changes\['success'\] must be an object"),
+        ("changes_not_list", "must be a list"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_containers(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 paired-change containers must retain their JSON shapes."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "paired_not_object":
+        payload["paired_changes"] = None
+    else:
+        metric = next(iter(payload["paired_changes"]))
+        by_radius = payload["paired_changes"][metric]
+        radius = next(iter(by_radius))
+        if case == "metric_not_object":
+            payload["paired_changes"][metric] = []
+        else:
+            by_radius[radius] = {}
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("change_not_object", "must be an object"),
+        ("support_not_object", "require support diagnostics"),
+        ("support_schema", "paired support schema_version must"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_entries(
+    case: str,
+    match: str,
+) -> None:
+    """Each v2 paired change must carry versioned support diagnostics."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    metric = next(iter(payload["paired_changes"]))
+    by_radius = payload["paired_changes"][metric]
+    radius = next(iter(by_radius))
+    changes = by_radius[radius]
+    if case == "change_not_object":
+        changes[0] = None
+    elif case == "support_not_object":
+        changes[0]["support"] = None
+    else:
+        changes[0]["support"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
+def test_radius_evidence_bundle_pins_v2_report_schema() -> None:
+    """The bundle provenance version records the report envelope it accepts."""
+    report = analyze_radius_sensitivity(None)
+    provenance = build_evidence_provenance(
+        report,
+        config_path="configs/benchmarks/radius_sensitivity_v1.yaml",
+        command="cmd",
+        campaign_commit=None,
+        analysis_commit="a" * 40,
+    )
+    payload = build_analysis_provenance_payload(report, provenance)
+    assert RADIUS_EVIDENCE_BUNDLE_SCHEMA == "issue_6643_radius_rank_stability_bundle.v2"
+    assert payload["schema_version"] == RADIUS_EVIDENCE_BUNDLE_SCHEMA
+    assert payload["report_schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    validate_radius_evidence_bundle_provenance(payload)
+
+    legacy = dict(payload)
+    legacy["schema_version"] = RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1
+    with pytest.raises(ValueError, match="bundle now pins the v2 report envelope"):
+        validate_radius_evidence_bundle_provenance(legacy)
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (None, "must be a JSON object"),
+        ({"schema_version": "unknown"}, "schema_version must be"),
+        (
+            {
+                "schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+                "report_schema_version": "radius_rank_stability.v1",
+            },
+            "report_schema_version must be",
+        ),
+    ],
+)
+def test_radius_bundle_validator_rejects_unsupported_provenance(
+    payload: object,
+    match: str,
+) -> None:
+    """Bundle provenance must pin the current bundle and report envelopes."""
+    with pytest.raises(ValueError, match=match):
+        validate_radius_evidence_bundle_provenance(payload)  # type: ignore[arg-type]
 
 
 def test_analyze_radius_sensitivity_end_to_end_verdicts() -> None:
@@ -1003,7 +1408,11 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 # --- CLI -------------------------------------------------------------------
 
 
-def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_blocked_exits_nonzero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Verify the blocked exit status and separate provenance.
 
     The blocked bundle must keep ``campaign_commit`` null and record the
@@ -1023,6 +1432,9 @@ def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         ]
     )
     assert exit_code == cli.EXIT_BLOCKED_PENDING_GATE2
+    cli_summary = json.loads(capsys.readouterr().out)
+    assert cli_summary["report_schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    assert cli_summary["bundle_schema_version"] == RADIUS_EVIDENCE_BUNDLE_SCHEMA
     assert (tmp_path / "bundle" / "result.json").is_file()
 
     provenance = json.loads((tmp_path / "bundle" / "analysis_provenance.json").read_text())[

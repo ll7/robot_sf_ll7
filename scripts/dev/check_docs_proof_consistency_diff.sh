@@ -19,6 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
+preflight_check_worktree_dependency_profile core
+
 BASE_REF="${BASE_REF:-origin/main}"
 # Link anchors are selected for docs/context-only diffs when catalog.yaml is not
 # already in the diff, so added-note README/INDEX linkage proof runs. Do not add

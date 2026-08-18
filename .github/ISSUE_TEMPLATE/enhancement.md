@@ -6,6 +6,15 @@ labels: ["enhancement"]
 assignees: []
 ---
 
+## Archetype Metadata
+
+<!-- Choose exactly one canonical value from docs/context/issue_1512_issue_archetypes.md. -->
+```yaml
+archetype:
+evidence_tier:
+linked_policy:
+```
+
 ## Goal / Problem
 
 <!-- Provide a clear and concise description of the capability to add -->

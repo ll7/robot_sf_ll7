@@ -56,6 +56,16 @@ jobs:
             --out-files-status "$RUNNER_TEMP/pr_files_status.tsv" \
             --out-added-files "$RUNNER_TEMP/pr_added_files.txt"
 
+      - name: Validate dependency update policy
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/check_dependabot_update_policy.py \
+            --base-ref "$BASE_REF" \
+            --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
+            --json
+
       - name: Run PR Contract Check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

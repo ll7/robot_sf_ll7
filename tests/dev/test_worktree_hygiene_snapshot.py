@@ -115,6 +115,23 @@ def test_run_command_preserves_timeout_result(monkeypatch) -> None:
     assert result.stderr == "command timed out after 30 seconds"
 
 
+def test_run_command_caps_subprocess_timeout_at_deadline(monkeypatch) -> None:
+    """A retirement deadline bounds one slow subprocess, not only the row loop."""
+    calls: dict[str, object] = {}
+
+    def fake_run(args, **kwargs):
+        calls.update(kwargs)
+        return _result()
+
+    monkeypatch.setattr(snapshot.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+
+    result = snapshot._run_command(["git", "status"], timeout=30, deadline=101.5)
+
+    assert result.returncode == 0
+    assert calls["timeout"] == pytest.approx(1.5)
+
+
 def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
     """Report all hygiene issue classes represented by one row."""
     assert snapshot._classify_issues(
@@ -509,8 +526,8 @@ def test_build_retirement_plan_reports_remote_errors_without_removal(
         worktrees=[row],
         errors=[],
     )
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(
         snapshot=hygiene,
@@ -551,8 +568,8 @@ def test_build_retirement_plan_budget_marks_unprocessed_rows_review(
         "title": "feature A",
         "body": "",
     }
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(
         snapshot=hygiene,
@@ -593,7 +610,7 @@ def test_build_retirement_plan_caches_fallback_branch_lookups(monkeypatch, tmp_p
     )
     calls: list[str] = []
 
-    def fake_query_head(_repo: Path, branch: str):
+    def fake_query_head(_repo: Path, branch: str, **_kwargs):
         calls.append(branch)
         return [
             {
@@ -609,11 +626,11 @@ def test_build_retirement_plan_caches_fallback_branch_lookups(monkeypatch, tmp_p
     monkeypatch.setattr(
         snapshot,
         "_load_pull_request_rows",
-        lambda _repo: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
+        lambda _repo, **_kwargs: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
     )
     monkeypatch.setattr(snapshot, "_query_head_pull_requests", fake_query_head)
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(
         snapshot=hygiene,
@@ -641,8 +658,8 @@ def test_include_all_retirement_plan_applies_budget_during_inventory(
     )
     seen_cwds: list[str | None] = []
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del timeout
+    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30, **kwargs):
+        del timeout, kwargs
         if args == ["git", "worktree", "list", "--porcelain"]:
             return _result(porcelain)
         seen_cwds.append(cwd)
@@ -664,8 +681,8 @@ def test_include_all_retirement_plan_applies_budget_during_inventory(
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(snapshot, "_run_command", fake_run)
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
     pull_requests = [
         {
             "number": index,
@@ -739,12 +756,16 @@ def test_build_retirement_plan_falls_back_to_branch_pr_query(monkeypatch, tmp_pa
     monkeypatch.setattr(
         snapshot,
         "_load_pull_request_rows",
-        lambda _repo: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
+        lambda _repo, **_kwargs: ([], snapshot.PULL_REQUEST_INVENTORY_TRUNCATED),
     )
-    monkeypatch.setattr(snapshot, "_query_head_pull_requests", lambda _repo, _branch: ([pr], None))
-    monkeypatch.setattr(snapshot, "_load_active_claims", lambda _repo: ({}, None))
-    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path: ([], None))
-    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path: ([], None))
+    monkeypatch.setattr(
+        snapshot,
+        "_query_head_pull_requests",
+        lambda _repo, _branch, **_kwargs: ([pr], None),
+    )
+    monkeypatch.setattr(snapshot, "_load_active_claims", lambda _repo, **_kwargs: ({}, None))
+    monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
+    monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
 
     plan = snapshot.build_retirement_plan(snapshot=hygiene)
 

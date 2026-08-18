@@ -472,25 +472,36 @@ def _validate_pr_snapshot_row(row: Any, *, index: int) -> dict[str, Any]:
 
 
 def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict[str, Any]:
-    """Return open and terminal PRs that explicitly reference an issue."""
+    """Return open, merged, and closed PRs that explicitly reference an issue.
+
+    ``terminal_prs`` is retained as the union of merged and closed PRs for
+    backward compatibility; ``merged_prs`` and ``closed_prs`` split it so a
+    release decision can distinguish "delivered by a merged PR" from "only
+    closed-unmerged coverage remains".
+    """
     payload, decode_error = _decode_pr_pages(result, empty_error="PR snapshot is empty")
     if decode_error is not None:
         return {
             "ok": False,
             "open_prs": [],
+            "merged_prs": [],
+            "closed_prs": [],
             "terminal_prs": [],
             "truncated": False,
             "error": decode_error,
         }
 
     open_prs: list[int] = []
-    terminal_prs: list[int] = []
+    merged_prs: list[int] = []
+    closed_prs: list[int] = []
     for index, row in enumerate(payload):
         validated = _validate_pr_snapshot_row(row, index=index)
         if not validated["ok"]:
             return {
                 "ok": False,
                 "open_prs": [],
+                "merged_prs": [],
+                "closed_prs": [],
                 "terminal_prs": [],
                 "truncated": False,
                 "error": validated["error"],
@@ -503,12 +514,16 @@ def _all_prs_covering_issue(result: CommandResult, *, issue_number: int) -> dict
             continue
         if validated["state"] == "OPEN":
             open_prs.append(validated["number"])
+        elif validated["state"] == "MERGED":
+            merged_prs.append(validated["number"])
         else:
-            terminal_prs.append(validated["number"])
+            closed_prs.append(validated["number"])
     return {
         "ok": True,
         "open_prs": sorted(set(open_prs)),
-        "terminal_prs": sorted(set(terminal_prs)),
+        "merged_prs": sorted(set(merged_prs)),
+        "closed_prs": sorted(set(closed_prs)),
+        "terminal_prs": sorted(set(merged_prs) | set(closed_prs)),
         "truncated": len(payload) >= PR_SNAPSHOT_LIMIT,
         "error": None,
     }
@@ -564,9 +579,19 @@ def _classify_reconciliation_row(
 
     open_prs = list(prs.get("open_prs", []))
     terminal_prs = list(prs.get("terminal_prs", []))
+    merged_prs = list(prs.get("merged_prs", []))
     row["covering_prs"] = open_prs
     row["terminal_covering_prs"] = terminal_prs
-    if open_prs:
+    row["merged_covering_prs"] = merged_prs
+    if open_prs and merged_prs:
+        row["classification"] = "delivered_open_competitor"
+        row["safe_to_release"] = True
+        row["reason"] = (
+            "a covering PR is MERGED (delivery proven) while a competing open "
+            "covering PR remains; the open competitor is the #7474/#7493 "
+            "coordination class, not a reason to retain the claim"
+        )
+    elif open_prs:
         row["classification"] = "active_open_pr"
         row["reason"] = "an open covering PR exists; retain the claim"
     elif issue["state"] == "CLOSED":
@@ -619,6 +644,7 @@ def _release_reconciled_claim(
         "terminal_ok": terminal_prs.get("ok", False),
         "terminal_truncated": terminal_prs.get("truncated", False),
         "terminal_prs": terminal_prs.get("terminal_prs", []),
+        "merged_prs": terminal_prs.get("merged_prs", []),
         "terminal_source": terminal_prs.get("source"),
         "terminal_fallback_reason": terminal_prs.get("fallback_reason"),
     }
@@ -998,6 +1024,50 @@ def release_issue(
             **coverage_provenance,
         }
     if coverage["covering_prs"]:
+        # An open covering PR normally blocks release. But if another covering PR
+        # already MERGED, the issue is verifiably delivered and the open PR is a
+        # competing/superseded lane (issue #7474/#7493 coordination class), so the
+        # claim may be released with the merged PR recorded as delivery evidence.
+        delivered = _all_prs_covering_issue_with_fallback(repo=repo, issue_number=issue_number)
+        merged_covering = sorted(
+            {
+                int(number)
+                for number in delivered.get("merged_prs", [])
+                if isinstance(number, int) and number > 0
+            }
+        )
+        if delivered.get("ok") and not delivered.get("truncated") and merged_covering:
+            result = _run(
+                build_release_command(issue_number, remote=remote, expected_sha=observed_sha)
+            )
+            ok = result.returncode == 0
+            return {
+                "schema": "issue_claim.v1",
+                "action": "release",
+                "ok": ok,
+                "claimed": False if ok else None,
+                "issue": issue_number,
+                "remote": remote,
+                "repo": repo,
+                "claim_ref": short_claim_ref(issue_number),
+                "command": list(result.command),
+                "stdout": result.stdout.strip(),
+                "stderr": result.stderr.strip(),
+                "error": None
+                if ok
+                else "claim_ref_release_failed; inspect remote branch state before retrying",
+                "release_class": "terminal" if ok else None,
+                "reason": reason,
+                "covering_prs": coverage["covering_prs"],
+                "merged_covering_prs": merged_covering,
+                "release_override": "delivered_open_competitor",
+                "delivered_by": merged_covering,
+                **coverage_provenance,
+                **{
+                    "delivery_source": delivered.get("source"),
+                    "delivery_fallback_reason": delivered.get("fallback_reason"),
+                },
+            }
         return {
             "schema": "issue_claim.v1",
             "action": "release",
@@ -1014,6 +1084,7 @@ def release_issue(
             "release_class": None,
             "reason": reason,
             "covering_prs": coverage["covering_prs"],
+            "merged_covering_prs": [],
             **coverage_provenance,
         }
 

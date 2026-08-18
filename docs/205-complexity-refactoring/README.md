@@ -90,7 +90,7 @@ All refactored modules were thoroughly tested:
 ### Remaining High-Complexity Functions
 The following functions still have complexity suppressions or complexity > 10 and are candidates
 for future refactoring:
-1. `robot_sf/benchmark/map_runner.py:_build_policy()` (C901/PLR0912/PLR0915 suppressed) - policy
+1. `robot_sf/benchmark/map_runner/__init__.py:_build_policy()` (C901/PLR0912/PLR0915 suppressed) - policy
    construction registry migration in progress.
 2. `robot_sf/benchmark/camera_ready_campaign.py:run_campaign()` (C901/PLR0912/PLR0915 suppressed)
    - campaign-stage decomposition still pending.

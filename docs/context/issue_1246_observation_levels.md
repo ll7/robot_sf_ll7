@@ -36,7 +36,7 @@ sim-to-real validity claims.
   - `6 passed`
 - `uv run pytest tests/benchmark/test_observation_levels.py tests/benchmark/test_algorithm_metadata_contract.py tests/benchmark/test_planner_command_contract.py tests/benchmark/test_map_runner_utils.py tests/benchmark/test_map_runner_resume_identity.py tests/benchmark/test_observation_noise.py tests/test_observation_stack_config.py tests/test_socnav_observation_mode.py tests/test_cli.py -q`
   - `140 passed`
-- `uv run ruff check robot_sf/benchmark/observation_levels.py robot_sf/benchmark/algorithm_metadata.py robot_sf/benchmark/planner_command_contract.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/runner.py robot_sf/benchmark/cli.py robot_sf/baselines/interface.py tests/benchmark/test_observation_levels.py tests/benchmark/test_map_runner_utils.py`
+- `uv run ruff check robot_sf/benchmark/observation_levels.py robot_sf/benchmark/algorithm_metadata.py robot_sf/benchmark/planner_command_contract.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/runner.py robot_sf/benchmark/cli.py robot_sf/baselines/interface.py tests/benchmark/test_observation_levels.py tests/benchmark/test_map_runner_utils.py`
   - passed
 
 ## Related Surfaces
@@ -45,5 +45,5 @@ sim-to-real validity claims.
 - Vocabulary: `robot_sf/benchmark/observation_levels.py`
 - Planner metadata: `robot_sf/benchmark/algorithm_metadata.py`
 - Compatibility validation: `robot_sf/benchmark/planner_command_contract.py`
-- Episode propagation: `robot_sf/benchmark/map_runner.py`
+- Episode propagation: `robot_sf/benchmark/map_runner/__init__.py`
 - Observation docs: `docs/dev/observation_contract.md`

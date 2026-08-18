@@ -20,7 +20,7 @@ fields:
     definition: >
       Episode-level Bernoulli indicator equal to 1 when the canonical exact-collision event
       predicate is present for the episode and 0 otherwise; it is not a collision count.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}
@@ -31,7 +31,7 @@ fields:
     definition: >
       Episode-level Bernoulli indicator equal to 1 when the declared canonical near-miss event
       predicate is present for the episode and 0 otherwise; it is not a near-miss count.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}
@@ -43,7 +43,7 @@ fields:
       Minimum finite predicted robot-human surface separation over the retained episode trace,
       emitted by the declared prediction/safety-context producer; clearing_distance_min and
       other geometric or realized-distance fields are not substitutes.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: raw
     value_type: finite_scalar
 
@@ -53,7 +53,7 @@ fields:
     definition: >
       Episode-level Bernoulli indicator equal to 1 when the canonical route-completion predicate
       is satisfied and 0 otherwise; collision and timeout semantics remain those of the runner.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}
@@ -65,7 +65,7 @@ fields:
       Fraction of the declared start-to-goal distance completed at the declared horizon when the
       episode terminates by timeout; a timeout-specific source is required and success or
       time-to-goal values are not substitutes.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}
@@ -77,7 +77,7 @@ fields:
       Rate of wrapper hard-stop/yield interventions classified as false positives by the declared
       paired wrapper-off counterfactual contract; the wrapper-on forward-window diagnostic proxy
       is not this rate and cannot populate this field.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: normalized
     value_type: finite_scalar
     bounds: {lower: 0.0, upper: 1.0}
@@ -89,7 +89,7 @@ fields:
       Elapsed seconds from a declared wrapper hard-stop/yield intervention to the next declared
       valid forward-progress command, measured on the retained episode trace; missing intervention
       and missing recovery observations are contract failures rather than zero values.
-    emitting_component: robot_sf.benchmark.map_runner_episode._finalize_episode_metrics
+    emitting_component: robot_sf.benchmark.map_runner.map_runner_episode._finalize_episode_metrics
     representation: raw
     value_type: finite_scalar
 

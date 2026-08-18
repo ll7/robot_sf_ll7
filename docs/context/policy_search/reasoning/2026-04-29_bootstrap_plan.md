@@ -14,7 +14,7 @@ Implement the parts of the policy-search notes that do not require full training
 
 - `docs/context/policy_search/2026-04-29_policy_search.md`
 - `docs/context/policy_search/2026-04-29_broad_policy_search.md`
-- `robot_sf/benchmark/map_runner.py`
+- `robot_sf/benchmark/map_runner/__init__.py`
 - Existing experimental planners already present in `robot_sf/planner/`
 - `local.machine.md` and `SLURM/AGENTS.md`
 

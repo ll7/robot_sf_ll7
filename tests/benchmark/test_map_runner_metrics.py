@@ -1,4 +1,4 @@
-"""Direct contract tests for ``robot_sf.benchmark.map_runner_metrics``.
+"""Direct contract tests for ``robot_sf.benchmark.map_runner.map_runner_metrics``.
 
 These tests lock the metric-contract boundaries used by map-based benchmark runs:
 pedestrian-impact control normalization, exact/fallback collision extraction, the
@@ -14,7 +14,7 @@ import math
 
 import pytest
 
-from robot_sf.benchmark.map_runner_metrics import (
+from robot_sf.benchmark.map_runner.map_runner_metrics import (
     _episode_collision_value,
     _exact_collision_event,
     _finite_float,

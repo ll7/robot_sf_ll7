@@ -56,7 +56,7 @@ output and are disposable. The tracked files above are the durable review surfac
 
 ```bash
 rtk uv run pytest tests/benchmark/test_issue_2452_mechanism_aware_suites.py tests/benchmark/test_map_runner_utils.py::test_run_map_episode_does_not_stop_on_waypoint_only_success -q
-rtk uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_map_runner_utils.py
+rtk uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_map_runner_utils.py
 rtk uv run robot_sf_bench --quiet validate-config --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml
 rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/social_force/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo social_force --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json
 rtk env LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 uv run robot_sf_bench --quiet run --matrix configs/scenarios/sets/issue_2544_static_deadlock_smoke.yaml --out <worktree-local-output>/orca/episodes.jsonl --schema robot_sf/benchmark/schemas/episode.schema.v1.json --algo orca --workers 1 --horizon 120 --dt 0.1 --no-video --video-renderer none --record-simulation-step-trace --no-resume --benchmark-profile baseline-safe --socnav-missing-prereq-policy fail-fast --external-log-noise suppress --structured-output json

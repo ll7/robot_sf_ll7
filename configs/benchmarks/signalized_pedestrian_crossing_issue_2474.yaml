@@ -182,7 +182,7 @@ first_smoke_or_spike:
     files_likely_touched:
       - robot_sf/nav/map_config.py
       - robot_sf/training/scenario_loader.py
-      - robot_sf/benchmark/map_runner.py
+      - robot_sf/benchmark/map_runner/__init__.py
       - robot_sf/benchmark/schemas/episode.schema.v1.json
       - tests/benchmark/
       - tests/scenario_certification/

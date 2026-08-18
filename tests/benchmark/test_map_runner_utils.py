@@ -55,12 +55,12 @@ from robot_sf.benchmark.map_runner import (
     _vel_and_acc,
     run_map_batch,
 )
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_seed_jobs,
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
-from robot_sf.benchmark.map_runner_episode import (
+from robot_sf.benchmark.map_runner.map_runner_episode import (
     _CollisionEventContext,
     _finite_positive_float,
     _initial_ped_velocities,
@@ -70,13 +70,13 @@ from robot_sf.benchmark.map_runner_episode import (
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
-from robot_sf.benchmark.map_runner_metrics import (
+from robot_sf.benchmark.map_runner.map_runner_metrics import (
     _episode_collision_value,
     summarize_collision_metrics,
 )
+from robot_sf.benchmark.map_runner.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
-from robot_sf.benchmark.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -292,11 +292,17 @@ def test_map_runner_execution_boundaries_stay_extracted() -> None:
     wrapper_source = inspect.getsource(map_runner._run_map_episode)
 
     assert map_runner._execute_map_episode is map_runner_episode.run_map_episode
-    assert map_runner._execute_map_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_runner"
-    assert map_runner._build_seed_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_plan"
+    assert (
+        map_runner._execute_map_jobs.__module__
+        == "robot_sf.benchmark.map_runner.map_runner_batch_runner"
+    )
+    assert (
+        map_runner._build_seed_jobs.__module__
+        == "robot_sf.benchmark.map_runner.map_runner_batch_plan"
+    )
     assert (
         map_runner._build_completed_batch_summary.__module__
-        == "robot_sf.benchmark.map_runner_batch_summary"
+        == "robot_sf.benchmark.map_runner.map_runner_batch_summary"
     )
     assert "_execute_map_episode(" in wrapper_source
     assert "for step_idx in range" not in wrapper_source
@@ -3074,31 +3080,31 @@ def test_run_map_episode_tracking_precision_clamps_and_records(
         robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner_episode.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner_episode.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner_episode.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner_episode.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner_episode.sample_obstacle_points",
         lambda *args: None,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode._policy_command_to_env_action",
+        "robot_sf.benchmark.map_runner.map_runner_episode._policy_command_to_env_action",
         lambda env, config, command: np.asarray(command, dtype=np.float32),
     )
 

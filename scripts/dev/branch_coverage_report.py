@@ -162,7 +162,7 @@ subset.
 
 ### Phase 3 — Raise to 35%
 - Focus on the 10 worst evidence-critical modules listed above.
-- Priority: ``benchmark/map_runner.py``, ``planner/socnav.py``,
+- Priority: ``benchmark/map_runner/__init__.py``, ``planner/socnav.py``,
   ``scenario_certification/perturbation_preflight.py``.
 - Target: Q4 2026.
 

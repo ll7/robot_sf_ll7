@@ -4,7 +4,7 @@ Issue #6506 replaces the duplicated planner bridges at the benchmark harness
 boundary with the canonical adapter introduced by issue #6492
 (``LocalPlannerProtocol``). Its scoped wiring covers the baseline
 ``step(obs) -> dict`` path in ``robot_sf/benchmark/runner.py`` and the external-
-MPC ``plan(observation) -> tuple`` bridge in ``robot_sf/benchmark/map_runner.py``.
+MPC ``plan(observation) -> tuple`` bridge in ``robot_sf/benchmark/map_runner/__init__.py``.
 
 The #6771 injection points (merged as #6813) now let the runner construct
 ``BaselineStepToLocalAdapter`` with its existing process-isolated step executor

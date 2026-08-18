@@ -4,7 +4,7 @@ Date: 2026-04-30
 
 ## Existing Planner Interface
 
-Map-based benchmark planners are built in `robot_sf/benchmark/map_runner.py::_build_policy`.
+Map-based benchmark planners are built in `robot_sf/benchmark/map_runner/__init__.py::_build_policy`.
 Native local planner adapters expose `plan(observation) -> (linear_velocity, angular_velocity)`.
 The map runner projects those commands through the benchmark kinematics model and records
 feasibility metadata. Optional `reset()` and `diagnostics()` hooks are supported; `diagnostics()`

@@ -56,9 +56,9 @@ run (57 test collection errors due to missing optional dependencies).
 |---|---|---|---|
 | 1 | `robot_sf/planner/socnav.py` | 0/674 | 381/2,274 |
 | 2 | `robot_sf/planner/hybrid_rule_local_planner.py` | 0/430 | 241/1,261 |
-| 3 | `robot_sf/benchmark/map_runner.py` | 0/362 | 188/1,030 |
+| 3 | `robot_sf/benchmark/map_runner/__init__.py` | 0/362 | 188/1,030 |
 | 4 | `robot_sf/scenario_certification/perturbation_preflight.py` | 0/302 | 106/728 |
-| 5 | `robot_sf/benchmark/map_runner_episode.py` | 0/300 | 112/797 |
+| 5 | `robot_sf/benchmark/map_runner/map_runner_episode.py` | 0/300 | 112/797 |
 | 6 | `robot_sf/analysis_workbench/trace_failure_predicates.py` | 0/294 | 113/667 |
 | 7 | `robot_sf/benchmark/camera_ready/_config.py` | 0/244 | 37/431 |
 | 8 | `robot_sf/benchmark/artifact_publication.py` | 0/228 | 96/557 |

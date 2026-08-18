@@ -7,7 +7,7 @@ Related surfaces:
 - GitHub issue: https://github.com/ll7/robot_sf_ll7/issues/2526
 - Parent scope note: [issue_2473_cyclist_interaction_benchmark.md](issue_2473_cyclist_interaction_benchmark.md)
 - Scenario fixture: `configs/scenarios/single/issue_2526_cyclist_vru_smoke.yaml`
-- Trace metadata implementation: `robot_sf/benchmark/map_runner.py`
+- Trace metadata implementation: `robot_sf/benchmark/map_runner/__init__.py`
 - Focused tests: `tests/benchmark/test_issue_2526_cyclist_vru_smoke.py`
 
 ## Result
@@ -43,8 +43,8 @@ Targeted validation:
 ```bash
 uv run pytest tests/benchmark/test_issue_2526_cyclist_vru_smoke.py -q
 uv run pytest tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_cyclist_interaction_benchmark_manifest.py tests/benchmark/test_issue_2526_cyclist_vru_smoke.py -q
-uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2526_cyclist_vru_smoke.py
-uv run ruff format --check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2526_cyclist_vru_smoke.py
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2526_cyclist_vru_smoke.py
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2526_cyclist_vru_smoke.py
 uv run python scripts/tools/validate_scenario.py configs/scenarios/single/issue_2526_cyclist_vru_smoke.yaml
 ```
 

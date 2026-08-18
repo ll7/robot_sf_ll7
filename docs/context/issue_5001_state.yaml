@@ -40,7 +40,7 @@ entries:
           command_source_changes == 3.
       - claim: "The episode runner never supplies command_sources, forcing 0."
         evidence: >-
-          robot_sf/benchmark/map_runner_episode.py:597 calls
+          robot_sf/benchmark/map_runner/map_runner_episode.py:597 calls
           `oscillatory_control_predicate(positions, headings, speeds, dt=dt)` with no
           `command_sources`. When that optional signal is absent,
           safety_predicates.py:98-100 hard-wires command_source_changes to 0 for every

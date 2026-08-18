@@ -49,7 +49,7 @@ capability, adapter effects, and robot feasibility must not be collapsed into on
 
 - Runtime contract: `robot_sf/planner/kinematics_model.py`
 - Classic planner wiring: `robot_sf/planner/classic_planner_adapter.py`
-- Benchmark feasibility aggregation: `robot_sf/benchmark/map_runner.py`
+- Benchmark feasibility aggregation: `robot_sf/benchmark/map_runner/__init__.py`
 - Campaign parity reporting: `robot_sf/benchmark/camera_ready_campaign.py`
 - Cross-kinematics smoke profile: `configs/benchmarks/paper_cross_kinematics_v1.yaml`
 - Cross-kinematics compatibility manifest:

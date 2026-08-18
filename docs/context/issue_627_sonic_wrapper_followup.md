@@ -23,7 +23,7 @@ local heuristic planner.
   + `sonic_crowdnav` provenance and kinematics metadata
 * `robot_sf/benchmark/algorithm_readiness.py`
   + readiness classification and aliases for `sonic_crowdnav` / `sonic_gst`
-* `robot_sf/benchmark/map_runner.py`
+* `robot_sf/benchmark/map_runner/__init__.py`
   + benchmark runner wiring for the new wrapper entrypoint
 
 ## Validation
@@ -167,7 +167,7 @@ Autoresearch experiments attempted:
   + result: discarded
   + reason: regressed `ours_gst` to success `0.2000` and broke the empty-map east case
 * increased `max_angular_speed` from `1.0` to `2.0`
-  + config: `configs/algos/gensafenav_turnfast_probe.yaml`
+  + config: discarded turn-fast probe configuration (not retained in the current tree)
   + result: discarded
   + reason: no aggregate success gain for either checkpoint
 

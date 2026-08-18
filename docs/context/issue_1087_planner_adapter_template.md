@@ -13,7 +13,7 @@ Use a copy-and-adapt documentation path rather than a code generator. The reposi
 a single adapter registry; real benchmark execution currently crosses these surfaces:
 
 * adapter implementation under `robot_sf/planner/`
-* map-runner dispatch in `robot_sf/benchmark/map_runner.py`
+* map-runner dispatch in `robot_sf/benchmark/map_runner/__init__.py`
 * readiness gating in `robot_sf/benchmark/algorithm_readiness.py`
 * benchmark metadata in `robot_sf/benchmark/algorithm_metadata.py`
 * targeted unit and dispatch tests

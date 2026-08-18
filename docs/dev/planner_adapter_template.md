@@ -50,7 +50,7 @@ Required behavior:
 For a new adapter key, update these surfaces together:
 
 * `robot_sf/planner/<module>.py`: adapter implementation and config builder.
-* `robot_sf/benchmark/map_runner.py`: import the adapter and add the `_build_policy()` branch.
+* `robot_sf/benchmark/map_runner/__init__.py`: import the adapter and add the `_build_policy()` branch.
 * `robot_sf/benchmark/algorithm_readiness.py`: readiness tier, aliases, and opt-in policy.
 * `robot_sf/benchmark/algorithm_metadata.py`: category, policy semantics, kinematics contract,
   adapter name, and projection policy.

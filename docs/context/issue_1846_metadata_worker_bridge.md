@@ -8,7 +8,7 @@ Related issue:
 
 Map-runner batch metadata now has an explicit worker bridge helper:
 
-- `robot_sf/benchmark/map_runner.py::_apply_worker_metadata_bridge`
+- `robot_sf/benchmark/map_runner/__init__.py::_apply_worker_metadata_bridge`
 
 Both serial direct-call execution and parallel worker execution use this helper to fold each
 episode record's `algorithm_metadata` into the batch-level `algorithm_metadata_contract`. The helper

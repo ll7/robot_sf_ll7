@@ -8,7 +8,7 @@ substantially raises collisions**, i.e. reactive (yielding) pedestrians flatter 
 ## What landed
 
 1. **Open-loop replay (non-reactive) pedestrian mode** in the real runner. `build_env_config`
-   (`robot_sf/benchmark/map_runner_env.py`) reads an optional scenario key
+   (`robot_sf/benchmark/map_runner/map_runner_env.py`) reads an optional scenario key
    `peds_have_robot_repulsion` and toggles `sim_config.prf_config.is_active`. `True` (default) =
    reactive social-force pedestrians; `False` = robot-response term disabled (pedestrians follow
    social-force dynamics among themselves but do not yield to the robot). Backward-compatible.

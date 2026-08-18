@@ -68,7 +68,7 @@ Robot SF now includes a concrete DRL-VO adapter surface:
     `{"v", "omega"}` unicycle actions, plus length-2 vector outputs.
   * `DrlVoPlanner._goal_seeking_action(...)`: deterministic fallback when no compatible model is
     available and `fallback_to_goal=true`.
-* `robot_sf/benchmark/map_runner.py`
+* `robot_sf/benchmark/map_runner/__init__.py`
   * `_obs_to_ppo_format(...)` converts map-runner observations into the DRL-VO/PPO-style dict.
   * The `algo_key == "drl_vo"` branch calls `DrlVoPlanner.step(...)`, converts velocity-vector
     actions to Robot SF `unicycle_vw`, and records adapter-impact/feasibility metadata.
@@ -148,7 +148,7 @@ Result: 18 passed. The targeted tests cover registration, fallback behavior, nea
 sorting, action parsing, map-runner conversion/projection, and upstream metadata.
 
 ```bash
-rg -n "drl_vo|DRL-VO|privileged|tracked_agents_no_noise|fallback_to_goal" docs/context/issue_769_drl_vo_assessment.md robot_sf/baselines/drl_vo.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/algorithm_metadata.py tests/planner/test_drl_vo.py
+rg -n "drl_vo|DRL-VO|privileged|tracked_agents_no_noise|fallback_to_goal" docs/context/issue_769_drl_vo_assessment.md robot_sf/baselines/drl_vo.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/algorithm_metadata.py tests/planner/test_drl_vo.py
 BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
 ```
 

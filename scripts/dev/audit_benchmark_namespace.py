@@ -364,7 +364,9 @@ def _classify(unit: Unit, *, compatibility_shim: bool) -> tuple[str, str]:
             "canonical_top_level_facade_api",
             "The package, execution, schema, or common contract surface is a supported top-level API and is not a migration candidate.",
         )
-    if unit.name in {"map_runner_policies", "map_runner.py"} or unit.name.startswith("map_runner_"):
+    if unit.name in {"map_runner", "map_runner_policies", "map_runner.py"} or unit.name.startswith(
+        "map_runner_"
+    ):
         return (
             "unresolved_map_runner_cluster",
             "The child belongs to the map-runner execution/policy surface and must preserve runtime, monkeypatch, and caller compatibility as one bounded cluster.",

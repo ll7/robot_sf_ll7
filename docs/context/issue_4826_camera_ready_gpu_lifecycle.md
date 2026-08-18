@@ -23,7 +23,7 @@ A 2 MiB allocation failing on a 44 GiB card after 14 hours means the leak is sev
 
 ## Distinction from Related Work
 
-- **Issue #4520 / PR #4528**: Fixed GPU VRAM leaks in the serial map-runner path (`_serial_execute_map_jobs` in `robot_sf/benchmark/map_runner_batch_runner.py`). Issue #4826 is the camera-ready campaign equivalent, affecting `run_camera_ready_benchmark.py` and `robot_sf/benchmark/camera_ready/campaign.py`.
+- **Issue #4520 / PR #4528**: Fixed GPU VRAM leaks in the serial map-runner path (`_serial_execute_map_jobs` in `robot_sf/benchmark/map_runner/map_runner_batch_runner.py`). Issue #4826 is the camera-ready campaign equivalent, affecting `run_camera_ready_benchmark.py` and `robot_sf/benchmark/camera_ready/campaign.py`.
 - **Checkpoint preflight (#4620, #4663)**: Validates that required checkpoints exist before the campaign starts. Issue #4826 addresses runtime leaks that occur during campaign execution, after all checkpoints are verified present.
 
 ## Implementation Status
@@ -103,7 +103,7 @@ Status: Complete (PR #4836)
 
 Set `PYTORCH_ALLOC_CONF=expandable_segments:True` in:
 - `scripts/tools/run_camera_ready_benchmark.py`
-- `robot_sf/benchmark/map_runner_batch_runner.py` (already present from #4528)
+- `robot_sf/benchmark/map_runner/map_runner_batch_runner.py` (already present from #4528)
 
 This is defense-in-depth against fragmentation, not the primary fix.
 

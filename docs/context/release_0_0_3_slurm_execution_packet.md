@@ -114,7 +114,7 @@ over (`run_camera_ready_benchmark.py --campaign-id` docstring, line ~68).
 
 The splitter only overrides `name`, `planners`, and adds `split_provenance`
 (`split_campaign_config_by_planner.py:148-153`); it does **not** reduce the inherited top-level
-`workers: 8`. Each arm's campaign run uses a `ProcessPoolExecutor` (`robot_sf/benchmark/map_runner.py:6,2613,3199`)
+`workers: 8`. Each arm's campaign run uses a `ProcessPoolExecutor` (`robot_sf/benchmark/map_runner/__init__.py:6,2613,3199`)
 with `workers` OS processes. For the 5 checkpoint-loading arms (see §4), **each of the 8 worker
 processes independently imports PyTorch/TensorFlow and loads the arm's checkpoint** — this
 process-level multiplication, not the checkpoint file size itself (94 MB combined in

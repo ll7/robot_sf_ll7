@@ -46,7 +46,8 @@ helpers, and schema/data directories. Existing subdirectories show that domain g
 | --- | --- | --- |
 | `camera_ready/` | 14 | release campaign surface |
 | `full_classic/` | 18 | classic benchmark variant |
-| `map_runner_policies/` | 12 | policy pack for the map runner |
+| `map_runner_policies/` | 19 | separate policy pack for the map runner; not merged into `map_runner/` |
+| `map_runner/` | 16 | canonical map-runner package root and extracted execution/batch/trace helpers |
 | `scenario_generation/` | 14 | scenario synthesis |
 | `snqi/` | 12 | Social Navigation Quality Index surface |
 | `figures/` | 6 | figure export |
@@ -61,8 +62,9 @@ Two structural smells are already visible and should be resolved by the follow-u
 - `schema/` (a single JSON data file) and `schemas/` (the versioned schema package) were a naming
   collision. Follow-up #7099 moved `scenarios.schema.json` under `schemas/` while preserving the
   schema bytes and `$id`; no legacy file-path shim was added for the retired singular path.
-- `map_runner_policies/` exists as a subdirectory while 22 `map_runner*` modules remain top-level,
-  splitting one domain across two locations.
+- The map-runner split is resolved by child #7536: the 16 remaining implementation modules now live
+  under `map_runner/`, while the 5 historical policy-helper paths remain identity shims into the
+  deliberately separate `map_runner_policies/` package.
 
 The first scenario-boundary child, #7155, moves the small failure-cause and staging helpers under
 `robot_sf/benchmark/scenario/`. Their historical top-level module paths remain identity-preserving
@@ -87,7 +89,7 @@ serve rather than to an `issue_*` directory, so the namespace stays domain-orien
 | `benchmark/collision/` | `collision_*` | 5 | `collision_causal_report.py`, `collision_cause_analyser.py` |
 | `benchmark/safety/` | `safety_*`, `cbf_safety_*` | 7 | `safety_wrapper_runtime.py`, `cbf_safety_filter_runtime.py` |
 | `benchmark/latency/` | `*latency*` | 5 | `control_action_latency_snqi.py`, `latency_stress.py` |
-| `benchmark/map_runner/` | `map_runner*` | 22 | `map_runner.py`, `map_runner_batch_runner.py` (merge with `map_runner_policies/`) |
+| `benchmark/map_runner/` | remaining `map_runner*` implementations | 16 | `map_runner/__init__.py`, `map_runner/map_runner_batch_runner.py` (keep `map_runner_policies/` separate) |
 | `benchmark/scenario/` | `scenario_*` (including the #7155 boundary helpers and #7157 coverage analyzer) | 16 | `scenario_contract.py`, `scenario/scenario_coverage.py`, `scenario/scenario_failure_cause.py` |
 | `benchmark/campaign/` | `campaign_*`, `camera_ready*` | 7 | `campaign_runtime_preflight.py` (relate to `camera_ready/`) |
 | `benchmark/constraint/` | `issue_4142_dpcbf_*` | 3 | `issue_4142_dpcbf_dense_runner.py` |
@@ -122,7 +124,8 @@ Required discipline:
    re-export shim in the old location for one release and mark it deprecated, then remove it in a
    named successor issue.
 4. Resolve the `schema/` vs `schemas/` collision and the `map_runner` split as explicit, recorded
-   decisions in the follow-up note.
+   decisions in the follow-up note. The schema collision is covered by #7099; the map-runner split
+   is covered by #7536, with `map_runner_policies/` intentionally remaining separate.
 5. Keep each domain move independently reviewable: one domain (or one tightly coupled domain
    cluster) per PR, not one 281-file rewrite.
 
@@ -145,7 +148,7 @@ the contract below gives the coordinator an actionable shape for that next step:
 - Parent/umbrella issue with one child issue per domain cluster in the table above, each child
   independently movable and validatable under the proof plan.
 - First child should be the lowest-risk, highest-signal cluster (for example `adversarial/`, four
-  modules) to prove the migration contract before larger clusters such as `map_runner/` (22) or
+  modules) to prove the migration contract before larger clusters such as `map_runner/` (16) or
   `scenario/` (16).
 - Include a guard task that adds a test or lint rule preventing `robot_sf/util/` and
   `robot_sf/utils/` from being reintroduced as tracked paths.
@@ -155,7 +158,8 @@ the contract below gives the coordinator an actionable shape for that next step:
 ## Boundaries And Caveats
 
 - This note is a proposal. It establishes no benchmark, metric, schema, or paper-facing claim.
-- No benchmark module is moved, renamed, or imported differently by this issue.
+- The original proposal did not move benchmark modules; child #7536 records the subsequent
+  behavior-preserving map-runner move and import-contract proof.
 - Domain assignments and counts are filename-derived estimates; the follow-up owns final placement.
 - Ghost-directory removal is already satisfied on any clean checkout because the directories hold
   only ignored `__pycache__/` bytecode and no tracked files.

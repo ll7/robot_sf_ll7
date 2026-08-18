@@ -7,7 +7,7 @@ Related surfaces:
 - GitHub issue: https://github.com/ll7/robot_sf_ll7/issues/2527
 - Parent scope note: [issue_2472_intent_conditioned_behavior.md](issue_2472_intent_conditioned_behavior.md)
 - Scenario fixture: `configs/scenarios/single/issue_2527_waiting_then_crossing.yaml`
-- Trace metadata implementation: `robot_sf/benchmark/map_runner.py`
+- Trace metadata implementation: `robot_sf/benchmark/map_runner/__init__.py`
 - Focused tests: `tests/benchmark/test_issue_2527_waiting_crossing_fixture.py`
 - Signal-state proxy smoke:
   [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md)
@@ -49,8 +49,8 @@ Targeted validation:
 ```bash
 uv run pytest tests/benchmark/test_issue_2527_waiting_crossing_fixture.py -q
 uv run pytest tests/benchmark/test_map_runner_utils.py::test_run_map_episode_records_synthetic_actuation_metrics -q
-uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py
-uv run ruff format --check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py
 uv run python scripts/tools/validate_scenario.py configs/scenarios/single/issue_2527_waiting_then_crossing.yaml
 ```
 

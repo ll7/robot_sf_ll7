@@ -10,10 +10,9 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062,
-# the result-interpretation packet module, and the trace-dossier package added by #7114.
-# Keep this explicit so a new direct child fails the audit until it is
-# deliberately classified, rather than silently changing the inventory size.
+# Keep this explicit so a new direct child fails the audit until it is deliberately classified,
+# rather than silently changing the inventory size. The count is for the current source tree after
+# the completed namespace slices and the map-runner package move.
 EXPECTED_DIRECT_CHILD_COUNT = 296
 
 
@@ -52,6 +51,7 @@ def test_known_facades_and_clusters_are_classified(inventory: dict[str, object])
         "already_migrated_implementation_with_compatibility_shim"
     )
     assert rows["map_runner_policies"]["classification"] == "unresolved_map_runner_cluster"
+    assert rows["map_runner"]["classification"] == "unresolved_map_runner_cluster"
     assert rows["scenario"]["classification"] == (
         "unresolved_scenario_generation_certification_cluster"
     )

@@ -9,7 +9,7 @@ Related surfaces:
 - Waiting/crossing fixture note: [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 - Scenario fixture: `configs/scenarios/single/issue_2527_waiting_then_crossing.yaml`
 - Benchmark manifest: `configs/benchmarks/signalized_pedestrian_crossing_issue_2474.yaml`
-- Trace implementation: `robot_sf/benchmark/map_runner.py`
+- Trace implementation: `robot_sf/benchmark/map_runner/__init__.py`
 - Compact smoke evidence: `docs/context/evidence/issue_2564_signal_state_proxy_smoke/summary.json`
 
 ## Result
@@ -52,8 +52,8 @@ Targeted validation:
 ```bash
 uv run pytest tests/benchmark/test_issue_2527_waiting_crossing_fixture.py
 uv run pytest tests/benchmark/test_signalized_crossing_benchmark_manifest.py
-uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
-uv run ruff format --check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
 ```
 
 Runtime smoke command shape:

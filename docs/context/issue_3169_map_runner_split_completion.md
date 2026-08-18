@@ -5,17 +5,17 @@ Related PR: [#3180](https://github.com/ll7/robot_sf_ll7/pull/3180)
 
 ## Current Decision
 
-`robot_sf/benchmark/map_runner.py` should remain the compatibility and public batch-entry shell for
+`robot_sf/benchmark/map_runner/__init__.py` should remain the compatibility and public batch-entry shell for
 `run_map_batch`, planner policy construction, and older private test imports. Episode execution and
 batch execution should live in owned helper modules:
 
-- `robot_sf/benchmark/map_runner_episode.py` owns single episode rollout, metric finalization,
+- `robot_sf/benchmark/map_runner/map_runner_episode.py` owns single episode rollout, metric finalization,
   trace payload assembly, and episode record construction.
-- `robot_sf/benchmark/map_runner_batch_plan.py` owns batch kinematics resolution, seed-job
+- `robot_sf/benchmark/map_runner/map_runner_batch_plan.py` owns batch kinematics resolution, seed-job
   expansion, and worker fixed-parameter payload assembly.
-- `robot_sf/benchmark/map_runner_batch_runner.py` owns serial/parallel job execution and validated
+- `robot_sf/benchmark/map_runner/map_runner_batch_runner.py` owns serial/parallel job execution and validated
   JSONL append ordering.
-- `robot_sf/benchmark/map_runner_batch_summary.py` owns completed-batch summary and worker metadata
+- `robot_sf/benchmark/map_runner/map_runner_batch_summary.py` owns completed-batch summary and worker metadata
   accumulation.
 
 This is a refactor boundary only. It does not change benchmark semantics, planner outputs, metric

@@ -154,7 +154,7 @@ best current hybrid-rule variant remains experimental, timeout-limited, and comf
 ## Validation
 
 - `uv run pytest tests/planner/test_hybrid_rule_local_planner.py -q`
-- `uv run ruff check robot_sf/planner/hybrid_rule_local_planner.py robot_sf/benchmark/map_runner.py tests/planner/test_hybrid_rule_local_planner.py`
+- `uv run ruff check robot_sf/planner/hybrid_rule_local_planner.py robot_sf/benchmark/map_runner/__init__.py tests/planner/test_hybrid_rule_local_planner.py`
 - `uv run pytest tests/planner/test_hybrid_rule_local_planner.py tests/benchmark/test_algorithm_metadata_contract.py tests/benchmark/test_map_runner_preflight_profiles.py -q`
 - `uv run pytest tests/validation/test_policy_search_common.py tests/validation/test_run_policy_search_candidate.py -q`
 - `LOGURU_LEVEL=WARNING uv run python scripts/validation/run_policy_search_candidate.py --candidate hybrid_rule_v3_static_margin0_waypoint2 --stage smoke --workers 1 --output-dir output/policy_search/hybrid_rule_v3_static_margin0_waypoint2_smoke`

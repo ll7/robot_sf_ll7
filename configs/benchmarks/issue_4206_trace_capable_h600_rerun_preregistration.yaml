@@ -100,7 +100,7 @@ required_outputs:
       - low_exposure_success
 
 # Trace capture must be on so mechanism labels are derivable. These map-runner
-# flags (robot_sf/benchmark/map_runner_episode.py) are the switches that let the
+# flags (robot_sf/benchmark/map_runner/map_runner_episode.py) are the switches that let the
 # #4301 exporter attach a real trace to each episode.
 trace_capture:
   required: true

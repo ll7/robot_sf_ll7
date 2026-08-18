@@ -25,7 +25,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     validate_failure_mechanism_record,
 )
 from robot_sf.benchmark.interaction_exposure import INTERACTION_EXPOSURE_SCHEMA_VERSION
-from robot_sf.benchmark.map_runner_episode import (
+from robot_sf.benchmark.map_runner.map_runner_episode import (
     _INTERACTION_EXPOSURE_RADIUS_M,
     _episode_evidence_fields,
     _finite_pedestrian_frames,

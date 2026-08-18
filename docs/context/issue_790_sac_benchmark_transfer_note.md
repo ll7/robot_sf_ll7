@@ -16,7 +16,7 @@
 # Evidence
 * Training script: `scripts/training/train_sac_sb3.py`
 * Benchmark adapter: `robot_sf/baselines/sac.py`
-* Benchmark runner integration: `robot_sf/benchmark/map_runner.py`
+* Benchmark runner integration: `robot_sf/benchmark/map_runner/__init__.py`
 * SAC eval entry point: `scripts/validation/evaluate_sac.py`
 * Observation contract reference: `docs/dev/observation_contract.md`
 * Training config: `configs/training/sac/gate_socnav_struct.yaml`

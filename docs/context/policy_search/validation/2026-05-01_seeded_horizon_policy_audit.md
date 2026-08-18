@@ -23,7 +23,7 @@ collision when the horizon is raised to `300`.
 
 The benchmark runner also had a reproducibility gap for route-spread pedestrian scenarios:
 `route_spawn_seed` remained `None`, so `np.random.default_rng(None)` bypassed the episode seed.
-`robot_sf/benchmark/map_runner.py` now fills a missing scenario `simulation_config.route_spawn_seed`
+`robot_sf/benchmark/map_runner/__init__.py` now fills a missing scenario `simulation_config.route_spawn_seed`
 from the episode seed before environment construction. Explicit scenario-provided
 `route_spawn_seed` values are preserved.
 
@@ -36,12 +36,12 @@ payload.
 Targeted tests:
 
 ```bash
-uv run ruff check robot_sf/benchmark/map_runner.py \
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py \
   robot_sf/planner/hybrid_rule_local_planner.py \
   scripts/validation/run_policy_search_step_diagnostics.py \
   tests/benchmark/test_map_runner_utils.py \
   tests/planner/test_hybrid_rule_local_planner.py
-uv run ruff format --check robot_sf/benchmark/map_runner.py \
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py \
   robot_sf/planner/hybrid_rule_local_planner.py \
   scripts/validation/run_policy_search_step_diagnostics.py \
   tests/benchmark/test_map_runner_utils.py \

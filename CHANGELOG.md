@@ -1175,7 +1175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Extended the **AMMV feasibility batch-summary artifact block** with the claim-boundary markers it
   was missing, so a consumer reading only the summary sees the same non-hardware boundary as the
-  per-episode payload (#3466). `robot_sf/benchmark/map_runner_batch_summary.py` now emits
+  per-episode payload (#3466). `robot_sf/benchmark/map_runner/map_runner_batch_summary.py` now emits
   `algorithm_metadata_contract.ammv_feasibility` via the new pure helper
   `build_ammv_feasibility_summary`, which adds `evidence_kind: "diagnostic_proxy"` and a
   `status` field (`"available"` / `"no_ammv_episodes"`) alongside the existing
@@ -1302,7 +1302,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   override emits one of three decision labels — `uncertainty_fallback_stop`,
   `uncertainty_fallback_slow_down`, or `uncertainty_fallback_configured` (delegates to the configured
   fallback adapter, e.g. ORCA) —
-  and `robot_sf/benchmark/map_runner.py` counts each in `guard_stats`. The probability value is an
+  and `robot_sf/benchmark/map_runner/__init__.py` counts each in `guard_stats`. The probability value is an
   explicitly labeled **diagnostic proxy**, not a calibrated probability: shield metadata carries
   `claim_boundary: diagnostic_proxy_not_safety_guarantee`. Diagnostic-only, default-off; no safety
   guarantee, no benchmark claim, no paper-facing claim. Validation:
@@ -2189,7 +2189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`terminate_on_contact` vs `bounce_back`; the robot benchmark env terminates on collision per
   `RobotState.is_terminal`). The map-runner now embeds this block under
   `provenance.config_identity.metric_affecting_config` in every batch summary
-  (`robot_sf/benchmark/map_runner.py`), derived once per batch via the fail-soft
+  (`robot_sf/benchmark/map_runner/__init__.py`), derived once per batch via the fail-soft
   `representative_metric_affecting_config` helper, so two result sets can be checked for comparability
   without out-of-band knowledge of each run's config. The helper is descriptive provenance only — it
   does not redefine metrics, rerun campaigns, or promote benchmark claims, and degrades to a
@@ -2428,7 +2428,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [`.github/PULL_REQUEST_TEMPLATE/pr_default.md`](.github/PULL_REQUEST_TEMPLATE/pr_default.md);
   tests: [`tests/dev/test_check_perf_evidence.py`](tests/dev/test_check_perf_evidence.py).
 * Added a **fail-closed planner observation-view integrity guard** in the benchmark runner (#3634,
-  the runtime guard deferred from #3568). New `robot_sf/benchmark/map_runner_view_integrity.py`
+  the runtime guard deferred from #3568). New `robot_sf/benchmark/map_runner/map_runner_view_integrity.py`
   (`evaluate_effective_view_integrity` + `DegeneratePlannerViewError`, reason `degenerate_planner_view`)
   is checked on the first step in `map_runner_episode.py`: when the observation handed to the planner
   contains pedestrians (`observation_ped_count > 0`) but the planner's own extractor returns zero — and
@@ -2832,14 +2832,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parent directory, a safe superset of the prior two). `benchmark/forecast_dataset_recorder.py` keeps
   its own writer for now because it has a different output contract (trailing newline, no `fsync`).
   Covered by `tests/common/test_atomic_io.py`.
-* Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner.py`
+* Began decomposing the ~1270-line `_build_policy` dispatcher in `robot_sf/benchmark/map_runner/__init__.py`
   into a `robot_sf/benchmark/map_runner_policies/` builder package backed by a registry (#3400, first
   slice of Issue #3384). The built-in goal/simple policy family now lives in `map_runner_policies/goal.py`
   (`build(...) -> (policy_fn, meta)`); `_build_policy` consults `_POLICY_BUILDERS` before its remaining
   inline branches, which are unchanged. Behavior-preserving (the regression net in
   `tests/benchmark/test_map_runner_utils.py` still passes); the only test change repoints one
   monkeypatch to the new builder namespace.
-* Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner.py` into a
+* Relocated the shared `_build_adapter_policy` helper out of `robot_sf/benchmark/map_runner/__init__.py` into a
   neutral `robot_sf/benchmark/map_runner_policy_common.py` (`build_adapter_policy`), re-exported under
   the old private name so all ~17 in-module call sites are unchanged (#3403, prerequisite for the
   Issue #3384 adapter-family decomposition). Behavior-preserving — the helper is a verbatim move and the

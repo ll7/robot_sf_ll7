@@ -38,7 +38,7 @@ track positions. Track velocities are zero by construction.
 - `robot_sf/planner/lidar_tracked_agents.py`
 - `robot_sf/benchmark/algorithm_readiness.py`
 - `robot_sf/benchmark/algorithm_metadata.py`
-- `robot_sf/benchmark/map_runner.py`
+- `robot_sf/benchmark/map_runner/__init__.py`
 - `configs/algos/lidar_social_force_issue_1660.yaml`
 - `tests/planner/test_lidar_tracked_agents.py`
 - `tests/benchmark/test_lidar_social_force_contract.py`
@@ -49,7 +49,7 @@ Commands run before full branch-head readiness:
 
 ```bash
 uv run pytest tests/planner/test_lidar_tracked_agents.py tests/benchmark/test_lidar_social_force_contract.py tests/benchmark/test_algorithm_metadata_contract.py
-uv run ruff check robot_sf/planner/lidar_tracked_agents.py robot_sf/benchmark/algorithm_readiness.py robot_sf/benchmark/algorithm_metadata.py robot_sf/benchmark/map_runner.py tests/planner/test_lidar_tracked_agents.py tests/benchmark/test_lidar_social_force_contract.py
+uv run ruff check robot_sf/planner/lidar_tracked_agents.py robot_sf/benchmark/algorithm_readiness.py robot_sf/benchmark/algorithm_metadata.py robot_sf/benchmark/map_runner/__init__.py tests/planner/test_lidar_tracked_agents.py tests/benchmark/test_lidar_social_force_contract.py
 codex-agent-worker --provider qwen --model Qwen3.6-27B --timeout 900 --slug issue-1660-qwen-scout --task-file /tmp/qwen_issue1660_scout.md
 ```
 

@@ -44,7 +44,7 @@ Confirmed by comparing old vs new full runs:
 
 Root cause fixed in code path:
 
-- dict-observation passthrough in `robot_sf/benchmark/map_runner.py`
+- dict-observation passthrough in `robot_sf/benchmark/map_runner/__init__.py`
 - PPO dict mode in `configs/baselines/ppo_15m_grid_socnav.yaml`
 
 ### 2. PPO adapter-impact accounting is now coherent in current code path

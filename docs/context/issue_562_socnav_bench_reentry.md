@@ -19,7 +19,7 @@ show competitive outcome quality, and stop being a runtime outlier.
 - `configs/benchmarks/paper_experiment_matrix_v1.yaml` excludes `socnav_bench`.
 - `configs/benchmarks/paper_experiment_matrix_all_planners_v1.yaml` keeps `socnav_bench` only in
   the all-planners profile and sets `socnav_missing_prereq_policy: fail-fast`.
-- `robot_sf/benchmark/map_runner.py` wires `socnav_bench` through
+- `robot_sf/benchmark/map_runner/__init__.py` wires `socnav_bench` through
   `SocNavBenchSamplingAdapter` with `allow_fallback=False` unless an algo config explicitly opts
   into fallback.
 

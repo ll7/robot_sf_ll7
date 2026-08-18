@@ -22,7 +22,7 @@ in this repository.
   - `mean`
   - `cvar`
 - Added optional bounded `predictive_mcts_enabled` search mode.
-- Added explicit benchmark metadata exposure in `robot_sf/benchmark/map_runner.py`:
+- Added explicit benchmark metadata exposure in `robot_sf/benchmark/map_runner/__init__.py`:
   - `prediction_mode`
   - `predictive_uncertainty_mode`
   - `predictive_risk_objective`
@@ -38,7 +38,7 @@ in this repository.
 Code-level validation:
 
 - `uv run pytest -q tests/test_socnav_planner_adapter.py -k 'prediction_adapter' tests/benchmark/test_prediction_planner_audit_contract.py`
-- `uv run ruff check robot_sf/planner/socnav.py robot_sf/benchmark/map_runner.py tests/test_socnav_planner_adapter.py tests/benchmark/test_prediction_planner_audit_contract.py`
+- `uv run ruff check robot_sf/planner/socnav.py robot_sf/benchmark/map_runner/__init__.py tests/test_socnav_planner_adapter.py tests/benchmark/test_prediction_planner_audit_contract.py`
 
 Benchmark proof:
 

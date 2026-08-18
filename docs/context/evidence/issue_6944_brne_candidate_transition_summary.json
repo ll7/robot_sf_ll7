@@ -10,7 +10,7 @@
     "implementation_commit": "8f9438632e794f084db72bb016a14b539bbca648",
     "changed_files": [
       "robot_sf/baselines/brne.py",
-      "robot_sf/benchmark/map_runner_episode.py",
+      "robot_sf/benchmark/map_runner/map_runner_episode.py",
       "scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py",
       "tests/baselines/test_brne_planner.py",
       "tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py",
@@ -49,7 +49,7 @@
     "staged_source_path": "third_party/external_repos/brne",
     "staged_source_commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
     "without_staged_source": "source-backed tests fail closed with skips; skipped rows are not native evidence",
-    "ruff_command": "uv run ruff check robot_sf/baselines/brne.py robot_sf/benchmark/map_runner_episode.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py tests/benchmark/test_map_runner_utils.py",
+    "ruff_command": "uv run ruff check robot_sf/baselines/brne.py robot_sf/benchmark/map_runner/map_runner_episode.py scripts/benchmark/run_brne_corridor_diagnostic_issue_6464.py tests/baselines/test_brne_planner.py tests/benchmark/test_issue_6464_brne_corridor_diagnostic.py tests/benchmark/test_map_runner_utils.py",
     "ruff_result": "all checks passed",
     "diff_check_result": "passed"
   },

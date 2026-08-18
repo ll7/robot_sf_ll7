@@ -37,7 +37,7 @@ enabled-versus-disabled promotion gate remains
 
 PR [#4388](https://github.com/ll7/robot_sf_ll7/pull/4388), merge
 `85cc54750f660b92ecb82b4b04a2e0ec26ff0a05`, added episode-level
-`topology_guided_episode` diagnostics in `robot_sf/benchmark/map_runner_episode.py`
+`topology_guided_episode` diagnostics in `robot_sf/benchmark/map_runner/map_runner_episode.py`
 with tests in `tests/benchmark/test_map_runner_utils.py`.
 
 PR [#5225](https://github.com/ll7/robot_sf_ll7/pull/5225), merge

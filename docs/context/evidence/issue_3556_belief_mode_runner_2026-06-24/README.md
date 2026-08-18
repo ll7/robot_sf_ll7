@@ -23,7 +23,7 @@ next step (run-gated only by compute, not by missing capability).
   `project_scenario_belief_for_planner`, and merges the uncertainty sidecar into the observation.
   `BeliefModeStreamGapAdapter` wraps the real `StreamGapPlannerAdapter` and delegates everything else.
   Fail-closed: any projection failure omits the sidecar (planner keeps every agent — conservative).
-- `robot_sf/benchmark/map_runner.py` — the `stream_gap` branch reads a `belief_mode` algo-config knob;
+- `robot_sf/benchmark/map_runner/__init__.py` — the `stream_gap` branch reads a `belief_mode` algo-config knob;
   when set it wraps the adapter and sets the planner uncertainty gate (ON only for `uncertain_dropped`).
 - `configs/benchmarks/scenario_belief_drop_vs_retain_issue_3556.yaml` — launch packet for the campaign.
 

@@ -109,7 +109,7 @@ echo "   command=${ARM_COMMAND}"
 
 # --- Threading guard (issue: macOS/torch segfault mitigation; harmless + correct
 #     thread-limiting on Linux compute nodes too). Each of the campaign's `workers`
-#     worker processes (ProcessPoolExecutor, see robot_sf/benchmark/map_runner.py)
+#     worker processes (ProcessPoolExecutor, see robot_sf/benchmark/map_runner/__init__.py)
 #     independently imports torch/tensorflow for learned-policy arms; without these
 #     guards each process can additionally spawn N BLAS/OpenMP threads and
 #     oversubscribe the allocated CPUs on top of the process-level memory cost. ---

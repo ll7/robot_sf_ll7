@@ -11,7 +11,7 @@ semantics, fallback/degraded-mode interpretation, training behavior, or planner 
 Measured with:
 
 ```bash
-rtk uv run python scripts/dev/complexity_runtime_baseline.py robot_sf/planner/socnav.py robot_sf/benchmark/camera_ready_campaign.py robot_sf/benchmark/map_runner.py scripts/training/train_ppo.py robot_sf/benchmark/cli.py robot_sf/benchmark/metrics.py --top 8
+rtk uv run python scripts/dev/complexity_runtime_baseline.py robot_sf/planner/socnav.py robot_sf/benchmark/camera_ready_campaign.py robot_sf/benchmark/map_runner/__init__.py scripts/training/train_ppo.py robot_sf/benchmark/cli.py robot_sf/benchmark/metrics.py --top 8
 ```
 
 Largest modules:
@@ -20,7 +20,7 @@ Largest modules:
 | --- | ---: | ---: |
 | `robot_sf/planner/socnav.py` | 4379 | 4896 |
 | `robot_sf/benchmark/camera_ready_campaign.py` | 3357 | 3645 |
-| `robot_sf/benchmark/map_runner.py` | 2858 | 3131 |
+| `robot_sf/benchmark/map_runner/__init__.py` | 2858 | 3131 |
 | `scripts/training/train_ppo.py` | 2740 | 3072 |
 | `robot_sf/benchmark/cli.py` | 1948 | 2171 |
 | `robot_sf/benchmark/metrics.py` | 1941 | 2481 |
@@ -30,11 +30,11 @@ Longest functions:
 | path | function | lines |
 | --- | --- | ---: |
 | `robot_sf/benchmark/camera_ready_campaign.py` | `run_campaign` | 1003 |
-| `robot_sf/benchmark/map_runner.py` | `_build_policy` | 979 |
-| `robot_sf/benchmark/map_runner.py` | `run_map_batch` | 338 |
+| `robot_sf/benchmark/map_runner/__init__.py` | `_build_policy` | 979 |
+| `robot_sf/benchmark/map_runner/__init__.py` | `run_map_batch` | 338 |
 | `robot_sf/benchmark/cli.py` | `_attach_core_subcommands` | 310 |
 | `robot_sf/benchmark/camera_ready_campaign.py` | `prepare_campaign_preflight` | 280 |
-| `robot_sf/benchmark/map_runner.py` | `_run_map_episode` | 271 |
+| `robot_sf/benchmark/map_runner/__init__.py` | `_run_map_episode` | 271 |
 
 ## Ownership Boundaries
 
@@ -42,7 +42,7 @@ Benchmark orchestration:
 
 - Owns scenario expansion, readiness/profile gates, resume identity, episode writing, and artifact
   root policy.
-- Current primary files: `robot_sf/benchmark/map_runner.py`,
+- Current primary files: `robot_sf/benchmark/map_runner/__init__.py`,
   `robot_sf/benchmark/runner.py`, `robot_sf/benchmark/camera_ready_campaign.py`, and
   `robot_sf/benchmark/cli.py`.
 - Should not own individual planner adapter construction details beyond invoking a stable factory.
@@ -51,7 +51,7 @@ Policy construction and command contracts:
 
 - Owns algorithm key resolution, planner adapter construction, action-space/projection metadata,
   availability status, and kinematics feasibility counters.
-- Current primary files: `robot_sf/benchmark/map_runner.py`,
+- Current primary files: `robot_sf/benchmark/map_runner/__init__.py`,
   `robot_sf/benchmark/algorithm_readiness.py`, `robot_sf/benchmark/algorithm_metadata.py`, and now
   `robot_sf/benchmark/planner_command_contract.py`.
 - This boundary must preserve explicit native/adapter/fallback/degraded semantics; hidden fallback
@@ -122,7 +122,7 @@ proves the map-runner hotspot can lose a coherent ownership slice without behavi
 Post-extraction measurement:
 
 ```bash
-rtk uv run python scripts/dev/complexity_runtime_baseline.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/planner_command_contract.py --top 5
+rtk uv run python scripts/dev/complexity_runtime_baseline.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/planner_command_contract.py --top 5
 ```
 
 Result: `map_runner.py` drops to `2771` code lines, and the extracted command-contract module is
@@ -133,7 +133,7 @@ Result: `map_runner.py` drops to `2771` code lines, and the extracted command-co
 Focused lint:
 
 ```bash
-rtk uv run ruff check robot_sf/benchmark/planner_command_contract.py robot_sf/benchmark/map_runner.py tests/benchmark/test_planner_command_contract.py tests/benchmark/test_map_runner_utils.py
+rtk uv run ruff check robot_sf/benchmark/planner_command_contract.py robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_planner_command_contract.py tests/benchmark/test_map_runner_utils.py
 ```
 
 Result: `All checks passed!`

@@ -23,7 +23,7 @@ The design builds on existing additive metadata rather than replacing the benchm
   observation levels.
 - `robot_sf/benchmark/observation_levels.py`, `robot_sf/benchmark/algorithm_metadata.py`, and
   `robot_sf/benchmark/planner_command_contract.py` validate planner/observation combinations.
-- `robot_sf/benchmark/map_runner.py` records `observation_mode` and `observation_level` at the
+- `robot_sf/benchmark/map_runner/__init__.py` records `observation_mode` and `observation_level` at the
   top level, in `scenario_params`, and inside `algorithm_metadata`.
 - `configs/benchmarks/lidar/observation_track_smoke_issue_1613.yaml` is the first concrete
   LiDAR-track smoke packet. It reuses `configs/scenarios/sanity_v1.yaml`, declares

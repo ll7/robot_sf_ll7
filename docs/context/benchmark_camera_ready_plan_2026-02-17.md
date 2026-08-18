@@ -188,7 +188,7 @@ Implemented artifacts and entry points:
 Compatibility fix included:
 
 - `socnav_bench` now forwards `allow_fallback` in `_build_policy`:
-  - `robot_sf/benchmark/map_runner.py`
+  - `robot_sf/benchmark/map_runner/__init__.py`
   - regression test:
     - `tests/benchmark/test_map_runner_utils.py`
 
@@ -238,7 +238,7 @@ Still pending:
 To make benchmark outputs easier to review and publish, implement the
 following helper layer on top of existing campaign artifacts.
 
-1. Report builder helper (`scripts/tools/benchmark_report_build.py`)
+1. Report builder helper (planned; the helper is not yet checked in)
    - Input: `reports/campaign_summary.json`
    - Output: normalized markdown brief with:
      - best/worst planner per key metric
@@ -246,7 +246,7 @@ following helper layer on top of existing campaign artifacts.
      - fallback/degraded planner flags
    - Why: reduces manual interpretation work before PR/release.
 
-2. Artifact explorer helper (`scripts/tools/benchmark_artifact_inspect.py`)
+2. Artifact explorer helper (planned; the helper is not yet checked in)
    - Input: campaign root path
    - Output: structural validation + human summary:
      - required files present/missing
@@ -254,7 +254,7 @@ following helper layer on top of existing campaign artifacts.
      - publication bundle completeness
    - Why: faster publication freeze checks.
 
-3. Visualization helper (`scripts/tools/benchmark_plot.py`)
+3. Visualization helper (planned; the helper is not yet checked in)
    - Input: `campaign_table.csv` or `campaign_summary.json`
    - Output:
      - planner metric bar charts (success/collision/SNQI)

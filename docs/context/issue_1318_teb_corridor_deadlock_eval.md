@@ -110,7 +110,7 @@ route completion.
 Focused proof:
 
 ```bash
-uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_map_runner_utils.py
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_map_runner_utils.py
 uv run pytest tests/benchmark/test_map_runner_utils.py -k 'collision_wins or floors_exact_obstacle_collision_metrics or teb' -q
 ```
 

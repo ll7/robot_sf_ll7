@@ -9,9 +9,9 @@
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
-      "robot_sf/benchmark/map_runner.py": 2,
-      "robot_sf/benchmark/map_runner_batch_runner.py": 3,
-      "robot_sf/benchmark/map_runner_env.py": 1,
+      "robot_sf/benchmark/map_runner/__init__.py": 2,
+      "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
+      "robot_sf/benchmark/map_runner/map_runner_env.py": 1,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
@@ -224,7 +224,7 @@
       "fingerprint": "669b2ff25f68c9e9",
       "handler": "Exception",
       "lineno": 886,
-      "path": "robot_sf/benchmark/map_runner.py",
+      "path": "robot_sf/benchmark/map_runner/__init__.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
     {
@@ -233,7 +233,7 @@
       "fingerprint": "eaed931d8e0c298c",
       "handler": "Exception",
       "lineno": 916,
-      "path": "robot_sf/benchmark/map_runner.py",
+      "path": "robot_sf/benchmark/map_runner/__init__.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
     {
@@ -242,7 +242,7 @@
       "fingerprint": "e7d031b092401803",
       "handler": "Exception",
       "lineno": 152,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation"
     },
     {
@@ -251,7 +251,7 @@
       "fingerprint": "ce516405151d56de",
       "handler": "Exception",
       "lineno": 265,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation"
     },
     {
@@ -260,7 +260,7 @@
       "fingerprint": "7dfc64ca8cd07dfd",
       "handler": "Exception",
       "lineno": 285,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - fail-closed write path"
     },
     {
@@ -269,7 +269,7 @@
       "fingerprint": "ca3a7028492cbd27",
       "handler": "Exception",
       "lineno": 84,
-      "path": "robot_sf/benchmark/map_runner_env.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
     {

@@ -10,7 +10,7 @@ import pytest
 
 from robot_sf.benchmark import map_runner_episode
 from robot_sf.benchmark.event_ledger import build_event_ledger
-from robot_sf.benchmark.map_runner_identity import _scenario_identity_payload
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_identity_payload
 from robot_sf.benchmark.safety import cbf_safety_filter_runtime
 from robot_sf.benchmark.safety.cbf_safety_filter_runtime import (
     CBF_COLLISION_CONE_ARM,

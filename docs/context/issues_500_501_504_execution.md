@@ -13,7 +13,7 @@
   - Planner-kinematics contract (`execution_mode`, adapter markers, command-space metadata).
 - Wired metadata enrichment into:
   - `robot_sf/benchmark/runner.py`
-  - `robot_sf/benchmark/map_runner.py`
+  - `robot_sf/benchmark/map_runner/__init__.py`
   - `robot_sf/benchmark/full_classic/orchestrator.py`
   - `scripts/tools/policy_analysis_run.py`
 - Added adapter-impact probing mode for map runs:

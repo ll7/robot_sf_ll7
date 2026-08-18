@@ -18,7 +18,7 @@ import pytest
 
 from robot_sf.benchmark.algorithm_metadata import observation_spec_for_algorithm
 from robot_sf.benchmark.map_runner import _build_policy, _run_map_episode
-from robot_sf.benchmark.map_runner_view_integrity import (
+from robot_sf.benchmark.map_runner.map_runner_view_integrity import (
     DEGENERATE_PLANNER_VIEW_REASON,
     DegeneratePlannerViewError,
     evaluate_effective_view_integrity,

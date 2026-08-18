@@ -37,7 +37,7 @@ Rough effort band:
 - Planner family coverage matrix:
   [`docs/benchmark_planner_family_coverage.md`](../benchmark_planner_family_coverage.md)
 - Map-runner policy-builder surfaces:
-  [`robot_sf/benchmark/map_runner.py`](../../robot_sf/benchmark/map_runner.py) and
+  [`robot_sf/benchmark/map_runner/__init__.py`](../../robot_sf/benchmark/map_runner/__init__.py) and
   [`robot_sf/benchmark/map_runner_policies/`](../../robot_sf/benchmark/map_runner_policies/)
 
 ## Upstream Method Boundary
@@ -82,7 +82,7 @@ Do not start by editing the benchmark matrix or paper profiles. The safest integ
 4. Only after the harness passes, implement a testing-only planner under `robot_sf/planner/` with a
    config-first path under `configs/algos/` or `configs/policy_search/candidates/`.
 5. Wire the planner through the existing map-runner policy path:
-   `robot_sf/benchmark/map_runner.py` and `robot_sf/benchmark/map_runner_policies/`.
+   `robot_sf/benchmark/map_runner/__init__.py` and `robot_sf/benchmark/map_runner_policies/`.
 6. Add metadata in `robot_sf/benchmark/algorithm_metadata.py` and
    `robot_sf/benchmark/algorithm_readiness.py` as experimental, explicit-opt-in, and unavailable
    unless the required dependency and artifact contract are satisfied.

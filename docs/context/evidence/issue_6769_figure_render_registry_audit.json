@@ -12,20 +12,20 @@
     "docs_context_evidence_issue_3482_event_ledger_reconciliation_guard_README_md__cmd2_fccbfb79"
   ],
   "exclusion_reason_counts": {
-    "missing_committed_fixture": 10,
+    "missing_committed_fixture": 11,
     "non_deterministic_contract": 10,
     "unsafe_command": 4
   },
-  "generated_at": "2026-08-12T21:37:07+00:00",
-  "ineligible_count": 24,
+  "generated_at": "2026-08-18T12:42:39+00:00",
+  "ineligible_count": 25,
   "issue": 6769,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "route_evidence_only": true,
   "schema": "issue_6769_figure_render_registry_audit.v1",
   "source_class_counts": {
     "build_command_txt": 2,
-    "readme_reproduction": 31
+    "readme_reproduction": 32
   },
-  "source_commit": "f306d3f9c54195095eee1f6837d7b1853001b4a6",
-  "total_entries": 33
+  "source_commit": "e72b03a9f254bf113fcba29ea8b0c9a02f2d60ec",
+  "total_entries": 34
 }

@@ -27,7 +27,7 @@
       "status": "met",
       "evidence": [
         "PR #4428 merged commit ea3583dbc74cc6ccf9eb836e80dfd3b347c8b5f8.",
-        "PR #4428 changed robot_sf/benchmark/runner.py, robot_sf/benchmark/map_runner.py, robot_sf/benchmark/map_runner_batch_plan.py, robot_sf/benchmark/map_runner_worker.py, and robot_sf/benchmark/map_runner_identity.py.",
+        "PR #4428 changed robot_sf/benchmark/runner.py, robot_sf/benchmark/map_runner/__init__.py, robot_sf/benchmark/map_runner/map_runner_batch_plan.py, robot_sf/benchmark/map_runner/map_runner_worker.py, and robot_sf/benchmark/map_runner/map_runner_identity.py.",
         "The PR body records record_planner_decision_trace as a new default-off run_batch/run_map_batch API parameter and notes that existing record_simulation_step_trace plumbing was preserved."
       ]
     },

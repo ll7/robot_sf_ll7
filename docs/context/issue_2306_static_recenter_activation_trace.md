@@ -31,7 +31,7 @@ scripts/validation/run_static_recenter_activation_trace.py
 ```
 
 The script runs each matched candidate with opt-in `planner_decision_trace` metadata from
-`robot_sf/benchmark/map_runner.py`. Normal benchmark records do not include this trace unless the
+`robot_sf/benchmark/map_runner/__init__.py`. Normal benchmark records do not include this trace unless the
 private episode runner is explicitly called with `record_planner_decision_trace=True`.
 
 ## Required Fields
@@ -74,8 +74,8 @@ should activate.
 Validation commands:
 
 ```bash
-scripts/dev/run_worktree_shared_venv.sh -- ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_map_runner_utils.py scripts/validation/run_static_recenter_activation_trace.py
-scripts/dev/run_worktree_shared_venv.sh -- ruff format --check robot_sf/benchmark/map_runner.py tests/benchmark/test_map_runner_utils.py scripts/validation/run_static_recenter_activation_trace.py
+scripts/dev/run_worktree_shared_venv.sh -- ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_map_runner_utils.py scripts/validation/run_static_recenter_activation_trace.py
+scripts/dev/run_worktree_shared_venv.sh -- ruff format --check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_map_runner_utils.py scripts/validation/run_static_recenter_activation_trace.py
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/benchmark/test_map_runner_utils.py::test_run_map_episode_merges_planner_runtime_stats -q
 LOGURU_LEVEL=WARNING TF_CPP_MIN_LOG_LEVEL=2 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/run_static_recenter_activation_trace.py --output-json <worktree-local diagnostics summary>
 python -m json.tool docs/context/evidence/issue_2306_static_recenter_activation_trace_2026-06-05/summary.json

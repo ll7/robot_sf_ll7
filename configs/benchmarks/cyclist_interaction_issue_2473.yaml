@@ -170,7 +170,7 @@ first_smoke_or_spike:
     title: add one executable cyclist crossing or overtaking smoke scenario
     files_likely_touched:
       - robot_sf/training/scenario_loader.py
-      - robot_sf/benchmark/map_runner.py
+      - robot_sf/benchmark/map_runner/__init__.py
       - robot_sf/benchmark/schemas/episode.schema.v1.json
       - configs/scenarios/
       - tests/benchmark/

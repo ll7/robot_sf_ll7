@@ -41,7 +41,7 @@ arm so benchmark rows remain comparable.
 ## Validation
 
 - `uv run pytest tests/benchmark/test_cbf_safety_filter_runtime.py tests/planner/test_cbf_safety_filter.py tests/benchmark/test_cbf_safety_filter_policy.py tests/benchmark/test_safety_wrapper_runtime.py tests/benchmark/test_event_ledger.py tests/benchmark/test_map_runner_resume_identity.py -q`
-- `uv run ruff check robot_sf/planner/cbf_safety_filter.py tests/planner/test_cbf_safety_filter.py robot_sf/benchmark/safety/cbf_safety_filter_runtime.py robot_sf/benchmark/map_runner_episode.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/map_runner_batch_plan.py robot_sf/benchmark/map_runner_worker.py robot_sf/benchmark/map_runner_identity.py robot_sf/benchmark/event_ledger.py tests/benchmark/test_cbf_safety_filter_runtime.py`
+- `uv run ruff check robot_sf/planner/cbf_safety_filter.py tests/planner/test_cbf_safety_filter.py robot_sf/benchmark/safety/cbf_safety_filter_runtime.py robot_sf/benchmark/map_runner/map_runner_episode.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/map_runner/map_runner_batch_plan.py robot_sf/benchmark/map_runner/map_runner_worker.py robot_sf/benchmark/map_runner/map_runner_identity.py robot_sf/benchmark/event_ledger.py tests/benchmark/test_cbf_safety_filter_runtime.py`
 - `git diff --check`
 
 This validation is implementation integrity proof, not benchmark-strength evidence.

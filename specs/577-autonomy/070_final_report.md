@@ -55,7 +55,7 @@ Deliver best-performing planner under v2 semantics with full reproducibility evi
 - Added `predictive_mppi` as a new learned-prediction sequence optimizer:
   - module: `robot_sf/planner/predictive_mppi.py`
   - config: `configs/algos/predictive_mppi_camera_ready.yaml`
-  - benchmark wiring: `robot_sf/benchmark/map_runner.py`
+  - benchmark wiring: `robot_sf/benchmark/map_runner/__init__.py`
 - Result from hard-suite probes:
   - `current_safe`: `0/7` success, `6 max_steps`, `1 collision`
   - `relaxed_progress`: `0/7` success, `6 max_steps`, `1 collision`

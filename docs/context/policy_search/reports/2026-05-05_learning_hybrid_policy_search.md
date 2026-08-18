@@ -37,7 +37,7 @@ Changed:
   - added ORCA prior construction via `prior_policy: orca`,
   - added residual command blending with safety/progress checks,
   - added optional ORCA fallback construction while retaining risk-DWA default behavior.
-- `robot_sf/benchmark/map_runner.py`
+- `robot_sf/benchmark/map_runner/__init__.py`
   - wires the optional guarded-PPO prior into benchmark policy construction,
   - records `prior_blend_safe` and `prior_safe` guard decisions.
 - `configs/policy_search/candidates/orca_prior_guarded_ppo_v1.yaml`
@@ -62,7 +62,7 @@ Training lineage:
 
 ```bash
 uv run pytest tests/planner/test_guarded_ppo.py -q
-uv run ruff check robot_sf/planner/guarded_ppo.py robot_sf/benchmark/map_runner.py tests/planner/test_guarded_ppo.py
+uv run ruff check robot_sf/planner/guarded_ppo.py robot_sf/benchmark/map_runner/__init__.py tests/planner/test_guarded_ppo.py
 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python scripts/validation/run_policy_search_candidate.py --candidate orca_prior_guarded_ppo_v1 --stage smoke --output-dir output/policy_search/20260505T134203+0200/orca_prior_guarded_ppo_v1/smoke --workers 1
 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python scripts/validation/run_policy_search_candidate.py --candidate orca_prior_guarded_ppo_v1 --stage nominal_sanity --output-dir output/policy_search/20260505T134203+0200/orca_prior_guarded_ppo_v1/nominal_sanity --workers 1
 LOGURU_LEVEL=WARNING PYGAME_HIDE_SUPPORT_PROMPT=1 uv run python scripts/validation/run_policy_search_candidate.py --candidate orca_prior_guarded_ppo_v2_static_global --stage smoke --output-dir output/policy_search/20260505T134203+0200/orca_prior_guarded_ppo_v2_static_global/smoke --workers 1

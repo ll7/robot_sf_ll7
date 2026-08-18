@@ -46,7 +46,7 @@ The remaining six failures are not proven impossible:
 
 ### Reproducible Route Seeds
 
-`robot_sf/benchmark/map_runner.py` now fills a missing
+`robot_sf/benchmark/map_runner/__init__.py` now fills a missing
 `simulation_config.route_spawn_seed` from the episode seed before constructing the environment.
 This prevents route-spread pedestrian scenarios from bypassing the episode seed via
 `np.random.default_rng(None)`. Explicit scenario route seeds are preserved.
@@ -201,13 +201,13 @@ matrix rerun before it can replace the current best fully validated candidate.
 Focused final checks run before this wrap-up:
 
 ```bash
-uv run ruff check robot_sf/benchmark/map_runner.py robot_sf/planner/hybrid_rule_local_planner.py \
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py robot_sf/planner/hybrid_rule_local_planner.py \
   robot_sf/sensor/socnav_observation.py scripts/validation/run_policy_search_candidate.py \
   scripts/validation/run_policy_search_step_diagnostics.py tests/benchmark/test_map_runner_utils.py \
   tests/planner/test_hybrid_rule_local_planner.py tests/test_socnav_observation.py \
   tests/validation/test_run_policy_search_candidate.py
 
-uv run ruff format --check robot_sf/benchmark/map_runner.py \
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py \
   robot_sf/planner/hybrid_rule_local_planner.py robot_sf/sensor/socnav_observation.py \
   scripts/validation/run_policy_search_candidate.py \
   scripts/validation/run_policy_search_step_diagnostics.py tests/benchmark/test_map_runner_utils.py \

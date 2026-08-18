@@ -41,7 +41,7 @@ Use these terms distinctly:
 |---|---|---|
 | Observation delay | Missing as a benchmark runner hook. `SensorFusion` and `SocialGraphObservationAdapter` keep history, but they do not expose delayed observation selection. | Needs an explicit queue/buffer contract so the policy consumes state from `t-k`, not just a stacked current-history tensor. |
 | Action or actuation delay | Partly implemented by `SyntheticActuationController` and Issue #1556 profile metadata. | This is synthetic command-path delay, not measured hardware latency. It currently applies to differential-drive absolute commands. |
-| Planner update frequency | Missing as a named map-runner control. Current policy calls are effectively once per environment step in `robot_sf/benchmark/map_runner.py`. | Needs `always`, periodic update, and hold-last semantics with stale-action provenance. |
+| Planner update frequency | Missing as a named map-runner control. Current policy calls are effectively once per environment step in `robot_sf/benchmark/map_runner/__init__.py`. | Needs `always`, periodic update, and hold-last semantics with stale-action provenance. |
 | Policy inference deadline | Present in the older benchmark runner through `POLICY_STEP_TIMEOUT_SECS`, but not as a learned-policy latency metric in the main map-runner path. | Wall-clock timeout is not simulated delay; it is runtime reliability evidence and should be tracked separately. |
 
 At the default benchmark `dt=0.1`, the requested delays map to:
@@ -61,7 +61,7 @@ overloaded onto the existing two-step synthetic actuation profile.
 |---|---|---|
 | `robot_sf/sim/sim_config.py` | Defines fixed simulation `time_per_step_in_secs`, default `0.1`. | No separate sensor, policy, or actuator latency fields. |
 | `robot_sf/gym_env/robot_env.py` | Applies one parsed action per environment step and records `last_action` for reward and UI metadata. | No delayed-action queue, no stale-action ratio, no planner update cadence. |
-| `robot_sf/benchmark/map_runner.py` | Calls `policy_fn(policy_obs)` once per episode step, applies observation noise, validates synthetic actuation, and records `dt`. | No observation-delay buffer, planner hold-last mode, or inference deadline counters in map-runner summaries. |
+| `robot_sf/benchmark/map_runner/__init__.py` | Calls `policy_fn(policy_obs)` once per episode step, applies observation noise, validates synthetic actuation, and records `dt`. | No observation-delay buffer, planner hold-last mode, or inference deadline counters in map-runner summaries. |
 | `robot_sf/benchmark/synthetic_actuation.py` | Applies delayed, held, and clipped differential-drive commands and reports clip/yaw/braking summaries. | Delay labels stop at two steps and are scoped to synthetic actuation, not perception or policy update delay. |
 | `robot_sf/sensor/sensor_fusion.py` | Emits oldest-to-newest `drive_state` and `rays` stacks. | Stack history is not equivalent to a delayed observation selector. |
 | `robot_sf/sensor/social_graph_observation.py` | Maintains bounded pedestrian feature history and rejects future-like fields. | Does not encode observation age or latency mode. |

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark import map_runner_native_command as nc
-from robot_sf.benchmark.map_runner_native_command import (
+from robot_sf.benchmark.map_runner.map_runner_native_command import (
     NativeCommandContractError,
     NativeCommandStepError,
     _NoProgressDeadlockDetector,

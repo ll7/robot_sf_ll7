@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-17
+updated_at: 2026-08-18
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -3760,6 +3760,10 @@ entries:
   freshness: evidence
   area: learned_policy
 - path: docs/context/evidence/issue_3558_gate_threshold_sweep_2026-06-25/report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_3573_reactivity_ablation_2026-06-25/README.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence

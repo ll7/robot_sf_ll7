@@ -35,11 +35,11 @@ malformed, or holonomic-only — the three-wheeled proxy cannot infer yaw feasib
 
 ## Artifact wiring (where the fields appear)
 
-- **Per-episode** (`robot_sf/benchmark/map_runner_episode.py`): `run_map_episode` records the
+- **Per-episode** (`robot_sf/benchmark/map_runner/map_runner_episode.py`): `run_map_episode` records the
   evaluator output under `algorithm_metadata.ammv_feasibility` for every episode
   (`algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(ammv_command_actions)`).
   Additive under `algorithm_metadata`, so existing episode rows stay backward-compatible.
-- **Batch summary** (`robot_sf/benchmark/map_runner_batch_summary.py`):
+- **Batch summary** (`robot_sf/benchmark/map_runner/map_runner_batch_summary.py`):
   `accumulate_batch_metadata` folds per-episode payloads into `feasibility_totals`;
   `build_ammv_feasibility_summary(feasibility_totals)` emits the aggregate
   `algorithm_metadata_contract.ammv_feasibility` block.

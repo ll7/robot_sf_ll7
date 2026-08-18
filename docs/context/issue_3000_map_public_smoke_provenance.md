@@ -14,7 +14,7 @@
 Issue #3000 extends the result-artifact provenance contract from the lightweight
 `robot_sf/benchmark/runner.py::run_batch` path to:
 
-- `robot_sf/benchmark/map_runner.py::run_map_batch` summary payloads;
+- `robot_sf/benchmark/map_runner/__init__.py::run_map_batch` summary payloads;
 - `scripts/validation/run_policy_search_candidate.py` public smoke stage summaries.
 
 Map-runner summaries now include a top-level `provenance` block with protocol version, commit hash,
@@ -51,6 +51,6 @@ Policy-search combined override summaries use
 Focused validation runs:
 
 - `uv run pytest tests/benchmark/test_map_runner_result_provenance.py tests/validation/test_run_policy_search_candidate.py -q`
-- `uv run ruff check robot_sf/benchmark/map_runner.py scripts/validation/run_policy_search_candidate.py tests/benchmark/test_map_runner_result_provenance.py tests/validation/test_run_policy_search_candidate.py`
-- `uv run ruff format --check robot_sf/benchmark/map_runner.py scripts/validation/run_policy_search_candidate.py tests/benchmark/test_map_runner_result_provenance.py tests/validation/test_run_policy_search_candidate.py`
+- `uv run ruff check robot_sf/benchmark/map_runner/__init__.py scripts/validation/run_policy_search_candidate.py tests/benchmark/test_map_runner_result_provenance.py tests/validation/test_run_policy_search_candidate.py`
+- `uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py scripts/validation/run_policy_search_candidate.py tests/benchmark/test_map_runner_result_provenance.py tests/validation/test_run_policy_search_candidate.py`
 - `git diff --check`

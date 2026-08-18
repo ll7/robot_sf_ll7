@@ -9,8 +9,8 @@
   [Replicable Simulation-Based Robot Validation through Provenance](https://arxiv.org/abs/2605.29973)
 - Modules:
   - `robot_sf/benchmark/result_provenance.py` — manifest builder + validator
-  - `robot_sf/benchmark/map_runner_episode.py` — row-level `result_provenance` field
-  - `robot_sf/benchmark/map_runner.py` — manifest emission in `run_map_batch`
+  - `robot_sf/benchmark/map_runner/map_runner_episode.py` — row-level `result_provenance` field
+  - `robot_sf/benchmark/map_runner/__init__.py` — manifest emission in `run_map_batch`
   - `scripts/validation/check_benchmark_result_provenance.py` — fail-closed checker CLI
 - Tests:
   - `tests/benchmark/test_benchmark_result_provenance.py`
@@ -60,8 +60,8 @@ missing artifact SHA256, missing row link, or malformed postprocessing entry.
 
 ```bash
 uv run pytest tests/benchmark/test_benchmark_result_provenance.py -q
-uv run ruff check robot_sf/benchmark/result_provenance.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/map_runner_episode.py scripts/validation/check_benchmark_result_provenance.py tests/benchmark/test_benchmark_result_provenance.py
-uv run ruff format --check robot_sf/benchmark/result_provenance.py robot_sf/benchmark/map_runner.py robot_sf/benchmark/map_runner_episode.py scripts/validation/check_benchmark_result_provenance.py tests/benchmark/test_benchmark_result_provenance.py
+uv run ruff check robot_sf/benchmark/result_provenance.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/map_runner/map_runner_episode.py scripts/validation/check_benchmark_result_provenance.py tests/benchmark/test_benchmark_result_provenance.py
+uv run ruff format --check robot_sf/benchmark/result_provenance.py robot_sf/benchmark/map_runner/__init__.py robot_sf/benchmark/map_runner/map_runner_episode.py scripts/validation/check_benchmark_result_provenance.py tests/benchmark/test_benchmark_result_provenance.py
 git diff --check
 ```
 

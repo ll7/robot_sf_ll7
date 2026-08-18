@@ -86,7 +86,7 @@ That is an intentional engineering simplification to keep the benchmark loop tra
 | Risk-adaptive horizon | `_effective_rollout_steps` |
 | Risk-adaptive lattice and speed cap | `_candidate_set`, `_risk_speed_cap_ratio` |
 | Canonical benchmark config | `configs/algos/prediction_planner_camera_ready.yaml` |
-| Benchmark wiring | `robot_sf/benchmark/map_runner.py`, readiness/metadata modules |
+| Benchmark wiring | `robot_sf/benchmark/map_runner/__init__.py`, readiness/metadata modules |
 
 [Expert Skip] If you only need implementation entry points, this table is enough.
 
@@ -448,7 +448,7 @@ Core integration points:
 
 - Planner adapter: `robot_sf/planner/socnav.py` (`PredictionPlannerAdapter`)
 - Benchmark config loader: `robot_sf/benchmark/predictive/predictive_planner_config.py`
-- Episode runner: `robot_sf/benchmark/map_runner.py`
+- Episode runner: `robot_sf/benchmark/map_runner/__init__.py`
 
 Runtime flow in benchmark episodes:
 

@@ -32,7 +32,7 @@ uses `configs/scenarios/nominal_v1.yaml`.
 
 The first attempted nominal run exposed a fail-closed integrity blocker shared with issue #1318:
 exact environment collision flags could report a collision while sampled collision metrics stayed at
-zero. `robot_sf/benchmark/map_runner.py` now floors collision metrics from exact typed collision
+zero. `robot_sf/benchmark/map_runner/__init__.py` now floors collision metrics from exact typed collision
 flags before outcome-integrity validation, with regression coverage in
 `tests/benchmark/test_map_runner_utils.py`.
 

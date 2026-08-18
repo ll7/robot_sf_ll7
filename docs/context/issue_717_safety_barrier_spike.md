@@ -25,7 +25,7 @@ as a native planner path after `#695` ruled out provenance-safe upstream wrappin
 - Readiness and metadata wiring:
   - `robot_sf/benchmark/algorithm_readiness.py`
   - `robot_sf/benchmark/algorithm_metadata.py`
-  - `robot_sf/benchmark/map_runner.py`
+  - `robot_sf/benchmark/map_runner/__init__.py`
 - Validation assets:
   - `configs/algos/safety_barrier_camera_ready.yaml`
   - `configs/scenarios/sets/safety_barrier_static_slice_v1.yaml`

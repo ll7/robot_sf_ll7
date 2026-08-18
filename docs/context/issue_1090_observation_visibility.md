@@ -12,7 +12,7 @@ continues to expose full ground truth to metrics and episode recording.
 
 Filtering in `robot_sf/sensor/socnav_observation.py` keeps the feature close to the observation
 contract and avoids changing simulator dynamics, pedestrian state, metric inputs, or map state. It
-also covers the benchmark path because `robot_sf/benchmark/map_runner.py` builds environments with
+also covers the benchmark path because `robot_sf/benchmark/map_runner/__init__.py` builds environments with
 `ObservationMode.SOCNAV_STRUCT`.
 
 Scenario parsing lives in `robot_sf/training/scenario_loader.py` so benchmark YAML can express the

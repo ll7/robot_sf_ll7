@@ -58,7 +58,7 @@ Common large or fragile files:
 | File | Purpose | Navigation hint |
 | --- | --- | --- |
 | `robot_sf/benchmark/camera_ready_campaign.py` | Camera-ready benchmark orchestration and reporting. | Search for the specific command, planner family, or artifact phase before reading. |
-| `robot_sf/benchmark/map_runner.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
+| `robot_sf/benchmark/map_runner/__init__.py` | Benchmark map execution and policy construction. | Search for policy names, `_build_policy`, or scenario/map handling branches. |
 | `robot_sf/benchmark/metrics.py` | Benchmark metric calculations and aggregation helpers. | Search for the metric name or schema field before changing formulas. |
 | `scripts/training/train_ppo.py` | Proximal Policy Optimization training entrypoint. | Search for config loading, checkpoint, or callback anchors. |
 | `scripts/validation/run_policy_search_step_diagnostics.py` | Policy-search step diagnostics launcher. | Search by candidate, diagnostic stage, or output field. |

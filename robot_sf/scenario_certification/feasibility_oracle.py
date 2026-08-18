@@ -44,7 +44,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.gym_env.environment_factory import make_robot_env

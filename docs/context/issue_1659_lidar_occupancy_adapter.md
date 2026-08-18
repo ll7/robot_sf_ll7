@@ -48,7 +48,7 @@ PYTHONPATH=$PWD UV_PROJECT_ENVIRONMENT=/home/luttkule/git/robot_sf_ll7/.venv UV_
 # 8 passed
 
 PYTHONPATH=$PWD UV_PROJECT_ENVIRONMENT=/home/luttkule/git/robot_sf_ll7/.venv UV_NO_SYNC=1 \
-  uv run ruff check robot_sf/planner/lidar_occupancy.py robot_sf/benchmark/map_runner.py \
+  uv run ruff check robot_sf/planner/lidar_occupancy.py robot_sf/benchmark/map_runner/__init__.py \
     robot_sf/benchmark/algorithm_metadata.py tests/test_planner/test_lidar_occupancy.py \
     tests/benchmark/test_lidar_occupancy_adapter.py \
     tests/benchmark/test_algorithm_metadata_contract.py

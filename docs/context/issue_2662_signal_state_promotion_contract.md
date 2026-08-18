@@ -12,7 +12,7 @@ Related surfaces:
 - Runtime denominator smoke: [evidence/issue_2799_signalized_runtime/README.md](evidence/issue_2799_signalized_runtime/README.md)
 - Waiting/crossing fixture: [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md)
 - Benchmark manifest: `configs/benchmarks/signalized_pedestrian_crossing_issue_2474.yaml`
-- Trace implementation: `robot_sf/benchmark/map_runner.py`
+- Trace implementation: `robot_sf/benchmark/map_runner/__init__.py`
 - Contract tests:
   `tests/benchmark/test_signalized_crossing_benchmark_manifest.py` and
   `tests/benchmark/test_issue_2527_waiting_crossing_fixture.py`
@@ -56,8 +56,8 @@ Targeted validation:
 
 ```bash
 uv run pytest tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py -q
-uv run ruff check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
-uv run ruff format --check robot_sf/benchmark/map_runner.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
+uv run ruff check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
+uv run ruff format --check robot_sf/benchmark/map_runner/__init__.py tests/benchmark/test_issue_2527_waiting_crossing_fixture.py tests/benchmark/test_signalized_crossing_benchmark_manifest.py
 uv run python scripts/validation/check_docs_proof_consistency.py --path docs/context/catalog.yaml
 git diff --check
 ```

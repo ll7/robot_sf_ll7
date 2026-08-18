@@ -38,7 +38,7 @@ Top module-size hotspots from the initial run:
 | --- | --- | --- |
 | `robot_sf/planner/socnav.py` | 4379 | 4896 |
 | `robot_sf/benchmark/camera_ready_campaign.py` | 3357 | 3645 |
-| `robot_sf/benchmark/map_runner.py` | 2858 | 3131 |
+| `robot_sf/benchmark/map_runner/__init__.py` | 2858 | 3131 |
 | `scripts/training/train_ppo.py` | 2740 | 3072 |
 | `tests/benchmark/test_map_runner_utils.py` | 2503 | 2959 |
 
@@ -47,7 +47,7 @@ Top function-size hotspots:
 | path | function | lines |
 | --- | --- | --- |
 | `robot_sf/benchmark/camera_ready_campaign.py` | `run_campaign` | 1003 |
-| `robot_sf/benchmark/map_runner.py` | `_build_policy` | 979 |
+| `robot_sf/benchmark/map_runner/__init__.py` | `_build_policy` | 979 |
 | `scripts/training/run_predictive_training_pipeline.py` | `main` | 501 |
 | `robot_sf/benchmark/scenario_difficulty.py` | `build_scenario_difficulty_analysis` | 453 |
 | `scripts/training/train_predictive_planner.py` | `main` | 433 |

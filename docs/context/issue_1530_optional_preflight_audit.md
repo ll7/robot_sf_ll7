@@ -13,7 +13,7 @@ honest.
   `scripts/tools/run_camera_ready_benchmark.py`,
   `scripts/tools/run_benchmark_release.py`
 - Benchmark preflight/runtime seam:
-  `robot_sf/benchmark/map_runner.py`
+  `robot_sf/benchmark/map_runner/__init__.py`
 - Planner families reviewed:
   `robot_sf/planner/social_navigation_pyenvs_*.py`,
   `robot_sf/planner/crowdnav_height.py`,
@@ -40,7 +40,7 @@ honest.
 1. `scripts/tools/run_benchmark_release.py` now runs `check_orca_rvo2_preflight(cfg)` immediately
    after loading the canonical campaign config, matching the camera-ready CLI's existing
    fail-fast behavior while preserving the release CLI's structured JSON exit contract.
-2. `robot_sf/benchmark/map_runner.py` now inspects planner metadata returned by `_build_policy()`
+2. `robot_sf/benchmark/map_runner/__init__.py` now inspects planner metadata returned by `_build_policy()`
    during preflight and converts `status="fallback"` into `preflight.status="skipped"` before any
    episode jobs are scheduled. This closes the benchmark-strength evidence gap for learned
    planners such as PPO, SAC, and DRL-VO when their optional runtime/checkpoint dependencies are

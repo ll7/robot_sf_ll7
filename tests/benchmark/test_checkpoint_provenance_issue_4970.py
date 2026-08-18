@@ -20,7 +20,7 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )
-from robot_sf.benchmark.map_runner_batch_summary import merge_runtime_algorithm_contract
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import merge_runtime_algorithm_contract
 from robot_sf.planner.socnav import SACADRLPlannerAdapter, SocNavPlannerConfig
 
 if TYPE_CHECKING:

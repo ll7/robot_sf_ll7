@@ -40,7 +40,7 @@ def sample_coverage(tmp_path: Path) -> Path:
                     "missing_branches": 5,
                 }
             },
-            "robot_sf/benchmark/map_runner.py": {
+            "robot_sf/benchmark/map_runner/__init__.py": {
                 "summary": {
                     "covered_lines": 10,
                     "missing_lines": 90,
@@ -110,7 +110,7 @@ def test_worst_evidence_critical(sample_coverage: Path) -> None:
     data = load_coverage(sample_coverage)
     table = worst_evidence_critical(data, n=2)
     assert "socnav.py" in table
-    assert "map_runner.py" in table
+    assert "map_runner/__init__.py" in table
 
 
 def test_threshold_proposal(sample_coverage: Path) -> None:

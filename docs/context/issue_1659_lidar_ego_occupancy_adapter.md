@@ -38,7 +38,7 @@ creating the grid-route observation.
 - `robot_sf/planner/lidar_occupancy_grid.py`
 - `robot_sf/benchmark/algorithm_readiness.py`
 - `robot_sf/benchmark/algorithm_metadata.py`
-- `robot_sf/benchmark/map_runner.py`
+- `robot_sf/benchmark/map_runner/__init__.py`
 - `configs/algos/lidar_grid_route_issue_1659.yaml`
 - `tests/planner/test_lidar_occupancy_grid.py`
 - `tests/benchmark/test_lidar_grid_route_contract.py`

@@ -28,7 +28,7 @@ to `NA` and state why.
 
 - Target claim / hypothesis / blocker this should affect:
 - Comparator or baseline, if applicable:
-- Evidence tier: full benchmark / targeted smoke / diagnostic probe / launch packet / docs-only / NA
+- Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / full_matrix / analysis_only / synthesis / paper_grade / blocked / docs-only / NA
 - Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
 - Decision or stop rule, if applicable:
 - Parent issue, claim map, registry, context note, or synthesis surface to update:

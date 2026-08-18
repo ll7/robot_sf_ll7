@@ -157,6 +157,14 @@ DECISION_PATTERNS = (
         r"|\bapprove\s+or\s+waive\b",
         re.IGNORECASE | re.DOTALL,
     ),
+    re.compile(
+        r"\breopen(?:s|ed|ing)?\b.{0,80}\b(?:decision|ruling|gate)\b",
+        re.IGNORECASE,
+    ),
+)
+CANONICAL_RULING_RE = re.compile(
+    r"^\s*ll7/robot_sf_ll7#(?P<issue>[1-9][0-9]*)\s*:\s*"
+    r"(?P<token>[a-z0-9][a-z0-9._-]*)\s*$"
 )
 READY_HEADING_PATTERN = re.compile(
     r"^#{2,4}\s+(?:acceptance(?: criteria)?|definition of done|success criteria|"
@@ -1000,8 +1008,13 @@ def _blocked_reason_evidence(text: str) -> list[str]:
     return evidence
 
 
-def _decision_evidence(text: str, labels: set[str]) -> list[str]:
-    """Return decision-gate evidence from explicit labels or issue text."""
+def _decision_evidence(
+    text: str,
+    labels: set[str],
+    *,
+    issue_number: int | None = None,
+) -> list[str]:
+    """Return decision-gate evidence while respecting a later canonical ruling."""
     evidence = ["decision-required label present"] if DECISION_LABEL in labels else []
     lines = [" ".join(line.split()) for line in text.splitlines()]
     resolution_pattern = re.compile(
@@ -1020,6 +1033,19 @@ def _decision_evidence(text: str, labels: set[str]) -> list[str]:
         (index for index, line in enumerate(lines) if resolution_pattern.search(line)),
         default=-1,
     )
+    if issue_number is not None:
+        latest_ruling = max(
+            (
+                index
+                for index, line in enumerate(lines)
+                if (
+                    (match := CANONICAL_RULING_RE.fullmatch(line)) is not None
+                    and int(match.group("issue")) == issue_number
+                )
+            ),
+            default=-1,
+        )
+        last_resolution = max(last_resolution, latest_ruling)
     for index, line in enumerate(lines):
         if not line:
             continue
@@ -1339,7 +1365,7 @@ def classify_issue(
         )
 
     terminal_review_evidence = _terminal_review_evidence(text)
-    decision_evidence = _decision_evidence(text, labels)
+    decision_evidence = _decision_evidence(text, labels, issue_number=number)
     decision_evidence.extend(terminal_review_evidence)
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")

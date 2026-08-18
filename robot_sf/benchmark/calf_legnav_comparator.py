@@ -117,8 +117,15 @@ def _action_values(rows: Sequence[Mapping[str, Any]]) -> np.ndarray:
     return np.asarray(actions, dtype=float).reshape(-1, 2) if actions else np.empty((0, 2))
 
 
-def _observation_contract(trace: Mapping[str, Any]) -> dict[str, Any]:
+def _observation_contract(
+    trace: Mapping[str, Any], *, expected_condition: str | None = None
+) -> dict[str, Any]:
     """Summarize the observed evidence class and perturbation profile.
+
+    When ``expected_condition`` is supplied, the observed evidence class must
+    match the paired slot the trace was assigned to. A mismatch (for example a
+    ``perfect_perception`` slot whose trace is actually ``perception_limited``)
+    fails closed instead of silently reporting a mislabelled pair.
 
     Returns:
         A condition and observation-provenance mapping.
@@ -145,9 +152,23 @@ def _observation_contract(trace: Mapping[str, Any]) -> dict[str, Any]:
     else:
         status = "unavailable"
         condition = "unknown"
+    mismatch_reason: str | None = None
+    if expected_condition is not None and condition != expected_condition:
+        status = "unavailable"
+        mismatch_reason = (
+            f"observed observation contract {condition!r} does not match the paired "
+            f"slot {expected_condition!r}; the pair is not a valid contrast"
+        )
     config = _mapping(trace.get("observation_perturbation_config"))
     return {
         "condition": condition,
+        "expected_condition": expected_condition,
+        "condition_binding": (
+            "unavailable"
+            if mismatch_reason
+            else ("matched" if expected_condition is not None else "not_checked")
+        ),
+        **({"reason": mismatch_reason} if mismatch_reason else {}),
         "status": status,
         "evidence_classes": sorted(classes),
         "noise_profiles": profiles,
@@ -415,6 +436,7 @@ def _unsupported_fields() -> list[dict[str, str]]:
 def _condition_report(
     trace: Mapping[str, Any],
     *,
+    expected_condition: str,
     personal_space_radius_m: float,
     dt_s: float,
 ) -> dict[str, Any]:
@@ -423,7 +445,7 @@ def _condition_report(
     Returns:
         A schema-shaped condition report.
     """
-    observation = _observation_contract(trace)
+    observation = _observation_contract(trace, expected_condition=expected_condition)
     execution = _execution_block(trace)
     return {
         "status": (
@@ -461,7 +483,7 @@ def build_calf_legnav_comparator_report(
     Returns:
         A schema-shaped diagnostic report with explicit proxy and unavailable fields.
     """
-    identity_fields = ("candidate", "scenario_id", "seed")
+    identity_fields = ("candidate", "scenario_id", "seed", "horizon")
     mismatches = [
         field for field in identity_fields if perfect_trace.get(field) != sensor_trace.get(field)
     ]
@@ -478,11 +500,13 @@ def build_calf_legnav_comparator_report(
     conditions = {
         CONDITION_IDEAL: _condition_report(
             perfect_trace,
+            expected_condition=CONDITION_IDEAL,
             personal_space_radius_m=personal_space_radius_m,
             dt_s=dt_s,
         ),
         CONDITION_SENSOR: _condition_report(
             sensor_trace,
+            expected_condition=CONDITION_SENSOR,
             personal_space_radius_m=personal_space_radius_m,
             dt_s=dt_s,
         ),

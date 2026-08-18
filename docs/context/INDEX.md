@@ -45,6 +45,12 @@ package. The receipt is build provenance only; it is not domain approval, admiss
 benchmark, or paper-facing evidence:
 [evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
 
+Issue #7128 exact-repeat execution context: a dependency-free,
+`benchmark_execution_context.v1` block and digest that binds CPU, platform,
+Python, numerical thread variables, and NumPy/Numba versions while keeping raw
+host identity separate from public comparison labels:
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md).
+
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
 release-cell-only claim boundary:
@@ -205,6 +211,12 @@ adapted) unless and until a formal license or explicit permission is obtained an
 the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier `idea`, no policy
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
+
+Issue #6318 Step 3 model-quality gate: config-first held-out prediction checks for the clean-room
+latent dynamics, reward, and continuation heads against persistence and a deterministic diagnostic
+MLP reference; the committed preview is intentionally blocked by train/holdout insufficiency and
+the gate makes no SAC, benchmark, or paper-facing claim:
+[issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md).
 
 Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
 preflight configuration and its explicit no-result boundary:

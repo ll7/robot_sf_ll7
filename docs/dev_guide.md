@@ -955,15 +955,19 @@ For a read-only preservation-aware retirement projection, use the bounded report
 
 ```bash
 uv run python scripts/dev/worktree_hygiene_snapshot.py \
-  --retirement-plan --include-all-worktrees --json
+  --retirement-plan --include-all-worktrees \
+  --worktree-budget 256 --time-budget-seconds 60 --json
 ```
 
 The retirement projection classifies each row as `preserve`, `review`, or `removeable`. It joins
 bounded PR coverage and remote issue-claim state, reports dirty/ahead/detached/missing-upstream
 reasons, and classifies ignored roots as cache, documented disposable output, durable-required, or
-handoff-needed. Unknown PR, claim, status, or artifact evidence is a blocker. The command never
-removes worktrees; any later removal still requires human approval and the preservation procedure
-above.
+handoff-needed. `--worktree-budget` and `--time-budget-seconds` bound the all-worktree scan itself,
+including local inventory construction. Rows that do not fit are retained as review-only, and the
+JSON `progress.terminal_status` is `incomplete`; `needs_review` also reports unavailable evidence.
+Treat any non-zero exit from an incomplete or needs-review report as a stop signal. Unknown PR,
+claim, status, or artifact evidence is a blocker. The command never removes worktrees; any later
+removal still requires human approval and the preservation procedure above.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 

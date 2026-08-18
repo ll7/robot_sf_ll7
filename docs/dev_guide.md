@@ -859,6 +859,29 @@ is completed successfully and the check-run is still pending, then reads the che
 fail-closed with a JSON report; the reconciliation job is diagnostic-only and outside the `ci`
 aggregate.
 
+For a pending Actions check with a job URL, the monitor performs bounded REST enrichment of the
+workflow run and job records to report the current phase separately from test conclusions. The
+default stale warning threshold is 900 seconds; set it explicitly when a different operational
+window is appropriate:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+  <pr-number> \
+  --expected-head-sha <head-sha> \
+  --actions-stale-after-seconds 900 \
+  --poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200 --json
+```
+
+`checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
+timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
+exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
+result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
+replacement rather than hiding the replacement relationship behind a count. When a stale run has
+an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
+and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+mutation commands and leaves the route evidence incomplete.
+
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
 `route_evidence_only: true`. When the local wall cap expires while checks are still pending, the

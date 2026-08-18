@@ -61,8 +61,11 @@ from robot_sf.common.artifact_paths import get_repository_root
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
-RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v1"
-RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v1"
+# The report envelope gained required paired-inference/support blocks in #7139.
+# Bump both the report and durable bundle identifiers before Gate 2 can produce
+# retained artifacts; no prior Gate 2 bundle exists to migrate.
+RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v2"
+RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v2"
 SWEEP_SUMMARY_SCHEMA = "issue_6642_radius_sweep_summary.v1"
 
 # Preregistered scientific verdicts (exactly one is emitted once the gate passes).
@@ -1446,7 +1449,7 @@ class RadiusSensitivityReport:
     verdict: VerdictDecision
 
     def to_dict(self) -> dict[str, object]:
-        """Return the ``radius_rank_stability.v1`` JSON-safe payload.
+        """Return the ``radius_rank_stability.v2`` JSON-safe payload.
 
         Returns:
             Mapping with schema, configuration, missingness, per-metric stability,

@@ -1,5 +1,9 @@
 """Tests for diagnostic trace dossier package composition."""
 
+# evidence-writer-exempt: tests write temporary fixture and package artifacts under pytest
+# tmp_path; the retained docs/context/evidence trace is read-only input and no test output is
+# committed or promoted as durable evidence.
+
 from __future__ import annotations
 
 import hashlib

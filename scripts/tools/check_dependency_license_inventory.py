@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
 
 SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+CANONICAL_PROFILE_MANIFEST = "scripts/validation/dependency_license_profiles.v1.json"
+CANONICAL_POLICY = "scripts/validation/dependency_license_policy.v1.json"
 PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
 POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
 _UNKNOWN_VALUES = frozenset({"", "unknown", "unknown license", "none", "null"})
@@ -543,6 +545,11 @@ def _profile_requirements(
     )
     requirements = [*base_requirements]
     for selected_extra in selected_extras:
+        if selected_extra not in optional:
+            raise ValueError(
+                f"profile {profile.get('id')} references undeclared extra {selected_extra!r} "
+                f"in {_relative_path(repo_root, project_path)}"
+            )
         extra_requirements = optional.get(selected_extra, [])
         if not isinstance(extra_requirements, list):
             raise ValueError(f"profile {profile.get('id')} extra {selected_extra} is not a list")
@@ -891,10 +898,8 @@ def build_inventory(  # noqa: C901
 ) -> dict[str, Any]:
     """Build a lock/profile/environment inventory without network or writes."""
     repo_root = repo_root.resolve()
-    manifest_path = profile_manifest_path or (
-        repo_root / "scripts/validation/dependency_license_profiles.v1.json"
-    )
-    policy_file = policy_path or repo_root / "scripts/validation/dependency_license_policy.v1.json"
+    manifest_path = profile_manifest_path or (repo_root / CANONICAL_PROFILE_MANIFEST)
+    policy_file = policy_path or repo_root / CANONICAL_POLICY
     manifest = _read_json(manifest_path)
     policy = _read_json(policy_file)
     root_document = _project_document(repo_root / "pyproject.toml")
@@ -1078,12 +1083,24 @@ def build_inventory(  # noqa: C901
 
 
 def check_report_freshness(repo_root: Path, report_path: Path) -> list[str]:
-    """Recompute every recorded input digest for an existing report."""
+    """Recompute every recorded input digest for an existing report.
+
+    Freshness also binds the report to the canonical profile manifest and policy. A report
+    generated with ``--profile-manifest``/``--policy`` pointing at a substitute file records
+    that substitute instead, so without this binding a relaxed policy could produce a report
+    that still validates as fresh.
+    """
     report = _read_json(report_path)
     issues: list[str] = []
     inputs = report.get("repository_inputs")
     if not isinstance(inputs, list) or not inputs:
         return ["report has no repository_inputs digest list"]
+    recorded_paths = {item.get("path") for item in inputs if isinstance(item, dict)}
+    issues.extend(
+        f"report was not generated from the canonical input: {canonical}"
+        for canonical in (CANONICAL_PROFILE_MANIFEST, CANONICAL_POLICY)
+        if canonical not in recorded_paths
+    )
     for item in inputs:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             issues.append("report contains an invalid repository input row")
@@ -1099,6 +1116,13 @@ def check_report_freshness(repo_root: Path, report_path: Path) -> list[str]:
                 f"report={item.get('sha256')} actual={actual}"
             )
     return sorted(set(issues))
+
+
+def _reported_unresolved_count(report_path: Path) -> int:
+    """Return an existing report's recorded unresolved-row count."""
+    summary = _read_json(report_path).get("summary")
+    value = summary.get("unresolved_count") if isinstance(summary, dict) else None
+    return value if isinstance(value, int) else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1136,14 +1160,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if args.check_freshness:
-            issues = check_report_freshness(repo_root, args.check_freshness.resolve())
+            report_path = args.check_freshness.resolve()
+            issues = check_report_freshness(repo_root, report_path)
+            unresolved = _reported_unresolved_count(report_path)
             print(
                 json.dumps(
-                    {"schema_version": "dependency_license_freshness.v1", "issues": issues},
+                    {
+                        "schema_version": "dependency_license_freshness.v1",
+                        "issues": issues,
+                        "unresolved_count": unresolved,
+                    },
                     indent=2,
                 )
             )
-            return 1 if issues else 0
+            if issues:
+                return 1
+            if args.fail_on_unresolved and unresolved:
+                print(
+                    f"FAIL: dependency license inventory remains blocked for {unresolved} row(s)",
+                    file=sys.stderr,
+                )
+                return 2
+            return 0
         inventory = build_inventory(
             repo_root,
             profile_manifest_path=(

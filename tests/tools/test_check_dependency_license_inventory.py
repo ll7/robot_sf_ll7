@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from scripts.tools.check_dependency_license_inventory import (
     build_inventory,
     check_report_freshness,
+    main,
 )
 
 if TYPE_CHECKING:
@@ -232,4 +233,62 @@ def test_current_profile_matrix_is_explicit_and_all_exclusion_is_visible() -> No
     assert inventory["structural_issues"] == []
     assert all(
         profile["status"] in {"complete", "not_applicable"} for profile in inventory["profiles"]
+    )
+
+
+def test_freshness_rejects_a_report_built_from_a_substitute_policy(tmp_path: Path) -> None:
+    """A relaxed policy cannot be laundered into a report that still validates as fresh."""
+    _write_inputs(tmp_path)
+    canonical_policy = tmp_path / "scripts" / "validation" / "dependency_license_policy.v1.json"
+    relaxed_policy = tmp_path / "scripts" / "validation" / "relaxed_policy.json"
+    relaxed_policy.write_text(canonical_policy.read_text(encoding="utf-8"), encoding="utf-8")
+    report = build_inventory(tmp_path, distributions=[], policy_path=relaxed_policy)
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    issues = check_report_freshness(tmp_path, report_path)
+
+    assert any("not generated from the canonical input" in issue for issue in issues)
+    assert any("dependency_license_policy.v1.json" in issue for issue in issues)
+
+
+def test_profile_referencing_an_undeclared_extra_fails_closed(tmp_path: Path) -> None:
+    """A profile extra that pyproject no longer declares must not resolve to base deps."""
+    _write_inputs(tmp_path)
+    manifest_path = tmp_path / "scripts" / "validation" / "dependency_license_profiles.v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for profile in manifest["profiles"]:
+        if profile["id"] == "foo":
+            profile["extra"] = "foo_typo"
+            profile["extras"] = ["foo_typo"]
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    inventory = build_inventory(tmp_path, distributions=[])
+
+    profile = next(item for item in inventory["profiles"] if item["id"] == "foo")
+    assert profile["status"] == "blocked"
+    assert any("references undeclared extra" in issue for issue in profile["missing_dependencies"])
+    assert any("references undeclared extra" in failure for failure in inventory["failures"])
+
+
+def test_freshness_with_strict_flag_reapplies_the_unresolved_exit_code(tmp_path: Path) -> None:
+    """`--check-freshness --fail-on-unresolved` must not report success on blocked evidence."""
+    _write_inputs(tmp_path)
+    report = build_inventory(tmp_path, distributions=[])
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    assert report["summary"]["unresolved_count"] > 0
+    assert main(["--repo-root", str(tmp_path), "--check-freshness", str(report_path)]) == 0
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--check-freshness",
+                str(report_path),
+                "--fail-on-unresolved",
+            ]
+        )
+        == 2
     )

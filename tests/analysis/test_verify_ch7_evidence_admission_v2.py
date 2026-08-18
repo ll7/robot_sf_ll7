@@ -14,6 +14,9 @@ from scripts.analysis import verify_ch7_evidence_admission_v2 as verifier
 SOURCE_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
 )
+DURABLE_V2_PACKAGE = (
+    Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
+)
 
 
 def _valid_receipt() -> dict[str, object]:
@@ -112,6 +115,16 @@ def test_check_only_diagnoses_blocked_package_and_builds_template(tmp_path: Path
     assert template["approval"]["decision"] is None
     assert template["retrieval"]["source_package_key"] is None
     assert not (output / "admission/receipt.json").exists()
+
+
+def test_check_only_accepts_complete_review_sidecars_on_durable_package() -> None:
+    diagnostic = verifier.diagnose_v2_package(DURABLE_V2_PACKAGE)
+
+    assert diagnostic["status"] == "blocked_pending_domain_approval"
+    assert diagnostic["admission_status"] == "not_admitted"
+    assert diagnostic["diagnostics"]["package_checksums_verified"] is True
+    assert diagnostic["diagnostics"]["admission_authorized"] is False
+    assert diagnostic["receipt_template"]["template_status"] == "not_a_receipt"
 
 
 def test_check_only_template_is_rejected_as_an_admission_receipt(tmp_path: Path) -> None:

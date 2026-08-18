@@ -902,3 +902,331 @@ def test_pr_removing_evidence_files_without_baseline_refresh_fails_pre_merge(
         f"baseline refresh.\nstderr:\n{check_drift.stderr}"
     )
     assert "evidence tree changed without a matching baseline refresh" in check_drift.stderr
+
+
+# --- issue #7467: review-companion delta -------------------------------------------
+
+
+def _review_doc(
+    reviewed_files: list[dict[str, object]] | None = None,
+    increases: list[dict[str, object]] | None = None,
+    prior_commit: str = "prior-baseline-commit",
+) -> dict[str, object]:
+    """Build a synthetic review companion matching evidence_registry_baseline_review.v1."""
+    return {
+        "schema_version": "evidence_registry_baseline_review.v1",
+        "prior_baseline_commit": prior_commit,
+        "reviewed_files": reviewed_files or [],
+        "reviewed_baseline_increases": increases or [],
+    }
+
+
+def _baseline_doc(findings_by_path: dict[str, dict[str, int]]) -> dict[str, object]:
+    """Build a synthetic baseline payload (only the fields the delta reads)."""
+    return {
+        "schema_version": 1,
+        "findings_by_path": findings_by_path,
+        "summary": {
+            "total_findings": sum(sum(codes.values()) for codes in findings_by_path.values()),
+            "files_with_findings": len(findings_by_path),
+        },
+    }
+
+
+def test_companion_delta_surfaces_new_paths_and_increases() -> None:
+    """New baseline paths and per-code increases need explicit companion entries."""
+    prior = _baseline_doc({"old.json": {"missing_commit": 1}})
+    baseline = _baseline_doc(
+        {
+            "old.json": {"missing_commit": 2},
+            "new.json": {"dangling_commit": 1, "missing_commit": 1},
+        }
+    )
+    review = _review_doc(reviewed_files=[], increases=[])
+
+    delta = ratchet.companion_delta(baseline, review, prior)
+
+    assert delta["missing_reviewed_files"] == ["new.json"]
+    assert delta["missing_reviewed_files_codes"] == {
+        "new.json": ["dangling_commit", "missing_commit"]
+    }
+    assert delta["missing_reviewed_increases"] == [("old.json", "missing_commit")]
+    assert delta["stale_reviewed_files"] == []
+    assert delta["stale_reviewed_increases"] == []
+    assert delta["empty"] is False
+
+
+def test_companion_delta_empty_when_review_covers_baseline() -> None:
+    """Existing reviewed_files / reviewed_baseline_increases entries empty the delta."""
+    prior = _baseline_doc({"old.json": {"missing_commit": 1}})
+    baseline = _baseline_doc(
+        {
+            "old.json": {"missing_commit": 2},
+            "new.json": {"dangling_commit": 1},
+        }
+    )
+    review = _review_doc(
+        reviewed_files=[
+            {"path": "new.json", "codes": ["dangling_commit"], "disposition": "baseline"}
+        ],
+        increases=[{"path": "old.json", "codes": ["missing_commit"], "disposition": "baseline"}],
+    )
+
+    delta = ratchet.companion_delta(baseline, review, prior)
+
+    assert delta["missing_reviewed_files"] == []
+    assert delta["missing_reviewed_increases"] == []
+    assert delta["stale_reviewed_files"] == []
+    assert delta["empty"] is True
+
+
+def test_companion_delta_reports_stale_review_entries() -> None:
+    """Reviewed entries that no longer exist in the baseline are surfaced as stale."""
+    prior = _baseline_doc({"old.json": {"missing_commit": 1}})
+    baseline = _baseline_doc({"old.json": {"missing_commit": 1}})
+    review = _review_doc(
+        reviewed_files=[
+            {"path": "gone.json", "codes": ["dangling_commit"], "disposition": "baseline"}
+        ],
+        increases=[{"path": "old.json", "codes": ["missing_commit"], "disposition": "baseline"}],
+    )
+
+    delta = ratchet.companion_delta(baseline, review, prior)
+
+    assert delta["stale_reviewed_files"] == ["gone.json"]
+    # old.json::missing_commit was declared as an increase but is no longer an increase
+    # (prior count 1 == current count 1), so it is stale too.
+    assert delta["stale_reviewed_increases"] == [("old.json", "missing_commit")]
+    assert delta["empty"] is False
+
+
+def test_companion_delta_ignores_codes_declared_for_new_files() -> None:
+    """A reviewed_files entry for a new path covers it regardless of its codes."""
+    prior = _baseline_doc({})
+    baseline = _baseline_doc({"new.json": {"dangling_commit": 1, "missing_commit": 2}})
+    review = _review_doc(
+        reviewed_files=[
+            {"path": "new.json", "codes": ["dangling_commit"], "disposition": "baseline"}
+        ]
+    )
+
+    delta = ratchet.companion_delta(baseline, review, prior)
+
+    assert delta["missing_reviewed_files"] == []
+    assert delta["missing_reviewed_increases"] == []
+    assert delta["empty"] is True
+
+
+def test_render_companion_template_is_deterministic_and_parseable() -> None:
+    """The rendered template round-trips through yaml.safe_load with exact paths/codes."""
+    delta = {
+        "missing_reviewed_files": ["a.json", "b.json"],
+        "missing_reviewed_files_codes": {
+            "a.json": ["dangling_commit"],
+            "b.json": ["dangling_commit", "missing_commit"],
+        },
+        "missing_reviewed_increases": [("old.json", "missing_commit")],
+        "stale_reviewed_files": ["gone.json"],
+        "stale_reviewed_increases": [("gone.json", "dangling_commit")],
+        "empty": False,
+    }
+    rendered = ratchet.render_companion_template(delta)
+    assert rendered == ratchet.render_companion_template(delta)
+
+    parsed = yaml.safe_load(rendered)
+    files = {entry["path"]: entry for entry in parsed["reviewed_files"]}
+    assert set(files) == {"a.json", "b.json"}
+    assert files["a.json"]["codes"] == ["dangling_commit"]
+    assert files["b.json"]["codes"] == ["dangling_commit", "missing_commit"]
+    assert files["a.json"]["disposition"] == "baseline"
+    assert "PLACEHOLDER" in files["a.json"]["reason"]
+    increases = parsed["reviewed_baseline_increases"]
+    assert len(increases) == 1
+    assert increases[0]["path"] == "old.json"
+    assert increases[0]["codes"] == ["missing_commit"]
+    assert increases[0]["disposition"] == "baseline"
+    assert "PLACEHOLDER" in increases[0]["reason"]
+
+
+def _run_companion_delta_cli(
+    tmp_path: Path,
+    baseline: dict[str, object],
+    review: dict[str, object],
+    prior: dict[str, object],
+    prior_commit: str,
+) -> subprocess.CompletedProcess:
+    """Run ``--companion-delta`` against synthetic baseline/review/prior-baseline files."""
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    review_path = tmp_path / "review.yaml"
+    review_path.write_text(yaml.safe_dump(review), encoding="utf-8")
+    prior_path = tmp_path / "prior.json"
+    prior_path.write_text(json.dumps(prior), encoding="utf-8")
+    # Seed a throwaway git repo with the prior baseline at `prior_commit` so the
+    # CLI can `git show` it, mirroring the production prior-baseline load.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+    scripts_dir = repo / "scripts" / "validation"
+    scripts_dir.mkdir(parents=True)
+    (scripts_dir / "evidence_registry_baseline.json").write_text(
+        json.dumps(prior), encoding="utf-8"
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "scripts/validation/evidence_registry_baseline.json"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "prior baseline"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "tag", prior_commit],
+        check=True,
+        capture_output=True,
+    )
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--companion-delta",
+            "--baseline",
+            str(baseline_path),
+            "--review",
+            str(review_path),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+
+def test_cli_companion_delta_exits_1_and_emits_template_when_entries_missing(
+    tmp_path: Path,
+) -> None:
+    """Missing companion entries fail (exit 1) and print a parseable template."""
+    prior = _baseline_doc({"old.json": {"missing_commit": 1}})
+    baseline = _baseline_doc(
+        {
+            "old.json": {"missing_commit": 2},
+            "new.json": {"dangling_commit": 1},
+        }
+    )
+    review = _review_doc(reviewed_files=[], increases=[])
+
+    proc = _run_companion_delta_cli(tmp_path, baseline, review, prior, "prior-baseline-commit")
+
+    assert proc.returncode == 1, proc.stderr
+    assert "new.json" in proc.stderr
+    assert "old.json :: missing_commit" in proc.stderr
+    template = yaml.safe_load(proc.stdout)
+    assert template["reviewed_files"][0]["path"] == "new.json"
+    assert template["reviewed_baseline_increases"][0]["path"] == "old.json"
+    assert template["reviewed_baseline_increases"][0]["codes"] == ["missing_commit"]
+    # The companion must not be modified by the read-only mode.
+    assert yaml.safe_load((tmp_path / "review.yaml").read_text(encoding="utf-8")) == review
+
+
+def test_cli_companion_delta_exits_0_when_covered(tmp_path: Path) -> None:
+    """A review companion that fully covers the baseline delta exits 0."""
+    prior = _baseline_doc({"old.json": {"missing_commit": 1}})
+    baseline = _baseline_doc(
+        {
+            "old.json": {"missing_commit": 2},
+            "new.json": {"dangling_commit": 1},
+        }
+    )
+    review = _review_doc(
+        reviewed_files=[
+            {"path": "new.json", "codes": ["dangling_commit"], "disposition": "baseline"}
+        ],
+        increases=[{"path": "old.json", "codes": ["missing_commit"], "disposition": "baseline"}],
+    )
+
+    proc = _run_companion_delta_cli(tmp_path, baseline, review, prior, "prior-baseline-commit")
+
+    assert proc.returncode == 0, proc.stderr
+    assert "companion delta is empty" in proc.stdout
+
+
+def test_cli_companion_delta_reports_missing_prior_baseline_commit(tmp_path: Path) -> None:
+    """An unknown prior-baseline commit is a documented error, not a traceback."""
+    prior = _baseline_doc({})
+    baseline = _baseline_doc({"new.json": {"dangling_commit": 1}})
+    review = _review_doc(reviewed_files=[], increases=[], prior_commit="no-such-commit")
+
+    proc = _run_companion_delta_cli(tmp_path, baseline, review, prior, "prior-baseline-commit")
+
+    assert proc.returncode == 2
+    assert "Could not load the prior baseline at commit no-such-commit" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+def test_companion_delta_regression_issue_7412_shape(tmp_path: Path) -> None:
+    """The #7412 refresh shape: three un-reviewed paths surface in one delta.
+
+    Issue #7467 regression: the #7412 baseline refresh (421 findings across 93 files)
+    introduced three evidence files that the review companion had no entries for, and
+    the next full pr_ready_check.sh failed. A synthetic baseline carrying exactly those
+    paths must produce a delta naming all three, and disappear once reviewed.
+    """
+    receipt = "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json"
+    manifest = "docs/context/evidence/issue_7322_ch7_evidence_package_v2_1/manifest.json"
+    source_verification = (
+        "docs/context/evidence/issue_7322_ch7_evidence_package_v2_1/review/source_verification.json"
+    )
+    prior = _baseline_doc({})
+    baseline = _baseline_doc(
+        {
+            receipt: {"hash_without_artifact_path": 1},
+            manifest: {"hash_without_artifact_path": 1},
+            source_verification: {"hash_without_artifact_path": 1},
+        }
+    )
+    review = _review_doc(reviewed_files=[], increases=[])
+
+    delta = ratchet.companion_delta(baseline, review, prior)
+
+    assert delta["missing_reviewed_files"] == sorted([receipt, manifest, source_verification])
+    assert delta["missing_reviewed_increases"] == []
+    assert delta["empty"] is False
+    # The rendered template names every exact path and code.
+    rendered = ratchet.render_companion_template(delta)
+    parsed = yaml.safe_load(rendered)
+    assert {entry["path"] for entry in parsed["reviewed_files"]} == {
+        receipt,
+        manifest,
+        source_verification,
+    }
+    assert all(
+        entry["codes"] == ["hash_without_artifact_path"] for entry in parsed["reviewed_files"]
+    )
+
+    # Adding the three reviewed_files entries empties the delta (the #7412 repair shape).
+    covered = _review_doc(
+        reviewed_files=[
+            {"path": receipt, "codes": ["hash_without_artifact_path"], "disposition": "baseline"},
+            {"path": manifest, "codes": ["hash_without_artifact_path"], "disposition": "baseline"},
+            {
+                "path": source_verification,
+                "codes": ["hash_without_artifact_path"],
+                "disposition": "baseline",
+            },
+        ]
+    )
+    assert ratchet.companion_delta(baseline, covered, prior)["empty"] is True

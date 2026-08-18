@@ -356,7 +356,9 @@ def _merge_queue_gate_check(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
         isinstance(current.get(key), str) and current[key].strip()
         for key in ("started_at", "completed_at")
     )
-    if status == "completed" and (not isinstance(raw_conclusion, str) or not raw_conclusion.strip()):
+    if status == "completed" and (
+        not isinstance(raw_conclusion, str) or not raw_conclusion.strip()
+    ):
         malformed = True
     if malformed:
         context = "malformed"

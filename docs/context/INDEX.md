@@ -45,6 +45,12 @@ package. The receipt is build provenance only; it is not domain approval, admiss
 benchmark, or paper-facing evidence:
 [evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
 
+Issue #7128 exact-repeat execution context: a dependency-free,
+`benchmark_execution_context.v1` block and digest that binds CPU, platform,
+Python, numerical thread variables, and NumPy/Numba versions while keeping raw
+host identity separate from public comparison labels:
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md).
+
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
 release-cell-only claim boundary:

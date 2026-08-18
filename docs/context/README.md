@@ -20,6 +20,10 @@ The fixture-only agent figure interpretation evaluator is documented in
 it reports aggregate scoring and workflow-variant availability without establishing model or
 scientific results.
 
+Exact-repeat execution-context provenance is documented in
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md);
+it binds cross-host verdicts to numerical context without establishing a determinism result.
+
 The post-rollout stale-base observation contract is documented in
 [issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
 SHA-pinned workflow records and keeps missing or unknown attribution unavailable.

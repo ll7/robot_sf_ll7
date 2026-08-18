@@ -972,3 +972,177 @@ def test_collect_live_state_records_ancestry_block(monkeypatch) -> None:
     assert snapshot["ancestry"]["declared_parent"] == 9999
     assert snapshot["ancestry"]["unexpected_paths"] == ["foreign.py", "own.py"]
     assert ancestry_state is not None
+
+
+def test_covering_issue_numbers_matches_various_formats() -> None:
+    """_covering_issue_numbers recognizes titles, branches, and body verbs."""
+    repo = "ll7/robot_sf_ll7"
+
+    # Verb in body
+    assert 7448 in gate._covering_issue_numbers(body="Refs #7448.", repo=repo)
+    assert 7448 in gate._covering_issue_numbers(body="Fixes #7448", repo=repo)
+    assert 7448 in gate._covering_issue_numbers(body="Part of #7448", repo=repo)
+    assert 7448 in gate._covering_issue_numbers(body="Addresses #7448", repo=repo)
+    assert 7448 in gate._covering_issue_numbers(
+        body="Closes https://github.com/ll7/robot_sf_ll7/issues/7448", repo=repo
+    )
+
+    # Title conventions
+    assert 7448 in gate._covering_issue_numbers(
+        title="fix(dev): fail closed on non-live carriers (#7448)", repo=repo
+    )
+    assert 7448 in gate._covering_issue_numbers(title="fix issue-7448 bug", repo=repo)
+
+    # Branch conventions
+    assert 7448 in gate._covering_issue_numbers(
+        head_ref="fix/issue-7448-pr-head-truth-20260818", repo=repo
+    )
+    assert 7448 in gate._covering_issue_numbers(head_ref="repair/issue-7448", repo=repo)
+
+    # Foreign repo exclusion
+    assert 7448 not in gate._covering_issue_numbers(
+        body="Closes otherorg/otherrepo#7448", repo=repo
+    )
+
+
+def test_fetch_claim_ref_detects_existing_and_missing(monkeypatch) -> None:
+    """_fetch_claim_ref checks remote ref presence."""
+
+    def fake_run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        if "agent-claims/issue-7474" in command[-1]:
+            return subprocess.CompletedProcess(
+                command, 0, "sha-7474\trefs/heads/agent-claims/issue-7474\n", ""
+            )
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    found = gate._fetch_claim_ref(remote="origin", issue=7474)
+    assert found["exists"] is True
+    assert found["sha"] == "sha-7474"
+
+    missing = gate._fetch_claim_ref(remote="origin", issue=9999)
+    assert missing["exists"] is False
+    assert missing["sha"] is None
+
+
+def test_capture_cli_superseded_when_competing_open_pr_exists(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Capture must fail closed with superseded when an open PR on another branch exists."""
+    snapshot_path = tmp_path / "snapshot.json"
+    competing_pr = {
+        "number": 7462,
+        "title": "fix(workflow): reject fabricated PR head provenance",
+        "head_ref": "fix/issue-7448-pr-head-truth-20260818",
+        "head_sha": "head-competing",
+        "base_ref": "main",
+    }
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **kwargs: _snapshot(
+            repo=kwargs["repo"],
+            issue=kwargs["issue"],
+            branch="fix/issue-7448-gate-verdict-sha-20260818",
+            open_covering_prs=[competing_pr],
+        ),
+    )
+
+    exit_code = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7448",
+            "--branch",
+            "fix/issue-7448-gate-verdict-sha-20260818",
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+
+    assert exit_code == 3
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "superseded"
+    assert output["reason"] == "open_pr_closes_issue"
+    assert output["open_covering_prs"][0]["number"] == 7462
+
+
+def test_capture_cli_ready_when_open_pr_is_same_branch(tmp_path, monkeypatch, capsys) -> None:
+    """Capture permits re-checking and updating an existing PR on the same branch."""
+    snapshot_path = tmp_path / "snapshot.json"
+    own_pr = {
+        "number": 7471,
+        "title": "fix(dev): fail closed on non-live exact-head SHA carriers (#7448)",
+        "head_ref": "fix/issue-7448-gate-verdict-sha-20260818",
+        "head_sha": "head-own",
+        "base_ref": "main",
+    }
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **kwargs: _snapshot(
+            repo=kwargs["repo"],
+            issue=kwargs["issue"],
+            branch="fix/issue-7448-gate-verdict-sha-20260818",
+            open_covering_prs=[own_pr],
+        ),
+    )
+
+    exit_code = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7448",
+            "--branch",
+            "fix/issue-7448-gate-verdict-sha-20260818",
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    assert output["reason"] == "baseline_captured"
+
+
+def test_evaluate_state_superseded_on_competing_open_pr() -> None:
+    """evaluate_state fails closed when a competing open PR exists on another branch."""
+    baseline = _snapshot(branch="fix/my-branch")
+    competing_pr = {
+        "number": 7462,
+        "title": "fix: competing PR",
+        "head_ref": "fix/competing-branch",
+        "head_sha": "head-competing",
+        "base_ref": "main",
+    }
+    current = _snapshot(branch="fix/my-branch", open_covering_prs=[competing_pr])
+
+    result = gate.evaluate_state(baseline, current)
+
+    assert result["decision"] == "superseded"
+    assert result["reason"] == "open_pr_closes_issue"
+    assert result["open_covering_prs"][0]["number"] == 7462
+
+
+def test_evaluate_state_ready_when_open_pr_is_same_branch() -> None:
+    """evaluate_state allows same-branch PR updates without supersession."""
+    baseline = _snapshot(branch="fix/my-branch")
+    own_pr = {
+        "number": 7471,
+        "title": "fix: own PR",
+        "head_ref": "fix/my-branch",
+        "head_sha": "head-own",
+        "base_ref": "main",
+    }
+    current = _snapshot(branch="fix/my-branch", open_covering_prs=[own_pr])
+
+    result = gate.evaluate_state(baseline, current)
+
+    assert result["decision"] == "ready"
+    assert result["reason"] == "remote_state_unchanged"

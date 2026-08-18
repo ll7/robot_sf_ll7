@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib
+import json
 import re
 import subprocess
 import sys
@@ -31,18 +32,44 @@ from scripts.validation.check_preregistration_inference_contract import (
 
 _CHECK_KINDS = {
     "artifact_catalog",
+    "analysis_receipt",
     "command",
     "durable_path",
     "evidence_contract",
     "manifest_rows",
     "preregistration",
+    "producer_receipt",
     "result_packet",
 }
 _MAX_OUTPUT_CHARS = 1200
 _MAX_VALIDATOR_TIMEOUT_SECONDS = 120.0
-_REGISTERED_VALIDATOR_IDS = {"pytest_contract"}
+_REGISTERED_VALIDATOR_IDS = {
+    "analysis_contract",
+    "producer_contract",
+    "pytest_contract",
+}
 _PYTEST_FLAGS = {"-q", "-v", "--disable-warnings"}
 _SHA256_RE = r"^[0-9a-f]{64}$"
+_DIAGNOSTIC_PACKET_TIERS = {"smoke_diagnostic", "visualization_fixture"}
+_DIAGNOSTIC_PACKET_STATES = {"diagnostic_only", "unavailable_causal_inference"}
+_DIAGNOSTIC_ARTIFACT_SOURCE_KINDS = {
+    "fixture_construction",
+    "diagnostic",
+    "smoke_diagnostic",
+    "visualization_fixture",
+}
+_STRICT_SURFACE_RULES: dict[str, dict[str, frozenset[str]]] = {
+    "producer": {"kinds": frozenset({"producer_receipt"})},
+    "preregistration": {"kinds": frozenset({"preregistration"})},
+    "evidence_contract": {"kinds": frozenset({"evidence_contract"})},
+    "analysis": {"kinds": frozenset({"analysis_receipt"})},
+    "artifact": {"kinds": frozenset({"artifact_catalog", "durable_path"})},
+    "result_packet": {"kinds": frozenset({"result_packet"})},
+}
+
+
+class _InputDriftError(OSError):
+    """Raised when a proof input changes during one admission invocation."""
 
 
 class AnswerabilityProofError(ValueError):
@@ -82,6 +109,160 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _stable_file_bytes(path: Path) -> bytes:
+    """Read one file twice and fail closed if its bytes drift during the read."""
+    first = path.read_bytes()
+    second = path.read_bytes()
+    if first != second:
+        raise _InputDriftError(f"proof input changed while being read: {path}")
+    return first
+
+
+def _stable_sha256_file(path: Path) -> str:
+    """Return a digest for bytes that were stable across two consecutive reads."""
+    return hashlib.sha256(_stable_file_bytes(path)).hexdigest()
+
+
+def _input_drift_failure(
+    path: Path,
+    *,
+    repo_root: Path,
+    initial_sha256: str | None,
+    required: bool,
+    kind: str,
+) -> dict[str, Any] | None:
+    """Return a failed result when a validator observed mutable proof input."""
+    if initial_sha256 is None:
+        return None
+    try:
+        final_sha256 = _stable_sha256_file(path)
+    except OSError as exc:
+        return _result(
+            status="failed",
+            required=required,
+            kind=kind,
+            reason=f"could not verify {kind} proof input stability: {exc}",
+            path=str(path.relative_to(repo_root)),
+        )
+    if final_sha256 == initial_sha256:
+        return None
+    return _result(
+        status="failed",
+        required=required,
+        kind=kind,
+        reason=f"{kind} proof input changed during validation; admission is blocked",
+        path=str(path.relative_to(repo_root)),
+        initial_sha256=initial_sha256,
+        final_sha256=final_sha256,
+    )
+
+
+def _decision_identity(  # noqa: C901, PLR0912
+    manifest: Mapping[str, Any], *, surface: str, spec: Mapping[str, Any]
+) -> tuple[Mapping[str, Any] | None, str | None]:
+    """Validate the common identity carried by one strict proof declaration."""
+    answerability = manifest.get("answerability")
+    campaign = manifest.get("campaign")
+    if not isinstance(answerability, Mapping) or not isinstance(campaign, Mapping):
+        return None, f"{surface} proof cannot bind identity without campaign and answerability"
+    question = answerability.get("question")
+    estimand = answerability.get("estimand")
+    if not isinstance(question, Mapping) or not isinstance(estimand, Mapping):
+        return None, f"{surface} proof requires structured question and estimand identity"
+    identity = spec.get("identity")
+    if not isinstance(identity, Mapping):
+        return None, (
+            f"decision-capable {surface} proof requires an identity mapping containing "
+            "campaign_id, question, and estimand"
+        )
+    expected = {
+        "campaign_id": campaign.get("id"),
+        "question": question.get("research_question"),
+        "estimand": estimand.get("primary"),
+    }
+    for field, expected_value in expected.items():
+        if not isinstance(expected_value, str) or not expected_value.strip():
+            return None, f"answerability.{field} identity is missing for {surface} proof"
+        if identity.get(field) != expected_value:
+            return None, f"{surface} proof identity.{field} does not match the manifest"
+
+    if surface == "producer":
+        producers = answerability.get("producers")
+        expected_fields = sorted(
+            producer.get("field")
+            for producer in producers or []
+            if isinstance(producer, Mapping) and producer.get("required", True)
+        )
+        if identity.get("producer_fields") != expected_fields:
+            return None, "producer proof identity.producer_fields does not match required producers"
+    elif surface == "analysis":
+        analysis = answerability.get("analysis")
+        analysis_id = analysis.get("analysis_id") if isinstance(analysis, Mapping) else None
+        if not isinstance(analysis_id, str) or not analysis_id.strip():
+            return None, "answerability.analysis.analysis_id is required for strict analysis proof"
+        if identity.get("analysis_id") != analysis_id:
+            return None, "analysis proof identity.analysis_id does not match the manifest"
+    elif surface == "artifact":
+        if not isinstance(identity.get("catalog_id"), str) or not identity["catalog_id"].strip():
+            return None, "artifact proof identity.catalog_id is required"
+        artifact_ids = identity.get("artifact_ids")
+        if (
+            not isinstance(artifact_ids, list)
+            or not artifact_ids
+            or not all(isinstance(item, str) and item.strip() for item in artifact_ids)
+        ):
+            return None, "artifact proof identity.artifact_ids must be a non-empty list"
+        artifact_digests = identity.get("artifact_digests")
+        if not isinstance(artifact_digests, Mapping):
+            return None, "artifact proof identity.artifact_digests is required"
+    elif surface == "result_packet":
+        for field in (
+            "packet_id",
+            "evidence_id",
+            "evidence_tier",
+            "admission_state",
+            "question_id",
+            "estimand_id",
+            "source_digests",
+        ):
+            if field not in identity:
+                return None, f"result-packet proof identity.{field} is required"
+    return identity, None
+
+
+def _strict_surface_failure(
+    surface: str,
+    kind: Any,
+    *,
+    manifest: Mapping[str, Any],
+    spec: Mapping[str, Any],
+    required: bool,
+) -> dict[str, Any] | None:
+    """Reject substitution of a generic validator across decision surfaces."""
+    if not _decision_capable(manifest):
+        return None
+    rule = _STRICT_SURFACE_RULES[surface]
+    if kind not in rule["kinds"]:
+        return _result(
+            status="failed",
+            required=required,
+            kind=str(kind) if kind is not None else None,
+            reason=(
+                f"decision-capable {surface} proof must use its canonical kind; "
+                f"allowed={sorted(rule['kinds'])}"
+            ),
+        )
+    _, identity_error = _decision_identity(manifest, surface=surface, spec=spec)
+    if identity_error:
+        return _result(
+            status="failed",
+            required=required,
+            kind=str(kind),
+            reason=identity_error,
+        )
+    return None
+
+
 def _decision_capable(manifest: Mapping[str, Any]) -> bool:
     """Return whether this collection is for decision-capable admission."""
     answerability = manifest.get("answerability")
@@ -113,7 +294,7 @@ def _file_identity_failure(
             path=str(path.relative_to(repo_root)),
         )
     try:
-        actual = _sha256_file(path)
+        actual = _stable_sha256_file(path)
     except OSError as exc:
         return _result(
             status="failed",
@@ -207,6 +388,7 @@ def _run_command(
     kind: str,
     timeout_seconds: float,
     validator_id: str,
+    expected_json: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one registered argv validator with a bounded wall-clock timeout."""
     try:
@@ -241,6 +423,36 @@ def _run_command(
             timeout_seconds=timeout_seconds,
         )
     if completed.returncode == 0:
+        if expected_json is not None:
+            try:
+                payload = json.loads(completed.stdout)
+            except json.JSONDecodeError as exc:
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind=kind,
+                    reason=f"registered validator did not emit JSON identity: {exc}",
+                    command=command,
+                    validator_id=validator_id,
+                    timeout_seconds=timeout_seconds,
+                )
+            if not isinstance(payload, Mapping) or any(
+                payload.get(field) != expected_value
+                for field, expected_value in expected_json.items()
+            ):
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind=kind,
+                    reason="registered validator output identity does not match the proof declaration",
+                    command=command,
+                    validator_id=validator_id,
+                    timeout_seconds=timeout_seconds,
+                    output_identity={
+                        field: payload.get(field) if isinstance(payload, Mapping) else None
+                        for field in expected_json
+                    },
+                )
         return _result(
             status="passed",
             required=required,
@@ -285,9 +497,22 @@ def _run_preregistration(
     )
     if identity_failure is not None:
         return identity_failure
+    initial_sha256 = None
+    if decision_capable and required:
+        try:
+            initial_sha256 = _stable_sha256_file(path)
+        except OSError as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind="preregistration",
+                reason=f"could not read preregistration proof input: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
     try:
+        payload = yaml.safe_load(_stable_file_bytes(path).decode("utf-8"))
         summary = check_yaml_file(path, repo_root=repo_root)
-    except (OSError, InferenceContractError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeDecodeError, InferenceContractError, ValueError, yaml.YAMLError) as exc:
         return _result(
             status="failed",
             required=required,
@@ -295,16 +520,50 @@ def _run_preregistration(
             reason=str(exc),
             path=str(path.relative_to(repo_root)),
         )
+    drift = _input_drift_failure(
+        path,
+        repo_root=repo_root,
+        initial_sha256=initial_sha256,
+        required=required,
+        kind="preregistration",
+    )
+    if drift is not None:
+        return drift
+    if decision_capable and required:
+        identity = spec["identity"]
+        if not isinstance(payload, Mapping):
+            return _result(
+                status="failed",
+                required=required,
+                kind="preregistration",
+                reason="preregistration proof input must be a mapping",
+                path=str(path.relative_to(repo_root)),
+            )
+        identity_fields = {
+            "study_id": payload.get("study_id"),
+            "question": payload.get("research_question", payload.get("question")),
+            "estimand": payload.get("estimand", payload.get("estimand_id")),
+        }
+        for field, value in identity_fields.items():
+            if value != identity.get(field):
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind="preregistration",
+                    reason=f"preregistration identity.{field} is not bound to the declared proof",
+                    path=str(path.relative_to(repo_root)),
+                )
     return _result(
         status="passed",
         required=required,
         kind="preregistration",
         path=str(path.relative_to(repo_root)),
         summary=summary,
+        study_id=(identity.get("study_id") if decision_capable and required else None),
     )
 
 
-def _run_artifact_catalog(
+def _run_artifact_catalog(  # noqa: C901
     spec: Mapping[str, Any],
     *,
     repo_root: Path,
@@ -323,6 +582,34 @@ def _run_artifact_catalog(
     )
     if identity_failure is not None:
         return identity_failure
+    if (
+        decision_capable
+        and required
+        and path.relative_to(repo_root).parts[:2]
+        == (
+            "tests",
+            "fixtures",
+        )
+    ):
+        return _result(
+            status="failed",
+            required=required,
+            kind="artifact_catalog",
+            reason="decision-capable artifact catalogs cannot come from tests/fixtures",
+            path=str(path.relative_to(repo_root)),
+        )
+    initial_sha256 = None
+    if decision_capable and required:
+        try:
+            initial_sha256 = _stable_sha256_file(path)
+        except OSError as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind="artifact_catalog",
+                reason=f"could not read artifact catalog proof input: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
     try:
         issues = validate_artifact_catalog(path)
     except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
@@ -353,19 +640,77 @@ def _run_artifact_catalog(
                 reason=f"could not load artifact identity: {exc}",
                 path=str(path.relative_to(repo_root)),
             )
-        claim_boundaries = [entry.claim_boundary.lower() for entry in catalog.artifacts]
-        diagnostic_tokens = ("fixture", "diagnostic", "not benchmark")
-        if any(
-            any(token in boundary for token in diagnostic_tokens) for boundary in claim_boundaries
-        ):
+        drift = _input_drift_failure(
+            path,
+            repo_root=repo_root,
+            initial_sha256=initial_sha256,
+            required=required,
+            kind="artifact_catalog",
+        )
+        if drift is not None:
+            return drift
+        identity = spec["identity"]
+        selected_ids = identity["artifact_ids"]
+        selected = {entry.artifact_id: entry for entry in catalog.artifacts}
+        if catalog.catalog_id != identity["catalog_id"]:
             return _result(
                 status="failed",
                 required=required,
                 kind="artifact_catalog",
-                reason="diagnostic or fixture-only artifact catalog cannot authorize decision admission",
+                reason="artifact catalog identity.catalog_id does not match the declared proof",
                 path=str(path.relative_to(repo_root)),
                 catalog_id=catalog.catalog_id,
             )
+        if set(selected_ids) != set(identity["artifact_digests"]):
+            return _result(
+                status="failed",
+                required=required,
+                kind="artifact_catalog",
+                reason="artifact catalog selected artifact IDs do not match their digest set",
+                path=str(path.relative_to(repo_root)),
+                catalog_id=catalog.catalog_id,
+            )
+        for artifact_id in selected_ids:
+            entry = selected.get(artifact_id)
+            if entry is None:
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind="artifact_catalog",
+                    reason=f"artifact catalog does not contain selected artifact {artifact_id!r}",
+                    path=str(path.relative_to(repo_root)),
+                    catalog_id=catalog.catalog_id,
+                )
+            if entry.source_kind in _DIAGNOSTIC_ARTIFACT_SOURCE_KINDS:
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind="artifact_catalog",
+                    reason=(
+                        "controlled diagnostic or fixture artifact source cannot authorize "
+                        "decision admission"
+                    ),
+                    path=str(path.relative_to(repo_root)),
+                    catalog_id=catalog.catalog_id,
+                    artifact_id=artifact_id,
+                )
+            actual_digests = sorted(
+                [ref.sha256 for ref in entry.source_files]
+                + [ref.sha256 for ref in entry.outputs.values()]
+                + ([entry.caption_file.sha256] if entry.caption_file is not None else [])
+            )
+            expected_digests = identity["artifact_digests"].get(artifact_id)
+            if not isinstance(expected_digests, list) or sorted(expected_digests) != actual_digests:
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind="artifact_catalog",
+                    reason=f"artifact {artifact_id!r} digest set is not bound to the catalog",
+                    path=str(path.relative_to(repo_root)),
+                    catalog_id=catalog.catalog_id,
+                    artifact_id=artifact_id,
+                    actual_digests=actual_digests,
+                )
     return _result(
         status="passed",
         required=required,
@@ -375,7 +720,7 @@ def _run_artifact_catalog(
     )
 
 
-def _run_result_packet(
+def _run_result_packet(  # noqa: C901
     spec: Mapping[str, Any],
     *,
     repo_root: Path,
@@ -394,6 +739,34 @@ def _run_result_packet(
     )
     if identity_failure is not None:
         return identity_failure
+    if (
+        decision_capable
+        and required
+        and path.relative_to(repo_root).parts[:2]
+        == (
+            "tests",
+            "fixtures",
+        )
+    ):
+        return _result(
+            status="failed",
+            required=required,
+            kind="result_packet",
+            reason="decision-capable result packets cannot come from tests/fixtures",
+            path=str(path.relative_to(repo_root)),
+        )
+    initial_sha256 = None
+    if decision_capable and required:
+        try:
+            initial_sha256 = _stable_sha256_file(path)
+        except OSError as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind="result_packet",
+                reason=f"could not read result-packet proof input: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
     try:
         module = importlib.import_module("robot_sf.benchmark.result_interpretation_packet")
     except ModuleNotFoundError as exc:
@@ -424,7 +797,7 @@ def _run_result_packet(
             path=str(path.relative_to(repo_root)),
         )
     try:
-        validator(path)
+        packet = validator(path)
     except (OSError, ValueError, TypeError, RuntimeError) as exc:
         return _result(
             status="failed",
@@ -433,11 +806,76 @@ def _run_result_packet(
             reason=str(exc),
             path=str(path.relative_to(repo_root)),
         )
+    drift = _input_drift_failure(
+        path,
+        repo_root=repo_root,
+        initial_sha256=initial_sha256,
+        required=required,
+        kind="result_packet",
+    )
+    if drift is not None:
+        return drift
+    if decision_capable and required:
+        identity = spec["identity"]
+        packet_evidence = getattr(packet, "evidence", None)
+        packet_question = getattr(packet, "question", None)
+        packet_estimand = getattr(packet, "estimand", None)
+        packet_sources = getattr(packet, "sources", None)
+        observed = {
+            "packet_id": getattr(packet, "packet_id", None),
+            "evidence_id": getattr(packet_evidence, "evidence_id", None),
+            "evidence_tier": getattr(packet_evidence, "tier", None),
+            "admission_state": getattr(packet_evidence, "admission_state", None),
+            "question": getattr(packet_question, "text", None),
+            "estimand": getattr(packet_estimand, "description", None),
+            "question_id": getattr(packet_question, "question_id", None),
+            "estimand_id": getattr(packet_estimand, "estimand_id", None),
+            "source_digests": {
+                getattr(source, "source_id", ""): getattr(source, "sha256", "")
+                for source in packet_sources or []
+            },
+        }
+        for field, expected in identity.items():
+            if field in observed and observed[field] != expected:
+                return _result(
+                    status="failed",
+                    required=required,
+                    kind="result_packet",
+                    reason=f"result-packet identity.{field} is not bound to the declared proof",
+                    path=str(path.relative_to(repo_root)),
+                    observed=observed[field],
+                )
+        if (
+            observed["evidence_tier"] in _DIAGNOSTIC_PACKET_TIERS
+            or observed["admission_state"] in _DIAGNOSTIC_PACKET_STATES
+        ):
+            return _result(
+                status="failed",
+                required=required,
+                kind="result_packet",
+                reason=(
+                    "controlled diagnostic or fixture result packet cannot authorize "
+                    "decision admission"
+                ),
+                path=str(path.relative_to(repo_root)),
+            )
+        if any(
+            str(getattr(source, "path", "")).split("/")[:2] == ["tests", "fixtures"]
+            for source in packet_sources or []
+        ):
+            return _result(
+                status="failed",
+                required=required,
+                kind="result_packet",
+                reason="decision-capable result packets cannot bind tests/fixtures sources",
+                path=str(path.relative_to(repo_root)),
+            )
     return _result(
         status="passed",
         required=required,
         kind="result_packet",
         path=str(path.relative_to(repo_root)),
+        packet_id=(getattr(packet, "packet_id", None) if decision_capable else None),
     )
 
 
@@ -481,7 +919,208 @@ def _run_durable_path(
     )
 
 
-def _run_surface(  # noqa: C901
+def _run_receipt(  # noqa: C901, PLR0912
+    surface: str,
+    spec: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    required: bool,
+    manifest: Mapping[str, Any],
+    decision_capable: bool,
+) -> dict[str, Any]:
+    """Validate a surface-specific, checksum-bound proof receipt."""
+    path = _repo_relative_path(repo_root, spec.get("path"), f"{surface}_receipt.path")
+    identity_failure = _file_identity_failure(
+        spec,
+        path=path,
+        repo_root=repo_root,
+        required=required,
+        kind=f"{surface}_receipt",
+        decision_capable=decision_capable,
+    )
+    if identity_failure is not None:
+        return identity_failure
+    if (
+        decision_capable
+        and required
+        and path.relative_to(repo_root).parts[:2]
+        == (
+            "tests",
+            "fixtures",
+        )
+    ):
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason="decision-capable proof receipts cannot come from tests/fixtures",
+            path=str(path.relative_to(repo_root)),
+        )
+    initial_sha256 = None
+    if decision_capable and required:
+        try:
+            initial_sha256 = _stable_sha256_file(path)
+            payload = json.loads(_stable_file_bytes(path).decode("utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind=f"{surface}_receipt",
+                reason=f"could not load {surface} proof receipt: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
+    else:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return _result(
+                status="failed",
+                required=required,
+                kind=f"{surface}_receipt",
+                reason=f"could not load {surface} proof receipt: {exc}",
+                path=str(path.relative_to(repo_root)),
+            )
+    if not isinstance(payload, Mapping):
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=f"{surface} proof receipt must be a JSON object",
+            path=str(path.relative_to(repo_root)),
+        )
+    drift = _input_drift_failure(
+        path,
+        repo_root=repo_root,
+        initial_sha256=initial_sha256,
+        required=required,
+        kind=f"{surface}_receipt",
+    )
+    if drift is not None:
+        return drift
+    identity = spec.get("identity")
+    expected_common = {
+        "campaign_id": identity.get("campaign_id") if isinstance(identity, Mapping) else None,
+        "question": identity.get("question") if isinstance(identity, Mapping) else None,
+        "estimand": identity.get("estimand") if isinstance(identity, Mapping) else None,
+    }
+    for field, expected in expected_common.items():
+        if payload.get(field) != expected:
+            return _result(
+                status="failed",
+                required=required,
+                kind=f"{surface}_receipt",
+                reason=f"{surface} receipt {field} is not bound to the declared proof identity",
+                path=str(path.relative_to(repo_root)),
+            )
+    if payload.get("status") != "passed":
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=f"{surface} proof receipt status must be passed",
+            path=str(path.relative_to(repo_root)),
+        )
+    if surface == "producer":
+        if payload.get("schema_version") != "research_answerability_producer_receipt.v1":
+            return _result(
+                status="failed",
+                required=required,
+                kind="producer_receipt",
+                reason="producer receipt schema_version is not canonical",
+                path=str(path.relative_to(repo_root)),
+            )
+        if payload.get("producer_fields") != identity.get("producer_fields"):
+            return _result(
+                status="failed",
+                required=required,
+                kind="producer_receipt",
+                reason="producer receipt fields are not bound to the required producer set",
+                path=str(path.relative_to(repo_root)),
+            )
+    else:
+        if payload.get("schema_version") != "research_answerability_analysis_receipt.v1":
+            return _result(
+                status="failed",
+                required=required,
+                kind="analysis_receipt",
+                reason="analysis receipt schema_version is not canonical",
+                path=str(path.relative_to(repo_root)),
+            )
+        analysis = manifest.get("answerability", {}).get("analysis", {})
+        if payload.get("analysis_id") != identity.get("analysis_id") or payload.get(
+            "command"
+        ) != analysis.get("command"):
+            return _result(
+                status="failed",
+                required=required,
+                kind="analysis_receipt",
+                reason="analysis receipt identity is not bound to answerability.analysis",
+                path=str(path.relative_to(repo_root)),
+            )
+        if payload.get("dry_run_status") not in {"passed", "not_required"} or payload.get(
+            "comparability_status"
+        ) not in {"passed", "not_required"}:
+            return _result(
+                status="failed",
+                required=required,
+                kind="analysis_receipt",
+                reason="analysis receipt must report passed or not_required analysis checks",
+                path=str(path.relative_to(repo_root)),
+            )
+    return _result(
+        status="passed",
+        required=required,
+        kind=f"{surface}_receipt",
+        path=str(path.relative_to(repo_root)),
+        identity=dict(identity) if isinstance(identity, Mapping) else {},
+    )
+
+
+def _run_evidence_contract(
+    spec: Mapping[str, Any],
+    *,
+    repo_root: Path,
+    required: bool,
+    decision_capable: bool,
+) -> dict[str, Any]:
+    """Invoke the public evidence-contract validator and bind its JSON identity."""
+    contract_id = spec.get("contract_id")
+    if not isinstance(contract_id, str) or not contract_id.strip():
+        raise AnswerabilityProofError(
+            "validation.answerability_proof.evidence_contract.contract_id must be non-empty"
+        )
+    identity = spec.get("identity")
+    if (
+        decision_capable
+        and required
+        and (
+            not isinstance(identity, Mapping) or identity.get("contract_id") != contract_id.strip()
+        )
+    ):
+        return _result(
+            status="failed",
+            required=required,
+            kind="evidence_contract",
+            reason="evidence-contract identity.contract_id does not match the declared contract",
+        )
+    command = [
+        sys.executable,
+        str(repo_root / "scripts/validation/preflight_evidence_contract.py"),
+        contract_id.strip(),
+        "--json",
+    ]
+    return _run_command(
+        command,
+        repo_root=repo_root,
+        required=required,
+        kind="evidence_contract",
+        timeout_seconds=_MAX_VALIDATOR_TIMEOUT_SECONDS,
+        validator_id="evidence_contract",
+        expected_json={"contract_id": contract_id.strip(), "conforms": True},
+    )
+
+
+def _run_surface(  # noqa: C901, PLR0912
     surface: str,
     spec: Mapping[str, Any],
     *,
@@ -512,6 +1151,34 @@ def _run_surface(  # noqa: C901
                 "diagnostic-only or unclassified proof cannot authorize admission"
             ),
         )
+    if not (surface == "artifact" and kind == "durable_path"):
+        strict_failure = _strict_surface_failure(
+            surface,
+            kind,
+            manifest=manifest,
+            spec=spec,
+            required=required,
+        )
+        if strict_failure is not None:
+            return strict_failure
+    if kind == "producer_receipt":
+        return _run_receipt(
+            "producer",
+            spec,
+            repo_root=repo_root,
+            required=required,
+            manifest=manifest,
+            decision_capable=decision_capable,
+        )
+    if kind == "analysis_receipt":
+        return _run_receipt(
+            "analysis",
+            spec,
+            repo_root=repo_root,
+            required=required,
+            manifest=manifest,
+            decision_capable=decision_capable,
+        )
     if kind == "command":
         command = _argv(spec.get("command"), f"validation.answerability_proof.{surface}.command")
         timeout_seconds, validator_id = _validate_registered_command(
@@ -528,24 +1195,11 @@ def _run_surface(  # noqa: C901
             validator_id=validator_id,
         )
     if kind == "evidence_contract":
-        contract_id = spec.get("contract_id")
-        if not isinstance(contract_id, str) or not contract_id.strip():
-            raise AnswerabilityProofError(
-                f"validation.answerability_proof.{surface}.contract_id must be non-empty"
-            )
-        command = [
-            sys.executable,
-            str(repo_root / "scripts/validation/preflight_evidence_contract.py"),
-            contract_id.strip(),
-            "--json",
-        ]
-        return _run_command(
-            command,
+        return _run_evidence_contract(
+            spec,
             repo_root=repo_root,
             required=required,
-            kind=kind,
-            timeout_seconds=_MAX_VALIDATOR_TIMEOUT_SECONDS,
-            validator_id="evidence_contract",
+            decision_capable=decision_capable,
         )
     if kind == "preregistration":
         return _run_preregistration(

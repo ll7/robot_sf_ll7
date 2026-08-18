@@ -77,13 +77,19 @@ missing producers are also retained as warnings.
 
 The runner can execute typed checks from
 `validation.answerability_proof` when `--execute-validation` or
-`--require-answerable` is supplied. Supported checks invoke the public
-preregistration and artifact-catalog validators, the evidence-contract CLI,
-the merged result-packet loader when available, a manifest-row producer check,
-or the registered `pytest_contract` validator. Registered commands are argv
-only, restricted to repository `tests/*.py` paths, and bounded by a 120-second
-timeout. A missing generic result-packet validator is recorded as
-`unavailable`; it is not replaced by an issue-specific or heuristic checker.
+`--require-answerable` is supplied. Diagnostic manifests may use manifest rows
+or the bounded `pytest_contract` adapter. Decision-capable manifests use a
+surface-specific map: `producer_receipt`, the public `preregistration` checker,
+the public `evidence_contract` checker, `analysis_receipt`, the public
+`artifact_catalog` checker, and the public `result_packet` loader. A generic
+pytest result cannot substitute for a producer or analysis receipt. Strict
+receipts and file-backed validators bind the campaign, question, estimand, and
+surface identity; artifact proofs additionally bind the catalog, selected
+artifact IDs, and complete source/output/caption digest sets. Registered
+diagnostic commands are argv-only, restricted to repository `tests/*.py` paths,
+and bounded by a 120-second timeout. A missing generic result-packet validator
+is recorded as `unavailable`; it is not replaced by an issue-specific or
+heuristic checker.
 
 Strict admission attaches `answerability.proof_binding` with the source
 manifest SHA-256, the declared camera configuration path and SHA-256, and a
@@ -96,6 +102,13 @@ path existence alone cannot establish tracked retention or checksum identity.
 A required artifact surface configured with `kind: durable_path` is therefore
 recorded as `unavailable` and blocks `answerable`. Use `kind: artifact_catalog`
 to invoke the public checksum and path-policy validator.
+Decision-capable artifact catalogs must not be sourced from `tests/fixtures` or
+controlled diagnostic/fixture source kinds. Result packets with
+`smoke_diagnostic`, `visualization_fixture`, `diagnostic_only`, or
+`unavailable_causal_inference` classifications are likewise rejected when
+declared as required decision proof. Validators read and verify stable pre/post
+input digests so a mutation between validation and launch cannot produce a
+receipt for different bytes.
 
 The production camera-ready launcher can enforce the same gate without creating
 a second readiness contract:

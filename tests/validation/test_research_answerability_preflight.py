@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +13,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.research_answerability import PROOF_SURFACES, answerability_from_manifest
+from scripts.validation import research_answerability_preflight as preflight_module
 from scripts.validation.research_answerability_preflight import (
     AnswerabilityProofError,
     apply_proof_results,
@@ -130,6 +133,197 @@ def test_public_preregistration_and_artifact_validators_are_composed() -> None:
     assert report["surfaces"]["preregistration"]["summary"]["status"] == "ok"
     assert report["surfaces"]["artifact"]["status"] == "passed"
     assert report["surfaces"]["artifact"]["issues"] == []
+
+
+def test_decision_proof_cannot_reuse_one_generic_pytest_for_multiple_surfaces() -> None:
+    """A generic test exit code cannot substitute for surface-specific proof."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    for surface in PROOF_SURFACES:
+        manifest["answerability"]["proof_surfaces"][surface] = {
+            "status": "unavailable",
+            "required": True,
+            "unavailable_reason": "not configured",
+        }
+    generic_spec = {
+        "kind": "command",
+        "validator_id": "pytest_contract",
+        "proof_class": "decision_capable",
+        "command": [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/benchmark/test_research_campaign_manifest_contract.py",
+            "-q",
+        ],
+    }
+    manifest["validation"]["answerability_proof"] = {
+        surface: copy.deepcopy(generic_spec) for surface in PROOF_SURFACES
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=REPO_ROOT,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    assert report["surfaces"]["producer"]["status"] == "failed"
+    assert "canonical kind" in report["surfaces"]["producer"]["reason"]
+    assert report["surfaces"]["analysis"]["status"] == "failed"
+    assert "canonical kind" in report["surfaces"]["analysis"]["reason"]
+
+
+def test_decision_proof_rejects_fixture_result_packet_even_with_matching_identity() -> None:
+    """A controlled diagnostic packet cannot satisfy a decision-capable result surface."""
+    manifest = _manifest()
+    packet_path = (
+        REPO_ROOT
+        / "tests/fixtures/result_interpretation_packet/v1/issue_6962_lane_formation_diagnostic.json"
+    )
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    answerability = manifest["answerability"]
+    answerability["design"]["mode"] = "decision_capable"
+    answerability["artifacts"]["durability_status"] = "ready"
+    answerability["proof_surfaces"]["result_packet"]["required"] = True
+    answerability["question"]["research_question"] = packet["question"]["text"]
+    answerability["estimand"]["primary"] = packet["estimand"]["description"]
+    manifest["validation"]["answerability_proof"] = {
+        "result_packet": {
+            "kind": "result_packet",
+            "proof_class": "decision_capable",
+            "path": str(packet_path.relative_to(REPO_ROOT)),
+            "sha256": hashlib.sha256(packet_path.read_bytes()).hexdigest(),
+            "identity": {
+                "campaign_id": manifest["campaign"]["id"],
+                "question": packet["question"]["text"],
+                "estimand": packet["estimand"]["description"],
+                "packet_id": packet["packet_id"],
+                "evidence_id": packet["evidence"]["evidence_id"],
+                "evidence_tier": packet["evidence"]["tier"],
+                "admission_state": packet["evidence"]["admission_state"],
+                "question_id": packet["question"]["question_id"],
+                "estimand_id": packet["estimand"]["estimand_id"],
+                "source_digests": {
+                    source["source_id"]: source["sha256"] for source in packet["sources"]
+                },
+            },
+        }
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=REPO_ROOT,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["result_packet"]
+    assert result["status"] == "failed"
+    assert "diagnostic" in result["reason"] or "fixtures" in result["reason"]
+
+
+def test_decision_proof_rejects_fixture_artifact_catalog_without_free_text_heuristics() -> None:
+    """Fixture source identity blocks artifact proof even when wording is neutral."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    manifest["answerability"]["proof_surfaces"]["artifact"]["required"] = True
+    catalog = yaml.safe_load(VALID_CATALOG.read_text(encoding="utf-8"))
+    artifact_digests = {}
+    for artifact in catalog["artifacts"]:
+        digests = [ref["sha256"] for ref in artifact["source_files"]]
+        digests.extend(ref["sha256"] for ref in artifact["outputs"].values())
+        if artifact.get("caption_file"):
+            digests.append(artifact["caption_file"]["sha256"])
+        artifact_digests[artifact["artifact_id"]] = sorted(digests)
+    manifest["validation"]["answerability_proof"] = {
+        "artifact": {
+            "kind": "artifact_catalog",
+            "proof_class": "decision_capable",
+            "path": str(VALID_CATALOG.relative_to(REPO_ROOT)),
+            "sha256": hashlib.sha256(VALID_CATALOG.read_bytes()).hexdigest(),
+            "identity": {
+                "campaign_id": manifest["campaign"]["id"],
+                "question": manifest["answerability"]["question"]["research_question"],
+                "estimand": manifest["answerability"]["estimand"]["primary"],
+                "catalog_id": catalog["catalog_id"],
+                "artifact_ids": sorted(artifact_digests),
+                "artifact_digests": artifact_digests,
+            },
+        }
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=REPO_ROOT,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["artifact"]
+    assert result["status"] == "failed"
+    assert "fixtures" in result["reason"]
+
+
+def test_checksum_bound_receipt_fails_when_input_drifts_during_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A receipt cannot be accepted when its bytes change between reads."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    producer_fields = sorted(
+        producer["field"]
+        for producer in manifest["answerability"]["producers"]
+        if producer.get("required", True)
+    )
+    receipt = {
+        "schema_version": "research_answerability_producer_receipt.v1",
+        "campaign_id": manifest["campaign"]["id"],
+        "question": manifest["answerability"]["question"]["research_question"],
+        "estimand": manifest["answerability"]["estimand"]["primary"],
+        "producer_fields": producer_fields,
+        "status": "passed",
+    }
+    receipt_path = tmp_path / "producer_receipt.json"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    manifest["validation"]["answerability_proof"] = {
+        "producer": {
+            "kind": "producer_receipt",
+            "proof_class": "decision_capable",
+            "path": "producer_receipt.json",
+            "sha256": hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            "identity": {
+                "campaign_id": receipt["campaign_id"],
+                "question": receipt["question"],
+                "estimand": receipt["estimand"],
+                "producer_fields": producer_fields,
+            },
+        }
+    }
+    original = preflight_module._stable_file_bytes
+    calls = {"count": 0}
+
+    def _drift(path: Path) -> bytes:
+        data = original(path)
+        calls["count"] += 1
+        if calls["count"] == 2:
+            path.write_text(json.dumps({**receipt, "status": "changed"}), encoding="utf-8")
+        return data
+
+    monkeypatch.setattr(preflight_module, "_stable_file_bytes", _drift)
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=tmp_path,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["producer"]
+    assert result["status"] == "failed"
+    assert "changed during validation" in result["reason"]
 
 
 def test_durable_path_cannot_promote_required_artifact_proof() -> None:

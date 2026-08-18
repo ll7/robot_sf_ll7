@@ -73,11 +73,27 @@ def _json_default(value: object) -> str:
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-def _load_manifest(path: Path) -> dict[str, Any]:
-    manifest = yaml.safe_load(path.read_text(encoding="utf-8"))
+def _stable_file_bytes(path: Path) -> bytes:
+    """Read one admission input twice and reject concurrent byte drift."""
+    first = path.read_bytes()
+    second = path.read_bytes()
+    if first != second:
+        raise ManifestError(f"admission input changed while being read: {path}")
+    return first
+
+
+def _load_manifest_with_digest(path: Path) -> tuple[dict[str, Any], str]:
+    """Load the parsed manifest and the digest of the exact stable bytes parsed."""
+    raw = _stable_file_bytes(path)
+    manifest = yaml.safe_load(raw.decode("utf-8"))
     if not isinstance(manifest, dict):
         raise ManifestError("Manifest must load as a mapping")
-    return manifest
+    return manifest, hashlib.sha256(raw).hexdigest()
+
+
+def _load_manifest(path: Path) -> dict[str, Any]:
+    """Load one stable manifest while preserving the historical helper API."""
+    return _load_manifest_with_digest(path)[0]
 
 
 def _posix_path(value: str, field_name: str) -> PurePosixPath:
@@ -227,9 +243,11 @@ def _evaluate_manifest_answerability(
     manifest: dict[str, Any],
     *,
     manifest_path: Path,
+    manifest_sha256: str | None = None,
     options: RunnerOptions,
     require_proof_surfaces: bool = False,
     expected_campaign_config: Path | None = None,
+    expected_config_sha256: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Evaluate one manifest through the shared proof collector and gate.
 
@@ -258,7 +276,9 @@ def _evaluate_manifest_answerability(
         _build_proof_binding(
             manifest_path,
             manifest,
+            expected_manifest_sha256=manifest_sha256,
             expected_campaign_config=expected_campaign_config,
+            expected_config_sha256=expected_config_sha256,
         )
         if enforce_admission_proof
         else None
@@ -307,6 +327,7 @@ def evaluate_research_manifest_answerability(
     *,
     execute_validation: bool = True,
     expected_campaign_config: Path | None = None,
+    expected_config_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate a manifest for a production admission caller without writing output.
 
@@ -314,10 +335,11 @@ def evaluate_research_manifest_answerability(
     validation and proof-surface collector used by :func:`run`, but does not
     create a packet, run a campaign, submit compute, or promote evidence.
     """
-    manifest = _load_manifest(manifest_path)
+    manifest, manifest_sha256 = _load_manifest_with_digest(manifest_path)
     evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
         manifest,
         manifest_path=manifest_path,
+        manifest_sha256=manifest_sha256,
         options=RunnerOptions(
             execute_validation=execute_validation,
             require_configured_outputs=False,
@@ -325,6 +347,7 @@ def evaluate_research_manifest_answerability(
         ),
         require_proof_surfaces=True,
         expected_campaign_config=expected_campaign_config,
+        expected_config_sha256=expected_config_sha256,
     )
     return {
         "source_manifest": str(manifest_path),
@@ -382,18 +405,16 @@ def _git_commit() -> str:
 
 def _sha256_file(path: Path) -> str:
     """Return a file digest used to bind admission to immutable inputs."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return hashlib.sha256(_stable_file_bytes(path)).hexdigest()
 
 
-def _build_proof_binding(
+def _build_proof_binding(  # noqa: C901
     manifest_path: Path,
     manifest: dict[str, Any],
     *,
+    expected_manifest_sha256: str | None = None,
     expected_campaign_config: Path | None,
+    expected_config_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Build the exact manifest/config identity used by decision admission."""
     root = _repo_root()
@@ -420,13 +441,25 @@ def _build_proof_binding(
         manifest_sha256 = _sha256_file(manifest_path)
     except OSError as exc:
         raise ManifestError(f"could not hash source research manifest: {exc}") from exc
+    if expected_manifest_sha256 is not None and manifest_sha256 != expected_manifest_sha256:
+        raise ManifestError(
+            "source research manifest changed after parsing; refusing to bind different bytes"
+        )
+    try:
+        config_sha256 = _sha256_file(config_path)
+    except OSError as exc:
+        raise ManifestError(f"could not hash campaign configuration: {exc}") from exc
+    if expected_config_sha256 is not None and config_sha256 != expected_config_sha256:
+        raise ManifestError(
+            "campaign configuration changed after loading; refusing to bind different bytes"
+        )
     return {
         "schema_version": "research_answerability_proof_binding.v1",
         "campaign_id": str(manifest["campaign"]["id"]),
         "source_manifest": str(manifest_path),
         "campaign_config": str(config_rel),
         "manifest_sha256": manifest_sha256,
-        "config_sha256": _sha256_file(config_path),
+        "config_sha256": config_sha256,
     }
 
 
@@ -657,10 +690,11 @@ def _write_context_note(path: Path, summary: dict[str, Any]) -> None:
 
 def run(manifest_path: Path, output_dir: Path, *, options: RunnerOptions) -> dict[str, Any]:
     """Validate a manifest, emit packet files, and return the summary payload."""
-    manifest = _load_manifest(manifest_path)
+    manifest, manifest_sha256 = _load_manifest_with_digest(manifest_path)
     evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
         manifest,
         manifest_path=manifest_path,
+        manifest_sha256=manifest_sha256,
         options=options,
     )
 

@@ -74,6 +74,35 @@ EXPECTED_ISSUE_FORMS = {
     ],
 }
 
+CANONICAL_ARCHETYPES = (
+    "blocked-asset",
+    "preflight",
+    "slurm-execution",
+    "analysis",
+    "synthesis",
+    "workflow",
+    "docs",
+    "benchmark-campaign",
+    "training-campaign",
+    "implementation",
+    "test",
+    "refactor",
+    "data",
+)
+CANONICAL_EVIDENCE_TIERS = (
+    "idea",
+    "launch_packet",
+    "preflight_valid",
+    "smoke",
+    "nominal",
+    "stress",
+    "full_matrix",
+    "analysis_only",
+    "synthesis",
+    "paper_grade",
+    "blocked",
+)
+
 
 def _load_template(path: Path) -> tuple[dict[str, object], str]:
     """Parse a GitHub issue template into frontmatter and markdown body."""
@@ -163,6 +192,42 @@ def test_issue_forms_cover_common_backlog_lanes() -> None:
         serialized = yaml.safe_dump(form, sort_keys=True)
         for marker in markers:
             assert marker in serialized, f"missing marker {marker!r} in {form_name}"
+
+
+def test_every_issue_template_collects_canonical_issue_metadata() -> None:
+    """Keep every new issue path aligned with the #1512 metadata contract."""
+
+    for path in sorted(TEMPLATE_DIR.glob("*.md")):
+        _, body = _load_template(path)
+        assert "## Archetype Metadata" in body, f"missing metadata block in {path.name}"
+        assert "archetype:" in body, f"missing archetype field in {path.name}"
+        assert "evidence_tier:" in body, f"missing evidence_tier field in {path.name}"
+        assert "linked_policy:" in body, f"missing linked_policy field in {path.name}"
+
+    for path in sorted(TEMPLATE_DIR.glob("*.yml")):
+        if path.name == "config.yml":
+            continue
+        form = _load_form(path)
+        body = form.get("body")
+        assert isinstance(body, list), f"{path.name} body must be a list"
+        fields = {
+            str(item.get("id")): item
+            for item in body
+            if isinstance(item, dict) and item.get("id") in {"archetype", "evidence_tier"}
+        }
+        assert set(fields) == {"archetype", "evidence_tier"}, (
+            f"{path.name} must collect both canonical metadata fields"
+        )
+        assert fields["archetype"]["type"] == "dropdown"
+        assert fields["evidence_tier"]["type"] == "dropdown"
+        assert fields["archetype"]["validations"]["required"] is True
+        assert fields["evidence_tier"]["validations"]["required"] is True
+        assert tuple(fields["archetype"]["attributes"]["options"]) == CANONICAL_ARCHETYPES
+        assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
+
+    docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
+    assert "canonical `archetype` and `evidence_tier` metadata" in docs_text
+    assert "context/issue_1512_issue_archetypes.md" in docs_text
 
 
 def test_issue_form_config_keeps_existing_templates_available() -> None:

@@ -1600,6 +1600,10 @@ why a change was made rather than a full issue execution transcript.
 
 ## Execution Workflow Notes
 
+* [Issue #7340 Real-Manifest Feasibility-First Diagnostic](issue_7340_real_manifest_feasibility_first.md) -
+  native diagnostic over a fixed station-platform candidate pool, including route-binding
+  provenance, observed event counts, and the pending budget-matched/domain-approval boundary.
+
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and
   virtualenv boundaries.

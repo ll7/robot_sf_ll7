@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.invalid/schemas/feasibility_first_real_manifest.v1.json",
+  "title": "Feasibility-first real-manifest diagnostic report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_boundary",
+    "evidence_tier",
+    "config_sha256",
+    "input_digests",
+    "seed_manifest",
+    "feasibility",
+    "comparison",
+    "candidates",
+    "governance",
+    "config"
+  ],
+  "properties": {
+    "schema_version": {"const": "feasibility_first_real_manifest.v1"},
+    "claim_boundary": {"const": "diagnostic-only real-manifest comparison: native execution and observed safety events; no simulator, planner, safety, benchmark, paper, or source-method claim"},
+    "evidence_tier": {"const": "diagnostic-only"},
+    "config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "input_digests": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "seed_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sampling_seed", "candidate_seeds", "candidate_ids_in_source_order"],
+      "properties": {
+        "sampling_seed": {"type": "integer", "minimum": 0},
+        "candidate_seeds": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}},
+        "candidate_ids_in_source_order": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "feasibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_names", "total_candidates", "feasible_candidates", "rejected_candidates", "unavailable_candidates", "rejection_counts", "invalid_candidates_excluded_from_safety_denominators"],
+      "properties": {
+        "check_names": {"const": ["kinematic_reachability", "behavioral_consistency", "geometry_traffic", "simulator_validity"]},
+        "total_candidates": {"type": "integer", "minimum": 1},
+        "feasible_candidates": {"type": "integer", "minimum": 0},
+        "rejected_candidates": {"type": "integer", "minimum": 0},
+        "unavailable_candidates": {"type": "integer", "minimum": 0},
+        "rejection_counts": {"$ref": "#/$defs/counts"},
+        "invalid_candidates_excluded_from_safety_denominators": {"const": true}
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_budget", "criticality_threshold", "existing_adversarial_baseline", "selection_protocol", "methods", "safety_event_severity"],
+      "properties": {
+        "sample_budget": {"type": "integer", "minimum": 1},
+        "criticality_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "existing_adversarial_baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "status", "reason", "claim_eligible"],
+          "properties": {
+            "id": {"const": "existing_adversarial_random_sampler.v1"},
+            "status": {"const": "executed_candidate_pool"},
+            "reason": {"type": "string", "minLength": 1},
+            "claim_eligible": {"const": false}
+          }
+        },
+        "selection_protocol": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["candidate_pool_fixed", "simulator_outcomes_used_for_selection", "risk_features_source", "safety_denominator"],
+          "properties": {
+            "candidate_pool_fixed": {"const": true},
+            "simulator_outcomes_used_for_selection": {"const": false},
+            "risk_features_source": {"const": "scenario_cert.v1 route evidence"},
+            "safety_denominator": {"type": "string", "minLength": 1}
+          }
+        },
+        "methods": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["seeded_uniform", "risk_feedback_hierarchical_value"],
+          "properties": {
+            "seeded_uniform": {"$ref": "#/$defs/method"},
+            "risk_feedback_hierarchical_value": {"$ref": "#/$defs/method"}
+          }
+        },
+        "safety_event_severity": {"$ref": "#/$defs/safetySummary"}
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/candidate"}
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["simulator_executed", "benchmark_evidence", "campaign_approval_required", "domain_approval_status", "adapted_from_source_method", "source_transfer_claim"],
+      "properties": {
+        "simulator_executed": {"type": "boolean"},
+        "benchmark_evidence": {"const": false},
+        "campaign_approval_required": {"const": true},
+        "domain_approval_status": {"const": "required"},
+        "adapted_from_source_method": {"const": true},
+        "source_transfer_claim": {"const": false}
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schema_version", "scenario_template", "search_space", "candidate_pool_budget", "sample_budget", "policy", "horizon", "dt", "pedestrian_id", "pedestrian_route_mode"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "schema_version": {"const": "feasibility_first_real_manifest.v1"},
+        "scenario_template": {"type": "string", "minLength": 1},
+        "search_space": {"type": "string", "minLength": 1},
+        "candidate_pool_budget": {"type": "integer", "minimum": 1},
+        "sample_budget": {"type": "integer", "minimum": 1},
+        "policy": {"type": "string", "minLength": 1},
+        "horizon": {"type": "integer", "minimum": 1},
+        "dt": {"type": "number", "exclusiveMinimum": 0},
+        "pedestrian_id": {"type": "string", "minLength": 1},
+        "pedestrian_route_mode": {"enum": ["candidate", "template"]}
+      }
+    }
+  },
+  "$defs": {
+    "counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "reason", "evidence"],
+      "properties": {
+        "name": {"enum": ["kinematic_reachability", "behavioral_consistency", "geometry_traffic", "simulator_validity"]},
+        "status": {"enum": ["pass", "fail", "unavailable"]},
+        "reason": {"type": "string", "minLength": 1},
+        "evidence": {"type": "object"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "scenario_family", "scenario_seed", "control_hash", "checks", "value", "feature_vector", "candidate_controls", "feasible", "rejection_reasons", "runtime"],
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "scenario_family": {"type": "string", "minLength": 1},
+        "scenario_seed": {"type": "integer", "minimum": 0},
+        "control_hash": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+        "checks": {"type": "array", "prefixItems": [{"$ref": "#/$defs/check"}, {"$ref": "#/$defs/check"}, {"$ref": "#/$defs/check"}, {"$ref": "#/$defs/check"}], "items": false, "minItems": 4, "maxItems": 4},
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kinematic_criticality", "controllability_risk", "diversity"],
+          "properties": {
+            "kinematic_criticality": {"type": "number", "minimum": 0, "maximum": 1},
+            "controllability_risk": {"type": "number", "minimum": 0, "maximum": 1},
+            "diversity": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "feature_vector": {"type": "array", "minItems": 1, "items": {"type": "number"}},
+        "candidate_controls": {"type": "object"},
+        "feasible": {"type": "boolean"},
+        "rejection_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "runtime": {"type": "object"}
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "selected_candidate_ids", "selected_count", "valid_scenario_rate", "discovery_yield", "unique_scenario_families", "mean_diversity", "rejected_count", "rejection_reasons", "safety_event_severity"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "reason": {"type": "string"},
+        "selected_candidate_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "selected_count": {"type": "integer", "minimum": 0},
+        "valid_scenario_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "discovery_yield": {"type": ["integer", "null"], "minimum": 0},
+        "unique_scenario_families": {"type": ["integer", "null"], "minimum": 0},
+        "mean_diversity": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "rejected_count": {"type": ["integer", "null"], "minimum": 0},
+        "rejection_reasons": {"$ref": "#/$defs/counts"},
+        "safety_event_severity": {"$ref": "#/$defs/safetySummary"}
+      }
+    },
+    "safetySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "counts", "denominator", "reason"],
+      "properties": {
+        "status": {"enum": ["available", "unavailable"]},
+        "counts": {"$ref": "#/$defs/counts"},
+        "denominator": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

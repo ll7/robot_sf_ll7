@@ -13,9 +13,14 @@ import yaml
 
 from robot_sf.adversarial import feasibility_first_real as real
 from robot_sf.adversarial.attribution import FailureAttribution
-from robot_sf.adversarial.bundle import write_candidate_inputs
+from robot_sf.adversarial.bundle import build_candidate_payload, write_candidate_inputs
 from robot_sf.adversarial.certification_types import CertificationStatus
-from robot_sf.adversarial.config import CandidateEvaluation, CandidateSpec, Pose2D
+from robot_sf.adversarial.config import (
+    CandidateEvaluation,
+    CandidateSpec,
+    Pose2D,
+    SearchSpaceConfig,
+)
 from robot_sf.adversarial.feasibility_first import (
     CHECK_NAMES,
     FeasibilityCandidate,
@@ -195,6 +200,47 @@ def test_hash_and_path_helpers_are_stable(tmp_path: Path) -> None:
     )
     with pytest.raises(real.RealManifestError, match="x"):
         real._resolve_input_path("missing.yaml", config_path=tmp_path / "config.yaml", field="x")
+
+
+def test_candidate_route_mode_and_invalid_route_mode_fail_closed() -> None:
+    """Candidate routes stay effective and unknown route modes fail closed."""
+    template = {
+        "name": "route-mode-fixture",
+        "single_pedestrians": [{"id": "probe", "trajectory": [[1.0, 1.0], [2.0, 2.0]]}],
+    }
+    candidate = _candidate()
+
+    scenario, route_payload = build_candidate_payload(
+        candidate,
+        index=0,
+        template_scenario=template,
+        pedestrian_id="probe",
+        pedestrian_route_mode="candidate",
+    )
+
+    assert route_payload["ped_routes"][0]["id"] == "probe"
+    assert scenario["single_pedestrians"][0]["trajectory"] == [
+        candidate.start.as_waypoint(),
+        candidate.goal.as_waypoint(),
+    ]
+
+    with pytest.raises(ValueError, match="pedestrian_route_mode must be one of"):
+        build_candidate_payload(
+            candidate,
+            index=0,
+            template_scenario=template,
+            pedestrian_id="probe",
+            pedestrian_route_mode="unknown",
+        )
+
+    search_space_payload = yaml.safe_load(
+        (
+            _REPO_ROOT / "configs/adversarial/issue_7340_station_platform_search_space_v1.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    search_space_payload["pedestrian"]["route_mode"] = "unknown"
+    with pytest.raises(ValueError, match="route_mode must be one of"):
+        SearchSpaceConfig.from_mapping(search_space_payload)
 
 
 @pytest.mark.parametrize(

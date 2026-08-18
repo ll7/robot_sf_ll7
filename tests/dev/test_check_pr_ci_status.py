@@ -1371,6 +1371,54 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     assert data["route_evidence_only"] is True
 
 
+def test_fetch_ci_status_retries_transient_graphql_then_uses_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exhausted 503 retries preserve REST provenance without hiding the route boundary."""
+    pull = {
+        "number": 42,
+        "title": "transient demo",
+        "state": "OPEN",
+        "head": {"ref": "fix", "sha": "abc"},
+        "mergeable_state": "clean",
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(
+            side_effect=[MagicMock(returncode=1, stderr="HTTP 503 Service Unavailable", stdout="")]
+            * 3
+            + [
+                MagicMock(returncode=0, stdout=json.dumps(pull), stderr=""),
+                MagicMock(
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "check_runs": [
+                                {
+                                    "name": "ci",
+                                    "status": "completed",
+                                    "conclusion": "success",
+                                }
+                            ]
+                        }
+                    ),
+                    stderr="",
+                ),
+                MagicMock(returncode=0, stdout="[]", stderr=""),
+            ]
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None)
+
+    data = _fetch_ci_status("42")
+
+    assert data["status"] == "ok"
+    assert data["data_source"] == "rest_fallback_graphql_transient"
+    assert data["graphql_fallback_diagnostic"]
+    assert data["checks"]["overall"] == "success"
+    assert data["route_evidence_only"] is True
+
+
 def test_fetch_ci_status_non_quota_error_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-quota gh failures are unchanged (no REST attempt)."""
     monkeypatch.setattr(

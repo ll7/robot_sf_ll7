@@ -602,6 +602,7 @@ def test_snapshot_prs_can_include_bounded_review_threads() -> None:
                 "pullRequest": {
                     "reviewThreads": {
                         "totalCount": 1,
+                        "pageInfo": {"hasNextPage": False},
                         "nodes": [
                             {
                                 "id": "thread-1",
@@ -667,9 +668,9 @@ def test_snapshot_prs_handles_null_review_thread_graphql_fields() -> None:
         payload = snapshot_prs([2695], repo="ll7/robot_sf_ll7", include_review_threads=True)
 
     snapshot = payload["prs"][0]["review_thread_snapshot"]
-    assert snapshot["status"] == "ok"
-    assert snapshot["total"] == 0
-    assert snapshot["threads"] == []
+    assert snapshot["status"] == "incomplete"
+    assert snapshot["unresolved"] is None
+    assert "refusing a thread-free result" in snapshot["error"]
 
 
 def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -1525,6 +1526,23 @@ def test_review_thread_snapshot_reports_unknown_graphql_quota() -> None:
     assert snap["status"] == "unknown_graphql_quota"
     assert snap["unresolved"] is None
     assert "merge-ready" in snap["guidance"]
+
+
+def test_review_thread_snapshot_reports_exhausted_graphql_transient() -> None:
+    """Persistent transient GraphQL failure leaves review-thread evidence unknown."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            side_effect=[_resp(returncode=1, stderr="HTTP 503 Service Unavailable")] * 3,
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+
+    assert snap["status"] == "unknown_graphql_transient"
+    assert snap["unresolved"] is None
+    assert "after 3 attempts" in snap["retry_diagnostic"]
+    assert "Never admit" in snap["guidance"]
 
 
 def test_fetch_pr_rest_rest_fallback_failure_is_labeled() -> None:

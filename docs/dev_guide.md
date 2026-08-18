@@ -594,8 +594,10 @@ SHA-pinned normal-throughput window after rollout; a live queue snapshot is not 
 causality measurement. Use `scripts/dev/measure_stale_base_policy.py` with an explicit
 `stale_base_observation_window.v1` input. The helper keeps ordinary compare-and-swap waits and
 base-sensitive refresh waits separate, requires exact-head/base evidence for stale-base attribution,
-and reports missing source data as `not_available`. Its output is workflow evidence only and does
-not authorize a policy change, merge, campaign, or publication.
+and reports missing source data as `not_available`. Source kinds, input SHA-256, the deterministic
+record audit, red-main coverage, and independent pre-rollout baseline evidence are preserved in the
+report; fixture sources cannot be promoted by editing the top-level evidence status. Its output is
+workflow evidence only and does not authorize a policy change, merge, campaign, or publication.
 
 ### Merge queue gate (issue #6274)
 

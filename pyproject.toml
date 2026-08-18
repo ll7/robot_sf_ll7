@@ -22,6 +22,8 @@ license-files = [
     "third_party/python-rvo2/LOCAL_CHANGES.patch",
     "third_party/socnavbench/LICENSE",
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+    "third_party/socnavbench/LICENSING.yaml",
+    "third_party/socnavbench/UPSTREAM.md",
     "THIRD_PARTY_NOTICES.md",
 ]
 readme = "README.md"

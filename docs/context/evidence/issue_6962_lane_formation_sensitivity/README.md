@@ -4,7 +4,7 @@
 
 Plain-language summary: a native Social Force Model diagnostic varied corridor geometry,
 population, run duration, and speed calibration across the same ten seeds used by the existing
-#5149 evidence bundle. No tested cell produced clear lane formation reproducibly, while weak
+Issue #5149 evidence bundle. No tested cell produced clear lane formation reproducibly, while weak
 signals varied with seed and cell. This narrows the interpretation of the original non-result but
 does not establish a model-wide absence of lane formation.
 
@@ -17,7 +17,7 @@ lane-segregation and lane-purity metric semantics and released simulator default
 ## Protocol and provenance
 
 - Code: `a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35` on base `080536c8ef12269753a4c3bc4a48f5bc006d68c1`.
-- Command: `uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z`.
+- Command: `uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir <scratch-output> --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z`.
 - Native execution: 320/320 rows `native:computed`; no fallback, degraded, adapter, unavailable,
   or failed rows.
 - Surface: lengths 16/24 m; corridor widths 3.5/5 m; populations 16/24; 200/400 steps;
@@ -65,7 +65,7 @@ flow still did not produce a robust clear profile, but the result remains diagno
 not distinguish a scenario limitation from a model property. The #6962 result-interpretation
 fixture now binds the #6969 compact summary alongside the #6962 summary, context, and provenance;
 the packet remains `diagnostic_only` with `inconclusive` decisions for downstream use by #7029 and
-#7032.
+Issue #7032.
 
 ## Next research direction
 

@@ -43,7 +43,11 @@ from typing import TYPE_CHECKING, Any
 from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
-from scripts.dev.pr_loop_policy import metadata_conflict_handoff
+from scripts.dev.pr_loop_policy import (
+    extract_sha_carriers,
+    invalid_sha_carriers,
+    metadata_conflict_handoff,
+)
 from scripts.dev.pr_metadata import metadata_digest, validate_pr_title
 
 if TYPE_CHECKING:
@@ -107,6 +111,102 @@ def _head_sha(payload: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _resolve_live_head(repo: str, number: int) -> tuple[str | None, str | None]:
+    """Resolve the live PR head SHA (REST ``head.sha``) or an error string."""
+    result = _gh_api_get(f"repos/{repo}/pulls/{number}")
+    response, error = _decode_object(result, operation="PR live-head read")
+    if error:
+        return None, error
+    assert response is not None
+    head = response.get("head")
+    if not isinstance(head, dict) or not isinstance(head.get("sha"), str) or not head["sha"]:
+        return None, "PR live-head read returned a malformed head"
+    return head["sha"], None
+
+
+def _git_object_diagnostics(shas: list[str]) -> dict[str, str]:
+    """Return per-SHA local object types via ``git cat-file -t``, best-effort.
+
+    Diagnostics only: a missing local object never blocks the write itself;
+    equality to the live remote head remains the admission rule.
+    """
+    result: dict[str, str] = {}
+    for sha in shas:
+        try:
+            proc = subprocess.run(
+                ["git", "cat-file", "-t", sha],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            result[sha] = (proc.stdout or "").strip() or "missing"
+        except (OSError, subprocess.TimeoutExpired):
+            result[sha] = "unavailable"
+    return result
+
+
+def _validate_sha_carriers(body: str, live_head_sha: str) -> str | None:
+    """Return a fail-closed error when *body* carries a non-live exact-head SHA.
+
+    Admission rule: every ``gate-verdict``/``base-policy``/``Exact head`` SHA
+    carrier must be a full 40-hex SHA equal to the live PR head. Abbreviated
+    SHAs and any SHA naming a different commit are invalid and block the write
+    before any PATCH is issued.
+    """
+    carriers = extract_sha_carriers(body)
+    if not carriers:
+        return None
+    invalid = invalid_sha_carriers(carriers, live_head_sha)
+    if not invalid:
+        return None
+    details = "; ".join(
+        f"{carrier.kind} {carrier.sha}" + ("" if carrier.full else " (abbreviated)")
+        for carrier in invalid
+    )
+    diagnostic = ""
+    full_shas = [carrier.sha for carrier in invalid if carrier.full]
+    if full_shas:
+        objects = _git_object_diagnostics(full_shas)
+        diagnostic = " local object type: " + ", ".join(
+            f"{sha}={obj}" for sha, obj in objects.items()
+        )
+    return (
+        f"PR body carries exact-head SHA carrier(s) that do not match the "
+        f"live head {live_head_sha}: {details}.{diagnostic}"
+    )
+
+
+def _guard_update_body(body: str, repo: str, number: int) -> str | None:
+    """Resolve the live head and validate the body's exact-head carriers.
+
+    Returns a fail-closed error before any PATCH when the body carries a
+    non-live exact-head SHA, or when a carrier-bearing body cannot be checked
+    against a resolvable live head.
+    """
+    if not extract_sha_carriers(body):
+        return None
+    live_head, head_error = _resolve_live_head(repo, number)
+    if head_error:
+        return head_error
+    assert live_head is not None
+    return _validate_sha_carriers(body, live_head)
+
+
+def _guard_reconcile_body(body: str, current: dict[str, Any]) -> str | None:
+    """Validate a desired body's exact-head carriers against the current PR head.
+
+    The current GET response supplies the live ``head.sha``; it is read inside
+    the writer lock immediately before mutation, so it is the admission
+    reference for this reconcile attempt.
+    """
+    if not extract_sha_carriers(body):
+        return None
+    head = current.get("head")
+    if not isinstance(head, dict) or not isinstance(head.get("sha"), str) or not head["sha"]:
+        return "PR metadata read returned a malformed head"
+    return _validate_sha_carriers(body, head["sha"])
+
+
 def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Update PR *number* from *body_file* and verify the REST response.
 
@@ -122,6 +222,9 @@ def update_pr_body(number: int, body_file: Path, *, repo: str = DEFAULT_REPO) ->
 
     try:
         with _metadata_write_lock(repo, number):
+            guard_error = _guard_update_body(body, repo, number)
+            if guard_error:
+                return {"status": "error", "error": guard_error}
             result = _gh_api_patch(f"repos/{repo}/pulls/{number}", {"body": body})
             if result.returncode != 0:
                 detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
@@ -190,6 +293,10 @@ def reconcile_pr_metadata(  # noqa: C901
             if not isinstance(current_body, str):
                 return {"status": "error", "error": "PR metadata read returned a malformed body"}
             current_head_sha = _head_sha(current)
+
+            guard_error = _guard_reconcile_body(body, current)
+            if guard_error:
+                return {"status": "error", "error": guard_error}
 
             desired_digest = metadata_digest(title, body)
             current_digest = metadata_digest(current_title, current_body)

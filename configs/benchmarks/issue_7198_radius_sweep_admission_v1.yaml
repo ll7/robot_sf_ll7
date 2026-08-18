@@ -63,7 +63,7 @@ fixed_factors:
 preflight:
   entrypoint: scripts/tools/run_camera_ready_benchmark.py
   mode: preflight
-  checkpoint_preflight_mode: metadata_only
+  checkpoint_preflight_mode: enforced_staged
   submit_safe_checkpoint_mode: enforced_staged
   skip_publication_bundle: true
   expected_episode_count: 0

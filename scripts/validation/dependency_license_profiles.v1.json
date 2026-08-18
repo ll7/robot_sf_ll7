@@ -1,0 +1,257 @@
+{
+  "$schema": "scripts/validation/dependency_license_profiles.v1.schema.json",
+  "schema_version": "robot-sf.dependency-license-profiles.v1",
+  "target": {
+    "os": "linux",
+    "architecture": "x86_64",
+    "python": {
+      "implementation": "CPython",
+      "version": "3.13",
+      "requires": ">=3.11"
+    },
+    "resolver": {
+      "name": "uv",
+      "version": "0.11.21",
+      "lock_mode": "frozen"
+    },
+    "source_policy": {
+      "indexes": ["https://pypi.org/simple"],
+      "network": "lock-identity validation is offline; profile resolution must use frozen locks"
+    }
+  },
+  "profiles": [
+    {
+      "id": "core",
+      "kind": "root",
+      "extras": [],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "viz",
+      "kind": "root-extra",
+      "extra": "viz",
+      "extras": ["viz"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "maps",
+      "kind": "root-extra",
+      "extra": "maps",
+      "extras": ["maps"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "benchmark",
+      "kind": "root-extra",
+      "extra": "benchmark",
+      "extras": ["benchmark"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "gpu",
+      "kind": "root-extra",
+      "extra": "gpu",
+      "extras": ["gpu"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "training",
+      "kind": "root-extra",
+      "extra": "training",
+      "extras": ["training"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "recurrent",
+      "kind": "root-extra",
+      "extra": "recurrent",
+      "extras": ["recurrent"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "rllib",
+      "kind": "root-extra",
+      "extra": "rllib",
+      "extras": ["rllib"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "progress",
+      "kind": "root-extra",
+      "extra": "progress",
+      "extras": ["progress"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "analytics",
+      "kind": "root-extra",
+      "extra": "analytics",
+      "extras": ["analytics"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "browser",
+      "kind": "root-extra",
+      "extra": "browser",
+      "extras": ["browser"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "sacadrl",
+      "kind": "root-extra",
+      "extra": "sacadrl",
+      "extras": ["sacadrl"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "orca",
+      "kind": "root-extra",
+      "extra": "orca",
+      "extras": ["orca"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "socnav",
+      "kind": "root-extra",
+      "extra": "socnav",
+      "extras": ["socnav"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "criticality",
+      "kind": "root-extra",
+      "extra": "criticality",
+      "extras": ["criticality"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "all",
+      "kind": "root-extra-closure",
+      "extra": "all",
+      "extras": [
+        "viz",
+        "maps",
+        "benchmark",
+        "training",
+        "gpu",
+        "recurrent",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "orca",
+        "socnav",
+        "criticality"
+      ],
+      "excluded_extras": ["rllib"],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "fast-pysf",
+      "kind": "standalone",
+      "extras": [],
+      "pyproject": "fast-pysf/pyproject.toml",
+      "lockfile": "fast-pysf/uv.lock",
+      "root_package": "pysocialforce",
+      "provenance_paths": ["fast-pysf/LICENSE"],
+      "expected_resolution": "locked",
+      "distribution_mode": "user_installed"
+    },
+    {
+      "id": "pyrvo2",
+      "kind": "built-companion",
+      "extras": [],
+      "pyproject": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "pyrvo2",
+      "provenance_paths": [
+        "third_party/python-rvo2/LICENSE",
+        "third_party/python-rvo2/UPSTREAM.md",
+        "third_party/python-rvo2/LOCAL_CHANGES.patch",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "components": ["python-rvo2"],
+      "expected_resolution": "locked",
+      "distribution_mode": "built_companion"
+    },
+    {
+      "id": "socnavbench",
+      "kind": "vendored-companion",
+      "extras": [],
+      "provenance_paths": [
+        "third_party/socnavbench/LICENSE",
+        "third_party/socnavbench/LICENSING.yaml",
+        "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+        "third_party/socnavbench/UPSTREAM.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "components": ["socnavbench"],
+      "expected_resolution": "not_applicable",
+      "distribution_mode": "bundled_source"
+    }
+  ]
+}

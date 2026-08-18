@@ -636,6 +636,27 @@ def test_source_distribution_excludes_model_artifacts() -> None:
     assert not any(path == "/model" or path.startswith("/model/") for path in includes)
 
 
+def test_wheel_shared_data_uses_hatch_namespace_and_omits_blocked_maps() -> None:
+    """Wheel shared-data must use the tool.hatch namespace hatchling reads and must not ship blocked maps (issue #7458)."""
+    project = _pyproject()
+    wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+    shared_data = wheel.get("shared-data", {})
+
+    # robot_sf/maps/*.svg have unresolved provenance (issue #7299); keep them out of the wheel.
+    assert "robot_sf/maps" not in shared_data
+
+    # The misspelled tool.hatchling namespace is always ignored by hatchling; its wheel
+    # shared-data table must not silently rot back in.
+    hatchling_wheel = (
+        project.get("tool", {})
+        .get("hatchling", {})
+        .get("build", {})
+        .get("targets", {})
+        .get("wheel", {})
+    )
+    assert "shared-data" not in hatchling_wheel
+
+
 def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:
     """Keep example smoke timing out of the fast-feedback pytest phase."""
     driver_text = CI_DRIVER.read_text(encoding="utf-8")

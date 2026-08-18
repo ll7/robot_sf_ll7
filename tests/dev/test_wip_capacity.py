@@ -108,6 +108,19 @@ def test_exact_limit_blocks_both_applicable_lanes() -> None:
     }
 
 
+def test_over_limit_remains_blocked_and_reports_the_overage() -> None:
+    """An already-overfull lane cannot admit another ordinary issue."""
+    result = _evaluate(
+        _snapshot(*[_pr(index, 120 + index) for index in range(1, 5)]),
+        proposed={"issue": 130, "labels": ["priority:1"]},
+    )
+
+    assert result["decision"] == "block"
+    limit_blocker = next(item for item in result["blockers"] if item["reason"] == "wip_limit_full")
+    assert limit_blocker["count"] == 4
+    assert limit_blocker["limit"] == 3
+
+
 def test_report_only_is_observable_but_not_claimed_as_available() -> None:
     """The rollout switch reports a full queue without turning it into capacity."""
     result = _evaluate(
@@ -174,6 +187,19 @@ def test_common_current_main_baseline_is_explicitly_blocked_and_excluded() -> No
     assert result["counts"]["implementation"] == 0
     assert result["excluded_items"][0]["category"] == "blocked"
     assert result["excluded_items"][0]["reason"] == "common_current_main_baseline_blocked"
+
+
+def test_draft_and_superseded_rows_are_explicitly_parked() -> None:
+    """Draft and superseded rows are listed but do not consume productive capacity."""
+    draft = _pr(6, 206)
+    draft["draft"] = True
+    superseded = _pr(7, 207, labels=["priority:1", "superseded"])
+
+    result = _evaluate(_snapshot(draft, superseded))
+
+    assert result["counts"]["implementation"] == 0
+    reasons = {item["reason"] for item in result["excluded_items"]}
+    assert reasons == {"draft_pr", "explicit_superseded_state"}
 
 
 def test_stale_claim_is_explicitly_excluded() -> None:
@@ -268,6 +294,25 @@ def test_security_exemption_requires_security_label() -> None:
         item["reason"] == "security_exemption_requires_security_label"
         for item in result["blockers"]
     )
+
+
+def test_audited_security_exemption_can_bypass_a_full_campaign_lane() -> None:
+    """A correctly labelled incident is the only security bypass path."""
+    full = _snapshot(
+        _pr(12, 412, labels=["campaign"]),
+        _pr(13, 413, labels=["slurm"]),
+    )
+    result = _evaluate(
+        full,
+        proposed={
+            "issue": 414,
+            "labels": ["campaign", "security"],
+            "exemption": _audited_exemption("security_incident", "issue:414"),
+        },
+    )
+
+    assert result["decision"] == "allow"
+    assert result["exemption"]["kind"] == "security_incident"
 
 
 def test_expired_maintainer_override_cannot_bypass_full_lane() -> None:

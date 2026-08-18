@@ -22,6 +22,8 @@ license-files = [
     "third_party/python-rvo2/LOCAL_CHANGES.patch",
     "third_party/socnavbench/LICENSE",
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+    "third_party/socnavbench/LICENSING.yaml",
+    "third_party/socnavbench/UPSTREAM.md",
     "THIRD_PARTY_NOTICES.md",
 ]
 readme = "README.md"
@@ -164,18 +166,6 @@ describe_command = [
 # Build hook writes the resolved version to an importable module so
 # `robot_sf.__version__` works from installed wheels and editable installs.
 version-file = "robot_sf/_version.py"
-
-[tool.hatchling.build.targets.wheel]
-packages = [
-    { include = "robot_sf" },
-    { include = "robot_sf_carla_bridge" },
-    { include = "examples" },
-    { include = "third_party" },
-]
-include = ["examples/**", "benchmarks/**"]
-
-[tool.hatchling.build.targets.wheel.shared-data]
-"robot_sf/maps" = "robot_sf/maps"
 
 [tool.hatch.build.targets.wheel.force-include]
 "benchmarks" = "benchmarks"

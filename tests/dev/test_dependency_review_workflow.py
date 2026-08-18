@@ -25,12 +25,22 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     }
     assert expected_paths <= paths
 
-    review_step = next(
+    review_steps = workflow["jobs"]["review"]["steps"]
+    dependency_review_steps = [
         step
-        for step in workflow["jobs"]["review"]["steps"]
-        if "actions/dependency-review-action" in str(step.get("uses", ""))
-    )
-    allow_licenses = review_step["with"]["allow-licenses"]
+        for step in review_steps
+        if step.get("uses", "").startswith("actions/dependency-review-action@")
+    ]
+    assert len(dependency_review_steps) == 1
+    dependency_review_step = dependency_review_steps[0]
+    dependency_review_index = review_steps.index(dependency_review_step)
+    later_steps = review_steps[dependency_review_index + 1 :]
+    assert later_steps, "evidence steps must remain covered by this regression"
+    assert any(
+        step.get("uses", "").startswith("actions/upload-artifact@") for step in later_steps
+    ), "the test must exercise a workflow with later artifact steps"
+
+    allow_licenses = dependency_review_step["with"]["allow-licenses"]
     allowed = {item.strip() for item in allow_licenses.split(",")}
     assert allowed == {
         "Apache-2.0",

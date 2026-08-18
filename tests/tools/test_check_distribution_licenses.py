@@ -38,6 +38,20 @@ PAYLOADS = {
         "Apache License\nVersion 2.0\n"
         "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n"
     ),
+    "third_party/socnavbench/LICENSING.yaml": (
+        "schema_version: robot_sf.third_party_licensing.v1\n"
+        "source_repository: https://github.com/CMU-TBD/SocNavBench\n"
+        "source_revision: 0123456789abcdef0123456789abcdef01234567\n"
+        "default_license_spdx: MIT\n"
+        "upstream_files: []\n"
+        "license_overrides: []\n"
+        "local_files: []\n"
+    ),
+    "third_party/socnavbench/UPSTREAM.md": (
+        "Origin: https://github.com/CMU-TBD/SocNavBench\n"
+        "Commit: 0123456789abcdef0123456789abcdef01234567\n"
+        "License: MIT\n"
+    ),
     "THIRD_PARTY_NOTICES.md": (
         "# Third-party notices\nfast-pysf\nMIT License\nYuxiang Gao\n"
         "python-rvo2\nApache License, Version 2.0\nSocNavBench\nTBD) Lab\n"
@@ -102,6 +116,78 @@ def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
 
     assert len(result.wheels) == 1
     assert len(result.sdists) == 1
+
+
+def test_socnavbench_file_partition_is_checked_semantically(tmp_path: Path) -> None:
+    """A declared upstream source file is accepted only when it is in the archive."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/agents/agent.py"] = "MIT upstream source\n"
+    payloads["third_party/socnavbench/LICENSING.yaml"] = payloads[
+        "third_party/socnavbench/LICENSING.yaml"
+    ].replace("upstream_files: []", "upstream_files:\n  - agents/agent.py")
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    result = check_distribution(tmp_path)
+
+    assert len(result.sdists) == 1
+
+
+def test_socnavbench_apache_override_of_an_upstream_file_is_accepted(tmp_path: Path) -> None:
+    """An Apache-2.0 override refines an upstream file and is not a separate partition."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/mp_env/map_utils.py"] = (
+        "# Apache License, Version 2.0\nupstream mesh loader\n"
+    )
+    payloads["third_party/socnavbench/LICENSING.yaml"] = (
+        payloads["third_party/socnavbench/LICENSING.yaml"]
+        .replace("upstream_files: []", "upstream_files:\n  - mp_env/map_utils.py")
+        .replace(
+            "license_overrides: []",
+            "license_overrides:\n"
+            "  - license_spdx: Apache-2.0\n"
+            "    files:\n"
+            "      - mp_env/map_utils.py\n",
+        )
+    )
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    result = check_distribution(tmp_path)
+
+    assert len(result.sdists) == 1
+
+
+def test_socnavbench_override_outside_upstream_files_fails_closed(tmp_path: Path) -> None:
+    """An override entry that is not declared upstream leaves the manifest ambiguous."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/mp_env/map_utils.py"] = (
+        "# Apache License, Version 2.0\nupstream mesh loader\n"
+    )
+    payloads["third_party/socnavbench/LICENSING.yaml"] = payloads[
+        "third_party/socnavbench/LICENSING.yaml"
+    ].replace(
+        "license_overrides: []",
+        "license_overrides:\n"
+        "  - license_spdx: Apache-2.0\n"
+        "    files:\n"
+        "      - mp_env/map_utils.py\n",
+    )
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="overrides must also be listed as upstream files",
+    ):
+        check_distribution(tmp_path)
+
+
+def test_socnavbench_unclassified_source_file_fails_closed(tmp_path: Path) -> None:
+    """A vendored SocNavBench source file cannot bypass the ownership manifest."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/agents/agent.py"] = "MIT upstream source\n"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(DistributionLicenseError, match="source files are unclassified"):
+        check_distribution(tmp_path)
 
 
 def test_missing_sdist_fails_closed(tmp_path: Path) -> None:

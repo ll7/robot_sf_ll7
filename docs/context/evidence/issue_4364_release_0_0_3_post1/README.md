@@ -26,6 +26,17 @@ ordering now use the same execution scalarizer.
 The bundle and full root-checksum log stay out of git and are attached to the draft GitHub release.
 `artifact_pointer.json` records their names, hashes, roles, and retrieval URLs.
 
+## Release 0.0.3 DOI correction record
+
+Release `0.0.3` has no assigned DOI. The historical placeholder
+`10.5281/zenodo.<record-id>` embedded in the 0.0.3 release manifest provenance block is a defect
+in immutable release bytes and was NOT rewritten. The canonical correction record
+[`release_0_0_3_doi_correction.v1.json`](release_0_0_3_doi_correction.v1.json) supersedes the
+placeholder in meaning and binds the `0.0.3` tag, release URL, asset name, and asset SHA-256
+(`3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7`), recording
+`doi_status: not_assigned` and `reproduction_status: not_run` (issue #7445). The `0.0.3.post1`
+concept DOI `10.5281/zenodo.19482025` is a DOI of the corrected successor bundle, not of 0.0.3.
+
 ## Verification
 
 From a fresh extraction, run at bundle root:

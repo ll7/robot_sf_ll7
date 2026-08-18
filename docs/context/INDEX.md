@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #7340 real-manifest feasibility-first diagnostic: a config-first native probe over a fixed
+station-platform candidate pool, with route certification, loader-backed pedestrian binding,
+separate rejection/unavailability accounting, and a fail-closed comparison contract. The bounded
+run is diagnostic-only: 4/4 candidates were feasible, with observed episode counts of 3 collisions
+and 1 timeout; no safety, planner, benchmark, paper, or source-method claim follows:
+[issue_7340_real_manifest_feasibility_first.md](issue_7340_real_manifest_feasibility_first.md).
+
 Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
 with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
 compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The
@@ -44,6 +51,12 @@ canonical output-tree hashes, and an outcome-free `--check-only` result for the 
 package. The receipt is build provenance only; it is not domain approval, admission, publication,
 benchmark, or paper-facing evidence:
 [evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
+
+Issue #7128 exact-repeat execution context: a dependency-free,
+`benchmark_execution_context.v1` block and digest that binds CPU, platform,
+Python, numerical thread variables, and NumPy/Numba versions while keeping raw
+host identity separate from public comparison labels:
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md).
 
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
@@ -206,6 +219,12 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6318 Step 3 model-quality gate: config-first held-out prediction checks for the clean-room
+latent dynamics, reward, and continuation heads against persistence and a deterministic diagnostic
+MLP reference; the committed preview is intentionally blocked by train/holdout insufficiency and
+the gate makes no SAC, benchmark, or paper-facing claim:
+[issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md).
+
 Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
 preflight configuration and its explicit no-result boundary:
 [issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
@@ -245,6 +264,13 @@ the effective radius and map-asset provenance are not retained/pinned, every col
 feasibility/planner/trajectory outcome is replay-required, and a radius-default inconsistency
 (`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
 [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
+
+Issue #7445 release 0.0.3 DOI correction record: binds the `0.0.3` tag, release URL, asset name,
+and asset SHA-256 and records `doi_status: not_assigned` (no retroactive Zenodo deposit
+authorized) and `reproduction_status: not_run`; the historical embedded placeholder
+`10.5281/zenodo.<record-id>` in the release manifest remains as immutable bytes and was NOT
+rewritten:
+[release_0_0_3_doi_correction.v1.json](evidence/issue_4364_release_0_0_3_post1/release_0_0_3_doi_correction.v1.json).
 
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).

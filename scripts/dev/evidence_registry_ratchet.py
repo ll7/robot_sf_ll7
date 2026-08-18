@@ -49,6 +49,13 @@ Exit codes
 * ``1`` — a clean file regressed, or a tracked file's per-code count increased.
 * ``2`` — the linter could not be run / produced unparseable output (infra error).
 
+``--companion-delta`` reports the review-companion delta for the committed baseline
+(issue #7467): it returns ``0`` when the review companion already covers every new
+baseline path and per-code increase (and carries no stale entries), ``1`` when new or
+stale companion entries need a disposition, and ``2`` when a baseline, review
+companion, or prior baseline cannot be loaded. It is read-only: it never edits the
+review companion.
+
 Usage
 -----
 ::
@@ -62,6 +69,12 @@ Usage
     # Parse a pre-rendered linter report (offline / test / no-network).
     uv run python scripts/dev/evidence_registry_ratchet.py --check \
         --report /tmp/lint_report.json
+
+    # Surface the review-companion delta for the committed baseline (issue #7467).
+    # Prints a paste-able template for any missing/stale reviewed_files or
+    # reviewed_baseline_increases entries and exits 1 when dispositions are missing;
+    # exits 0 when the companion already covers the baseline delta. Read-only.
+    uv run python scripts/dev/evidence_registry_ratchet.py --companion-delta
 
 The committed baseline lives at
 ``scripts/validation/evidence_registry_baseline.json``.
@@ -82,11 +95,19 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+import yaml
+
 SCHEMA_VERSION = 1
 DEFAULT_BASELINE = Path("scripts/validation/evidence_registry_baseline.json")
+DEFAULT_REVIEW_COMPANION = Path("scripts/validation/evidence_registry_baseline_review.yaml")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
+# Fallback anchor when the review companion does not yet record a prior baseline
+# commit (issue #7467); the committed review companion currently carries this value.
+FALLBACK_PRIOR_BASELINE_COMMIT = "9fa96c01bf1c8152459f5fa8c481e938fb1e6725"
+REVIEW_SCHEMA_VERSION = "evidence_registry_baseline_review.v1"
+VALID_DISPOSITIONS = ("baseline", "remediate")
 
 
 def _repo_root() -> Path:
@@ -403,6 +424,337 @@ def load_baseline(path: Path) -> dict[str, Any]:
     return data
 
 
+# --- issue #7467: review-companion delta ------------------------------------------
+
+
+def _review_entries(review: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    """Return the validated list of ``reviewed_files`` / ``reviewed_baseline_increases``.
+
+    The review companion is schema-versioned (``evidence_registry_baseline_review.v1``);
+    a foreign schema is a hard error so a drift in the human contract surfaces loudly
+    instead of being silently misread.
+    """
+    if review.get("schema_version") != REVIEW_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported review companion schema_version: "
+            f"got {review.get('schema_version')!r}, expected {REVIEW_SCHEMA_VERSION!r}"
+        )
+    entries = review.get(key, [])
+    if not isinstance(entries, list):
+        raise ValueError(f"Review companion '{key}' must be a list, got {type(entries).__name__}.")
+    return entries
+
+
+def _reviewed_paths(review: dict[str, Any]) -> set[str]:
+    """Return the set of paths already dispositioned under ``reviewed_files``."""
+    reviewed = set()
+    for entry in _review_entries(review, "reviewed_files"):
+        path = entry.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError("Review companion reviewed_files entries must name a 'path'.")
+        reviewed.add(path)
+    return reviewed
+
+
+def _declared_increases(review: dict[str, Any]) -> set[tuple[str, str]]:
+    """Return the declared ``(path, code)`` set from ``reviewed_baseline_increases``."""
+    declared: set[tuple[str, str]] = set()
+    for entry in _review_entries(review, "reviewed_baseline_increases"):
+        path = entry.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                "Review companion reviewed_baseline_increases entries must name a 'path'."
+            )
+        codes = entry.get("codes")
+        if not isinstance(codes, list):
+            raise ValueError(
+                f"Review companion reviewed_baseline_increases entry '{path}' must list 'codes'."
+            )
+        for code in codes:
+            if not isinstance(code, str) or not code:
+                raise ValueError(
+                    f"Review companion reviewed_baseline_increases entry '{path}' "
+                    "has an invalid code."
+                )
+            declared.add((path, code))
+    return declared
+
+
+def _findings_by_path(baseline: dict[str, Any]) -> dict[str, dict[str, int]]:
+    """Return the baseline ``findings_by_path`` normalized to plain ints."""
+    return {
+        str(path): {str(code): int(count) for code, count in codes.items()}
+        for path, codes in baseline.get("findings_by_path", {}).items()
+    }
+
+
+def companion_delta(
+    baseline: dict[str, Any],
+    review: dict[str, Any],
+    prior_baseline: dict[str, Any],
+) -> dict[str, Any]:
+    """Compute the review-companion delta for ``baseline`` against ``prior_baseline``.
+
+    Mirrors the decomposition enforced by
+    ``tests/dev/test_evidence_registry_ratchet.py::test_review_companion_covers_every_post_5317_baseline_file``
+    so a baseline refresh surfaces exactly what the human review companion must
+    disposition (issue #7467):
+
+    * ``missing_reviewed_files`` — baseline paths absent from the prior baseline and
+      not yet listed in ``reviewed_files``; each needs a companion disposition.
+    * ``missing_reviewed_files_codes`` — ``{path: [codes]}`` for the missing
+      ``reviewed_files`` paths, so the rendered template lists the exact finding codes
+      a maintainer must disposition.
+    * ``missing_reviewed_increases`` — ``(path, code)`` pairs where a file already in
+      the prior baseline has a higher per-code count in ``baseline`` and the pair is
+      not yet declared in ``reviewed_baseline_increases``.
+    * ``stale_reviewed_files`` — ``reviewed_files`` paths no longer present in
+      ``baseline``; the companion should drop them to stay honest.
+    * ``stale_reviewed_increases`` — declared ``(path, code)`` increases that are no
+      longer a current increase; the companion should drop them.
+
+    ``empty`` is True when every delta category is empty (the companion fully covers
+    the baseline delta). The function is pure: it never reads or writes files.
+    """
+    current = _findings_by_path(baseline)
+    prior = _findings_by_path(prior_baseline)
+    reviewed = _reviewed_paths(review)
+    declared = _declared_increases(review)
+
+    current_paths = set(current)
+    prior_paths = set(prior)
+    missing_reviewed_files = sorted(current_paths - prior_paths - reviewed)
+    missing_reviewed_increases = sorted(
+        {
+            (path, code)
+            for path, codes in current.items()
+            for code, count in codes.items()
+            if path in prior_paths and count > prior[path].get(code, 0)
+        }
+        - declared
+    )
+    stale_reviewed_files = sorted(reviewed - current_paths)
+    stale_reviewed_increases = sorted(
+        {
+            (path, code)
+            for path, code in declared
+            if path not in current_paths
+            or path not in prior_paths
+            or current[path].get(code, 0) <= prior[path].get(code, 0)
+        }
+    )
+    return {
+        "missing_reviewed_files": missing_reviewed_files,
+        "missing_reviewed_files_codes": {
+            path: sorted(current[path]) for path in missing_reviewed_files
+        },
+        "missing_reviewed_increases": missing_reviewed_increases,
+        "stale_reviewed_files": stale_reviewed_files,
+        "stale_reviewed_increases": stale_reviewed_increases,
+        "empty": not (
+            missing_reviewed_files
+            or missing_reviewed_increases
+            or stale_reviewed_files
+            or stale_reviewed_increases
+        ),
+    }
+
+
+def load_review_companion(path: Path) -> dict[str, Any]:
+    """Load and validate the human review companion YAML.
+
+    Raises ``ValueError`` on a missing, unparseable, or foreign-schema companion so
+    the CLI maps the problem to the documented infra-error exit code instead of an
+    uncaught traceback.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Could not read review companion {path}: {exc}") from exc
+    try:
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Review companion {path} is not valid YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Review companion {path} must be a YAML mapping, got {type(data).__name__}."
+        )
+    if data.get("schema_version") != REVIEW_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported review companion schema_version in {path}: "
+            f"got {data.get('schema_version')!r}, expected {REVIEW_SCHEMA_VERSION!r}"
+        )
+    # Validate the sections the delta computation reads directly, plus the
+    # disposition contract ({baseline, remediate}) so a drift in the human
+    # companion surfaces loudly instead of silently weakening the gate.
+    _reviewed_paths(data)
+    _declared_increases(data)
+    for key in ("reviewed_files", "reviewed_baseline_increases"):
+        for entry in _review_entries(data, key):
+            disposition = entry.get("disposition")
+            if disposition not in VALID_DISPOSITIONS:
+                raise ValueError(
+                    f"Review companion {path} entry '{entry.get('path')}' has an invalid "
+                    f"disposition {disposition!r}; expected one of {VALID_DISPOSITIONS}."
+                )
+    return data
+
+
+def load_prior_baseline_from_git(repo_root: Path, commit: str) -> dict[str, Any]:
+    """Load the prior ratchet baseline at ``commit`` from the local git history.
+
+    Raises ``ValueError`` (never a traceback) when the commit does not exist or does
+    not contain the baseline file, so ``--companion-delta`` degrades to a documented
+    error the maintainer can act on.
+    """
+    proc = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{commit}:scripts/validation/evidence_registry_baseline.json",
+        ],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise ValueError(
+            f"Could not load the prior baseline at commit {commit}: git show exited "
+            f"{proc.returncode}. Ensure the commit exists in the local history.\n"
+            f"git stderr: {proc.stderr.strip()[:500]}"
+        )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Prior baseline at commit {commit} is not valid JSON: {exc}") from exc
+
+
+def _render_code_list(codes: list[str]) -> str:
+    """Render a sorted code list as a YAML inline list (deterministic)."""
+    if not codes:
+        return "[]"
+    return "[" + ", ".join(codes) + "]"
+
+
+def render_companion_template(delta: dict[str, Any]) -> str:
+    """Render a deterministic, paste-able YAML template for ``delta``.
+
+    The output is emitted by ``--companion-delta`` so a maintainer can append the
+    missing ``reviewed_files`` / ``reviewed_baseline_increases`` entries to the review
+    companion verbatim. Entries carry a placeholder ``baseline`` disposition and a
+    placeholder reason; the ordering is deterministic (sorted paths / path-then-code)
+    so repeated runs produce byte-identical templates. Stale entries are listed under
+    a comment block rather than in the paste-able payload. The rendered YAML must
+    round-trip through ``yaml.safe_load``.
+    """
+    missing_files = delta.get("missing_reviewed_files", [])
+    missing_files_codes = delta.get("missing_reviewed_files_codes", {})
+    missing_increases = delta.get("missing_reviewed_increases", [])
+    stale_files = delta.get("stale_reviewed_files", [])
+    stale_increases = delta.get("stale_reviewed_increases", [])
+    lines = [
+        "# Evidence-registry review-companion delta (issue #7467)",
+        "# Generated by scripts/dev/evidence_registry_ratchet.py --companion-delta",
+        "# Paste the entries below into scripts/validation/evidence_registry_baseline_review.yaml.",
+        "# A disposition is exactly one of: baseline | remediate. Replace the placeholder",
+        "# reason with a short justification before committing.",
+        "",
+    ]
+    if missing_files:
+        lines.extend(
+            [
+                "reviewed_files:",
+                *[
+                    (
+                        f"  - path: {path}\n"
+                        f"    codes: {_render_code_list(missing_files_codes.get(path, []))}\n"
+                        "    disposition: baseline\n"
+                        "    reason: >-\n"
+                        "      PLACEHOLDER: review this newly baselined file and record its\n"
+                        "      remediate-or-baseline disposition (issue #7467)."
+                    )
+                    for path in missing_files
+                ],
+            ]
+        )
+    else:
+        lines.append("reviewed_files: []")
+    lines.append("")
+    if missing_increases:
+        lines.extend(
+            [
+                "reviewed_baseline_increases:",
+                *[
+                    (
+                        f"  - path: {path}\n"
+                        f"    codes: {_render_code_list([code])}\n"
+                        "    disposition: baseline\n"
+                        "    reason: >-\n"
+                        "      PLACEHOLDER: review this per-code baseline increase and record\n"
+                        "      its remediate-or-baseline disposition (issue #7467)."
+                    )
+                    for path, code in missing_increases
+                ],
+            ]
+        )
+    else:
+        lines.append("reviewed_baseline_increases: []")
+    lines.append("")
+    if stale_files or stale_increases:
+        lines.append("# Stale companion entries (no longer in the baseline):")
+        for path in stale_files:
+            lines.append(f"#   - reviewed_files path: {path}")
+        for path, code in stale_increases:
+            lines.append(f"#   - reviewed_baseline_increases path/code: {path} :: {code}")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _report_companion_delta(delta: dict[str, Any]) -> int:
+    """Print the ``--companion-delta`` report and return the exit code."""
+    missing_files = delta.get("missing_reviewed_files", [])
+    missing_increases = delta.get("missing_reviewed_increases", [])
+    stale_files = delta.get("stale_reviewed_files", [])
+    stale_increases = delta.get("stale_reviewed_increases", [])
+    if delta.get("empty", False):
+        print(
+            "evidence-registry companion delta is empty: the review companion already "
+            "covers the committed baseline (no new paths, no per-code increases, no "
+            "stale entries)."
+        )
+        return 0
+    print(
+        "evidence-registry companion delta: the review companion does not yet cover "
+        "the committed baseline.",
+        file=sys.stderr,
+    )
+    if missing_files:
+        print("\nreviewed_files entries required:", file=sys.stderr)
+        for path in missing_files:
+            print(f"  - {path}", file=sys.stderr)
+    if missing_increases:
+        print("\nreviewed_baseline_increases entries required:", file=sys.stderr)
+        for path, code in missing_increases:
+            print(f"  - {path} :: {code}", file=sys.stderr)
+    if stale_files:
+        print("\nstale reviewed_files entries (no longer in the baseline):", file=sys.stderr)
+        for path in stale_files:
+            print(f"  - {path}", file=sys.stderr)
+    if stale_increases:
+        print("\nstale reviewed_baseline_increases entries:", file=sys.stderr)
+        for path, code in stale_increases:
+            print(f"  - {path} :: {code}", file=sys.stderr)
+    print(
+        "\nRefresh scripts/validation/evidence_registry_baseline.json with --write-baseline,"
+        "\nthen paste the rendered template below into the review companion",
+        "\n(scripts/validation/evidence_registry_baseline_review.yaml) with real",
+        "\nremediating-or-baseline dispositions before the full pr_ready_check.sh run.",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def check_against_baseline(
     current: dict[str, dict[str, int]],
     baseline: dict[str, Any],
@@ -477,9 +829,25 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Print the aggregate (per-file, per-code counts) without a baseline.",
     )
+    mode.add_argument(
+        "--companion-delta",
+        action="store_true",
+        help=(
+            "Report the review-companion delta for the committed baseline: every new "
+            "baseline path and per-code increase still needing a companion disposition, "
+            "plus stale companion entries. Prints a deterministic YAML template to paste "
+            "into the review companion. Read-only; exits 1 when dispositions are missing."
+        ),
+    )
     parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
     parser.add_argument(
         "--root", type=Path, default=None, help="Repository root (defaults to git toplevel)."
+    )
+    parser.add_argument(
+        "--review",
+        type=Path,
+        default=DEFAULT_REVIEW_COMPANION,
+        help="Path to the review companion YAML (default: the committed companion).",
     )
     parser.add_argument(
         "--report",
@@ -547,10 +915,13 @@ def _report_check(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the ratchet gate, baseline refresh, or aggregate report."""
+    """Run the ratchet gate, baseline refresh, aggregate report, or companion-delta."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
     repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
+
+    if args.companion_delta:
+        return _run_companion_delta(repo_root, baseline_path, args.review)
 
     try:
         report = _gather_report(args, repo_root)
@@ -597,6 +968,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     failures = [*findings_failures, *manifest_failures]
     notices = [*notices, *manifest_notices]
     return _report_check(report, baseline, failures, notices)
+
+
+def _run_companion_delta(repo_root: Path, baseline_path: Path, review_arg: Path) -> int:
+    """Run the read-only ``--companion-delta`` report for the committed baseline.
+
+    Loads the committed baseline, the human review companion, and the prior baseline
+    (via ``git show`` at the companion's ``prior_baseline_commit``), computes the
+    decomposition the companion contract enforces, and prints either a success line
+    (delta empty) or a deterministic YAML template listing exactly the missing and
+    stale companion entries. The companion file is never written.
+    """
+    review_path = review_arg if review_arg.is_absolute() else repo_root / review_arg
+    try:
+        baseline = load_baseline(baseline_path)
+        review = load_review_companion(review_path)
+    except ValueError as exc:
+        print(f"ERROR: could not load baseline or review companion: {exc}", file=sys.stderr)
+        return 2
+    prior_commit = str(review.get("prior_baseline_commit") or FALLBACK_PRIOR_BASELINE_COMMIT)
+    try:
+        prior_baseline = load_prior_baseline_from_git(repo_root, prior_commit)
+    except ValueError as exc:
+        print(f"ERROR: could not load prior baseline: {exc}", file=sys.stderr)
+        return 2
+
+    delta = companion_delta(baseline, review, prior_baseline)
+    if delta.get("empty", False):
+        return _report_companion_delta(delta)
+    code = _report_companion_delta(delta)
+    print(render_companion_template(delta))
+    return code
 
 
 if __name__ == "__main__":

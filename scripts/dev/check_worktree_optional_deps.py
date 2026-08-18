@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Check optional imports without importing Robot SF project code.
+"""Check declared dependency imports without importing Robot SF project code.
 
 This is a setup diagnostic for linked worktrees. It deliberately probes import
-specifications only, so a missing optional package is reported separately from a
+specifications only, so an incomplete environment is reported separately from a
 failure while importing changed project code.
 
 Exit codes:
@@ -46,10 +46,11 @@ EXTRA_MODULES = {
     "socnav": ("cv2", "pyassimp", "OpenGL", "skfmm", "skimage"),
     "criticality": ("cma",),
 }
+CORE_MODULES = ("yaml",)
 ALL_EXTRAS_MODULES = tuple(
     dict.fromkeys(module for modules in EXTRA_MODULES.values() for module in modules)
 )
-PROFILES = {"all-extras": ALL_EXTRAS_MODULES, **EXTRA_MODULES}
+PROFILES = {"core": CORE_MODULES, "all-extras": ALL_EXTRAS_MODULES, **EXTRA_MODULES}
 SCHEMA = "robot_sf.worktree_optional_deps.v1"
 
 
@@ -130,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         "--profile",
         choices=sorted(PROFILES),
         default="all-extras",
-        help="Optional-extra import profile to check (default: all-extras).",
+        help="Dependency import profile to check (default: all-extras).",
     )
     parser.add_argument(
         "--module",

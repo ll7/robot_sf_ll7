@@ -1,0 +1,37 @@
+name: Release Legal Input Coverage
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-legal-input-coverage:
+    name: release-legal-input-coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv with bounded retry
+        env:
+          UV_VERSION: "0.11.21"
+          UV_INSTALL_MAX_ATTEMPTS: "3"
+          UV_INSTALL_BACKOFF_BASE: "5"
+          UV_INSTALL_BACKOFF_CAP: "30"
+        run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+      - name: Verify legal-input ownership and trigger coverage
+        run: uv run python scripts/tools/check_release_legal_input_coverage.py

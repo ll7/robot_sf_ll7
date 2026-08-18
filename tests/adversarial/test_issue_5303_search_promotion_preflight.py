@@ -83,6 +83,18 @@ def test_preflight_accepts_non_inert_search_space() -> None:
         assert probe.baseline_hash != probe.perturbed_hash
 
 
+def test_preflight_rejects_template_route_mode_as_inert() -> None:
+    """Promotion preflight must not replace an authored route with a candidate route."""
+    search_space = replace(_space(), pedestrian_route_mode="template")
+
+    result = evaluate_preflight(search_space=search_space, template_scenario=_template())
+
+    assert result.status == "blocked_inert_dimensions"
+    assert result.pedestrian_route_populated is False
+    assert any(probe.status == "inert_metadata_only" for probe in result.dimensions)
+    assert any("metadata-only" in blocker for blocker in result.blockers)
+
+
 def test_preflight_rejects_search_space_without_pedestrian_id() -> None:
     """No declared pedestrian.id fails closed with blocked_no_pedestrian (PR #6291 mode)."""
     result = evaluate_preflight(
@@ -256,6 +268,7 @@ def test_preflight_rejects_metadata_only_timing_dimensions(monkeypatch: pytest.M
         index,
         template_scenario,
         pedestrian_id,
+        pedestrian_route_mode="candidate",
         route_file_name="route_overrides.yaml",
     ):
         scenario, route = real_builder(
@@ -263,6 +276,7 @@ def test_preflight_rejects_metadata_only_timing_dimensions(monkeypatch: pytest.M
             index=index,
             template_scenario=template_scenario,
             pedestrian_id=pedestrian_id,
+            pedestrian_route_mode=pedestrian_route_mode,
             route_file_name=route_file_name,
         )
         # Simulate the PR #6291 inert materialization: timing survives only in provenance

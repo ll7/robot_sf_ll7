@@ -20,6 +20,12 @@ fail-closed preflight as ``gh-pr-merger``:
   - staleness-free base (fresh by construction inside the merge queue, where the
     base SHA equals current ``main``; evaluated against ``main`` in ``--pr`` mode).
 
+Issue #7515: the gate also rejects stacked ancestry.  When the evaluated PR
+snapshot carries an ``ancestry`` block from ``scripts.dev.stack_ancestry`` whose
+state is undeclared, mismatched, invalidated, or a declared stack (anything but
+``clean``), the gate fails closed with ``stacked_ancestry_not_independently_mergeable``
+because a stacked PR must never be merged independently before its parent merges.
+
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
 queue merging strategy, base SHA, label set, metadata digest and trailer
 statuses, exact-head changed-coverage status, staleness verdict, CI conclusion,
@@ -135,6 +141,7 @@ class MergeGateAudit:
     staleness_verdict: str
     thread_resolution: str
     reviewer_request_status: str
+    ancestry_state: str
     merge_ready: bool
     passed: bool
     reasons: list[str] = field(default_factory=list)
@@ -214,6 +221,7 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913 - one ordered list of independe
     thread_resolution: str,
     reviewer_request_status: str,
     merge_group_head_binding: str,
+    ancestry_state: str = "",
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -261,6 +269,8 @@ def _fail_closed_reasons(  # noqa: C901, PLR0913 - one ordered list of independe
             if reviewer_request_status == "requested"
             else "requested_reviewers_not_evaluated"
         )
+    if ancestry_state and ancestry_state != "clean":
+        reasons.append("stacked_ancestry_not_independently_mergeable")
     return reasons
 
 
@@ -374,6 +384,12 @@ def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913 - explicit fail-closed 
     else:
         reviewer_request_status = "not_evaluated"
 
+    ancestry_block = pr.get("ancestry")
+    if isinstance(ancestry_block, dict):
+        ancestry_state = str(ancestry_block.get("state") or "")
+    else:
+        ancestry_state = ""
+
     reasons = ["draft_state_unavailable"] if not draft_state_valid else []
     reasons.extend(
         _fail_closed_reasons(
@@ -387,6 +403,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913 - explicit fail-closed 
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
+            ancestry_state=ancestry_state,
         )
     )
     if not head_sha:
@@ -416,6 +433,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913 - explicit fail-closed 
         staleness_verdict=staleness_verdict,
         thread_resolution=thread_resolution,
         reviewer_request_status=reviewer_request_status,
+        ancestry_state=ancestry_state,
         merge_ready=merge_ready,
         passed=passed,
         reasons=reasons,
@@ -959,6 +977,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- CI conclusion: `{audit.ci_overall}`",
         f"- thread resolution: `{audit.thread_resolution}`",
         f"- requested-reviewer status: `{audit.reviewer_request_status}`",
+        f"- ancestry state: `{audit.ancestry_state or 'not_evaluated'}`",
     ]
     if audit.reasons:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")

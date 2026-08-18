@@ -594,8 +594,10 @@ SHA-pinned normal-throughput window after rollout; a live queue snapshot is not 
 causality measurement. Use `scripts/dev/measure_stale_base_policy.py` with an explicit
 `stale_base_observation_window.v1` input. The helper keeps ordinary compare-and-swap waits and
 base-sensitive refresh waits separate, requires exact-head/base evidence for stale-base attribution,
-and reports missing source data as `not_available`. Its output is workflow evidence only and does
-not authorize a policy change, merge, campaign, or publication.
+and reports missing source data as `not_available`. Source kinds, input SHA-256, the deterministic
+record audit, red-main coverage, and independent pre-rollout baseline evidence are preserved in the
+report; fixture sources cannot be promoted by editing the top-level evidence status. Its output is
+workflow evidence only and does not authorize a policy change, merge, campaign, or publication.
 
 ### Merge queue gate (issue #6274)
 
@@ -721,6 +723,43 @@ or stale trailer blocks both `gh-pr-merger` and native merge-queue admission. Me
 reconciliation does not rerun source CI, but it invalidates prior final-state review evidence until
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
+
+### Exact-head stability snapshot (issue #7523)
+
+Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof
+or GitHub reports completed-success workflow jobs while check-runs remain pending. Run the
+deterministic stability snapshot once after local proof and again immediately before any handoff
+step; it is route-evidence-only, never retries automatically, and never authorizes a merge:
+
+```bash
+uv run python scripts/dev/check_pr_ci_status.py <pr-number> --stability-snapshot --json \
+  --expected-head-sha <head-sha> --expected-main-sha <current-main-sha> \
+  --expected-metadata-digest <64-hex> --repo ll7/robot_sf_ll7
+```
+
+The `pr_stability_snapshot.v1` result reports the observed PR head SHA, the current `main` SHA,
+the base ref/SHA, the exact title/body SHA-256 metadata digest (the same `metadata_digest` as the
+`pr-metadata: reconciled @ <digest>` trailer), the CI rollup, and REST/GraphQL quota state.
+`status` is one of `stable`, `changed`, `failure`, `pending`, `status_propagation_lag`,
+`quota_blocked`, or `error`:
+
+- `changed` (with `invalidated_reasons` and the observed values) when the head, current `main`, or
+  metadata digest moved since the snapshot. The smallest safe resume command re-runs the snapshot
+  against the observed values; nothing is retried automatically and no merge is authorized.
+- `status_propagation_lag` is distinct from ordinary `pending` work and from terminal `failure`;
+  the checks payload carries the `check_run_stale_job_success` diagnostic and the resume command is
+  the bounded CI monitor (exit code 2 until the lag resolves).
+- `quota_blocked` surfaces the `gh api rate_limit` core/GraphQL reset (or a `Retry-After` value)
+  as `resume.min_delay_seconds` and `resume.resume_epoch_seconds`; re-run the snapshot only after
+  that delay, never in a spin loop.
+- Exit codes: `0` stable, `1` changed/failure/error, `2` inconclusive (pending,
+  status-propagation-lag, or quota-blocked; resume later).
+
+Optional `--metadata-title` + `--metadata-body-file` compare the desired final title/body pair;
+metadata drift then resumes with `scripts/dev/gh_pr_body_rest.py <pr> --reconcile` before
+re-snapshotting. The snapshot does not apply `merge-ready`, bypass reviews, or relax any
+fail-closed gate; `scripts/dev/check_pr_current_base_cas.py` and the monitor's exact-head guard
+remain the binding final preflights.
 
 ### Reusable dev scripts
 

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.dev.merge_queue_gate import (
+    _format_summary,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
     fetch_pr_snapshot,
@@ -864,3 +865,89 @@ def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
 
     assert excinfo.value.code == 2
     assert "--advisory is valid only with --pr" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: stacked ancestry fails the merge gate closed
+# ---------------------------------------------------------------------------
+
+
+def _gate_ready_pr(**overrides: object) -> dict[str, object]:
+    """Build a PR snapshot that otherwise passes every merge-gate dimension."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    payload: dict[str, object] = {
+        "number": 42,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "draft": False,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        "metadata_digest": metadata,
+        "metadata_verdicts": [metadata_trailer(metadata)],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_stacked_ancestry_fails_gate_closed() -> None:
+    """A stacked-not-independently-mergeable PR must never pass the merge gate."""
+    for state in (
+        "undeclared_stack",
+        "mismatched_declaration",
+        "parent_invalidated",
+        "stacked",
+        "parent_merged",
+    ):
+        audit = evaluate_merge_gate(
+            _gate_ready_pr(ancestry={"state": state}),
+            main_sha=FULL_SHA,
+            threads_resolved=True,
+            reviewers_requested=False,
+        )
+
+        assert audit.passed is False, state
+        assert audit.ancestry_state == state
+        assert "stacked_ancestry_not_independently_mergeable" in audit.reasons
+
+
+def test_clean_ancestry_passes_gate() -> None:
+    """A clean ancestry block leaves the otherwise-ready PR mergeable."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(ancestry={"state": "clean"}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.ancestry_state == "clean"
+    assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+def test_missing_ancestry_block_is_not_evaluated() -> None:
+    """Legacy snapshots without an ancestry block keep the pre-gate verdict."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.ancestry_state == ""
+    assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+def test_audit_summary_records_ancestry_state(capsys) -> None:
+    """The human summary surfaces the evaluated ancestry state."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(ancestry={"state": "stacked"}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    summary = _format_summary(audit)
+    assert "ancestry state: `stacked`" in summary
+    assert "stacked_ancestry_not_independently_mergeable" in summary

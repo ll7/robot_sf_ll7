@@ -1,13 +1,16 @@
 {
   "schema_version": "stale_base_observation_window.v1",
   "repo": "ll7/robot_sf_ll7",
+  "semantics_id": "risk-tiered-stale-base.v1",
   "evidence_status": "workflow_fixture",
   "policy": {
     "policy_id": "risk-tiered-stale-base",
     "rollout_at": "2026-08-17T00:00:00Z",
+    "rollout_commit": "9999999999999999999999999999999999999999",
     "source_snapshot": {
       "path": "fixture://policy/6272",
       "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "source_kind": "fixture",
       "available": true,
       "role": "policy-decision"
     }
@@ -17,10 +20,12 @@
     "kind": "normal_throughput",
     "start_at": "2026-08-18T10:00:00Z",
     "end_at": "2026-08-18T11:00:00Z",
+    "captured_at": "2026-08-18T11:00:00Z",
     "source_snapshots": [
       {
         "path": "fixture://queue/2026-08-18T11:00:00Z",
         "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "source_kind": "fixture",
         "available": true,
         "role": "queue-window"
       }
@@ -92,9 +97,22 @@
       "attribution": "unknown"
     }
   ],
+  "red_main_coverage": {
+    "status": "complete",
+    "source_snapshots": [
+      {
+        "path": "fixture://red-main/2026-08-18T11:00:00Z",
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "source_kind": "fixture",
+        "available": true,
+        "role": "red-main-window"
+      }
+    ]
+  },
   "red_main_events": [
     {
       "incident_id": "fixture-stale",
+      "occurred_at": "2026-08-18T10:10:00Z",
       "red_main_observed": true,
       "evidence": {
         "pr_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -106,6 +124,7 @@
     },
     {
       "incident_id": "fixture-not-stale",
+      "occurred_at": "2026-08-18T10:20:00Z",
       "red_main_observed": true,
       "evidence": {
         "pr_head_sha": "dddddddddddddddddddddddddddddddddddddddd",
@@ -117,20 +136,32 @@
     },
     {
       "incident_id": "fixture-unknown",
+      "occurred_at": "2026-08-18T10:30:00Z",
       "red_main_observed": true,
       "evidence": {}
     }
   ],
   "baseline": {
     "schema_version": "stale_base_observation_window.v1",
-    "source_snapshots": [
-      {
-        "path": "fixture://queue/pre-rollout",
-        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
-        "available": true,
-        "role": "pre-rollout-baseline"
-      }
-    ],
+    "repo": "ll7/robot_sf_ll7",
+    "semantics_id": "risk-tiered-stale-base.v1",
+    "evidence_status": "workflow_fixture",
+    "window": {
+      "window_id": "fixture-pre-rollout-2026-08-10",
+      "kind": "pre_rollout",
+      "start_at": "2026-08-10T09:00:00Z",
+      "end_at": "2026-08-10T11:00:00Z",
+      "captured_at": "2026-08-10T11:00:00Z",
+      "source_snapshots": [
+        {
+          "path": "fixture://queue/pre-rollout",
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+          "source_kind": "fixture",
+          "available": true,
+          "role": "pre-rollout-baseline"
+        }
+      ]
+    },
     "records": [
       {
         "pr_number": 9001,

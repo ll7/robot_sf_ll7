@@ -177,6 +177,55 @@ def test_build_baseline_payload_round_trips_through_check() -> None:
     assert failures == []
 
 
+def test_build_review_companion_template_is_deterministic() -> None:
+    """The review delta exposes every new/increased finding without approving it."""
+    previous = {
+        "schema_version": 1,
+        "generated_at": "2026-08-18T06:00:00+00:00",
+        "summary": {"total_findings": 1, "files_with_findings": 1},
+        "findings_by_path": {"old.json": {"missing_commit": 1}},
+        "evidence_tree": {"count": 1, "sha256": "old-tree"},
+    }
+    candidate = {
+        "schema_version": 1,
+        "generated_at": "2026-08-18T06:01:00+00:00",
+        "summary": {"total_findings": 4, "files_with_findings": 2},
+        "findings_by_path": {
+            "old.json": {"missing_commit": 2, "dangling_commit": 1},
+            "new.json": {"missing_config_path": 1},
+        },
+        "evidence_tree": {"count": 2, "sha256": "new-tree"},
+    }
+
+    template = ratchet.build_review_companion_template(previous, candidate)
+
+    assert template == ratchet.build_review_companion_template(previous, candidate)
+    assert template["schema_version"] == "evidence_registry_baseline_review_delta.v1"
+    assert template["status"] == "needs_human_review"
+    assert template["reviewed_files"] == [
+        {
+            "path": "new.json",
+            "codes": ["missing_config_path"],
+            "current_counts": {"missing_config_path": 1},
+            "disposition": "TODO",
+            "reason": "TODO: choose baseline or remediate and explain why.",
+        }
+    ]
+    assert template["reviewed_baseline_increases"] == [
+        {
+            "path": "old.json",
+            "codes": ["dangling_commit", "missing_commit"],
+            "previous_counts": {"dangling_commit": 0, "missing_commit": 1},
+            "current_counts": {"dangling_commit": 1, "missing_commit": 2},
+            "disposition": "TODO",
+            "reason": "TODO: choose baseline or remediate and explain why.",
+        }
+    ]
+    assert template["evidence_tree_delta"]["changed"] is True
+    assert template["prior_baseline"]["digest"] == ratchet._payload_digest(previous)
+    assert template["candidate_baseline"]["digest"] == ratchet._payload_digest(candidate)
+
+
 def test_load_baseline_rejects_wrong_schema_version(tmp_path: Path) -> None:
     """A baseline with the wrong schema_version fails closed."""
     bad = tmp_path / "baseline.json"
@@ -272,6 +321,85 @@ def test_cli_write_then_check_roundtrip(tmp_path: Path) -> None:
     check = _run_cli(tmp_path, report)
     assert check.returncode == 0, check.stderr
     assert "ratchet passed" in check.stdout
+
+
+def test_cli_write_can_emit_review_companion_template(tmp_path: Path) -> None:
+    """A refresh can emit a human-review delta before replacing the machine baseline."""
+    baseline = tmp_path / "baseline.json"
+    prior_report_path = tmp_path / "prior-report.json"
+    prior_report_path.write_text(
+        json.dumps(_report(_issue("old.json", "missing_commit"))), encoding="utf-8"
+    )
+    initial = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--report",
+            str(prior_report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert initial.returncode == 0, initial.stderr
+
+    current_report_path = tmp_path / "current-report.json"
+    current_report_path.write_text(
+        json.dumps(
+            _report(
+                _issue("old.json", "missing_commit"),
+                _issue("old.json", "missing_commit"),
+                _issue("new.json", "dangling_commit"),
+            )
+        ),
+        encoding="utf-8",
+    )
+    template_path = tmp_path / "review-delta.yaml"
+    refresh = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--review-template",
+            str(template_path),
+            "--report",
+            str(current_report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+    assert refresh.returncode == 0, refresh.stderr
+    review = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+    assert review["status"] == "needs_human_review"
+    assert [entry["path"] for entry in review["reviewed_files"]] == ["new.json"]
+    assert [entry["path"] for entry in review["reviewed_baseline_increases"]] == ["old.json"]
+    assert ratchet.load_baseline(baseline)["summary"]["total_findings"] == 3
+
+
+def test_cli_rejects_review_template_without_baseline_refresh(tmp_path: Path) -> None:
+    """The review-template output cannot be requested on a read-only check."""
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--check", "--review-template", str(tmp_path / "delta.yaml")],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 2
+    assert "requires --write-baseline" in proc.stderr
 
 
 def test_cli_check_fails_on_clean_file_regression(tmp_path: Path) -> None:

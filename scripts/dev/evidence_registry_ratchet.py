@@ -59,6 +59,10 @@ Usage
     # Refresh the baseline after intentionally reducing findings.
     uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline
 
+    # Refresh the baseline and emit a human-review delta for new/increased findings.
+    uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline \
+        --review-template /tmp/evidence_registry_baseline_review_delta.yaml
+
     # Parse a pre-rendered linter report (offline / test / no-network).
     uv run python scripts/dev/evidence_registry_ratchet.py --check \
         --report /tmp/lint_report.json
@@ -79,6 +83,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -87,6 +93,7 @@ DEFAULT_BASELINE = Path("scripts/validation/evidence_registry_baseline.json")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
+REVIEW_TEMPLATE_SCHEMA = "evidence_registry_baseline_review_delta.v1"
 
 
 def _repo_root() -> Path:
@@ -460,6 +467,143 @@ def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _payload_digest(payload: dict[str, Any]) -> str:
+    """Hash a baseline payload while ignoring its intentionally volatile timestamp."""
+    stable_payload = {key: value for key, value in payload.items() if key != "generated_at"}
+    serialized = json.dumps(
+        stable_payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _baseline_delta(
+    previous: dict[str, Any], candidate: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Return the human-review delta between two baseline payloads."""
+    previous_findings = previous.get("findings_by_path", {})
+    candidate_findings = candidate.get("findings_by_path", {})
+    new_files: list[dict[str, Any]] = []
+    increases: list[dict[str, Any]] = []
+    removed_files: list[dict[str, Any]] = []
+    decreases: list[dict[str, Any]] = []
+
+    for path in sorted(set(candidate_findings) - set(previous_findings)):
+        codes = candidate_findings[path]
+        new_files.append(
+            {
+                "path": path,
+                "codes": sorted(codes),
+                "current_counts": {code: codes[code] for code in sorted(codes)},
+                "disposition": "TODO",
+                "reason": "TODO: choose baseline or remediate and explain why.",
+            }
+        )
+
+    for path in sorted(set(previous_findings) & set(candidate_findings)):
+        previous_codes = previous_findings[path]
+        candidate_codes = candidate_findings[path]
+        increased_codes = sorted(
+            code
+            for code in set(previous_codes) | set(candidate_codes)
+            if candidate_codes.get(code, 0) > previous_codes.get(code, 0)
+        )
+        decreased_codes = sorted(
+            code
+            for code in set(previous_codes) | set(candidate_codes)
+            if candidate_codes.get(code, 0) < previous_codes.get(code, 0)
+        )
+        if increased_codes:
+            increases.append(
+                {
+                    "path": path,
+                    "codes": increased_codes,
+                    "previous_counts": {
+                        code: previous_codes.get(code, 0) for code in increased_codes
+                    },
+                    "current_counts": {
+                        code: candidate_codes.get(code, 0) for code in increased_codes
+                    },
+                    "disposition": "TODO",
+                    "reason": "TODO: choose baseline or remediate and explain why.",
+                }
+            )
+        if decreased_codes:
+            decreases.append(
+                {
+                    "path": path,
+                    "codes": decreased_codes,
+                    "previous_counts": {
+                        code: previous_codes.get(code, 0) for code in decreased_codes
+                    },
+                    "current_counts": {
+                        code: candidate_codes.get(code, 0) for code in decreased_codes
+                    },
+                }
+            )
+
+    for path in sorted(set(previous_findings) - set(candidate_findings)):
+        removed_files.append({"path": path, "codes": sorted(previous_findings[path])})
+
+    return {
+        "new_files": new_files,
+        "increases": increases,
+        "removed_files": removed_files,
+        "decreases": decreases,
+    }
+
+
+def build_review_companion_template(
+    previous: dict[str, Any], candidate: dict[str, Any]
+) -> dict[str, Any]:
+    """Build a deterministic, human-completable review companion delta."""
+    delta = _baseline_delta(previous, candidate)
+    previous_tree = previous.get("evidence_tree", {})
+    candidate_tree = candidate.get("evidence_tree", {})
+    tree_changed = previous_tree != candidate_tree
+    needs_review = bool(delta["new_files"] or delta["increases"] or tree_changed)
+    return {
+        "schema_version": REVIEW_TEMPLATE_SCHEMA,
+        "status": "needs_human_review" if needs_review else "no_changes_requiring_review",
+        "claim_boundary": (
+            "Generated delta only. Do not commit this template as an approval. "
+            "A maintainer must choose baseline or remediate for every new file and "
+            "per-code increase before updating the human review companion."
+        ),
+        "prior_baseline": {
+            "digest": _payload_digest(previous),
+            "total_findings": previous.get("summary", {}).get("total_findings", 0),
+            "files_with_findings": previous.get("summary", {}).get("files_with_findings", 0),
+            "evidence_tree": previous_tree,
+        },
+        "candidate_baseline": {
+            "digest": _payload_digest(candidate),
+            "total_findings": candidate.get("summary", {}).get("total_findings", 0),
+            "files_with_findings": candidate.get("summary", {}).get("files_with_findings", 0),
+            "evidence_tree": candidate_tree,
+        },
+        "reviewed_files": delta["new_files"],
+        "reviewed_baseline_increases": delta["increases"],
+        "removed_files": delta["removed_files"],
+        "decreased_findings": delta["decreases"],
+        "evidence_tree_delta": {
+            "changed": tree_changed,
+            "action": (
+                "Refresh the companion only after reviewing the evidence-tree change."
+                if tree_changed
+                else "No evidence-tree file add/remove drift."
+            ),
+        },
+    }
+
+
+def write_review_companion_template(path: Path, payload: dict[str, Any]) -> None:
+    """Write a stable YAML review template without auto-approving any finding."""
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, default_flow_style=False, width=100),
+        encoding="utf-8",
+    )
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
@@ -488,6 +632,15 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help=(
             "Path to a pre-rendered linter JSON report. When set, the linter is "
             "NOT re-run; the report is parsed instead (offline / test mode)."
+        ),
+    )
+    parser.add_argument(
+        "--review-template",
+        type=Path,
+        default=None,
+        help=(
+            "When used with --write-baseline, write a deterministic YAML delta "
+            "requiring human dispositions for new files and per-code increases."
         ),
     )
     return parser.parse_args(argv)
@@ -546,11 +699,64 @@ def _report_check(
     return 0
 
 
+def _write_baseline(
+    report: dict[str, Any],
+    repo_root: Path,
+    baseline_path: Path,
+    review_template: Path | None,
+) -> int:
+    """Write a machine baseline and, optionally, its human-review delta."""
+    payload = build_baseline_payload(report, repo_root / DEFAULT_REGISTRY_ROOT)
+    if review_template is not None:
+        template_path = (
+            review_template if review_template.is_absolute() else repo_root / review_template
+        )
+        if template_path.resolve() == baseline_path.resolve():
+            print("ERROR: --review-template must differ from --baseline.", file=sys.stderr)
+            return 2
+        if not baseline_path.exists():
+            print(
+                "ERROR: --review-template requires an existing baseline so the delta can "
+                "be reviewed before replacement.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            previous = load_baseline(baseline_path)
+            template_path.parent.mkdir(parents=True, exist_ok=True)
+            write_review_companion_template(
+                template_path, build_review_companion_template(previous, payload)
+            )
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: could not write review companion template: {exc}", file=sys.stderr)
+            return 2
+        print(f"Wrote evidence-registry review companion template to {template_path}.")
+
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        write_json(baseline_path, payload)
+    except OSError as exc:
+        print(f"ERROR: could not write baseline: {exc}", file=sys.stderr)
+        return 2
+    manifest = payload["evidence_tree"]
+    print(
+        f"Wrote evidence-registry baseline to {baseline_path}: "
+        f"{payload['summary']['total_findings']} findings across "
+        f"{payload['summary']['files_with_findings']} files; "
+        f"evidence_tree manifest tracks {manifest['count']} evidence files."
+    )
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ratchet gate, baseline refresh, or aggregate report."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
     repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
+
+    if args.review_template is not None and not args.write_baseline:
+        print("ERROR: --review-template requires --write-baseline.", file=sys.stderr)
+        return 2
 
     try:
         report = _gather_report(args, repo_root)
@@ -562,20 +768,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_aggregate(report)
         return 0
 
-    registry_root = repo_root / DEFAULT_REGISTRY_ROOT
-
     if args.write_baseline:
-        payload = build_baseline_payload(report, registry_root)
-        baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        write_json(baseline_path, payload)
-        manifest = payload["evidence_tree"]
-        print(
-            f"Wrote evidence-registry baseline to {baseline_path}: "
-            f"{payload['summary']['total_findings']} findings across "
-            f"{payload['summary']['files_with_findings']} files; "
-            f"evidence_tree manifest tracks {manifest['count']} evidence files."
+        return _write_baseline(
+            report,
+            repo_root,
+            baseline_path,
+            args.review_template,
         )
-        return 0
 
     # --check
     if not baseline_path.exists():
@@ -591,6 +790,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"ERROR: could not load baseline: {exc}", file=sys.stderr)
         return 2
     findings_failures, notices = check_against_baseline(aggregate(report), baseline)
+    registry_root = repo_root / DEFAULT_REGISTRY_ROOT
     manifest_failures, manifest_notices = check_evidence_tree_manifest(
         evidence_tree_manifest(registry_root), baseline
     )

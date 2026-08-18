@@ -540,7 +540,33 @@ def evaluate_capacity(  # noqa: C901, PLR0912, PLR0915 - one auditable admission
     if exemption_error:
         blockers.append({"reason": exemption_error})
     proposed_scope = scope_key(proposed) if proposed is not None else None
-    if proposed is not None and proposed_scope in occupied_scopes:
+    active_claim_scopes = {
+        str(item.get("scope")) for item in counted if item.get("source") == "claim"
+    }
+    active_pr_scopes = {
+        str(item.get("scope"))
+        for item in items
+        if item.get("source") == "pr"
+        and item.get("reason") not in {"explicit_superseded_state", "stale_or_expired_claim"}
+        and item.get("scope") not in {None, "unknown"}
+    }
+    continuation_of_owned_claim = bool(
+        proposed is not None
+        and proposed_scope in active_claim_scopes
+        and proposed_scope not in active_pr_scopes
+    )
+    if proposed is not None and proposed_scope in active_pr_scopes:
+        blockers.append(
+            {
+                "reason": "issue_already_has_owner_or_pr",
+                "scope": proposed_scope,
+            }
+        )
+    elif (
+        proposed is not None
+        and proposed_scope in occupied_scopes
+        and not continuation_of_owned_claim
+    ):
         blockers.append(
             {
                 "reason": "issue_already_has_owner_or_pr",
@@ -552,6 +578,7 @@ def evaluate_capacity(  # noqa: C901, PLR0912, PLR0915 - one auditable admission
         blockers.append({"reason": "proposed_lane_unknown"})
     if (
         proposed is not None
+        and not continuation_of_owned_claim
         and proposed_lane in VALID_LANES
         and counts[proposed_lane] >= limits[proposed_lane]
     ):
@@ -631,6 +658,7 @@ def evaluate_capacity(  # noqa: C901, PLR0912, PLR0915 - one auditable admission
         "coordination_blockers": coordination_blockers,
         "proposed": proposed,
         "proposed_lane": proposed_lane,
+        "continuation_of_owned_claim": continuation_of_owned_claim,
         "exemption": valid_exemption,
         "next_action": next_action,
         "evidence": {

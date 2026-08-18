@@ -197,6 +197,19 @@ def test_competing_prs_are_one_lane_but_fail_coordination_closed() -> None:
     assert result["decision"] == "block"
 
 
+def test_owned_claim_can_continue_to_worktree_or_pr_without_new_lane() -> None:
+    """An already-admitted owner may continue its claim even when new capacity is full."""
+    result = _evaluate(
+        _snapshot(*[_pr(index, 600 + index) for index in range(1, 4)]),
+        claims=[{"issue": 610, "claim_ref": "agent-claims/issue-610", "state": "active"}],
+        proposed={"issue": 610, "labels": ["priority:1"]},
+    )
+
+    assert result["decision"] == "allow"
+    assert result["continuation_of_owned_claim"] is True
+    assert not any(item["reason"] == "wip_limit_full" for item in result["blockers"])
+
+
 def test_unknown_queue_evidence_never_proves_capacity() -> None:
     """A truncated queue is a blocker even when the visible portion is empty."""
     result = _evaluate(

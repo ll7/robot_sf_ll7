@@ -1,7 +1,7 @@
 {
+  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_7322_ch7_evidence_package_v2/publication/narrow_doorway_terminal_signature.sidecar.json",
-  "artifact_sha256": "5374ea652b34228de11f68ccb16d1fc98ba815df032c0cfb3233004cdb2b82bc",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "fda2fca566ddcb94b0f86995bdfccc2098c98a658ae4b378a8bf533d0beb07fe",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "preserved_exact_bytes": true
 }

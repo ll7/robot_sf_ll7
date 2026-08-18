@@ -167,3 +167,48 @@ def test_mismatched_pair_is_rejected() -> None:
             sensor,
             config=_config(),
         )
+
+
+def test_mismatched_horizon_is_rejected() -> None:
+    """A paired comparison cannot mix replay horizons."""
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    sensor["horizon"] = 99
+
+    with pytest.raises(ValueError, match="horizon"):
+        build_calf_legnav_comparator_report(
+            _trace("ideal_state", [2.0, 2.0, 2.0]),
+            sensor,
+            config=_config(),
+        )
+
+
+def test_swapped_observation_contract_fails_closed() -> None:
+    """A trace whose evidence class contradicts its paired slot blocks the report."""
+    report = build_calf_legnav_comparator_report(
+        _trace("perception_limited", [2.0, 2.0, 2.0]),
+        _trace("perception_limited", [1.0, 1.0, 2.0]),
+        config=_config(),
+    )
+
+    ideal = report["conditions"]["perfect_perception"]
+    assert ideal["observation_contract"]["condition_binding"] == "unavailable"
+    assert ideal["observation_contract"]["status"] == "unavailable"
+    assert ideal["status"] == "blocked"
+    assert report["status"] == "blocked"
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(report)
+
+
+def test_matching_observation_contract_records_the_binding() -> None:
+    """A correctly paired report records the matched condition binding."""
+    report = build_calf_legnav_comparator_report(
+        _trace("ideal_state", [2.0, 2.0, 2.0]),
+        _trace("perception_limited", [1.0, 1.0, 2.0]),
+        config=_config(),
+    )
+
+    for condition in ("perfect_perception", "sensor_limited"):
+        binding = report["conditions"][condition]["observation_contract"]
+        assert binding["condition_binding"] == "matched"
+        assert binding["expected_condition"] == condition
+    assert report["status"] == "available"

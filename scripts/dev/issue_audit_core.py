@@ -1819,6 +1819,17 @@ def _blocked_label_plan_errors(mutations: Sequence[object]) -> list[dict[str, An
     return errors
 
 
+def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
+    """Recognize GitHub's idempotent missing-label delete response only."""
+    if result.returncode == 0:
+        return False
+    detail = (result.stderr or result.stdout).strip()
+    return bool(
+        "404" in detail
+        and re.search(r"\blabel\b.*\b(?:does not exist|not found)\b", detail, re.IGNORECASE)
+    )
+
+
 def apply_mutations(
     plan: Mapping[str, Any],
     *,
@@ -1840,6 +1851,7 @@ def apply_mutations(
             "ok": False,
             "reason": "plan is missing plan_digest; regenerate it before applying",
             "applied": [],
+            "already_applied": [],
             "failures": ["missing plan_digest"],
             "readback": [],
         }
@@ -1851,6 +1863,7 @@ def apply_mutations(
             "ok": False,
             "reason": str(exc),
             "applied": [],
+            "already_applied": [],
             "failures": [str(exc)],
             "readback": [],
         }
@@ -1860,6 +1873,7 @@ def apply_mutations(
             "ok": False,
             "reason": "stale plan_digest does not match the plan contents; regenerate it before applying",
             "applied": [],
+            "already_applied": [],
             "failures": ["stale plan_digest"],
             "readback": [],
         }
@@ -1869,6 +1883,7 @@ def apply_mutations(
             "ok": False,
             "reason": "inventory or mutation plan is incomplete",
             "applied": [],
+            "already_applied": [],
             "failures": list(plan["truncation_or_errors"]),
             "readback": [],
         }
@@ -1884,15 +1899,32 @@ def apply_mutations(
             "ok": False,
             "reason": "plan contains an unreasoned blocked-label mutation",
             "applied": [],
+            "already_applied": [],
             "failures": blocked_label_errors,
             "readback": [],
         }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []
+    already_applied: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     touched: set[int] = set()
     expectations: dict[int, dict[str, set[str] | bool]] = {}
+
+    def register_expected(number: int, operation: str, value: object) -> None:
+        """Track successful and idempotent operations for the readback gate."""
+        touched.add(number)
+        expected = expectations.setdefault(
+            number,
+            {"add_labels": set(), "remove_labels": set(), "closed": False},
+        )
+        if operation == "add_label" and isinstance(value, str):
+            expected["add_labels"].add(value)  # type: ignore[union-attr]
+        elif operation == "remove_label" and isinstance(value, str):
+            expected["remove_labels"].add(value)  # type: ignore[union-attr]
+        elif operation == "close_issue":
+            expected["closed"] = True
+
     for mutation in mutations:
         if not isinstance(mutation, Mapping):
             failures.append({"mutation": mutation, "error": "mutation is not an object"})
@@ -1923,6 +1955,19 @@ def apply_mutations(
             )
             continue
         if result.returncode != 0:
+            if (
+                operation == "remove_label"
+                and isinstance(value, str)
+                and _is_absent_label_delete(result)
+            ):
+                already_applied.append(
+                    {
+                        **dict(mutation),
+                        "skipped_reason": "already_absent",
+                    }
+                )
+                register_expected(number, operation, value)
+                continue
             failures.append(
                 {
                     "mutation": dict(mutation),
@@ -1932,17 +1977,7 @@ def apply_mutations(
             )
             continue
         applied.append(dict(mutation))
-        touched.add(number)
-        expected = expectations.setdefault(
-            number,
-            {"add_labels": set(), "remove_labels": set(), "closed": False},
-        )
-        if operation == "add_label" and isinstance(value, str):
-            expected["add_labels"].add(value)  # type: ignore[union-attr]
-        elif operation == "remove_label" and isinstance(value, str):
-            expected["remove_labels"].add(value)  # type: ignore[union-attr]
-        elif operation == "close_issue":
-            expected["closed"] = True
+        register_expected(number, operation, value)
 
     readback: list[dict[str, Any]] = []
     for number in sorted(touched):
@@ -1980,8 +2015,15 @@ def apply_mutations(
         "schema": "issue_audit_apply.v1",
         "ok": not failures and all(row.get("ok") for row in readback),
         "applied": applied,
+        "already_applied": already_applied,
         "failures": failures,
         "readback": readback,
+        "counts": {
+            "planned": len(mutations),
+            "applied": len(applied),
+            "already_applied": len(already_applied),
+            "failed": len(failures),
+        },
     }
 
 

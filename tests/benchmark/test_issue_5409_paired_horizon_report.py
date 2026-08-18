@@ -5,6 +5,12 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
+from robot_sf.benchmark.issue_5409_campaign_identity import (
+    DEFAULT_CAMPAIGN_ID_PAIR,
+    CampaignIdPair,
+)
 from scripts.benchmark.build_issue_5409_paired_horizon_report import analyze_pair
 
 if TYPE_CHECKING:
@@ -152,6 +158,9 @@ def _campaign_root(
                             "run_horizon": horizon,
                             "metadata": {"archetype": "fixture_family"},
                         },
+                        "algorithm_metadata": {
+                            "planner_kinematics": {"execution_mode": execution_mode}
+                        },
                     }
                 )
         (run_dir / "episodes.jsonl").write_text(
@@ -169,7 +178,14 @@ def _fixture_pair(tmp_path: Path, **kwargs: object) -> tuple[Path, Path, Path]:
     return h500, h600, output
 
 
-def _analyze(h500: Path, h600: Path, output: Path) -> dict:
+def _analyze(
+    h500: Path,
+    h600: Path,
+    output: Path,
+    *,
+    expected_campaign_ids: tuple[str, str] | None = None,
+    campaign_identity: CampaignIdPair | None = None,
+) -> dict:
     """Run the fixture analysis with a small declared denominator."""
     return analyze_pair(
         h500,
@@ -183,6 +199,8 @@ def _analyze(h500: Path, h600: Path, output: Path) -> dict:
         expected_rows_per_arm=8,
         expected_scenario_count=2,
         expected_scenario_matrix_hash="fixture-hash",
+        expected_campaign_ids=expected_campaign_ids,
+        campaign_identity=campaign_identity,
         validate_config_pair=False,
         bootstrap_samples=100,
     )
@@ -205,6 +223,69 @@ def test_valid_pair_emits_deltas_and_seed_uncertainty(tmp_path: Path) -> None:
     assert len(uncertainty["scenario_family_rows"]) == 2
     assert deltas["rows"][0]["metrics"]["near_misses"]["delta_h600_minus_h500"] == 0.0
     assert uncertainty["planner_rows"][0]["metrics"]["snqi"]["seed_count"] == 2
+    assert completeness["expected"]["campaign_identity"]["ids"] == {
+        "h500": "issue5409_horizon_ablation_h500",
+        "h600": "issue5409_horizon_ablation_h600",
+    }
+    assert (
+        deltas["provenance"]["campaign_identity"] == completeness["expected"]["campaign_identity"]
+    )
+
+
+def test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported(
+    tmp_path: Path,
+) -> None:
+    """A reviewed rerun suffix and current staged gate remain provenance-safe."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    campaign_ids = (
+        "issue5409_horizon_ablation_rerun1_h500_20260814",
+        "issue5409_horizon_ablation_rerun1_h600_20260814",
+    )
+    for root, campaign_id in zip((h500, h600), campaign_ids, strict=True):
+        manifest_path = root / "campaign_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["campaign_id"] = campaign_id
+        _write_json(manifest_path, manifest)
+
+        summary_path = root / "reports" / "campaign_summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["campaign"]["campaign_id"] = campaign_id
+        _write_json(summary_path, summary)
+
+        checkpoint_path = root / "preflight" / "checkpoint_staging.json"
+        checkpoint = json.loads(checkpoint_path.read_text())
+        checkpoint.pop("status")
+        checkpoint.update({"mode": "enforced_staged", "stage": True})
+        _write_json(checkpoint_path, checkpoint)
+
+    result = _analyze(h500, h600, output, expected_campaign_ids=campaign_ids)
+
+    assert result["status"] == "ready"
+    completeness = json.loads((output / "matched_key_completeness.json").read_text())
+    assert completeness["expected"]["campaign_ids"] == {
+        "h500": campaign_ids[0],
+        "h600": campaign_ids[1],
+    }
+    assert completeness["expected"]["campaign_identity"]["ids"] == {
+        "h500": campaign_ids[0],
+        "h600": campaign_ids[1],
+    }
+
+
+def test_conflicting_campaign_identity_declarations_are_rejected(tmp_path: Path) -> None:
+    """The report cannot override the launch-packet pair with another pair."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    with pytest.raises(ValueError, match="do not match"):
+        _analyze(
+            h500,
+            h600,
+            output,
+            campaign_identity=DEFAULT_CAMPAIGN_ID_PAIR,
+            expected_campaign_ids=(
+                "issue5409_horizon_ablation_rerun1_h500",
+                "issue5409_horizon_ablation_rerun1_h600",
+            ),
+        )
 
 
 def test_missing_key_blocks_without_partial_numeric_output(tmp_path: Path) -> None:
@@ -242,3 +323,103 @@ def test_fallback_execution_is_not_treated_as_success(tmp_path: Path) -> None:
 
     assert result["status"] == "blocked"
     assert any("fallback" in blocker for blocker in result["blockers"])
+
+
+def test_episode_execution_mode_cannot_disagree_with_run_summary(tmp_path: Path) -> None:
+    """A fallback episode cannot hide behind a native run summary."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"] = {"planner_kinematics": {"execution_mode": "fallback"}}
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any("disagrees with run summary" in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+def test_missing_episode_execution_mode_does_not_inherit_run_summary(tmp_path: Path) -> None:
+    """A missing row mode remains blocked even when the run summary is native."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0].pop("algorithm_metadata")
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any(
+        "missing explicit row-level execution mode" in blocker for blocker in result["blockers"]
+    )
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "marker"),
+    (
+        ("status", "fallback", "status='fallback'"),
+        ("readiness_status", "degraded", "readiness_status='degraded'"),
+        ("availability_status", "unavailable", "availability_status='unavailable'"),
+        ("fallback_triggered", True, "fallback_triggered='true'"),
+        ("degraded", True, "degraded='true'"),
+    ),
+)
+def test_blocked_row_status_markers_are_rejected_independently(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    marker: str,
+) -> None:
+    """A blocked row marker cannot be hidden by an otherwise native row mode."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    episode_path = next(h500.glob("runs/*/episodes.jsonl"))
+    rows = [json.loads(line) for line in episode_path.read_text().splitlines()]
+    rows[0][field] = value
+    episode_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any(marker in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []
+
+
+def test_zero_checkpoint_coverage_is_not_submit_safe(tmp_path: Path) -> None:
+    """An enforced 0/0 checkpoint receipt cannot pass the paired handoff gate."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    for root in (h500, h600):
+        checkpoint_path = root / "preflight" / "checkpoint_staging.json"
+        checkpoint = json.loads(checkpoint_path.read_text())
+        checkpoint.pop("status")
+        checkpoint.update(
+            {
+                "mode": "enforced_staged",
+                "stage": True,
+                "checked": 0,
+                "resolved": 0,
+                "submit_safe": True,
+            }
+        )
+        _write_json(checkpoint_path, checkpoint)
+
+    result = _analyze(h500, h600, output)
+
+    assert result["status"] == "blocked"
+    assert any("checkpoint staging receipt" in blocker for blocker in result["blockers"])
+    deltas = json.loads((output / "paired_horizon_deltas.json").read_text())
+    assert deltas["rows"] == []

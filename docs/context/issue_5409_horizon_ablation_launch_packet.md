@@ -12,6 +12,12 @@ from. This packet is that coordinate.
 - Fail-closed checker:
   `scripts/validation/check_issue_5409_horizon_ablation_launch_packet.py`
 
+The checked-in packet is launch-packet v2. Its `campaign_identity` block is a versioned,
+explicit h500/h600 pair consumed by both the launch checker and the paired-report builder. The
+canonical pair remains `issue5409_horizon_ablation_h500` and
+`issue5409_horizon_ablation_h600`. A historical v1 packet remains readable only with that fixed
+pair; a reviewed rerun must declare a v2 pair instead of relying on a suffix convention.
+
 ```bash
 uv run python scripts/validation/check_issue_5409_horizon_ablation_launch_packet.py --json
 ```

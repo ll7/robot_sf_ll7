@@ -373,6 +373,15 @@ _FAST_FILES = {
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.
     "test_feasibility_first_real.py",
+    # The trace-dossier contract tests exercise lightweight, diagnostic-only
+    # export/render paths required by the exact-head changed-coverage gate.
+    "test_export_trace_dossier.py",
+    "test_release_protocol.py",
+    "test_trace_dossier_package.py",
+    "test_trace_dossier_renderer.py",
+    # Radius rank-stability schema tests exercise the changed benchmark producer;
+    # keep their deterministic contract coverage in pull-request fast shards.
+    "test_radius_rank_stability.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

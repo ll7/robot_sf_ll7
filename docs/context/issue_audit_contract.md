@@ -71,6 +71,14 @@ Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
 
+The command applies an aggregate REST wall-time budget (`--max-wall-seconds`,
+default 120 seconds) in addition to the 60-second timeout on each individual
+`gh` subprocess. When the aggregate budget expires, the core records a
+structured inventory error, writes the partial plan when an output path was
+requested, returns a non-zero status, and the apply path refuses all
+mutations. A partial plan is never a complete audit; callers may increase the
+budget only when the bounded inventory scope justifies it.
+
 ## Label rules
 
 Canonical execution-state labels are mutually exclusive. The repository also

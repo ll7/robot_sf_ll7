@@ -369,6 +369,10 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # The real-manifest contract tests use mocked candidate evaluation only;
+    # keep their coverage available to pull-request shards without promoting
+    # the broader adversarial-search suite into the fast lane.
+    "test_feasibility_first_real.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

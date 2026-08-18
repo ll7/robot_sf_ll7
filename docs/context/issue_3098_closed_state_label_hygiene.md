@@ -66,9 +66,9 @@ The private after-report is stored in `codex-agent-runs/active/issue-3098/after.
 
 Representative issues were checked after cleanup:
 
-- #1108: closed issue that previously had `state:blocked`; no live state label remains.
-- #2259: closed issue that previously had `state:ready`; no live state label remains.
-- #2382: closed issue that previously had `state:running`; no live state label remains.
+- Issue #1108: closed issue that previously had `state:blocked`; no live state label remains.
+- Issue #2259: closed issue that previously had `state:ready`; no live state label remains.
+- Issue #2382: closed issue that previously had `state:running`; no live state label remains.
 
 ## Recurrence and Automation Follow-up
 
@@ -148,3 +148,46 @@ The guard never closes issues, removes labels, edits Project #5, or declares tha
 satisfies the issue. Each candidate is `merged_reference_needs_exact_fix_review`; a maintainer or
 issue-audit authority must verify the named-symbol/failing-signature boundary before closing or
 relabeling it. This is routing metadata hygiene only, not benchmark, research, or publication evidence.
+
+## Exact-fix review routing (Issue #7549)
+
+The report can now be handed to a deterministic, no-write review queue:
+
+```bash
+uv run python scripts/dev/open_state_label_hygiene.py \
+  --repo ll7/robot_sf_ll7 > output/open_state_label_hygiene.json
+uv run python scripts/dev/route_exact_fix_audit.py \
+  --report output/open_state_label_hygiene.json \
+  --output output/exact_fix_review_queue.json
+```
+
+`route_exact_fix_audit.py` requires a complete `open_state_label_hygiene.v1` report and preserves
+its digest, issue links, active labels, merged PRs, and merge commits in an
+`exact_fix_review_queue.v1` packet. Every candidate is checked against the exact-fix checklist:
+the named symbol, failure signature, failing file/line, regression proof, current-main SHA, and
+the verified issue-timeline covering PR. Missing fields are classified as
+`needs_exact_fix_evidence`; a packet with all fields is merely
+`ready_for_manual_exact_fix_review`.
+
+An optional evidence manifest can provide the five explicit fields for a later maintainer review:
+
+```json
+{
+  "schema": "exact_fix_evidence.v1",
+  "issues": [
+    {
+      "number": 123,
+      "covering_pr": 456,
+      "named_symbol": "scripts/dev/route_exact_fix_audit.py:build_review_queue",
+      "failure_signature": "ValueError: stale label",
+      "failing_file_line": "scripts/dev/route_exact_fix_audit.py:202",
+      "regression_proof": "tests/dev/test_route_exact_fix_audit.py::test_build_review_queue_routes_without_authorizing_a_disposition",
+      "current_main_sha": "<40-hex-main-sha>"
+    }
+  ]
+}
+```
+
+The route never closes or relabels an issue and never treats an issue-number match or merged PR
+alone as an exact fix. The resulting `pending_decisions` rows are handed to the existing
+maintainer-facing issue-audit lane for one explicit disposition at a time.

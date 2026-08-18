@@ -142,7 +142,10 @@ input_provenance:
       sha256: 765ffc09d7dafdabe22fb2634e8a720e8f3e017033953f23f017f84bcb97f4a9
     - id: timing_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
-      sha256: f64fe6617dfd41c4b99248bf25b69347021369acde1aa81ab23b3a029134b581
+      # Refreshed after propagating the authored pedestrian route mode into the
+      # side-effect-free preflight; template routes now fail closed instead of
+      # being silently replaced by candidate routes.
+      sha256: ea0f734b4e498efc7de2e4687b65bf9e0255350cebedb0c6cea0e548d729a9ab
     - id: algorithm_metadata
       path: robot_sf/benchmark/algorithm_metadata.py
       # Refreshed after the additive, outcome-free BRNE diagnostic registry metadata

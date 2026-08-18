@@ -1,0 +1,207 @@
+{
+  "schema_version": "robot-sf.dependabot-update-policy.v1",
+  "policy_name": "root-python-dependency-update-risk-lanes",
+  "dependabot_config": ".github/dependabot.yml",
+  "ci_workflow": ".github/workflows/ci.yml",
+  "aggregate_job": "ci",
+  "classes": [
+    {
+      "id": "high-impact-runtime",
+      "risk": "high",
+      "update_lane": "individual",
+      "packages": [
+        "gymnasium",
+        "numba",
+        "numpy",
+        "pyarrow",
+        "ray",
+        "sb3-contrib",
+        "scipy",
+        "stable-baselines3",
+        "tensorflow",
+        "torch"
+      ],
+      "required_jobs": [
+        "fast-feedback",
+        "compat-matrix",
+        "wheel-smoke-install"
+      ],
+      "focused_test_paths": [
+        "tests/common",
+        "tests/contract",
+        "tests/factories",
+        "tests/gym_env",
+        "tests/maps",
+        "tests/nav",
+        "tests/ped_npc",
+        "tests/render",
+        "tests/scenarios",
+        "tests/sensor",
+        "tests/sim",
+        "tests/unit"
+      ]
+    },
+    {
+      "id": "serialization-data",
+      "risk": "high",
+      "update_lane": "individual",
+      "packages": [
+        "jsonschema",
+        "orjson",
+        "pyyaml",
+        "rfc8785",
+        "toml"
+      ],
+      "required_jobs": [
+        "fast-feedback",
+        "compat-matrix",
+        "wheel-smoke-install"
+      ],
+      "focused_test_paths": [
+        "tests/contract",
+        "tests/common",
+        "tests/unit"
+      ]
+    },
+    {
+      "id": "experiment-integrations",
+      "risk": "medium",
+      "update_lane": "individual",
+      "packages": [
+        "optuna",
+        "optuna-dashboard",
+        "tensorboard",
+        "wandb"
+      ],
+      "required_jobs": [
+        "fast-feedback",
+        "compat-matrix"
+      ],
+      "focused_test_paths": [
+        "tests/contract",
+        "tests/common",
+        "tests/unit"
+      ]
+    },
+    {
+      "id": "developer-tooling",
+      "risk": "low",
+      "update_lane": "developer-tooling",
+      "packages": [
+        "black",
+        "isort",
+        "jupyter",
+        "myst-parser",
+        "mypy",
+        "mutmut",
+        "pre-commit",
+        "pylint",
+        "pytest",
+        "pytest-bdd",
+        "pytest-cov",
+        "pytest-split",
+        "pytest-timeout",
+        "pytest-xdist",
+        "ruff",
+        "scalene",
+        "setuptools",
+        "sphinx",
+        "sphinx-rtd-theme"
+      ],
+      "required_jobs": [
+        "fast-feedback"
+      ],
+      "focused_test_paths": [
+        "tests/dev"
+      ]
+    },
+    {
+      "id": "core-runtime",
+      "risk": "medium",
+      "update_lane": "individual",
+      "packages": [
+        "loguru",
+        "networkx",
+        "psutil",
+        "pyvisgraph",
+        "python-motion-planning",
+        "rich",
+        "shapely",
+        "svgelements",
+        "tqdm"
+      ],
+      "required_jobs": [
+        "fast-feedback",
+        "compat-matrix"
+      ],
+      "focused_test_paths": [
+        "tests/common",
+        "tests/contract",
+        "tests/unit"
+      ]
+    },
+    {
+      "id": "optional-runtime",
+      "risk": "medium",
+      "update_lane": "individual",
+      "packages": [
+        "cma",
+        "carla",
+        "duckdb",
+        "geopandas",
+        "imitation",
+        "matplotlib",
+        "moviepy",
+        "opencv-python-headless",
+        "osmnx",
+        "pandas",
+        "pillow",
+        "playwright",
+        "pyassimp",
+        "pyopengl",
+        "pyproj",
+        "pyrvo2",
+        "pygame",
+        "scikit-fmm",
+        "scikit-image",
+        "scikit-learn",
+        "seaborn"
+      ],
+      "required_jobs": [
+        "fast-feedback",
+        "compat-matrix",
+        "wheel-smoke-install"
+      ],
+      "focused_test_paths": [
+        "tests/common",
+        "tests/contract"
+      ]
+    }
+  ],
+  "transitive_fallback": {
+    "id": "transitive-lock-package",
+    "risk": "unknown",
+    "update_lane": "individual",
+    "required_jobs": [
+      "fast-feedback",
+      "compat-matrix"
+    ],
+    "focused_test_paths": [
+      "tests/common",
+      "tests/contract"
+    ]
+  },
+  "security_updates": {
+    "independent": true,
+    "grouping_rule": "No root dependency group may use applies-to: security-updates.",
+    "required_jobs": [
+      "fast-feedback",
+      "compat-matrix",
+      "wheel-smoke-install"
+    ]
+  },
+  "rollback": {
+    "policy": "Close or revert one update lane and regenerate only its lockfile rows; leave unrelated lanes untouched.",
+    "proof": "The package-to-class report and the exact dependency diff identify the smallest revertable lane."
+  }
+}

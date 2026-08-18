@@ -56,6 +56,14 @@ stale companion entries need a disposition, and ``2`` when a baseline, review
 companion, or prior baseline cannot be loaded. It is read-only: it never edits the
 review companion.
 
+``--prewrite-review`` is an opt-in guard for a baseline refresh. It builds the
+candidate baseline in memory, compares it with the current machine baseline, checks
+the human review companion against the candidate, and emits a deterministic YAML
+template. The machine baseline is not replaced while the candidate or companion
+delta needs review. Pass ``--prewrite-review-override`` with a real, non-placeholder
+reason only when a separately reviewed exception authorizes that write. The real
+human companion is never overwritten by this helper.
+
 Usage
 -----
 ::
@@ -75,6 +83,11 @@ Usage
     # reviewed_baseline_increases entries and exits 1 when dispositions are missing;
     # exits 0 when the companion already covers the baseline delta. Read-only.
     uv run python scripts/dev/evidence_registry_ratchet.py --companion-delta
+
+    # Review a candidate baseline before replacing the machine baseline. The YAML
+    # template is written separately and is never a human approval record.
+    uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline \\
+        --prewrite-review --review-template output/validation/evidence-review.yaml
 
 The committed baseline lives at
 ``scripts/validation/evidence_registry_baseline.json``.
@@ -108,6 +121,7 @@ DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions
 FALLBACK_PRIOR_BASELINE_COMMIT = "9fa96c01bf1c8152459f5fa8c481e938fb1e6725"
 REVIEW_SCHEMA_VERSION = "evidence_registry_baseline_review.v1"
 VALID_DISPOSITIONS = ("baseline", "remediate")
+REVIEW_TEMPLATE_SCHEMA = "evidence_registry_baseline_review_delta.v1"
 
 
 def _repo_root() -> Path:
@@ -812,6 +826,205 @@ def write_json(path: Path, payload: dict[str, Any] | list[Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def _payload_digest(payload: dict[str, Any]) -> str:
+    """Hash a baseline payload while ignoring its intentionally volatile timestamp."""
+    stable_payload = {key: value for key, value in payload.items() if key != "generated_at"}
+    serialized = json.dumps(
+        stable_payload, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _baseline_delta(
+    previous: dict[str, Any], candidate: dict[str, Any]
+) -> dict[str, list[dict[str, Any]]]:
+    """Return the deterministic finding delta between two machine baselines."""
+    previous_findings = _findings_by_path(previous)
+    candidate_findings = _findings_by_path(candidate)
+    new_files: list[dict[str, Any]] = []
+    increases: list[dict[str, Any]] = []
+    removed_files: list[dict[str, Any]] = []
+    decreases: list[dict[str, Any]] = []
+
+    for path in sorted(set(candidate_findings) - set(previous_findings)):
+        codes = candidate_findings[path]
+        new_files.append(
+            {
+                "path": path,
+                "codes": sorted(codes),
+                "current_counts": {code: codes[code] for code in sorted(codes)},
+                "disposition": "TODO",
+                "reason": "TODO: choose baseline or remediate and explain why.",
+            }
+        )
+
+    for path in sorted(set(previous_findings) & set(candidate_findings)):
+        previous_codes = previous_findings[path]
+        candidate_codes = candidate_findings[path]
+        all_codes = set(previous_codes) | set(candidate_codes)
+        increased_codes = sorted(
+            code for code in all_codes if candidate_codes.get(code, 0) > previous_codes.get(code, 0)
+        )
+        decreased_codes = sorted(
+            code for code in all_codes if candidate_codes.get(code, 0) < previous_codes.get(code, 0)
+        )
+        if increased_codes:
+            increases.append(
+                {
+                    "path": path,
+                    "codes": increased_codes,
+                    "previous_counts": {
+                        code: previous_codes.get(code, 0) for code in increased_codes
+                    },
+                    "current_counts": {
+                        code: candidate_codes.get(code, 0) for code in increased_codes
+                    },
+                    "disposition": "TODO",
+                    "reason": "TODO: choose baseline or remediate and explain why.",
+                }
+            )
+        if decreased_codes:
+            decreases.append(
+                {
+                    "path": path,
+                    "codes": decreased_codes,
+                    "previous_counts": {
+                        code: previous_codes.get(code, 0) for code in decreased_codes
+                    },
+                    "current_counts": {
+                        code: candidate_codes.get(code, 0) for code in decreased_codes
+                    },
+                }
+            )
+
+    for path in sorted(set(previous_findings) - set(candidate_findings)):
+        removed_files.append({"path": path, "codes": sorted(previous_findings[path])})
+
+    return {
+        "new_files": new_files,
+        "increases": increases,
+        "removed_files": removed_files,
+        "decreases": decreases,
+    }
+
+
+def _serializable_companion_delta(delta: dict[str, Any]) -> dict[str, Any]:
+    """Convert tuple-bearing companion delta fields to YAML-safe lists."""
+    return {
+        "missing_reviewed_files": list(delta.get("missing_reviewed_files", [])),
+        "missing_reviewed_files_codes": {
+            path: list(codes)
+            for path, codes in sorted(delta.get("missing_reviewed_files_codes", {}).items())
+        },
+        "missing_reviewed_increases": [
+            [path, code] for path, code in delta.get("missing_reviewed_increases", [])
+        ],
+        "stale_reviewed_files": list(delta.get("stale_reviewed_files", [])),
+        "stale_reviewed_increases": [
+            [path, code] for path, code in delta.get("stale_reviewed_increases", [])
+        ],
+        "empty": bool(delta.get("empty", False)),
+    }
+
+
+def build_review_companion_template(
+    previous: dict[str, Any],
+    candidate: dict[str, Any],
+    human_companion_delta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic, non-approving pre-write review template.
+
+    ``previous`` and ``candidate`` are machine-generated baselines. The template
+    records finding additions, per-code increases, removals, decreases, and
+    evidence-tree drift. The optional human-companion delta is the independent
+    check against the companion's recorded prior baseline; keeping both views in
+    one artifact makes it clear whether a candidate change or an already-incomplete
+    companion is blocking the write.
+    """
+    delta = _baseline_delta(previous, candidate)
+    previous_tree = previous.get("evidence_tree", {})
+    candidate_tree = candidate.get("evidence_tree", {})
+    tree_changed = previous_tree != candidate_tree
+    companion_delta = (
+        _serializable_companion_delta(human_companion_delta)
+        if human_companion_delta is not None
+        else None
+    )
+    needs_review = bool(delta["new_files"] or delta["increases"] or tree_changed)
+    if companion_delta is not None:
+        needs_review = needs_review or not companion_delta["empty"]
+
+    template: dict[str, Any] = {
+        "schema_version": REVIEW_TEMPLATE_SCHEMA,
+        "status": "needs_human_review" if needs_review else "no_changes_requiring_review",
+        "template_only": True,
+        "approval": {
+            "status": "not_approved",
+            "reviewer": "TODO",
+            "reason": "TODO: this generated template is not a human disposition.",
+        },
+        "claim_boundary": (
+            "Generated delta only. Do not commit this template as an approval. "
+            "A maintainer must choose baseline or remediate for every new file and "
+            "per-code increase before updating the human review companion."
+        ),
+        "prior_baseline": {
+            "digest": _payload_digest(previous),
+            "total_findings": previous.get("summary", {}).get("total_findings", 0),
+            "files_with_findings": previous.get("summary", {}).get("files_with_findings", 0),
+            "evidence_tree": previous_tree,
+        },
+        "candidate_baseline": {
+            "digest": _payload_digest(candidate),
+            "total_findings": candidate.get("summary", {}).get("total_findings", 0),
+            "files_with_findings": candidate.get("summary", {}).get("files_with_findings", 0),
+            "evidence_tree": candidate_tree,
+        },
+        "reviewed_files": delta["new_files"],
+        "reviewed_baseline_increases": delta["increases"],
+        "removed_files": delta["removed_files"],
+        "decreased_findings": delta["decreases"],
+        "evidence_tree_delta": {
+            "changed": tree_changed,
+            "previous": previous_tree,
+            "candidate": candidate_tree,
+            "action": (
+                "Refresh the companion only after reviewing the evidence-tree change."
+                if tree_changed
+                else "No evidence-tree file add/remove drift."
+            ),
+        },
+    }
+    if companion_delta is not None:
+        template["human_companion_delta"] = companion_delta
+    return template
+
+
+def write_review_companion_template(path: Path, payload: dict[str, Any]) -> None:
+    """Write a stable YAML template without auto-approving any finding."""
+    path.write_text(
+        yaml.safe_dump(payload, sort_keys=False, default_flow_style=False, width=100),
+        encoding="utf-8",
+    )
+
+
+def _validate_prewrite_override(reason: str | None) -> str | None:
+    """Validate an explicit pre-write override reason, rejecting placeholders."""
+    if reason is None:
+        return None
+    normalized = reason.strip()
+    if not normalized:
+        raise ValueError("--prewrite-review-override requires a non-empty reason.")
+    lowered = normalized.lower()
+    forbidden = ("todo", "placeholder", "not approved", "needs_human_review")
+    if any(marker in lowered for marker in forbidden):
+        raise ValueError(
+            "--prewrite-review-override must contain a real review reason; "
+            "TODO/placeholder approval text is not accepted."
+        )
+    return normalized
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(
@@ -856,6 +1069,32 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help=(
             "Path to a pre-rendered linter JSON report. When set, the linter is "
             "NOT re-run; the report is parsed instead (offline / test mode)."
+        ),
+    )
+    parser.add_argument(
+        "--prewrite-review",
+        action="store_true",
+        help=(
+            "Before --write-baseline, compare the candidate with the current baseline, "
+            "validate the human companion, and fail closed while review is incomplete."
+        ),
+    )
+    parser.add_argument(
+        "--review-template",
+        type=Path,
+        default=None,
+        help=(
+            "With --prewrite-review, write the deterministic non-approving YAML delta "
+            "to a separate path; the real human companion is protected."
+        ),
+    )
+    parser.add_argument(
+        "--prewrite-review-override",
+        metavar="REASON",
+        default=None,
+        help=(
+            "Explicitly allow a pre-write despite incomplete review; requires a real, "
+            "non-placeholder reason for a separately reviewed exception."
         ),
     )
     return parser.parse_args(argv)
@@ -914,11 +1153,150 @@ def _report_check(
     return 0
 
 
+def _print_baseline_written(payload: dict[str, Any], baseline_path: Path, *, stream: Any) -> None:
+    """Print the stable baseline-refresh summary to the requested stream."""
+    manifest = payload["evidence_tree"]
+    print(
+        f"Wrote evidence-registry baseline to {baseline_path}: "
+        f"{payload['summary']['total_findings']} findings across "
+        f"{payload['summary']['files_with_findings']} files; "
+        f"evidence_tree manifest tracks {manifest['count']} evidence files.",
+        file=stream,
+    )
+
+
+def _load_prewrite_review(
+    repo_root: Path,
+    baseline_path: Path,
+    candidate: dict[str, Any],
+    review_arg: Path,
+) -> tuple[dict[str, Any], dict[str, Any], Path]:
+    """Load the current baseline and compute the candidate's human-companion delta."""
+    if not baseline_path.exists():
+        raise ValueError(
+            "--prewrite-review requires an existing machine baseline so the candidate "
+            "can be compared before replacement."
+        )
+    review_path = review_arg if review_arg.is_absolute() else repo_root / review_arg
+    previous = load_baseline(baseline_path)
+    review = load_review_companion(review_path)
+    prior_commit = str(review.get("prior_baseline_commit") or FALLBACK_PRIOR_BASELINE_COMMIT)
+    prior_baseline = load_prior_baseline_from_git(repo_root, prior_commit)
+    return previous, companion_delta(candidate, review, prior_baseline), review_path
+
+
+def _resolve_prewrite_template_path(
+    repo_root: Path,
+    baseline_path: Path,
+    review_path: Path,
+    review_template: Path | None,
+) -> Path | None:
+    """Resolve a template target and protect every machine/human input path."""
+    if review_template is None:
+        return None
+    template_path = (
+        review_template if review_template.is_absolute() else repo_root / review_template
+    )
+    protected_paths = {
+        baseline_path.resolve(),
+        (repo_root / DEFAULT_REVIEW_COMPANION).resolve(),
+        review_path.resolve(),
+    }
+    if template_path.resolve() in protected_paths:
+        raise ValueError(
+            "--review-template must target a separate file; refusing to overwrite the "
+            "machine baseline or human review companion."
+        )
+    return template_path
+
+
+def _write_prewrite_template(path: Path, payload: dict[str, Any]) -> None:
+    """Persist a pre-write template, converting filesystem errors to contract errors."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_review_companion_template(path, payload)
+    except OSError as exc:
+        raise ValueError(f"could not write review template: {exc}") from exc
+
+
+def _write_baseline(
+    report: dict[str, Any],
+    repo_root: Path,
+    baseline_path: Path,
+    *,
+    prewrite_review: bool,
+    review_arg: Path,
+    review_template: Path | None,
+    override_reason: str | None,
+) -> int:
+    """Write a baseline, optionally applying the fail-closed pre-write review guard."""
+    payload = build_baseline_payload(report, repo_root / DEFAULT_REGISTRY_ROOT)
+    if not prewrite_review:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(baseline_path, payload)
+        _print_baseline_written(payload, baseline_path, stream=sys.stdout)
+        return 0
+
+    try:
+        normalized_override = _validate_prewrite_override(override_reason)
+        previous, human_delta, review_path = _load_prewrite_review(
+            repo_root, baseline_path, payload, review_arg
+        )
+        template_path = _resolve_prewrite_template_path(
+            repo_root, baseline_path, review_path, review_template
+        )
+        template = build_review_companion_template(previous, payload, human_delta)
+        if template_path is not None:
+            _write_prewrite_template(template_path, template)
+    except ValueError as exc:
+        print(f"ERROR: could not prepare pre-write review: {exc}", file=sys.stderr)
+        return 2
+
+    if template_path is not None:
+        print(f"Wrote evidence-registry review template to {template_path}.", file=sys.stderr)
+    # stdout is the deterministic YAML artifact for the opt-in mode, making it
+    # safe to redirect even when no --review-template path was supplied.
+    print(yaml.safe_dump(template, sort_keys=False, default_flow_style=False, width=100), end="")
+    if template["status"] == "needs_human_review" and normalized_override is None:
+        print(
+            "ERROR: refusing to replace the machine baseline: the candidate or human "
+            "review companion is incomplete. Review the YAML template, update the "
+            "real companion separately, or pass --prewrite-review-override with a "
+            "separately reviewed non-placeholder reason.",
+            file=sys.stderr,
+        )
+        return 1
+    if normalized_override is not None:
+        print(
+            "WARNING: writing the machine baseline under an explicit pre-write review "
+            f"override: {normalized_override}",
+            file=sys.stderr,
+        )
+    try:
+        baseline_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(baseline_path, payload)
+    except OSError as exc:
+        print(f"ERROR: could not write baseline: {exc}", file=sys.stderr)
+        return 2
+    _print_baseline_written(payload, baseline_path, stream=sys.stderr)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ratchet gate, baseline refresh, aggregate report, or companion-delta."""
     args = parse_args(list(sys.argv[1:] if argv is None else argv))
     repo_root = args.root.resolve() if args.root is not None else _repo_root()
     baseline_path = args.baseline if args.baseline.is_absolute() else repo_root / args.baseline
+
+    if args.prewrite_review and not args.write_baseline:
+        print("ERROR: --prewrite-review requires --write-baseline.", file=sys.stderr)
+        return 2
+    if args.review_template is not None and not args.prewrite_review:
+        print("ERROR: --review-template requires --prewrite-review.", file=sys.stderr)
+        return 2
+    if args.prewrite_review_override is not None and not args.prewrite_review:
+        print("ERROR: --prewrite-review-override requires --prewrite-review.", file=sys.stderr)
+        return 2
 
     if args.companion_delta:
         return _run_companion_delta(repo_root, baseline_path, args.review)
@@ -936,17 +1314,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     registry_root = repo_root / DEFAULT_REGISTRY_ROOT
 
     if args.write_baseline:
-        payload = build_baseline_payload(report, registry_root)
-        baseline_path.parent.mkdir(parents=True, exist_ok=True)
-        write_json(baseline_path, payload)
-        manifest = payload["evidence_tree"]
-        print(
-            f"Wrote evidence-registry baseline to {baseline_path}: "
-            f"{payload['summary']['total_findings']} findings across "
-            f"{payload['summary']['files_with_findings']} files; "
-            f"evidence_tree manifest tracks {manifest['count']} evidence files."
+        return _write_baseline(
+            report,
+            repo_root,
+            baseline_path,
+            prewrite_review=args.prewrite_review,
+            review_arg=args.review,
+            review_template=args.review_template,
+            override_reason=args.prewrite_review_override,
         )
-        return 0
 
     # --check
     if not baseline_path.exists():

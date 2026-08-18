@@ -7,6 +7,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from robot_sf.benchmark.issue_5409_campaign_identity import (
+    DEFAULT_CAMPAIGN_ID_PAIR,
+    CampaignIdPair,
+)
 from scripts.benchmark.build_issue_5409_paired_horizon_report import analyze_pair
 
 if TYPE_CHECKING:
@@ -180,6 +184,7 @@ def _analyze(
     output: Path,
     *,
     expected_campaign_ids: tuple[str, str] | None = None,
+    campaign_identity: CampaignIdPair | None = None,
 ) -> dict:
     """Run the fixture analysis with a small declared denominator."""
     return analyze_pair(
@@ -195,6 +200,7 @@ def _analyze(
         expected_scenario_count=2,
         expected_scenario_matrix_hash="fixture-hash",
         expected_campaign_ids=expected_campaign_ids,
+        campaign_identity=campaign_identity,
         validate_config_pair=False,
         bootstrap_samples=100,
     )
@@ -217,6 +223,13 @@ def test_valid_pair_emits_deltas_and_seed_uncertainty(tmp_path: Path) -> None:
     assert len(uncertainty["scenario_family_rows"]) == 2
     assert deltas["rows"][0]["metrics"]["near_misses"]["delta_h600_minus_h500"] == 0.0
     assert uncertainty["planner_rows"][0]["metrics"]["snqi"]["seed_count"] == 2
+    assert completeness["expected"]["campaign_identity"]["ids"] == {
+        "h500": "issue5409_horizon_ablation_h500",
+        "h600": "issue5409_horizon_ablation_h600",
+    }
+    assert (
+        deltas["provenance"]["campaign_identity"] == completeness["expected"]["campaign_identity"]
+    )
 
 
 def test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported(
@@ -253,6 +266,26 @@ def test_reviewed_rerun_ids_and_enforced_staging_receipts_are_supported(
         "h500": campaign_ids[0],
         "h600": campaign_ids[1],
     }
+    assert completeness["expected"]["campaign_identity"]["ids"] == {
+        "h500": campaign_ids[0],
+        "h600": campaign_ids[1],
+    }
+
+
+def test_conflicting_campaign_identity_declarations_are_rejected(tmp_path: Path) -> None:
+    """The report cannot override the launch-packet pair with another pair."""
+    h500, h600, output = _fixture_pair(tmp_path)
+    with pytest.raises(ValueError, match="do not match"):
+        _analyze(
+            h500,
+            h600,
+            output,
+            campaign_identity=DEFAULT_CAMPAIGN_ID_PAIR,
+            expected_campaign_ids=(
+                "issue5409_horizon_ablation_rerun1_h500",
+                "issue5409_horizon_ablation_rerun1_h600",
+            ),
+        )
 
 
 def test_missing_key_blocks_without_partial_numeric_output(tmp_path: Path) -> None:

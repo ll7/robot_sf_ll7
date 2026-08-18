@@ -22,12 +22,24 @@ The command emits three compact JSON artifacts in `--output-dir`:
 - `paired_uncertainty_summary.json` reports deterministic 95% percentile-bootstrap
   intervals over seed-level means at planner and scenario-family level.
 
-Reviewed reruns may use explicit campaign IDs without weakening the rest of the
-provenance contract:
+Campaign identity comes from the versioned launch packet at
+`configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml` by default. Pass
+`--launch-packet <path>` when a reviewed rerun uses a v2 packet with a different explicit
+h500/h600 pair. The packet is the authority for the pair; the report output records the same
+versioned identity payload in its completeness and provenance sections.
+
+Reviewed reruns may use an explicit, versioned campaign-ID pair declared by their launch packet
+without weakening the rest of the provenance contract:
 
 ```bash
+--launch-packet /path/to/reviewed_issue5409_rerun_packet.yaml \
 --expected-campaign-id <h500-campaign-id> <h600-campaign-id>
 ```
+
+The explicit option is optional and must match the packet pair. The pair validator rejects empty,
+duplicate, role-swapped, malformed, unrelated, or packet-mismatched IDs. A legacy v1 launch packet
+remains fixed to the canonical `issue5409_horizon_ablation_h500` and
+`issue5409_horizon_ablation_h600` IDs; changing those semantics requires v2.
 
 The handoff accepts both the legacy `status: ok` checkpoint receipt and the current
 enforced staging receipt when it reports `mode: enforced_staged`, `stage: true`,

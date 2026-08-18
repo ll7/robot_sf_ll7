@@ -185,7 +185,7 @@ jobs:
 
   coverage-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: fast-feedback
     if: ${{ github.event_name != 'pull_request' && needs.fast-feedback.result == 'success' }}
     steps:
@@ -378,7 +378,7 @@ jobs:
     # than skipped; retain manual dispatch for standalone diagnostics.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

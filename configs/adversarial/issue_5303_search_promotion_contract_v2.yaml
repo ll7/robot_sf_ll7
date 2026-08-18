@@ -133,13 +133,19 @@ input_provenance:
       sha256: 0a926d30f304bf7fa2e8065ba6e2f7bfdab31c7c46c1dfe85bb9ac8ec34a0160
     - id: adversarial_bundle
       path: robot_sf/adversarial/bundle.py
-      sha256: 7a38ccabd3ed914cdde4616b9b5f86075f703d824994716352dcacc3a57afc5a
+      # Refreshed after additive template-route support for issue #7340; the
+      # default candidate-route behavior and #5303 promotion controls are unchanged.
+      sha256: fe6e899c21d9318a2ccc646c4f2b9f4f721e4059a58a5636ed6e6e1743560263
     - id: adversarial_config
       path: robot_sf/adversarial/config.py
-      sha256: 1cb2944aa3ce4e2975af3465cc9449b558817b6994062f735ee0141abf6b9499
+      # Refreshed with the bundle hash for the same additive route-mode support.
+      sha256: 765ffc09d7dafdabe22fb2634e8a720e8f3e017033953f23f017f84bcb97f4a9
     - id: timing_preflight_module
       path: robot_sf/benchmark/issue_5303_search_promotion_preflight.py
-      sha256: f64fe6617dfd41c4b99248bf25b69347021369acde1aa81ab23b3a029134b581
+      # Refreshed after propagating the authored pedestrian route mode into the
+      # side-effect-free preflight; template routes now fail closed instead of
+      # being silently replaced by candidate routes.
+      sha256: ea0f734b4e498efc7de2e4687b65bf9e0255350cebedb0c6cea0e548d729a9ab
     - id: algorithm_metadata
       path: robot_sf/benchmark/algorithm_metadata.py
       # Refreshed after the additive, outcome-free BRNE diagnostic registry metadata

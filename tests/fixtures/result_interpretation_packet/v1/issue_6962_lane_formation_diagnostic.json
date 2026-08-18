@@ -180,7 +180,7 @@
       "decision_id": "d_6962_clear_lane_regime",
       "metric_id": "clear_lane_hit_rate_max",
       "outcome": "inconclusive",
-      "rationale": "The tested native screen found no reproducible clear-threshold cell. The separately bound #6969 reference-control summary distinguishes initialized separated and mixed trajectories under sustained flow, but the mixed condition still has 0/3 clear hits in both calibrations and does not identify a scenario or model cause for spontaneous formation.",
+      "rationale": "The tested native screen found no reproducible clear-threshold cell. The separately bound #6969 reference-control summary distinguishes known mixed and initialized separated trajectories under sustained flow, but the mixed condition still has 0/3 clear hits in both calibrations and does not identify a scenario or model cause for spontaneous formation.",
       "refusal_reason": "Reference-control discrimination does not establish spontaneous or model-wide lane formation."
     },
     {
@@ -204,7 +204,7 @@
     "allowed": [
       "Within the tested native Linux screen, report the observed lane-segregation summary and clear-hit accounting.",
       "Use the same-seed cell surface to motivate threshold, warm-up, and sustained-flow follow-up.",
-      "Report that the separately bound #6969 native reference distinguishes known initialized mixed and separated controls under its declared protocol."
+      "Report that the separately bound #6969 native reference distinguishes a known mixed condition from an initialized separated control under its declared protocol."
     ],
     "forbidden": [
       "Model-wide absence of lane formation.",
@@ -232,7 +232,7 @@
     "Across 32 cells and 320 native rows, no cell reached the clear lane threshold reproducibly.",
     "Released-default and literature-typical all-row mean LSI values are 0.1605 and 0.1492, respectively.",
     "Weak-threshold rates vary with seed and cell; non-default same-seed mean intervals include zero.",
-    "The #6962 threshold grid is sensitivity information; the separately bound #6969 reference calibrates discrimination for initialized controls only.",
+    "The #6962 threshold grid is sensitivity information; the separately bound #6969 reference tests discrimination for known controls only.",
     "The #6969 mixed sustained-flow reference has 0/3 clear hits in each calibration, while its initialized separated-lane control has 3/3."
   ],
   "limitations": [

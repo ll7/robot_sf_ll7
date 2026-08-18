@@ -124,3 +124,27 @@ provides a manual/backfill path for sweeps; the Action handles steady-state clos
 The periodic read-only detector remains the CI/backstop check: it still flags any closed issue that
 slips through (for example, a closure event that predates the Action, or a label re-added later), so
 the automation and the audit reinforce each other rather than replace one another.
+
+## Open-Issue Stale-State Guard (Issue #7537)
+
+Closed-issue cleanup does not catch the inverse queue failure: an issue can remain open with an active
+`state:ready`, `state:running`, or `state:working` label after the exact implementation PR has merged.
+Those rows are neither safe implementation supply nor trustworthy open work, so they need a separate
+report-only audit.
+
+Run the bounded guard with:
+
+```bash
+uv run python scripts/dev/open_state_label_hygiene.py --repo ll7/robot_sf_ll7
+```
+
+The guard reads open issues through REST, rechecks each candidate's current state and labels, follows
+the issue timeline, and verifies each referenced PR's current merged state and `merge_commit_sha`.
+Its `open_state_label_hygiene.v1` report includes the candidate issue, active labels, merged PR, merge
+commit, timeline source, and `complete_for_open_issues` coverage flag. Any incomplete issue or timeline
+inventory returns non-zero and must not be interpreted as a clean queue.
+
+The guard never closes issues, removes labels, edits Project #5, or declares that a merged PR fully
+satisfies the issue. Each candidate is `merged_reference_needs_exact_fix_review`; a maintainer or
+issue-audit authority must verify the named-symbol/failing-signature boundary before closing or
+relabeling it. This is routing metadata hygiene only, not benchmark, research, or publication evidence.

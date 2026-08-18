@@ -1,0 +1,76 @@
+{
+  "schema_version": "resolved-config-fingerprint.v1",
+  "source_revision": "82e280eb15aa4fd67bff651a70dff82bfde3122a",
+  "variants": {
+    "benchmark_orca_classic_cross_trap_subset.yaml": {
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 10,
+        "success_rate": 0.9
+      },
+      "env_factory_kwargs": {
+        "peds_have_obstacle_forces": true
+      },
+      "env_overrides": {
+        "observation_mode": "socnav_struct",
+        "peds_have_obstacle_forces": true,
+        "robot_config": {
+          "allow_backwards": true,
+          "max_angular_speed": 1.0,
+          "max_linear_speed": 3.0,
+          "type": "differential_drive"
+        }
+      },
+      "evaluation": {
+        "evaluation_episodes": 1,
+        "hold_out_scenarios": [],
+        "step_schedule": [
+          {
+            "every_steps": 1
+          }
+        ]
+      },
+      "num_envs": 1,
+      "policy_id": "socnav_orca_classic_cross_trap_subset",
+      "scenario_config": "configs/scenarios/sets/classic_cross_trap_subset.yaml",
+      "seeds": [123],
+      "total_timesteps": 1,
+      "worker_mode": "auto"
+    },
+    "benchmark_orca_classic_crossing_subset.yaml": {
+      "convergence": {
+        "collision_rate": 0.05,
+        "plateau_window": 10,
+        "success_rate": 0.9
+      },
+      "env_factory_kwargs": {
+        "peds_have_obstacle_forces": true
+      },
+      "env_overrides": {
+        "observation_mode": "socnav_struct",
+        "peds_have_obstacle_forces": true,
+        "robot_config": {
+          "allow_backwards": true,
+          "max_angular_speed": 1.0,
+          "max_linear_speed": 3.0,
+          "type": "differential_drive"
+        }
+      },
+      "evaluation": {
+        "evaluation_episodes": 1,
+        "hold_out_scenarios": [],
+        "step_schedule": [
+          {
+            "every_steps": 1
+          }
+        ]
+      },
+      "num_envs": 1,
+      "policy_id": "socnav_orca_classic_crossing_subset",
+      "scenario_config": "configs/scenarios/sets/classic_crossing_subset.yaml",
+      "seeds": [123],
+      "total_timesteps": 1,
+      "worker_mode": "auto"
+    }
+  }
+}

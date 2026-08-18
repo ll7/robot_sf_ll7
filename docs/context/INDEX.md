@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #7340 real-manifest feasibility-first diagnostic: a config-first native probe over a fixed
+station-platform candidate pool, with route certification, loader-backed pedestrian binding,
+separate rejection/unavailability accounting, and a fail-closed comparison contract. The bounded
+run is diagnostic-only: 4/4 candidates were feasible, with observed episode counts of 3 collisions
+and 1 timeout; no safety, planner, benchmark, paper, or source-method claim follows:
+[issue_7340_real_manifest_feasibility_first.md](issue_7340_real_manifest_feasibility_first.md).
+
 Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
 with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
 compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The
@@ -14,16 +21,17 @@ the measurement boundary for a later normal-throughput observation window:
 
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
-one campaign cell, preserves terminal-verdict denominators, and remains
-metadata-only until trace export and renderer provenance are reviewed:
+one campaign cell, preserves terminal-verdict denominators, and now composes
+diagnostic PNG/SVG/PDF/caption outputs with checksums without admitting
+scientific evidence:
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md).
 
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
 plus the shared `robot_sf.research.representative_selection` rule that the
 emergent-phenomena campaign, its figures, and its replay videos all call
-instead of carrying private copies, without trace execution or evidence
-admission:
+instead of carrying private copies, plus the diagnostic h600 trace pin for
+retained trace-series conversion, without evidence admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
 Issue #7030 agent figure interpretation evaluation: digest-pinned fixture replay

@@ -303,6 +303,7 @@ def _probe_dimension(
     baseline_hash: str,
     template_scenario: dict[str, Any],
     pedestrian_id: str | None,
+    pedestrian_route_mode: str,
     index: int,
 ) -> TimingDimensionProbe:
     """Materialize a one-at-a-time perturbation of one timing dimension and classify it.
@@ -359,6 +360,7 @@ def _probe_dimension(
         index=index,
         template_scenario=template_scenario,
         pedestrian_id=pedestrian_id,
+        pedestrian_route_mode=pedestrian_route_mode,
     )
     perturbed_hash = compute_effective_scenario_hash(perturbed_scenario, perturbed_route)
     hash_changed = perturbed_hash != baseline_hash
@@ -425,6 +427,7 @@ def evaluate_preflight(
         index=index,
         template_scenario=template,
         pedestrian_id=materialization_id,
+        pedestrian_route_mode=search_space.pedestrian_route_mode,
     )
     baseline_hash = compute_effective_scenario_hash(baseline_scenario, baseline_route)
     (
@@ -460,6 +463,7 @@ def evaluate_preflight(
             baseline_hash=baseline_hash,
             template_scenario=template,
             pedestrian_id=probe_pedestrian_id,
+            pedestrian_route_mode=search_space.pedestrian_route_mode,
             index=index,
         )
         for name in PROMOTION_TIMING_DIMENSIONS

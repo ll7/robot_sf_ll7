@@ -1,5 +1,7 @@
 """Fail-closed tests for the future Chapter 7 v2 admission boundary."""
 
+# evidence-writer-exempt: negative tests mutate only pytest tmp_path packages to prove that a tampered atlas remains rejected after checksum regeneration; no repository evidence is written.
+
 from __future__ import annotations
 
 import csv

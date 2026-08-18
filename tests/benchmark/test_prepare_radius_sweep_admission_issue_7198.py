@@ -77,11 +77,22 @@ def _preflight_payload() -> dict:
             "resolved_seeds": list(range(EXPECTED_SEED_RANGE[0], EXPECTED_SEED_RANGE[1] + 1))
         },
         "checkpoint_preflight": {
-            "mode": "metadata_only",
-            "stage": False,
+            "mode": "enforced_staged",
+            "stage": True,
             "checked": 5,
             "resolved": 5,
-            "submit_safe": False,
+            "submit_safe": True,
+            "arms": [
+                {
+                    "planner_key": f"planner_{index}",
+                    "algo": "learned",
+                    "kind": "model_id",
+                    "value": f"model_{index}",
+                    "status": "staged",
+                    "checkpoint_sha256": "a" * 64,
+                }
+                for index in range(5)
+            ],
         },
         "episodes": 0,
     }
@@ -118,8 +129,8 @@ def test_gate1_report_rejects_non_mapping_surface_entries() -> None:
     assert any("non-mapping entries" in error for error in errors)
 
 
-def test_preflight_passes_structure_but_metadata_only_is_not_submit_safe() -> None:
-    """Verify structural preflight success does not promote metadata-only checkpoints."""
+def test_preflight_requires_enforced_staged_checkpoint_evidence() -> None:
+    """Verify submit-safe preflight retains staged checkpoint identity and checksums."""
     result = validate_preflight_payload(
         _preflight_payload(),
         arm_key="r0p5",
@@ -128,8 +139,45 @@ def test_preflight_passes_structure_but_metadata_only_is_not_submit_safe() -> No
     )
 
     assert result["structural_status"] == "passed"
-    assert result["checkpoint_preflight"]["submit_safe"] is False
+    assert result["checkpoint_preflight"]["submit_safe"] is True
+    assert len(result["checkpoint_preflight"]["arms"]) == 5
+    assert result["checkpoint_preflight"]["arms"][0]["checkpoint_sha256"] == "a" * 64
     assert result["episodes"] == 0
+
+
+def test_preflight_rejects_metadata_only_checkpoint_evidence() -> None:
+    """Verify metadata-only checkpoint resolution remains blocked for submission."""
+    payload = _preflight_payload()
+    payload["checkpoint_preflight"].update(
+        {"mode": "metadata_only", "stage": False, "submit_safe": False}
+    )
+
+    result = validate_preflight_payload(
+        payload,
+        arm_key="r0p5",
+        radius_m=0.5,
+        config_sha256="a" * 64,
+    )
+
+    assert result["structural_status"] == "blocked"
+    assert any("enforced_staged" in error for error in result["errors"])
+    assert any("submit_safe=true" in error for error in result["errors"])
+
+
+def test_preflight_rejects_unverified_staged_checkpoint() -> None:
+    """Verify staged admission cannot omit a checkpoint checksum."""
+    payload = _preflight_payload()
+    payload["checkpoint_preflight"]["arms"][0]["checkpoint_sha256"] = "not-a-sha"
+
+    result = validate_preflight_payload(
+        payload,
+        arm_key="r0p5",
+        radius_m=0.5,
+        config_sha256="a" * 64,
+    )
+
+    assert result["structural_status"] == "blocked"
+    assert any("verified SHA-256" in error for error in result["errors"])
 
 
 def test_preflight_rejects_any_episode_count() -> None:
@@ -245,7 +293,7 @@ def test_preflight_command_is_check_only_and_zero_episode() -> None:
     assert "--mode" in command
     assert command[command.index("--mode") + 1] == "preflight"
     assert "--skip-publication-bundle" in command
-    assert command[command.index("--checkpoint-preflight-mode") + 1] == "metadata_only"
+    assert command[command.index("--checkpoint-preflight-mode") + 1] == "enforced_staged"
 
 
 def test_submission_command_preserves_expansion_and_custom_manifest_path() -> None:

@@ -619,11 +619,21 @@ def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
         Requirement(dependency).name for dependency in project["project"]["dependencies"]
     }
     wheel_force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
-    sdist_includes = project["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
+    sdist_includes = project["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
 
     assert "pysocialforce" not in dependency_names
     assert wheel_force_include["fast-pysf/pysocialforce"] == "pysocialforce"
     assert "/fast-pysf/pysocialforce" in sdist_includes
+
+
+def test_source_distribution_excludes_model_artifacts() -> None:
+    """Keep model weights outside the source-distribution boundary (issue #7297)."""
+    sdist = _pyproject()["tool"]["hatch"]["build"]["targets"]["sdist"]
+    includes = sdist["include"]
+    excludes = sdist["exclude"]
+
+    assert "/model/**" in excludes
+    assert not any(path == "/model" or path.startswith("/model/") for path in includes)
 
 
 def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:

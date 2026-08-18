@@ -1,0 +1,534 @@
+schema_version: robot_sf.asset_rights_inventory.v1
+claim_boundary: >-
+  This is a tracked-path classification and provenance boundary, not a legal opinion. A cleared
+  row records evidence present in this repository for the named family; it does not clear model
+  weights, benchmark claims, or an external asset whose source/revision is not named. Blocked and
+  external-pointer-only rows must remain fail-closed until their unblock condition is satisfied.
+
+tracked_scopes:
+  - id: maps
+    globs: ["maps/**"]
+    release_relevant: true
+  - id: fast-pysf-maps
+    globs: ["fast-pysf/maps/**"]
+    release_relevant: true
+  - id: config-maps
+    globs: ["configs/maps/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      These are import examples and provenance/configuration contracts, not the acquired source
+      assets themselves; the referenced asset still needs its own row.
+  - id: config-data
+    globs: ["configs/data/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Dataset staging and trajectory provenance manifests are configuration/evidence contracts;
+      acquired data is staged and governed separately.
+  - id: scenario-map-configs
+    globs: ["configs/scenarios/maps/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Scenario YAML references map assets but is not itself the acquired map/media asset.
+  - id: examples
+    globs: ["examples/**"]
+    release_relevant: true
+  - id: renderer-assets
+    globs: ["robot_sf/render/assets/**", "robot_sf/render/web_assets/**"]
+    release_relevant: true
+  - id: robot-map-assets
+    globs: ["robot_sf/maps/*.svg"]
+    release_relevant: true
+  - id: docs
+    globs: ["docs/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Documentation, figures, and experiment records are evidence/documentation surfaces, not a
+      declaration that linked external media or datasets are redistributable.
+  - id: fast-pysf-doc-assets
+    globs: ["fast-pysf/docs/assets/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Tutorial screenshots are documentation assets and are not part of the Robot SF runtime
+      release surface.
+  - id: test-fixtures
+    globs: ["tests/fixtures/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Test fixtures are not release assets; fixture provenance and redistribution remain separate
+      test-governance concerns.
+  - id: test-data-fixtures
+    globs: ["tests/data/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      External-data shape tests and synthetic data samples are test-only inputs, not release
+      assets.
+  - id: pygame-recordings
+    globs: ["tests/pygame/recordings/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Legacy test recordings are fixture-only inputs and are excluded from distributions.
+  - id: specs
+    globs: ["specs/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Specification fixtures and source-analysis samples are not runtime release assets.
+  - id: vendored-socnavbench
+    globs: ["third_party/socnavbench/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      Vendored source licensing is governed by THIRD_PARTY_NOTICES.md and LICENSING.yaml; this
+      inventory does not infer rights for the external datasets consumed by that source.
+  - id: tracked-output
+    globs: ["output/**"]
+    release_relevant: false
+    exclusion_reason: >-
+      The few intentionally tracked output manifests are evidence records, not redistributable
+      runtime assets.
+
+rows:
+  - id: ovgu-osm-import
+    scope: maps
+    globs: ["maps/imported/**"]
+    status: cleared
+    source: >-
+      OpenStreetMap Overpass extract, with the retained source features and Robot SF annotations
+      described by the checked-in provenance sidecar.
+    source_revision_or_access_date: "Overpass acquisition accessed 2026-07-10; source feature IDs are pinned in the sidecar."
+    license_or_rights: "Open Data Commons Open Database License (ODbL) v1.0 for the OSM source geometry."
+    attribution: "© OpenStreetMap contributors; Robot SF annotations are separately identified as project-authored."
+    checksum_policy: "Raw input SHA-256 is recorded at raw_input.sha256 in the provenance sidecar; derived files are reviewed with the source."
+    modification_status: "Derived local-coordinate map with explicit Robot SF route/start/goal annotations."
+    evidence:
+      - maps/imported/ovgu_campus_walk.provenance.yaml
+      - docs/maps/geojson_import.md
+    notes: >-
+      Cleared here means the source attribution/license/checksum evidence is present. The sidecar
+      remains exploratory_only and does not certify benchmark evidence.
+
+  - id: osm-svg-exports
+    scope: maps
+    globs: ["maps/osm_svg_maps/**"]
+    status: blocked
+    source: "OpenStreetMap-derived SVG exports; the individual source query/revision is not pinned for this family."
+    source_revision_or_access_date: "Not proven per file."
+    license_or_rights: "ODbL may apply, but redistribution terms are not proven for each tracked export."
+    attribution: "Per-file OSM attribution is not proven."
+    checksum_policy: "Add source revision/query, raw checksum, and derived-output checksum before release use."
+    modification_status: "Derived SVG geometry of unknown per-file provenance."
+    evidence:
+      - docs/osm_map_workflow.md
+    unblock_condition: "Add a per-family provenance record naming the source, access date, ODbL basis, attribution, and hashes."
+
+  - id: osm-obstacle-exports
+    scope: maps
+    globs: ["maps/obstacle_svg_maps/**"]
+    status: blocked
+    source: "OpenStreetMap-derived obstacle/route SVG exports; the individual source revision is not pinned for this family."
+    source_revision_or_access_date: "Not proven per file."
+    license_or_rights: "ODbL may apply, but redistribution terms are not proven for each tracked export."
+    attribution: "Per-file OSM attribution is not proven."
+    checksum_policy: "Add source revision/query, raw checksum, and derived-output checksum before release use."
+    modification_status: "Derived obstacle and route SVG geometry of unknown per-file provenance."
+    evidence:
+      - docs/osm_map_workflow.md
+    unblock_condition: "Add a per-family provenance record naming the source, access date, ODbL basis, attribution, and hashes."
+
+  - id: map-registry
+    scope: maps
+    globs: ["maps/registry.yaml"]
+    status: project-authored
+    source: "Robot SF map capability catalog maintained in this repository."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository metadata; catalog presence does not clear the rights of referenced maps."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Referenced map hashes are retained where the catalog provides them; rights still come from the referenced inventory row."
+    modification_status: "Project-authored metadata describing map runtime capabilities."
+    evidence:
+      - maps/registry.yaml
+      - docs/maps/geojson_import.md
+
+  - id: paper-francis2023-maps
+    scope: maps
+    globs: ["maps/svg_maps/francis2023/**"]
+    status: blocked
+    source: "Geometry-first reconstruction of scenarios described by Francis et al. (2023)."
+    source_revision_or_access_date: "Paper-derived; no redistribution grant is recorded in this repository."
+    license_or_rights: "Paper citation is not a license or permission to redistribute the derived figures/geometry."
+    attribution: "Francis et al. (2023) is cited by the family README; rights remain unresolved."
+    checksum_policy: "Pin the source publication/version and each derived asset hash with rights evidence."
+    modification_status: "Project-derived geometry based on a published scenario figure."
+    evidence:
+      - maps/svg_maps/francis2023/readme.md
+    unblock_condition: "Record a redistribution basis for the source-derived geometry and all included image/map files."
+
+  - id: masterthesis-maps
+    scope: maps
+    globs: ["maps/svg_maps/masterthesis/**"]
+    status: blocked
+    source: "Maps associated with a master-thesis scenario family."
+    source_revision_or_access_date: "Thesis/source revision and access date are not pinned in this repository."
+    license_or_rights: "No redistribution basis is recorded."
+    attribution: "Thesis author/source attribution is not recorded for each file."
+    checksum_policy: "Pin source and derived-file hashes after rights evidence is obtained."
+    modification_status: "Externally-derived or source-inspired geometry not yet classified."
+    evidence:
+      - docs/maps/geojson_import.md
+    unblock_condition: "Identify the thesis/source owner and record permission, attribution, revision, and hashes."
+
+  - id: socnavbench-map
+    scope: maps
+    globs: ["maps/svg_maps/socnavbench/**"]
+    status: external-pointer-only
+    source: "SocNavBench ETH map pointer; external source assets are not redistributed by Robot SF."
+    source_revision_or_access_date: "Upstream revision/access date is not pinned for this derived SVG."
+    license_or_rights: "External SocNavBench/S3DIS terms apply; this row makes no redistribution claim."
+    attribution: "CMU-TBD/SocNavBench source attribution remains required when the external asset is used."
+    checksum_policy: "Keep external source/tree checksums in the local staging manifest; do not infer them from this SVG."
+    modification_status: "Tracked pointer/derived map associated with external SocNavBench assets."
+    evidence:
+      - docs/external_data_setup.md
+      - third_party/socnavbench/UPSTREAM.md
+    unblock_condition: "Keep the source local under its terms and attach a source/revision/checksum manifest before any redistribution claim."
+
+  - id: project-svg-maps
+    scope: maps
+    globs: ["maps/svg_maps/*.svg"]
+    exclude_globs: ["maps/svg_maps/map3_1350_buildings_inkscape.svg"]
+    status: project-authored
+    source: "Robot SF project-authored SVG scenario/map definitions."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned project content under the repository license; no external-source clearance is implied."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Release artifacts are hashed by the distribution/evidence pipeline; no external raw source is asserted."
+    modification_status: "Project-authored geometry and scenario annotations."
+    evidence:
+      - maps/registry.yaml
+      - LICENSE
+
+  - id: map3-osm-export
+    scope: maps
+    globs: ["maps/svg_maps/map3_1350_buildings_inkscape.svg"]
+    status: blocked
+    source: "Maperitive/OSM-derived map export identified by its map3_1350 naming and documentation."
+    source_revision_or_access_date: "Source revision and access date are not pinned for this tracked export."
+    license_or_rights: "OSM/Maperitive redistribution basis is not proven for this file."
+    attribution: "Per-file source attribution is not proven."
+    checksum_policy: "Add source input/output hashes and an attribution/license record before release use."
+    modification_status: "Derived SVG export with unresolved source provenance."
+    evidence:
+      - fast-pysf/maps/osm_maps/map3_1350.md
+      - docs/osm_map_workflow.md
+    unblock_condition: "Record the exact source, revision/access date, license, attribution, and derived-file checksum."
+
+  - id: svg-map-readme
+    scope: maps
+    globs: ["maps/svg_maps/README.md"]
+    status: project-authored
+    source: "Robot SF map authoring documentation."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository documentation under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin; no external asset rights are asserted by this documentation."
+    modification_status: "Project-authored documentation."
+    evidence:
+      - maps/svg_maps/README.md
+      - LICENSE
+
+  - id: map-templates
+    scope: maps
+    globs: ["maps/templates/**"]
+    status: project-authored
+    source: "Robot SF map templates."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned project content under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Release artifacts are hashed by the distribution/evidence pipeline."
+    modification_status: "Project-authored reusable template geometry."
+    evidence:
+      - maps/templates/map_template.svg
+      - LICENSE
+
+  - id: fast-pysf-json-maps
+    scope: fast-pysf-maps
+    globs: ["fast-pysf/maps/*.json"]
+    status: project-authored
+    source: "Robot SF fast-pysf map definitions maintained in this repository."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned project content under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Release artifacts are hashed by the distribution/evidence pipeline."
+    modification_status: "Project-authored runtime map data."
+    evidence:
+      - fast-pysf/maps/default_map.json
+      - LICENSE
+
+  - id: fast-pysf-osm-maps
+    scope: fast-pysf-maps
+    globs: ["fast-pysf/maps/osm_maps/**"]
+    status: blocked
+    source: "OpenStreetMap/Maperitive-derived fast-pysf maps."
+    source_revision_or_access_date: "Source revision and access date are not pinned for each export."
+    license_or_rights: "ODbL/Maperitive redistribution basis is not proven for each tracked file."
+    attribution: "Per-file source attribution is not proven."
+    checksum_policy: "Add source query/revision and raw/derived hashes before release use."
+    modification_status: "Derived map exports and documentation with unresolved source provenance."
+    evidence:
+      - fast-pysf/maps/osm_maps/map3_1350.md
+      - docs/osm_map_workflow.md
+    unblock_condition: "Record per-family source, access date, license/attribution, modifications, and hashes."
+
+  - id: map-config-contracts
+    scope: config-maps
+    globs: ["configs/maps/**"]
+    status: evidence-only
+    source: "Robot SF map-import configuration and provenance examples."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Configuration/documentation only; referenced source assets require separate evidence."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin; no raw external asset is included by these examples."
+    modification_status: "Project-authored configuration and provenance template."
+    evidence:
+      - configs/maps/geojson_import_provenance.example.yaml
+    exclusion_reason: "Configuration contracts are not acquired source assets."
+
+  - id: data-provenance-contracts
+    scope: config-data
+    globs: ["configs/data/**"]
+    status: evidence-only
+    source: "Robot SF external-data staging and trajectory provenance contracts."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Configuration/evidence only; staged data terms are recorded by the external-data manifest."
+    attribution: "Robot SF project authors and the source records named by each manifest."
+    checksum_policy: "Manifest-specific tree/file checksums; this row does not clear staged data."
+    modification_status: "Project-authored provenance and staging metadata."
+    evidence:
+      - configs/data/sdd_staging_manifest.yaml
+    exclusion_reason: "Manifests describe acquired data but do not redistribute it."
+
+  - id: scenario-map-contracts
+    scope: scenario-map-configs
+    globs: ["configs/scenarios/maps/**"]
+    status: evidence-only
+    source: "Robot SF scenario/map configuration files."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Configuration only; referenced map assets retain their own inventory rows."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin."
+    modification_status: "Project-authored scenario configuration."
+    evidence:
+      - configs/scenarios/maps/issue_2926_pedestrian_only_cut.yaml
+    exclusion_reason: "Scenario configuration is not an acquired map/media asset."
+
+  - id: example-python
+    scope: examples
+    globs: ["examples/**/*.py"]
+    status: project-authored
+    source: "Robot SF example programs."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned source code under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin and distribution hash; dependencies/assets retain their own rows."
+    modification_status: "Project-authored example source code."
+    evidence:
+      - examples/examples_manifest.yaml
+      - LICENSE
+
+  - id: example-docs
+    scope: examples
+    globs: ["examples/**/*.md"]
+    exclude_globs: ["examples/recordings/**"]
+    status: project-authored
+    source: "Robot SF example documentation."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository documentation under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin; documentation does not clear referenced datasets or recordings."
+    modification_status: "Project-authored documentation."
+    evidence:
+      - examples/README.md
+      - LICENSE
+
+  - id: example-metadata
+    scope: examples
+    globs: ["examples/**/*.yaml", "examples/**/*.gitkeep"]
+    status: project-authored
+    source: "Robot SF example catalog and directory metadata."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository metadata under the repository license; referenced assets require separate evidence."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Source-control commit pin."
+    modification_status: "Project-authored metadata."
+    evidence:
+      - examples/examples_manifest.yaml
+      - LICENSE
+
+  - id: example-recordings
+    scope: examples
+    globs: ["examples/recordings/**"]
+    status: blocked
+    source: "Robot SF recording/pickle examples; the producing run and redistribution basis are not captured as an asset manifest."
+    source_revision_or_access_date: "Not proven for each recording."
+    license_or_rights: "Recording and pickle redistribution rights are not proven."
+    attribution: "Producer/source attribution is not recorded for each file."
+    checksum_policy: "Record per-file SHA-256 and producing-run/source provenance before release use."
+    modification_status: "Tracked serialized recordings; pickle content is untrusted input."
+    evidence:
+      - examples/recordings/README.md
+    unblock_condition: "Add per-recording producer/source, terms, access date, checksum, and modification manifest."
+
+  - id: example-dataset-json
+    scope: examples
+    globs: ["examples/datasets/**"]
+    status: blocked
+    source: "Example trajectory/state JSON with no source dataset or producing-run provenance row."
+    source_revision_or_access_date: "Not proven."
+    license_or_rights: "Data redistribution basis is not proven."
+    attribution: "Producer/source attribution is not recorded."
+    checksum_policy: "Record source and generated-file SHA-256 with rights evidence before release use."
+    modification_status: "Derived/example data file of unknown provenance."
+    evidence:
+      - examples/datasets/2024-12-06_15-39-44.json
+    unblock_condition: "Identify the source/producer and terms, then record access date, checksum, attribution, and modifications."
+
+  - id: renderer-runtime-assets
+    scope: renderer-assets
+    globs: ["robot_sf/render/assets/**", "robot_sf/render/web_assets/**"]
+    status: project-authored
+    source: "Robot SF renderer sprites and browser viewer assets."
+    source_revision_or_access_date: "Repository-authored; validated at the commit running this checker."
+    license_or_rights: "Repository-owned runtime assets under the repository license."
+    attribution: "Robot SF project authors."
+    checksum_policy: "Wheel/sdist artifact hashes cover included runtime assets."
+    modification_status: "Project-authored packaged runtime assets."
+    evidence:
+      - robot_sf/render/assets/robot.png
+      - robot_sf/render/web_assets/index.html
+      - LICENSE
+
+  - id: robot-osm-runtime-map
+    scope: robot-map-assets
+    globs: ["robot_sf/maps/*.svg"]
+    status: blocked
+    source: "Runtime map SVG with OSM-derived naming/provenance not pinned in a checked-in asset record."
+    source_revision_or_access_date: "Source revision and access date are not proven for the tracked file."
+    license_or_rights: "Potential ODbL/source terms are not proven for redistribution of this derived map."
+    attribution: "Per-file source attribution is not proven."
+    checksum_policy: "Add source query/revision and raw/derived SHA-256 values before release use."
+    modification_status: "Derived runtime SVG with unresolved external-source provenance."
+    evidence:
+      - robot_sf/maps/uni_campus_big.svg
+      - docs/osm_map_workflow.md
+    unblock_condition: "Record source, access date, license/attribution, modifications, and hashes for the runtime map."
+
+  - id: documentation-assets
+    scope: docs
+    globs: ["docs/**"]
+    status: evidence-only
+    source: "Robot SF documentation, experiment records, figures, and linked external-data guidance."
+    source_revision_or_access_date: "Repository-authored or evidence-captured; per-asset provenance is governed by the relevant release family."
+    license_or_rights: "Documentation/evidence surface only; no blanket redistribution claim for embedded or referenced external assets."
+    attribution: "Per-document and per-asset attribution remains governed by its source record."
+    checksum_policy: "Commit-pinned documentation; release asset hashes belong in the owning asset row."
+    modification_status: "Documentation/evidence records, including derived figures and experiment outputs."
+    evidence:
+      - docs/external_data_setup.md
+    exclusion_reason: "Documentation and evidence are not treated as blanket clearance for linked assets."
+
+  - id: fast-pysf-documentation-assets
+    scope: fast-pysf-doc-assets
+    globs: ["fast-pysf/docs/assets/**"]
+    status: evidence-only
+    source: "fast-pysf tutorial screenshots and documentation assets."
+    source_revision_or_access_date: "Repository-captured; upstream source is not asserted by this row."
+    license_or_rights: "Documentation-only asset family; redistribution rights require per-file evidence if promoted to a release surface."
+    attribution: "Not a blanket attribution claim."
+    checksum_policy: "Commit-pinned documentation asset hash."
+    modification_status: "Tutorial/documentation screenshots."
+    evidence:
+      - fast-pysf/docs/assets/export_image.png
+    exclusion_reason: "Tutorial screenshots are not runtime release assets."
+
+  - id: test-fixture-files
+    scope: test-fixtures
+    globs: ["tests/fixtures/**"]
+    status: fixture-only
+    source: "Robot SF test fixtures, including synthetic and source-shaped fixture inputs."
+    source_revision_or_access_date: "Fixture provenance is maintained by the owning test contract."
+    license_or_rights: "Excluded from release; no fixture redistribution claim is made here."
+    attribution: "Fixture-specific attribution belongs to the owning test contract."
+    checksum_policy: "Test fixture hashes may be pinned by tests; not a release clearance mechanism."
+    modification_status: "Test-only inputs and expected outputs."
+    evidence:
+      - tests/fixtures
+    exclusion_reason: "Tests and fixtures are excluded from distributions and benchmark release assets."
+
+  - id: test-data-files
+    scope: test-data-fixtures
+    globs: ["tests/data/**"]
+    status: fixture-only
+    source: "Synthetic and source-shaped test data for external-data contracts."
+    source_revision_or_access_date: "Fixture provenance is maintained by the owning test contract."
+    license_or_rights: "Excluded from release; no data redistribution claim is made here."
+    attribution: "Fixture-specific attribution belongs to the owning test contract."
+    checksum_policy: "Test fixture hashes may be pinned by tests; not a release clearance mechanism."
+    modification_status: "Test-only data samples and shape fixtures."
+    evidence:
+      - tests/data
+    exclusion_reason: "External-data test samples are not runtime release assets."
+
+  - id: pygame-recording-fixtures
+    scope: pygame-recordings
+    globs: ["tests/pygame/recordings/**"]
+    status: fixture-only
+    source: "Legacy Robot SF pygame recording fixture."
+    source_revision_or_access_date: "Fixture provenance is maintained by the owning test contract."
+    license_or_rights: "Excluded from release; no recording redistribution claim is made here."
+    attribution: "Fixture-specific attribution belongs to the owning test contract."
+    checksum_policy: "Test fixture hashes may be pinned by tests; not a release clearance mechanism."
+    modification_status: "Test-only serialized recording."
+    evidence:
+      - tests/pygame/recordings
+    exclusion_reason: "Legacy test recording is not a release asset."
+
+  - id: specification-assets
+    scope: specs
+    globs: ["specs/**"]
+    status: evidence-only
+    source: "Feature specifications, contract fixtures, and source-analysis samples."
+    source_revision_or_access_date: "Repository-authored or analysis-captured; not a runtime release declaration."
+    license_or_rights: "Specification/evidence surface only; external sample rights are not inferred."
+    attribution: "Per-specification source attribution remains governed by the owning specification."
+    checksum_policy: "Commit-pinned specification assets."
+    modification_status: "Specification and analysis inputs."
+    evidence:
+      - specs
+    exclusion_reason: "Specifications and their samples are not runtime release assets."
+
+  - id: vendored-socnavbench-source
+    scope: vendored-socnavbench
+    globs: ["third_party/socnavbench/**"]
+    status: evidence-only
+    source: "Vendored SocNavBench source retained under the repository's third-party boundary."
+    source_revision_or_access_date: "Pinned by third_party/socnavbench/UPSTREAM.md and the current commit."
+    license_or_rights: "Governed by third_party/socnavbench/LICENSING.yaml and THIRD_PARTY_NOTICES.md; external datasets are not included."
+    attribution: "CMU-TBD/SocNavBench attribution is recorded in THIRD_PARTY_NOTICES.md."
+    checksum_policy: "Third-party source and license inventory is authoritative; dataset checksums belong to local staging manifests."
+    modification_status: "Vendored source with the documented local license partition."
+    evidence:
+      - third_party/socnavbench/LICENSING.yaml
+      - THIRD_PARTY_NOTICES.md
+    exclusion_reason: "This inventory covers data/media assets; vendored source uses the dedicated third-party licensing inventory."
+
+  - id: tracked-output-evidence
+    scope: tracked-output
+    globs: ["output/**"]
+    status: evidence-only
+    source: "Intentionally tracked output manifests and evidence records."
+    source_revision_or_access_date: "Pinned by the commit and manifest metadata that produced each record."
+    license_or_rights: "Evidence record only; no blanket redistribution claim for referenced artifacts."
+    attribution: "Per-record provenance metadata is authoritative."
+    checksum_policy: "Each evidence package carries its own checksum manifest where required."
+    modification_status: "Generated evidence metadata retained for reproducibility."
+    evidence:
+      - output/compute_feasibility_matrix_v1/manifest.json
+    exclusion_reason: "Generated output is not a runtime release asset."

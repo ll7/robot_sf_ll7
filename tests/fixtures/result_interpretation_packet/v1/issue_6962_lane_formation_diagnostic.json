@@ -1,0 +1,237 @@
+{
+  "schema_version": "result_interpretation_packet.v1",
+  "packet_id": "issue_6962_lane_formation_diagnostic",
+  "question": {
+    "question_id": "q_6962_lane_formation_non_result",
+    "text": "Does the lane-formation non-result vary with corridor configuration or remain unresolved under the tested native diagnostic screen?",
+    "issue_refs": [6962, 5149]
+  },
+  "evidence": {
+    "evidence_id": "issue_6962_lane_formation_sensitivity",
+    "tier": "smoke_diagnostic",
+    "admission_state": "diagnostic_only",
+    "rationale": "The packet binds the tracked compact summary of 320 native rows and preserves the unresolved scenario, threshold, and model interpretation boundary."
+  },
+  "sources": [
+    {
+      "source_id": "lane_formation_summary",
+      "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json",
+      "sha256": "c1b1eb14cc85e971a65c9498669f9316e0b938623da2fb4114b0289820752ba5",
+      "kind": "diagnostic_summary",
+      "commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
+      "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b",
+      "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
+      "description": "Tracked compact cell surface and mechanism-screen summary for the native #6962 diagnostic."
+    },
+    {
+      "source_id": "lane_formation_context",
+      "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md",
+      "sha256": "86f8ca239689773a9723448bae1c8a5f5e969b27ff0b405e0524b896c81dd34c",
+      "kind": "context_note",
+      "commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
+      "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b",
+      "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
+      "description": "Claim boundary, protocol, limitations, and next discriminating research direction."
+    },
+    {
+      "source_id": "lane_formation_provenance",
+      "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json",
+      "sha256": "f3abce3c42354c20f7a812a0c6e1d6912fca1ed5330f446cc5213072c27f1beb",
+      "kind": "artifact_provenance",
+      "commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
+      "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b",
+      "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
+      "description": "Provenance classification that keeps raw output ignored and binds the compact tracked evidence surfaces."
+    }
+  ],
+  "population": {
+    "total": 320,
+    "included": 320,
+    "excluded": 0,
+    "attrition": {
+      "native": 0,
+      "adapter": 0,
+      "fallback": 0,
+      "degraded": 0,
+      "unavailable": 0,
+      "invalid": 0,
+      "rejected": 0
+    },
+    "rejected_rows": [],
+    "exclusion_reasons": []
+  },
+  "execution_mode": {
+    "counts": {
+      "native": 320
+    },
+    "fallback_permitted": false,
+    "degraded_permitted": false
+  },
+  "estimand": {
+    "estimand_id": "lane_formation_native_cell_screen",
+    "description": "Descriptive lane-segregation and clear-hit accounting across the declared geometry, population, duration, calibration, threshold, and seed cells; no model-wide inference.",
+    "analysis_unit": "seed_cell",
+    "resampling_unit": "seed",
+    "pairing_key": "seed",
+    "clustering_key": "cell_id",
+    "contrast_direction": "descriptive_only"
+  },
+  "metrics": [
+    {
+      "metric_id": "lane_segregation_index_released_default_all_rows",
+      "source_ids": ["lane_formation_summary"],
+      "unit": "dimensionless",
+      "desirability": "not_applicable",
+      "support": 160,
+      "denominator": 160,
+      "support_threshold": null,
+      "missingness": "complete",
+      "unavailable_handling": "diagnostic_only",
+      "effect": 0.1605276744,
+      "null_value": 0.5,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": [
+        "Cell-mean range 0.1219–0.1833; maximum clear hit rate 0%."
+      ]
+    },
+    {
+      "metric_id": "lane_segregation_index_literature_typical_all_rows",
+      "source_ids": ["lane_formation_summary"],
+      "unit": "dimensionless",
+      "desirability": "not_applicable",
+      "support": 160,
+      "denominator": 160,
+      "support_threshold": null,
+      "missingness": "complete",
+      "unavailable_handling": "diagnostic_only",
+      "effect": 0.1491924698,
+      "null_value": 0.5,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": [
+        "Cell-mean range 0.1162–0.1634; maximum clear hit rate 0%."
+      ]
+    },
+    {
+      "metric_id": "clear_lane_hit_rate_max",
+      "source_ids": ["lane_formation_summary"],
+      "unit": "fraction",
+      "desirability": "not_applicable",
+      "support": 0,
+      "denominator": 32,
+      "support_threshold": null,
+      "missingness": "complete",
+      "unavailable_handling": "diagnostic_only",
+      "effect": 0.0,
+      "null_value": 1.0,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": [
+        "The 32 declared cells all have clear-hit rate 0.0; weak-threshold rates vary by seed and cell."
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "d_6962_clear_lane_regime",
+      "metric_id": "clear_lane_hit_rate_max",
+      "outcome": "inconclusive",
+      "rationale": "The tested native screen found no reproducible clear-threshold cell, but the threshold is not externally calibrated and independent warm-up or sustained-flow controls were not part of this screen.",
+      "refusal_reason": "Inconclusive diagnostic screen: scenario, threshold, and model explanations remain unresolved."
+    },
+    {
+      "decision_id": "d_6962_released_default_surface",
+      "metric_id": "lane_segregation_index_released_default_all_rows",
+      "outcome": "inconclusive",
+      "rationale": "The released-default calibration surface remains low and cell-dependent; same-seed non-default comparisons include zero, so this packet does not identify a configuration cause.",
+      "refusal_reason": "No parameter recommendation or model-wide interpretation is admitted from the diagnostic surface."
+    },
+    {
+      "decision_id": "d_6962_literature_typical_surface",
+      "metric_id": "lane_segregation_index_literature_typical_all_rows",
+      "outcome": "inconclusive",
+      "rationale": "The literature-typical calibration also has no clear-threshold cell and noisy weak-threshold rates; the platform-qualified screen narrows but does not resolve the mechanism question.",
+      "refusal_reason": "The cross-platform historical comparator and threshold calibration are insufficient for a stronger conclusion."
+    }
+  ],
+  "figure_links": [],
+  "caption_assertions": [],
+  "claim_boundary": {
+    "allowed": [
+      "Within the tested native Linux screen, report the observed lane-segregation summary and clear-hit accounting.",
+      "Use the same-seed cell surface to motivate threshold, warm-up, and sustained-flow follow-up."
+    ],
+    "forbidden": [
+      "Model-wide absence of lane formation.",
+      "Released-default parameter recommendation or retuning decision.",
+      "Benchmark, safety, paper-facing, or dissertation claim.",
+      "Cross-platform byte or value identity with the macOS/arm64 comparator."
+    ]
+  },
+  "forbidden_claims": [
+    "Model-wide absence of lane formation.",
+    "Released-default parameter recommendation or retuning decision.",
+    "Benchmark, safety, paper-facing, or dissertation claim.",
+    "Cross-platform byte or value identity with the macOS/arm64 comparator."
+  ],
+  "producer": {
+    "actor_id": "codex_agent",
+    "commit": "54ed835669192dd22974ff4a68acbc83ddfe5148",
+    "command": "build_result_interpretation_packet --input tests/fixtures/result_interpretation_packet/v1/issue_6962_lane_formation_diagnostic.json --validate-only",
+    "status": "draft"
+  },
+  "reviewer": null,
+  "reviewed_packet_digest": null,
+  "post_review_digest": null,
+  "findings": [
+    "Across 32 cells and 320 native rows, no cell reached the clear lane threshold reproducibly.",
+    "Released-default and literature-typical all-row mean LSI values are 0.1605 and 0.1492, respectively.",
+    "Weak-threshold rates vary with seed and cell; non-default same-seed mean intervals include zero.",
+    "The threshold grid is sensitivity information, not calibration against an external reference case."
+  ],
+  "limitations": [
+    "This is a 2x2x2x2 diagnostic screen with ten seeds per cell, not a full parameter-identification campaign.",
+    "Warm-up and sustained inflow were not independently controlled.",
+    "All execution was native local Linux/x86_64; the historical comparator was generated on macOS/arm64.",
+    "Raw rows, checkpoints, and logs remain ignored worktree-local artifacts with no durable retrieval pointer."
+  ],
+  "fail_closed_changes": [
+    "The packet is diagnostic-only and cannot admit benchmark, safety, paper, or dissertation evidence.",
+    "Fallback, degraded, unavailable, invalid, and rejected rows are excluded from the included native population.",
+    "No lane metric semantics, released simulator default, parameter recommendation, or campaign runner is changed."
+  ]
+}

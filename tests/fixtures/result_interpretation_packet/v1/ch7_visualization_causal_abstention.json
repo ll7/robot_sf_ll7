@@ -1,0 +1,203 @@
+{
+  "schema_version": "result_interpretation_packet.v1",
+  "packet_id": "ch7_visualization_causal_abstention_fixture",
+  "question": {
+    "question_id": "q_ch7_matched_planner_process_contrast",
+    "text": "Do matched-start planner traces show distinct observed processes and terminal outcomes?",
+    "issue_refs": [6792]
+  },
+  "evidence": {
+    "evidence_id": "ch7_visualization_causal_abstention",
+    "tier": "visualization_fixture",
+    "admission_state": "unavailable_causal_inference",
+    "rationale": "The Chapter 7 grammar admits descriptive visualization only; causal and inferential interpretations remain unavailable."
+  },
+  "sources": [
+    {
+      "source_id": "portfolio_schema",
+      "path": "robot_sf/benchmark/schemas/ch7_case_portfolio.schema.v2.json",
+      "sha256": "4538841ad66eb1f4807ccefcf35a2fa390b786e0cb7fc2259ea19efa29816881",
+      "kind": "json_schema",
+      "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "43140cccb7f89d28a74c4b52ef6045cc084e0e87",
+      "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
+      "description": "Chapter 7 worked-example portfolio schema."
+    },
+    {
+      "source_id": "portfolio_fixture",
+      "path": "tests/fixtures/benchmark/case_dossier_v1/matched_seed118/portfolio.json",
+      "sha256": "817910224a4c86d5cca81c30288026a60b9c5927a738693e72657eef840ac4c2",
+      "kind": "portfolio_manifest",
+      "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "8489156f8be0ff32fe6afea2be6639a4b8dcbe9c",
+      "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
+      "description": "Ch7 case portfolio.v2 manifest (synthetic fixture)."
+    },
+    {
+      "source_id": "campaign_atlas",
+      "path": "tests/fixtures/benchmark/case_dossier_v1/matched_seed118/campaign_atlas.json",
+      "sha256": "91f30c5c2555e06f8d0e76231caf840f1568cc4000288582ab14376a4b4641e5",
+      "kind": "campaign_atlas",
+      "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+      "tracked_commit": "8489156f8be0ff32fe6afea2be6639a4b8dcbe9c",
+      "command": "scripts/dev/refresh_case_dossier_fixtures.py --check",
+      "description": "Campaign atlas v2 (synthetic fixture) for cell context."
+    }
+  ],
+  "population": {
+    "total": 2,
+    "included": 2,
+    "excluded": 0,
+    "attrition": {
+      "native": 0,
+      "adapter": 0,
+      "fallback": 0,
+      "degraded": 0,
+      "unavailable": 0,
+      "invalid": 0,
+      "rejected": 0
+    },
+    "rejected_rows": [],
+    "exclusion_reasons": []
+  },
+  "execution_mode": {
+    "counts": {"native": 2},
+    "fallback_permitted": false,
+    "degraded_permitted": false
+  },
+  "estimand": {
+    "estimand_id": "ch7_matched_planner_process_contrast",
+    "description": "Visualization-only process contrast from matched-start traces; causal abstention.",
+    "analysis_unit": "trace",
+    "resampling_unit": "trace",
+    "pairing_key": "matched_seed_pair",
+    "clustering_key": null,
+    "comparator": {
+      "reference": "left_role",
+      "comparison": "right_role",
+      "direction": "not_applicable"
+    },
+    "contrast_direction": "visualization_only"
+  },
+  "metrics": [
+    {
+      "metric_id": "path_length_m",
+      "source_ids": [
+        "portfolio_fixture"
+      ],
+      "unit": "metres",
+      "desirability": "lower_is_better",
+      "support": 2,
+      "denominator": 2,
+      "missingness": "complete",
+      "unavailable_handling": "fail_closed",
+      "effect": null,
+      "uncertainty": {
+        "declared": false,
+        "method": null,
+        "ci_low": null,
+        "ci_high": null,
+        "p_value_raw": null,
+        "p_value_adjusted": null
+      },
+      "null_value": null,
+      "multiplicity": {
+        "declared": false,
+        "method": null,
+        "n_comparisons": null
+      },
+      "sensitivity": null
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "d_ch7_process_visualization",
+      "metric_id": "path_length_m",
+      "outcome": "unavailable",
+      "rationale": "Visualization-only; the controlled grammar does not admit inferential or causal comparison. Provenance is not admitted for causal claims.",
+      "refusal_reason": "Causal abstention: visualization-only, no inferential comparison admitted."
+    }
+  ],
+  "figure_links": [
+    {
+      "figure_id": "ch7_matched_start_process_contrast",
+      "artifact_id": "ch7_case_dossier_matched_seed118",
+      "path": "tests/fixtures/benchmark/case_dossier_v1/matched_seed118/portfolio.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "encoding": "unavailable",
+      "visual_contract": {
+        "estimand_id": "ch7_matched_planner_process_contrast",
+        "plot_type": "matched_start_process_trace",
+        "rationale": "The visual encodings preserve the matched-start process contrast without implying a causal effect.",
+        "encodings": {
+          "x": "recorded trace step",
+          "y": "recorded position",
+          "color": "declared role"
+        },
+        "transforms": [],
+        "limits": {},
+        "reference_lines": [],
+        "ordering": ["recorded start", "trace step"],
+        "faceting": ["matched seed pair"],
+        "uncertainty_encoding": null,
+        "sample_size_display": "n=2 recorded traces",
+        "legend_identities": ["declared role"],
+        "accessibility_contract": ["color is not the sole identity channel", "caption states visualization-only status"]
+      },
+      "caption_file": null
+    }
+  ],
+  "caption_assertions": [
+    {
+      "figure_id": "ch7_matched_start_process_contrast",
+      "template_id": "unavailable_visualization.v1",
+      "assertion_text": "Figure 'ch7_matched_start_process_contrast' is unavailable under admission state 'unavailable_causal_inference'.",
+      "status": "unavailable",
+      "bound_to_packet_fields": ["estimand_id", "comparison.direction", "claim_boundary.allowed"]
+    }
+  ],
+  "claim_boundary": {
+    "allowed": [
+      "The recorded traces show distinct observed paths and terminal outcomes from different recorded starts.",
+      "Visualization-only; no mechanistic or population inference is admitted."
+    ],
+    "forbidden": [
+      "Causal mechanism or hinge-point claim.",
+      "Adjacent-seed significance or difference-curve claim.",
+      "Divergence-point or pivot-time claim.",
+      "Planner ranking or population generalization claim.",
+      "Paper-facing or dissertation-ready claim."
+    ]
+  },
+  "forbidden_claims": [
+    "Causal mechanism or hinge-point claim.",
+    "Adjacent-seed significance or difference-curve claim.",
+    "Divergence-point or pivot-time claim.",
+    "Planner ranking or population generalization claim.",
+    "Paper-facing or dissertation-ready claim."
+  ],
+  "producer": {
+    "actor_id": "codex_agent",
+    "commit": "ce9510737f87f6a52811c2257e9fd1e599cd6e46",
+    "command": "build_result_interpretation_packet --input fixture_ch7.json",
+    "status": "draft"
+  },
+  "reviewer": null,
+  "reviewed_packet_digest": null,
+  "post_review_digest": null,
+  "findings": [
+    "Visualization-only process contrast from matched-start traces.",
+    "The controlled grammar (matched_start_descriptive.v1) is bound to the descriptive template.",
+    "No inferential or causal comparison is admitted; causal abstention is explicit."
+  ],
+  "limitations": [
+    "Visualization-only; provenance is not admitted for causal claims.",
+    "The controlled grammar forbids causal mechanism, hinge-point, difference-curve, divergence-point, and pivot-time claims.",
+    "No paper-facing or dissertation-ready claim is supported.",
+    "Figure bytes are represented as unavailable; no rendered result is inferred."
+  ],
+  "fail_closed_changes": [
+    "Causal and inferential comparison remain unavailable under the Chapter 7 grammar.",
+    "No figure bytes, divergence point, pivot time, ranking, or dissertation claim is inferred."
+  ]
+}

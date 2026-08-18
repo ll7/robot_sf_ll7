@@ -10,11 +10,12 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062.
+# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062
+# and the result-interpretation packet module.
 # This PR adds the CALF/LegNav comparator module as another deliberate benchmark child.
 # Keep this explicit so a new direct child fails the audit until it is
 # deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 295
+EXPECTED_DIRECT_CHILD_COUNT = 296
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +58,12 @@ def test_known_facades_and_clusters_are_classified(inventory: dict[str, object])
     )
     assert rows["camera_ready"]["classification"] == (
         "unresolved_camera_ready_campaign_facade_cluster"
+    )
+    assert rows["result_interpretation_packet.py"]["classification"] == (
+        "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
+    )
+    assert rows["result_interpretation_packet.py"]["compatibility_action"] == (
+        "no_compatibility_action"
     )
     assert rows["__init__.py"]["classification"] == "canonical_top_level_facade_api"
     assert rows["calf_legnav_comparator.py"]["classification"] == (

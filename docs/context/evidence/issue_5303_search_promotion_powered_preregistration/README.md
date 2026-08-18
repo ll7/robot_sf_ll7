@@ -72,6 +72,16 @@ candidate space, six-seed budget, thresholds, result schema, downstream activati
 and evidence boundary are unchanged; this is an implementation/provenance refresh only and
 does not authorize a campaign, transfer, or promotion.
 
+## Outcome-free scoped-map provenance refresh (2026-08-18)
+
+Issue #7400 repaired the v2 template's marker binding with a dedicated
+`issue_5303_classic_group_crossing_medium_v2` map projection. The projection preserves the
+group-crossing geometry and the frozen candidate identity, timing bindings, budget, gates, and
+evidence boundary while keeping the shared `classic_group_crossing.svg` asset unchanged for
+route-only scenarios and Issue #6139 recertification. The powered template and derived contract
+manifest hashes were refreshed after this input change. No outcomes were generated and no
+campaign execution is authorized by this refresh.
+
 ## The claim under test (frozen, falsifiable)
 
 > Under a frozen family-disjoint design and matched candidate (64 per search seed per

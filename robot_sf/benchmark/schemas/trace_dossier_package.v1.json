@@ -172,9 +172,19 @@
     "render": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dossier", "manifest", "evidence_boundary"],
+      "required": [
+        "dossier",
+        "svg",
+        "pdf",
+        "caption",
+        "manifest",
+        "evidence_boundary"
+      ],
       "properties": {
         "dossier": {"type": "string", "minLength": 1},
+        "svg": {"type": "string", "minLength": 1},
+        "pdf": {"type": "string", "minLength": 1},
+        "caption": {"type": "string", "minLength": 1},
         "manifest": {"type": "string", "minLength": 1},
         "evidence_boundary": {"const": "diagnostic_only"}
       }

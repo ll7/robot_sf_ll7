@@ -688,10 +688,14 @@ be proven by a core-only shard.
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
 output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
 `scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
-missing, pending, failed, malformed, or stale result. The existing `coverage-gate` absolute-floor
-and baseline checks continue to run on main/manual/merge-group full-suite events; they do not
-substitute for the changed-line proof. Direct merge dispatchers must consume the same exact-head
-check before their CAS step (tracked separately by #7407).
+missing, pending, failed, malformed, or stale result for source-changing PRs. The CI workflow
+intentionally skips a PR whose complete changed-file set matches `**/*.md` or `docs/**`; in that
+case the gate fetches and validates the complete GitHub changed-file set and records
+`changed_coverage_status: not_required`. An API failure, incomplete file listing, or any mixed/non-
+ignored path remains a blocker. The existing `coverage-gate` absolute-floor and baseline checks
+continue to run on main/manual/merge-group full-suite events; they do not substitute for the
+changed-line proof. Direct merge dispatchers must consume the same exact-head check before their
+CAS step (tracked separately by #7407).
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for

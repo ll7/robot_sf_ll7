@@ -32,12 +32,15 @@ issue_audit_plan.v1.
 
        uv run python scripts/dev/issue_audit_core.py plan \
          --mode autonomous --include-comments \
+         --max-wall-seconds 120 \
          --output output/issue_audit_plan.json
 
    Do not use Project #5 as a mutex or as a source of readiness evidence.
-2. Inspect schema, counts, and truncation_or_errors. If any source is partial
-   or failed, preserve affected issues and stop mutation application. A
-   partial inventory is not a complete audit.
+2. Inspect schema, counts, and truncation_or_errors. The command has a
+   fail-closed aggregate REST wall-time budget in addition to each individual
+   gh command timeout. If the budget expires, preserve affected issues and
+   stop mutation application; the emitted partial inventory is not a complete
+   audit.
 3. Apply only the mutations already present in the plan:
 
        uv run python scripts/dev/issue_audit_core.py apply \

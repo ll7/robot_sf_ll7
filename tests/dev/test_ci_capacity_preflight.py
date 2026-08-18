@@ -227,3 +227,79 @@ def test_run_worktree_shared_venv_scratch_dir_reaches_uv(tmp_path: Path) -> None
     assert f"XDG_CACHE_HOME={expected_root / 'xdg-cache'}" in captured
     assert f"MPLCONFIGDIR={expected_root / 'mplconfig'}" in captured
     assert "UV_NO_SYNC=1" in captured
+
+
+def test_run_worktree_shared_venv_rejects_incomplete_local_venv(tmp_path: Path) -> None:
+    """An auto-created worktree-local .venv missing docs-proof modules must fail closed."""
+    repo, fake_bin, capture = _shared_venv_fixture(tmp_path)
+    _fake_df(fake_bin, available_kib=10_000_000)
+    _write_executable(
+        repo / ".venv" / "bin" / "python",
+        "#!/usr/bin/env bash\nprintf '%s\\n' 'yaml, duckdb'\nexit 1\n",
+    )
+    ambient_tmp = tmp_path / "ambient-tmp"
+    ambient_tmp.mkdir()
+
+    env = _env_with_fake_bin(fake_bin)
+    env.update(
+        {
+            "CI_CAPTURE": str(capture),
+            "TMPDIR": str(ambient_tmp),
+            "ROBOT_SF_CI_MIN_FREE_BYTES": "0",
+        }
+    )
+    result = subprocess.run(
+        [
+            str(RUN_SHARED_VENV),
+            "--",
+            "python",
+            "-c",
+            "pass",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    diagnostic = result.stdout + result.stderr
+    assert "worktree-local virtual environment is incomplete" in diagnostic
+    assert "yaml, duckdb" in diagnostic
+    assert "scripts/dev/bootstrap_worktree.sh" in diagnostic
+    assert not capture.exists()
+
+
+def test_run_worktree_shared_venv_uses_complete_local_venv(tmp_path: Path) -> None:
+    """A complete worktree-local .venv is used without falling back or failing."""
+    repo, fake_bin, capture = _shared_venv_fixture(tmp_path)
+    _fake_df(fake_bin, available_kib=10_000_000)
+    ambient_tmp = tmp_path / "ambient-tmp"
+    ambient_tmp.mkdir()
+
+    env = _env_with_fake_bin(fake_bin)
+    env.update(
+        {
+            "CI_CAPTURE": str(capture),
+            "TMPDIR": str(ambient_tmp),
+            "ROBOT_SF_CI_MIN_FREE_BYTES": "0",
+        }
+    )
+    result = subprocess.run(
+        [
+            str(RUN_SHARED_VENV),
+            "--",
+            "python",
+            "-c",
+            "pass",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert capture.exists(), "uv must be reached after the local venv probe passes"

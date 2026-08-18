@@ -230,7 +230,9 @@ checked.
 For quick, targeted checks in a sibling worktree, prefer
 `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized
 current-worktree `.venv` when available, otherwise the main checkout `.venv`, while pinning
-imports to the current worktree:
+imports to the current worktree. An auto-created worktree-local `.venv` (for example from a bare
+`uv run --active` before bootstrap) fails closed with a `scripts/dev/bootstrap_worktree.sh`
+instruction instead of being reused (issue #7478):
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q

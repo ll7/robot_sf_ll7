@@ -21,6 +21,10 @@ Standalone commands with a verified boundary that does not import project packag
 --standalone. That mode skips the project-source freshness check and does not add the worktree root
 to PYTHONPATH, while still reusing the shared environment for third-party dependencies.
 
+A worktree-local .venv that was auto-created before the documented bootstrap ran is incomplete and
+fails closed with a scripts/dev/bootstrap_worktree.sh instruction instead of being reused
+(issue #7478).
+
 Options:
   --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to an
                          initialized current-worktree .venv, otherwise the main checkout .venv.
@@ -184,10 +188,12 @@ if [[ -n "$scratch_dir" ]]; then
 fi
 check_scratch_capacity "${TMPDIR:-/tmp}"
 
+local_venv_selected=0
 if [[ -n "$venv_override" ]]; then
   venv_path="$venv_override"
 elif [[ -x "$repo_root/.venv/bin/python" ]]; then
   venv_path="$repo_root/.venv"
+  local_venv_selected=1
 else
   venv_path="$main_repo_root/.venv"
 fi
@@ -199,6 +205,43 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
   echo "Shared virtualenv not found or incomplete: $venv_path" >&2
   echo "Create it with 'uv sync --all-extras' in the owning checkout, or use a local .venv." >&2
   exit 2
+fi
+
+# A worktree-local .venv can be auto-created by a bare `uv run --active` before
+# the documented bootstrap ran, leaving base and optional modules missing
+# (issue #7478). Reusing it here produced ModuleNotFoundError in docs-proof and
+# final-readiness runs, so fail closed with the required bootstrap command.
+check_local_venv_complete() {
+  local venv_python="$1"
+  local missing
+  if ! missing="$("$venv_python" - <<'PY' 2>&1
+from __future__ import annotations
+
+import importlib.util
+
+missing = [
+    module_name
+    for module_name in ("yaml", "duckdb", "pyarrow", "pandas")
+    if importlib.util.find_spec(module_name) is None
+]
+if missing:
+    print(", ".join(missing))
+    raise SystemExit(1)
+PY
+  )"; then
+    echo "ERROR: worktree-local virtual environment is incomplete: $venv_path" >&2
+    echo "Missing or unavailable modules: ${missing:-unknown}" >&2
+    echo "The environment was probably auto-created by 'uv run --active' without the project extras." >&2
+    echo "Run 'scripts/dev/bootstrap_worktree.sh' in this worktree, then rerun." >&2
+    return 2
+  fi
+  return 0
+}
+
+if [[ "$local_venv_selected" -eq 1 ]]; then
+  if ! check_local_venv_complete "$venv_path/bin/python"; then
+    exit 2
+  fi
 fi
 
 check_shared_venv_freshness() {

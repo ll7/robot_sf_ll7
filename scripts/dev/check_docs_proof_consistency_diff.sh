@@ -19,6 +19,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
+# Fail closed instead of letting `uv run --active` auto-create a lightweight
+# .venv without the project dependencies in a fresh worktree (issue #7478).
+# A subsequent helper run would otherwise reuse that incomplete environment and
+# fail with ModuleNotFoundError instead of an actionable setup message.
+if [[ ! -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  echo "ERROR: this checkout has no usable local virtual environment ($REPO_ROOT/.venv)." >&2
+  echo "Run 'scripts/dev/bootstrap_worktree.sh' in this worktree, then rerun." >&2
+  exit 2
+fi
+if ! "$REPO_ROOT/.venv/bin/python" - <<'PY' 2>/dev/null
+from __future__ import annotations
+
+import importlib.util
+
+if importlib.util.find_spec("yaml") is None:
+    raise SystemExit(1)
+PY
+then
+  echo "ERROR: the local virtual environment ($REPO_ROOT/.venv) is incomplete: 'yaml' is not importable." >&2
+  echo "Run 'scripts/dev/bootstrap_worktree.sh' in this worktree, then rerun." >&2
+  exit 2
+fi
+
 BASE_REF="${BASE_REF:-origin/main}"
 # Link anchors are selected for docs/context-only diffs when catalog.yaml is not
 # already in the diff, so added-note README/INDEX linkage proof runs. Do not add

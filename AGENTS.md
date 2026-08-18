@@ -108,7 +108,10 @@ profile such as `--profile training` when bootstrap was invoked with `--extra tr
 targeted validation, prefer
 `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized current-worktree
 `.venv` when available, otherwise reuses the main checkout `.venv`, while `PYTHONPATH` points at
-the active worktree. Use a full local `.venv` and final PR readiness for merge proof. Do not include
+the active worktree. A worktree-local `.venv` that was auto-created (for example by a bare
+`uv run --active` before bootstrap) is detected as incomplete and fails closed with the bootstrap
+command instead of being reused (issue #7478). Use a full local `.venv` and final PR readiness for
+merge proof. Do not include
 CARLA in routine `--all-extras`; opt into `--group carla` only for
 CARLA-capable worktrees and prove runtime with `scripts/dev/check_carla_runtime.sh` when needed.
 

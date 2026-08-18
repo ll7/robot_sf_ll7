@@ -1,5 +1,9 @@
 """Tests for diagnostic trace dossier package composition."""
 
+# evidence-writer-exempt: tests write temporary fixture and package artifacts under pytest
+# tmp_path; the retained docs/context/evidence trace is read-only input and no test output is
+# committed or promoted as durable evidence.
+
 from __future__ import annotations
 
 import hashlib
@@ -22,8 +26,14 @@ from scripts.tools.export_trace_dossier import TraceDossierExportError
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RELEASE = _ROOT / "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+_REAL_RELEASE = _ROOT / "configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml"
 _TRACE_FIXTURE = (
     _ROOT / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
+)
+_REAL_TRACE_SERIES = (
+    _ROOT
+    / "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/"
+    / "classic_group_crossing_medium_seed22_median/trace_series.json"
 )
 _CLI = _ROOT / "scripts/tools/build_trace_dossier_package.py"
 
@@ -63,6 +73,31 @@ def _write_store(tmp_path: Path, source: Path) -> Path:
         study_id="trace-dossier-fixture",
         command="fixture",
         source_commit="fixture-commit",
+    )
+    return store
+
+
+def _write_real_store(tmp_path: Path) -> Path:
+    """Bind the retained #4848 trace-series exemplar to its campaign identity."""
+    store = tmp_path / "real-campaign-store"
+    write_result_store(
+        store,
+        [
+            {
+                "run_id": "run-13334",
+                "episode_id": "classic_group_crossing_medium--22--605d6793ad25c1f5",
+                "planner": "goal",
+                "scenario_id": "classic_group_crossing_medium",
+                "scenario_family": "group_crossing",
+                "seed": 22,
+                "row_status": "native",
+                "artifact_uri": str(_REAL_TRACE_SERIES),
+                "artifact_sha256": hashlib.sha256(_REAL_TRACE_SERIES.read_bytes()).hexdigest(),
+            }
+        ],
+        study_id="issue4206_trace_capable_h600_rerun_20260704",
+        command="retained #4848 exemplar fixture",
+        source_commit="0b0214ced856eac77fa9a4c15b02921eabab1661",
     )
     return store
 
@@ -114,6 +149,9 @@ def test_package_composes_cell_binding_export_render_and_checksums(tmp_path: Pat
     )
     assert renderer_manifest["source_trace"]["path"] == "export/trace.json"
     assert renderer_manifest["outputs"]["png"]["path"] == "render/dossier.png"
+    assert renderer_manifest["outputs"]["svg"]["path"] == "render/dossier.svg"
+    assert renderer_manifest["outputs"]["pdf"]["path"] == "render/dossier.pdf"
+    assert renderer_manifest["outputs"]["caption"]["path"] == "render/caption.md"
 
 
 def test_package_is_byte_deterministic_for_same_inputs(tmp_path: Path) -> None:
@@ -141,6 +179,52 @@ def test_package_is_byte_deterministic_for_same_inputs(tmp_path: Path) -> None:
     assert first_files == second_files
     for relative in first_files:
         assert (first / relative).read_bytes() == (second / relative).read_bytes(), relative
+
+
+def test_package_composes_retained_real_trace_to_publication_candidate(tmp_path: Path) -> None:
+    """One retained #4848 trace reaches the complete diagnostic package path."""
+    store = _write_real_store(tmp_path)
+    source_sha256 = hashlib.sha256(_REAL_TRACE_SERIES.read_bytes()).hexdigest()
+    candidate = _candidate(
+        _REAL_TRACE_SERIES,
+        campaign_id="issue4206_trace_capable_h600_rerun_20260704",
+        cell_id="classic_group_crossing_medium__goal",
+        scenario_id="classic_group_crossing_medium",
+        scenario_family="group_crossing",
+        release_arm_id="goal",
+        seed=22,
+        seed_id="22",
+        episode_id="classic_group_crossing_medium--22--605d6793ad25c1f5",
+        verdict="success",
+        primary_order=0.5,
+        trace_artifact_uri=str(_REAL_TRACE_SERIES),
+        trace_sha256=source_sha256,
+    )
+
+    result = build_trace_dossier_package(
+        candidates=[candidate],
+        release_manifest_path=_REAL_RELEASE,
+        campaign_store_dir=store,
+        output_dir=tmp_path / "real-package",
+    )
+
+    output = tmp_path / "real-package"
+    payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert payload["evidence_boundary"] == "diagnostic_only"
+    assert payload["campaign_cell"]["scenario_id"] == "classic_group_crossing_medium"
+    assert payload["selection"]["selected_seed_id"] == "22"
+    assert payload["render"]["svg"] == "render/dossier.svg"
+    assert payload["render"]["pdf"] == "render/dossier.pdf"
+    assert payload["render"]["caption"] == "render/caption.md"
+    assert (output / "render/dossier.svg").stat().st_size > 0
+    assert (output / "render/dossier.pdf").stat().st_size > 0
+    caption = (output / "render/caption.md").read_text(encoding="utf-8")
+    assert "classic_group_crossing_medium" in caption
+    assert "not benchmark" in caption
+    renderer_manifest = json.loads(
+        (output / "render/renderer_manifest.json").read_text(encoding="utf-8")
+    )
+    assert set(renderer_manifest["outputs"]) == {"png", "svg", "pdf", "caption"}
 
 
 def test_package_rejects_export_identity_mismatch(tmp_path: Path) -> None:

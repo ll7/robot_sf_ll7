@@ -91,15 +91,16 @@ def test_save_plot_closes_figure(tmp_path: Path) -> None:
 
 def test_save_plot_suppresses_value_error(tmp_path: Path) -> None:
     """Suppress invalid-path errors and still close the active figure."""
-    plt.figure()
+    fig = plt.figure()
     plt.plot([0, 1], [0, 1])
     save_plot("\0")
-    assert plt.get_fignums() == []
+    assert fig.number not in plt.get_fignums()
 
 
 def test_save_plot_suppresses_permission_error(tmp_path: Path) -> None:
-    """Suppress save-time operating-system errors and still close the figure."""
-    plt.figure()
+    """Suppress save-time errors and close only the figure owned by the test."""
+    unrelated_fig = plt.figure()
+    fig = plt.figure()
     plt.plot([0, 1], [0, 1])
     with patch(
         "robot_sf.data_analysis.plot_utils.plt.savefig",
@@ -107,7 +108,8 @@ def test_save_plot_suppresses_permission_error(tmp_path: Path) -> None:
     ) as savefig:
         save_plot(str(tmp_path / "plot.png"))
     savefig.assert_called_once()
-    assert plt.get_fignums() == []
+    assert fig.number not in plt.get_fignums()
+    assert unrelated_fig.number in plt.get_fignums()
 
 
 def test_save_plot_existing_directory_no_op(tmp_path: Path) -> None:

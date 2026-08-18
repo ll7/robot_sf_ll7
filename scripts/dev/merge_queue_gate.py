@@ -12,6 +12,7 @@ fail-closed preflight as ``gh-pr-merger``:
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
+  - a successful ``changed-coverage-gate`` check on the exact live PR head,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
@@ -21,8 +22,9 @@ fail-closed preflight as ``gh-pr-merger``:
 
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
 queue merging strategy, base SHA, label set, metadata digest and trailer
-statuses, staleness verdict, CI conclusion, reviewer-thread resolution, and
-requested-reviewer status so the merge decision is inspectable and reproducible.
+statuses, exact-head changed-coverage status, staleness verdict, CI conclusion,
+reviewer-thread resolution, and requested-reviewer status so the merge decision
+is inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -94,6 +96,7 @@ PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested",
 COMPLETED_STATUS = "completed"
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
+CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
 
 # GitHub's native merge-queue ref is exposed as either the full
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
@@ -123,6 +126,8 @@ class MergeGateAudit:
     labels: list[str]
     draft: bool
     ci_overall: str
+    changed_coverage_status: str
+    changed_coverage_head_sha: str
     gate_verdict_status: str
     metadata_digest: str
     metadata_verdict_status: str
@@ -196,11 +201,12 @@ def _reviewers_requested_value(pr: dict[str, Any], reviewers_requested: bool | N
     return snapshot_value if type(snapshot_value) is bool else None
 
 
-def _fail_closed_reasons(  # noqa: PLR0913
+def _fail_closed_reasons(  # noqa: C901, PLR0913 - one ordered list of independent gate blockers.
     *,
     draft: bool,
     merge_ready: bool,
     ci_overall: str,
+    changed_coverage_status: str,
     staleness_verdict: str,
     gate_verdict_status: str,
     metadata_verdict_status: str,
@@ -220,6 +226,16 @@ def _fail_closed_reasons(  # noqa: PLR0913
         reasons.append("missing_merge_ready_label")
     if ci_overall != "success":
         reasons.append(f"ci_not_green:{ci_overall}")
+    if changed_coverage_status != "success":
+        reasons.append(
+            {
+                "missing": "changed_coverage_proof_missing",
+                "pending": "changed_coverage_proof_pending",
+                "failure": "changed_coverage_proof_failed",
+                "stale": "changed_coverage_proof_stale",
+                "malformed": "changed_coverage_proof_malformed",
+            }.get(changed_coverage_status, "changed_coverage_proof_unknown")
+        )
     if staleness_verdict == "stale":
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
@@ -247,11 +263,13 @@ def _fail_closed_reasons(  # noqa: PLR0913
     return reasons
 
 
-def evaluate_merge_gate(
+def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",
     ci_overall: str | None = None,
+    changed_coverage_status: str | None = None,
+    changed_coverage_head_sha: str = "",
     threads_resolved: bool | None = None,
     reviewers_requested: bool | None = None,
     merge_group_head_sha: str = "",
@@ -263,7 +281,8 @@ def evaluate_merge_gate(
 
     Inputs:
       pr: compact PR snapshot. Recognized fields: ``head_sha`` (required for a
-        pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``, plus any
+        pass), ``labels``, ``draft``, ``base_sha``, ``checks.overall``,
+        ``changed_coverage`` (which must bind a success result to ``head_sha``), plus any
         gate-verdict carrier fields understood by
         ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
         ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
@@ -293,7 +312,7 @@ def evaluate_merge_gate(
     Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
     ``reasons``. The audit always records the evaluated head SHA, base SHA, label
     set, gate-verdict and metadata-verdict statuses, staleness verdict, CI
-    conclusion, and thread resolution so the decision is inspectable.
+    conclusion, changed-coverage status, and thread resolution so the decision is inspectable.
     """
     head_sha = str(pr.get("head_sha", "") or "")
     labels = _label_names(pr)
@@ -306,6 +325,18 @@ def evaluate_merge_gate(
     if ci_overall is None:
         ci_overall = str((pr.get("checks") or {}).get("overall", "") or "")
     ci_overall = str(ci_overall).lower() or "unknown"
+
+    changed_coverage = pr.get("changed_coverage")
+    if isinstance(changed_coverage, dict):
+        if changed_coverage_status is None:
+            changed_coverage_status = str(changed_coverage.get("status") or "")
+        if not changed_coverage_head_sha:
+            changed_coverage_head_sha = str(changed_coverage.get("head_sha") or "")
+    changed_coverage_status = str(changed_coverage_status or "").lower() or "unknown"
+    if changed_coverage_status == "success" and (
+        not changed_coverage_head_sha or changed_coverage_head_sha.lower() != head_sha.lower()
+    ):
+        changed_coverage_status = "stale"
 
     reviewers_requested = _reviewers_requested_value(pr, reviewers_requested)
 
@@ -348,6 +379,7 @@ def evaluate_merge_gate(
             draft=draft,
             merge_ready=merge_ready,
             ci_overall=ci_overall,
+            changed_coverage_status=changed_coverage_status,
             staleness_verdict=staleness_verdict,
             gate_verdict_status=gate_verdict_status,
             metadata_verdict_status=metadata_verdict_status,
@@ -375,6 +407,8 @@ def evaluate_merge_gate(
         labels=labels,
         draft=draft,
         ci_overall=ci_overall or "unknown",
+        changed_coverage_status=changed_coverage_status,
+        changed_coverage_head_sha=changed_coverage_head_sha,
         gate_verdict_status=gate_verdict_status,
         metadata_digest=metadata_digest_value,
         metadata_verdict_status=metadata_verdict_status,
@@ -454,6 +488,79 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
         if conclusion not in SUCCESS_CONCLUSIONS:
             return "unknown"
     return "success"
+
+
+def _classify_changed_coverage_checks(
+    check_runs: list[dict[str, Any]], *, head_sha: str
+) -> dict[str, Any]:
+    """Classify the newest changed-coverage check for one exact commit."""
+    candidates = [
+        check
+        for check in check_runs
+        if str(check.get("name") or "").strip() == CHANGED_COVERAGE_CHECK_NAME
+    ]
+    if not candidates:
+        return {
+            "status": "missing",
+            "head_sha": head_sha,
+            "name": CHANGED_COVERAGE_CHECK_NAME,
+        }
+
+    def sort_key(check: dict[str, Any]) -> tuple[str, int]:
+        timestamp = str(
+            check.get("completed_at") or check.get("started_at") or check.get("created_at") or ""
+        )
+        try:
+            identifier = int(check.get("id", 0) or 0)
+        except (TypeError, ValueError):
+            identifier = 0
+        return timestamp, identifier
+
+    latest = max(candidates, key=sort_key)
+    reported_head = str(latest.get("head_sha") or "")
+    if not reported_head:
+        status = "malformed"
+    elif reported_head.lower() != head_sha.lower():
+        status = "stale"
+    elif str(latest.get("status") or "").lower() != COMPLETED_STATUS:
+        status = "pending"
+    elif str(latest.get("conclusion") or "").lower() != "success":
+        status = "failure"
+    else:
+        status = "success"
+    return {
+        "status": status,
+        "head_sha": reported_head or head_sha,
+        "name": str(latest.get("name") or CHANGED_COVERAGE_CHECK_NAME),
+        "check_run_id": latest.get("id"),
+        "started_at": latest.get("started_at"),
+        "completed_at": latest.get("completed_at"),
+        "conclusion": latest.get("conclusion"),
+        "details_url": latest.get("html_url") or latest.get("details_url"),
+    }
+
+
+def _fetch_exact_head_changed_coverage(
+    head_sha: str, *, repo: str
+) -> tuple[dict[str, Any], str | None]:
+    """Fetch changed-coverage evidence from the exact PR-head check-run list."""
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        return {}, "PR head SHA is missing or malformed"
+    result = _gh(["api", f"repos/{repo}/commits/{head_sha}/check-runs?per_page=100"])
+    if result.returncode != 0:
+        return {}, result.stderr.strip() or "exact-head check-run query failed"
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return {}, err or "exact-head check-run response is not a JSON object"
+    check_runs = payload.get("check_runs")
+    if not isinstance(check_runs, list) or any(not isinstance(item, dict) for item in check_runs):
+        return {}, "exact-head check-run response is missing a valid check_runs list"
+    total_count = payload.get("total_count")
+    if type(total_count) is not int or total_count < len(check_runs):
+        return {}, "exact-head check-run response has an invalid or incomplete total_count"
+    if total_count > len(check_runs):
+        return {}, "exact-head check-run response is incomplete; refusing stale-proof bypass"
+    return _classify_changed_coverage_checks(check_runs, head_sha=head_sha), None
 
 
 def _graphql_error(payload: dict[str, Any]) -> str | None:
@@ -638,14 +745,20 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     if base_err:
         return {}, f"failed to fetch PR base SHA: {base_err}"
 
+    head_sha = str(payload.get("headRefOid") or "")
+    changed_coverage, changed_coverage_err = _fetch_exact_head_changed_coverage(head_sha, repo=repo)
+    if changed_coverage_err:
+        return {}, f"failed to fetch exact-head changed coverage: {changed_coverage_err}"
+
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
         "draft": draft_value,
-        "head_sha": str(payload.get("headRefOid") or ""),
+        "head_sha": head_sha,
         "metadata_digest": metadata_digest(title, body),
         "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
+        "changed_coverage": changed_coverage,
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
@@ -826,6 +939,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- labels: `{', '.join(audit.labels) if audit.labels else '(none)'}`",
         f"- draft: `{audit.draft}`",
         f"- merge-ready: `{audit.merge_ready}`",
+        f"- exact-head changed-coverage status: `{audit.changed_coverage_status}`",
+        f"- changed-coverage head SHA: `{audit.changed_coverage_head_sha or '?'}`",
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
         f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
@@ -840,7 +955,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
         "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
-        "trailer + resolved threads + no outstanding reviewer requests + "
+        "trailer + exact-head `changed-coverage-gate` proof + resolved threads + no outstanding reviewer requests + "
         "`ALLGREEN` queue strategy; fail-closed on any missing dimension. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
@@ -967,6 +1082,7 @@ def _self_test() -> int:
             "labels": list(labels),
             "draft": draft,
             "base_sha": base_sha,
+            "changed_coverage": {"status": "success", "head_sha": head_sha},
         }
         digest = metadata_digest("merge queue gate self-test", "final body")
         pr["metadata_digest"] = digest
@@ -1118,6 +1234,8 @@ def _self_test() -> int:
         "labels",
         "draft",
         "ci_overall",
+        "changed_coverage_status",
+        "changed_coverage_head_sha",
         "gate_verdict_status",
         "staleness_verdict",
         "thread_resolution",
@@ -1154,6 +1272,7 @@ def _self_test() -> int:
             "labels": ["merge-ready"],
             "draft": False,
             "checks": {"overall": "success"},
+            "changed_coverage": {"status": "success", "head_sha": full_sha},
             "reviewers_requested": False,
             "metadata_digest": metadata_digest("merge queue gate self-test", "final body"),
             "metadata_verdicts": [

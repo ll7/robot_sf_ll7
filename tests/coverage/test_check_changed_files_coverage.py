@@ -1,20 +1,60 @@
-"""Tests for changed-files coverage gate filtering."""
+"""Tests for changed-files coverage gate filtering and immutable verdicts."""
 
 from __future__ import annotations
 
+import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from scripts.coverage.check_changed_files_coverage import (
+    _changed_line_coverage_details,
     _changed_line_numbers,
     _coverage_for_changed_lines,
     _declaration_only_class_base_requirements,
     _declaration_proofs_from_test_source,
     _has_declaration_only_test_proof,
     _is_doc_or_comment_only_python_change,
+    _resolve_comparison,
+    _run_check,
 )
+
+
+def _git(repo: Path, *args: str) -> str:
+    """Run one small fixture-repository Git command."""
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _fixture_repo(tmp_path: Path) -> tuple[Path, str, str]:
+    """Create two exact commits for immutable base/head coverage checks."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "coverage@example.invalid")
+    _git(repo, "config", "user.name", "coverage-fixture")
+    source = repo / "robot_sf" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def answer() -> int:\n    return 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+    source.write_text(
+        "def answer() -> int:\n    return 1\n\ndef changed() -> int:\n    return 2\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "head")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+    return repo, base_sha, head_sha
 
 
 def test_doc_or_comment_only_python_change_detection() -> None:
@@ -63,6 +103,87 @@ def test_changed_line_coverage_treats_non_executable_edits_as_covered() -> None:
 
     assert coverage == 100.0
     assert scope == "changed executable lines 0/0"
+
+
+def test_changed_line_coverage_fails_closed_on_malformed_file_data() -> None:
+    """A coverage row without executable-line arrays cannot prove changed coverage."""
+    coverage, scope, changed, covered, missing = _changed_line_coverage_details(
+        file_data={"summary": {}},
+        changed_lines={3},
+    )
+
+    assert coverage is None
+    assert scope == "coverage malformed"
+    assert changed == [3]
+    assert covered is None
+    assert missing is None
+
+
+def test_explicit_base_and_head_shas_are_resolved_and_bound(tmp_path: Path) -> None:
+    """Hosted-style inputs must resolve exact commits and reject checkout drift."""
+    repo, base_sha, head_sha = _fixture_repo(tmp_path)
+    args = SimpleNamespace(base="origin/main", base_sha=base_sha, head_sha=head_sha)
+
+    comparison = _resolve_comparison(args, repo)
+
+    assert comparison.base_sha == base_sha
+    assert comparison.head_sha == head_sha
+    with pytest.raises(RuntimeError, match="checked-out HEAD mismatch"):
+        _resolve_comparison(
+            SimpleNamespace(base="origin/main", base_sha=base_sha, head_sha=base_sha),
+            repo,
+        )
+
+
+def test_machine_verdict_binds_changed_files_and_coverage_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The opt-in report carries exact identities, line evidence, and no-merge policy."""
+    repo, base_sha, head_sha = _fixture_repo(tmp_path)
+    coverage_path = repo / "coverage.json"
+    coverage_path.write_text(
+        json.dumps(
+            {
+                "files": {
+                    "robot_sf/feature.py": {
+                        "executed_lines": [1, 2, 4, 5],
+                        "missing_lines": [],
+                        "summary": {"percent_covered": 100.0},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_path = repo / "changed-coverage.json"
+    monkeypatch.setattr("scripts.coverage.check_changed_files_coverage._repo_root", lambda: repo)
+    args = SimpleNamespace(
+        base="origin/main",
+        base_sha=base_sha,
+        head_sha=head_sha,
+        event_name="pull_request",
+        coverage=str(coverage_path),
+        min=80.0,
+        goal=100.0,
+        include=[],
+        exclude=[],
+        show_skipped=False,
+        json_output=report_path,
+        json=False,
+    )
+
+    assert _run_check(args) == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["schema"] == "changed-coverage.v1"
+    assert report["base_sha"] == base_sha
+    assert report["head_sha"] == head_sha
+    assert report["event"] == "pull_request"
+    assert report["coverage_artifact"]["sha256"]
+    assert report["verdict"] == "passed"
+    assert report["no_merge"] is True
+    assert report["files"][0]["missing_changed_lines"] == []
 
 
 def test_declaration_only_base_change_accepts_parametrized_issubclass_proof() -> None:

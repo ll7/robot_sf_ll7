@@ -374,3 +374,84 @@ def test_model_licensing_preflight_rejects_symlinked_legal_file(
     assert exit_code == 2
     report = json.loads(capsys.readouterr().out)
     assert any("must not traverse symlinks" in issue for issue in report["issues"])
+
+
+def test_undeclared_licensing_is_reported_but_can_be_allowed_in_the_pr_gate(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """A row with no licensing mapping is a known rights gap, strict only outside the PR gate."""
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(
+        registry_path, _registry_text(tmp_path / "missing" / "model.zip", include_licensing=False)
+    )
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    strict_code = publish_model_registry_release.main(
+        ["--registry-path", str(registry_path), "--validate-licensing"]
+    )
+    strict_report = json.loads(capsys.readouterr().out)
+    allowed_code = publish_model_registry_release.main(
+        [
+            "--registry-path",
+            str(registry_path),
+            "--validate-licensing",
+            "--allow-undeclared-licensing",
+        ]
+    )
+    allowed_report = json.loads(capsys.readouterr().out)
+
+    assert strict_code == 2
+    assert allowed_code == 0
+    assert allowed_report["status"] == "blocked"
+    assert strict_report["undeclared_licensing_issues"]
+    assert allowed_report["undeclared_licensing_issues"]
+    assert allowed_report["invalid_licensing_evidence_issues"] == []
+
+
+def test_invalid_declared_licensing_evidence_still_fails_the_pr_gate(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Declared licensing whose legal file is missing cannot be waived by the PR-gate flag."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    (model_path.parent / "LICENSE").unlink()
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_model_registry_release.main(
+        [
+            "--registry-path",
+            str(registry_path),
+            "--validate-licensing",
+            "--allow-undeclared-licensing",
+        ]
+    )
+
+    assert exit_code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["invalid_licensing_evidence_issues"]
+    assert any("does not exist" in issue for issue in report["invalid_licensing_evidence_issues"])
+
+
+def test_allow_undeclared_licensing_requires_the_preflight_mode(tmp_path: Path) -> None:
+    """The PR-gate waiver cannot leak into the publication path."""
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(tmp_path / "missing" / "model.zip"))
+
+    with pytest.raises(SystemExit) as exc:
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-fixture",
+                "--allow-undeclared-licensing",
+            ]
+        )
+
+    assert exc.value.code == 2

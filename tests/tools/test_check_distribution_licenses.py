@@ -132,6 +132,54 @@ def test_socnavbench_file_partition_is_checked_semantically(tmp_path: Path) -> N
     assert len(result.sdists) == 1
 
 
+def test_socnavbench_apache_override_of_an_upstream_file_is_accepted(tmp_path: Path) -> None:
+    """An Apache-2.0 override refines an upstream file and is not a separate partition."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/mp_env/map_utils.py"] = (
+        "# Apache License, Version 2.0\nupstream mesh loader\n"
+    )
+    payloads["third_party/socnavbench/LICENSING.yaml"] = (
+        payloads["third_party/socnavbench/LICENSING.yaml"]
+        .replace("upstream_files: []", "upstream_files:\n  - mp_env/map_utils.py")
+        .replace(
+            "license_overrides: []",
+            "license_overrides:\n"
+            "  - license_spdx: Apache-2.0\n"
+            "    files:\n"
+            "      - mp_env/map_utils.py\n",
+        )
+    )
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    result = check_distribution(tmp_path)
+
+    assert len(result.sdists) == 1
+
+
+def test_socnavbench_override_outside_upstream_files_fails_closed(tmp_path: Path) -> None:
+    """An override entry that is not declared upstream leaves the manifest ambiguous."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/mp_env/map_utils.py"] = (
+        "# Apache License, Version 2.0\nupstream mesh loader\n"
+    )
+    payloads["third_party/socnavbench/LICENSING.yaml"] = payloads[
+        "third_party/socnavbench/LICENSING.yaml"
+    ].replace(
+        "license_overrides: []",
+        "license_overrides:\n"
+        "  - license_spdx: Apache-2.0\n"
+        "    files:\n"
+        "      - mp_env/map_utils.py\n",
+    )
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="overrides must also be listed as upstream files",
+    ):
+        check_distribution(tmp_path)
+
+
 def test_socnavbench_unclassified_source_file_fails_closed(tmp_path: Path) -> None:
     """A vendored SocNavBench source file cannot bypass the ownership manifest."""
     payloads = dict(PAYLOADS)

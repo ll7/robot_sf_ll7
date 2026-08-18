@@ -45,6 +45,15 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--allow-undeclared-licensing",
+        action="store_true",
+        help=(
+            "Preflight only: report registry rows that declare no licensing mapping as known "
+            "blockers instead of failing. Invalid declared licensing evidence still fails closed, "
+            "and the publication path is unaffected."
+        ),
+    )
+    parser.add_argument(
         "--model-id",
         action="append",
         default=[],
@@ -397,6 +406,31 @@ def _repository_relative_path(raw_path: str, *, repo_root: Path) -> str:
     return candidate.relative_to(repo_root.resolve()).as_posix()
 
 
+UNDECLARED_LICENSING_MARKER = "licensing mapping is required before publication"
+
+
+def _partition_licensing_issues(row_issues: list[str]) -> tuple[list[str], list[str]]:
+    """Split a row's issues into pre-existing undeclared rights and invalid declared evidence.
+
+    A row that carries no ``licensing`` mapping at all is a known, pre-existing rights gap owned
+    by the separate model-weight rights review. A row that *declares* licensing but whose
+    identity, training-data, or legal-file evidence does not hold is a defect introduced by the
+    declaration and must always fail closed.
+    """
+    undeclared = [issue for issue in row_issues if issue.endswith(UNDECLARED_LICENSING_MARKER)]
+    invalid = [issue for issue in row_issues if not issue.endswith(UNDECLARED_LICENSING_MARKER)]
+    return undeclared, invalid
+
+
+def licensing_preflight_exit_code(report: dict[str, Any], *, allow_undeclared: bool = False) -> int:
+    """Return the preflight exit code for a release-strict or PR-gate invocation."""
+    if report.get("invalid_licensing_evidence_issues"):
+        return 2
+    if report.get("undeclared_licensing_issues") and not allow_undeclared:
+        return 2
+    return 0
+
+
 def validate_model_licensing_inputs(
     registry_path: Path, *, repo_root: Path | None = None
 ) -> dict[str, Any]:
@@ -404,6 +438,8 @@ def validate_model_licensing_inputs(
     effective_root = (repo_root or get_repository_root()).resolve()
     registry_data = _load_registry_data(registry_path)
     issues: list[str] = []
+    undeclared_issues: list[str] = []
+    invalid_issues: list[str] = []
     rows: list[dict[str, Any]] = []
 
     for entry in _model_licensing_candidates(registry_data):
@@ -438,15 +474,20 @@ def validate_model_licensing_inputs(
                         "sha256": _sha256(resolved),
                     }
                 )
+        undeclared, invalid = _partition_licensing_issues(row_issues)
         rows.append(
             {
                 "model_id": model_id,
                 "status": "blocked" if row_issues else "passed",
                 "files": files,
                 "issues": row_issues,
+                "undeclared_licensing": undeclared,
+                "invalid_licensing_evidence": invalid,
             }
         )
         issues.extend(row_issues)
+        undeclared_issues.extend(undeclared)
+        invalid_issues.extend(invalid)
 
     return {
         "schema_version": "robot-sf-model-licensing-preflight.v1",
@@ -454,6 +495,8 @@ def validate_model_licensing_inputs(
         "registry_path": str(registry_path),
         "rows": rows,
         "issues": issues,
+        "undeclared_licensing_issues": undeclared_issues,
+        "invalid_licensing_evidence_issues": invalid_issues,
         "read_only": True,
         "uploads_performed": False,
         "registry_writes_performed": False,
@@ -752,7 +795,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.registry_path = args.registry_path.resolve()
         report = validate_model_licensing_inputs(args.registry_path)
         print(json.dumps(report, indent=2, sort_keys=True))
-        return 0 if report["status"] == "passed" else 2
+        return licensing_preflight_exit_code(
+            report, allow_undeclared=args.allow_undeclared_licensing
+        )
+    if args.allow_undeclared_licensing:
+        parser.error("--allow-undeclared-licensing requires --validate-licensing")
     if not args.tag:
         parser.error("--tag is required unless --validate-licensing is used")
     if (

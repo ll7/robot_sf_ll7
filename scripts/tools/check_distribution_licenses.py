@@ -255,7 +255,11 @@ def _check_socnav_identity(
 
 
 def _socnav_classifications(archive: Path, manifest: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Validate and flatten SocNavBench's upstream, override, and local partitions."""
+    """Validate SocNavBench's upstream/local partition and its Apache override refinement.
+
+    ``license_overrides`` refines the license of files that remain upstream files, so an
+    override entry must also appear in ``upstream_files`` and is not a third partition.
+    """
     errors: list[str] = []
     upstream_files = manifest.get("upstream_files")
     overrides = manifest.get("license_overrides")
@@ -280,7 +284,13 @@ def _socnav_classifications(archive: Path, manifest: dict[str, Any]) -> tuple[li
         for item in local_files
         if isinstance(item, dict) and isinstance(item.get("path"), str)
     ]
-    classified = list(upstream_files) + override_files + local_paths
+    stray_overrides = sorted(set(override_files) - set(upstream_files))
+    if stray_overrides:
+        errors.append(
+            f"{archive.name}: SocNavBench license overrides must also be listed as "
+            f"upstream files: {stray_overrides}"
+        )
+    classified = list(upstream_files) + local_paths
     if len(classified) != len(set(classified)):
         errors.append(f"{archive.name}: SocNavBench file classifications overlap")
     return classified, errors

@@ -106,18 +106,25 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Create the worktree through the capacity-guarded helper from the main checkout:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
-  "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The helper checks the target filesystem before invoking Git. A low-space or
+non-writable target fails before checkout, so it cannot leave a partially
+populated worktree. The default threshold is 2 GiB and can be overridden for
+a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
+`--minimum-free-bytes`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
@@ -135,18 +142,18 @@ A cheap fresh-worktree check is:
   && [ ! -d .venv ]
 ```
 
-Use this order for a fresh worktree:
+Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
-scripts/dev/bootstrap_worktree.sh
-source .venv/bin/activate
-python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+scripts/dev/run_worktree_shared_venv.sh -- \
+  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
-`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
-`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
-commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
-intentionally resync the local environment, unset the guard for that command:
+The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
+scratch capacity before starting the command. This avoids materializing one full `.venv` per
+parallel worktree. Use `bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it creates and targets the local `.venv`, then adds `UV_NO_SYNC=1` to its activation
+script. To intentionally resync a local environment, unset the guard for that command:
 
 ```bash
 env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
@@ -167,6 +174,18 @@ If a current-worktree `.venv` is missing or incomplete, both entry points fail b
 lightweight Python-only environment from being reused as if it were a synchronized dependency
 profile. `--standalone` remains available only for commands whose no-project-import boundary is
 verified.
+
+When the host is under pressure, inspect reclaim candidates without deleting anything:
+
+```bash
+scripts/dev/check_worktree_capacity.py --inventory --json
+```
+
+The inventory covers ignored generated `output/`, the uv cache, repository worktree containers,
+and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
+evidence before pruning `output/`; remove only clean, pushed Git worktrees with
+`git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
+automated cleanup is performed.
 
 ### Local CI scratch capacity
 

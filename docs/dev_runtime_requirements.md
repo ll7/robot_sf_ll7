@@ -38,12 +38,27 @@ These are expected for normal development:
 * Python 3.12 - the supported interpreter version in GitHub Actions. Run project commands through
   `uv run ...` rather than a globally activated interpreter.
 
-After cloning or creating a fresh linked worktree:
+After cloning or initializing the canonical main checkout:
 
 ```bash
 uv sync --all-extras
 source .venv/bin/activate
 ```
+
+For a fresh linked worktree, use the capacity-guarded creator and the shared
+main-checkout environment by default:
+
+```bash
+scripts/dev/create_worktree.sh --branch issue-123-short-description \
+  --path ../robot_sf_ll7.worktrees/issue-123-short-description --base origin/main
+scripts/dev/run_worktree_shared_venv.sh -- <command>
+```
+
+This avoids one full virtual environment per worker. Use
+`scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is
+explicitly required; inspect reclaim candidates with
+`scripts/dev/check_worktree_capacity.py --inventory` before manually pruning
+ignored output, caches, or scratch worktrees.
 
 When using the linked-worktree bootstrap helper for a training or vectorized-environment
 (VecEnv) validation path, name the required optional dependency explicitly:

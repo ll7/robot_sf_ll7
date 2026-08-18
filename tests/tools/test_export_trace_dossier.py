@@ -18,8 +18,14 @@ from scripts.tools.export_trace_dossier import TraceDossierExportError, export_t
 
 _ROOT = Path(__file__).resolve().parents[2]
 _RELEASE = _ROOT / "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+_REAL_RELEASE = _ROOT / "configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml"
 _TRACE_FIXTURE = (
     _ROOT / "tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json"
+)
+_REAL_TRACE_SERIES = (
+    _ROOT
+    / "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/"
+    / "classic_group_crossing_medium_seed22_median/trace_series.json"
 )
 
 
@@ -99,6 +105,31 @@ def _write_jsonl_source(tmp_path: Path) -> Path:
     return path
 
 
+def _write_real_trace_store(tmp_path: Path) -> Path:
+    """Bind the retained #4848 trace-series exemplar to its campaign identity."""
+    store = tmp_path / "real-campaign-store"
+    write_result_store(
+        store,
+        [
+            {
+                "run_id": "run-13334",
+                "episode_id": "classic_group_crossing_medium--22--605d6793ad25c1f5",
+                "planner": "goal",
+                "scenario_id": "classic_group_crossing_medium",
+                "scenario_family": "group_crossing",
+                "seed": 22,
+                "row_status": "native",
+                "artifact_uri": str(_REAL_TRACE_SERIES),
+                "artifact_sha256": hashlib.sha256(_REAL_TRACE_SERIES.read_bytes()).hexdigest(),
+            }
+        ],
+        study_id="issue4206_trace_capable_h600_rerun_20260704",
+        command="retained #4848 exemplar fixture",
+        source_commit="0b0214ced856eac77fa9a4c15b02921eabab1661",
+    )
+    return store
+
+
 def test_export_trace_dossier_writes_trace_manifest_and_checksums(tmp_path: Path) -> None:
     """A release-pinned existing trace becomes a deterministic dossier bundle."""
     source = _write_typed_source(tmp_path)
@@ -145,6 +176,38 @@ def test_export_trace_dossier_converts_existing_jsonl_recording(tmp_path: Path) 
     assert exported["schema_version"] == "simulation_trace_export.v1"
     assert len(exported["frames"]) == 2
     assert exported["source"]["episode_id"] == "fixture_episode_001"
+
+
+def test_export_trace_dossier_converts_retained_real_trace_series(tmp_path: Path) -> None:
+    """A retained #4848 trace-series exemplar becomes a provenance-bound typed trace."""
+    store = _write_real_trace_store(tmp_path)
+    output = tmp_path / "real-dossier"
+
+    manifest = export_trace_dossier(
+        scenario_id="classic_group_crossing_medium",
+        planner_id="goal",
+        seed=22,
+        release_manifest_path=_REAL_RELEASE,
+        campaign_store_dir=store,
+        output_dir=output,
+    )
+
+    exported = json.loads((output / "trace.json").read_text(encoding="utf-8"))
+    receipt = json.loads((output / "normalization_receipt.json").read_text(encoding="utf-8"))
+    assert manifest["release"]["release_id"] == "issue_7086_trace_dossier_diagnostic_v0_1"
+    assert exported["source"] == {
+        "episode_id": "classic_group_crossing_medium--22--605d6793ad25c1f5",
+        "generated_by": ("scripts/tools/export_trace_dossier.py; source=trace_series.json"),
+        "planner_id": "goal",
+        "scenario_id": "classic_group_crossing_medium",
+        "seed": 22,
+    }
+    assert len(exported["frames"]) == 167
+    assert exported["frames"][0]["pedestrians"][0]["id"] == "0"
+    assert exported["frames"][0]["planner"]["rl"]["reward"] == pytest.approx(0.0008005650800357953)
+    assert receipt["provenance"]["source_schema_version"] == "issue-4848-trace-series.v1"
+    assert receipt["provenance"]["transformation"] == "trace_series_to_simulation_trace_export"
+    assert receipt["provenance"]["trace_series_campaign_job"] == "13334"
 
 
 def test_export_trace_dossier_fails_closed_when_source_is_missing(tmp_path: Path) -> None:

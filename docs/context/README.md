@@ -9,11 +9,13 @@ maintenance workflow and full discoverability surface.
 
 The trace dossier cell-binding metadata contract is documented in
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md); it remains
-metadata-only until trace export and renderer provenance are reviewed.
+metadata-only even though the retained-trace export and renderer provenance path is now
+covered by diagnostic checks.
 
 The deterministic representative selector is documented in
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md); it selects a future
-trace-dossier representative only and does not establish benchmark evidence.
+trace-dossier representative, with a diagnostic h600 pin for retained exemplars, and does not
+establish benchmark evidence.
 
 The fixture-only agent figure interpretation evaluator is documented in
 [issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md);

@@ -154,7 +154,19 @@ env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
 
 The optional-dependency preflight uses import-spec probes without importing project code. A
 `missing_optional` result is setup evidence and should not be confused with a changed-code
-collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
+collection or runtime failure. The docs-proof wrapper checks the `core` profile before invoking
+`uv run`; the shared-venv wrapper checks that profile by default and accepts an explicit profile
+when the command needs optional packages:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
+```
+
+If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
+`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
+lightweight Python-only environment from being reused as if it were a synchronized dependency
+profile. `--standalone` remains available only for commands whose no-project-import boundary is
+verified.
 
 ### Local CI scratch capacity
 
@@ -654,6 +666,30 @@ Until these toggles are applied, the workflow does not provide the queue-side co
 in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
+
+**Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
+the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
+fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
+and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
+`--head-sha` values. The same checker used by local readiness emits a `changed-coverage.v1`
+artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
+and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
+`not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
+changed-head mismatch, malformed diff/artifact evidence, or an incomplete check-run query is a
+blocker. A pure-deletion file with a valid coverage row and no new-file line numbers is reported as
+`100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
+`not_required` verdict is only for a head with no executable Python changes in the configured
+coverage scope, and remains observable in the artifact rather than being inferred from a skipped
+job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+be proven by a core-only shard.
+
+The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
+output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
+`scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
+missing, pending, failed, malformed, or stale result. The existing `coverage-gate` absolute-floor
+and baseline checks continue to run on main/manual/merge-group full-suite events; they do not
+substitute for the changed-line proof. Direct merge dispatchers must consume the same exact-head
+check before their CAS step (tracked separately by #7407).
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
@@ -1370,6 +1406,33 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
   The wrapper auto-detects context-only PRs and includes README/INDEX/catalog in that gate. State
   explicitly when benchmark, simulator, or full PR readiness gates were not run because the branch only
   changes discoverability or workflow text.
+
+#### Canonical context-note integrity checks
+
+Use the following sequence when adding or changing a context note. Run it from the repository root
+so the commands resolve the active worktree and its `origin/main` base:
+
+```bash
+# Changed-document proof, including README/INDEX anchors for context-only diffs.
+BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
+
+# Repository-wide Markdown link integrity (the full-link pass).
+uv run python scripts/dev/check_docs_evidence_integrity.py --full
+
+# Context-note index/catalog coverage and freshness.
+uv run python scripts/tools/check_context_note_freshness.py \
+  --index docs/context/INDEX.md \
+  --context-dir docs/context \
+  --catalog docs/context/catalog.yaml
+```
+
+The changed-document wrapper is the normal PR gate. To include freshness checks for only notes
+changed on the branch, set `DOCS_PROOF_CHECK_FRESHNESS=1`; use `DOCS_PROOF_FRESHNESS_STRICT=1` only
+when the pre-existing warning backlog is intentionally part of the review. The default freshness
+run is non-strict: repository-wide orphan-note findings are warning-only and may remain as an
+existing backlog, while malformed or superseded notes without a valid replacement remain blocking.
+This boundary keeps a new note fail-closed without making an unrelated historical orphan warning
+look like a failure in the changed-document proof.
 
 ### Agent memory conventions
 
@@ -2640,6 +2703,13 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 Use the following templates for specific tasks.
 
+Every issue template collects the canonical `archetype` and `evidence_tier` metadata defined in
+the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown templates provide
+the metadata block near the top of the issue body; YAML issue forms expose both fields as required
+dropdowns. Use exactly one value from each enum and add repository-relative paths under
+`linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
+without rewriting existing issue bodies or changing labels and project fields.
+
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:
   [research validation](../.github/ISSUE_TEMPLATE/research-validation.yml),
@@ -2739,6 +2809,16 @@ evidence, benchmark/reporting gates, generated artifacts, CI/release policy, or 
 paths, and recommended for multi-agent or multi-run tasks.
 
 - [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
+
+### Issue #5303 checker authority
+
+The only current entry point for the promotion-capable search contract is the powered,
+side-effect-free v2 checker:
+`uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py` (and its pure
+`--identities` mode). The historical three-seed v1 contract and timing-control paths remain
+available only to reproduce their pinned diagnostic artifacts; they cannot authorize promotion,
+execution, or transfer work. Current operational code and documentation must not invoke either
+v1 checker path.
 
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.

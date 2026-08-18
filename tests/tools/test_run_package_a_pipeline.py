@@ -300,9 +300,10 @@ class TestPartitionManifestIntegration:
     """Test with a real shipped partition manifest."""
 
     def test_with_valid_partition_manifest(self, tmp_path: Path) -> None:
-        manifest = Path("configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml")
-        if not manifest.exists():
-            pytest.skip("partition manifest not available in test environment")
+        manifest = (
+            Path(__file__).resolve().parents[2]
+            / "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+        )
 
         out = tmp_path / "output"
         payload = run_pipeline(

@@ -13,7 +13,14 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 
 FAILURE_CONCLUSIONS = {
     "failure",
@@ -383,14 +390,32 @@ def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, A
     return checks, superseded_count
 
 
-def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
-    """Build the CI status payload from REST when GraphQL quota is exhausted (issue #6564)."""
+def _fetch_ci_status_rest(
+    pr_number: str,
+    *,
+    fallback_kind: str = "quota",
+    fallback_diagnostic: str = "",
+) -> dict[str, Any]:
+    """Build a route-evidence-only CI payload after a GraphQL read fails.
+
+    REST fallback is authoritative for the check-run and review fields it
+    returns, but it cannot replace GraphQL-only review-thread evidence.  The
+    caller therefore keeps the source and the missing dimension explicit.
+    """
+    if fallback_kind == "transient_exhausted":
+        error_kind = "graphql_transient_exhausted"
+        source = "rest_fallback_graphql_transient"
+        failure = "GraphQL transient retry budget exhausted and REST pull fallback failed"
+    else:
+        error_kind = "graphql_quota_exhausted"
+        source = "rest_fallback_graphql_quota"
+        failure = "GraphQL quota exhausted and REST pull fallback failed"
     pull = _rest_api_get(f"pulls/{pr_number}")
     if not isinstance(pull, dict):
         return {
             "status": "error",
-            "error_kind": "graphql_quota_exhausted",
-            "error": "GraphQL quota exhausted and REST pull fallback failed",
+            "error_kind": error_kind,
+            "error": f"{failure}; {fallback_diagnostic}" if fallback_diagnostic else failure,
         }
     head = pull.get("head") or {}
     head_sha = str(head.get("sha", "") or "")
@@ -414,15 +439,28 @@ def _fetch_ci_status_rest(pr_number: str) -> dict[str, Any]:
         "head_sha": head_sha,
         "checks": checks,
         "reviews": review_states,
-        "data_source": "rest_fallback_graphql_quota",
+        "data_source": source,
+        "graphql_fallback_diagnostic": fallback_diagnostic,
         "route_evidence_only": True,
     }
 
 
-def _gh_view_error_payload(pr_number: str, stderr: str, returncode: int) -> dict[str, Any]:
-    """Map a failed ``gh pr view`` to an error payload, falling back to REST on GraphQL quota."""
+def _gh_view_error_payload(
+    pr_number: str,
+    stderr: str,
+    returncode: int,
+    *,
+    retry: GraphQLRetryOutcome | None = None,
+) -> dict[str, Any]:
+    """Map a failed GraphQL-backed PR read to a truthful payload."""
     if _is_graphql_quota_error(stderr):
         return _fetch_ci_status_rest(pr_number)
+    if retry is not None and retry.exhausted:
+        return _fetch_ci_status_rest(
+            pr_number,
+            fallback_kind="transient_exhausted",
+            fallback_diagnostic=retry.terminal_diagnostic,
+        )
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
 
@@ -442,18 +480,26 @@ def _fetch_ci_status(
     if backoff > 0:
         time.sleep(backoff)
 
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "pr",
             "view",
             pr_number,
             "--json",
             "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
-        ]
+        ],
+        timeout=30,
     )
+    result = retry.result
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        return _gh_view_error_payload(pr_number, stderr, result.returncode)
+        return _gh_view_error_payload(
+            pr_number,
+            stderr,
+            result.returncode,
+            retry=retry,
+        )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
     if parse_error or data is None:
@@ -678,6 +724,38 @@ def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
     return False
 
 
+def _validate_expected_head_sha(expected_head_sha: str) -> str | None:
+    """Return an error message when ``--expected-head-sha`` is not a full 40-hex SHA.
+
+    A short prefix or other malformed value is rejected up front so the monitor reports a clear
+    format error instead of a spurious "PR head SHA changed" on the first poll (issue #7505).
+    """
+    if not expected_head_sha:
+        return None
+    if len(expected_head_sha) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", expected_head_sha):
+        return (
+            "--expected-head-sha must be the full 40-hex SHA, got "
+            f"{len(expected_head_sha)} chars ({expected_head_sha!r}); short prefixes are not accepted"
+        )
+    return None
+
+
+def _preflight_validate(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> str | None:
+    """Return an exit-1 preflight error message, or None when arguments are acceptable.
+
+    A conflicting PR number still raises SystemExit(2) via ``parser.error``, matching prior behavior.
+    """
+    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
+        parser.error(
+            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
+            "or pass the same value to both"
+        )
+    return _validate_expected_head_sha(args.expected_head_sha)
+
+
 def _bounded_sleep_seconds(
     poll_interval: float,
     wall_deadline: float | None,
@@ -831,11 +909,10 @@ were cancelled or failed.
         ),
     )
     args = parser.parse_args(argv)
-    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
-        parser.error(
-            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
-            "or pass the same value to both"
-        )
+    preflight_error = _preflight_validate(args, parser)
+    if preflight_error is not None:
+        print(f"error: {preflight_error}", file=sys.stderr)
+        return 1
     pr_number = args.pr_number_option or args.pr_number
 
     try:

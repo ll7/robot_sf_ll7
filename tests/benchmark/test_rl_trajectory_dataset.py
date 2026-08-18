@@ -94,8 +94,9 @@ def test_loader_rejects_mismatched_step_lengths(tmp_path) -> None:
         load_rl_trajectory_dataset(dataset_path)
 
 
-def test_recorder_converts_synthetic_simulation_step_trace(tmp_path) -> None:
+def test_recorder_converts_synthetic_simulation_step_trace(tmp_path, monkeypatch) -> None:
     """Recorder converts simulation-step traces into RL episode rows."""
+    monkeypatch.chdir(tmp_path)
     source_path = tmp_path / "episodes.jsonl"
     source_path.write_text(json.dumps(_source_record()) + "\n", encoding="utf-8")
 
@@ -117,6 +118,12 @@ def test_recorder_converts_synthetic_simulation_step_trace(tmp_path) -> None:
     assert loaded[0].rewards == (1.0, 2.0)
     assert loaded[0].return_to_go == (3.0, 2.0)
     assert (output_dir / "issue_4011_smoke.manifest.json").exists()
+    manifest = json.loads(
+        (output_dir / "issue_4011_smoke.manifest.json").read_text(encoding="utf-8")
+    )
+    commit = manifest["provenance"]["git_commit"]
+    assert isinstance(commit, str) and len(commit) == 40
+    int(commit, 16)
 
 
 def test_recorder_fails_closed_when_reward_fields_missing(tmp_path) -> None:

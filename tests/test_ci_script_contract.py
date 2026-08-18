@@ -1201,6 +1201,8 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
+    assert "--profile NAME" in help_result.stdout
+    assert "all-extras" in help_result.stdout
 
 
 def test_worktree_shared_venv_helper_fails_for_missing_shared_env(tmp_path: Path) -> None:
@@ -3038,10 +3040,17 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     assert "COVERAGE_CORE: sysmon" in ci_workflow_text
     assert "--minimum-total 85.0" in ci_workflow_text
     assert "coverage combine output/coverage" in ci_workflow_text
-    assert (
-        "ROBOT_SF_PYTEST_COVERAGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}"
-        in ci_workflow_text
-    )
+    assert 'ROBOT_SF_PYTEST_COVERAGE: "1"' in ci_workflow_text
+    assert "changed-coverage-gate:" in ci_workflow_text
+    assert '--base-sha "$BASE_SHA"' in ci_workflow_text
+    assert '--head-sha "$HEAD_SHA"' in ci_workflow_text
+    assert "--json-output output/coverage/changed-coverage-result.json" in ci_workflow_text
+    assert "github.event.pull_request.base.sha" in ci_workflow_text
+    assert "github.event.pull_request.head.sha" in ci_workflow_text
+    assert "github.event.merge_group.base_sha" in ci_workflow_text
+    assert '"changed-coverage.v1"' in (
+        ROOT / "scripts" / "coverage" / "check_changed_files_coverage.py"
+    ).read_text(encoding="utf-8")
 
     assert "sysmon" in cov_guide_text
     assert "--minimum-total 85.0" in cov_guide_text
@@ -3050,4 +3059,6 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     assert "coverage-gate" in cov_guide_text
 
     assert "coverage-gate" in dev_guide_text
+    assert "changed-coverage-gate" in dev_guide_text
+    assert "changed-coverage.v1" in dev_guide_text
     assert "85.0%" in dev_guide_text or "85.0" in dev_guide_text

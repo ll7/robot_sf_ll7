@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import yaml
 
 from scripts.tools.generate_map_registry import generate_registry
 from scripts.validation.verify_map_catalog import validate_registry
 
-if TYPE_CHECKING:
-    from pathlib import Path
+REPO_ROOT = Path(__file__).parents[2]
 
 
 def _write_svg(path: Path, body: str) -> Path:
@@ -64,6 +64,15 @@ def _runtime_svg_body() -> str:
   <path id="robot_path" inkscape:label="robot_route_0_0" d="M 1 1 L 10 10" />
   <path id="ped_path" inkscape:label="ped_route_0_0" d="M 2 2 L 9 9" />
 """.strip()
+
+
+def test_checked_in_map_catalog_covers_every_tracked_svg() -> None:
+    """The checked-in catalog must stay synchronized with the tracked SVG tree."""
+    registry_path = REPO_ROOT / "maps" / "registry.yaml"
+    map_root = REPO_ROOT / "maps" / "svg_maps"
+    assert validate_registry(registry_path, map_root) == []
+    generated = generate_registry(map_root, registry_path)
+    assert yaml.safe_dump(generated, sort_keys=False) == registry_path.read_text(encoding="utf-8")
 
 
 def test_generator_preserves_review_fields_and_validator_accepts(tmp_path: Path) -> None:

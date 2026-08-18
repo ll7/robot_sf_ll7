@@ -77,6 +77,7 @@ _PARENT_HEAD_RE = re.compile(
     r"^parent_head\s*:\s*([0-9a-fA-F]{40})\s*$", re.IGNORECASE | re.MULTILINE
 )
 _SECTION_HEADING_RE = re.compile(r"^##\s+Stack\s+Declaration\s*$", re.IGNORECASE | re.MULTILINE)
+_NEXT_SECTION_HEADING_RE = re.compile(r"^##\s+.*$", re.MULTILINE)
 
 # States that fail closed before PR creation and before ``merge-ready``.
 BLOCKING_STATES = frozenset({"undeclared_stack", "mismatched_declaration", "parent_invalidated"})
@@ -107,7 +108,9 @@ def _extract_declaration_section(text: str) -> str:
     match = _SECTION_HEADING_RE.search(text)
     if not match:
         return ""
-    return text[match.end() :]
+    section = text[match.end() :]
+    next_heading = _NEXT_SECTION_HEADING_RE.search(section)
+    return section[: next_heading.start()] if next_heading else section
 
 
 def parse_stack_declaration(text: str) -> tuple[StackDeclaration | None, str | None]:

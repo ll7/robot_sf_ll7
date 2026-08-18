@@ -128,6 +128,16 @@ def test_parse_stack_declaration_ignores_other_sections() -> None:
     assert declaration.parent_pr == 7389
 
 
+def test_parse_stack_declaration_does_not_read_fields_from_later_sections() -> None:
+    """Fields after the canonical section cannot manufacture a declaration."""
+    text = f"## Stack Declaration\nparent_pr: #7308\n## Summary\nparent_head: {PARENT_HEAD}\n"
+
+    declaration, error = parse_stack_declaration(text)
+
+    assert declaration is None
+    assert error == "stack declaration requires both parent_pr and parent_head"
+
+
 # ---------------------------------------------------------------------------
 # Classification: clean
 # ---------------------------------------------------------------------------

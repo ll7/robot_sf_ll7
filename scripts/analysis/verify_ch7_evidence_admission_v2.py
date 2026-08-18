@@ -119,7 +119,10 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
 
     try:
         sums_sha, _listed = admission._verify_members(
-            package, label="Chapter 7 v2 evidence package", require_review_sidecars=False
+            package,
+            label="Chapter 7 v2 evidence package",
+            require_review_sidecars=False,
+            allow_review_sidecars=True,
         )
     except admission.Ch7EvidenceAdmissionError as exc:
         raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc

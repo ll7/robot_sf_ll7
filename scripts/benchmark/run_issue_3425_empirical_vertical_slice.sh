@@ -27,20 +27,25 @@ MANIFEST_ARGS=(
   --output-dir "$PACKET_DIR"
 )
 
-if [[ "${RUN_CAMPAIGN:-0}" == "1" ]]; then
-  echo "== [#3425] require decision-capable answerability before launch =="
-  MANIFEST_ARGS+=(--require-answerable)
-fi
-
 uv run python scripts/validation/run_research_campaign_manifest.py \
   "${MANIFEST_ARGS[@]}"
 
 echo "== [#3425] camera-ready campaign preflight =="
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config "$CAMPAIGN_CONFIG" \
-  --campaign-id "$CAMPAIGN_ID" \
-  --output-root "$OUTPUT_ROOT" \
+CAMERA_PREFLIGHT_ARGS=(
+  --config "$CAMPAIGN_CONFIG"
+  --campaign-id "$CAMPAIGN_ID"
+  --output-root "$OUTPUT_ROOT"
   --mode preflight
+)
+if [[ "${RUN_CAMPAIGN:-0}" == "1" ]]; then
+  echo "== [#3425] require decision-capable answerability before launch =="
+  CAMERA_PREFLIGHT_ARGS+=(
+    --research-manifest "$RESEARCH_MANIFEST"
+    --require-answerable
+  )
+fi
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  "${CAMERA_PREFLIGHT_ARGS[@]}"
 
 if [[ "${RUN_CAMPAIGN:-0}" != "1" ]]; then
   echo "== [#3425] readiness only; set RUN_CAMPAIGN=1 on the approved execution route to run episodes =="

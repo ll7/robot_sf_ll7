@@ -222,6 +222,82 @@ def _validate_manifest(
         )
 
 
+def _evaluate_manifest_answerability(
+    manifest: dict[str, Any],
+    *,
+    options: RunnerOptions,
+    require_proof_surfaces: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Evaluate one manifest through the shared proof collector and gate.
+
+    Returns:
+        A tuple of ``(evaluated_manifest, answerability, proof_report)``. The
+        evaluated manifest is a copy whose proof-surface statuses come from
+        the collector, so declarative ``passed`` values cannot bypass proof.
+    """
+    base_options = RunnerOptions(
+        execute_validation=options.execute_validation,
+        require_configured_outputs=options.require_configured_outputs,
+        require_answerable=False,
+    )
+    _validate_manifest(manifest, options=base_options)
+
+    proof_report = collect_answerability_proof(
+        manifest,
+        repo_root=_repo_root(),
+        execute=options.execute_validation or options.require_answerable,
+        build_rows=_build_rows,
+    )
+    evaluated_manifest = manifest
+    answerability_contract = manifest.get("answerability")
+    if isinstance(answerability_contract, dict):
+        if (options.require_answerable or require_proof_surfaces) and "proof_surfaces" not in (
+            answerability_contract
+        ):
+            raise ManifestError(
+                "answerability.proof_surfaces is required for executable answerability admission"
+            )
+        updated_contract = apply_proof_results(answerability_contract, proof_report)
+        evaluated_manifest = dict(manifest)
+        evaluated_manifest["answerability"] = updated_contract
+    answerability = answerability_from_manifest(evaluated_manifest)
+    _validate_manifest(
+        manifest,
+        options=options,
+        answerability=answerability,
+    )
+    return evaluated_manifest, answerability, proof_report
+
+
+def evaluate_research_manifest_answerability(
+    manifest_path: Path,
+    *,
+    execute_validation: bool = True,
+) -> dict[str, Any]:
+    """Evaluate a manifest for a production admission caller without writing output.
+
+    This is the reusable launch-owner seam. It composes the same structural
+    validation and proof-surface collector used by :func:`run`, but does not
+    create a packet, run a campaign, submit compute, or promote evidence.
+    """
+    manifest = _load_manifest(manifest_path)
+    evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
+        manifest,
+        options=RunnerOptions(
+            execute_validation=execute_validation,
+            require_configured_outputs=False,
+            require_answerable=False,
+        ),
+        require_proof_surfaces=True,
+    )
+    return {
+        "source_manifest": str(manifest_path),
+        "manifest": evaluated_manifest,
+        "answerability": answerability,
+        "answerability_proof": proof_report,
+    }
+
+
 def _scenario_ids(manifest: dict[str, Any]) -> list[str]:
     scenario_suite = manifest["scenario_suite"]
     ids = _list_field(scenario_suite, "scenario_ids", "scenario_suite.scenario_ids", required=False)
@@ -489,34 +565,9 @@ def _write_context_note(path: Path, summary: dict[str, Any]) -> None:
 def run(manifest_path: Path, output_dir: Path, *, options: RunnerOptions) -> dict[str, Any]:
     """Validate a manifest, emit packet files, and return the summary payload."""
     manifest = _load_manifest(manifest_path)
-    base_options = RunnerOptions(
-        execute_validation=options.execute_validation,
-        require_configured_outputs=options.require_configured_outputs,
-        require_answerable=False,
-    )
-    _validate_manifest(manifest, options=base_options)
-
-    proof_report = collect_answerability_proof(
-        manifest,
-        repo_root=_repo_root(),
-        execute=options.execute_validation or options.require_answerable,
-        build_rows=_build_rows,
-    )
-    evaluated_manifest = manifest
-    answerability_contract = manifest.get("answerability")
-    if isinstance(answerability_contract, dict):
-        if options.require_answerable and "proof_surfaces" not in answerability_contract:
-            raise ManifestError(
-                "answerability.proof_surfaces is required when --require-answerable is used"
-            )
-        updated_contract = apply_proof_results(answerability_contract, proof_report)
-        evaluated_manifest = dict(manifest)
-        evaluated_manifest["answerability"] = updated_contract
-    answerability = answerability_from_manifest(evaluated_manifest)
-    _validate_manifest(
+    evaluated_manifest, answerability, proof_report = _evaluate_manifest_answerability(
         manifest,
         options=options,
-        answerability=answerability,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)

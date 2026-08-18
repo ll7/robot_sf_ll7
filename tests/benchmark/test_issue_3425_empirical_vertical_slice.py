@@ -128,6 +128,7 @@ def test_issue_3425_runner_preserves_diagnostic_preflight_without_answerability_
     assert "--require-answerable" not in calls[0]
     assert "run_camera_ready_benchmark.py" in calls[1]
     assert "--mode preflight" in calls[1]
+    assert "--require-answerable" not in calls[1]
 
 
 def test_issue_3425_runner_requires_answerability_before_campaign_launch(tmp_path: Path) -> None:
@@ -161,7 +162,10 @@ def test_issue_3425_runner_requires_answerability_before_campaign_launch(tmp_pat
 
     assert completed.returncode == 2
     calls = log_path.read_text(encoding="utf-8").splitlines()
-    assert len(calls) == 1
+    assert len(calls) == 2
     assert "run_research_campaign_manifest.py" in calls[0]
-    assert "--require-answerable" in calls[0]
-    assert "run_camera_ready_benchmark.py" not in calls[0]
+    assert "--require-answerable" not in calls[0]
+    assert "run_camera_ready_benchmark.py" in calls[1]
+    assert "--mode preflight" in calls[1]
+    assert "--research-manifest" in calls[1]
+    assert "--require-answerable" in calls[1]

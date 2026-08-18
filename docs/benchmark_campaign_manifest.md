@@ -77,6 +77,22 @@ or an argv-style command. Commands are never passed through a shell. A
 missing generic result-packet validator is recorded as `unavailable`; it is
 not replaced by an issue-specific or heuristic checker.
 
+The production camera-ready launcher can enforce the same gate without creating
+a second readiness contract:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/<camera-ready-config>.yaml \
+  --research-manifest configs/benchmarks/<research-manifest>.yaml \
+  --require-answerable \
+  --mode preflight
+```
+
+The launcher evaluates the manifest before camera-ready preflight or episode
+execution and does not submit compute. Readiness-only callers may omit
+`--require-answerable`; the existing packet runner remains the owner of packet
+generation.
+
 ## Research-Yield Snapshot
 
 Repository throughput should be reported from a frozen

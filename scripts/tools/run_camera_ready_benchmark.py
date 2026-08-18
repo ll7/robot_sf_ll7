@@ -17,6 +17,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 
 # Apply process-wide numerical thread caps before importing camera-ready modules,
@@ -37,6 +39,9 @@ from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
 from robot_sf.benchmark.fallback_policy import campaign_exit_code  # noqa: E402
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError  # noqa: E402
 from scripts.tools.record_post_campaign_stage_status import build_stage_status  # noqa: E402
+from scripts.validation.run_research_campaign_manifest import (  # noqa: E402
+    evaluate_research_manifest_answerability,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -86,6 +91,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Execution mode: full run or preflight-only artifact generation.",
     )
     parser.add_argument(
+        "--research-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Optional research campaign manifest to evaluate before camera-ready admission. "
+            "This does not run a campaign or write a research packet."
+        ),
+    )
+    parser.add_argument(
+        "--require-answerable",
+        action="store_true",
+        help=(
+            "Fail closed before camera-ready preflight/run unless --research-manifest "
+            "evaluates to answerable through its executable proof surfaces."
+        ),
+    )
+    parser.add_argument(
         "--checkpoint-preflight-mode",
         choices=("metadata_only", "enforced_staged"),
         default="metadata_only",
@@ -133,6 +155,72 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _research_answerability_block(
+    *,
+    manifest_path: Path | None,
+    require_answerable: bool,
+    mode: str,
+) -> dict[str, Any] | None:
+    """Return a fail-closed result when a required research gate cannot pass."""
+    if not require_answerable:
+        return None
+    if manifest_path is None:
+        reason = "--require-answerable requires --research-manifest"
+        proof: dict[str, Any] = {}
+        answerability: dict[str, Any] = {
+            "state": "not_declared",
+            "decision_capable": False,
+            "reasons": [reason],
+            "warnings": [],
+        }
+    else:
+        try:
+            report = evaluate_research_manifest_answerability(
+                manifest_path,
+                execute_validation=True,
+            )
+        except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+            reason = f"research answerability admission could not be evaluated: {exc}"
+            proof = {}
+            answerability = {
+                "state": "invalid_contract",
+                "decision_capable": False,
+                "reasons": [reason],
+                "warnings": [],
+            }
+        else:
+            raw_answerability = report.get("answerability")
+            answerability = raw_answerability if isinstance(raw_answerability, dict) else {}
+            proof = report.get("answerability_proof")
+            if not isinstance(proof, dict):
+                proof = {}
+            if answerability.get("state") == "answerable":
+                return None
+            reasons = answerability.get("reasons")
+            reason = (
+                "research answerability gate requires state=answerable, got "
+                f"{answerability.get('state', 'unknown')}: {reasons}"
+            )
+    return {
+        "mode": mode,
+        "status": "research_answerability_blocked",
+        "status_reason": reason,
+        "research_manifest": str(manifest_path) if manifest_path is not None else None,
+        "answerability": answerability,
+        "answerability_proof": proof,
+        "benchmark_success": False,
+        "exit_code": 2,
+        "campaign_execution_status": "failed",
+        "evidence_status": "blocked",
+        "row_status_summary": {
+            "successful_evidence_rows": 0,
+            "accepted_unavailable_rows": 0,
+            "unexpected_failed_rows": 0,
+            "fallback_or_degraded_rows": 0,
+        },
+    }
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute camera-ready benchmark campaign from CLI arguments."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -144,6 +232,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     cfg = load_campaign_config(args.config)
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
+    result = _research_answerability_block(
+        manifest_path=args.research_manifest,
+        require_answerable=args.require_answerable,
+        mode=args.mode,
+    )
+    if result is not None:
+        print(json.dumps(result, indent=2))
+        return 2
+
     try:
         if args.mode == "preflight":
             prepared = prepare_campaign_preflight(
@@ -222,6 +319,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.mode == "preflight" and result.get("status") not in {
         "orca_preflight_failed",
         "radius_binding_preflight_failed",
+        "research_answerability_blocked",
     }:
         return 0
     exit_code = campaign_exit_code(result)

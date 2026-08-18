@@ -1,9 +1,11 @@
 """Shared representative-run selection rule for multi-seed phenomenon campaigns.
 
-This module is the single source of truth for the rule that decides *which*
-seed of a multi-seed campaign cell is shown when a single run has to stand in
-for the cell: figures, replay videos, and trace dossiers all pick their
-exhibit with the same deterministic procedure.
+This module is the single source of truth for the campaign rule that decides
+*which* seed of a multi-seed cell is shown when a single run has to stand in
+for the cell: figures and replay videos use this deterministic procedure.
+Trace-dossier exhibits use the separately versioned
+``trace_dossier_selector.v1`` contract; the intentional divergence is recorded
+in ``docs/context/issue_7086_trace_dossiers.md``.
 
 The rule exists to make single-run exhibits non-cherry-picked:
 

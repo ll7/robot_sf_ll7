@@ -53,6 +53,8 @@ def test_majority_verdict_ranks_unknown_labels_last() -> None:
 
 
 def test_majority_verdict_between_unknown_labels_is_order_independent() -> None:
+    """The pinned campaign fallback orders equally unknown labels lexically."""
+
     forward = majority_verdict(["zeta_label", "alpha_label"])
     reverse = majority_verdict(["alpha_label", "zeta_label"])
     assert forward == reverse == "alpha_label"

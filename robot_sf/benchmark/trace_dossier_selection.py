@@ -3,6 +3,10 @@
 The selector chooses one seed or episode from a single campaign cell.  It is
 deliberately a pure, provenance-neutral helper: it does not compute a metric,
 change a verdict, or admit a trace as benchmark evidence.
+
+Its separately versioned ``trace_dossier_selector.v1`` contract intentionally
+differs from the compatibility-pinned campaign selector; see
+``docs/context/issue_7086_trace_dossiers.md`` for the recorded decision.
 """
 
 from __future__ import annotations

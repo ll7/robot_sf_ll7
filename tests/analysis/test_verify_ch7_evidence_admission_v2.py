@@ -101,7 +101,7 @@ def test_check_only_diagnoses_blocked_package_and_builds_template(tmp_path: Path
     assert {blocker["code"] for blocker in diagnostic["diagnostics"]["blockers"]} == {
         "domain_approval_pending",
         "external_admission_receipt_required",
-        "metric_semantics_blocked_issue_7042",
+        "metric_semantics_excluded_issue_7042",
     }
 
     template = diagnostic["receipt_template"]

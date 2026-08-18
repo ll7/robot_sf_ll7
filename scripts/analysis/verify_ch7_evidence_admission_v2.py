@@ -164,8 +164,8 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     if any(item.get("issue") == 7042 for item in excluded if isinstance(item, Mapping)):
         blockers.append(
             {
-                "code": "metric_semantics_blocked_issue_7042",
-                "reason": "collision-sensitive metric naming remains unresolved by #7042",
+                "code": "metric_semantics_excluded_issue_7042",
+                "reason": "collision-sensitive metrics and SNQI are excluded by the closed #7042 ruling",
             }
         )
     return {

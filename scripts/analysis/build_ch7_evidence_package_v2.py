@@ -90,9 +90,9 @@ EXCLUDED_METRICS = (
     "collision_derived_composites",
 )
 CLAIM_BOUNDARY = (
-    "Release-cell descriptive projections only. Collision-related metrics remain omitted pending "
-    "#7042 metric naming resolution. No trace-level, causal, universal-ranking, or admission claim "
-    "is produced by this builder."
+    "Release-cell descriptive projections only. Collision-related metrics and SNQI are excluded by "
+    "the closed #7042 ruling; no such field is quoted. No trace-level, causal, universal-ranking, "
+    "or admission claim is produced by this builder."
 )
 
 
@@ -475,7 +475,7 @@ def _excluded_metric_records() -> list[dict[str, Any]]:
             "metric": metric,
             "issue": 7042,
             "status": "excluded",
-            "reason": "collision-related metric naming remains blocked; v2 does not quote this field",
+            "reason": "collision-related metrics and SNQI are excluded by the closed #7042 ruling; v2 does not quote this field",
         }
         for metric in EXCLUDED_METRICS
     ]
@@ -649,7 +649,7 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                     ),
                     "limitations": [
                         "release-cell grain only",
-                        "collision-related metrics omitted pending #7042",
+                        "collision-related metrics and SNQI excluded by the closed #7042 ruling",
                         "no trace or mechanism-level causal evidence",
                         "no universal ranking claim",
                         "external admission receipt remains required",

@@ -123,3 +123,27 @@ distinct host with matching pinned NumPy/Numba versions; register `cross_host_ma
 `machine_id` (`exact_repeat_campaign.py`), so the cross-host matrix is structurally impossible on a
 single machine and is reserved for a two-host campaign owner. The native-PPO primary-host artifact
 registered above is the input the second-host run will be compared against.
+
+### Historical verification boundary after `benchmark_execution_context.v1`
+
+The two registered #5498 raw host reports predate the execution-context contract added by #7128
+and cannot be replayed by the current default verifier:
+
+- `issue_5498_host_result.json` and `issue_5498_native_ppo_host_result.json` use the historical
+  `scenario_exact_repeat_host_result.v1` shape and do not contain
+  `environment.execution_context`, `execution_context_sha256`, or the current host-identity
+  bindings;
+- `scripts/benchmark/build_exact_repeat_campaign_packet.py verify-host` now requires that
+  canonical context block and its digest, so it rejects these reports before producing a current
+  contract verdict;
+- the exact pre-#7128 verifier commit and environment used for the original verification are not
+  recorded in the committed artifacts. The bundle registration commits are known—`583425e1` for
+  the original single-host bundle and `4e4e8234` for the native-PPO registration—but they are not
+  asserted to be the historical verifier commits.
+
+This note records a compatibility boundary, not a re-verification. Historical report bytes,
+verified counterparts, metrics, trajectory hashes, review sidecars, and recorded verdicts remain
+unchanged. The current verifier remains fail-closed by default; no implicit legacy upgrade or
+`pre-7128` compatibility mode is authorized here. Re-verification requires either a separately
+approved legacy tool path with an explicitly legacy-labelled output or a new current-contract
+execution under the governed #5498 campaign.

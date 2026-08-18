@@ -65,6 +65,7 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _rollup_conclusion,
     _rollup_status,
 )
+from scripts.dev.github_graphql_retry import run_with_retry  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
@@ -600,7 +601,8 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     carry gate-verdict trailers (in the shape
     ``has_current_accepted_gate_verdict`` reads).
     """
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "pr",
             "view",
@@ -609,10 +611,13 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
             repo,
             "--json",
             "number,title,body,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
-        ]
+        ],
+        timeout=30,
     )
+    result = retry.result
     if result.returncode != 0:
-        return {}, result.stderr.strip() or f"gh pr view failed (exit {result.returncode})"
+        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+        return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return {}, err or "gh pr view output is not a JSON object"
@@ -718,7 +723,8 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
         "repository(owner:$owner,name:$name){pullRequest(number:$number){"
         "mergeQueueEntry{mergeQueue{configuration{mergingStrategy}}}}}}"
     )
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "api",
             "graphql",
@@ -733,8 +739,10 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
         ],
         timeout=45,
     )
+    result = retry.result
     if result.returncode != 0:
-        return None, result.stderr.strip() or "graphql mergeQueue configuration query failed"
+        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+        return None, diagnostic or "graphql mergeQueue configuration query failed"
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return None, err or "graphql response is not JSON"
@@ -770,7 +778,8 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
         "reviewThreads(first:100){totalCount pageInfo{hasNextPage}"
         "nodes{isResolved isOutdated}}}}}"
     )
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "api",
             "graphql",
@@ -785,8 +794,10 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
         ],
         timeout=45,
     )
+    result = retry.result
     if result.returncode != 0:
-        return None, result.stderr.strip() or "graphql reviewThreads query failed"
+        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+        return None, diagnostic or "graphql reviewThreads query failed"
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return None, err or "graphql response is not JSON"

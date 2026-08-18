@@ -10,7 +10,9 @@
   "release_manifest": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3.yaml",
   "asset": {
     "name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "artifact_path": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
     "url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "location": "GitHub release asset attached to tag 0.0.3 (untracked by design; see release_url)",
     "sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
   },
   "doi_status": "not_assigned",

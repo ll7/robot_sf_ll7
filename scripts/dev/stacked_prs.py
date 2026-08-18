@@ -19,10 +19,13 @@ four deliberately small operations:
     and stops until fresh CI is available.
 
 This is a workflow coordinator, not a replacement for the repository's merge
-gate.  All mutating operations are dry-run by default and require ``--apply``.
-Every apply path requires caller-supplied expected head SHAs and rechecks them
-before writing.  GitHub access uses ``gh api`` so the helper does not depend on
-the deprecated Projects Classic fields queried by some ``gh pr`` commands.
+gate.  Its direct merge path still performs a final exact-head CAS preflight,
+requiring the current ``Merge Queue Gate / merge-queue-gate`` check to be
+successful and rejecting the canonical trusted merge/domain holds.  All
+mutating operations are dry-run by default and require ``--apply``.  Every
+apply path requires caller-supplied expected head SHAs and rechecks them before
+writing.  GitHub access uses ``gh api`` so the helper does not depend on the
+deprecated Projects Classic fields queried by some ``gh pr`` commands.
 """
 
 from __future__ import annotations
@@ -43,8 +46,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.dev.merge_queue_gate import fetch_threads_resolved  # noqa: E402
+from scripts.dev.merge_queue_gate import (  # noqa: E402
+    GATE_JOB_NAME,
+    GATE_WORKFLOW_NAME,
+    fetch_threads_resolved,
+)
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    current_gate_hold_reason,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
@@ -288,30 +296,86 @@ def _review_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _check_name(item: dict[str, Any]) -> str:
+    """Return the stable job/check name from a REST check-run object."""
+    app = item.get("app") if isinstance(item.get("app"), dict) else {}
+    return str(item.get("name") or app.get("name") or "unknown")
+
+
+def _check_workflow_name(item: dict[str, Any]) -> str:
+    """Return an optional workflow name from REST or GraphQL-shaped fixtures."""
+    return str(item.get("workflowName") or item.get("workflow_name") or "")
+
+
+def _check_sort_key(item: dict[str, Any]) -> tuple[str, int]:
+    """Sort check reruns by completion/start time and then stable run ID."""
+    timestamp = str(item.get("completed_at") or item.get("started_at") or "")
+    try:
+        identifier = int(item.get("id", 0) or 0)
+    except (TypeError, ValueError):
+        identifier = 0
+    return timestamp, identifier
+
+
 def _latest_check_runs(check_runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Keep the newest check run for each name; count superseded runs."""
 
-    def check_name(item: dict[str, Any]) -> str:
-        app = item.get("app") if isinstance(item.get("app"), dict) else {}
-        return str(item.get("name") or app.get("name") or "unknown")
-
-    def sort_key(item: dict[str, Any]) -> tuple[str, int]:
-        timestamp = str(item.get("completed_at") or item.get("started_at") or "")
-        try:
-            identifier = int(item.get("id", 0) or 0)
-        except (TypeError, ValueError):
-            identifier = 0
-        return timestamp, identifier
-
     latest: dict[str, dict[str, Any]] = {}
     for item in check_runs:
-        name = check_name(item)
+        name = _check_name(item)
         current = latest.get(name)
-        if current is None or sort_key(item) >= sort_key(current):
+        if current is None or _check_sort_key(item) >= _check_sort_key(current):
             latest[name] = item
     return sorted(latest.values(), key=lambda item: str(item.get("name") or "")), max(
         0, len(check_runs) - len(latest)
     )
+
+
+def _merge_queue_gate_check(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return the newest exact Merge Queue Gate job context, fail closed."""
+    candidates = [item for item in check_runs if _check_name(item) == GATE_JOB_NAME]
+    if not candidates:
+        return {
+            "context": "missing",
+            "name": GATE_JOB_NAME,
+            "workflow_name": GATE_WORKFLOW_NAME,
+            "status": "missing",
+            "conclusion": None,
+            "started_at": None,
+            "completed_at": None,
+            "html_url": None,
+        }
+    current = max(candidates, key=_check_sort_key)
+    workflow_name = _check_workflow_name(current)
+    raw_status = current.get("status")
+    raw_conclusion = current.get("conclusion")
+    status = str(raw_status or "").lower() or "unknown"
+    conclusion = str(raw_conclusion or "").lower() or None
+    malformed = not isinstance(raw_status, str) or not raw_status.strip()
+    malformed = malformed or not any(
+        isinstance(current.get(key), str) and current[key].strip()
+        for key in ("started_at", "completed_at")
+    )
+    if status == "completed" and (
+        not isinstance(raw_conclusion, str) or not raw_conclusion.strip()
+    ):
+        malformed = True
+    if malformed:
+        context = "malformed"
+    elif workflow_name and workflow_name != GATE_WORKFLOW_NAME:
+        context = "mismatch"
+    else:
+        context = "valid"
+    return {
+        "context": context,
+        "name": GATE_JOB_NAME,
+        "workflow_name": workflow_name or None,
+        "status": status,
+        "conclusion": conclusion,
+        "started_at": current.get("started_at"),
+        "completed_at": current.get("completed_at"),
+        "html_url": current.get("html_url"),
+    }
 
 
 def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -321,13 +385,13 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
     failures: list[str] = []
     pending: list[str] = []
     for item in current:
-        app = item.get("app") if isinstance(item.get("app"), dict) else {}
-        name = str(item.get("name") or app.get("name") or "unknown")
+        name = _check_name(item)
         status = str(item.get("status") or "").lower()
         conclusion = str(item.get("conclusion") or "").lower() or None
         normalized.append(
             {
                 "name": name,
+                "workflow_name": _check_workflow_name(item) or None,
                 "status": status or "unknown",
                 "conclusion": conclusion,
                 "started_at": item.get("started_at"),
@@ -353,6 +417,7 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
         "superseded_count": superseded_count,
         "pending": pending,
         "failures": failures,
+        "merge_queue_gate": _merge_queue_gate_check(check_runs),
     }
 
 
@@ -453,7 +518,7 @@ def _fetch_threads(pr_number: int, *, repo: str) -> tuple[bool | None, str | Non
 
 def _gate_status(
     pr: dict[str, Any], review_data: dict[str, Any], *, metadata: str
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Evaluate exact-head and final metadata evidence from trusted review bodies."""
     evidence = {
         "head_sha": pr["head_sha"],
@@ -471,10 +536,11 @@ def _gate_status(
         "metadata_verdict": (
             "accepted" if has_current_pr_metadata_verdict(evidence, metadata) else "missing"
         ),
+        "merge_hold_reason": current_gate_hold_reason(evidence, pr["head_sha"]),
     }
 
 
-def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
+def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901, PLR0912
     """Return deterministic fail-closed readiness reasons for one stack entry."""
     reasons: list[str] = []
     if entry.get("state") != "open":
@@ -487,6 +553,18 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
         reasons.append("mergeable_state_not_clean")
     if entry.get("checks", {}).get("overall") != "success":
         reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
+    merge_queue_gate = entry.get("checks", {}).get("merge_queue_gate")
+    if not isinstance(merge_queue_gate, dict) or merge_queue_gate.get("context") == "missing":
+        reasons.append("merge_queue_gate_check_missing")
+    elif merge_queue_gate.get("context") == "malformed":
+        reasons.append("merge_queue_gate_check_malformed")
+    elif merge_queue_gate.get("context") != "valid":
+        reasons.append("merge_queue_gate_check_context_mismatch")
+    elif (
+        merge_queue_gate.get("status") != "completed"
+        or merge_queue_gate.get("conclusion") != "success"
+    ):
+        reasons.append("merge_queue_gate_not_success")
     if entry.get("requested_reviewer_count", 0) or entry.get("requested_team_count", 0):
         reasons.append("outstanding_requested_reviewers")
     if entry.get("review_threads", {}).get("status") != "resolved":
@@ -497,6 +575,8 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
         )
     if "merge-ready" not in entry.get("labels", []):
         reasons.append("missing_merge_ready_label")
+    if entry.get("merge_hold_reason"):
+        reasons.append(f"explicit_merge_hold:{entry['merge_hold_reason']}")
     if entry.get("gate_verdict") != "accepted":
         reasons.append("missing_exact_head_gate_verdict")
     if entry.get("metadata_verdict") != "accepted":
@@ -852,6 +932,25 @@ def sync_stack(  # noqa: C901
     return result
 
 
+def _merge_authority_error(entry: dict[str, Any]) -> str | None:
+    """Return the final fail-closed authority error before the CAS merge."""
+    merge_queue_gate = entry.get("checks", {}).get("merge_queue_gate")
+    if not isinstance(merge_queue_gate, dict) or merge_queue_gate.get("context") == "missing":
+        return "live merge-queue-gate check is missing"
+    if merge_queue_gate.get("context") == "malformed":
+        return "live merge-queue-gate check is malformed"
+    if merge_queue_gate.get("context") != "valid":
+        return "live merge-queue-gate check context is invalid"
+    if (
+        merge_queue_gate.get("status") != "completed"
+        or merge_queue_gate.get("conclusion") != "success"
+    ):
+        return "live merge-queue-gate check is not successful"
+    if entry.get("merge_hold_reason"):
+        return f"explicit merge hold: {entry['merge_hold_reason']}"
+    return None
+
+
 def _merge_pr(
     repo: str,
     entry: dict[str, Any],
@@ -862,6 +961,9 @@ def _merge_pr(
     """Squash-merge one exact PR head and verify remote merged state."""
     if entry.get("head_sha", "").lower() != expected_head.lower():
         return None, f"PR #{entry.get('pr')} head changed before merge"
+    authority_error = _merge_authority_error(entry)
+    if authority_error:
+        return None, authority_error
     response, error = api(
         "PUT",
         f"repos/{repo}/pulls/{entry['pr']}/merge",

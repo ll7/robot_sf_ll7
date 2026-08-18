@@ -839,8 +839,8 @@ def test_untrusted_metadata_trailer_cannot_admit_current_digest() -> None:
     assert classify_pr_state(pr) == "pending_pr_metadata"
 
 
-def test_classify_green_merge_ready_with_abbreviated_verdict_accepted() -> None:
-    """An abbreviated trailer SHA matching the head should satisfy the gate."""
+def test_classify_green_merge_ready_with_abbreviated_verdict_rejected() -> None:
+    """An abbreviated trailer SHA is diagnostic-only, not merge authority."""
     pr = _pr(
         3003,
         overall="success",
@@ -848,7 +848,7 @@ def test_classify_green_merge_ready_with_abbreviated_verdict_accepted() -> None:
         head_sha=FULL_SHA,
         gate_verdict=SHORT_SHA,
     )
-    assert classify_pr_state(pr) == "ready_to_merge"
+    assert classify_pr_state(pr) == "pending_gate_verdict"
 
 
 def test_classify_green_merge_ready_with_stale_verdict_rejected() -> None:
@@ -962,6 +962,15 @@ def test_has_current_accepted_gate_verdict_empty_head() -> None:
     """Empty head SHA should return False even with a trailer present."""
     pr = _pr(3012, head_sha=FULL_SHA, gate_verdict=FULL_SHA)
     assert has_current_accepted_gate_verdict(pr, "") is False
+
+
+@pytest.mark.parametrize("head_sha", [None, 123])
+def test_has_current_accepted_gate_verdict_rejects_malformed_head(
+    head_sha: object,
+) -> None:
+    """Malformed head identities fail closed without raising."""
+    pr = _pr(3012, head_sha=FULL_SHA, gate_verdict=FULL_SHA)
+    assert has_current_accepted_gate_verdict(pr, head_sha) is False  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("pr", [[], None, "not-a-pr"])

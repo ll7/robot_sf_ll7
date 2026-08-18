@@ -15,6 +15,10 @@ from scripts.dev.merge_queue_gate import (
     fetch_threads_resolved,
     main,
 )
+from scripts.dev.pr_loop_policy import (
+    current_gate_hold_reason,
+    has_current_accepted_gate_verdict,
+)
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
@@ -44,6 +48,7 @@ def _raw_pr(
             {
                 "body": metadata_trailer(metadata_digest("merge queue test PR", "final body")),
                 "authorAssociation": "OWNER",
+                "createdAt": "2026-08-17T08:00:00Z",
             }
         ],
         "reviews": [],
@@ -52,7 +57,11 @@ def _raw_pr(
     if body:
         payload[carrier] = [
             *payload.get(carrier, []),
-            {"body": body, "authorAssociation": author_association},
+            {
+                "body": body,
+                "authorAssociation": author_association,
+                "createdAt": "2026-08-17T09:00:00Z",
+            },
         ]
     return payload
 
@@ -102,6 +111,8 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
 
     assert error is None
     assert snapshot["base_sha"] == "base_sha"
+    assert snapshot["comments"] == _raw_pr()["comments"]
+    assert snapshot["reviews"] == _raw_pr()["reviews"]
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]
     fields = first_call[first_call.index("--json") + 1]
@@ -253,39 +264,59 @@ def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
     assert snapshot["checks"] == {"overall": expected}
 
 
-def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
-    """Only native merge-group evaluation is a failing required check."""
+def test_workflow_fails_closed_for_source_heads_and_review_mutations() -> None:
+    """Every source-head mutation publishes the same fail-closed authority check."""
     workflow = Path(".github/workflows/merge-queue-gate.yml").read_text(encoding="utf-8")
 
     assert "PR_NUMBER: ${{ inputs.pr_number }}" in workflow
     assert '--pr "$PR_NUMBER"' in workflow
     assert '--pr "${{ inputs.pr_number }}"' not in workflow
     assert "pull_request:" in workflow
-    assert "pull_request_review:" not in workflow
+    assert "pull_request_review:" in workflow
     assert "pull_request_review_comment:" not in workflow
-    for activity in ("labeled", "unlabeled", "synchronize"):
-        assert activity in workflow
-    for noisy_activity in (
+    for activity in (
         "opened",
         "reopened",
         "ready_for_review",
         "converted_to_draft",
+        "labeled",
+        "unlabeled",
+        "synchronize",
+        "edited",
         "review_requested",
         "review_request_removed",
     ):
-        assert noisy_activity not in workflow
-    assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
+        assert activity in workflow
+    pull_request_events = workflow.split("  pull_request:\n", maxsplit=1)[1].split(
+        "  pull_request_review:\n", maxsplit=1
+    )[0]
+    assert "      - edited\n" in pull_request_events
+    for activity in ("submitted", "edited", "dismissed"):
+        assert activity in workflow
+    assert "issue_comment:" in workflow
+    for activity in ("created", "edited", "deleted"):
+        assert activity in workflow
+    assert (
+        "PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number" in workflow
+    )
+    assert "github.event.issue.number" in workflow
+    assert "github.event.issue.pull_request != null" in workflow
+    assert "pulls/$PR_NUMBER" in workflow
+    assert (
+        "merge-queue-gate-${{ github.event.pull_request.number || github.event.issue.number"
+        in workflow
+    )
     assert "Run merge-admission audit (source PR head)" in workflow
-    assert "Source-PR admission is advisory; merge_group remains fail-closed." in workflow
-    assert workflow.count("--advisory") == 2
+    assert "Source-PR admission is advisory; merge_group remains fail-closed." not in workflow
+    assert "--advisory" not in workflow
     merge_group_step, source_pr_step = workflow.split(
         "- name: Run merge-admission audit (source PR head)",
         maxsplit=1,
     )
     assert "--advisory" not in merge_group_step
     assert "--from-event" in merge_group_step
-    assert "--advisory" in source_pr_step
-    assert "exit 0" in workflow  # Bootstrap skip remains advisory before the gate exists on main.
+    assert "--advisory" not in source_pr_step
+    assert "exit 0" not in workflow
     assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
     assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" not in workflow
     assert "PULL_REQUEST_BASE_REF: ${{ github.event.pull_request.base.ref }}" in workflow
@@ -301,7 +332,225 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "statuses: read" in workflow
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
     assert "conversation resolution before merging" in workflow
-    assert "exit 0" in workflow
+
+
+def test_review_only_current_carrier_is_authoritative() -> None:
+    """A trusted review, not only an issue comment, can record the exact head."""
+    pr = {
+        "reviews": [
+            {
+                "submittedAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is True
+
+
+@pytest.mark.parametrize("state", ["CHANGES_REQUESTED", "PENDING"])
+def test_non_authoritative_review_state_cannot_authorize_current_head(state: str) -> None:
+    """A requested-change or pending review revokes its accepted carrier."""
+    pr = {
+        "reviews": [
+            {
+                "state": state,
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "submittedAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_dismissed_review_without_body_is_a_revocation_tombstone() -> None:
+    """A malformed dismissed review cannot leave an older acceptance live."""
+    pr = {
+        "reviews": [
+            {
+                "state": "DISMISSED",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "authorAssociation": "OWNER",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_dismissed_review_cannot_authorize_the_current_head() -> None:
+    """A review dismissal revokes its accepted carrier instead of refreshing it."""
+    pr = {
+        "reviews": [
+            {
+                "state": "DISMISSED",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "submittedAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            }
+        ],
+        "comments": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_invalid_carrier_timestamp_fails_closed_without_fallback() -> None:
+    """An unorderable trusted carrier cannot revive an older acceptance."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T09:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+            {
+                "createdAt": "not-a-timestamp",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+        ],
+        "reviews": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_updated_timestamp_orders_an_edited_carrier_after_submission() -> None:
+    """An edited malformed review supersedes an older accepted comment."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            }
+        ],
+        "reviews": [
+            {
+                "state": "COMMENTED",
+                "submittedAt": "2026-08-17T09:00:00Z",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": "gate-verdict: accepted without an exact-head trailer",
+            }
+        ],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_updated_comment_timestamp_orders_an_edited_carrier_after_creation() -> None:
+    """An edited malformed comment supersedes an older accepted comment."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+            {
+                "createdAt": "2026-08-17T09:00:00Z",
+                "updatedAt": "2026-08-17T11:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": "gate-verdict: accepted without an exact-head trailer",
+            },
+        ],
+        "reviews": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_newest_malformed_carrier_cannot_fall_back_to_older_acceptance() -> None:
+    """A later malformed trusted carrier invalidates an older accepted carrier."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T09:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA}",
+            },
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": "gate-verdict: accepted @ not-a-commit",
+            },
+        ],
+        "reviews": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_abbreviated_current_carrier_sha_is_not_merge_authority() -> None:
+    """A short prefix cannot satisfy the live exact-head gate."""
+    pr = {
+        "comments": [
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": f"gate-verdict: accepted @ {FULL_SHA[:12]}",
+            }
+        ],
+        "reviews": [],
+    }
+
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
+def test_current_gate_hold_overrides_accepted_exact_head() -> None:
+    """A trusted exact-head hold cannot be bypassed by a green gate verdict."""
+    pr = {
+        "head_sha": FULL_SHA,
+        "draft": False,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        "comments": [],
+        "reviews": [
+            {
+                "submittedAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": (
+                    f"gate-verdict: accepted @ {FULL_SHA}\n"
+                    "merge-ready: no\n"
+                    "domain-approval: pending"
+                ),
+            }
+        ],
+    }
+
+    assert current_gate_hold_reason(pr, FULL_SHA) == "merge-ready:no"
+    audit = evaluate_merge_gate(pr, threads_resolved=True, reviewers_requested=False)
+    assert audit.passed is False
+    assert audit.merge_hold_reason == "merge-ready:no"
+    assert "explicit_merge_hold:merge-ready:no" in audit.reasons
+
+
+def test_comment_only_gate_hold_is_authoritative() -> None:
+    """A trusted issue comment can record a hold even without a review body."""
+    pr = {
+        "head_sha": FULL_SHA,
+        "comments": [
+            {
+                "createdAt": "2026-08-17T10:00:00Z",
+                "authorAssociation": "OWNER",
+                "body": "domain-approval: pending",
+            }
+        ],
+        "reviews": [],
+    }
+
+    assert current_gate_hold_reason(pr, FULL_SHA) == "domain-approval:pending"
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
@@ -325,12 +574,15 @@ def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) ->
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
-def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(carrier: str) -> None:
+@pytest.mark.parametrize("author_association", ["CONTRIBUTOR", "COLLABORATOR"])
+def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(
+    carrier: str, author_association: str
+) -> None:
     """A contributor cannot self-approve a retained merge-ready label after pushing."""
     raw_pr = _raw_pr(
         body=f"gate-verdict: accepted @ {FULL_SHA}",
         carrier=carrier,
-        author_association="CONTRIBUTOR",
+        author_association=author_association,
     )
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
         mock_gh.side_effect = [

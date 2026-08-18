@@ -32,6 +32,7 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -81,8 +82,9 @@ VALID_STATES = frozenset(
     }
 )
 
-# Minimum overlap (hex chars) required to treat an abbreviated trailer SHA as a
-# match for a longer head SHA. Seven mirrors git's default short SHA width.
+# Minimum overlap (hex chars) retained for diagnostic/base-policy surfaces that
+# still understand abbreviated SHAs. Merge authority below requires the full
+# 40-character identity.
 GATE_VERDICT_MIN_SHA_OVERLAP = 7
 
 # Matches ``gate-verdict: accepted @ <sha>`` trailers embedded in comment or
@@ -94,6 +96,26 @@ _GATE_VERDICT_RE = re.compile(
     re.IGNORECASE,
 )
 GATE_VERDICT_RE = _GATE_VERDICT_RE
+_EXACT_GATE_VERDICT_RE = re.compile(
+    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{40})\b",
+    re.IGNORECASE,
+)
+_GATE_CARRIER_MARKER_RE = re.compile(r"gate-verdict\s*:", re.IGNORECASE)
+_AUTHORITY_CARRIER_MARKER_RE = re.compile(
+    r"gate-verdict\s*:|^[ \t]*(?:[-*>][ \t]*)?"
+    r"(?:merge-ready|domain-approval)\s*:",
+    re.IGNORECASE | re.MULTILINE,
+)
+_HOLD_DIRECTIVE_RE = re.compile(
+    r"^[ \t]*(?:[-*>][ \t]*)?"
+    r"(?P<key>merge-ready|domain-approval)\s*:\s*"
+    r"(?P<value>[^\s`]+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_HOLD_VALUES = {
+    "merge-ready": frozenset({"no", "false", "hold", "blocked", "pending"}),
+    "domain-approval": frozenset({"no", "false", "hold", "blocked", "pending", "required"}),
+}
 _BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*(ordinary-cas|current-base)\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
@@ -208,7 +230,165 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
     return texts
 
 
-_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER"}
+_REVOKING_REVIEW_STATES = {
+    "CHANGES_REQUESTED",
+    "DISMISSED",
+    "PENDING",
+    "REQUEST_CHANGES",
+}
+_KNOWN_REVIEW_STATES = {
+    "",
+    "APPROVED",
+    "COMMENTED",
+    *_REVOKING_REVIEW_STATES,
+}
+
+
+def _carrier_timestamp(entry: dict[str, Any]) -> str:
+    """Return the carrier's authoritative GitHub timestamp, if present."""
+    # Edits mutate authority. Prefer the mutation timestamp so an edited older
+    # review cannot remain ordered by its original submission time.
+    for key in (
+        "updatedAt",
+        "updated_at",
+        "submittedAt",
+        "submitted_at",
+        "createdAt",
+        "created_at",
+    ):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _carrier_timestamp_value(value: str) -> float | None:
+    """Return a comparable UTC timestamp, or None for malformed/missing data."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.timestamp()
+
+
+def _carrier_review_state(entry: dict[str, Any], key: str) -> tuple[str, bool, bool]:
+    """Return normalized review state plus revocation/validity flags."""
+    state = str(entry.get("state") or entry.get("reviewState") or "").upper()
+    revoked = key == "reviews" and state in _REVOKING_REVIEW_STATES
+    invalid = key == "reviews" and state not in _KNOWN_REVIEW_STATES
+    return state, revoked, invalid
+
+
+def _carrier_body(entry: dict[str, Any], *, marker: re.Pattern[str], revoked: bool) -> str | None:
+    """Return a valid authority body, retaining bodyless revocation tombstones."""
+    body = entry.get("body")
+    if not isinstance(body, str):
+        return "" if revoked else None
+    if not body:
+        return "" if revoked else None
+    if not revoked and not marker.search(body):
+        return None
+    return body
+
+
+def _raw_authority_carriers(
+    pr: dict[str, Any],
+    *,
+    marker: re.Pattern[str],
+) -> list[dict[str, Any]]:
+    """Return trusted raw comments/reviews carrying an authority directive.
+
+    Raw carriers are retained by the live merge gate so the newest directive can
+    be selected before any compact extraction collapses history. If a carrier
+    has a malformed timestamp alongside timestamped carriers, it sorts newest;
+    callers also reject any invalid timestamp so chronology cannot revive an
+    older verdict. Dismissed reviews are retained as revocation tombstones even
+    when their body no longer contains the original trailer.
+    """
+    carriers: list[dict[str, Any]] = []
+    sequence = 0
+    for key in ("comments", "reviews"):
+        items = pr.get(key)
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            sequence += 1
+            if not isinstance(entry, dict):
+                continue
+            association = str(
+                entry.get("authorAssociation") or entry.get("author_association") or ""
+            ).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            state, review_state_revoked, review_state_invalid = _carrier_review_state(entry, key)
+            body = _carrier_body(entry, marker=marker, revoked=review_state_revoked)
+            if body is None:
+                continue
+            timestamp = _carrier_timestamp(entry)
+            carriers.append(
+                {
+                    "body": body,
+                    "state": state,
+                    "review_state_revoked": review_state_revoked,
+                    "review_state_invalid": review_state_invalid,
+                    "timestamp": timestamp,
+                    "timestamp_value": _carrier_timestamp_value(timestamp),
+                    "sequence": sequence,
+                }
+            )
+    if not carriers:
+        return []
+    has_timestamped_carrier = any(item["timestamp_value"] is not None for item in carriers)
+    if not has_timestamped_carrier:
+        return sorted(carriers, key=lambda item: item["sequence"])
+    return sorted(
+        carriers,
+        key=lambda item: (
+            item["timestamp_value"] if item["timestamp_value"] is not None else float("inf"),
+            item["sequence"],
+        ),
+    )
+
+
+def _latest_raw_gate_carrier(pr: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the newest trusted raw gate-verdict carrier, if one exists."""
+    carriers = _raw_authority_carriers(pr, marker=_GATE_CARRIER_MARKER_RE)
+    return carriers[-1] if carriers else None
+
+
+def _hold_reason_from_body(body: str) -> str | None:
+    """Return the first explicit blocking merge/domain directive in a body."""
+    for match in _HOLD_DIRECTIVE_RE.finditer(body):
+        key = match.group("key").lower()
+        value = match.group("value").lower().rstrip(".,;:)")
+        if value in _HOLD_VALUES[key]:
+            return f"{key}:{value}"
+    return None
+
+
+def current_gate_hold_reason(pr: dict[str, Any], head_sha: str = "") -> str | None:
+    """Return the newest trusted explicit hold that blocks merge admission.
+
+    The PR body is deliberately excluded. A hold from a trusted comment/review
+    is observable even when the same carrier also records an accepted verdict;
+    the merge gate must not treat that verdict as stronger than an explicit
+    ``merge-ready: no`` or ``domain-approval: pending`` directive.
+    """
+    if not isinstance(pr, dict):
+        return None
+    carriers = _raw_authority_carriers(pr, marker=_AUTHORITY_CARRIER_MARKER_RE)
+    if carriers:
+        return _hold_reason_from_body(str(carriers[-1]["body"]))
+    for body in reversed(_snapshot_body_texts(pr)):
+        reason = _hold_reason_from_body(body)
+        if reason:
+            return reason
+    return None
 
 
 def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
@@ -287,10 +467,28 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     gate described in issue #6019 — the dispatcher must reject any exact head
     unless every required check is green AND such a trailer is present.
     """
-    if not isinstance(pr, dict) or not head_sha:
+    if (
+        not isinstance(pr, dict)
+        or not isinstance(head_sha, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha)
+    ):
         return False
+    raw_carrier_fields_present = any(
+        isinstance(pr.get(key), list) for key in ("comments", "reviews")
+    )
+    raw_carriers = _raw_authority_carriers(pr, marker=_GATE_CARRIER_MARKER_RE)
+    if raw_carrier_fields_present:
+        if not raw_carriers or any(item["timestamp_value"] is None for item in raw_carriers):
+            return False
+        latest_raw = raw_carriers[-1]
+        if latest_raw.get("review_state_revoked") or latest_raw.get("review_state_invalid"):
+            return False
+        return any(
+            match.group(1).lower() == head_sha.lower()
+            for match in _EXACT_GATE_VERDICT_RE.finditer(str(latest_raw["body"]))
+        )
     accepted = _accepted_gate_verdict_shas(pr)
-    return any(_sha_matches_head(sha, head_sha) for sha in accepted)
+    return any(len(sha) == 40 and sha.lower() == head_sha.lower() for sha in accepted)
 
 
 def _explicit_metadata_verdict_texts(pr: dict[str, Any]) -> list[str]:

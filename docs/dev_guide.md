@@ -673,7 +673,9 @@ with the gate-side rationale above.
 the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
 fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
 and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
-`--head-sha` values. The same checker used by local readiness emits a `changed-coverage.v1`
+`--head-sha` values. Because this lane performs the complete exact-head checkout and shared
+all-extras setup before combining shards, its hosted job has a bounded 30-minute timeout. The
+same checker used by local readiness emits a `changed-coverage.v1`
 artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
 and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
 `not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a

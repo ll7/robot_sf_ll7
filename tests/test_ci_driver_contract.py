@@ -27,7 +27,7 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
     "coverage-gate": 20,
-    "changed-coverage-gate": 15,
+    "changed-coverage-gate": 30,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,

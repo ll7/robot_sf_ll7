@@ -306,6 +306,41 @@ def test_search_space_rejects_non_integral_seed_bounds() -> None:
         SearchSpaceConfig.from_mapping(payload)
 
 
+def test_search_space_parses_template_pedestrian_route_mode() -> None:
+    """Search spaces should preserve an explicit authored pedestrian route mode."""
+    payload = {
+        "variables": {
+            "start_x": {"min": 0, "max": 1},
+            "start_y": {"min": 0, "max": 1},
+            "goal_x": {"min": 2, "max": 3},
+            "goal_y": {"min": 2, "max": 3},
+        },
+        "pedestrian": {"id": "probe", "route_mode": "template"},
+    }
+
+    config = SearchSpaceConfig.from_mapping(payload)
+
+    assert config.pedestrian_id == "probe"
+    assert config.pedestrian_route_mode == "template"
+    assert config.to_json()["pedestrian"] == {"id": "probe", "route_mode": "template"}
+
+
+def test_search_space_rejects_unknown_pedestrian_route_mode() -> None:
+    """Unknown pedestrian route modes must fail before candidate materialization."""
+    payload = {
+        "variables": {
+            "start_x": {"min": 0, "max": 1},
+            "start_y": {"min": 0, "max": 1},
+            "goal_x": {"min": 2, "max": 3},
+            "goal_y": {"min": 2, "max": 3},
+        },
+        "pedestrian": {"id": "probe", "route_mode": "unknown"},
+    }
+
+    with pytest.raises(ValueError, match="route_mode must be one of"):
+        SearchSpaceConfig.from_mapping(payload)
+
+
 def test_multi_ped_adversarial_config_parses_and_serializes_yaml(tmp_path: Path) -> None:
     """Multi-ped adversarial candidates should have a deterministic schema contract."""
     path = tmp_path / "multi_ped.yaml"
@@ -740,6 +775,40 @@ def test_bundle_materializes_pedestrian_route_and_single_pedestrian_when_id_decl
     assert pedestrian["trajectory"] == [[1.0, 2.0], [5.0, 2.0]]
     assert pedestrian["start_delay_s"] == pytest.approx(candidate.spawn_time_s)
     assert pedestrian["wait_at"][0]["wait_s"] == pytest.approx(candidate.pedestrian_delay_s)
+
+
+def test_bundle_template_route_mode_preserves_authored_pedestrian_path() -> None:
+    """Template route mode varies timing/speed without replacing the authored path."""
+    template = _bundle_template_scenario()
+    template["single_pedestrians"] = [
+        {
+            "id": "crossing_probe",
+            "trajectory": [[10.0, 10.0], [11.0, 11.0]],
+            "speed_m_s": 1.1,
+            "start_delay_s": 0.25,
+        }
+    ]
+
+    candidate = dataclasses.replace(
+        _candidate(7),
+        spawn_time_s=0.8,
+        pedestrian_speed_mps=1.4,
+        pedestrian_delay_s=0.6,
+    )
+    scenario, route_payload = build_candidate_payload(
+        candidate,
+        index=0,
+        template_scenario=template,
+        pedestrian_id="crossing_probe",
+        pedestrian_route_mode="template",
+    )
+
+    assert route_payload["ped_routes"] == []
+    pedestrian = scenario["single_pedestrians"][0]
+    assert pedestrian["trajectory"] == [[10.0, 10.0], [11.0, 11.0]]
+    assert pedestrian["speed_m_s"] == pytest.approx(candidate.pedestrian_speed_mps)
+    assert pedestrian["start_delay_s"] == pytest.approx(candidate.spawn_time_s)
+    assert "wait_at" not in pedestrian
 
 
 def test_bundle_normalizes_pedestrian_id_before_binding_template_entry() -> None:

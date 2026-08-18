@@ -5,20 +5,36 @@ from __future__ import annotations
 import argparse
 import ast
 import io
+import json
 import re
 import subprocess
 import sys
 import tokenize
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 EVIDENCE_PATH_FRAGMENT = "docs/context/evidence"
 EXEMPTION_PATTERN = re.compile(r"#\s*evidence-writer-exempt:\s*(.*)$", re.IGNORECASE)
 WRITE_METHODS = frozenset({"write_bytes", "write_text"})
+INVENTORY_PATH_PREFIXES = ("hooks/", "scripts/", "robot_sf/")
+BENCHMARK_PATH_PREFIXES = ("scripts/benchmark/", "robot_sf/benchmark/", "tests/benchmark/")
 # The shared evidence-writer package owns the canonical raw-write wrappers; flagging
 # its own definitions would be circular (those wrappers exist so other modules can
 # adopt them). The guard enforces adoption everywhere else.
 _SHARED_WRITER_MODULE_SUFFIX = ("robot_sf", "evidence", "writers.py")
 _ForwardingHelper = tuple[str, int | None]
+
+
+@dataclass(frozen=True, order=True)
+class EvidenceWriterInventoryFinding:
+    """One raw evidence-writer bypass found by inventory mode."""
+
+    path: str
+    line: int
+    operation: str
+    kind: str
+    exemption_status: str
+    exemption_reason: str | None = None
 
 
 def _string_literal_parts(expr: ast.AST) -> list[str]:
@@ -31,7 +47,9 @@ def _string_literal_parts(expr: ast.AST) -> list[str]:
     return parts
 
 
-def _has_write_mode(call: ast.Call) -> bool:
+def _has_write_mode(
+    call: ast.Call, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> bool:
     """Return whether an ``open`` call requests a write-capable mode."""
     mode: ast.expr | None = None
     if len(call.args) >= 2:
@@ -42,11 +60,16 @@ def _has_write_mode(call: ast.Call) -> bool:
             break
     if isinstance(mode, ast.Constant) and isinstance(mode.value, str):
         return any(flag in mode.value for flag in ("w", "a", "x", "+"))
+    if isinstance(mode, ast.Name) and mode.id in write_mode_names:
+        return True
     return False
 
 
 def _expr_mentions_evidence(
-    expr: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+    expr: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
 ) -> bool:
     """Return whether an expression resolves to an evidence-tree path.
 
@@ -65,16 +88,25 @@ def _expr_mentions_evidence(
         return True
     if isinstance(expr, ast.Name):
         return expr.id in evidence_names
+    if (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id in evidence_factory_names
+    ):
+        return True
     if isinstance(expr, ast.Attribute) and expr.attr in evidence_arg_dests:
         return True
     return any(
-        _expr_mentions_evidence(child, evidence_names, evidence_arg_dests)
+        _expr_mentions_evidence(child, evidence_names, evidence_arg_dests, evidence_factory_names)
         for child in ast.iter_child_nodes(expr)
     )
 
 
 def _evidence_argparse_dests(
-    tree: ast.AST, evidence_names: set[str], evidence_arg_dests: set[str]
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
 ) -> set[str]:
     """Collect argparse destinations whose ``add_argument`` default is evidence.
 
@@ -97,7 +129,7 @@ def _evidence_argparse_dests(
             None,
         )
         if default is None or not _expr_mentions_evidence(
-            default, evidence_names, evidence_arg_dests
+            default, evidence_names, evidence_arg_dests, evidence_factory_names
         ):
             continue
         dest: str | None = None
@@ -130,7 +162,11 @@ def _evidence_argparse_dests(
     return dests
 
 
-def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str]:
+def _evidence_path_names(
+    tree: ast.AST,
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
     """Collect simple names assigned from expressions containing the evidence path."""
     evidence_names: set[str] = set()
     changed = True
@@ -144,7 +180,7 @@ def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str
             else:
                 continue
             if node.value is None or not _expr_mentions_evidence(
-                node.value, evidence_names, evidence_arg_dests
+                node.value, evidence_names, evidence_arg_dests, evidence_factory_names
             ):
                 continue
             for target in targets:
@@ -154,7 +190,76 @@ def _evidence_path_names(tree: ast.AST, evidence_arg_dests: set[str]) -> set[str
     return evidence_names
 
 
-def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str]]:
+def _return_mentions_evidence_path(
+    expr: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str],
+) -> bool:
+    """Recognize path-like returns without treating prose as a path factory."""
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        value = expr.value.strip()
+        return value.startswith(EVIDENCE_PATH_FRAGMENT) or value.startswith(
+            f"./{EVIDENCE_PATH_FRAGMENT}"
+        )
+    if isinstance(expr, ast.Name):
+        return expr.id in evidence_names
+    if isinstance(expr, ast.Call):
+        if isinstance(expr.func, ast.Name) and expr.func.id in evidence_factory_names:
+            return True
+        if isinstance(expr.func, ast.Name) and expr.func.id in {
+            "Path",
+            "PurePath",
+            "PosixPath",
+            "WindowsPath",
+        }:
+            return _expr_mentions_evidence(
+                expr, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+        if isinstance(expr.func, ast.Attribute) and expr.func.attr in {
+            "joinpath",
+            "with_name",
+            "with_suffix",
+            "resolve",
+        }:
+            return _expr_mentions_evidence(
+                expr, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+        return False
+    if isinstance(expr, (ast.BinOp, ast.JoinedStr, ast.IfExp, ast.Attribute, ast.Subscript)):
+        return _expr_mentions_evidence(
+            expr, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
+    return False
+
+
+def _evidence_factory_names(
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str] | frozenset[str] = frozenset(),
+) -> set[str]:
+    """Collect functions that return a path resolving to the evidence tree."""
+    factories: set[str] = set()
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(
+            isinstance(return_node, ast.Return)
+            and return_node.value is not None
+            and _return_mentions_evidence_path(
+                return_node.value,
+                evidence_names,
+                evidence_arg_dests,
+                evidence_factory_names,
+            )
+            for return_node in ast.walk(node)
+        ):
+            factories.add(node.name)
+    return factories
+
+
+def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
     """Resolve evidence names and argparse dests jointly to a fixed point.
 
     A destination whose default is a module constant (``default=DEFAULT_OUTPUT``)
@@ -164,21 +269,117 @@ def _evidence_name_sets(tree: ast.AST) -> tuple[set[str], set[str]]:
     """
     evidence_names: set[str] = set()
     evidence_arg_dests: set[str] = set()
+    evidence_factory_names: set[str] = set()
     changed = True
     while changed:
         changed = False
-        names = _evidence_path_names(tree, evidence_arg_dests)
+        names = _evidence_path_names(tree, evidence_arg_dests, evidence_factory_names)
         if names - evidence_names:
             evidence_names |= names
             changed = True
-        dests = _evidence_argparse_dests(tree, evidence_names, evidence_arg_dests)
+        factories = _evidence_factory_names(
+            tree, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
+        if factories - evidence_factory_names:
+            evidence_factory_names |= factories
+            changed = True
+        dests = _evidence_argparse_dests(
+            tree, evidence_names, evidence_arg_dests, evidence_factory_names
+        )
         if dests - evidence_arg_dests:
             evidence_arg_dests |= dests
             changed = True
-    return evidence_names, evidence_arg_dests
+    return evidence_names, evidence_arg_dests, evidence_factory_names
 
 
-def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
+def _write_mode_names(tree: ast.AST) -> set[str]:
+    """Collect simple names assigned a write-capable file mode."""
+    write_mode_names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            value = node.value
+            is_write_mode = (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+                and any(flag in value.value for flag in ("w", "a", "x", "+"))
+            ) or (isinstance(value, ast.Name) and value.id in write_mode_names)
+            if not is_write_mode:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in write_mode_names:
+                    write_mode_names.add(target.id)
+                    changed = True
+    return write_mode_names
+
+
+def _assignment_targets(node: ast.AST) -> list[ast.expr]:
+    """Return simple assignment targets for data-flow scans."""
+    if isinstance(node, ast.Assign):
+        return node.targets
+    if isinstance(node, ast.AnnAssign):
+        return [node.target]
+    return []
+
+
+def _writer_alias_operation(
+    value: ast.AST,
+    aliases: dict[str, str],
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str],
+) -> str | None:
+    """Return the raw-write operation represented by an assigned expression."""
+    if isinstance(value, ast.Attribute) and value.attr in WRITE_METHODS:
+        if _expr_mentions_evidence(
+            value.value,
+            evidence_names,
+            evidence_arg_dests,
+            evidence_factory_names,
+        ):
+            return f".{value.attr}()"
+    elif isinstance(value, ast.Name):
+        return aliases.get(value.id)
+    return None
+
+
+def _writer_aliases(
+    tree: ast.AST,
+    evidence_names: set[str],
+    evidence_arg_dests: set[str],
+    evidence_factory_names: set[str],
+) -> dict[str, str]:
+    """Collect names aliased to evidence-bound ``Path`` write methods."""
+    aliases: dict[str, str] = {}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            targets = _assignment_targets(node)
+            if not targets:
+                continue
+            operation = _writer_alias_operation(
+                node.value, aliases, evidence_names, evidence_arg_dests, evidence_factory_names
+            )
+            if operation is None:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in aliases:
+                    aliases[target.id] = operation
+                    changed = True
+    return aliases
+
+
+def _write_path_exprs(
+    node: ast.Call, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> list[ast.AST]:
     """Return the path expressions a write-primitive call targets.
 
     Used by indirect-helper detection to decide whether a private helper forwards
@@ -188,19 +389,21 @@ def _write_path_exprs(node: ast.Call) -> list[ast.AST]:
     if isinstance(function, ast.Attribute):
         if function.attr in WRITE_METHODS:
             return [function.value]
-        if function.attr == "open" and _has_write_mode(node):
+        if function.attr == "open" and _has_write_mode(node, write_mode_names):
             return [function.value]
         if function.attr == "dump" and len(node.args) >= 2:
             return [node.args[1]]
         if function.attr == "DictWriter" and node.args:
             return [node.args[0]]
     elif isinstance(function, ast.Name) and function.id == "open":
-        if _has_write_mode(node) and node.args:
+        if _has_write_mode(node, write_mode_names) and node.args:
             return [node.args[0]]
     return []
 
 
-def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[str, set[str]]:
+def _local_path_origins(
+    func_def: ast.FunctionDef | ast.AsyncFunctionDef, params: list[str]
+) -> dict[str, set[str]]:
     """Map helper-local path aliases back to the parameters they derive from."""
     path_origins = {parameter: {parameter} for parameter in params}
     changed = True
@@ -231,7 +434,31 @@ def _local_path_origins(func_def: ast.FunctionDef, params: list[str]) -> dict[st
     return path_origins
 
 
-def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | None:
+def _path_origins_in_expr(expr: ast.AST, path_origins: dict[str, set[str]]) -> set[str]:
+    """Return helper parameters referenced by an expression."""
+    return {
+        origin
+        for child in ast.walk(expr)
+        if isinstance(child, ast.Name)
+        for origin in path_origins.get(child.id, ())
+    }
+
+
+def _helper_call_arguments(
+    node: ast.Call, parameter_name: str, positional_index: int | None
+) -> list[ast.expr]:
+    """Return arguments bound to a forwarded helper path parameter."""
+    arguments = [keyword.value for keyword in node.keywords if keyword.arg == parameter_name]
+    if positional_index is not None and positional_index < len(node.args):
+        arguments.append(node.args[positional_index])
+    return arguments
+
+
+def _forward_path_parameter(
+    func_def: ast.FunctionDef | ast.AsyncFunctionDef,
+    write_mode_names: set[str] | frozenset[str] = frozenset(),
+    forwarding_helpers: dict[str, _ForwardingHelper] | None = None,
+) -> _ForwardingHelper | None:
     """Return the parameter a helper forwards to a write.
 
     A module-level helper like ``_write(path, text)`` that calls
@@ -249,10 +476,16 @@ def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | No
     for node in ast.walk(func_def):
         if not isinstance(node, ast.Call):
             continue
-        for expr in _write_path_exprs(node):
-            for child in ast.walk(expr):
-                if isinstance(child, ast.Name):
-                    forwarded.update(path_origins.get(child.id, ()))
+        for expr in _write_path_exprs(node, write_mode_names):
+            forwarded.update(_path_origins_in_expr(expr, path_origins))
+        if (
+            forwarding_helpers
+            and isinstance(node.func, ast.Name)
+            and node.func.id in forwarding_helpers
+        ):
+            helper_parameter, helper_positional_index = forwarding_helpers[node.func.id]
+            for expr in _helper_call_arguments(node, helper_parameter, helper_positional_index):
+                forwarded.update(_path_origins_in_expr(expr, path_origins))
     if not forwarded:
         return None
     parameter_name = min(forwarded, key=params.index)
@@ -262,14 +495,22 @@ def _forward_path_parameter(func_def: ast.FunctionDef) -> _ForwardingHelper | No
     return parameter_name, positional_index
 
 
-def _forwarding_helpers(tree: ast.AST) -> dict[str, _ForwardingHelper]:
+def _forwarding_helpers(
+    tree: ast.AST, write_mode_names: set[str] | frozenset[str] = frozenset()
+) -> dict[str, _ForwardingHelper]:
     """Map module-level helpers to the parameters they forward to raw writes."""
     helpers: dict[str, _ForwardingHelper] = {}
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
-            parameter = _forward_path_parameter(node)
-            if parameter is not None:
+    function_defs = [
+        node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    changed = True
+    while changed:
+        changed = False
+        for node in function_defs:
+            parameter = _forward_path_parameter(node, write_mode_names, helpers)
+            if parameter is not None and helpers.get(node.name) != parameter:
                 helpers[node.name] = parameter
+                changed = True
     return helpers
 
 
@@ -287,15 +528,26 @@ class _DirectWriterVisitor(ast.NodeVisitor):
         self,
         evidence_names: set[str],
         evidence_arg_dests: set[str],
+        evidence_factory_names: set[str],
+        write_mode_names: set[str],
         forwarding_helpers: dict[str, _ForwardingHelper],
+        writer_aliases: dict[str, str],
     ) -> None:
         self.violations: list[tuple[int, str, str]] = []
         self.evidence_names = evidence_names
         self.evidence_arg_dests = evidence_arg_dests
+        self.evidence_factory_names = evidence_factory_names
+        self.write_mode_names = write_mode_names
         self.forwarding_helpers = forwarding_helpers
+        self.writer_aliases = writer_aliases
 
     def _mentions(self, expr: ast.AST) -> bool:
-        return _expr_mentions_evidence(expr, self.evidence_names, self.evidence_arg_dests)
+        return _expr_mentions_evidence(
+            expr,
+            self.evidence_names,
+            self.evidence_arg_dests,
+            self.evidence_factory_names,
+        )
 
     def _record(self, node: ast.Call, operation: str, kind: str) -> None:
         self.violations.append((node.lineno, operation, kind))
@@ -311,7 +563,11 @@ class _DirectWriterVisitor(ast.NodeVisitor):
     def _check_attribute_call(self, node: ast.Call, function: ast.Attribute) -> None:
         if function.attr in WRITE_METHODS and self._mentions(function.value):
             self._record(node, f".{function.attr}()", "direct")
-        elif function.attr == "open" and _has_write_mode(node) and self._mentions(function.value):
+        elif (
+            function.attr == "open"
+            and _has_write_mode(node, self.write_mode_names)
+            and self._mentions(function.value)
+        ):
             self._record(node, ".open(..., write mode)", "direct")
         elif function.attr == "DictWriter" and node.args and self._mentions(node.args[0]):
             self._record(node, "csv.DictWriter()", "direct")
@@ -324,9 +580,15 @@ class _DirectWriterVisitor(ast.NodeVisitor):
                 self._record(node, f"{function.attr}()", "direct")
 
     def _check_name_call(self, node: ast.Call, function: ast.Name) -> None:
-        if (
+        if function.id in self.writer_aliases:
+            self._record(
+                node,
+                f"{function.id}() (alias for {self.writer_aliases[function.id]})",
+                "direct",
+            )
+        elif (
             function.id == "open"
-            and _has_write_mode(node)
+            and _has_write_mode(node, self.write_mode_names)
             and node.args
             and self._mentions(node.args[0])
         ):
@@ -366,7 +628,8 @@ def _structural_helper_violations(
     helper_lines = {
         node.name: node.lineno
         for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in forwarding_helpers
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in forwarding_helpers
     }
     return [
         (
@@ -399,8 +662,8 @@ def _is_shared_writer_module(source_path: Path) -> bool:
     return resolved.parts[-suffix_length:] == _SHARED_WRITER_MODULE_SUFFIX
 
 
-def _exemption(source: str) -> tuple[bool, str | None]:
-    """Return whether source has a valid file-level exemption."""
+def _exemption_status(source: str) -> tuple[str, str | None, str | None]:
+    """Return ``(status, reason, error)`` for a file-level exemption marker."""
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         comment_tokens = (token for token in tokens if token.type == tokenize.COMMENT)
@@ -412,12 +675,135 @@ def _exemption(source: str) -> tuple[bool, str | None]:
                 continue
             reason = match.group(1).strip()
             if not reason:
-                return True, f"line {token.start[0]} has an empty evidence-writer exemption reason"
-            return True, None
+                return (
+                    "invalid",
+                    None,
+                    f"line {token.start[0]} has an empty evidence-writer exemption reason",
+                )
+            reason_parts = [reason]
+            source_lines = source.splitlines()
+            next_line_index = token.start[0]
+            while next_line_index < len(source_lines):
+                continuation = source_lines[next_line_index]
+                if not continuation.startswith("#"):
+                    break
+                continuation_text = continuation[1:].strip()
+                if not continuation_text or EXEMPTION_PATTERN.match(continuation):
+                    break
+                reason_parts.append(continuation_text)
+                next_line_index += 1
+            return "valid", " ".join(reason_parts), None
     except (IndentationError, tokenize.TokenError):
         # Let ast.parse below report malformed source as a fail-closed blocker.
-        return False, None
-    return False, None
+        return "none", None, None
+    return "none", None, None
+
+
+def _exemption(source: str) -> tuple[bool, str | None]:
+    """Return whether source has a valid file-level exemption."""
+    status, _, error = _exemption_status(source)
+    return status in {"valid", "invalid"}, error
+
+
+def _repo_root() -> Path:
+    """Return the current Git repository root."""
+    return Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+
+
+def _repo_relative_path(path: Path, repo_root: Path) -> str:
+    """Return a stable slash-separated repository-relative path when possible."""
+    try:
+        return path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _violation_tuples(source_path: Path, source: str) -> list[tuple[int, str, str]]:
+    """Return raw evidence-writer bypasses in ``source``."""
+    tree = ast.parse(source, filename=str(source_path))
+    evidence_names, evidence_arg_dests, evidence_factory_names = _evidence_name_sets(tree)
+    write_mode_names = _write_mode_names(tree)
+    forwarding_helpers = _forwarding_helpers(tree, write_mode_names)
+    writer_aliases = _writer_aliases(
+        tree, evidence_names, evidence_arg_dests, evidence_factory_names
+    )
+    has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
+
+    visitor = _DirectWriterVisitor(
+        evidence_names,
+        evidence_arg_dests,
+        evidence_factory_names,
+        write_mode_names,
+        forwarding_helpers,
+        writer_aliases,
+    )
+    visitor.visit(tree)
+    violations = visitor.violations
+    violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))
+    return sorted(violations, key=lambda item: (item[0], item[1], item[2]))
+
+
+def inventory_file(
+    path: str | Path, repo_root: Path | None = None
+) -> list[EvidenceWriterInventoryFinding]:
+    """Return raw evidence-writer bypasses for one Python file, including exemption status."""
+    source_path = Path(path)
+    if (
+        source_path.suffix != ".py"
+        or not source_path.is_file()
+        or _is_shared_writer_module(source_path)
+    ):
+        return []
+    if repo_root is None:
+        repo_root = _repo_root()
+    relative_path = _repo_relative_path(source_path, repo_root)
+    try:
+        source = source_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return [
+            EvidenceWriterInventoryFinding(
+                path=relative_path,
+                line=1,
+                operation="read",
+                kind="error",
+                exemption_status="invalid",
+                exemption_reason=f"cannot read source: {exc}",
+            )
+        ]
+    exemption_status, exemption_reason, exemption_error = _exemption_status(source)
+    if exemption_error is not None:
+        exemption_reason = exemption_error
+    try:
+        violations = _violation_tuples(source_path, source)
+    except SyntaxError as exc:
+        return [
+            EvidenceWriterInventoryFinding(
+                path=relative_path,
+                line=exc.lineno or 1,
+                operation="parse",
+                kind="error",
+                exemption_status="invalid",
+                exemption_reason=f"cannot parse source: {exc.msg}",
+            )
+        ]
+    return [
+        EvidenceWriterInventoryFinding(
+            path=relative_path,
+            line=line,
+            operation=operation,
+            kind=kind,
+            exemption_status=exemption_status,
+            exemption_reason=exemption_reason,
+        )
+        for line, operation, kind in violations
+    ]
 
 
 def check_file(path: str | Path) -> list[str]:
@@ -440,18 +826,9 @@ def check_file(path: str | Path) -> list[str]:
     if has_exemption:
         return []
     try:
-        tree = ast.parse(source, filename=str(source_path))
+        violations = _violation_tuples(source_path, source)
     except SyntaxError as exc:
         return [f"BLOCKER: cannot parse changed Python file '{source_path}': {exc}"]
-
-    evidence_names, evidence_arg_dests = _evidence_name_sets(tree)
-    forwarding_helpers = _forwarding_helpers(tree)
-    has_evidence_output = bool(evidence_names) or bool(evidence_arg_dests)
-
-    visitor = _DirectWriterVisitor(evidence_names, evidence_arg_dests, forwarding_helpers)
-    visitor.visit(tree)
-    violations = visitor.violations
-    violations.extend(_structural_helper_violations(forwarding_helpers, tree, has_evidence_output))
     return [
         _format_blocker(source_path, line, operation, kind) for line, operation, kind in violations
     ]
@@ -496,25 +873,99 @@ def check_changed_files(changed_files: list[str], base_ref: str = "origin/main")
     return blockers
 
 
+def _is_inventory_path(path: str) -> bool:
+    """Return whether a tracked Python path belongs in the non-benchmark inventory."""
+    return (
+        path.endswith(".py")
+        and any(path.startswith(prefix) for prefix in INVENTORY_PATH_PREFIXES)
+        and not any(path.startswith(prefix) for prefix in BENCHMARK_PATH_PREFIXES)
+    )
+
+
+def inventory_tracked_files() -> tuple[list[EvidenceWriterInventoryFinding], int]:
+    """Scan tracked non-benchmark Python files for raw evidence-writer bypasses."""
+    repo_root = _repo_root()
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "-z", "--full-name", "--", "*.py"],
+        check=True,
+        capture_output=True,
+    )
+    paths = sorted(
+        path.decode("utf-8")
+        for path in result.stdout.split(b"\0")
+        if path and _is_inventory_path(path.decode("utf-8"))
+    )
+    findings: list[EvidenceWriterInventoryFinding] = []
+    for path in paths:
+        findings.extend(inventory_file(repo_root / path, repo_root))
+    return sorted(findings), len(paths)
+
+
+def _print_json(payload: dict[str, object]) -> None:
+    """Print deterministic JSON output."""
+    print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _run_inventory(*, json_output: bool) -> int:
+    """Run the read-only tracked-file inventory mode."""
+    findings, scanned_paths = inventory_tracked_files()
+    scan_errors = any(finding.kind == "error" for finding in findings)
+    if json_output:
+        _print_json(
+            {
+                "mode": "inventory",
+                "scanned_paths": scanned_paths,
+                "approved_prefixes": list(INVENTORY_PATH_PREFIXES),
+                "excluded_prefixes": list(BENCHMARK_PATH_PREFIXES),
+                "count": len(findings),
+                "findings": [asdict(finding) for finding in findings],
+            }
+        )
+        return 1 if scan_errors else 0
+    for finding in findings:
+        print(
+            f"{finding.path}:{finding.line}: operation={finding.operation} "
+            f"kind={finding.kind} exemption_status={finding.exemption_status}"
+        )
+    print(f"Inventory findings: {len(findings)} across {scanned_paths} tracked Python files")
+    return 1 if scan_errors else 0
+
+
 def main() -> int:
     """Run the changed-file evidence-writer guard."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--changed-files-file",
         type=Path,
-        required=True,
         help="newline-delimited changed-file paths",
     )
     parser.add_argument("--base-ref", default="origin/main", help="git base ref")
+    mode_group.add_argument(
+        "--inventory",
+        action="store_true",
+        help=(
+            "read-only inventory of tracked non-benchmark Python files; excludes "
+            "scripts/benchmark/, robot_sf/benchmark/, and tests/benchmark/"
+        ),
+    )
+    parser.add_argument("--json", action="store_true", help="emit deterministic JSON output")
     args = parser.parse_args()
+    if args.inventory:
+        return _run_inventory(json_output=args.json)
+    if args.changed_files_file is None:
+        parser.error("--changed-files-file is required unless --inventory is set")
     changed_files = [
         line.strip()
         for line in args.changed_files_file.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     blockers = check_changed_files(changed_files, args.base_ref)
-    for blocker in blockers:
-        print(blocker)
+    if args.json:
+        _print_json({"mode": "changed-files", "blockers": blockers, "count": len(blockers)})
+    else:
+        for blocker in blockers:
+            print(blocker)
     return 1 if blockers else 0
 
 

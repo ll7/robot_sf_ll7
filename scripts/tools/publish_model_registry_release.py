@@ -7,6 +7,7 @@ import argparse
 import gzip
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -32,8 +33,16 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", default="ll7/robot_sf_ll7")
     parser.add_argument(
         "--tag",
-        required=True,
+        required=False,
         help="GitHub release tag, for example artifact/models-2026-05-registry-v1.",
+    )
+    parser.add_argument(
+        "--validate-licensing",
+        action="store_true",
+        help=(
+            "Run the read-only model licensing preflight. This never stages, hydrates, uploads, "
+            "or writes the registry."
+        ),
     )
     parser.add_argument(
         "--model-id",
@@ -341,15 +350,114 @@ def _validate_repository_file(
     """Validate one required legal file path and return a user-facing issue."""
     if not isinstance(raw_path, str) or not raw_path.strip():
         return f"{model_id}: {label} is required"
+    repo_root = repo_root.resolve()
     path = Path(raw_path)
-    resolved = (repo_root / path).resolve() if not path.is_absolute() else path.resolve()
+    candidate = Path(os.path.abspath(str(path if path.is_absolute() else repo_root / path)))
     try:
-        resolved.relative_to(repo_root.resolve())
+        candidate.relative_to(repo_root)
+    except ValueError:
+        return f"{model_id}: {label} must stay inside the repository: {raw_path}"
+    relative = candidate.relative_to(repo_root)
+    current = repo_root
+    for component in relative.parts:
+        current /= component
+        if current.is_symlink():
+            return f"{model_id}: {label} must not traverse symlinks: {raw_path}"
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(repo_root)
     except ValueError:
         return f"{model_id}: {label} must stay inside the repository: {raw_path}"
     if not resolved.is_file():
         return f"{model_id}: {label} does not exist: {raw_path}"
     return None
+
+
+def _model_licensing_candidates(registry_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return rows whose registry data can enter a public model release."""
+    candidates: list[dict[str, Any]] = []
+    for entry in registry_data.get("models", []):
+        if not isinstance(entry, dict):
+            continue
+        release = entry.get("github_release")
+        if (
+            entry.get("public_artifact_source") == "github_release"
+            or isinstance(release, dict)
+            or _has_wandb_reference(entry)
+            or isinstance(entry.get("licensing"), dict)
+        ):
+            candidates.append(entry)
+    return candidates
+
+
+def _repository_relative_path(raw_path: str, *, repo_root: Path) -> str:
+    """Return a stable repository-relative representation of a legal input path."""
+    path = Path(raw_path)
+    candidate = Path(os.path.abspath(str(path if path.is_absolute() else repo_root / path)))
+    return candidate.relative_to(repo_root.resolve()).as_posix()
+
+
+def validate_model_licensing_inputs(
+    registry_path: Path, *, repo_root: Path | None = None
+) -> dict[str, Any]:
+    """Check registry legal inputs without staging, hydrating, uploading, or writing."""
+    effective_root = (repo_root or get_repository_root()).resolve()
+    registry_data = _load_registry_data(registry_path)
+    issues: list[str] = []
+    rows: list[dict[str, Any]] = []
+
+    for entry in _model_licensing_candidates(registry_data):
+        model_id = str(entry.get("model_id", "unknown-model"))
+        row_issues = _validate_model_licensing(entry, repo_root=effective_root)
+        files: list[dict[str, str]] = []
+        licensing = entry.get("licensing")
+        if isinstance(licensing, dict):
+            legal_paths: list[str] = []
+            for field in ("license_file", "model_card_file"):
+                value = licensing.get(field)
+                if isinstance(value, str) and value.strip():
+                    legal_paths.append(value)
+            notices = licensing.get("included_notices")
+            if isinstance(notices, list):
+                legal_paths.extend(
+                    item for item in notices if isinstance(item, str) and item.strip()
+                )
+            for raw_path in legal_paths:
+                path_issue = _validate_repository_file(
+                    raw_path,
+                    repo_root=effective_root,
+                    model_id=model_id,
+                    label="licensing legal file",
+                )
+                if path_issue:
+                    continue
+                resolved = _path_from_registry(raw_path, repo_root=effective_root)
+                files.append(
+                    {
+                        "path": _repository_relative_path(raw_path, repo_root=effective_root),
+                        "sha256": _sha256(resolved),
+                    }
+                )
+        rows.append(
+            {
+                "model_id": model_id,
+                "status": "blocked" if row_issues else "passed",
+                "files": files,
+                "issues": row_issues,
+            }
+        )
+        issues.extend(row_issues)
+
+    return {
+        "schema_version": "robot-sf-model-licensing-preflight.v1",
+        "status": "blocked" if issues else "passed",
+        "registry_path": str(registry_path),
+        "rows": rows,
+        "issues": issues,
+        "read_only": True,
+        "uploads_performed": False,
+        "registry_writes_performed": False,
+    }
 
 
 def _path_from_registry(raw_path: str, *, repo_root: Path) -> Path:
@@ -628,6 +736,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the model registry publication workflow."""
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.validate_licensing:
+        read_only_conflicts = {
+            "--download-missing": args.download_missing,
+            "--execute-upload": args.execute_upload,
+            "--create-release": args.create_release,
+            "--update-registry": args.update_registry,
+            "--allow-registry-update-without-upload": args.allow_registry_update_without_upload,
+            "--staging-dir": args.staging_dir is not None,
+            "--output-json": args.output_json is not None,
+        }
+        conflicts = [option for option, enabled in read_only_conflicts.items() if enabled]
+        if conflicts:
+            parser.error("--validate-licensing is read-only; remove: " + ", ".join(conflicts))
+        args.registry_path = args.registry_path.resolve()
+        report = validate_model_licensing_inputs(args.registry_path)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report["status"] == "passed" else 2
+    if not args.tag:
+        parser.error("--tag is required unless --validate-licensing is used")
     if (
         args.update_registry
         and not args.execute_upload

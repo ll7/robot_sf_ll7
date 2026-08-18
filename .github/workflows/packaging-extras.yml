@@ -7,10 +7,9 @@ on:
       - "uv.lock"
       - "LICENSE"
       - "THIRD_PARTY_NOTICES.md"
-      - "fast-pysf/LICENSE"
-      - "third_party/python-rvo2/LICENSE"
-      - "third_party/socnavbench/LICENSE"
-      - "third_party/socnavbench/LICENSES/Apache-2.0.txt"
+      - "fast-pysf/**"
+      - "third_party/python-rvo2/**"
+      - "third_party/socnavbench/**"
       - "robot_sf/common/optional_import.py"
       - "robot_sf/common/__init__.py"
       - "robot_sf/benchmark/doctor.py"
@@ -20,6 +19,9 @@ on:
       - "scripts/validation/wheel_install_smoke.sh"
       - "scripts/tools/check_distribution_licenses.py"
       - "tests/tools/test_check_distribution_licenses.py"
+      - "scripts/validation/release_legal_inputs.v1.json"
+      - "scripts/tools/check_release_legal_input_coverage.py"
+      - "tests/dev/test_release_legal_input_coverage.py"
       - ".github/workflows/packaging-extras.yml"
   workflow_dispatch:
 

@@ -5,14 +5,18 @@ on:
     paths:
       - "pyproject.toml"
       - "uv.lock"
-      - "fast-pysf/pyproject.toml"
-      - "fast-pysf/uv.lock"
+      - "fast-pysf/**"
+      - "third_party/python-rvo2/**"
+      - "third_party/socnavbench/**"
       - "third_party/python-rvo2/pyproject.toml"
       - "third_party/python-rvo2/setup.py"
       - "third_party/python-rvo2/requirements.txt"
       - "third_party/socnavbench/LICENSING.yaml"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
+      - "scripts/validation/release_legal_inputs.v1.json"
+      - "scripts/tools/check_release_legal_input_coverage.py"
+      - "tests/dev/test_release_legal_input_coverage.py"
   workflow_dispatch:
 
 permissions:

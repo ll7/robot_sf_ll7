@@ -57,10 +57,10 @@ class CampaignIdPair:
 
     def __post_init__(self) -> None:
         """Reject malformed, duplicated, swapped, or unrelated arm identities."""
+        if self.h500 == self.h600:
+            raise CampaignIdentityError("h500 and h600 campaign IDs must be distinct")
         h500 = _validate_id(self.h500, role="h500")
         h600 = _validate_id(self.h600, role="h600")
-        if h500 == h600:
-            raise CampaignIdentityError("h500 and h600 campaign IDs must be distinct")
         if _pair_shape(h500, role="h500") != _pair_shape(h600, role="h600"):
             raise CampaignIdentityError(
                 "h500 and h600 campaign IDs must describe the same declared rerun"

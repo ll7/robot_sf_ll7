@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.research_answerability import PROOF_SURFACES
+from robot_sf.benchmark.research_answerability import PROOF_SURFACES, answerability_from_manifest
 from scripts.validation.research_answerability_preflight import (
     apply_proof_results,
     collect_answerability_proof,
@@ -95,6 +95,40 @@ def test_public_preregistration_and_artifact_validators_are_composed() -> None:
     assert report["surfaces"]["preregistration"]["summary"]["status"] == "ok"
     assert report["surfaces"]["artifact"]["status"] == "passed"
     assert report["surfaces"]["artifact"]["issues"] == []
+
+
+def test_durable_path_cannot_promote_required_artifact_proof() -> None:
+    """A path-existence check cannot satisfy a required durable artifact surface."""
+    manifest = _manifest()
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    manifest["answerability"]["proof_surfaces"]["artifact"]["required"] = True
+    manifest["validation"]["answerability_proof"].update(
+        {
+            "preregistration": {
+                "kind": "preregistration",
+                "path": str(VALID_PREREGISTRATION.relative_to(REPO_ROOT)),
+            },
+            "evidence_contract": {
+                "kind": "evidence_contract",
+                "contract_id": "orca_residual_smoke",
+            },
+            "artifact": {"kind": "durable_path", "path": "README.md"},
+        }
+    )
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=REPO_ROOT,
+        execute=True,
+        build_rows=lambda value: [{"campaign_id": value["campaign"]["id"]}],
+    )
+    evaluated = copy.deepcopy(manifest)
+    evaluated["answerability"] = apply_proof_results(manifest["answerability"], report)
+
+    assert report["surfaces"]["artifact"]["status"] == "unavailable"
+    assert "checksum identity" in report["surfaces"]["artifact"]["reason"]
+    assert answerability_from_manifest(evaluated)["state"] == "blocked_missing_proof"
 
 
 def test_result_packet_validator_is_explicitly_unavailable_when_unmerged() -> None:

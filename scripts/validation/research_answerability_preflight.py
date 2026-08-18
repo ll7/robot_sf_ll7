@@ -243,7 +243,13 @@ def _run_result_packet(
 def _run_durable_path(
     spec: Mapping[str, Any], *, repo_root: Path, required: bool
 ) -> dict[str, Any]:
-    """Check that a declared tracked evidence path exists and is not disposable."""
+    """Refuse path-existence checks as artifact admission proof.
+
+    A path check cannot establish tracking, immutable retention, or checksum
+    identity. The public artifact-catalog validator is the canonical owner for
+    those properties, so a ``durable_path`` declaration is recorded as
+    unavailable instead of being promoted to ``passed``.
+    """
     path = _repo_relative_path(repo_root, spec.get("path"), "durable_path.path")
     relative = path.relative_to(repo_root)
     if relative.parts[:1] == ("output",):
@@ -263,9 +269,13 @@ def _run_durable_path(
             path=str(relative),
         )
     return _result(
-        status="passed",
+        status="unavailable",
         required=required,
         kind="durable_path",
+        reason=(
+            "path existence does not prove tracked retention or checksum identity; "
+            "configure an artifact_catalog proof instead"
+        ),
         path=str(relative),
     )
 

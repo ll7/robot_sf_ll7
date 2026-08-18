@@ -77,6 +77,12 @@ or an argv-style command. Commands are never passed through a shell. A
 missing generic result-packet validator is recorded as `unavailable`; it is
 not replaced by an issue-specific or heuristic checker.
 
+The `durable_path` adapter is deliberately not an artifact admission proof:
+path existence alone cannot establish tracked retention or checksum identity.
+A required artifact surface configured with `kind: durable_path` is therefore
+recorded as `unavailable` and blocks `answerable`. Use `kind: artifact_catalog`
+to invoke the public checksum and path-policy validator.
+
 The production camera-ready launcher can enforce the same gate without creating
 a second readiness contract:
 

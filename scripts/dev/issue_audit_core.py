@@ -1819,6 +1819,12 @@ def _blocked_label_plan_errors(mutations: Sequence[object]) -> list[dict[str, An
     return errors
 
 
+def _is_http_not_found(result: subprocess.CompletedProcess[str]) -> bool:
+    """Recognize GitHub's not-found response without hiding other failures."""
+    detail = "\n".join(part for part in (result.stderr, result.stdout) if part)
+    return bool(re.search(r"\bHTTP\s+404\b|\b404\s+Not\s+Found\b", detail, re.IGNORECASE))
+
+
 def apply_mutations(
     plan: Mapping[str, Any],
     *,
@@ -1840,6 +1846,8 @@ def apply_mutations(
             "ok": False,
             "reason": "plan is missing plan_digest; regenerate it before applying",
             "applied": [],
+            "already_applied": [],
+            "already_applied_count": 0,
             "failures": ["missing plan_digest"],
             "readback": [],
         }
@@ -1851,6 +1859,8 @@ def apply_mutations(
             "ok": False,
             "reason": str(exc),
             "applied": [],
+            "already_applied": [],
+            "already_applied_count": 0,
             "failures": [str(exc)],
             "readback": [],
         }
@@ -1860,6 +1870,8 @@ def apply_mutations(
             "ok": False,
             "reason": "stale plan_digest does not match the plan contents; regenerate it before applying",
             "applied": [],
+            "already_applied": [],
+            "already_applied_count": 0,
             "failures": ["stale plan_digest"],
             "readback": [],
         }
@@ -1869,6 +1881,8 @@ def apply_mutations(
             "ok": False,
             "reason": "inventory or mutation plan is incomplete",
             "applied": [],
+            "already_applied": [],
+            "already_applied_count": 0,
             "failures": list(plan["truncation_or_errors"]),
             "readback": [],
         }
@@ -1884,12 +1898,15 @@ def apply_mutations(
             "ok": False,
             "reason": "plan contains an unreasoned blocked-label mutation",
             "applied": [],
+            "already_applied": [],
+            "already_applied_count": 0,
             "failures": blocked_label_errors,
             "readback": [],
         }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []
+    already_applied: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     touched: set[int] = set()
     expectations: dict[int, dict[str, set[str] | bool]] = {}
@@ -1922,7 +1939,10 @@ def apply_mutations(
                 {"mutation": dict(mutation), "error": f"unsupported mutation: {operation}"}
             )
             continue
-        if result.returncode != 0:
+        idempotent_remove = (
+            result.returncode != 0 and operation == "remove_label" and _is_http_not_found(result)
+        )
+        if result.returncode != 0 and not idempotent_remove:
             failures.append(
                 {
                     "mutation": dict(mutation),
@@ -1931,7 +1951,10 @@ def apply_mutations(
                 }
             )
             continue
-        applied.append(dict(mutation))
+        if idempotent_remove:
+            already_applied.append({**dict(mutation), "skipped_reason": "already_absent"})
+        else:
+            applied.append(dict(mutation))
         touched.add(number)
         expected = expectations.setdefault(
             number,
@@ -1980,6 +2003,8 @@ def apply_mutations(
         "schema": "issue_audit_apply.v1",
         "ok": not failures and all(row.get("ok") for row in readback),
         "applied": applied,
+        "already_applied": already_applied,
+        "already_applied_count": len(already_applied),
         "failures": failures,
         "readback": readback,
     }

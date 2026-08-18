@@ -25,7 +25,12 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     }
     assert expected_paths <= paths
 
-    allow_licenses = workflow["jobs"]["review"]["steps"][-1]["with"]["allow-licenses"]
+    review_step = next(
+        step
+        for step in workflow["jobs"]["review"]["steps"]
+        if step.get("name") == "Review dependency changes"
+    )
+    allow_licenses = review_step["with"]["allow-licenses"]
     allowed = {item.strip() for item in allow_licenses.split(",")}
     assert allowed == {
         "Apache-2.0",

@@ -258,6 +258,13 @@ feasibility/planner/trajectory outcome is replay-required, and a radius-default 
 (`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
 [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
 
+Issue #7445 release 0.0.3 DOI correction record: binds the `0.0.3` tag, release URL, asset name,
+and asset SHA-256 and records `doi_status: not_assigned` (no retroactive Zenodo deposit
+authorized) and `reproduction_status: not_run`; the historical embedded placeholder
+`10.5281/zenodo.<record-id>` in the release manifest remains as immutable bytes and was NOT
+rewritten:
+[release_0_0_3_doi_correction.v1.json](evidence/issue_4364_release_0_0_3_post1/release_0_0_3_doi_correction.v1.json).
+
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
 

@@ -1201,6 +1201,8 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
+    assert "--profile NAME" in help_result.stdout
+    assert "all-extras" in help_result.stdout
 
 
 def test_worktree_shared_venv_helper_fails_for_missing_shared_env(tmp_path: Path) -> None:

@@ -154,7 +154,19 @@ env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
 
 The optional-dependency preflight uses import-spec probes without importing project code. A
 `missing_optional` result is setup evidence and should not be confused with a changed-code
-collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
+collection or runtime failure. The docs-proof wrapper checks the `core` profile before invoking
+`uv run`; the shared-venv wrapper checks that profile by default and accepts an explicit profile
+when the command needs optional packages:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
+```
+
+If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
+`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
+lightweight Python-only environment from being reused as if it were a synchronized dependency
+profile. `--standalone` remains available only for commands whose no-project-import boundary is
+verified.
 
 ### Local CI scratch capacity
 

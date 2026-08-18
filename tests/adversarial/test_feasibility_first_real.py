@@ -321,6 +321,18 @@ def test_behavior_check_and_simulator_check_fail_closed(tmp_path: Path) -> None:
     failed, _runtime = real._simulator_check(evaluation, certification_status=_certification())
     assert failed.status == "fail"
 
+    evaluation.episode_record_path.write_text("not-json\n", encoding="utf-8")
+    malformed_record, malformed_runtime = real._simulator_check(
+        evaluation, certification_status=_certification()
+    )
+    assert malformed_record.status == "fail"
+    assert "record_error" in malformed_runtime
+
+    malformed_scenario = tmp_path / "malformed_metadata.yaml"
+    malformed_scenario.write_text("scenarios:\n  - metadata: []\n", encoding="utf-8")
+    malformed_behavior = real._behavior_check(malformed_scenario, config=config)
+    assert malformed_behavior.status == "fail"
+
 
 def test_method_summary_and_candidate_record_preserve_denominators() -> None:
     """Method summaries expose selected and safety denominators without rate claims."""

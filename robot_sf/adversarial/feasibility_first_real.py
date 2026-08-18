@@ -335,9 +335,12 @@ def _behavior_check(
         pedestrian = pedestrians.get(pedestrian_id)
         if pedestrian is None:
             raise ValueError(f"runtime map has no pedestrian {pedestrian_id!r}")
-        candidate = scenario.get("metadata", {}).get("adversarial_candidate", {})
-        if not isinstance(candidate, dict):
-            raise ValueError("candidate provenance metadata is missing")
+        metadata = scenario.get("metadata")
+        candidate = (
+            metadata.get("adversarial_candidate", {}) if isinstance(metadata, Mapping) else None
+        )
+        if not isinstance(metadata, Mapping) or not isinstance(candidate, dict):
+            raise ValueError("candidate provenance metadata is missing or malformed")
         expected_speed = float(candidate["pedestrian_speed_mps"])
         expected_delay = float(candidate["spawn_time_s"])
         if pedestrian.speed_m_s is None or not math.isclose(
@@ -429,7 +432,16 @@ def _simulator_check(
             runtime,
         )
     record_path = getattr(evaluation, "episode_record_path", None)
-    record = read_first_jsonl_record(record_path) if isinstance(record_path, Path) else None
+    record_error: str | None = None
+    if isinstance(record_path, Path):
+        try:
+            record = read_first_jsonl_record(record_path)
+        except (OSError, TypeError, ValueError) as exc:
+            record = None
+            record_error = str(exc)
+            runtime["record_error"] = record_error
+    else:
+        record = None
     if (
         record
         and execution_mode in {"native", "adapter", "mixed"}
@@ -466,7 +478,10 @@ def _simulator_check(
             "simulator_validity",
             "fail",
             "canonical benchmark runner did not produce a valid episode record",
-            {"error": runtime.get("error") or "missing episode record"},
+            {
+                "error": runtime.get("error") or "missing episode record",
+                **({"record_error": record_error} if record_error else {}),
+            },
         ),
         runtime,
     )

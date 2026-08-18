@@ -85,6 +85,17 @@ def _changed_files(base: str, repo_root: Path) -> list[Path]:
     return files
 
 
+def _no_changed_files_message(base: str) -> str:
+    """Describe an empty committed-HEAD diff without hiding dirty work.
+
+    The readiness wrapper reports dirty paths separately during interim runs.
+    This gate compares only ``base...HEAD``, so calling the result simply
+    "no changed files" would contradict that receipt and could be mistaken for
+    proof that the dirty implementation tree was checked.
+    """
+    return f"No committed changed files vs {base}."
+
+
 def _file_at_ref(base: str, path: Path, repo_root: Path) -> str | None:
     """Read a repository file at the merge-base for a comparison ref.
 
@@ -902,7 +913,7 @@ def _run_check(args: argparse.Namespace) -> int:
 
     changed_files = _changed_files(args.base, repo_root)
     if not changed_files:
-        print(f"No changed files vs {args.base}.")
+        print(_no_changed_files_message(args.base))
         return 0
 
     selected, skipped = _select_changed_files(

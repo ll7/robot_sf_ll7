@@ -9,6 +9,14 @@ from pathlib import Path
 from scripts.validation import check_docstring_todos
 
 
+def test_empty_diff_message_names_committed_scope() -> None:
+    """An empty HEAD diff must be distinguishable from an unscanned dirty tree."""
+    assert (
+        check_docstring_todos._no_changed_python_files_message()
+        == "No committed changed Python files detected."
+    )
+
+
 def test_read_defs_handles_syntax_error(tmp_path):
     """Invalid Python input should be skipped without raising errors."""
     bad_file = tmp_path / "bad.py"

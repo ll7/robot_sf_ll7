@@ -73,6 +73,25 @@ closed instead of inventing body-edge clearance or event annotations. The render
 diagnostic/tooling-only and does not acquire traces,
 run simulation, or admit benchmark or paper-facing evidence.
 
+To compose one cell-bound package from existing release-pinned campaign artifacts, provide a JSON
+list of candidate cell rows containing the selector fields (`cell_id`, `verdict`, `label_strength`,
+`primary_order`, and `seed_id`) plus the campaign/episode identity:
+
+```bash
+uv run python scripts/tools/build_trace_dossier_package.py \
+  --candidates output/debug/trace_dossier/cell_candidates.json \
+  --release-manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml \
+  --campaign-store output/campaign_results/example \
+  --output-dir output/debug/trace_dossier/package
+```
+
+The package composes the deterministic representative selection, existing-trace export, cell
+binding, four-panel render, and recursive `SHA256SUMS` manifest. The candidate campaign identity
+must agree with the campaign-store study identity; missing or mismatched source identity/checksums
+fail closed. Candidate cell and verdict metadata remain supplied metadata rather than inferred
+outcomes. It is diagnostic-only metadata and does not acquire traces, run simulation, submit
+compute, or admit benchmark evidence.
+
 To generate reusable static trajectory panels and failure mosaics from the same trace-export
 format, run:
 

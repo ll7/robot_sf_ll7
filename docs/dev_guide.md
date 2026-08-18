@@ -1369,6 +1369,33 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
   explicitly when benchmark, simulator, or full PR readiness gates were not run because the branch only
   changes discoverability or workflow text.
 
+#### Canonical context-note integrity checks
+
+Use the following sequence when adding or changing a context note. Run it from the repository root
+so the commands resolve the active worktree and its `origin/main` base:
+
+```bash
+# Changed-document proof, including README/INDEX anchors for context-only diffs.
+BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
+
+# Repository-wide Markdown link integrity (the full-link pass).
+uv run python scripts/dev/check_docs_evidence_integrity.py --full
+
+# Context-note index/catalog coverage and freshness.
+uv run python scripts/tools/check_context_note_freshness.py \
+  --index docs/context/INDEX.md \
+  --context-dir docs/context \
+  --catalog docs/context/catalog.yaml
+```
+
+The changed-document wrapper is the normal PR gate. To include freshness checks for only notes
+changed on the branch, set `DOCS_PROOF_CHECK_FRESHNESS=1`; use `DOCS_PROOF_FRESHNESS_STRICT=1` only
+when the pre-existing warning backlog is intentionally part of the review. The default freshness
+run is non-strict: repository-wide orphan-note findings are warning-only and may remain as an
+existing backlog, while malformed or superseded notes without a valid replacement remain blocking.
+This boundary keeps a new note fail-closed without making an unrelated historical orphan warning
+look like a failure in the changed-document proof.
+
 ### Agent memory conventions
 
 The repository now keeps a repo-local Markdown memory layer under `memory/` for stable cross-session

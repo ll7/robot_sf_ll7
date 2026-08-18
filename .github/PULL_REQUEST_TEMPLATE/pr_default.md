@@ -26,9 +26,13 @@ Required for research-labelled, benchmark-labelled, metric-facing, paper-facing,
 evidence-producing PRs. For support/tooling/docs-only PRs that make no research claim, set fields
 to `NA` and state why.
 
+Use the canonical evidence-tier values from
+`docs/context/issue_1512_issue_archetypes.md`. `docs-only` and `NA` are no-claim PR exceptions;
+explain the exception when using either value.
+
 - Target claim / hypothesis / blocker this should affect:
 - Comparator or baseline, if applicable:
-- Evidence tier: full benchmark / targeted smoke / diagnostic probe / launch packet / docs-only / NA
+- Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / full_matrix / analysis_only / synthesis / paper_grade / blocked / docs-only / NA
 - Result classification: positive / negative / inconclusive / diagnostic-only / blocker-resolution / NA
 - Decision or stop rule, if applicable:
 - Parent issue, claim map, registry, context note, or synthesis surface to update:

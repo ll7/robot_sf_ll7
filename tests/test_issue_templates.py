@@ -102,6 +102,7 @@ CANONICAL_EVIDENCE_TIERS = (
     "paper_grade",
     "blocked",
 )
+CANONICAL_EVIDENCE_GRADES = ("observed", "inferred", "proposal")
 
 
 def _load_template(path: Path) -> tuple[dict[str, object], str]:
@@ -192,6 +193,24 @@ def test_issue_forms_cover_common_backlog_lanes() -> None:
         serialized = yaml.safe_dump(form, sort_keys=True)
         for marker in markers:
             assert marker in serialized, f"missing marker {marker!r} in {form_name}"
+
+
+def test_research_templates_use_canonical_evidence_vocabulary() -> None:
+    """Keep research issue grades and tiers distinct and canonical."""
+
+    _, research_body = _load_template(TEMPLATE_DIR / "research.md")
+    assert "**Evidence grade**" in research_body
+    assert "observed, inferred, or proposal" in research_body
+    assert "speculative, blocked, diagnostic-only, benchmark, or paper-facing" not in research_body
+
+    research_form = _load_form(TEMPLATE_DIR / "research-validation.yml")
+    fields = {
+        str(item.get("id")): item
+        for item in research_form["body"]
+        if isinstance(item, dict) and item.get("id") in {"evidence_grade", "evidence_tier"}
+    }
+    assert tuple(fields["evidence_grade"]["attributes"]["options"]) == CANONICAL_EVIDENCE_GRADES
+    assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
 
 
 def test_every_issue_template_collects_canonical_issue_metadata() -> None:

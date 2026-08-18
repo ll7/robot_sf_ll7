@@ -6,6 +6,12 @@ dependency-free to collect and binds CPU model, platform, Python, NumPy, Numba,
 CPU-only/single-worker mode, and the numerical thread variables
 `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS`.
 
+The `cpu_only` and `workers` fields are recorded only by callers that enforce
+or observe the execution mode. The exact-repeat path does, and its host-report
+verification requires CPU-only single-worker execution. The generic benchmark
+result-provenance path does not, so it omits both fields rather than restating
+an unobserved mode; the real worker count stays in the campaign run metadata.
+
 Host identity is separate from the scientific equivalence rule. Reports retain
 the raw machine identifier for local verification, plus a digest and public-safe
 label. The context digest excludes that identity, so distinct hosts can be

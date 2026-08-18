@@ -59,7 +59,12 @@ def manifest() -> dict[str, Any]:
 
 def _host_report(manifest: dict[str, Any], machine_id: str) -> dict[str, Any]:
     repeats = [{"outcome": 1, "trajectory_sha256": "a" * 64, "near_misses": 0} for _ in range(3)]
-    context = build_execution_context(numpy_version="2.3.5", numba_version="0.65.1")
+    context = build_execution_context(
+        numpy_version="2.3.5",
+        numba_version="0.65.1",
+        cpu_only=True,
+        workers=1,
+    )
     return {
         "schema_version": HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],

@@ -30,6 +30,13 @@ from robot_sf.benchmark.result_provenance import (
 )
 from scripts.validation import check_benchmark_result_provenance
 
+# Canonical context fields the generic benchmark provenance path can actually
+# observe. ``cpu_only``/``workers`` belong to callers that enforce or measure the
+# execution mode (exact-repeat), not to every benchmark run.
+_OBSERVED_CONTEXT_FIELDS = tuple(
+    field for field in EXECUTION_CONTEXT_FIELDS if field not in {"cpu_only", "workers"}
+)
+
 
 def _write_input_files(tmp_path: Path) -> tuple[Path, Path, Path]:
     """Create deterministic benchmark input files for complete manifests."""
@@ -139,21 +146,35 @@ def test_build_manifest_records_execution_context() -> None:
         active_observation_level="full",
     )
     ctx = manifest["run"]["execution_context"]
-    assert set(ctx) == {"hostname", *EXECUTION_CONTEXT_FIELDS, "execution_context_sha256"}
+    assert set(ctx) == {"hostname", *_OBSERVED_CONTEXT_FIELDS, "execution_context_sha256"}
     assert isinstance(ctx["hostname"], str) and ctx["hostname"]
     assert isinstance(ctx["thread_env"], dict)
     assert set(ctx["thread_env"]) >= {"OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}
-    canonical_context = {field: ctx[field] for field in EXECUTION_CONTEXT_FIELDS}
+    canonical_context = {field: ctx[field] for field in _OBSERVED_CONTEXT_FIELDS}
     assert canonical_context["numpy_version"] == np.__version__
     assert canonical_context["numba_version"] == str(numba.__version__)
     assert ctx["execution_context_sha256"] == execution_context_digest(canonical_context)
+
+
+def test_manifest_execution_context_does_not_assert_unobserved_execution_mode() -> None:
+    """The generic run context must not claim CPU-only single-worker execution.
+
+    ``build_execution_context_provenance`` runs for every benchmark campaign,
+    including multi-worker camera-ready runs whose real worker count is recorded
+    separately in run metadata. Restating an unobserved ``cpu_only``/``workers``
+    value here would write a false provenance record (issue #7128 review).
+    """
+    provenance = build_execution_context_provenance()
+
+    assert "cpu_only" not in provenance
+    assert "workers" not in provenance
 
 
 @pytest.mark.parametrize("field", ["numpy_version", "numba_version"])
 def test_execution_context_digest_binds_runtime_versions(field: str) -> None:
     """Changing either runtime version changes the canonical context digest."""
     provenance = build_execution_context_provenance()
-    canonical_context = {name: provenance[name] for name in EXECUTION_CONTEXT_FIELDS}
+    canonical_context = {name: provenance[name] for name in _OBSERVED_CONTEXT_FIELDS}
     drifted_context = dict(canonical_context)
     drifted_context[field] = f"{drifted_context[field]}-drifted"
 

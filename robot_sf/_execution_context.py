@@ -53,15 +53,19 @@ def build_execution_context(
     *,
     numpy_version: str | None = None,
     numba_version: str | None = None,
-    cpu_only: bool = True,
-    workers: int = 1,
+    cpu_only: bool | None = None,
+    workers: int | None = None,
 ) -> dict[str, Any]:
     """Build the canonical numerical execution context.
 
-    The optional NumPy and Numba values are supplied by callers after those
-    libraries are imported.  Keeping them optional allows result provenance to
-    capture the same context before numeric imports while exact-repeat reports
-    retain the pinned runtime versions.
+    Every field is optional and omitted when the caller cannot observe it, so
+    the context never asserts an execution mode it did not verify.  The NumPy
+    and Numba values are supplied by callers after those libraries are
+    imported.  ``cpu_only`` and ``workers`` are supplied only by callers that
+    enforce or observe the execution mode (for example the exact-repeat path,
+    whose contract is CPU-only single-worker execution); general result
+    provenance records the real worker count in its own run metadata instead of
+    restating it here.
 
     Returns:
         A JSON-serialisable canonical execution-context mapping.
@@ -72,13 +76,15 @@ def build_execution_context(
         "platform": platform.platform(),
         "python_version": platform.python_version(),
         "thread_env": {name: os.environ.get(name) for name in THREAD_ENV_VARS},
-        "cpu_only": bool(cpu_only),
-        "workers": int(workers),
     }
     if numpy_version is not None:
         context["numpy_version"] = str(numpy_version)
     if numba_version is not None:
         context["numba_version"] = str(numba_version)
+    if cpu_only is not None:
+        context["cpu_only"] = bool(cpu_only)
+    if workers is not None:
+        context["workers"] = int(workers)
     return context
 
 

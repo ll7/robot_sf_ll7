@@ -207,8 +207,6 @@ def build_execution_context_provenance() -> dict[str, Any]:
     context = build_execution_context(
         numpy_version=np.__version__,
         numba_version=str(numba.__version__),
-        cpu_only=True,
-        workers=1,
     )
     return {
         "hostname": platform.node(),

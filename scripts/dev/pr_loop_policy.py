@@ -16,6 +16,17 @@ the machine half of the goal-pr-review skill contract from PR #7500):
   ``### Decision packet`` comment at the live head, so the PR is parked on an
   author-reserved ruling rather than an infra/preflight blocker.
 
+A third parking state comes from the ancestry gate (issue #7515):
+
+- ``stacked_not_independently_mergeable`` — the PR's non-``main`` ancestry is
+  either undeclared (``undeclared_stack``), mismatched
+  (``mismatched_declaration``), invalidated (``parent_invalidated``), or a valid
+  declared stack (``stacked`` / ``parent_merged``).  Such a PR can never be
+  independently merged: it is parked with ``no_action`` until the parent merges
+  and the child is re-evaluated against current ``main``.  The state is read
+  from the snapshot's ``ancestry.state`` block (produced by
+  ``scripts.dev.stack_ancestry``) plus the PR's ``base_ref``.
+
 Both park the PR (``no_action`` / ``stop``). The not-ready-sentinel half
 (merge-ready present while the body carries a not-ready sentence) is tracked
 separately in issue #7491 and intentionally not implemented here.
@@ -93,6 +104,7 @@ VALID_STATES = frozenset(
         "pending_pr_metadata",
         "active_writer",
         "author_decision",
+        "stacked_not_independently_mergeable",
         "ready_to_merge",
         "no_action",
     }
@@ -821,6 +833,30 @@ def _active_writer_or_author_decision(
     return None
 
 
+def _stacked_ancestry_state(pr: dict[str, Any]) -> str | None:
+    """Return ``stacked_not_independently_mergeable`` for non-``main`` ancestry.
+
+    Issue #7515: a PR whose snapshot carries an ``ancestry`` block is never
+    independently mergeable while the ancestry state is anything other than
+    ``clean``.  The state covers undeclared, mismatched, invalidated, declared,
+    and parent-merged ancestry; in every case the PR must park until the parent
+    merges and the child is re-evaluated against current ``main``.  PRs without
+    an ``ancestry`` block (snapshots produced before the gate existed) are left
+    untouched so this never widens the merge path for existing queues.
+    """
+    if not isinstance(pr, dict):
+        return None
+    ancestry = pr.get("ancestry")
+    if not isinstance(ancestry, dict):
+        return None
+    state = str(ancestry.get("state") or "")
+    if state == "clean":
+        return None
+    if state:
+        return "stacked_not_independently_mergeable"
+    return None
+
+
 def _preflight_state_before_pending(
     pr: dict[str, Any],
     *,
@@ -860,10 +896,14 @@ def classify_pr_state(
     Marker precedence (issue #7508): ``active_writer`` and ``author_decision``
     are checked before the generic ``blocked_preflight`` classification, so a PR
     can be parked for a live review-claim or an author decision even when other
-    preflight logic would otherwise fire. Draft/closed/error PRs still return
-    ``no_action`` first, exactly as before. The not-ready-sentinel half
-    (merge-ready present while the body carries a not-ready sentence) is tracked
-    separately in issue #7491 and intentionally not implemented here.
+    preflight logic would otherwise fire.  Ancestry precedence (issue #7515):
+    ``stacked_not_independently_mergeable`` is checked before failed-CI and
+    merge-readiness, so a PR with undeclared/mismatched/invalidated/declared
+    non-``main`` ancestry can never be treated as independently mergeable.
+    Draft/closed/error PRs still return ``no_action`` first, exactly as before.
+    The not-ready-sentinel half (merge-ready present while the body carries a
+    not-ready sentence) is tracked separately in issue #7491 and intentionally
+    not implemented here.
 
     ``now`` is an explicit UTC evaluation instant for review-claim expiry so the
     classifier stays deterministic; a naive datetime is interpreted as UTC and
@@ -891,6 +931,9 @@ def classify_pr_state(
     )
     if marker_state is not None:
         return marker_state
+    stacked_state = _stacked_ancestry_state(pr)
+    if stacked_state is not None:
+        return stacked_state
     if overall == "failure":
         return "failed_ci"
     preflight_state = _preflight_state_before_pending(pr, overall=overall, head_sha=head_sha)
@@ -953,6 +996,7 @@ def _compute_flow_decision(
       - unknown_review_threads -> continue (wait for a thread-capable snapshot)
       - failed_ci, failed_validation, missing_artifacts, stale_worktree, stale_merge_base -> reroute
       - active_writer, author_decision, blocked_preflight -> stop (parked)
+      - stacked_not_independently_mergeable -> stop (parked; parent must merge first)
       - no_action -> stop
     """
     if budget_exhausted:
@@ -1152,6 +1196,19 @@ def recommend_action(  # noqa: C901, PLR0912
                 reason=(
                     "decision-required label with a live-head Decision packet; "
                     "park for the author's ruling"
+                ),
+                actions_remaining=remaining,
+            )
+        case "stacked_not_independently_mergeable":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "non-main ancestry is present (undeclared, mismatched, invalidated, "
+                    "or a declared stack); park until the parent merges and the branch is "
+                    "re-evaluated against current main"
                 ),
                 actions_remaining=remaining,
             )

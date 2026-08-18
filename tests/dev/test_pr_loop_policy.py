@@ -2375,3 +2375,137 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     queue_result = evaluate_queue([pr_snapshot], max_actions=3)
     assert queue_result["decisions"][0]["state"] == "ready_to_merge"
     assert queue_result["decisions"][0]["action"] == "mark_ready_candidate"
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: stacked ancestry parking state
+# ---------------------------------------------------------------------------
+
+
+def _with_ancestry(pr: dict[str, object], state: str) -> dict[str, object]:
+    """Attach an ``ancestry`` snapshot block (stack_ancestry.v1) to a PR."""
+    pr["ancestry"] = {"state": state}
+    return pr
+
+
+def test_stacked_ancestry_parks_undeclared_contamination() -> None:
+    """An undeclared non-main ancestry parks the PR, never merge-ready."""
+    pr = _with_ancestry(
+        _pr(
+            7515,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        "undeclared_stack",
+    )
+    state = classify_pr_state(pr)
+    assert state == "stacked_not_independently_mergeable"
+    decision = recommend_action(state, pr_number=7515, actions_remaining=3)
+    assert decision.action == "no_action"
+    assert decision.flow_decision == "stop"
+    assert "parent merges" in decision.reason
+
+
+def test_stacked_ancestry_parks_declared_stack() -> None:
+    """A valid declared stack is never independently mergeable."""
+    pr = _with_ancestry(
+        _pr(
+            7516,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        "stacked",
+    )
+    assert classify_pr_state(pr) == "stacked_not_independently_mergeable"
+
+
+def test_stacked_ancestry_parks_mismatched_and_invalidated() -> None:
+    """Mismatched and invalidated ancestry states park the PR fail-closed."""
+    for state in ("mismatched_declaration", "parent_invalidated", "parent_merged"):
+        pr = _with_ancestry(
+            _pr(
+                7517,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            state,
+        )
+        assert classify_pr_state(pr) == "stacked_not_independently_mergeable", state
+
+
+def test_clean_ancestry_does_not_park() -> None:
+    """A clean ancestry block leaves a green merge-ready PR mergeable."""
+    pr = _with_ancestry(
+        _pr(
+            7518,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        "clean",
+    )
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_ancestry_block_absent_is_untouched_legacy_snapshot() -> None:
+    """Snapshots without an ancestry block keep their pre-gate classification."""
+    pr = _pr(
+        7519,
+        overall="success",
+        labels=["merge-ready"],
+        head_sha=FULL_SHA,
+        gate_verdict=FULL_SHA,
+    )
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_stacked_ancestry_precedes_failed_ci_and_preflight() -> None:
+    """Ancestry precedence: the parking state wins before CI/preflight routing."""
+    pr = _with_ancestry(
+        _pr(7525, overall="failure", labels=["merge-ready"], head_sha=FULL_SHA),
+        "undeclared_stack",
+    )
+    pr["preflight"] = {"status": "blocked", "reasons": ["missing_authority"]}
+    assert classify_pr_state(pr) == "stacked_not_independently_mergeable"
+
+
+def test_draft_with_ancestry_stays_no_action() -> None:
+    """Draft PRs remain no_action before ancestry classification."""
+    pr = _with_ancestry(
+        _pr(7526, overall="success", draft=True, head_sha=FULL_SHA),
+        "undeclared_stack",
+    )
+    assert classify_pr_state(pr) == "no_action"
+
+
+def test_stacked_state_is_in_valid_states_contract() -> None:
+    """The new parking state is part of the exported policy contract."""
+    assert "stacked_not_independently_mergeable" in VALID_STATES
+
+
+def test_evaluate_queue_parks_stacked_ancestry() -> None:
+    """Queue evaluation parks a stacked-ancestry PR with no_action."""
+    prs = [
+        _with_ancestry(
+            _pr(
+                7527,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            "stacked",
+        )
+    ]
+    result = evaluate_queue(prs, max_actions=3)
+    decision = result["decisions"][0]
+    assert decision["state"] == "stacked_not_independently_mergeable"
+    assert decision["action"] == "no_action"
+    assert decision["flow_decision"] == "stop"

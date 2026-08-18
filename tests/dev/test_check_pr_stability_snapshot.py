@@ -11,6 +11,7 @@ import pytest
 from scripts.dev.check_pr_ci_status import (
     STABILITY_SNAPSHOT_SCHEMA,
     StabilitySnapshotEvidence,
+    _fetch_ci_status,
     _fetch_rate_limit_info,
     _fetch_stability_snapshot,
     _is_rate_limit_error_text,
@@ -31,6 +32,46 @@ OLD_MAIN = "d" * 40
 DIGEST = "e" * 64
 OLD_DIGEST = "f" * 64
 QUOTA_STDERR = "HTTP 403: API rate limit exceeded for user"
+
+
+def test_snapshot_ci_read_is_single_attempt_without_rest_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Snapshot CI reads do not retry transient failures or expand into REST reads."""
+    runner = MagicMock(
+        return_value=MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="HTTP 503: service unavailable",
+        )
+    )
+    rest_fallback = MagicMock(side_effect=AssertionError("snapshot must not use REST fallback"))
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._gh", runner)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._fetch_ci_status_rest", rest_fallback)
+
+    result = _fetch_ci_status("42", max_attempts=1, allow_rest_fallback=False)
+
+    assert result["status"] == "error"
+    assert result["error_kind"] == "graphql_transient_exhausted"
+    assert runner.call_count == 1
+    rest_fallback.assert_not_called()
+
+
+def test_snapshot_requests_single_ci_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stability snapshot selects the no-retry, no-fallback CI path."""
+    ci_fetch = MagicMock(return_value={"status": "error", "error": "HTTP 503: service unavailable"})
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._fetch_ci_status", ci_fetch)
+
+    result = _fetch_stability_snapshot(
+        "42",
+        repo="ll7/robot_sf_ll7",
+        expected_head_sha=HEAD,
+        expected_main_sha=MAIN,
+        expected_metadata_digest=DIGEST,
+    )
+
+    assert result["status"] == "error"
+    ci_fetch.assert_called_once_with("42", max_attempts=1, allow_rest_fallback=False)
 
 
 def _evidence(**overrides: Any) -> StabilitySnapshotEvidence:

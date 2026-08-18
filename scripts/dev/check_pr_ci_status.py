@@ -531,8 +531,21 @@ def _gh_view_error_payload(
     returncode: int,
     *,
     retry: GraphQLRetryOutcome | None = None,
+    allow_rest_fallback: bool = True,
 ) -> dict[str, Any]:
     """Map a failed GraphQL-backed PR read to a truthful payload."""
+    if not allow_rest_fallback:
+        if _is_graphql_quota_error(stderr):
+            error_kind = "graphql_quota_exhausted"
+        elif retry is not None and retry.exhausted:
+            error_kind = "graphql_transient_exhausted"
+        else:
+            error_kind = "graphql_read_failed"
+        return {
+            "status": "error",
+            "error_kind": error_kind,
+            "error": stderr or f"gh returned exit code {returncode}",
+        }
     if _is_graphql_quota_error(stderr):
         return _fetch_ci_status_rest(pr_number)
     if retry is not None and retry.exhausted:
@@ -544,9 +557,19 @@ def _gh_view_error_payload(
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
 
+def _ci_retry_kwargs(max_attempts: int | None) -> dict[str, Any]:
+    """Build retry options while preserving the normal monitor defaults."""
+    if max_attempts is None:
+        return {"timeout": 30}
+    return {"timeout": 30, "max_attempts": max(1, int(max_attempts))}
+
+
 def _fetch_ci_status(
     pr_number: str,
     backoff: float = 0.0,
+    *,
+    max_attempts: int | None = None,
+    allow_rest_fallback: bool = True,
 ) -> dict[str, Any]:
     """Fetch combined CI status for a PR.
 
@@ -569,7 +592,7 @@ def _fetch_ci_status(
             "--json",
             "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
         ],
-        timeout=30,
+        **_ci_retry_kwargs(max_attempts),
     )
     result = retry.result
     if result.returncode != 0:
@@ -579,6 +602,7 @@ def _fetch_ci_status(
             stderr,
             result.returncode,
             retry=retry,
+            allow_rest_fallback=allow_rest_fallback,
         )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
@@ -1076,10 +1100,14 @@ def _fetch_stability_snapshot(
             "repository could not be derived from the git remote; pass --repo owner/name",
         )
 
-    ci = _fetch_ci_status(pr)
+    # Snapshot mode is intentionally a single read.  The normal monitor keeps
+    # its bounded transient retry and REST fallback behavior, but using either
+    # here would mix evidence from different time windows and violate the
+    # route-evidence contract.
+    ci = _fetch_ci_status(pr, max_attempts=1, allow_rest_fallback=False)
     if ci.get("status") == "error":
         error_text = str(ci.get("error", "") or "")
-        quota_kinds = {"graphql_quota_exhausted", "graphql_transient_exhausted"}
+        quota_kinds = {"graphql_quota_exhausted"}
         if ci.get("error_kind") in quota_kinds or _is_rate_limit_error_text(error_text):
             return _quota_blocked_snapshot(
                 pr,

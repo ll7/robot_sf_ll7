@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/checksums.sha256",
-  "artifact_sha256": "e48e0d8f7719da074b4204a6975450ded91c9e8a36f6426d5008b31b9060a8fe",
+  "artifact_sha256": "73ac1c0c6acaa7a922550eb64070e38bf9f308e39a0c57d073fffbce224f57bd",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

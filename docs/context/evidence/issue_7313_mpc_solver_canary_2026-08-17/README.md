@@ -55,7 +55,8 @@ The machine-readable compact summary is [`summary.json`](summary.json).
 What this canary supports:
 
 - the declared six-cell admission and eligibility contract passed;
-- the native solver path was exercised for 600 control steps per arm without solver failure;
+- the native solver path was exercised for 300 control steps per arm (600 combined) without
+  solver failure;
 - no fallback or degraded execution appeared in the six-row output;
 - the CBF wrapper's runtime path was active and produced no hard-constraint violation in this
   short diagnostic.

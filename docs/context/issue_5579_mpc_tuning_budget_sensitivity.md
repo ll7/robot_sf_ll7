@@ -91,11 +91,11 @@ Motivation and late validity guidance: [GitHub issue #5579](https://github.com/l
 ## 2026-08-17 solver-canary addendum
 
 Before reviving the full sensitivity campaign, a bounded six-episode solver canary exercised the
-two incumbent arms on three paired scenarios at seed 101. The native solver path completed 600
-control steps per arm without solver failures or fallback stops, but every episode timed out at
-the deliberately short 100-step horizon. The CBF arm recorded an intervention on every step
-without overrides or hard-constraint violations; the retained summary fields matched the
-incumbent arm, so this is a wiring/diagnostic result rather than a behavioral comparison.
+two incumbent arms on three paired scenarios at seed 101. The native solver path completed 300
+control steps per arm (600 combined) without solver failures or fallback stops, but every episode
+timed out at the deliberately short 100-step horizon. The CBF arm recorded an intervention on
+every step without overrides or hard-constraint violations; the retained summary fields matched
+the incumbent arm, so this is a wiring/diagnostic result rather than a behavioral comparison.
 
 See the compact, preserved [Issue #7313 canary note](evidence/issue_7313_mpc_solver_canary_2026-08-17/README.md)
 and [machine-readable summary](evidence/issue_7313_mpc_solver_canary_2026-08-17/summary.json).

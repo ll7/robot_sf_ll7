@@ -10,11 +10,12 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062;
-# this PR adds the result-interpretation packet module.
+# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062
+# and the trace-dossier package delivered by #7114; the result-interpretation
+# packet module was delivered by #7029.
 # Keep this explicit so a new direct child fails the audit until it is
 # deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 295
+EXPECTED_DIRECT_CHILD_COUNT = 296
 
 
 @pytest.fixture(scope="module")

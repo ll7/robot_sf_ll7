@@ -55,11 +55,12 @@ the smallest next repair target and blockers preserves all reasons.
 
 The generator also runs the existing manifest checker and current Gate 1
 canary. It invokes the public camera-ready runner only with
---mode preflight, --skip-publication-bundle, and
---checkpoint-preflight-mode metadata_only; this proves configuration and
-runtime binding structure but is intentionally not submit-safe until the
-separate staged-checkpoint gate succeeds. It verifies that no episode JSONL or
-Parquet files were emitted.
+`--mode preflight`, `--skip-publication-bundle`, and
+`--checkpoint-preflight-mode enforced_staged`; this stages and checksum-verifies
+every registry-backed checkpoint and retains each staged identity in the packet.
+It verifies that no episode JSONL or Parquet files were emitted. A failed or
+unavailable staging operation remains a blocker; metadata-only resolution is
+not submit-safe for this admission packet.
 
 Private-ops inspection is read-only. The generator captures the queue summary
 and route evaluation, checks that the private checkout is clean, and records

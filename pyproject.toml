@@ -183,7 +183,7 @@ include = ["examples/**", "benchmarks/**"]
 "benchmarks" = "benchmarks"
 "fast-pysf/pysocialforce" = "pysocialforce"
 
-[tool.hatchling.build.targets.sdist]
+[tool.hatch.build.targets.sdist]
 include = [
     "/robot_sf",
     "/robot_sf_carla_bridge",
@@ -204,6 +204,7 @@ exclude = [
     "/.git",
     "/.pytest_cache",
     "/__pycache__",
+    "/model/**",
     "/fast-pysf/tests",
     "/fast-pysf/examples",
     "/fast-pysf/benchmarks",

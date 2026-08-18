@@ -4,7 +4,8 @@
 The gate checks every Robot SF wheel and source distribution found in a distribution directory.
 At least one of each archive type is required. Each archive must carry the root GPL text, the
 fast-pysf MIT text, the python-rvo2 Apache text, the SocNavBench MIT text, and the third-party
-notice manifest. CI can additionally require the vendored ``pyrvo2`` companion wheel.
+notice manifest. Source distributions must not carry the top-level ``model/`` artifact tree.
+CI can additionally require the vendored ``pyrvo2`` companion wheel.
 
 Examples:
     python scripts/tools/check_distribution_licenses.py dist
@@ -153,6 +154,7 @@ PYRVO2_REQUIREMENTS = (
 
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
 SOCNAV_EXCLUDED_MEMBERS = {"LICENSE", "LICENSING.yaml", "UPSTREAM.md"}
+FORBIDDEN_SDIST_ROOTS = frozenset({"model"})
 
 
 def _archive_members(archive: Path) -> dict[str, str]:
@@ -364,6 +366,18 @@ def _check_socnavbench_provenance(archive: Path, members: dict[str, str]) -> lis
     return errors
 
 
+def _forbidden_sdist_members(archive: Path, members: dict[str, str]) -> tuple[str, ...]:
+    """Return source-archive members under a forbidden top-level artifact tree."""
+    if not archive.name.endswith(SDIST_SUFFIXES):
+        return ()
+    forbidden = sorted(
+        name
+        for name in members
+        if FORBIDDEN_SDIST_ROOTS.intersection(PurePosixPath(name).parts[:2])
+    )
+    return tuple(forbidden)
+
+
 def _check_archive(
     archive: Path, requirements: tuple[ArchiveRequirement, ...] = REQUIREMENTS
 ) -> list[str]:
@@ -374,6 +388,12 @@ def _check_archive(
         return [str(exc)]
 
     errors: list[str] = []
+    forbidden_members = _forbidden_sdist_members(archive, members)
+    if forbidden_members:
+        errors.append(
+            f"{archive.name}: forbidden source-distribution model artifact members "
+            f"(top-level model/): {', '.join(forbidden_members)}"
+        )
     for requirement in requirements:
         matches = _matching_members(archive, members, requirement.path_suffix)
         if not matches:

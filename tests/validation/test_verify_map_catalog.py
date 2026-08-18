@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
 
 import yaml
 
-from scripts.tools.generate_map_registry import generate_registry
+from robot_sf.maps.verification.svg_inspection import inspect_svg
+from scripts.tools.generate_map_registry import generate_registry, sha256_file
 from scripts.validation.verify_map_catalog import validate_registry
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_svg(path: Path, body: str) -> Path:
@@ -211,3 +211,35 @@ def test_validator_rejects_absolute_catalog_paths(tmp_path: Path) -> None:
     errors = validate_registry(registry_path, map_root)
 
     assert any("path must be relative to the registry directory" in error for error in errors)
+
+
+def test_issue_7430_maps_remain_registered_and_in_sync() -> None:
+    """Issue #7430 maps are tracked with matching parser metadata and source hashes."""
+    repo_root = Path(__file__).resolve().parents[2]
+    registry_path = repo_root / "maps" / "registry.yaml"
+    map_root = repo_root / "maps" / "svg_maps"
+    required_map_ids = {
+        "issue_2728_semantic_boundaries",
+        "issue_3233_near_field_observation_noise",
+        "smg_curb_ramp_conflict",
+        "socnavbench_eth",
+    }
+
+    errors = validate_registry(registry_path=registry_path, map_root=map_root)
+    assert errors == []
+
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    rows = registry.get("maps", [])
+    by_id = {
+        row.get("map_id"): row
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("map_id"), str)
+    }
+
+    for map_id in sorted(required_map_ids):
+        row = by_id.get(map_id)
+        assert row is not None, f"map {map_id} missing from maps/registry.yaml"
+        row_path = registry_path.parent / str(row["path"])
+        assert row_path.is_file(), f"registry path missing for {map_id}: {row['path']}"
+        assert row.get("source_sha256") == sha256_file(row_path)
+        assert row.get("parser_metadata") == asdict(inspect_svg(row_path).capability_metadata)

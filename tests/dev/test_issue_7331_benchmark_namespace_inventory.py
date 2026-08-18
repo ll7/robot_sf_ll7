@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -101,4 +102,39 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
     assert "# Benchmark namespace residual inventory (issue #7331)" in markdown_path.read_text(
         encoding="utf-8"
+    )
+
+
+def test_inventory_reports_detached_head_without_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A detached-head worktree yields an explicit DETACHED ref, not an exception.
+
+    ``git symbolic-ref --short -q HEAD`` exits non-zero with empty stdout on a
+    detached HEAD (issue #7496); the inventory must represent that state
+    instead of raising ``CalledProcessError``.
+    """
+    calls: list[list[str]] = []
+
+    def fake_optional(repo_root: Path, *args: str) -> str:
+        calls.append([*args])
+        return ""
+
+    monkeypatch.setattr(audit_benchmark_namespace, "_git_optional", fake_optional)
+    payload = audit_benchmark_namespace.build_inventory(REPO_ROOT)
+
+    assert ["symbolic-ref", "--short", "-q", "HEAD"] in calls
+    assert payload["source"]["ref"] == "DETACHED"
+    assert payload["source"]["commit"]  # real commit remains recorded
+
+
+def test_git_optional_tolerates_nonzero_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The optional git helper returns stdout even when git exits non-zero."""
+
+    def fake_run(
+        command: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 1, stdout="DETACHED_REF\n", stderr="")
+
+    monkeypatch.setattr(audit_benchmark_namespace.subprocess, "run", fake_run)
+    assert audit_benchmark_namespace._git_optional(Path("."), "symbolic-ref", "-q", "HEAD") == (
+        "DETACHED_REF"
     )

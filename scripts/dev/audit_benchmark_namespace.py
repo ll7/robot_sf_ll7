@@ -110,6 +110,22 @@ def _git(repo_root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _git_optional(repo_root: Path, *args: str) -> str:
+    """Run a read-only git command that may legitimately exit non-zero.
+
+    ``git symbolic-ref --short -q HEAD`` exits non-zero with empty stdout on
+    a detached HEAD, which is a normal review/audit state; the caller decides
+    how to represent it.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
 def _tracked_paths(repo_root: Path, pathspecs: Iterable[str]) -> list[str]:
     """Return tracked paths matching pathspecs in lexical order."""
     output = _git(repo_root, "ls-files", "--", *pathspecs)
@@ -690,7 +706,7 @@ def build_inventory(  # noqa: C901 - assembles one complete deterministic report
             "repository": "ll7/robot_sf_ll7",
             "root": BENCHMARK_ROOT,
             "commit": _git(repo_root, "rev-parse", "HEAD"),
-            "ref": _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD") or "DETACHED",
+            "ref": _git_optional(repo_root, "symbolic-ref", "--short", "-q", "HEAD") or "DETACHED",
             "clean": not dirty,
             "tracked_python_file_count": tracked_python_count,
         },

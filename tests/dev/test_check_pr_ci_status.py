@@ -21,8 +21,12 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
     _summarize_check_runs,
+    _validate_expected_head_sha,
     main,
 )
+
+# Full 40-hex SHA used wherever --expected-head-sha must pass startup validation.
+FULL_SHA = "a6640d7141e8f7c3b2a5d9049f1c6e3a8b7d5f2e"
 
 
 def _check_pr_ci_status_script() -> Path:
@@ -685,7 +689,7 @@ def test_main_bounded_polling_json_includes_monitor_metadata(
             "state": "OPEN",
             "mergeable": "UNKNOWN",
             "headRefName": "metadata-poll",
-            "headRefOid": "abc123",
+            "headRefOid": FULL_SHA,
             "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
             "reviews": [],
         }
@@ -697,7 +701,7 @@ def test_main_bounded_polling_json_includes_monitor_metadata(
             "state": "OPEN",
             "mergeable": "MERGEABLE",
             "headRefName": "metadata-poll",
-            "headRefOid": "abc123",
+            "headRefOid": FULL_SHA,
             "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
             "reviews": [],
         }
@@ -717,7 +721,7 @@ def test_main_bounded_polling_json_includes_monitor_metadata(
                 "9",
                 "--json",
                 "--expected-head-sha",
-                "abc123",
+                FULL_SHA,
                 "--poll-attempts",
                 "5",
                 "--poll-interval",
@@ -732,7 +736,7 @@ def test_main_bounded_polling_json_includes_monitor_metadata(
     assert len(payloads) == 2
     assert payloads[0]["monitor"] == {
         "route": "ci_wait_monitor",
-        "expected_head_sha": "abc123",
+        "expected_head_sha": FULL_SHA,
         "head_sha_matches_expected": True,
         "poll_attempt": 1,
         "poll_attempts": 5,
@@ -765,16 +769,46 @@ def test_main_expected_head_sha_mismatch_returns_json_error(
 
     with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
-        rc = main(["10", "--json", "--expected-head-sha", "expected"])
+        rc = main(["10", "--json", "--expected-head-sha", FULL_SHA])
 
     assert rc == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "error"
     assert payload["error"] == "PR head SHA changed while monitoring CI"
     assert payload["head_sha"] == "actual"
-    assert payload["monitor"]["expected_head_sha"] == "expected"
+    assert payload["monitor"]["expected_head_sha"] == FULL_SHA
     assert payload["monitor"]["head_sha_matches_expected"] is False
     assert payload["monitor"]["route_evidence_only"] is True
+
+
+def test_validate_expected_head_sha_rejects_short_and_non_hex() -> None:
+    """A full 40-hex SHA passes; short prefixes and malformed values fail with a clear reason."""
+    assert _validate_expected_head_sha("") is None
+    assert _validate_expected_head_sha(FULL_SHA) is None
+    assert _validate_expected_head_sha(FULL_SHA.upper()) is None
+
+    short = _validate_expected_head_sha("a6640d714")
+    assert short is not None
+    assert "40-hex" in short
+    assert "short prefixes" in short
+
+    assert _validate_expected_head_sha("not-a-sha") is not None
+    assert _validate_expected_head_sha("z" * 40) is not None
+
+
+def test_main_rejects_short_expected_head_sha_before_polling(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A short --expected-head-sha should fail fast with a clear error, without invoking gh."""
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        rc = main(["10", "--json", "--expected-head-sha", "a6640d714"])
+
+    assert rc == 1
+    mock_run.assert_not_called()
+    captured = capsys.readouterr()
+    assert "40-hex" in captured.err
+    assert "short prefixes" in captured.err
+    assert captured.out == ""
 
 
 def test_main_bounded_polling_json_respects_max_wall_seconds(
@@ -788,7 +822,7 @@ def test_main_bounded_polling_json_respects_max_wall_seconds(
             "state": "OPEN",
             "mergeable": "UNKNOWN",
             "headRefName": "wall-cap",
-            "headRefOid": "abc123",
+            "headRefOid": FULL_SHA,
             "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
             "reviews": [],
         }
@@ -809,7 +843,7 @@ def test_main_bounded_polling_json_respects_max_wall_seconds(
                 "11",
                 "--json",
                 "--expected-head-sha",
-                "abc123",
+                FULL_SHA,
                 "--poll-attempts",
                 "40",
                 "--poll-interval",
@@ -982,7 +1016,7 @@ def test_smoke_completed_ci_exits_cleanly_with_monitor_metadata(
         "state": "OPEN",
         "mergeable": "MERGEABLE",
         "headRefName": "smoke-success",
-        "headRefOid": "deadbeef",
+        "headRefOid": FULL_SHA,
         "statusCheckRollup": [{"name": "ci", "status": "completed", "conclusion": "success"}],
         "reviews": [],
     }
@@ -993,7 +1027,7 @@ def test_smoke_completed_ci_exits_cleanly_with_monitor_metadata(
             "21",
             "--json",
             "--expected-head-sha",
-            "deadbeef",
+            FULL_SHA,
             "--poll-attempts",
             "3",
             "--poll-interval",
@@ -1006,7 +1040,7 @@ def test_smoke_completed_ci_exits_cleanly_with_monitor_metadata(
     payload = json.loads(result.stdout.strip().splitlines()[-1])
     assert payload["status"] == "ok"
     assert payload["checks"]["overall"] == "success"
-    assert payload["monitor"]["expected_head_sha"] == "deadbeef"
+    assert payload["monitor"]["expected_head_sha"] == FULL_SHA
     assert payload["monitor"]["head_sha_matches_expected"] is True
     assert payload["monitor"]["route_evidence_only"] is True
     assert payload["monitor"]["terminal_reason"] == "success"
@@ -1022,7 +1056,7 @@ def test_smoke_attempt_exhaustion_reports_bounded_pending_reason(
         "state": "OPEN",
         "mergeable": "UNKNOWN",
         "headRefName": "smoke-pending",
-        "headRefOid": "cafebabe",
+        "headRefOid": FULL_SHA,
         "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
         "reviews": [],
     }
@@ -1033,7 +1067,7 @@ def test_smoke_attempt_exhaustion_reports_bounded_pending_reason(
             "22",
             "--json",
             "--expected-head-sha",
-            "cafebabe",
+            FULL_SHA,
             "--poll-attempts",
             "3",
             "--poll-interval",
@@ -1048,7 +1082,7 @@ def test_smoke_attempt_exhaustion_reports_bounded_pending_reason(
     final = json.loads(lines[-1])
     assert final["status"] == "ok"
     assert final["checks"]["overall"] == "pending"
-    assert final["monitor"]["expected_head_sha"] == "cafebabe"
+    assert final["monitor"]["expected_head_sha"] == FULL_SHA
     assert final["monitor"]["head_sha_matches_expected"] is True
     assert final["monitor"]["route_evidence_only"] is True
     assert final["monitor"]["terminal_reason"] == "attempt_exhausted"
@@ -1253,7 +1287,7 @@ def test_bounded_polling_continues_until_replacement_success(
         "state": "open",
         "mergeable": "CLEAN",
         "branch": "evidence",
-        "head_sha": "abc123",
+        "head_sha": FULL_SHA,
         "checks": {"overall": "pending", "superseded": 1},
         "reviews": {},
         "data_source": "rest_fallback_graphql_quota",
@@ -1270,7 +1304,7 @@ def test_bounded_polling_continues_until_replacement_success(
             "6995",
             "--json",
             "--expected-head-sha",
-            "abc123",
+            FULL_SHA,
             "--poll-attempts",
             "2",
             "--poll-interval",
@@ -1493,7 +1527,7 @@ def test_fetch_ci_status_marks_completed_run_with_stale_job_status_as_lag(
         "state": "OPEN",
         "mergeable": "MERGEABLE",
         "headRefName": "friction",
-        "headRefOid": "abc123",
+        "headRefOid": FULL_SHA,
         "statusCheckRollup": [
             {
                 "__typename": "CheckRun",
@@ -1615,7 +1649,7 @@ def test_main_keeps_status_propagation_lag_fail_closed(
         "state": "OPEN",
         "mergeable": "MERGEABLE",
         "headRefName": "friction",
-        "headRefOid": "abc123",
+        "headRefOid": FULL_SHA,
         "statusCheckRollup": [
             {
                 "__typename": "CheckRun",
@@ -1657,7 +1691,7 @@ def test_main_keeps_status_propagation_lag_fail_closed(
             "6885",
             "--json",
             "--expected-head-sha",
-            "abc123",
+            FULL_SHA,
             "--poll-attempts",
             "2",
             "--poll-interval",
@@ -1672,3 +1706,177 @@ def test_main_keeps_status_propagation_lag_fail_closed(
     assert payloads[-1]["monitor"]["pending_reason"] == "status_propagation_lag"
     assert payloads[-1]["monitor"]["diagnostic"] == "check_run_stale_job_success"
     assert payloads[-1]["monitor"]["terminal_reason"] == "status_propagation_lag"
+
+
+def test_fetch_ci_status_reports_actions_queue_age_and_manual_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale setup gate reports age and exact-head-safe, non-executed recovery commands."""
+    payload = {
+        "number": 7000,
+        "title": "queued gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "queued-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "fast-feedback (1)",
+                "workflowName": "CI",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/123/job/456",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/123": {
+            "status": "in_progress",
+            "conclusion": None,
+            "created_at": "1970-01-01T00:00:00Z",
+            "run_started_at": "1970-01-01T00:00:10Z",
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/456": {
+            "status": "queued",
+            "conclusion": None,
+            "started_at": None,
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7000", actions_stale_after_seconds=900)
+
+    lifecycle = data["checks"]["actions_lifecycle"]
+    assert lifecycle["by_phase"] == {"setup": 1}
+    assert lifecycle["stale_count"] == 1
+    warning = data["checks"]["age_warnings"][0]
+    assert warning["age_seconds"] == 990
+    assert warning["age_source"] == "workflow_started_at"
+    assert warning["exact_head_sha_matches"] is True
+    assert data["checks"]["pending_reason"] == "actions_gate_age"
+    assert data["checks"]["diagnostic"] == "actions_gate_queue_age"
+    recovery = data["checks"]["recovery"]
+    assert recovery["action"] == "inspect_then_cancel_or_replace"
+    assert recovery["mutation_authorized"] is False
+    stale_run = recovery["stale_runs"][0]
+    assert stale_run["cancel_command"] == "gh run cancel 123"
+    assert stale_run["replacement_command"] == "gh run rerun 123"
+
+
+def test_actions_recovery_blocks_mutation_when_run_head_is_not_proven(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale run with an unmatching head must not receive cancel/rerun commands."""
+    payload = {
+        "number": 7001,
+        "title": "wrong head gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "wrong-head-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/124/job/457",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {
+                "status": "queued",
+                "created_at": "1970-01-01T00:00:00Z",
+                "head_sha": "not-the-pr-head",
+            }
+            if path == "actions/runs/124"
+            else {"status": "queued", "conclusion": None}
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7001", actions_stale_after_seconds=900)
+
+    stale_run = data["checks"]["recovery"]["stale_runs"][0]
+    assert stale_run["exact_head_sha_matches"] is False
+    assert stale_run["cancel_command"] is None
+    assert stale_run["replacement_command"] is None
+
+
+def test_fetch_ci_status_identifies_superseded_exact_head_replacement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Superseded runs expose their replacement without changing fail-closed CI semantics."""
+    payload = {
+        "number": 7002,
+        "title": "replacement gate",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "replacement-gate",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "1970-01-01T00:00:01Z",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/125/job/458",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "startedAt": "1970-01-01T00:00:02Z",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/126/job/459",
+            },
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        lambda path: (
+            {
+                "status": "queued",
+                "created_at": "1970-01-01T00:00:02Z",
+                "head_sha": FULL_SHA,
+            }
+            if path == "actions/runs/126"
+            else {"status": "queued", "conclusion": None}
+        ),
+    )
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7002", actions_stale_after_seconds=10_000)
+
+    assert data["checks"]["overall"] == "pending"
+    assert data["checks"]["superseded"] == 1
+    superseded = data["checks"]["superseded_runs"][0]
+    assert superseded["run_id"] == 125
+    assert superseded["replacement"]["run_id"] == 126
+    assert superseded["reason"] == "newer_same_workflow_job"
+    assert data["checks"]["recovery"]["action"] == "wait_for_replacement"

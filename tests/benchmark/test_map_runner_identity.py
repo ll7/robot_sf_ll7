@@ -1,4 +1,4 @@
-"""Tests for robot_sf.benchmark.map_runner_identity — seed and resume identity."""
+"""Tests for robot_sf.benchmark.map_runner.map_runner_identity — seed and resume identity."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from robot_sf.benchmark.map_runner_identity import (
+from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _resolve_seed_list,
     _scenario_identity_payload,

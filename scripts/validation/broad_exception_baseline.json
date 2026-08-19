@@ -9,9 +9,9 @@
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/issue_6412_real_reexport.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
-      "robot_sf/benchmark/map_runner.py": 2,
-      "robot_sf/benchmark/map_runner_batch_runner.py": 3,
-      "robot_sf/benchmark/map_runner_env.py": 1,
+      "robot_sf/benchmark/map_runner/map_runner.py": 2,
+      "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
+      "robot_sf/benchmark/map_runner/map_runner_env.py": 1,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
@@ -221,55 +221,55 @@
     {
       "col_offset": 4,
       "context": "_preflight_policy",
-      "fingerprint": "669b2ff25f68c9e9",
+      "fingerprint": "7a3a2d000b9eb0a0",
       "handler": "Exception",
-      "lineno": 886,
-      "path": "robot_sf/benchmark/map_runner.py",
+      "lineno": 892,
+      "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as exc:  # socnav prereq policy boundary: skip, fallback, or re-raise (#6690)"
     },
     {
       "col_offset": 12,
       "context": "_preflight_policy",
-      "fingerprint": "eaed931d8e0c298c",
+      "fingerprint": "e1451027dc4d2b28",
       "handler": "Exception",
-      "lineno": 916,
-      "path": "robot_sf/benchmark/map_runner.py",
+      "lineno": 922,
+      "path": "robot_sf/benchmark/map_runner/map_runner.py",
       "source": "except Exception as fallback_exc:  # wrap any fallback build error, re-raise (#6690)"
     },
     {
       "col_offset": 12,
       "context": "_serial_execute_map_jobs",
-      "fingerprint": "e7d031b092401803",
+      "fingerprint": "01f69e1137753e35",
       "handler": "Exception",
       "lineno": 152,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation"
     },
     {
       "col_offset": 12,
       "context": "_parallel_execute_map_jobs",
-      "fingerprint": "ce516405151d56de",
+      "fingerprint": "0a22b73eb6394887",
       "handler": "Exception",
       "lineno": 265,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - batch job isolation"
     },
     {
       "col_offset": 12,
       "context": "_parallel_execute_map_jobs",
-      "fingerprint": "7dfc64ca8cd07dfd",
+      "fingerprint": "ab9595fac207bbb3",
       "handler": "Exception",
       "lineno": 285,
-      "path": "robot_sf/benchmark/map_runner_batch_runner.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_batch_runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - fail-closed write path"
     },
     {
       "col_offset": 4,
       "context": "representative_metric_affecting_config",
-      "fingerprint": "ca3a7028492cbd27",
+      "fingerprint": "e0bcbde65fb074f0",
       "handler": "Exception",
       "lineno": 84,
-      "path": "robot_sf/benchmark/map_runner_env.py",
+      "path": "robot_sf/benchmark/map_runner/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
     {
@@ -286,7 +286,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "9e9cfa53c3234921",
       "handler": "Exception",
-      "lineno": 379,
+      "lineno": 436,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # noqa: BLE001 - child worker must send structured init errors"
     },
@@ -295,7 +295,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "36fb8c6067433ca9",
       "handler": "Exception",
-      "lineno": 401,
+      "lineno": 458,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover  # noqa: BLE001 - planner step isolation"
     },
@@ -304,7 +304,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2524,
+      "lineno": 2613,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -313,7 +313,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "3e85dca65fdc0caf",
       "handler": "Exception",
-      "lineno": 2526,
+      "lineno": 2615,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -322,7 +322,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "bcf5aab6fcdc5686",
       "handler": "Exception",
-      "lineno": 2542,
+      "lineno": 2631,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -331,7 +331,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2629,
+      "lineno": 2718,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -340,7 +340,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "83f25d3b1aad5e1e",
       "handler": "Exception",
-      "lineno": 2631,
+      "lineno": 2720,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - batch job isolation; fail_fast re-raises"
     },
@@ -349,7 +349,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "e79143095eea18a4",
       "handler": "Exception",
-      "lineno": 2647,
+      "lineno": 2736,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover  # noqa: BLE001 - best-effort progress"
     },
@@ -1141,7 +1141,7 @@
       "context": "_source_path_for",
       "fingerprint": "90fcd650a1b21cf4",
       "handler": "Exception",
-      "lineno": 160,
+      "lineno": 178,
       "path": "scripts/tools/publish_model_registry_release.py",
       "source": "except Exception as exc:"
     },

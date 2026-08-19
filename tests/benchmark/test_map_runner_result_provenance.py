@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark import map_runner
 from robot_sf.benchmark.manifest import manifest_path_for, save_manifest
-from robot_sf.benchmark.map_runner import _map_result_provenance, run_map_batch
+from robot_sf.benchmark.map_runner import map_runner
+from robot_sf.benchmark.map_runner.map_runner import _map_result_provenance, run_map_batch
 from robot_sf.benchmark.runner import _finalize_batch
 
 

@@ -108,3 +108,8 @@ gh_api_label_get = partial(run_gh_api, timeout_context="could not read labels")
 gh_api_comments_get = partial(run_gh_api, timeout_context="PR comments were not read")
 gh_api_patch = partial(run_gh_api, method="PATCH", timeout_context="body update was not verified")
 gh_api_metadata_get = partial(run_gh_api, timeout_context="PR metadata was not verified")
+gh_api_review_post = partial(
+    run_gh_api,
+    method="POST",
+    timeout_context="review publication was not verified",
+)

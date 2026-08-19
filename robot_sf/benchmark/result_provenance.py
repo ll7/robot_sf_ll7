@@ -22,6 +22,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numba
+import numpy as np
+
+from robot_sf._execution_context import build_execution_context, execution_context_digest
 from robot_sf._numerical_thread_env import THREAD_ENV_VARS as _THREAD_ENV_VARS
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 
@@ -200,12 +204,14 @@ def build_execution_context_provenance() -> dict[str, Any]:
     Returns:
         Execution-context provenance dict.
     """
+    context = build_execution_context(
+        numpy_version=np.__version__,
+        numba_version=str(numba.__version__),
+    )
     return {
         "hostname": platform.node(),
-        "cpu_model": _cpu_model(),
-        "python_version": platform.python_version(),
-        "platform": platform.platform(),
-        "thread_env": _thread_env_snapshot(),
+        **context,
+        "execution_context_sha256": execution_context_digest(context),
     }
 
 

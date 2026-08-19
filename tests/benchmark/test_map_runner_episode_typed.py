@@ -340,7 +340,8 @@ def test_episode_record_partial_defaults() -> None:
 
 def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
     """Typed orchestration boundaries remain inspectable by runtime tooling."""
-    from robot_sf.benchmark import map_runner, map_runner_episode
+    from robot_sf.benchmark import map_runner_episode
+    from robot_sf.benchmark.map_runner import map_runner
 
     batch_hints = typing.get_type_hints(map_runner.run_map_batch)
     loop_hints = typing.get_type_hints(map_runner_episode._run_episode_step_loop)
@@ -361,7 +362,8 @@ def test_benchmark_orchestration_annotations_resolve_at_runtime() -> None:
 
 def test_orchestration_boundaries_do_not_expose_any_annotations() -> None:
     """Issue #6461 boundaries must not regress to nested ``Any`` annotations."""
-    from robot_sf.benchmark import map_runner, map_runner_episode
+    from robot_sf.benchmark import map_runner_episode
+    from robot_sf.benchmark.map_runner import map_runner
 
     for function in (map_runner.run_map_batch, map_runner_episode._run_episode_step_loop):
         definition = ast.parse(inspect.getsource(function)).body[0]

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.training.discrete_action_lattice import DiscreteUnicycleActionLattice
 from robot_sf.training.distributional_rl import QuantileQNetwork, save_quantile_checkpoint
 

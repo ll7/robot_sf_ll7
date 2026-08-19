@@ -66,9 +66,9 @@ The private after-report is stored in `codex-agent-runs/active/issue-3098/after.
 
 Representative issues were checked after cleanup:
 
-- #1108: closed issue that previously had `state:blocked`; no live state label remains.
-- #2259: closed issue that previously had `state:ready`; no live state label remains.
-- #2382: closed issue that previously had `state:running`; no live state label remains.
+- Issue #1108: closed issue that previously had `state:blocked`; no live state label remains.
+- Issue #2259: closed issue that previously had `state:ready`; no live state label remains.
+- Issue #2382: closed issue that previously had `state:running`; no live state label remains.
 
 ## Recurrence and Automation Follow-up
 
@@ -124,3 +124,70 @@ provides a manual/backfill path for sweeps; the Action handles steady-state clos
 The periodic read-only detector remains the CI/backstop check: it still flags any closed issue that
 slips through (for example, a closure event that predates the Action, or a label re-added later), so
 the automation and the audit reinforce each other rather than replace one another.
+
+## Open-Issue Stale-State Guard (Issue #7537)
+
+Closed-issue cleanup does not catch the inverse queue failure: an issue can remain open with an active
+`state:ready`, `state:running`, or `state:working` label after the exact implementation PR has merged.
+Those rows are neither safe implementation supply nor trustworthy open work, so they need a separate
+report-only audit.
+
+Run the bounded guard with:
+
+```bash
+uv run python scripts/dev/open_state_label_hygiene.py --repo ll7/robot_sf_ll7
+```
+
+The guard reads open issues through REST, rechecks each candidate's current state and labels, follows
+the issue timeline, and verifies each referenced PR's current merged state and `merge_commit_sha`.
+Its `open_state_label_hygiene.v1` report includes the candidate issue, active labels, merged PR, merge
+commit, timeline source, and `complete_for_open_issues` coverage flag. Any incomplete issue or timeline
+inventory returns non-zero and must not be interpreted as a clean queue.
+
+The guard never closes issues, removes labels, edits Project #5, or declares that a merged PR fully
+satisfies the issue. Each candidate is `merged_reference_needs_exact_fix_review`; a maintainer or
+issue-audit authority must verify the named-symbol/failing-signature boundary before closing or
+relabeling it. This is routing metadata hygiene only, not benchmark, research, or publication evidence.
+
+## Exact-fix review routing (Issue #7549)
+
+The report can now be handed to a deterministic, no-write review queue:
+
+```bash
+uv run python scripts/dev/open_state_label_hygiene.py \
+  --repo ll7/robot_sf_ll7 > output/open_state_label_hygiene.json
+uv run python scripts/dev/route_exact_fix_audit.py \
+  --report output/open_state_label_hygiene.json \
+  --output output/exact_fix_review_queue.json
+```
+
+`route_exact_fix_audit.py` requires a complete `open_state_label_hygiene.v1` report and preserves
+its digest, issue links, active labels, merged PRs, and merge commits in an
+`exact_fix_review_queue.v1` packet. Every candidate is checked against the exact-fix checklist:
+the named symbol, failure signature, failing file/line, regression proof, current-main SHA, and
+the verified issue-timeline covering PR. Missing fields are classified as
+`needs_exact_fix_evidence`; a packet with all fields is merely
+`ready_for_manual_exact_fix_review`.
+
+An optional evidence manifest can provide the five explicit fields for a later maintainer review:
+
+```json
+{
+  "schema": "exact_fix_evidence.v1",
+  "issues": [
+    {
+      "number": 123,
+      "covering_pr": 456,
+      "named_symbol": "scripts/dev/route_exact_fix_audit.py:build_review_queue",
+      "failure_signature": "ValueError: stale label",
+      "failing_file_line": "scripts/dev/route_exact_fix_audit.py:202",
+      "regression_proof": "tests/dev/test_route_exact_fix_audit.py::test_build_review_queue_routes_without_authorizing_a_disposition",
+      "current_main_sha": "<40-hex-main-sha>"
+    }
+  ]
+}
+```
+
+The route never closes or relabels an issue and never treats an issue-number match or merged PR
+alone as an exact fix. The resulting `pending_decisions` rows are handed to the existing
+maintainer-facing issue-audit lane for one explicit disposition at a time.

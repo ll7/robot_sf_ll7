@@ -711,7 +711,7 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
     assert report["native_cell_count"] == EXPECTED_CELL_COUNT
     assert report["git_provenance"]["git_head"]
     assert report["command_environment_manifest"]["runner"] == (
-        "robot_sf.benchmark.map_runner.run_map_batch"
+        "robot_sf.benchmark.map_runner.map_runner.run_map_batch"
     )
     cells = (tmp_path / "cells.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(cells) == EXPECTED_CELL_COUNT

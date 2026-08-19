@@ -106,18 +106,25 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Create the worktree through the capacity-guarded helper from the main checkout:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
-  "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The helper checks the target filesystem before invoking Git. A low-space or
+non-writable target fails before checkout, so it cannot leave a partially
+populated worktree. The default threshold is 2 GiB and can be overridden for
+a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
+`--minimum-free-bytes`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
@@ -135,18 +142,18 @@ A cheap fresh-worktree check is:
   && [ ! -d .venv ]
 ```
 
-Use this order for a fresh worktree:
+Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
-scripts/dev/bootstrap_worktree.sh
-source .venv/bin/activate
-python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+scripts/dev/run_worktree_shared_venv.sh -- \
+  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
-`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
-`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
-commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
-intentionally resync the local environment, unset the guard for that command:
+The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
+scratch capacity before starting the command. This avoids materializing one full `.venv` per
+parallel worktree. Use `bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it creates and targets the local `.venv`, then adds `UV_NO_SYNC=1` to its activation
+script. To intentionally resync a local environment, unset the guard for that command:
 
 ```bash
 env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
@@ -154,7 +161,35 @@ env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
 
 The optional-dependency preflight uses import-spec probes without importing project code. A
 `missing_optional` result is setup evidence and should not be confused with a changed-code
-collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
+collection or runtime failure. The docs-proof wrapper checks the `core` profile before invoking
+`uv run`; the shared-venv wrapper checks that profile by default and accepts an explicit profile
+when the command needs optional packages:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
+```
+
+If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
+`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
+lightweight Python-only environment from being reused as if it were a synchronized dependency
+profile. `--standalone` remains available only for commands whose no-project-import boundary is
+verified.
+
+When the host is under pressure, inspect reclaim candidates without deleting anything:
+
+```bash
+scripts/dev/check_worktree_capacity.py --inventory --json
+```
+
+The inventory covers ignored generated `output/`, the uv cache, repository worktree containers,
+and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
+evidence before pruning `output/`; remove only clean, pushed Git worktrees with
+`git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
+automated cleanup is performed. Each existing candidate is sized with a five-second per-path
+timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
+diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
+machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
+not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 
@@ -582,8 +617,10 @@ SHA-pinned normal-throughput window after rollout; a live queue snapshot is not 
 causality measurement. Use `scripts/dev/measure_stale_base_policy.py` with an explicit
 `stale_base_observation_window.v1` input. The helper keeps ordinary compare-and-swap waits and
 base-sensitive refresh waits separate, requires exact-head/base evidence for stale-base attribution,
-and reports missing source data as `not_available`. Its output is workflow evidence only and does
-not authorize a policy change, merge, campaign, or publication.
+and reports missing source data as `not_available`. Source kinds, input SHA-256, the deterministic
+record audit, red-main coverage, and independent pre-rollout baseline evidence are preserved in the
+report; fixture sources cannot be promoted by editing the top-level evidence status. Its output is
+workflow evidence only and does not authorize a policy change, merge, campaign, or publication.
 
 ### Merge queue gate (issue #6274)
 
@@ -655,6 +692,36 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+**Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
+the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
+fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
+and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
+`--head-sha` values. Because this lane performs the complete exact-head checkout and shared
+all-extras setup before combining shards, its hosted job has a bounded 30-minute timeout. The
+same checker used by local readiness emits a `changed-coverage.v1`
+artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
+and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
+`not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
+changed-head mismatch, malformed diff/artifact evidence, or an incomplete check-run query is a
+blocker. A pure-deletion file with a valid coverage row and no new-file line numbers is reported as
+`100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
+`not_required` verdict is only for a head with no executable Python changes in the configured
+coverage scope, and remains observable in the artifact rather than being inferred from a skipped
+job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+be proven by a core-only shard.
+
+The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
+output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
+`scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
+missing, pending, failed, malformed, or stale result for source-changing PRs. The CI workflow
+intentionally skips a PR whose complete changed-file set matches `**/*.md` or `docs/**`; in that
+case the gate fetches and validates the complete GitHub changed-file set and records
+`changed_coverage_status: not_required`. An API failure, incomplete file listing, or any mixed/non-
+ignored path remains a blocker. The existing `coverage-gate` absolute-floor and baseline checks
+continue to run on main/manual/merge-group full-suite events; they do not substitute for the
+changed-line proof. Direct merge dispatchers must consume the same exact-head check before their
+CAS step (tracked separately by #7407).
+
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
 non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
@@ -694,6 +761,43 @@ head SHAs. It also returns the stable `next_action`
 live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
 retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
 successful reconciliation.
+
+### Exact-head stability snapshot (issue #7523)
+
+Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof
+or GitHub reports completed-success workflow jobs while check-runs remain pending. Run the
+deterministic stability snapshot once after local proof and again immediately before any handoff
+step; it is route-evidence-only, never retries automatically, and never authorizes a merge:
+
+```bash
+uv run python scripts/dev/check_pr_ci_status.py <pr-number> --stability-snapshot --json \
+  --expected-head-sha <head-sha> --expected-main-sha <current-main-sha> \
+  --expected-metadata-digest <64-hex> --repo ll7/robot_sf_ll7
+```
+
+The `pr_stability_snapshot.v1` result reports the observed PR head SHA, the current `main` SHA,
+the base ref/SHA, the exact title/body SHA-256 metadata digest (the same `metadata_digest` as the
+`pr-metadata: reconciled @ <digest>` trailer), the CI rollup, and REST/GraphQL quota state.
+`status` is one of `stable`, `changed`, `failure`, `pending`, `status_propagation_lag`,
+`quota_blocked`, or `error`:
+
+- `changed` (with `invalidated_reasons` and the observed values) when the head, current `main`, or
+  metadata digest moved since the snapshot. The smallest safe resume command re-runs the snapshot
+  against the observed values; nothing is retried automatically and no merge is authorized.
+- `status_propagation_lag` is distinct from ordinary `pending` work and from terminal `failure`;
+  the checks payload carries the `check_run_stale_job_success` diagnostic and the resume command is
+  the bounded CI monitor (exit code 2 until the lag resolves).
+- `quota_blocked` surfaces the `gh api rate_limit` core/GraphQL reset (or a `Retry-After` value)
+  as `resume.min_delay_seconds` and `resume.resume_epoch_seconds`; re-run the snapshot only after
+  that delay, never in a spin loop.
+- Exit codes: `0` stable, `1` changed/failure/error, `2` inconclusive (pending,
+  status-propagation-lag, or quota-blocked; resume later).
+
+Optional `--metadata-title` + `--metadata-body-file` compare the desired final title/body pair;
+metadata drift then resumes with `scripts/dev/gh_pr_body_rest.py <pr> --reconcile` before
+re-snapshotting. The snapshot does not apply `merge-ready`, bypass reviews, or relax any
+fail-closed gate; `scripts/dev/check_pr_current_base_cas.py` and the monitor's exact-head guard
+remain the binding final preflights.
 
 ### Reusable dev scripts
 
@@ -793,6 +897,29 @@ is completed successfully and the check-run is still pending, then reads the che
 fail-closed with a JSON report; the reconciliation job is diagnostic-only and outside the `ci`
 aggregate.
 
+For a pending Actions check with a job URL, the monitor performs bounded REST enrichment of the
+workflow run and job records to report the current phase separately from test conclusions. The
+default stale warning threshold is 900 seconds; set it explicitly when a different operational
+window is appropriate:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+  <pr-number> \
+  --expected-head-sha <head-sha> \
+  --actions-stale-after-seconds 900 \
+  --poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200 --json
+```
+
+`checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
+timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
+exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
+result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
+replacement rather than hiding the replacement relationship behind a count. When a stale run has
+an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
+and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+mutation commands and leaves the route evidence incomplete.
+
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
 `route_evidence_only: true`. When the local wall cap expires while checks are still pending, the
@@ -889,15 +1016,19 @@ For a read-only preservation-aware retirement projection, use the bounded report
 
 ```bash
 uv run python scripts/dev/worktree_hygiene_snapshot.py \
-  --retirement-plan --include-all-worktrees --json
+  --retirement-plan --include-all-worktrees \
+  --worktree-budget 256 --time-budget-seconds 60 --json
 ```
 
 The retirement projection classifies each row as `preserve`, `review`, or `removeable`. It joins
 bounded PR coverage and remote issue-claim state, reports dirty/ahead/detached/missing-upstream
 reasons, and classifies ignored roots as cache, documented disposable output, durable-required, or
-handoff-needed. Unknown PR, claim, status, or artifact evidence is a blocker. The command never
-removes worktrees; any later removal still requires human approval and the preservation procedure
-above.
+handoff-needed. `--worktree-budget` and `--time-budget-seconds` bound the all-worktree scan itself,
+including local inventory construction. Rows that do not fit are retained as review-only, and the
+JSON `progress.terminal_status` is `incomplete`; `needs_review` also reports unavailable evidence.
+Treat any non-zero exit from an incomplete or needs-review report as a stop signal. Unknown PR,
+claim, status, or artifact evidence is a blocker. The command never removes worktrees; any later
+removal still requires human approval and the preservation procedure above.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 
@@ -2219,8 +2350,9 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
-  run the complete suite and upload one coverage database per shard.
+  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+  trace-based coverage database per shard for exact-head changed coverage, while non-PR events
+  run the complete suite and upload one coverage database per shard using the faster sysmon backend.
 - `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
@@ -2271,8 +2403,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
-  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker and
+  trace-based per-shard coverage for exact-head changed coverage, while main, manual, and merge-queue
+  events run the complete suite with per-shard coverage data. Merge-queue coverage also uses the
+  trace backend because it feeds the exact-head changed-coverage gate.
 - `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
   and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
@@ -2782,6 +2916,16 @@ evidence, benchmark/reporting gates, generated artifacts, CI/release policy, or 
 paths, and recommended for multi-agent or multi-run tasks.
 
 - [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
+
+### Issue #5303 checker authority
+
+The only current entry point for the promotion-capable search contract is the powered,
+side-effect-free v2 checker:
+`uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py` (and its pure
+`--identities` mode). The historical three-seed v1 contract and timing-control paths remain
+available only to reproduce their pinned diagnostic artifacts; they cannot authorize promotion,
+execution, or transfer work. Current operational code and documentation must not invoke either
+v1 checker path.
 
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.

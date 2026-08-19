@@ -6,6 +6,31 @@ stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
 refresh_snapshot, mark_ready_candidate, await_gate_verdict, reconcile_pr_metadata,
 await_review_threads, or no_action.
 
+Two parking states are machine-recognized from trusted PR comments (issue #7508,
+the machine half of the goal-pr-review skill contract from PR #7500):
+
+- ``active_writer`` — a trusted comment carries an unexpired, unreleased
+  ``review-claim: <lane> @ <head> until <UTC>`` marker covering the live head, so
+  another review lane owns the write window and the loop must not race it.
+- ``author_decision`` — the ``decision-required`` label is paired with a
+  ``### Decision packet`` comment at the live head, so the PR is parked on an
+  author-reserved ruling rather than an infra/preflight blocker.
+
+A third parking state comes from the ancestry gate (issue #7515):
+
+- ``stacked_not_independently_mergeable`` — the PR's non-``main`` ancestry is
+  either undeclared (``undeclared_stack``), mismatched
+  (``mismatched_declaration``), invalidated (``parent_invalidated``), or a valid
+  declared stack (``stacked`` / ``parent_merged``).  Such a PR can never be
+  independently merged: it is parked with ``no_action`` until the parent merges
+  and the child is re-evaluated against current ``main``.  The state is read
+  from the snapshot's ``ancestry.state`` block (produced by
+  ``scripts.dev.stack_ancestry``) plus the PR's ``base_ref``.
+
+Both park the PR (``no_action`` / ``stop``). The not-ready-sentinel half
+(merge-ready present while the body carries a not-ready sentence) is tracked
+separately in issue #7491 and intentionally not implemented here.
+
 Every PolicyDecision also emits a high-level ``flow_decision`` — one of exactly
 ``stop``, ``continue``, ``reroute``, or ``escalate`` — for machine consumption.
 
@@ -32,10 +57,11 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.dev.pr_metadata import extract_metadata_digests
+from scripts.dev.pr_metadata import extract_metadata_digests, has_not_ready_body_narrative
 from scripts.dev.route_efficiency_report import (
     EXPECTED_ARTIFACT_KEYS,
     has_validation_success,
@@ -77,6 +103,10 @@ VALID_STATES = frozenset(
         "unknown_review_threads",
         "pending_gate_verdict",
         "pending_pr_metadata",
+        "active_writer",
+        "author_decision",
+        "stacked_not_independently_mergeable",
+        "merged_externally",
         "ready_to_merge",
         "no_action",
     }
@@ -106,6 +136,24 @@ _EXACT_HEAD_RE = re.compile(
 )
 EXACT_HEAD_RE = _EXACT_HEAD_RE
 
+# Issue #7508 markers from the goal-pr-review skill (PR #7500). An advisory
+# ``review-claim`` comment announces a lane's mutable-write window; the same
+# comment thread is released with ``review-claim: released @ <head-sha>``. The
+# ``until`` timestamp is the ISO-8601 UTC expiry (default claim window 90 min).
+_REVIEW_CLAIM_RE = re.compile(
+    r"review-claim\s*:\s*(?P<lane>[^\s@]+)\s*@\s*(?P<sha>[0-9a-fA-F]{7,40})\b"
+    r"\s+until\s+(?P<until>\S+)",
+    re.IGNORECASE,
+)
+REVIEW_CLAIM_RE = _REVIEW_CLAIM_RE
+_REVIEW_CLAIM_RELEASED_RE = re.compile(
+    r"review-claim\s*:\s*released\s*@\s*(?P<sha>[0-9a-fA-F]{7,40})\b",
+    re.IGNORECASE,
+)
+REVIEW_CLAIM_RELEASED_RE = _REVIEW_CLAIM_RELEASED_RE
+_DECISION_PACKET_HEADING_RE = re.compile(r"^###\s+Decision\s+packet\b", re.IGNORECASE)
+DECISION_PACKET_HEADING_RE = _DECISION_PACKET_HEADING_RE
+
 
 @dataclass(frozen=True, slots=True)
 class ShaCarrier:
@@ -119,6 +167,20 @@ class ShaCarrier:
     kind: str
     sha: str
     full: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewClaim:
+    """One parsed ``review-claim`` marker from a trusted comment (issue #7508).
+
+    ``lane`` is the claiming lane id, ``sha`` the claimed head SHA as written
+    (lowercased), and ``expires_at`` the parsed ``until`` timestamp (UTC) or
+    ``None`` when the timestamp is missing or unparseable.
+    """
+
+    lane: str
+    sha: str
+    expires_at: datetime | None
 
 
 def extract_sha_carriers(text: str) -> list[ShaCarrier]:
@@ -155,6 +217,166 @@ def invalid_sha_carriers(carriers: list[ShaCarrier], live_head_sha: str) -> list
     """
     live_head = live_head_sha.lower()
     return [carrier for carrier in carriers if not carrier.full or carrier.sha != live_head]
+
+
+def _parse_review_claim_marker(text: str) -> ReviewClaim | None:
+    """Parse one ``review-claim: <lane> @ <sha> until <UTC>`` marker, or None.
+
+    Returns ``None`` for non-string/empty blobs and for blobs whose timestamp
+    cannot be parsed as an ISO-8601 UTC datetime (fail closed: an unparseable
+    claim is treated as expired rather than parking the PR forever).
+    """
+    if not isinstance(text, str) or not text:
+        return None
+    match = _REVIEW_CLAIM_RE.search(text)
+    if not match:
+        return None
+    raw_until = match.group("until")
+    try:
+        expires_at = datetime.fromisoformat(raw_until.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return ReviewClaim(
+        lane=match.group("lane").lower(),
+        sha=match.group("sha").lower(),
+        expires_at=expires_at.astimezone(UTC),
+    )
+
+
+def _review_claim_released_shas(text: str) -> set[str]:
+    """Return lowercased SHAs released by ``review-claim: released @ <sha>`` markers."""
+    if not isinstance(text, str) or not text:
+        return set()
+    return {match.group("sha").lower() for match in _REVIEW_CLAIM_RELEASED_RE.finditer(text)}
+
+
+def _has_decision_packet_heading(text: str) -> bool:
+    """Return True when a comment body carries a ``### Decision packet`` heading."""
+    if not isinstance(text, str) or not text:
+        return False
+    return any(_DECISION_PACKET_HEADING_RE.match(line) for line in text.splitlines())
+
+
+def _trusted_marker_comments(pr: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return comment/review entries that may carry an issue #7508 marker.
+
+    Only repository-trusted authors (OWNER/MEMBER/COLLABORATOR) may park a PR.
+    Mirrors ``_snapshot_body_texts`` and the snapshot producer's
+    ``_extract_trailers_from_bodies`` trust rule.
+    """
+    entries: list[dict[str, Any]] = []
+    for items in (pr.get("comments"), pr.get("reviews")):
+        if not isinstance(items, list):
+            continue
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            association = str(
+                entry.get("authorAssociation") or entry.get("author_association") or ""
+            ).upper()
+            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
+                continue
+            body = entry.get("body")
+            if isinstance(body, str) and body:
+                entries.append(entry)
+    return entries
+
+
+def _normalize_now(now: datetime | None) -> datetime | None:
+    """Return a UTC-aware evaluation instant, or None for a non-datetime value."""
+    if now is None:
+        return datetime.now(UTC)
+    if not isinstance(now, datetime):
+        return None
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    return now.astimezone(UTC)
+
+
+def _claim_parks(claim: ReviewClaim, *, head_sha: str, released: set[str], now: datetime) -> bool:
+    """Return True when one parsed claim still parks the PR."""
+    if not _sha_matches_head(claim.sha, head_sha):
+        return False
+    if claim.sha in released:
+        return False
+    if claim.expires_at is None or now >= claim.expires_at:
+        return False
+    return True
+
+
+def active_review_claim(
+    pr: dict[str, Any], head_sha: str, now: datetime | None
+) -> ReviewClaim | None:
+    """Return the review-claim parking the PR as an active writer, or None.
+
+    A PR is ``active_writer`` when a trusted comment carries a ``review-claim:
+    <lane> @ <head> until <UTC>`` marker that is (issue #7508):
+
+      - unexpired: ``now < until`` (unparseable timestamps fail closed as
+        expired; equality is expiry, matching the ``now >= until`` rule),
+      - unreleased: no trusted ``review-claim: released @ <sha>`` marker names
+        the same head SHA after the claim (releases clear regardless of head
+        movement),
+      - head-bound: the marker's SHA matches the live head SHA.
+
+    Lane identity is not distinguishable in the compact snapshot, so the
+    documented simplification applies: any unexpired unreleased trusted marker
+    parks the PR (see the module docstring limitation note).
+
+    ``now`` is an explicit evaluation instant for deterministic tests; ``None``
+    falls back to ``datetime.now(UTC)`` for live queue evaluation. A naive
+    datetime is interpreted as UTC.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return None
+    now = _normalize_now(now)
+    if now is None:
+        return None
+
+    released: set[str] = set()
+    claims: list[ReviewClaim] = []
+    for entry in _trusted_marker_comments(pr):
+        body = str(entry.get("body", ""))
+        released.update(_review_claim_released_shas(body))
+        claim = _parse_review_claim_marker(body)
+        if claim is not None:
+            claims.append(claim)
+
+    for claim in claims:
+        if _claim_parks(claim, head_sha=head_sha, released=released, now=now):
+            return claim
+    return None
+
+
+def has_author_decision_packet(pr: dict[str, Any], head_sha: str) -> bool:
+    """Return True when a trusted comment at the live head posts a Decision packet.
+
+    ``author_decision`` requires the ``decision-required`` label AND a trusted
+    comment whose body contains a ``### Decision packet`` heading. The comment
+    must be bound to the live head: either it names the head SHA in a
+    ``review-claim``/``exact-head`` carrier, or the PR snapshot carries only
+    conversation comments (no historical review bodies), in which case the
+    comment set is assumed to live at the current head.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return False
+    carriers: list[ShaCarrier] = []
+    comments_with_packet = 0
+    has_historical_review_bodies = False
+    for entry in _trusted_marker_comments(pr):
+        body = str(entry.get("body", ""))
+        carriers.extend(extract_sha_carriers(body))
+        if _has_decision_packet_heading(body):
+            comments_with_packet += 1
+            if "reviews" in pr and entry in pr.get("reviews", []):
+                has_historical_review_bodies = True
+    if comments_with_packet == 0:
+        return False
+    if has_historical_review_bodies and any(carrier.full for carrier in carriers):
+        return any(_sha_matches_head(carrier.sha, head_sha) for carrier in carriers)
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -610,34 +832,68 @@ def _merge_ready_state(
     metadata_digest = str(pr.get("metadata_digest", "") or "")
     if not has_current_pr_metadata_verdict(pr, metadata_digest):
         return "pending_pr_metadata"
+    body_text = str(pr.get("body") or "")
+    if has_not_ready_body_narrative(body_text):
+        return "pending_pr_metadata"
     return "ready_to_merge"
 
 
-def classify_pr_state(
+def _active_writer_or_author_decision(
     pr: dict[str, Any],
     *,
-    compact_artifacts: dict[str, Any] | None = None,
-) -> str:
-    """Classify a single PR into a machine-checkable loop state.
+    label_names: list[str],
+    head_sha: str,
+    now: datetime | None,
+) -> str | None:
+    """Return the issue #7508 marker parking state for a PR, or None.
 
-    Pure function: no side effects, no GitHub calls.
+    Checked before the generic preflight pipeline so a PR parks on a live
+    review-claim or an author decision even when other preflight logic would
+    otherwise fire.
+    """
+    if active_review_claim(pr, head_sha, now) is not None:
+        return "active_writer"
+    if "decision-required" in label_names and has_author_decision_packet(pr, head_sha):
+        return "author_decision"
+    return None
+
+
+def _stacked_ancestry_state(pr: dict[str, Any]) -> str | None:
+    """Return ``stacked_not_independently_mergeable`` for non-``main`` ancestry.
+
+    Issue #7515: a PR whose snapshot carries an ``ancestry`` block is never
+    independently mergeable while the ancestry state is anything other than
+    ``clean``.  The state covers undeclared, mismatched, invalidated, declared,
+    and parent-merged ancestry; in every case the PR must park until the parent
+    merges and the child is re-evaluated against current ``main``.  PRs without
+    an ``ancestry`` block (snapshots produced before the gate existed) are left
+    untouched so this never widens the merge path for existing queues.
     """
     if not isinstance(pr, dict):
-        return "no_action"
-    compact_artifacts = _compact_artifacts_from_pr(pr, compact_artifacts)
-    status = str(pr.get("status", ""))
-    if status == "error":
-        return "no_action"
-    checks = pr.get("checks") or {}
-    overall = str(checks.get("overall", ""))
-    label_names = _label_names(pr)
-    is_draft = bool(pr.get("draft", False))
-    head_sha = str(pr.get("head_sha", ""))
-    artifacts = pr.get("artifacts")
-    if is_draft:
-        return "no_action"
-    if overall == "failure":
-        return "failed_ci"
+        return None
+    ancestry = pr.get("ancestry")
+    if not isinstance(ancestry, dict):
+        return None
+    state = str(ancestry.get("state") or "")
+    if state == "clean":
+        return None
+    if state:
+        return "stacked_not_independently_mergeable"
+    return None
+
+
+def _preflight_state_before_pending(
+    pr: dict[str, Any],
+    *,
+    overall: str,
+    head_sha: str,
+) -> str | None:
+    """Return the fail-closed state that precedes a pending-CI wait, or None.
+
+    Mirrors the original classifier ordering: base freshness, stale head, and
+    blocked preflight evidence all take precedence over the generic pending-CI
+    wait.
+    """
     base_state = _base_state_after_policy(pr, head_sha)
     if base_state is not None:
         return base_state
@@ -649,6 +905,80 @@ def classify_pr_state(
         return preflight_state
     if overall == "pending":
         return "pending_ci"
+    return None
+
+
+def _lifecycle_state(pr: dict[str, Any]) -> str | None:
+    """Return the terminal lifecycle route for a PR snapshot, if applicable."""
+    lifecycle_state = str(pr.get("state", "")).upper()
+    if lifecycle_state == "MERGED" or pr.get("merged_at"):
+        return "merged_externally"
+    if lifecycle_state == "CLOSED":
+        return "no_action"
+    return None
+
+
+def classify_pr_state(
+    pr: dict[str, Any],
+    *,
+    compact_artifacts: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> str:
+    """Classify a single PR into a machine-checkable loop state.
+
+    Pure function: no side effects, no GitHub calls.
+
+    Marker precedence (issue #7508): ``active_writer`` and ``author_decision``
+    are checked before the generic ``blocked_preflight`` classification, so a PR
+    can be parked for a live review-claim or an author decision even when other
+    preflight logic would otherwise fire.  Ancestry precedence (issue #7515):
+    ``stacked_not_independently_mergeable`` is checked before failed-CI and
+    merge-readiness, so a PR with undeclared/mismatched/invalidated/declared
+    non-``main`` ancestry can never be treated as independently mergeable.
+    Draft/closed/error PRs still return ``no_action`` first, while a snapshot
+    that records a merge returns ``merged_externally`` so the caller can emit a
+    distinct no-action handoff rather than re-reviewing it.
+    The not-ready-sentinel half (merge-ready present while the body carries a
+    not-ready sentence) is tracked separately in issue #7491 and intentionally
+    not implemented here.
+
+    ``now`` is an explicit UTC evaluation instant for review-claim expiry so the
+    classifier stays deterministic; a naive datetime is interpreted as UTC and
+    ``None`` falls back to ``datetime.now(UTC)``.
+    """
+    if not isinstance(pr, dict):
+        return "no_action"
+    compact_artifacts = _compact_artifacts_from_pr(pr, compact_artifacts)
+    status = str(pr.get("status", ""))
+    if status == "error":
+        return "no_action"
+    lifecycle_state = _lifecycle_state(pr)
+    if lifecycle_state is not None:
+        return lifecycle_state
+    checks = pr.get("checks") or {}
+    overall = str(checks.get("overall", ""))
+    label_names = _label_names(pr)
+    is_draft = bool(pr.get("draft", False))
+    head_sha = str(pr.get("head_sha", ""))
+    artifacts = pr.get("artifacts")
+    if is_draft:
+        return "no_action"
+    marker_state = _active_writer_or_author_decision(
+        pr,
+        label_names=label_names,
+        head_sha=head_sha,
+        now=now,
+    )
+    if marker_state is not None:
+        return marker_state
+    stacked_state = _stacked_ancestry_state(pr)
+    if stacked_state is not None:
+        return stacked_state
+    if overall == "failure":
+        return "failed_ci"
+    preflight_state = _preflight_state_before_pending(pr, overall=overall, head_sha=head_sha)
+    if preflight_state is not None:
+        return preflight_state
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state
@@ -705,7 +1035,8 @@ def _compute_flow_decision(
       - ready_to_merge -> continue
       - unknown_review_threads -> continue (wait for a thread-capable snapshot)
       - failed_ci, failed_validation, missing_artifacts, stale_worktree, stale_merge_base -> reroute
-      - blocked_preflight -> stop
+      - active_writer, author_decision, blocked_preflight, merged_externally -> stop (parked)
+      - stacked_not_independently_mergeable -> stop (parked; parent must merge first)
       - no_action -> stop
     """
     if budget_exhausted:
@@ -729,7 +1060,7 @@ def _compute_flow_decision(
             return "stop"
 
 
-def recommend_action(  # noqa: C901
+def recommend_action(  # noqa: C901, PLR0912
     state: str,
     *,
     pr_number: int,
@@ -884,6 +1215,55 @@ def recommend_action(  # noqa: C901
                 reason="snapshot preflight is blocked; inspect the blocking reason before retry",
                 actions_remaining=remaining,
             )
+        case "active_writer":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "another lane holds an unexpired review-claim on this head; "
+                    "park until the claim is released or expires"
+                ),
+                actions_remaining=remaining,
+            )
+        case "author_decision":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "decision-required label with a live-head Decision packet; "
+                    "park for the author's ruling"
+                ),
+                actions_remaining=remaining,
+            )
+        case "stacked_not_independently_mergeable":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "non-main ancestry is present (undeclared, mismatched, invalidated, "
+                    "or a declared stack); park until the parent merges and the branch is "
+                    "re-evaluated against current main"
+                ),
+                actions_remaining=remaining,
+            )
+        case "merged_externally":
+            return PolicyDecision(
+                pr=pr_number,
+                action="no_action",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "PR merged externally while in the review queue; do not post review evidence "
+                    "or apply merge-ready"
+                ),
+                actions_remaining=remaining,
+            )
         case _:
             return PolicyDecision(
                 pr=pr_number,
@@ -910,10 +1290,13 @@ def evaluate_queue(
     expected_head_shas: dict[int, str] | None = None,
     artifact_presence: dict[int, bool] | None = None,
     compact_artifacts: dict[int, dict[str, Any]] | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     """Evaluate a PR queue and emit per-PR decisions under a loop budget.
 
-    Pure function: reads snapshot dicts, never calls external APIs.
+    ``now`` is forwarded to ``classify_pr_state`` for deterministic review-claim
+    expiry evaluation; ``None`` falls back to ``datetime.now(UTC)``. Pure
+    function: reads snapshot dicts, never calls external APIs.
     """
     decisions: list[dict[str, Any]] = []
     actions_used = 0
@@ -930,7 +1313,7 @@ def evaluate_queue(
         compact = compact_by_pr.get(num)
         if compact is not None:
             enriched["compact_artifacts"] = compact
-        state = classify_pr_state(enriched, compact_artifacts=compact)
+        state = classify_pr_state(enriched, compact_artifacts=compact, now=now)
         review = _review_state(enriched)
         labels = enriched.get("labels") or []
         label_names = [str(label) for label in labels] if isinstance(labels, list) else []

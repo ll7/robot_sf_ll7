@@ -10,9 +10,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
+from scripts.dev.github_quota import parse_rate_limit_payload  # noqa: E402
+from scripts.dev.pr_metadata import metadata_digest, validate_pr_title  # noqa: E402
 
 FAILURE_CONCLUSIONS = {
     "failure",
@@ -36,6 +41,10 @@ _ACTIONS_JOB_URL_RE = re.compile(
 )
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
 _WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
+STABILITY_SNAPSHOT_SCHEMA = "pr_stability_snapshot.v1"
+_RETRY_AFTER_RE = re.compile(r"retry-after\s*[:=]\s*(\d+)", re.IGNORECASE)
+_RESUME_MONITOR_ARGS = "--poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200"
+DEFAULT_ACTIONS_STALE_AFTER_SECONDS = 900
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -129,6 +138,66 @@ def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
 
 def _latest_check_runs(rollup: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Keep the newest timestamped run for each duplicate GitHub Actions job."""
+    effective_rollup, superseded_count, _ = _latest_check_runs_with_evidence(rollup)
+    return effective_rollup, superseded_count
+
+
+def _check_details_url(check: dict[str, Any]) -> str:
+    """Return the URL identifying a check run or legacy status."""
+    return str(
+        check.get("detailsUrl")
+        or check.get("details_url")
+        or check.get("targetUrl")
+        or check.get("target_url")
+        or ""
+    )
+
+
+def _check_started_at(check: dict[str, Any]) -> str:
+    """Return a normalized check-run start timestamp."""
+    return str(check.get("startedAt") or check.get("started_at") or "")
+
+
+def _check_completed_at(check: dict[str, Any]) -> str:
+    """Return a normalized check-run completion timestamp."""
+    return str(check.get("completedAt") or check.get("completed_at") or "")
+
+
+def _check_workflow_name(check: dict[str, Any]) -> str:
+    """Return a normalized workflow name for diagnostic output."""
+    return str(check.get("workflowName") or check.get("workflow_name") or "")
+
+
+def _actions_run_job_ids(details_url: str) -> tuple[int, int] | None:
+    """Extract an Actions run/job identity from a check details URL."""
+    match = _ACTIONS_JOB_URL_RE.search(details_url)
+    if match is None:
+        return None
+    return int(match.group("run_id")), int(match.group("job_id"))
+
+
+def _run_identity_evidence(check: dict[str, Any]) -> dict[str, Any]:
+    """Return compact, URL-backed identity evidence for one check run."""
+    details_url = _check_details_url(check)
+    run_job_ids = _actions_run_job_ids(details_url)
+    evidence: dict[str, Any] = {
+        "name": _rollup_name(check),
+        "workflow": _check_workflow_name(check) or None,
+        "status": _rollup_status(check),
+        "conclusion": _rollup_conclusion(check),
+        "started_at": _check_started_at(check) or None,
+        "completed_at": _check_completed_at(check) or None,
+        "details_url": details_url or None,
+    }
+    if run_job_ids is not None:
+        evidence["run_id"], evidence["job_id"] = run_job_ids
+    return evidence
+
+
+def _latest_check_runs_with_evidence(
+    rollup: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
+    """Keep current runs and describe every discarded exact-head replacement."""
     latest_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
     for check in rollup:
         identity = _check_run_identity(check)
@@ -140,13 +209,19 @@ def _latest_check_runs(rollup: list[dict[str, Any]]) -> tuple[list[dict[str, Any
 
     effective_rollup: list[dict[str, Any]] = []
     superseded_count = 0
+    superseded_runs: list[dict[str, Any]] = []
     for check in rollup:
         identity = _check_run_identity(check)
         if identity is not None and latest_by_identity[identity] is not check:
             superseded_count += 1
+            superseded = _run_identity_evidence(check)
+            replacement = _run_identity_evidence(latest_by_identity[identity])
+            superseded["replacement"] = replacement
+            superseded["reason"] = "newer_same_workflow_job"
+            superseded_runs.append(superseded)
             continue
         effective_rollup.append(check)
-    return effective_rollup, superseded_count
+    return effective_rollup, superseded_count, superseded_runs
 
 
 def _is_graphql_quota_error(message: str) -> bool:
@@ -204,6 +279,79 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return None
 
 
+def _rest_api_get_detailed(path: str, *, timeout: int = 45) -> tuple[Any, str]:
+    """Fetch one explicit REST path, returning ``(payload, error_text)``.
+
+    Unlike :func:`_rest_api_get`, the gh error text is preserved so quota-blocked
+    calls can be distinguished from ordinary failures without an extra request.
+    """
+    result = _gh(["api", path], timeout=timeout)
+    if result.returncode != 0:
+        return None, result.stderr.strip() or f"gh api exited with code {result.returncode}"
+    try:
+        return json.loads(result.stdout), ""
+    except json.JSONDecodeError:
+        return None, f"gh api returned invalid JSON for {path}"
+
+
+def _is_rate_limit_error_text(text: str) -> bool:
+    """Return whether gh error text indicates REST/GraphQL rate-limit exhaustion."""
+    lowered = (text or "").lower()
+    return "rate limit" in lowered or "rate_limit" in lowered or "too many requests" in lowered
+
+
+def _parse_retry_after(text: str) -> int | None:
+    """Parse the first ``Retry-After`` seconds value from gh output, best-effort."""
+    match = _RETRY_AFTER_RE.search(text or "")
+    if match is None:
+        return None
+    try:
+        return max(0, int(match.group(1)))
+    except ValueError:
+        return None
+
+
+def _fetch_rate_limit_info() -> dict[str, Any]:
+    """Return bounded REST/GraphQL quota state without consuming quota.
+
+    ``gh api rate_limit`` does not count against the API quota. When it is
+    unavailable (for example a secondary rate limit), a ``Retry-After`` value
+    from the gh error output supplies a bounded resume hint; otherwise the
+    source is ``unavailable`` and callers stay fail-closed. Never retries.
+    """
+    result = _gh(["api", "rate_limit"])
+    if result.returncode == 0:
+        try:
+            snapshot = parse_rate_limit_payload(json.loads(result.stdout))
+        except json.JSONDecodeError:
+            snapshot = None
+        if snapshot is not None and snapshot.status == "ok":
+            return {
+                "source": "gh_api_rate_limit",
+                "graphql_remaining": snapshot.graphql_remaining,
+                "graphql_reset_epoch_seconds": snapshot.graphql_reset_at,
+                "core_remaining": snapshot.core_remaining,
+                "core_reset_epoch_seconds": snapshot.core_reset_at,
+            }
+    retry_after = _parse_retry_after(result.stderr) or _parse_retry_after(result.stdout)
+    if retry_after is not None:
+        return {"source": "retry_after", "retry_after_seconds": retry_after}
+    return {"source": "unavailable"}
+
+
+def _rate_limit_resume_hint(info: dict[str, Any], now: int) -> tuple[int | None, int | None]:
+    """Return ``(min_delay_seconds, resume_epoch_seconds)`` from rate-limit info."""
+    reset = info.get("core_reset_epoch_seconds") or info.get("graphql_reset_epoch_seconds")
+    retry_after = info.get("retry_after_seconds")
+    min_delay: int | None = None
+    if reset is not None:
+        min_delay = max(0, int(reset) - now)
+    elif retry_after is not None:
+        min_delay = max(0, int(retry_after))
+    resume_epoch = int(reset) if reset is not None else None
+    return min_delay, resume_epoch
+
+
 def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
     """Bind GitHub Actions check runs to their authoritative workflow IDs.
 
@@ -238,33 +386,65 @@ def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
     return enriched_runs
 
 
-def _stale_job_status(job: dict[str, Any]) -> str | None:
-    """Return the eligible stale job lifecycle, or ``None`` for ordinary job state."""
-    job_status = str(job.get("status", "") or "").lower()
-    if job_status == "in_progress":
-        return job_status
-    if job_status == "completed" and str(job.get("conclusion", "") or "").lower() == "success":
-        return job_status
-    return None
+def _rest_check_runs_to_rollup(check_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize REST check runs to the rollup shape used by lifecycle helpers."""
+    return [
+        {
+            "__typename": "CheckRun",
+            "name": str(run.get("name", "") or ""),
+            "status": str(run.get("status", "") or ""),
+            "conclusion": run.get("conclusion") or "",
+            "detailsUrl": str(run.get("details_url", "") or ""),
+            "startedAt": str(run.get("started_at", "") or ""),
+            "completedAt": str(run.get("completed_at", "") or ""),
+            "workflowId": str(run.get("workflow_id", "") or ""),
+            "workflowName": str(
+                (run.get("workflow") or (run.get("check_suite") or {}).get("workflow") or "")
+                if isinstance(run, dict)
+                else ""
+            ),
+        }
+        for run in check_runs
+        if isinstance(run, dict)
+    ]
 
 
-def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
-    """Return evidence for a completed-success workflow whose job record is still pending.
+def _actions_lifecycle_payloads(
+    rollup: list[dict[str, Any]],
+) -> dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]]:
+    """Fetch bounded run/job metadata for pending Actions checks only.
 
-    GitHub can leave a check-run/job lifecycle status in ``in_progress`` after the parent
-    workflow and every job step have completed successfully. This is diagnostic evidence only:
-    callers keep the CI rollup fail-closed as pending and use the returned fields to distinguish
-    status propagation lag from ordinary work still running.
+    The PR rollup is authoritative for the check conclusion. REST metadata is
+    diagnostic enrichment used to distinguish a queued workflow, setup wait,
+    and active execution; lookup failure therefore never changes the rollup.
     """
-    match = _ACTIONS_JOB_URL_RE.search(details_url)
-    if match is None:
-        return None
+    payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] = {}
+    for check in rollup:
+        if _rollup_status(check) not in PENDING_STATUSES:
+            continue
+        details_url = _check_details_url(check)
+        if details_url in payloads or _actions_run_job_ids(details_url) is None:
+            continue
+        run_job_ids = _actions_run_job_ids(details_url)
+        assert run_job_ids is not None
+        run_id, job_id = run_job_ids
+        run = _rest_api_get(f"actions/runs/{run_id}")
+        job = _rest_api_get(f"actions/jobs/{job_id}")
+        payloads[details_url] = (
+            run if isinstance(run, dict) else None,
+            job if isinstance(job, dict) else None,
+        )
+    return payloads
 
-    run_id = match.group("run_id")
-    job_id = match.group("job_id")
-    run = _rest_api_get(f"actions/runs/{run_id}")
-    job = _rest_api_get(f"actions/jobs/{job_id}")
-    if not isinstance(run, dict) or not isinstance(job, dict):
+
+def _status_propagation_lag_evidence_from_payload(
+    details_url: str,
+    run: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build propagation-lag evidence from already-fetched run/job metadata."""
+    run_job_ids = _actions_run_job_ids(details_url)
+    if run_job_ids is None or not isinstance(run, dict) or not isinstance(job, dict):
         return None
     if str(run.get("status", "") or "").lower() != "completed":
         return None
@@ -292,36 +472,79 @@ def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
     ):
         return None
 
-    evidence = {
-        "run_id": int(run_id),
-        "job_id": int(job_id),
+    run_id, job_id = run_job_ids
+    return {
+        "run_id": run_id,
+        "job_id": job_id,
         "parent_run_status": "completed",
         "parent_run_conclusion": "success",
         "job_status": job_status,
         "final_step": "Complete job",
         "final_step_conclusion": "success",
     }
-    return evidence
 
 
-def _status_propagation_lag_details(rollup: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _stale_job_status(job: dict[str, Any]) -> str | None:
+    """Return the eligible stale job lifecycle, or ``None`` for ordinary job state."""
+    job_status = str(job.get("status", "") or "").lower()
+    if job_status == "in_progress":
+        return job_status
+    if job_status == "completed" and str(job.get("conclusion", "") or "").lower() == "success":
+        return job_status
+    return None
+
+
+def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
+    """Return evidence for a completed-success workflow whose job record is still pending.
+
+    GitHub can leave a check-run/job lifecycle status in ``in_progress`` after the parent
+    workflow and every job step have completed successfully. This is diagnostic evidence only:
+    callers keep the CI rollup fail-closed as pending and use the returned fields to distinguish
+    status propagation lag from ordinary work still running.
+    """
+    run_job_ids = _actions_run_job_ids(details_url)
+    if run_job_ids is None:
+        return None
+
+    run_id, job_id = run_job_ids
+    run = _rest_api_get(f"actions/runs/{run_id}")
+    job = _rest_api_get(f"actions/jobs/{job_id}")
+    return _status_propagation_lag_evidence_from_payload(details_url, run, job)
+
+
+def _status_propagation_lag_details(
+    rollup: list[dict[str, Any]],
+    *,
+    actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+) -> list[dict[str, Any]]:
     """Inspect pending GitHub Actions checks for completed-success propagation lag."""
     details: list[dict[str, Any]] = []
     for check in rollup:
         if _rollup_status(check) not in PENDING_STATUSES:
             continue
-        details_url = str(check.get("detailsUrl") or check.get("targetUrl") or "")
-        evidence = _status_propagation_lag_evidence(details_url)
+        details_url = _check_details_url(check)
+        payload = (actions_payloads or {}).get(details_url)
+        if payload is None:
+            evidence = _status_propagation_lag_evidence(details_url)
+        else:
+            evidence = _status_propagation_lag_evidence_from_payload(
+                details_url,
+                payload[0],
+                payload[1],
+            )
         if evidence is not None:
             details.append({"name": _rollup_name(check), "details_url": details_url, **evidence})
     return details
 
 
 def _annotate_status_propagation_lag(
-    checks: dict[str, Any], rollup: list[dict[str, Any]]
+    checks: dict[str, Any],
+    rollup: list[dict[str, Any]],
+    *,
+    actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
 ) -> dict[str, Any]:
     """Attach a distinct, fail-closed status for stale successful workflow job records."""
-    lag_details = _status_propagation_lag_details(rollup)
+    lag_details = _status_propagation_lag_details(rollup, actions_payloads=actions_payloads)
     if not lag_details:
         return checks
     pending_count = sum(_rollup_status(check) in PENDING_STATUSES for check in rollup)
@@ -332,27 +555,231 @@ def _annotate_status_propagation_lag(
     return checks
 
 
-def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, Any], int]:
+def _parse_github_timestamp(value: Any) -> datetime | None:
+    """Parse an RFC3339 GitHub timestamp without accepting malformed age evidence."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _timestamp_age_seconds(value: Any, *, now_epoch_seconds: float) -> int | None:
+    """Return non-negative elapsed seconds for a GitHub timestamp."""
+    parsed = _parse_github_timestamp(value)
+    if parsed is None:
+        return None
+    return max(0, int(now_epoch_seconds - parsed.timestamp()))
+
+
+def _actions_lifecycle_phase(
+    check: dict[str, Any],
+    run: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> str | None:
+    """Classify a pending Actions check as queued, setup, or in-progress."""
+    check_status = _rollup_status(check)
+    run_status = str((run or {}).get("status", "") or "").lower()
+    job_status = str((job or {}).get("status", "") or "").lower()
+    if run_status == "queued":
+        return "queued"
+    if job_status == "queued":
+        return "setup" if run_status == "in_progress" else "queued"
+    if job_status == "in_progress" or run_status == "in_progress":
+        return "in_progress"
+    if check_status in PENDING_STATUSES:
+        return "queued"
+    return None
+
+
+def _actions_lifecycle_age_source(
+    phase: str,
+    check: dict[str, Any],
+    run: dict[str, Any] | None,
+    job: dict[str, Any] | None,
+) -> tuple[str | None, str]:
+    """Select the timestamp whose age represents the current Actions phase."""
+    run = run or {}
+    job = job or {}
+    if phase == "queued":
+        candidates = (
+            (run.get("created_at"), "workflow_created_at"),
+            (job.get("created_at"), "job_created_at"),
+        )
+    elif phase == "setup":
+        candidates = (
+            (run.get("run_started_at"), "workflow_started_at"),
+            (run.get("created_at"), "workflow_created_at"),
+        )
+    else:
+        candidates = (
+            (job.get("started_at"), "job_started_at"),
+            (run.get("run_started_at"), "workflow_started_at"),
+            (_check_started_at(check), "check_started_at"),
+        )
+    for timestamp, source in candidates:
+        if _parse_github_timestamp(timestamp) is not None:
+            return str(timestamp), source
+    return None, "unavailable"
+
+
+def _actions_recovery_evidence(
+    *,
+    pr_number: str,
+    expected_head_sha: str,
+    stale_items: list[dict[str, Any]],
+    superseded_runs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Describe manual, exact-head-safe recovery without executing mutations."""
+    monitor_command = None
+    if expected_head_sha:
+        monitor_command = (
+            f"scripts/dev/check_pr_ci_status.py {pr_number} --expected-head-sha "
+            f"{expected_head_sha} {_RESUME_MONITOR_ARGS} --json"
+        )
+    stale_commands: list[dict[str, Any]] = []
+    for item in stale_items:
+        run_id = item.get("run_id")
+        if run_id is None:
+            continue
+        job_id = item.get("job_id")
+        inspect = f"gh run view {run_id}"
+        if job_id is not None:
+            inspect += f" --job {job_id}"
+        exact_head_matches = item.get("exact_head_sha_matches")
+        stale_commands.append(
+            {
+                "run_id": run_id,
+                "job_id": job_id,
+                "phase": item.get("phase"),
+                "exact_head_sha_matches": exact_head_matches,
+                "inspect_command": inspect,
+                "cancel_command": (
+                    f"gh run cancel {run_id}" if exact_head_matches is True else None
+                ),
+                "replacement_command": (
+                    f"gh run rerun {run_id}" if exact_head_matches is True else None
+                ),
+                "mutation_authorized": False,
+            }
+        )
+    return {
+        "action": "inspect_then_cancel_or_replace" if stale_items else "wait_for_replacement",
+        "authorized": False,
+        "mutation_authorized": False,
+        "route_evidence_only": True,
+        "exact_head_sha": expected_head_sha or None,
+        "monitor_command": monitor_command,
+        "stale_runs": stale_commands,
+        "superseded_runs": superseded_runs,
+        "note": "Commands are explicit suggestions only; no cancellation or rerun was executed.",
+    }
+
+
+def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic branches.
+    checks: dict[str, Any],
+    rollup: list[dict[str, Any]],
+    *,
+    pr_number: str,
+    expected_head_sha: str,
+    actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
+    actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+) -> dict[str, Any]:
+    """Attach queue/setup age and manual recovery evidence to a CI summary."""
+    if actions_stale_after_seconds < 0:
+        raise ValueError("actions_stale_after_seconds must be non-negative")
+    payloads = (
+        actions_payloads if actions_payloads is not None else _actions_lifecycle_payloads(rollup)
+    )
+    now_epoch_seconds = time.time()
+    items: list[dict[str, Any]] = []
+    for check in rollup:
+        if _rollup_status(check) not in PENDING_STATUSES:
+            continue
+        details_url = _check_details_url(check)
+        run_job_ids = _actions_run_job_ids(details_url)
+        if run_job_ids is None:
+            continue
+        run, job = payloads.get(details_url, (None, None))
+        phase = _actions_lifecycle_phase(check, run, job)
+        if phase is None:
+            continue
+        timestamp, age_source = _actions_lifecycle_age_source(phase, check, run, job)
+        age_seconds = _timestamp_age_seconds(timestamp, now_epoch_seconds=now_epoch_seconds)
+        run_id, job_id = run_job_ids
+        run_head_sha = str((run or {}).get("head_sha", "") or "")
+        exact_head_matches: bool | None
+        if not expected_head_sha:
+            exact_head_matches = None
+        else:
+            exact_head_matches = bool(run_head_sha) and run_head_sha == expected_head_sha
+        stale = age_seconds is not None and age_seconds >= actions_stale_after_seconds
+        items.append(
+            {
+                "name": _rollup_name(check),
+                "workflow": _check_workflow_name(check) or None,
+                "phase": phase,
+                "status": _rollup_status(check),
+                "conclusion": _rollup_conclusion(check),
+                "age_seconds": age_seconds,
+                "age_source": age_source,
+                "stale_after_seconds": actions_stale_after_seconds,
+                "stale": stale,
+                "run_id": run_id,
+                "job_id": job_id,
+                "details_url": details_url,
+                "run_status": str((run or {}).get("status", "") or "") or None,
+                "job_status": str((job or {}).get("status", "") or "") or None,
+                "run_created_at": str((run or {}).get("created_at", "") or "") or None,
+                "run_started_at": str((run or {}).get("run_started_at", "") or "") or None,
+                "job_started_at": str((job or {}).get("started_at", "") or "") or None,
+                "run_head_sha": run_head_sha or None,
+                "exact_head_sha_matches": exact_head_matches,
+            }
+        )
+
+    if not items:
+        return checks
+    by_phase: dict[str, int] = {}
+    for item in items:
+        phase = str(item["phase"])
+        by_phase[phase] = by_phase.get(phase, 0) + 1
+    stale_items = [item for item in items if item["stale"]]
+    checks["actions_lifecycle"] = {
+        "items": items,
+        "by_phase": by_phase,
+        "stale_count": len(stale_items),
+        "warning_threshold_seconds": actions_stale_after_seconds,
+    }
+    if stale_items:
+        checks["age_warnings"] = stale_items
+        if not checks.get("pending_reason"):
+            checks["pending_reason"] = "actions_gate_age"
+        if not checks.get("diagnostic"):
+            checks["diagnostic"] = "actions_gate_queue_age"
+    superseded_runs = checks.get("superseded_runs", [])
+    if stale_items or superseded_runs:
+        checks["recovery"] = _actions_recovery_evidence(
+            pr_number=pr_number,
+            expected_head_sha=expected_head_sha,
+            stale_items=stale_items,
+            superseded_runs=superseded_runs if isinstance(superseded_runs, list) else [],
+        )
+    return checks
+
+
+def _summarize_check_runs(
+    check_runs: list[dict[str, Any]],
+    *,
+    actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+) -> tuple[dict[str, Any], int]:
     """Build the ``checks`` summary (and superseded count) from raw REST check-run dicts."""
-    rollup = [
-        {
-            "__typename": "CheckRun",
-            "name": str(run.get("name", "") or ""),
-            "status": str(run.get("status", "") or ""),
-            "conclusion": run.get("conclusion") or "",
-            "detailsUrl": str(run.get("details_url", "") or ""),
-            "startedAt": str(run.get("started_at", "") or ""),
-            "workflowId": str(run.get("workflow_id", "") or ""),
-            "workflowName": str(
-                (run.get("workflow") or (run.get("check_suite") or {}).get("workflow") or "")
-                if isinstance(run, dict)
-                else ""
-            ),
-        }
-        for run in check_runs
-        if isinstance(run, dict)
-    ]
-    effective, superseded_count = _latest_check_runs(rollup)
+    rollup = _rest_check_runs_to_rollup(check_runs)
+    effective, superseded_count, superseded_runs = _latest_check_runs_with_evidence(rollup)
     conclusions: dict[str, int] = {}
     states: dict[str, int] = {}
     name_counts: dict[str, int] = {}
@@ -386,7 +813,9 @@ def _summarize_check_runs(check_runs: list[dict[str, Any]]) -> tuple[dict[str, A
         "names": sorted(name_counts),
         "details": details,
     }
-    _annotate_status_propagation_lag(checks, effective)
+    if superseded_runs:
+        checks["superseded_runs"] = superseded_runs
+    _annotate_status_propagation_lag(checks, effective, actions_payloads=actions_payloads)
     return checks, superseded_count
 
 
@@ -395,6 +824,7 @@ def _fetch_ci_status_rest(
     *,
     fallback_kind: str = "quota",
     fallback_diagnostic: str = "",
+    actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """Build a route-evidence-only CI payload after a GraphQL read fails.
 
@@ -422,7 +852,22 @@ def _fetch_ci_status_rest(
     checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs")
     check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
     raw_check_runs = check_runs if isinstance(check_runs, list) else []
-    checks, _ = _summarize_check_runs(_enrich_rest_check_runs(raw_check_runs))
+    enriched_check_runs = _enrich_rest_check_runs(raw_check_runs)
+    rest_rollup = _rest_check_runs_to_rollup(enriched_check_runs)
+    effective_rest_rollup, _, _ = _latest_check_runs_with_evidence(rest_rollup)
+    actions_payloads = _actions_lifecycle_payloads(effective_rest_rollup)
+    checks, _ = _summarize_check_runs(
+        enriched_check_runs,
+        actions_payloads=actions_payloads,
+    )
+    _annotate_actions_lifecycle(
+        checks,
+        effective_rest_rollup,
+        pr_number=pr_number,
+        expected_head_sha=head_sha,
+        actions_stale_after_seconds=actions_stale_after_seconds,
+        actions_payloads=actions_payloads,
+    )
     reviews_raw = _rest_api_get(f"pulls/{pr_number}/reviews")
     review_states: dict[str, int] = {}
     for review in reviews_raw if isinstance(reviews_raw, list) else []:
@@ -451,22 +896,51 @@ def _gh_view_error_payload(
     returncode: int,
     *,
     retry: GraphQLRetryOutcome | None = None,
+    allow_rest_fallback: bool = True,
+    actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """Map a failed GraphQL-backed PR read to a truthful payload."""
+    if not allow_rest_fallback:
+        if _is_graphql_quota_error(stderr):
+            error_kind = "graphql_quota_exhausted"
+        elif retry is not None and retry.exhausted:
+            error_kind = "graphql_transient_exhausted"
+        else:
+            error_kind = "graphql_read_failed"
+        return {
+            "status": "error",
+            "error_kind": error_kind,
+            "error": stderr or f"gh returned exit code {returncode}",
+        }
     if _is_graphql_quota_error(stderr):
-        return _fetch_ci_status_rest(pr_number)
+        return _fetch_ci_status_rest(
+            pr_number,
+            actions_stale_after_seconds=actions_stale_after_seconds,
+        )
     if retry is not None and retry.exhausted:
         return _fetch_ci_status_rest(
             pr_number,
             fallback_kind="transient_exhausted",
             fallback_diagnostic=retry.terminal_diagnostic,
+            actions_stale_after_seconds=actions_stale_after_seconds,
         )
     return {"status": "error", "error": stderr or f"gh returned exit code {returncode}"}
 
 
-def _fetch_ci_status(
+def _ci_retry_kwargs(max_attempts: int | None) -> dict[str, Any]:
+    """Build retry options while preserving the normal monitor defaults."""
+    if max_attempts is None:
+        return {"timeout": 30}
+    return {"timeout": 30, "max_attempts": max(1, int(max_attempts))}
+
+
+def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
     pr_number: str,
     backoff: float = 0.0,
+    *,
+    max_attempts: int | None = None,
+    allow_rest_fallback: bool = True,
+    actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """Fetch combined CI status for a PR.
 
@@ -489,7 +963,7 @@ def _fetch_ci_status(
             "--json",
             "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
         ],
-        timeout=30,
+        **_ci_retry_kwargs(max_attempts),
     )
     result = retry.result
     if result.returncode != 0:
@@ -499,6 +973,8 @@ def _fetch_ci_status(
             stderr,
             result.returncode,
             retry=retry,
+            allow_rest_fallback=allow_rest_fallback,
+            actions_stale_after_seconds=actions_stale_after_seconds,
         )
 
     data, parse_error = _parse_pr_view_json(result.stdout)
@@ -508,7 +984,7 @@ def _fetch_ci_status(
             "error": parse_error or "gh output is not a JSON object",
         }
     raw_rollup = data.get("statusCheckRollup", []) or []
-    rollup, superseded_count = _latest_check_runs(raw_rollup)
+    rollup, superseded_count, superseded_runs = _latest_check_runs_with_evidence(raw_rollup)
 
     # Classify overall CI state.
     conclusions: dict[str, int] = {}
@@ -546,7 +1022,7 @@ def _fetch_ci_status(
             "name": _rollup_name(check),
             "status": _rollup_status(check),
             "conclusion": _rollup_conclusion(check),
-            "details_url": check.get("detailsUrl", "") or check.get("targetUrl", ""),
+            "details_url": _check_details_url(check),
         }
         for check in rollup
     ]
@@ -559,7 +1035,18 @@ def _fetch_ci_status(
         "names": sorted(name_counts),
         "details": check_details,
     }
-    _annotate_status_propagation_lag(checks, rollup)
+    if superseded_runs:
+        checks["superseded_runs"] = superseded_runs
+    actions_payloads = _actions_lifecycle_payloads(rollup)
+    _annotate_status_propagation_lag(checks, rollup, actions_payloads=actions_payloads)
+    _annotate_actions_lifecycle(
+        checks,
+        rollup,
+        pr_number=pr_number,
+        expected_head_sha=str(data.get("headRefOid", "") or ""),
+        actions_stale_after_seconds=actions_stale_after_seconds,
+        actions_payloads=actions_payloads,
+    )
 
     return {
         "status": "ok",
@@ -611,7 +1098,7 @@ def _add_monitor_metadata(
         data["monitor"]["diagnostic"] = diagnostic
 
 
-def _format_human(data: dict[str, Any]) -> str:
+def _format_human(data: dict[str, Any]) -> str:  # noqa: C901 - compact diagnostic rendering.
     """Format CI status data for human-readable compact output."""
     if data.get("status") == "error":
         return f"ERROR fetching CI status: {data.get('error', 'unknown error')}"
@@ -648,9 +1135,36 @@ def _format_human(data: dict[str, Any]) -> str:
     diagnostic = checks.get("diagnostic")
     if diagnostic:
         lines.append(f"  diagnostic: {diagnostic}  |  fail-closed: true")
+    lifecycle = checks.get("actions_lifecycle")
+    if isinstance(lifecycle, dict):
+        phase_counts = " ".join(
+            f"{phase}={count}" for phase, count in sorted(lifecycle.get("by_phase", {}).items())
+        )
+        lines.append(
+            "  actions_lifecycle: "
+            f"{phase_counts or 'none'}  |  stale={lifecycle.get('stale_count', 0)} "
+            f"|  threshold={lifecycle.get('warning_threshold_seconds')}s"
+        )
+        for warning in checks.get("age_warnings", []):
+            lines.append(
+                f"    - {warning.get('name', 'unknown')}: "
+                f"{warning.get('phase', 'unknown')} age={warning.get('age_seconds')}s "
+                f"| run {warning.get('run_id')} job {warning.get('job_id')}"
+            )
     superseded = checks.get("superseded", 0)
     if superseded:
         lines.append(f"  ignored {superseded} superseded GitHub Actions check run(s)")
+        for run in checks.get("superseded_runs", []):
+            replacement = run.get("replacement", {})
+            lines.append(
+                f"    - {run.get('name', 'unknown')}: run {run.get('run_id', 'unknown')} "
+                f"replaced by run {replacement.get('run_id', 'unknown')}"
+            )
+    recovery = checks.get("recovery")
+    if isinstance(recovery, dict):
+        lines.append(
+            f"  recovery: {recovery.get('action', 'manual review')} | mutation-authorized: false"
+        )
     for check in checks.get("details", []):
         if check.get("status") == "completed" and check.get("conclusion") == "success":
             continue
@@ -705,6 +1219,416 @@ def _monitor_terminal_reason(
     return terminal_reason
 
 
+@dataclass(frozen=True)
+class StabilitySnapshotEvidence:
+    """Live exact-head evidence evaluated by the pure snapshot evaluator."""
+
+    observed_head_sha: str
+    observed_main_sha: str
+    base_sha: str
+    base_ref: str
+    observed_metadata_digest: str
+    ci_overall: str
+    ci_pending_reason: str
+    expected_head_sha: str
+    expected_main_sha: str
+    expected_metadata_digest: str
+
+
+def _resolve_ci_state(overall: str, pending_reason: str) -> str:
+    """Classify a CI rollup with a distinct status-propagation-lag state."""
+    if overall == "success":
+        return "success"
+    if overall == "failure":
+        return "failure"
+    if overall == "pending":
+        if pending_reason == "status_propagation_lag":
+            return "status_propagation_lag"
+        return "pending"
+    return "unknown"
+
+
+def _snapshot_resume_command(
+    status: str,
+    *,
+    reasons: list[str],
+    evidence: StabilitySnapshotEvidence,
+    pr: str,
+    desired_hint: str = "",
+    min_delay_seconds: int | None = None,
+) -> dict[str, Any]:
+    """Return the smallest safe resume command for a snapshot status.
+
+    Route evidence only: the command never retries automatically and never
+    authorizes a merge. Movement invalidation always resumes with a fresh
+    snapshot against the observed values; pending/lag states resume with the
+    bounded CI monitor (exit code 2 until checks settle).
+    """
+    if status == "stable":
+        return {"command": None, "reason": "none", "min_delay_seconds": None}
+    head = evidence.observed_head_sha or "<observed-head-sha>"
+    main = evidence.observed_main_sha or "<observed-main-sha>"
+    digest = evidence.observed_metadata_digest or "<observed-digest>"
+    snapshot_cmd = (
+        f"scripts/dev/check_pr_ci_status.py {pr} --stability-snapshot --json "
+        f"--expected-head-sha {head} --expected-main-sha {main} "
+        f"--expected-metadata-digest {digest}"
+    )
+    if status == "changed":
+        if "metadata_digest_changed" in reasons and desired_hint:
+            return {
+                "command": (
+                    f"scripts/dev/gh_pr_body_rest.py {pr} --reconcile {desired_hint} "
+                    f"&& {snapshot_cmd}"
+                ),
+                "reason": "reconcile_metadata_then_rerun",
+                "min_delay_seconds": None,
+            }
+        return {
+            "command": snapshot_cmd,
+            "reason": "refresh_expecteds_and_rerun",
+            "min_delay_seconds": None,
+        }
+    if status in {"pending", "status_propagation_lag"}:
+        return {
+            "command": (
+                f"scripts/dev/check_pr_ci_status.py {pr} --json "
+                f"--expected-head-sha {head} {_RESUME_MONITOR_ARGS}"
+            ),
+            "reason": "bounded_ci_wait",
+            "min_delay_seconds": None,
+        }
+    if status == "quota_blocked":
+        return {
+            "command": snapshot_cmd,
+            "reason": "rest_rate_limit_reset",
+            "min_delay_seconds": min_delay_seconds,
+        }
+    return {"command": snapshot_cmd, "reason": "rerun_after_fix", "min_delay_seconds": None}
+
+
+def _snapshot_status(reasons: list[str], ci_state: str) -> str:
+    """Resolve the snapshot status with movement invalidation taking precedence."""
+    if reasons:
+        return "changed"
+    if ci_state == "failure":
+        return "failure"
+    if ci_state == "status_propagation_lag":
+        return "status_propagation_lag"
+    if ci_state == "pending":
+        return "pending"
+    if ci_state == "success":
+        return "stable"
+    return "error"
+
+
+def evaluate_stability_snapshot(
+    evidence: StabilitySnapshotEvidence,
+    *,
+    pr: str,
+    repo: str,
+    head_read_race: bool = False,
+    desired_metadata_digest: str = "",
+    desired_hint: str = "",
+) -> dict[str, Any]:
+    """Evaluate a live exact-head snapshot against expected evidence (pure).
+
+    Movement of the head, current main, or metadata digest invalidates the
+    snapshot with the observed values and a resume command; the snapshot never
+    retries automatically and never authorizes a merge.
+    """
+    reasons: list[str] = []
+    head_matches: bool | None = None
+    main_matches: bool | None = None
+    digest_matches: bool | None = None
+    if evidence.expected_head_sha:
+        head_matches = bool(evidence.observed_head_sha) and (
+            evidence.observed_head_sha == evidence.expected_head_sha
+        )
+        if not head_matches:
+            reasons.append("head_sha_changed")
+    if evidence.expected_main_sha:
+        main_matches = bool(evidence.observed_main_sha) and (
+            evidence.observed_main_sha == evidence.expected_main_sha
+        )
+        if not main_matches:
+            reasons.append("main_sha_changed")
+    if evidence.expected_metadata_digest:
+        digest_matches = bool(evidence.observed_metadata_digest) and (
+            evidence.observed_metadata_digest == evidence.expected_metadata_digest
+        )
+        if not digest_matches:
+            reasons.append("metadata_digest_changed")
+    if head_read_race:
+        reasons.append("head_sha_read_race")
+
+    ci_state = _resolve_ci_state(evidence.ci_overall, evidence.ci_pending_reason)
+    status = _snapshot_status(reasons, ci_state)
+
+    metadata_evidence: dict[str, Any] = {
+        "observed_digest": evidence.observed_metadata_digest,
+        "expected_digest": evidence.expected_metadata_digest or None,
+        "digest_matches": digest_matches,
+    }
+    if desired_metadata_digest:
+        metadata_evidence["desired_digest"] = desired_metadata_digest
+
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": status,
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "head_sha": evidence.observed_head_sha,
+        "expected_head_sha": evidence.expected_head_sha or None,
+        "head_sha_matches": head_matches,
+        "main_sha": evidence.observed_main_sha,
+        "expected_main_sha": evidence.expected_main_sha or None,
+        "main_sha_matches": main_matches,
+        "base_sha": evidence.base_sha or None,
+        "base_ref": evidence.base_ref,
+        "metadata": metadata_evidence,
+        "ci_state": ci_state,
+        "invalidated": bool(reasons),
+        "invalidated_reasons": reasons,
+        "resume": _snapshot_resume_command(
+            status,
+            reasons=reasons,
+            evidence=evidence,
+            pr=pr,
+            desired_hint=desired_hint,
+        ),
+    }
+
+
+def _quota_blocked_snapshot(
+    pr: str,
+    repo: str,
+    *,
+    diagnostic: str,
+    rate_limit: dict[str, Any] | None = None,
+    expected_head_sha: str = "",
+    expected_main_sha: str = "",
+    expected_metadata_digest: str = "",
+) -> dict[str, Any]:
+    """Build the quota-blocked snapshot with a bounded resume time and no retry."""
+    info = rate_limit if rate_limit is not None else _fetch_rate_limit_info()
+    min_delay, resume_epoch = _rate_limit_resume_hint(info, int(time.time()))
+    head = expected_head_sha or "<observed-head-sha>"
+    main = expected_main_sha or "<observed-main-sha>"
+    digest = expected_metadata_digest or "<observed-digest>"
+    command = (
+        f"scripts/dev/check_pr_ci_status.py {pr} --stability-snapshot --json "
+        f"--expected-head-sha {head} --expected-main-sha {main} "
+        f"--expected-metadata-digest {digest}"
+    )
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": "quota_blocked",
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "error": diagnostic,
+        "rate_limit": info,
+        "resume": {
+            "command": command,
+            "reason": "rest_rate_limit_reset",
+            "min_delay_seconds": min_delay,
+            "resume_epoch_seconds": resume_epoch,
+        },
+    }
+
+
+def _read_text_file(path: Path) -> tuple[str | None, str | None]:
+    """Read a UTF-8 text file, returning ``(text, error)``."""
+    try:
+        return path.read_text(encoding="utf-8"), None
+    except OSError as exc:
+        return None, f"could not read {path}: {exc}"
+
+
+def _snapshot_error_payload(pr: str, repo: str, message: str) -> dict[str, Any]:
+    """Build the fail-closed snapshot error payload."""
+    return {
+        "schema": STABILITY_SNAPSHOT_SCHEMA,
+        "status": "error",
+        "route_evidence_only": True,
+        "pr": pr,
+        "repo": repo,
+        "error": message,
+    }
+
+
+def _desired_metadata_evidence(
+    *,
+    metadata_title: str | None,
+    metadata_body_file: Path | None,
+    pr: str,
+    repo: str,
+) -> tuple[str, str, dict[str, Any] | None]:
+    """Return ``(desired_digest, desired_hint, error_payload)`` for a desired metadata pair."""
+    if metadata_title is None and metadata_body_file is None:
+        return "", "", None
+    title = metadata_title or ""
+    title_error = validate_pr_title(title)
+    if title_error:
+        return "", "", _snapshot_error_payload(pr, repo, title_error)
+    if metadata_body_file is None:
+        body = ""
+    else:
+        body, body_error = _read_text_file(metadata_body_file)
+        if body_error:
+            return "", "", _snapshot_error_payload(pr, repo, body_error)
+        assert body is not None
+    hint = f"--title {shlex.quote(title)} --body-file {shlex.quote(str(metadata_body_file))}"
+    return metadata_digest(title, body), hint, None
+
+
+def _fetch_stability_snapshot(
+    pr: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    expected_main_sha: str,
+    expected_metadata_digest: str,
+    metadata_title: str | None = None,
+    metadata_body_file: Path | None = None,
+) -> dict[str, Any]:
+    """Fetch one deterministic exact-head stability snapshot (route evidence only).
+
+    The snapshot reads the live CI status, the live PR title/body/base, the
+    current ``main`` SHA, and the REST quota state exactly once each. It never
+    polls, never retries automatically, and never mutates anything.
+    """
+    if not repo:
+        owner, name = _git_remote_owner_name()
+        repo = f"{owner}/{name}" if owner and name else ""
+    if not repo:
+        return _snapshot_error_payload(
+            pr,
+            "",
+            "repository could not be derived from the git remote; pass --repo owner/name",
+        )
+
+    # Snapshot mode is intentionally a single read.  The normal monitor keeps
+    # its bounded transient retry and REST fallback behavior, but using either
+    # here would mix evidence from different time windows and violate the
+    # route-evidence contract.
+    ci = _fetch_ci_status(pr, max_attempts=1, allow_rest_fallback=False)
+    if ci.get("status") == "error":
+        error_text = str(ci.get("error", "") or "")
+        quota_kinds = {"graphql_quota_exhausted"}
+        if ci.get("error_kind") in quota_kinds or _is_rate_limit_error_text(error_text):
+            return _quota_blocked_snapshot(
+                pr,
+                repo,
+                diagnostic=error_text,
+                expected_head_sha=expected_head_sha,
+                expected_main_sha=expected_main_sha,
+                expected_metadata_digest=expected_metadata_digest,
+            )
+        return _snapshot_error_payload(pr, repo, error_text or "CI status read failed")
+
+    desired_digest, desired_hint, metadata_error = _desired_metadata_evidence(
+        metadata_title=metadata_title,
+        metadata_body_file=metadata_body_file,
+        pr=pr,
+        repo=repo,
+    )
+    if metadata_error is not None:
+        return metadata_error
+
+    rate_limit = _fetch_rate_limit_info()
+    pull, pull_error = _rest_api_get_detailed(f"repos/{repo}/pulls/{pr}")
+    main_payload, main_error = _rest_api_get_detailed(f"repos/{repo}/branches/main")
+    error_text = " ".join(text for text in (pull_error, main_error) if text).strip()
+    if pull_error or main_error:
+        if _is_rate_limit_error_text(error_text):
+            return _quota_blocked_snapshot(
+                pr,
+                repo,
+                diagnostic=error_text,
+                rate_limit=rate_limit,
+                expected_head_sha=expected_head_sha,
+                expected_main_sha=expected_main_sha,
+                expected_metadata_digest=expected_metadata_digest,
+            )
+        payload = _snapshot_error_payload(pr, repo, error_text or "live PR/main read failed")
+        payload["rate_limit"] = rate_limit
+        return payload
+
+    pull = pull if isinstance(pull, dict) else {}
+    head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+    observed_head = str(head.get("sha", "") or "")
+    observed_digest = metadata_digest(
+        str(pull.get("title", "") or ""), str(pull.get("body", "") or "")
+    )
+    commit = main_payload.get("commit") if isinstance(main_payload, dict) else None
+    observed_main = str(commit.get("sha", "") or "") if isinstance(commit, dict) else ""
+
+    ci_head = str(ci.get("head_sha", "") or "")
+    head_read_race = bool(ci_head) and ci_head != observed_head
+
+    evidence = StabilitySnapshotEvidence(
+        observed_head_sha=observed_head,
+        observed_main_sha=observed_main,
+        base_sha=str(base.get("sha", "") or ""),
+        base_ref=str(base.get("ref", "") or ""),
+        observed_metadata_digest=observed_digest,
+        ci_overall=str(ci.get("checks", {}).get("overall", "") or ""),
+        ci_pending_reason=str(ci.get("checks", {}).get("pending_reason", "") or ""),
+        expected_head_sha=expected_head_sha,
+        expected_main_sha=expected_main_sha,
+        expected_metadata_digest=expected_metadata_digest,
+    )
+    result = evaluate_stability_snapshot(
+        evidence,
+        pr=pr,
+        repo=repo,
+        head_read_race=head_read_race,
+        desired_metadata_digest=desired_digest,
+        desired_hint=desired_hint,
+    )
+    result["checks"] = ci.get("checks", {})
+    result["reviews"] = ci.get("reviews", {})
+    result["rate_limit"] = rate_limit
+    if ci.get("data_source"):
+        result["data_source"] = ci["data_source"]
+    remaining = rate_limit.get("core_remaining")
+    if remaining is not None and remaining <= 0 and result["status"] == "stable":
+        result["warning"] = (
+            "REST quota exhausted; evidence is fresh but resume commands fail until reset"
+        )
+    return result
+
+
+def _validate_expected_main_sha(expected_main_sha: str) -> str | None:
+    """Return an error message when ``--expected-main-sha`` is not a full 40-hex SHA."""
+    if not expected_main_sha:
+        return None
+    if len(expected_main_sha) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", expected_main_sha):
+        return (
+            "--expected-main-sha must be the full 40-hex SHA, got "
+            f"{len(expected_main_sha)} chars ({expected_main_sha!r}); "
+            "short prefixes are not accepted"
+        )
+    return None
+
+
+def _validate_expected_metadata_digest(expected_digest: str) -> str | None:
+    """Return an error when ``--expected-metadata-digest`` is not a 64-hex SHA-256 digest."""
+    if not expected_digest:
+        return None
+    if len(expected_digest) != 64 or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_digest):
+        return (
+            "--expected-metadata-digest must be the full 64-hex SHA-256 digest, got "
+            f"{len(expected_digest)} chars ({expected_digest!r}); "
+            "short prefixes are not accepted"
+        )
+    return None
+
+
 def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
     """Fail closed when the observed PR head SHA diverges from the expected one.
 
@@ -722,6 +1646,59 @@ def _guard_head_sha(data: dict[str, Any], expected_head_sha: str) -> bool:
         data["monitor"]["terminal_reason"] = "error"
         return True
     return False
+
+
+def _validate_expected_head_sha(expected_head_sha: str) -> str | None:
+    """Return an error message when ``--expected-head-sha`` is not a full 40-hex SHA.
+
+    A short prefix or other malformed value is rejected up front so the monitor reports a clear
+    format error instead of a spurious "PR head SHA changed" on the first poll (issue #7505).
+    """
+    if not expected_head_sha:
+        return None
+    if len(expected_head_sha) != 40 or not re.fullmatch(r"[0-9a-fA-F]{40}", expected_head_sha):
+        return (
+            "--expected-head-sha must be the full 40-hex SHA, got "
+            f"{len(expected_head_sha)} chars ({expected_head_sha!r}); short prefixes are not accepted"
+        )
+    return None
+
+
+def _preflight_validate(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> str | None:
+    """Return an exit-1 preflight error message, or None when arguments are acceptable.
+
+    A conflicting PR number still raises SystemExit(2) via ``parser.error``, matching prior behavior.
+    """
+    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
+        parser.error(
+            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
+            "or pass the same value to both"
+        )
+    head_error = _validate_expected_head_sha(args.expected_head_sha)
+    if head_error:
+        return head_error
+    if args.stability_snapshot:
+        if args.poll_attempts > 1 or args.backoff > 0 or args.max_wall_seconds is not None:
+            parser.error(
+                "--stability-snapshot is a single-read snapshot that never polls; "
+                "remove --poll-attempts > 1, --backoff, or --max-wall-seconds"
+            )
+        if (args.metadata_title is None) != (args.metadata_body_file is None):
+            parser.error("--metadata-title and --metadata-body-file must be provided together")
+        main_error = _validate_expected_main_sha(args.expected_main_sha)
+        if main_error:
+            return main_error
+        return _validate_expected_metadata_digest(args.expected_metadata_digest)
+    if args.expected_main_sha or args.expected_metadata_digest:
+        parser.error(
+            "--expected-main-sha and --expected-metadata-digest require --stability-snapshot"
+        )
+    if args.metadata_title is not None or args.metadata_body_file is not None:
+        parser.error("--metadata-title and --metadata-body-file require --stability-snapshot")
+    return None
 
 
 def _bounded_sleep_seconds(
@@ -746,6 +1723,17 @@ def _non_negative_float(value: str) -> float:
     return parsed
 
 
+def _non_negative_int(value: str) -> int:
+    """Parse a non-negative integer for lifecycle warning thresholds."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("value must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
+    return parsed
+
+
 def _poll_ci_status(
     pr: str,
     *,
@@ -755,6 +1743,7 @@ def _poll_ci_status(
     json_output: bool,
     expected_head_sha: str = "",
     max_wall_seconds: float | None = None,
+    actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
 ) -> dict[str, Any]:
     """Fetch CI status once or poll until checks settle or the budget expires."""
     data: dict[str, Any] = {}
@@ -767,7 +1756,11 @@ def _poll_ci_status(
         time.monotonic() + max(0.0, max_wall_seconds) if max_wall_seconds is not None else None
     )
     for attempt in range(1, attempts + 1):
-        data = _fetch_ci_status(pr, backoff=backoff if attempt == 1 else 0.0)
+        data = _fetch_ci_status(
+            pr,
+            backoff=backoff if attempt == 1 else 0.0,
+            actions_stale_after_seconds=actions_stale_after_seconds,
+        )
         _add_monitor_metadata(
             data,
             expected_head_sha=expected_head_sha,
@@ -808,6 +1801,79 @@ def _poll_ci_status(
     return data
 
 
+def _print_snapshot_result(data: dict[str, Any]) -> int:
+    """Print one snapshot JSON document and return its exit code.
+
+    Exit codes: 0 stable, 1 changed/failure/error, 2 inconclusive
+    (pending/status-propagation-lag/quota-blocked; resume later).
+    """
+    print(json.dumps(data))
+    status = data.get("status")
+    if status == "stable":
+        return 0
+    if status in {"changed", "failure", "error"}:
+        return 1
+    return 2
+
+
+def _fetch_data(args: argparse.Namespace, pr: str) -> tuple[dict[str, Any], int]:
+    """Fetch CI status or the stability snapshot, returning ``(data, attempts)``."""
+    if args.stability_snapshot:
+        return (
+            _fetch_stability_snapshot(
+                pr,
+                repo=args.repo,
+                expected_head_sha=args.expected_head_sha,
+                expected_main_sha=args.expected_main_sha,
+                expected_metadata_digest=args.expected_metadata_digest,
+                metadata_title=args.metadata_title,
+                metadata_body_file=args.metadata_body_file,
+            ),
+            1,
+        )
+    attempts = max(1, args.poll_attempts)
+    return (
+        _poll_ci_status(
+            pr,
+            attempts=attempts,
+            poll_interval=args.poll_interval,
+            backoff=args.backoff,
+            json_output=args.json,
+            expected_head_sha=args.expected_head_sha,
+            max_wall_seconds=args.max_wall_seconds,
+            actions_stale_after_seconds=args.actions_stale_after_seconds,
+        ),
+        attempts,
+    )
+
+
+def _emit_ci_result(data: dict[str, Any], args: argparse.Namespace, attempts: int) -> int:
+    """Print CI data and return the exit code (0 success / 1 failure / 2 pending-timeout)."""
+    if args.stability_snapshot:
+        return _print_snapshot_result(data)
+    if data.get("status") == "error":
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
+        return 1
+
+    if attempts == 1:
+        if args.json:
+            print(json.dumps(data))
+        else:
+            print(_format_human(data))
+
+    # Non-zero exit when CI is failing; pending checks are cache/backoff-safe.
+    overall = data.get("checks", {}).get("overall")
+    if overall == "failure":
+        return 1
+    if attempts > 1 and overall == "pending":
+        return 2
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point: check CI status and print results."""
     epilog = """\
@@ -822,6 +1888,18 @@ so uv will not create or prompt for a per-worktree .venv.
 `--max-wall-seconds` gives long-running agents a non-interactive local stop path;
 exit code 2 means checks were still pending locally, not that remote GitHub checks
 were cancelled or failed.
+
+Exact-head stability snapshot (issue #7523), route evidence only:
+
+  scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \\
+      <pr-number> --stability-snapshot --json \\
+      --expected-head-sha <head-sha> --expected-main-sha <current-main-sha> \\
+      --expected-metadata-digest <64-hex> --repo ll7/robot_sf_ll7
+
+The snapshot is one deterministic read of head/main/metadata-digest/CI/quota
+state; it never retries automatically and never authorizes a merge. Snapshot exit
+codes: 0 stable, 1 changed/failure/error, 2 inconclusive
+(pending/status-propagation-lag/quota-blocked; resume later).
 """
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -868,6 +1946,42 @@ were cancelled or failed.
         help="optional PR head SHA guard; stale heads return error without claiming readiness",
     )
     parser.add_argument(
+        "--stability-snapshot",
+        action="store_true",
+        default=False,
+        help=(
+            "emit one deterministic exact-head stability snapshot (schema "
+            "pr_stability_snapshot.v1) covering head/main/metadata-digest/CI/quota "
+            "route evidence; single read, never polls, never mutates"
+        ),
+    )
+    parser.add_argument(
+        "--repo",
+        default="",
+        help="owner/name REST target (default: derive from the origin git remote)",
+    )
+    parser.add_argument(
+        "--expected-main-sha",
+        default="",
+        help="optional current-main SHA guard for --stability-snapshot",
+    )
+    parser.add_argument(
+        "--expected-metadata-digest",
+        default="",
+        help="optional 64-hex title/body metadata digest guard for --stability-snapshot",
+    )
+    parser.add_argument(
+        "--metadata-title",
+        default=None,
+        help="desired final title for --stability-snapshot metadata comparison",
+    )
+    parser.add_argument(
+        "--metadata-body-file",
+        type=Path,
+        default=None,
+        help="desired final body file for --stability-snapshot metadata comparison",
+    )
+    parser.add_argument(
         "--max-wall-seconds",
         type=_non_negative_float,
         default=None,
@@ -876,26 +1990,25 @@ were cancelled or failed.
             "without affecting remote GitHub checks"
         ),
     )
+    parser.add_argument(
+        "--actions-stale-after-seconds",
+        type=_non_negative_int,
+        default=DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
+        help=(
+            "warn when a queued, setup, or in-progress Actions gate has no terminal result "
+            "after this many seconds; warnings remain fail-closed and do not cancel or rerun"
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
-        parser.error(
-            "conflicting PR numbers: pass either positional <pr-number> or --pr <number>, "
-            "or pass the same value to both"
-        )
+    preflight_error = _preflight_validate(args, parser)
+    if preflight_error is not None:
+        print(f"error: {preflight_error}", file=sys.stderr)
+        return 1
     pr_number = args.pr_number_option or args.pr_number
 
     try:
         pr = _resolve_pr_number(pr_number)
-        attempts = max(1, args.poll_attempts)
-        data = _poll_ci_status(
-            pr,
-            attempts=attempts,
-            poll_interval=args.poll_interval,
-            backoff=args.backoff,
-            json_output=args.json,
-            expected_head_sha=args.expected_head_sha,
-            max_wall_seconds=args.max_wall_seconds,
-        )
+        data, attempts = _fetch_data(args, pr)
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
         return 1
@@ -906,27 +2019,7 @@ were cancelled or failed.
         )
         return 1
 
-    if data.get("status") == "error":
-        if args.json:
-            print(json.dumps(data))
-        else:
-            print(_format_human(data))
-        return 1
-
-    if attempts == 1:
-        if args.json:
-            print(json.dumps(data))
-        else:
-            print(_format_human(data))
-
-    # Non-zero exit when CI is failing; pending checks are cache/backoff-safe.
-    overall = data.get("checks", {}).get("overall")
-    if overall == "failure":
-        return 1
-    if attempts > 1 and overall == "pending":
-        return 2
-
-    return 0
+    return _emit_ci_result(data, args, attempts)
 
 
 if __name__ == "__main__":

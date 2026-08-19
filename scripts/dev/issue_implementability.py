@@ -151,7 +151,7 @@ def _heading_records(body: str) -> list[tuple[str, str]]:
         offset += len(line)
 
     records: list[tuple[str, str]] = []
-    for index, (start, content_start, heading) in enumerate(spans):
+    for index, (_start, content_start, heading) in enumerate(spans):
         next_start = spans[index + 1][0] if index + 1 < len(spans) else len(body)
         content = body[content_start:next_start].strip()
         if content:
@@ -255,6 +255,7 @@ def normalize_issue(issue: dict[str, Any]) -> dict[str, Any]:
 
 
 def _has_blocked_prefix(labels: set[str]) -> bool:
+    """Return whether any label uses the explicit blocker namespace."""
     return any(label.startswith("blocked:") for label in labels)
 
 
@@ -365,6 +366,7 @@ def live_issue_report(number: int, *, repo: str, remote: str) -> dict[str, Any]:
 
 
 def _parse_claimed(value: str) -> dict[str, Any]:
+    """Return a normalized offline claim-state fixture."""
     if value == "unknown":
         return {"ok": False, "claimed": None, "claim_ref": None, "sha": None}
     claimed = value == "true"
@@ -377,6 +379,7 @@ def _parse_claimed(value: str) -> dict[str, Any]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("issue", type=int, help="Positive GitHub issue number.")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
@@ -400,6 +403,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _error_report(number: int, message: str) -> dict[str, Any]:
+    """Return a stable fail-closed error payload."""
     return {
         "schema": SCHEMA,
         "issue": {"number": number},

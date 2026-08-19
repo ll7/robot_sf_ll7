@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/agent_figure_interpretation_candidate.v1.json",
+  "title": "Provider-Free Agent Figure Interpretation Candidate (v1)",
+  "description": "A candidate interpretation for diagnostic fixture replay. It contains no reference answer and is not benchmark evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "artifact_kind",
+    "provider",
+    "fixture_id",
+    "mutation_id",
+    "claim_boundary",
+    "interpretation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agent_figure_interpretation_candidate.v1"
+    },
+    "artifact_kind": {
+      "const": "candidate_interpretation"
+    },
+    "provider": {
+      "const": "none"
+    },
+    "fixture_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mutation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_boundary": {
+      "const": "fixture replay only; not benchmark evidence"
+    },
+    "interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_denominator",
+        "estimand_unit",
+        "stats_multiplicity",
+        "visual_semantics",
+        "caption_accuracy",
+        "evidence_tier_availability",
+        "claim_boundary",
+        "correction_usefulness"
+      ],
+      "properties": {
+        "source_denominator": {"type": "object"},
+        "estimand_unit": {"type": "object"},
+        "stats_multiplicity": {"type": "object"},
+        "visual_semantics": {"type": "object"},
+        "caption_accuracy": {"type": "object"},
+        "evidence_tier_availability": {"type": "object"},
+        "claim_boundary": {"type": "object"},
+        "correction_usefulness": {"type": "object"}
+      }
+    }
+  }
+}

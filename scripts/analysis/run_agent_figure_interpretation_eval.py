@@ -4,13 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from robot_sf.benchmark.agent_figure_interpretation_eval import (
     AgentFigureEvalError,
     canonical_json,
     evaluate_manifest,
+    list_fixture_mutations,
+    replay_all_fixture_mutations,
+    replay_fixture_mutation,
 )
 
 DEFAULT_MANIFEST = (
@@ -36,25 +41,87 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print indented JSON instead of canonical compact JSON.",
     )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_inventory",
+        help="List verified source fixtures, mutations, and expected detectors.",
+    )
+    parser.add_argument(
+        "--candidate",
+        type=Path,
+        help="Provider-free candidate envelope JSON for one-pair or replay-all mode.",
+    )
+    parser.add_argument(
+        "--replay-all",
+        action="store_true",
+        help="Replay a JSON array of candidate envelopes against every verified pair.",
+    )
+    parser.add_argument("--fixture-id", help="Require this fixture ID in one-pair mode.")
+    parser.add_argument("--mutation-id", help="Require this mutation ID in one-pair mode.")
     return parser
 
 
+def _load_candidate_payload(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise AgentFigureEvalError(f"{path}: unreadable candidate JSON: {exc}") from exc
+
+
+def _run_list(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if args.candidate or args.replay_all or args.fixture_id or args.mutation_id:
+        raise AgentFigureEvalError("--list cannot be combined with replay arguments")
+    return list_fixture_mutations(args.manifest), 0
+
+
+def _run_all(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if not args.candidate:
+        raise AgentFigureEvalError("--replay-all requires --candidate")
+    if args.fixture_id or args.mutation_id:
+        raise AgentFigureEvalError("--replay-all cannot use --fixture-id or --mutation-id")
+    result = replay_all_fixture_mutations(args.manifest, _load_candidate_payload(args.candidate))
+    return result, 0 if result["detector_status"] == "pass" else 1
+
+
+def _run_one(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if (args.fixture_id is None) != (args.mutation_id is None):
+        raise AgentFigureEvalError("--fixture-id and --mutation-id must be supplied together")
+    result = replay_fixture_mutation(
+        args.manifest,
+        _load_candidate_payload(args.candidate),
+        fixture_id=args.fixture_id,
+        mutation_id=args.mutation_id,
+    )
+    return result, 0 if result["detector_status"] == "pass" else 1
+
+
+def _run_requested_mode(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if args.list_inventory:
+        return _run_list(args)
+    if args.replay_all:
+        return _run_all(args)
+    if args.candidate:
+        return _run_one(args)
+    if args.fixture_id or args.mutation_id:
+        raise AgentFigureEvalError("fixture/mutation selectors require --candidate")
+    return evaluate_manifest(args.manifest), 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Run fixture-only replay and print the evaluation JSON."""
+    """Run fixture-only evaluation or the provider-free replay harness."""
 
     args = _parser().parse_args(argv)
     try:
-        result = evaluate_manifest(args.manifest)
+        result, exit_code = _run_requested_mode(args)
     except AgentFigureEvalError as exc:
         print(f"agent figure interpretation eval failed closed: {exc}", file=sys.stderr)
         return 2
     if args.pretty:
-        import json
-
         print(json.dumps(result, indent=2, sort_keys=True))
     else:
         print(canonical_json(result))
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

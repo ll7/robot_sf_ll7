@@ -15,13 +15,18 @@ import pytest
 
 from robot_sf.benchmark import agent_figure_interpretation_eval as eval_mod
 from robot_sf.benchmark.agent_figure_interpretation_eval import (
+    CANDIDATE_SCHEMA_VERSION,
     CRITICAL_ERROR_KINDS,
     DIMENSIONS,
     EXPECTED_PACKET_SCHEMA,
     AgentFigureEvalError,
     evaluate_manifest,
     evaluate_packet,
+    list_fixture_mutations,
     load_verified_packets,
+    replay_all_fixture_mutations,
+    replay_fixture_mutation,
+    validate_candidate_envelope,
 )
 
 FIXTURE_DIR = (
@@ -46,6 +51,19 @@ def _clean_packet() -> dict[str, object]:
     return json.loads((FIXTURE_DIR / "clean.json").read_text(encoding="utf-8"))
 
 
+def _candidate(packet_id: str) -> dict[str, object]:
+    packet = json.loads((FIXTURE_DIR / f"{packet_id}.json").read_text(encoding="utf-8"))
+    return {
+        "schema_version": CANDIDATE_SCHEMA_VERSION,
+        "artifact_kind": "candidate_interpretation",
+        "provider": "none",
+        "fixture_id": packet["source"]["source_id"],
+        "mutation_id": packet_id,
+        "claim_boundary": "fixture replay only; not benchmark evidence",
+        "interpretation": packet["interpretation"],
+    }
+
+
 def _review_scores(value: float = 1.0) -> dict[str, float]:
     return dict.fromkeys(DIMENSIONS, value)
 
@@ -53,6 +71,14 @@ def _review_scores(value: float = 1.0) -> dict[str, float]:
 def _result_schema() -> dict[str, object]:
     return json.loads(
         Path("robot_sf/benchmark/schemas/agent_figure_interpretation_eval.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def _candidate_schema() -> dict[str, object]:
+    return json.loads(
+        Path("robot_sf/benchmark/schemas/agent_figure_interpretation_candidate.v1.json").read_text(
             encoding="utf-8"
         )
     )
@@ -138,6 +164,72 @@ def test_each_critical_mutation_is_flagged(packet_id: str, critical_kind: str) -
     assert case["critical_errors"][critical_kind] is True
     for other_kind in set(CRITICAL_ERROR_KINDS) - {critical_kind}:
         assert case["critical_errors"][other_kind] is False
+
+
+def test_replay_inventory_lists_source_fixtures_and_required_detectors() -> None:
+    inventory = list_fixture_mutations(MANIFEST)
+    assert inventory["status"] == "evaluation_artifacts_only"
+    assert inventory["claim_boundary"] == eval_mod.EXPECTED_REPORT_CLAIM_BOUNDARY
+    assert {record["mutation_id"] for record in inventory["mutations"]} == {
+        "clean",
+        *CRITICAL_ERROR_KINDS,
+    }
+    mutation_by_id = {record["mutation_id"]: record for record in inventory["mutations"]}
+    assert mutation_by_id["clean"]["expected_detectors"] == []
+    for mutation_id in CRITICAL_ERROR_KINDS:
+        assert mutation_by_id[mutation_id]["expected_detectors"] == [mutation_id]
+    assert {fixture["fixture_id"] for fixture in inventory["fixtures"]} == {
+        "issue-7030-frozen-figure-a",
+        "issue-7030-frozen-figure-fallback",
+        "issue-7030-frozen-figure-unavailable",
+    }
+
+
+def test_candidate_envelope_is_provider_free_and_exact() -> None:
+    candidate = _candidate("clean")
+    validate_candidate_envelope(candidate)
+    jsonschema.Draft202012Validator.check_schema(_candidate_schema())
+    jsonschema.validate(candidate, _candidate_schema())
+
+    invalid_provider = dict(candidate, provider="local-model")
+    with pytest.raises(AgentFigureEvalError, match="provider must be 'none'"):
+        validate_candidate_envelope(invalid_provider)
+
+    invalid_boundary = dict(candidate, claim_boundary="benchmark evidence")
+    with pytest.raises(AgentFigureEvalError, match="claim_boundary"):
+        validate_candidate_envelope(invalid_boundary)
+
+    with_reference = dict(candidate, reference=candidate["interpretation"])
+    with pytest.raises(AgentFigureEvalError, match="unexpected reference"):
+        validate_candidate_envelope(with_reference)
+
+
+@pytest.mark.parametrize("packet_id", ["clean", *CRITICAL_ERROR_KINDS])
+def test_replay_one_pair_requires_the_named_detector(packet_id: str) -> None:
+    report = replay_fixture_mutation(MANIFEST, _candidate(packet_id))
+
+    expected = [] if packet_id == "clean" else [packet_id]
+    assert report["mode"] == "single"
+    assert report["expected_detectors"] == expected
+    assert report["detected_detectors"] == expected
+    assert report["detector_status"] == "pass"
+
+
+def test_replay_all_requires_exact_corpus_coverage_and_is_deterministic() -> None:
+    packet_ids = ["clean", *CRITICAL_ERROR_KINDS]
+    candidates = [_candidate(packet_id) for packet_id in reversed(packet_ids)]
+    first = replay_all_fixture_mutations(MANIFEST, candidates)
+    second = replay_all_fixture_mutations(MANIFEST, candidates)
+
+    assert first == second
+    assert first["mode"] == "all"
+    assert first["case_count"] == 8
+    assert first["passed_case_count"] == 8
+    assert first["failed_case_count"] == 0
+    assert first["detector_status"] == "pass"
+
+    with pytest.raises(AgentFigureEvalError, match="coverage mismatch"):
+        replay_all_fixture_mutations(MANIFEST, candidates[:-1])
 
 
 @pytest.mark.parametrize(
@@ -564,6 +656,60 @@ def test_cli_help_and_fixture_only_replay() -> None:
     assert result["status"] == "evaluation_artifacts_only"
     assert result["case_count"] == 8
     assert result["aggregate_summary"]["workflow_variants"]["status"] == "not_available"
+
+
+def test_cli_lists_and_replays_candidate_envelopes(tmp_path: Path) -> None:
+    script = Path("scripts/analysis/run_agent_figure_interpretation_eval.py")
+    listed = subprocess.run(
+        [sys.executable, str(script), "--manifest", str(MANIFEST), "--list"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    inventory = json.loads(listed.stdout)
+    assert inventory["mutations"][-1]["mutation_id"] == "wrong_pairing_resampling"
+
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text(json.dumps(_candidate("causal_overclaim")), encoding="utf-8")
+    one = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(candidate_path),
+            "--fixture-id",
+            "issue-7030-frozen-figure-a",
+            "--mutation-id",
+            "causal_overclaim",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(one.stdout)["detector_status"] == "pass"
+
+    all_candidates_path = tmp_path / "candidates.json"
+    all_candidates_path.write_text(
+        json.dumps([_candidate(packet_id) for packet_id in ["clean", *CRITICAL_ERROR_KINDS]]),
+        encoding="utf-8",
+    )
+    all_replay = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(all_candidates_path),
+            "--replay-all",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(all_replay.stdout)["detector_status"] == "pass"
 
 
 def test_no_external_provider_path() -> None:

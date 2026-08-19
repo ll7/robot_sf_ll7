@@ -13,12 +13,15 @@ import hashlib
 import json
 import math
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 EVAL_SCHEMA_VERSION = "agent_figure_interpretation_eval.v1"
 MANIFEST_SCHEMA_VERSION = "agent_figure_interpretation_eval_manifest.v1"
+REPLAY_SCHEMA_VERSION = "agent_figure_interpretation_replay.v1"
+CANDIDATE_SCHEMA_VERSION = "agent_figure_interpretation_candidate.v1"
 EXPECTED_PACKET_SCHEMA = "result_interpretation_packet.v1"
 EXPECTED_MANIFEST_STATUS = "evaluation_artifacts_only"
 EXPECTED_MANIFEST_CLAIM_BOUNDARY = (
@@ -29,6 +32,19 @@ EXPECTED_PACKET_CLAIM_BOUNDARY = "fixture replay only; not benchmark evidence"
 EXPECTED_REPORT_CLAIM_BOUNDARY = (
     "fixture replay only; no external model calls, no benchmark claims, "
     "and no generated evidence promotion"
+)
+EXPECTED_CANDIDATE_ARTIFACT_KIND = "candidate_interpretation"
+EXPECTED_CANDIDATE_PROVIDER = "none"
+REQUIRED_CANDIDATE_KEYS = frozenset(
+    {
+        "schema_version",
+        "artifact_kind",
+        "provider",
+        "fixture_id",
+        "mutation_id",
+        "claim_boundary",
+        "interpretation",
+    }
 )
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 LOCAL_ONLY_MANIFEST_PARTS = frozenset({".git", ".venv", ".worktrees", "output", "results"})
@@ -51,6 +67,7 @@ CRITICAL_ERROR_KINDS = (
     "unsupported_ranking",
     "null_overclaim",
 )
+REQUIRED_SCIENTIFIC_ERROR_MUTATIONS = CRITICAL_ERROR_KINDS
 INTERPRETATION_VARIANTS = ("baseline", "packet_constrained")
 SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2}
 CRITICAL_ERROR_DIMENSIONS = {
@@ -200,6 +217,266 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
             "manifest claim_boundary must preserve the evaluation-artifacts-only boundary"
         )
     return packets
+
+
+def validate_candidate_envelope(envelope: Mapping[str, Any]) -> None:
+    """Validate one provider-free candidate interpretation envelope.
+
+    The envelope carries only a candidate interpretation. Reference answers
+    are resolved from the digest-pinned manifest during replay and therefore
+    cannot be supplied by a candidate.
+
+    Raises:
+        AgentFigureEvalError: If the envelope is not the exact supported
+            candidate contract.
+    """
+
+    if not isinstance(envelope, Mapping):
+        raise AgentFigureEvalError("candidate envelope must be an object")
+    _validate_candidate_keys(envelope)
+    _validate_candidate_identity(envelope)
+    _validate_candidate_interpretation(envelope)
+
+
+def _validate_candidate_keys(envelope: Mapping[str, Any]) -> None:
+    """Validate the exact top-level candidate envelope keys."""
+
+    if set(envelope) != REQUIRED_CANDIDATE_KEYS:
+        missing = sorted(REQUIRED_CANDIDATE_KEYS - set(envelope))
+        extra = sorted(set(envelope) - REQUIRED_CANDIDATE_KEYS)
+        details = []
+        if missing:
+            details.append(f"missing {', '.join(missing)}")
+        if extra:
+            details.append(f"unexpected {', '.join(extra)}")
+        raise AgentFigureEvalError(f"candidate envelope keys invalid: {'; '.join(details)}")
+
+
+def _validate_candidate_identity(envelope: Mapping[str, Any]) -> None:
+    """Validate provider, boundary, and fixture/mutation identity fields."""
+
+    if envelope.get("schema_version") != CANDIDATE_SCHEMA_VERSION:
+        raise AgentFigureEvalError(f"candidate schema_version must be {CANDIDATE_SCHEMA_VERSION!r}")
+    if envelope.get("artifact_kind") != EXPECTED_CANDIDATE_ARTIFACT_KIND:
+        raise AgentFigureEvalError(
+            f"candidate artifact_kind must be {EXPECTED_CANDIDATE_ARTIFACT_KIND!r}"
+        )
+    if envelope.get("provider") != EXPECTED_CANDIDATE_PROVIDER:
+        raise AgentFigureEvalError("candidate provider must be 'none'")
+    if envelope.get("claim_boundary") != EXPECTED_PACKET_CLAIM_BOUNDARY:
+        raise AgentFigureEvalError(
+            "candidate claim_boundary must preserve the evaluation-artifacts-only boundary"
+        )
+    for key in ("fixture_id", "mutation_id"):
+        value = envelope.get(key)
+        if not isinstance(value, str) or not value:
+            raise AgentFigureEvalError(f"candidate {key} must be a non-empty string")
+
+
+def _validate_candidate_interpretation(envelope: Mapping[str, Any]) -> None:
+    """Validate the candidate's complete dimension mapping."""
+
+    interpretation = envelope.get("interpretation")
+    if not isinstance(interpretation, Mapping):
+        raise AgentFigureEvalError("candidate interpretation must be an object")
+    if set(interpretation) != set(DIMENSIONS):
+        raise AgentFigureEvalError(
+            "candidate interpretation must contain exactly the declared scoring dimensions"
+        )
+    for dimension in DIMENSIONS:
+        if not isinstance(interpretation[dimension], Mapping):
+            raise AgentFigureEvalError(f"candidate interpretation.{dimension} must be an object")
+
+
+def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
+    """List verified source fixtures and their deterministic mutation detectors.
+
+    The inventory is derived from committed packet/source bytes. It is a
+    diagnostic inventory only; it does not select a preferred interpretation
+    or promote any result to benchmark evidence.
+
+    Returns:
+        Deterministic fixture and mutation inventory.
+    """
+
+    fixture_mutations: dict[str, set[str]] = {}
+    mutation_records: list[dict[str, Any]] = []
+    seen_mutations: set[str] = set()
+    for _, packet in load_verified_packets(manifest_path):
+        source = _required_mapping(packet, "source")
+        fixture_id = _required_text(source, "source_id")
+        mutation_id = _required_text(packet, "packet_id")
+        if mutation_id in seen_mutations:
+            raise AgentFigureEvalError(f"duplicate mutation_id {mutation_id!r}")
+        seen_mutations.add(mutation_id)
+        fixture_mutations.setdefault(fixture_id, set()).add(mutation_id)
+
+        canonical_case = evaluate_packet(packet)
+        detectors = [kind for kind in CRITICAL_ERROR_KINDS if canonical_case.critical_errors[kind]]
+        if mutation_id == "clean":
+            if detectors:
+                raise AgentFigureEvalError(
+                    "clean mutation must not trigger a scientific-error detector"
+                )
+        elif mutation_id in REQUIRED_SCIENTIFIC_ERROR_MUTATIONS and detectors != [mutation_id]:
+            raise AgentFigureEvalError(
+                f"mutation {mutation_id!r} must trigger exactly its named detector"
+            )
+        elif not detectors:
+            raise AgentFigureEvalError(
+                f"mutation {mutation_id!r} has no deterministic scientific-error detector"
+            )
+        mutation_records.append(
+            {
+                "fixture_id": fixture_id,
+                "mutation_id": mutation_id,
+                "expected_detectors": detectors,
+            }
+        )
+
+    missing = sorted(set(REQUIRED_SCIENTIFIC_ERROR_MUTATIONS) - seen_mutations)
+    if missing:
+        raise AgentFigureEvalError(
+            "manifest is missing required scientific-error mutations: " + ", ".join(missing)
+        )
+    return {
+        "schema_version": REPLAY_SCHEMA_VERSION,
+        "status": EXPECTED_MANIFEST_STATUS,
+        "claim_boundary": EXPECTED_REPORT_CLAIM_BOUNDARY,
+        "fixtures": [
+            {"fixture_id": fixture_id, "mutation_ids": sorted(mutation_ids)}
+            for fixture_id, mutation_ids in sorted(fixture_mutations.items())
+        ],
+        "mutations": sorted(mutation_records, key=lambda record: record["mutation_id"]),
+    }
+
+
+def replay_fixture_mutation(
+    manifest_path: Path,
+    candidate_envelope: Mapping[str, Any],
+    *,
+    fixture_id: str | None = None,
+    mutation_id: str | None = None,
+) -> dict[str, Any]:
+    """Replay one candidate against one verified fixture/mutation pair.
+
+    Returns:
+        A deterministic diagnostic replay report.
+    """
+
+    validate_candidate_envelope(candidate_envelope)
+    envelope_fixture_id = str(candidate_envelope["fixture_id"])
+    envelope_mutation_id = str(candidate_envelope["mutation_id"])
+    if fixture_id is not None and fixture_id != envelope_fixture_id:
+        raise AgentFigureEvalError("requested fixture_id does not match candidate envelope")
+    if mutation_id is not None and mutation_id != envelope_mutation_id:
+        raise AgentFigureEvalError("requested mutation_id does not match candidate envelope")
+
+    packets = _verified_packet_index(manifest_path)
+    packet = packets.get((envelope_fixture_id, envelope_mutation_id))
+    if packet is None:
+        raise AgentFigureEvalError(
+            f"unknown fixture/mutation pair: {envelope_fixture_id!r}/{envelope_mutation_id!r}"
+        )
+
+    canonical_case = evaluate_packet(packet)
+    expected_detectors = [
+        kind for kind in CRITICAL_ERROR_KINDS if canonical_case.critical_errors[kind]
+    ]
+    candidate_packet = dict(packet)
+    candidate_packet["interpretation"] = dict(candidate_envelope["interpretation"])
+    candidate_case = evaluate_packet(candidate_packet).to_dict()
+    detected_detectors = [
+        kind for kind in CRITICAL_ERROR_KINDS if candidate_case["critical_errors"][kind]
+    ]
+    detector_match = detected_detectors == expected_detectors
+    return {
+        "schema_version": REPLAY_SCHEMA_VERSION,
+        "status": EXPECTED_MANIFEST_STATUS,
+        "claim_boundary": EXPECTED_REPORT_CLAIM_BOUNDARY,
+        "mode": "single",
+        "fixture_id": envelope_fixture_id,
+        "mutation_id": envelope_mutation_id,
+        "expected_detectors": expected_detectors,
+        "detected_detectors": detected_detectors,
+        "detector_status": "pass" if detector_match else "fail",
+        "case": candidate_case,
+    }
+
+
+def replay_all_fixture_mutations(
+    manifest_path: Path,
+    candidate_envelopes: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Replay a complete candidate envelope set against the verified corpus.
+
+    Returns:
+        A deterministic diagnostic replay-all report.
+    """
+
+    if isinstance(candidate_envelopes, (str, bytes)) or not isinstance(
+        candidate_envelopes, Sequence
+    ):
+        raise AgentFigureEvalError("replay-all candidates must be a JSON array")
+    expected_pairs = {
+        (record["fixture_id"], record["mutation_id"])
+        for record in list_fixture_mutations(manifest_path)["mutations"]
+    }
+    validated: list[Mapping[str, Any]] = []
+    observed_pairs: set[tuple[str, str]] = set()
+    for index, envelope in enumerate(candidate_envelopes):
+        try:
+            validate_candidate_envelope(envelope)
+        except AgentFigureEvalError as exc:
+            raise AgentFigureEvalError(f"candidate {index}: {exc}") from exc
+        pair = (str(envelope["fixture_id"]), str(envelope["mutation_id"]))
+        if pair in observed_pairs:
+            raise AgentFigureEvalError(f"replay-all contains duplicate pair {pair!r}")
+        observed_pairs.add(pair)
+        validated.append(envelope)
+    missing = sorted(expected_pairs - observed_pairs)
+    extra = sorted(observed_pairs - expected_pairs)
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f"missing pairs: {missing}")
+        if extra:
+            details.append(f"unexpected pairs: {extra}")
+        raise AgentFigureEvalError("replay-all coverage mismatch: " + "; ".join(details))
+
+    cases = [replay_fixture_mutation(manifest_path, envelope) for envelope in validated]
+    cases.sort(key=lambda case: (case["fixture_id"], case["mutation_id"]))
+    failed_count = sum(case["detector_status"] != "pass" for case in cases)
+    return {
+        "schema_version": REPLAY_SCHEMA_VERSION,
+        "status": EXPECTED_MANIFEST_STATUS,
+        "claim_boundary": EXPECTED_REPORT_CLAIM_BOUNDARY,
+        "mode": "all",
+        "case_count": len(cases),
+        "passed_case_count": len(cases) - failed_count,
+        "failed_case_count": failed_count,
+        "detector_status": "pass" if failed_count == 0 else "fail",
+        "cases": cases,
+    }
+
+
+def _verified_packet_index(manifest_path: Path) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index verified packets by source fixture and mutation identifiers.
+
+    Returns:
+        Mapping from fixture/mutation pairs to verified packets.
+    """
+
+    index: dict[tuple[str, str], dict[str, Any]] = {}
+    for _, packet in load_verified_packets(manifest_path):
+        source = _required_mapping(packet, "source")
+        fixture_id = _required_text(source, "source_id")
+        mutation_id = _required_text(packet, "packet_id")
+        pair = (fixture_id, mutation_id)
+        if pair in index:
+            raise AgentFigureEvalError(f"duplicate fixture/mutation pair {pair!r}")
+        index[pair] = packet
+    return index
 
 
 def evaluate_manifest(manifest_path: Path) -> dict[str, Any]:
@@ -857,17 +1134,24 @@ def _required_text(data: dict[str, Any], key: str) -> str:
 
 
 __all__ = [
+    "CANDIDATE_SCHEMA_VERSION",
     "CRITICAL_ERROR_KINDS",
     "DIMENSIONS",
     "EVAL_SCHEMA_VERSION",
     "EXPECTED_PACKET_SCHEMA",
     "MANIFEST_SCHEMA_VERSION",
+    "REPLAY_SCHEMA_VERSION",
+    "REQUIRED_SCIENTIFIC_ERROR_MUTATIONS",
     "AgentFigureEvalError",
     "CaseEvaluation",
     "DimensionScore",
     "canonical_json",
     "evaluate_manifest",
     "evaluate_packet",
+    "list_fixture_mutations",
     "load_verified_packets",
+    "replay_all_fixture_mutations",
+    "replay_fixture_mutation",
     "sha256_file",
+    "validate_candidate_envelope",
 ]

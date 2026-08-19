@@ -13,6 +13,45 @@ uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
   --pretty
 ```
 
+The bounded replay harness is provider-free and uses the same evaluator owner:
+
+```bash
+uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
+  --manifest tests/fixtures/agent_figure_interpretation_eval/v1/manifest.json --list
+```
+
+`--list` reports the verified source fixture IDs, mutation IDs, and the
+expected deterministic scientific-error detector for each mutation. A
+single candidate envelope is replayed with `--candidate`; `--fixture-id` and
+`--mutation-id` may be supplied as an additional identity check:
+
+```bash
+uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
+  --manifest tests/fixtures/agent_figure_interpretation_eval/v1/manifest.json \
+  --candidate candidate.json \
+  --fixture-id issue-7030-frozen-figure-a \
+  --mutation-id causal_overclaim
+```
+
+The candidate envelope must contain exactly `schema_version`,
+`artifact_kind: candidate_interpretation`, `provider: none`, `fixture_id`,
+`mutation_id`, `claim_boundary: fixture replay only; not benchmark evidence`,
+and an `interpretation` mapping covering all eight scoring dimensions. It must
+not include a reference answer. A replay-all candidate file is a JSON array
+of these envelopes:
+
+```bash
+uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
+  --manifest tests/fixtures/agent_figure_interpretation_eval/v1/manifest.json \
+  --candidate candidates.json --replay-all
+```
+
+Replay-all fails closed unless it covers every verified fixture/mutation pair
+exactly once. Exit code 1 means the candidate did not reproduce the expected
+detector; exit code 2 means the manifest, envelope, identity, digest, or
+claim-boundary contract failed. These commands remain diagnostic fixture
+replays only and do not call providers or create benchmark evidence.
+
 The manifest pins every packet, source fixture, and reference fixture by SHA-256. The evaluator
 fails closed on digest, identity, path, schema, and claim-boundary drift. Its output is explicitly
 `evaluation_artifacts_only`; generated output must not be treated as benchmark, paper, or

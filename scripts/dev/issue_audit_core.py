@@ -27,6 +27,7 @@ import subprocess
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -160,6 +161,19 @@ DECISION_PATTERNS = (
         r"|\bapprove\s+or\s+waive\b",
         re.IGNORECASE | re.DOTALL,
     ),
+    re.compile(
+        r"\breopen(?:s|ed|ing)?\b.{0,80}\b(?:decision|ruling|gate)\b",
+        re.IGNORECASE,
+    ),
+)
+CANONICAL_RULING_RE = re.compile(
+    r"^\s*ll7/robot_sf_ll7#(?P<issue>[1-9][0-9]*)\s*:\s*"
+    r"(?P<token>[a-z0-9][a-z0-9._-]*)\s*$"
+)
+NON_AUTHORITATIVE_RULING_CONTEXT_RE = re.compile(
+    r"\b(?:example|cop(?:y|ied|y-pasted)|quote|quoted|sample|historical|"
+    r"do\s+not\s+apply|not\s+a\s+ruling)\b",
+    re.IGNORECASE,
 )
 READY_HEADING_PATTERN = re.compile(
     r"^#{2,4}\s+(?:acceptance(?: criteria)?|definition of done|success criteria|"
@@ -922,16 +936,50 @@ def discover_inventory(
     }
 
 
-def _text_for_issue(issue: Mapping[str, Any]) -> str:
-    """Join body and comments for evidence matching without inventing content."""
-    parts = [str(issue.get("title") or ""), str(issue.get("body") or "")]
+def _comment_timestamp(value: object) -> datetime | None:
+    """Parse a timezone-aware comment timestamp, or return ``None`` fail-closed."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    timestamp = value.strip()
+    if timestamp.endswith("Z"):
+        timestamp = f"{timestamp[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _ordered_comment_texts(issue: Mapping[str, Any]) -> tuple[list[str], bool]:
+    """Return comment bodies in chronological order when timestamps are complete."""
     comments = issue.get("comments")
-    if isinstance(comments, Sequence) and not isinstance(comments, (str, bytes)):
-        for comment in comments:
-            if isinstance(comment, Mapping):
-                parts.append(str(comment.get("body") or ""))
-            elif isinstance(comment, str):
-                parts.append(comment)
+    if not isinstance(comments, Sequence) or isinstance(comments, (str, bytes)):
+        return [], True
+    rows: list[tuple[datetime | None, int, str]] = []
+    ordering_complete = True
+    for index, comment in enumerate(comments):
+        if isinstance(comment, Mapping):
+            timestamp = _comment_timestamp(comment.get("created_at"))
+            ordering_complete = ordering_complete and timestamp is not None
+            rows.append((timestamp, index, str(comment.get("body") or "")))
+        elif isinstance(comment, str):
+            ordering_complete = False
+            rows.append((None, index, comment))
+        else:
+            ordering_complete = False
+            rows.append((None, index, ""))
+    if ordering_complete:
+        rows.sort(key=lambda row: (row[0], row[1]))
+    return [row[2] for row in rows], ordering_complete
+
+
+def _text_for_issue(issue: Mapping[str, Any]) -> str:
+    """Join body and chronologically ordered comments for evidence matching."""
+    parts = [str(issue.get("title") or ""), str(issue.get("body") or "")]
+    comment_texts, _ = _ordered_comment_texts(issue)
+    parts.extend(comment_texts)
     return "\n".join(parts)
 
 
@@ -1046,8 +1094,14 @@ def _blocked_reason_evidence(text: str) -> list[str]:
     return evidence
 
 
-def _decision_evidence(text: str, labels: set[str]) -> list[str]:
-    """Return decision-gate evidence from explicit labels or issue text."""
+def _decision_evidence(
+    text: str,
+    labels: set[str],
+    *,
+    issue_number: int | None = None,
+    comment_order_complete: bool = True,
+) -> list[str]:
+    """Return decision evidence while respecting a later canonical ruling."""
     evidence = ["decision-required label present"] if DECISION_LABEL in labels else []
     lines = [" ".join(line.split()) for line in text.splitlines()]
     resolution_pattern = re.compile(
@@ -1066,6 +1120,23 @@ def _decision_evidence(text: str, labels: set[str]) -> list[str]:
         (index for index, line in enumerate(lines) if resolution_pattern.search(line)),
         default=-1,
     )
+    if issue_number is not None and comment_order_complete:
+        latest_ruling = max(
+            (
+                index
+                for index, line in enumerate(lines)
+                if (
+                    (match := CANONICAL_RULING_RE.fullmatch(line)) is not None
+                    and int(match.group("issue")) == issue_number
+                    and not any(
+                        NON_AUTHORITATIVE_RULING_CONTEXT_RE.search(context)
+                        for context in lines[max(0, index - 2) : index]
+                    )
+                )
+            ),
+            default=-1,
+        )
+        last_resolution = max(last_resolution, latest_ruling)
     for index, line in enumerate(lines):
         if not line:
             continue
@@ -1385,7 +1456,13 @@ def classify_issue(
         )
 
     terminal_review_evidence = _terminal_review_evidence(text)
-    decision_evidence = _decision_evidence(text, labels)
+    _, comment_order_complete = _ordered_comment_texts(issue)
+    decision_evidence = _decision_evidence(
+        text,
+        labels,
+        issue_number=number,
+        comment_order_complete=comment_order_complete,
+    )
     decision_evidence.extend(terminal_review_evidence)
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")

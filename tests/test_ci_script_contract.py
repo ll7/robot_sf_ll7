@@ -247,6 +247,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "PR_READY_SKIP_PREFLIGHT": "1",
             "PYTEST_DEBUG_TEMPROOT": "fixture",
             "TMPDIR": str(temp_root),
+            "COVERAGE_FILE": str(tmp_path / "coverage" / f"{name}.coverage"),
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
@@ -263,6 +264,35 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         assert result.returncode == expected, (name, result.stdout, result.stderr)
         assert not list(temp_root.glob("pytest_run.*.log")), name
         assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+    missing_coverage_env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "PYTEST_NUM_WORKERS": "1",
+        "PYTEST_FAST_FAIL": "0",
+        "PYTEST_ORDER_MODE": "none",
+        "PYTEST_SHARD_COUNT": "2",
+        "PYTEST_SHARD_INDEX": "1",
+        "ROBOT_SF_SHARD_INCLUDE_SLOW": "0",
+        "ROBOT_SF_PYTEST_COVERAGE": "1",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PYTEST_DEBUG_TEMPROOT": "fixture",
+        "TMPDIR": str(temp_root),
+        "FIXTURE_OUTPUT": str(output),
+        "FIXTURE_EXIT": "0",
+    }
+    missing_coverage_env.pop("COVERAGE_FILE", None)
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh")],
+        cwd=repo,
+        env=missing_coverage_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Sharded coverage requires a unique COVERAGE_FILE per shard." in result.stderr
 
 
 def test_ci_workflow_persists_merged_pytest_duration_store() -> None:

@@ -357,11 +357,7 @@
       "hash_without_artifact_path": 1
     }
   },
-<<<<<<< HEAD
   "generated_at": "2026-08-19T09:34:09Z",
-=======
-  "generated_at": "2026-08-19T03:55:28Z",
->>>>>>> 0b9ccb792 (feat(evidence): promote job 13512 custody bundle (#5890))
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

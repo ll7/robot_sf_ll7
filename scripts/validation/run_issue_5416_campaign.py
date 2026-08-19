@@ -27,7 +27,7 @@ What it reuses (read-only, never redefined here)
 * ``analyze_issue_5416_sipp_four_geometry.py``: its per-row parse logic is the
   single source of truth for "this episode is an eligible native evidence row",
   so a row skipped-on-resume is judged by the same contract that scores it.
-* ``robot_sf.benchmark.map_runner.run_map_batch`` with ``algo="native_command"``:
+* ``robot_sf.benchmark.map_runner.map_runner.run_map_batch`` with ``algo="native_command"``:
   the same execution path the frozen native smoke validator drives.
 
 Resume discipline (#5538/#5940)
@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
 # Reuse the frozen packet checker (acceptance oracle) and the native smoke
 # validator's frozen planner->config mapping and helpers. These are imported,

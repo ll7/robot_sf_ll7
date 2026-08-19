@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix, select_scenario
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.evidence.distance_convention import (
     DISTANCE_CONVENTION_FIELD,
     DistanceConvention,
@@ -258,7 +258,7 @@ def write_bundle(
         "planner": planner,
         "horizon": horizon,
         "dt": dt,
-        "recording_path": "robot_sf.benchmark.map_runner._run_map_episode(record_simulation_step_trace=True)",
+        "recording_path": "robot_sf.benchmark.map_runner.map_runner._run_map_episode(record_simulation_step_trace=True)",
         # Issue #5141: min_robot_ped_distance_m is computed as math.dist(robot_xy,
         # ped_position), i.e. center-to-center; declared explicitly to prevent a
         # surface-clearance misreading of the exported series.

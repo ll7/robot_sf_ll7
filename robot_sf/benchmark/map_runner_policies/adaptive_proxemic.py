@@ -2,7 +2,7 @@
 
 Continuation of ``_build_policy`` decomposition (#3384). This module is a
 behavior-preserving move of the adaptive proxemic selector branch from
-``robot_sf.benchmark.map_runner`` into the policy-builder registry package.
+``robot_sf.benchmark.map_runner.map_runner`` into the policy-builder registry package.
 """
 
 from __future__ import annotations

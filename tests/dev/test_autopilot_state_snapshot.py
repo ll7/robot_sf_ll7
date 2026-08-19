@@ -21,6 +21,14 @@ def _result(command: list[str], *, stdout: str = "", stderr: str = "", returncod
     )
 
 
+def test_json_compatibility_flag_is_accepted() -> None:
+    """The documented --json flag remains compatible with the JSON-default helper."""
+    args = snapshot._build_parser().parse_args(["--include-worktrees", "--json"])
+
+    assert args.json is True
+    assert args.include_worktrees is True
+
+
 def test_parse_worktree_porcelain_summarizes_linked_worktrees() -> None:
     """Worktree porcelain output should become compact branch/head rows."""
     rows = snapshot._parse_worktree_porcelain(

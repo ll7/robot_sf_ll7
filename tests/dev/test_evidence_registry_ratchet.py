@@ -1230,3 +1230,256 @@ def test_companion_delta_regression_issue_7412_shape(tmp_path: Path) -> None:
         ]
     )
     assert ratchet.companion_delta(baseline, covered, prior)["empty"] is True
+
+
+def _prepare_prewrite_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """Create a small git-backed baseline/review fixture for pre-write CLI tests."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "test@example.com"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "test"],
+        check=True,
+        capture_output=True,
+    )
+
+    prior_path = repo / "scripts" / "validation" / "evidence_registry_baseline.json"
+    prior_path.parent.mkdir(parents=True)
+    prior_path.write_text(
+        json.dumps(_baseline_doc({"old.json": {"missing_commit": 1}})), encoding="utf-8"
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "add", str(prior_path.relative_to(repo))],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-q", "-m", "prior baseline"],
+        check=True,
+        capture_output=True,
+    )
+    prior_commit = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    report_path = repo / "prior-report.json"
+    report_path.write_text(
+        json.dumps(_report(_issue("old.json", "missing_commit"))), encoding="utf-8"
+    )
+    baseline_path = repo / "baseline.json"
+    initial = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline_path),
+            "--root",
+            str(repo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert initial.returncode == 0, initial.stderr
+
+    review_path = repo / "scripts" / "validation" / "evidence_registry_baseline_review.yaml"
+    review_path.write_text(yaml.safe_dump(_review_doc(prior_commit=prior_commit)), encoding="utf-8")
+    return repo, baseline_path, review_path, report_path
+
+
+def _run_prewrite_cli(
+    repo: Path,
+    baseline: Path,
+    report: dict[str, object],
+    *extra: str,
+) -> subprocess.CompletedProcess:
+    """Run the opt-in pre-write mode against a synthetic report."""
+    report_path = repo / "candidate-report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--write-baseline",
+            "--prewrite-review",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(repo),
+        ]
+        + list(extra),
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+
+def test_prewrite_review_refuses_incomplete_candidate_and_preserves_inputs(
+    tmp_path: Path,
+) -> None:
+    """Candidate additions fail closed and cannot overwrite machine or human inputs."""
+    repo, baseline, review, _ = _prepare_prewrite_fixture(tmp_path)
+    baseline_before = baseline.read_bytes()
+    review_before = review.read_bytes()
+    template_path = repo / "review-delta.yaml"
+
+    proc = _run_prewrite_cli(
+        repo,
+        baseline,
+        _report(
+            _issue("old.json", "missing_commit"),
+            _issue("old.json", "missing_commit"),
+            _issue("new.json", "dangling_commit"),
+        ),
+        "--review-template",
+        str(template_path),
+    )
+
+    assert proc.returncode == 1, proc.stderr
+    assert "refusing to replace the machine baseline" in proc.stderr
+    assert baseline.read_bytes() == baseline_before
+    assert review.read_bytes() == review_before
+    template = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+    assert template["status"] == "needs_human_review"
+    assert template["template_only"] is True
+    assert template["approval"]["status"] == "not_approved"
+    assert template["reviewed_files"][0]["disposition"] == "TODO"
+    assert template["reviewed_baseline_increases"][0]["codes"] == ["missing_commit"]
+    assert template["reviewed_baseline_increases"][0]["previous_counts"] == {"missing_commit": 1}
+    assert template["reviewed_baseline_increases"][0]["current_counts"] == {"missing_commit": 2}
+    assert template["human_companion_delta"]["missing_reviewed_files"] == ["new.json"]
+    assert template["candidate_baseline"]["digest"] != template["prior_baseline"]["digest"]
+
+
+def test_prewrite_review_override_is_explicit_and_placeholder_free(tmp_path: Path) -> None:
+    """A real override permits the write, while placeholder text remains rejected."""
+    repo, baseline, review, _ = _prepare_prewrite_fixture(tmp_path)
+    review_before = review.read_bytes()
+    candidate = _report(
+        _issue("old.json", "missing_commit"),
+        _issue("old.json", "missing_commit"),
+        _issue("new.json", "dangling_commit"),
+    )
+    template_path = repo / "review-delta.yaml"
+    proc = _run_prewrite_cli(
+        repo,
+        baseline,
+        candidate,
+        "--review-template",
+        str(template_path),
+        "--prewrite-review-override",
+        "Separate maintainer review approved this temporary baseline refresh for issue 7513.",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "explicit pre-write review override" in proc.stderr
+    assert ratchet.load_baseline(baseline)["summary"]["total_findings"] == 3
+    assert yaml.safe_load(template_path.read_text(encoding="utf-8"))["status"] == (
+        "needs_human_review"
+    )
+    assert review.read_bytes() == review_before
+
+    before = baseline.read_bytes()
+    rejected = _run_prewrite_cli(
+        repo,
+        baseline,
+        candidate,
+        "--prewrite-review-override",
+        "TODO approve this",
+    )
+    assert rejected.returncode == 2
+    assert "placeholder" in rejected.stderr
+    assert baseline.read_bytes() == before
+
+
+def test_prewrite_review_accepts_unchanged_complete_companion_and_digest_ignores_timestamp(
+    tmp_path: Path,
+) -> None:
+    """An unchanged candidate passes, and generated timestamps do not alter digests."""
+    repo, baseline, _, _ = _prepare_prewrite_fixture(tmp_path)
+    current = ratchet.load_baseline(baseline)
+    candidate = dict(current)
+    candidate["generated_at"] = "2099-01-01T00:00:00Z"
+    template = ratchet.build_review_companion_template(current, candidate)
+    assert template["status"] == "no_changes_requiring_review"
+    assert template["prior_baseline"]["digest"] == template["candidate_baseline"]["digest"]
+
+    proc = _run_prewrite_cli(
+        repo,
+        baseline,
+        _report(_issue("old.json", "missing_commit")),
+        "--review-template",
+        str(repo / "review-delta.yaml"),
+    )
+    assert proc.returncode == 0, proc.stderr
+    emitted = yaml.safe_load((repo / "review-delta.yaml").read_text(encoding="utf-8"))
+    assert emitted["status"] == "no_changes_requiring_review"
+    assert emitted["human_companion_delta"]["empty"] is True
+
+
+def test_prewrite_review_never_overwrites_selected_human_companion(tmp_path: Path) -> None:
+    """The template target cannot alias the selected human review companion."""
+    repo, baseline, review, _ = _prepare_prewrite_fixture(tmp_path)
+    baseline_before = baseline.read_bytes()
+    review_before = review.read_bytes()
+    proc = _run_prewrite_cli(
+        repo,
+        baseline,
+        _report(_issue("old.json", "missing_commit")),
+        "--review-template",
+        str(review),
+    )
+    assert proc.returncode == 2
+    assert "refusing to overwrite" in proc.stderr
+    assert baseline.read_bytes() == baseline_before
+    assert review.read_bytes() == review_before
+
+
+def test_prewrite_template_reports_removals_decreases_and_tree_drift() -> None:
+    """The candidate template preserves cleanup and evidence-tree changes for review."""
+    previous = {
+        **_baseline_doc(
+            {
+                "kept.json": {"missing_commit": 3},
+                "removed.json": {"dangling_commit": 1},
+            }
+        ),
+        "evidence_tree": {"count": 2, "sha256": "old-tree"},
+    }
+    candidate = {
+        **_baseline_doc({"kept.json": {"missing_commit": 1}}),
+        "evidence_tree": {"count": 3, "sha256": "new-tree"},
+    }
+
+    template = ratchet.build_review_companion_template(previous, candidate)
+
+    assert template["status"] == "needs_human_review"
+    assert template["removed_files"] == [{"path": "removed.json", "codes": ["dangling_commit"]}]
+    assert template["decreased_findings"] == [
+        {
+            "path": "kept.json",
+            "codes": ["missing_commit"],
+            "previous_counts": {"missing_commit": 3},
+            "current_counts": {"missing_commit": 1},
+        }
+    ]
+    assert template["evidence_tree_delta"] == {
+        "changed": True,
+        "previous": {"count": 2, "sha256": "old-tree"},
+        "candidate": {"count": 3, "sha256": "new-tree"},
+        "action": "Refresh the companion only after reviewing the evidence-tree change.",
+    }

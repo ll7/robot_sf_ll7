@@ -113,6 +113,7 @@ def _candidate_route_payload(
     *,
     index: int,
     pedestrian_id: str | None = None,
+    pedestrian_route_mode: str = "candidate",
 ) -> dict[str, Any]:
     """Build a route-overrides payload for the candidate start and goal.
 
@@ -124,7 +125,7 @@ def _candidate_route_payload(
     route_id = 100_000 + int(index)
     waypoints = [candidate.start.as_waypoint(), candidate.goal.as_waypoint()]
     ped_routes: list[dict[str, Any]] = []
-    if pedestrian_id:
+    if pedestrian_id and pedestrian_route_mode == "candidate":
         ped_routes.append(
             {
                 "id": pedestrian_id,
@@ -153,6 +154,7 @@ def _apply_candidate_to_scenario(
     index: int,
     route_file_name: str,
     pedestrian_id: str | None,
+    pedestrian_route_mode: str,
 ) -> dict[str, Any]:
     """Return a scenario dictionary specialized for one candidate."""
     pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
@@ -175,20 +177,37 @@ def _apply_candidate_to_scenario(
 
     if pedestrian_id:
         entries = list(updated.get("single_pedestrians") or [])
-        replacement = {
-            "id": pedestrian_id,
-            "start": candidate.start.as_waypoint(),
+        replacement = {"id": pedestrian_id}
+        if pedestrian_route_mode == "candidate":
             # ``wait_at`` is a trajectory-only runtime control. Keep the generated override
             # loader-valid even when the template entry previously used a goal-only behavior.
-            "goal": None,
-            "trajectory": [
-                candidate.start.as_waypoint(),
-                candidate.goal.as_waypoint(),
-            ],
-            "speed_m_s": float(candidate.pedestrian_speed_mps),
-            "start_delay_s": float(candidate.spawn_time_s),
-            "wait_at": [{"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}],
-        }
+            replacement.update(
+                {
+                    "start": candidate.start.as_waypoint(),
+                    "goal": None,
+                    "trajectory": [
+                        candidate.start.as_waypoint(),
+                        candidate.goal.as_waypoint(),
+                    ],
+                    "speed_m_s": float(candidate.pedestrian_speed_mps),
+                    "start_delay_s": float(candidate.spawn_time_s),
+                    "wait_at": [
+                        {"waypoint_index": 0, "wait_s": float(candidate.pedestrian_delay_s)}
+                    ],
+                }
+            )
+        elif pedestrian_route_mode == "template":
+            # Preserve the authored pedestrian path while making speed and start timing
+            # candidate-effective. ``pedestrian_delay_s`` stays provenance-only here because
+            # the loader only permits wait rules on explicit trajectories.
+            replacement.update(
+                {
+                    "speed_m_s": float(candidate.pedestrian_speed_mps),
+                    "start_delay_s": float(candidate.spawn_time_s),
+                }
+            )
+        else:
+            raise ValueError("pedestrian_route_mode must be one of: candidate, template")
         for entry_index, entry in enumerate(entries):
             if isinstance(entry, Mapping) and str(entry.get("id") or "").strip() == pedestrian_id:
                 merged = dict(entry)
@@ -212,6 +231,7 @@ def build_candidate_payload(
     index: int,
     template_scenario: Mapping[str, Any],
     pedestrian_id: str | None,
+    pedestrian_route_mode: str = "candidate",
     route_file_name: str = "route_overrides.yaml",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build the in-memory scenario and route-override payloads for one candidate.
@@ -226,13 +246,19 @@ def build_candidate_payload(
         route-override payload.
     """
     pedestrian_id = _normalize_pedestrian_id(pedestrian_id)
-    route_payload = _candidate_route_payload(candidate, index=index, pedestrian_id=pedestrian_id)
+    route_payload = _candidate_route_payload(
+        candidate,
+        index=index,
+        pedestrian_id=pedestrian_id,
+        pedestrian_route_mode=pedestrian_route_mode,
+    )
     scenario = _apply_candidate_to_scenario(
         dict(template_scenario),
         candidate,
         index=index,
         route_file_name=route_file_name,
         pedestrian_id=pedestrian_id,
+        pedestrian_route_mode=pedestrian_route_mode,
     )
     return scenario, route_payload
 
@@ -336,6 +362,7 @@ def write_candidate_inputs(
         index=index,
         template_scenario=template["scenarios"][0],
         pedestrian_id=pedestrian_id,
+        pedestrian_route_mode=config.search_space.pedestrian_route_mode,
         route_file_name=route_path.name,
     )
     scenario = _rebase_template_map_file(

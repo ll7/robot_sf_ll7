@@ -6,9 +6,9 @@ failure — including a real regression in the code under test — into a green 
 The test then asserts nothing and can never fail, which is the textbook "skip
 mask" coverage hole (see issue #3382).
 
-This check generalizes the AST-policy approach already used for visual schema
+This check generalizes the AST-policy approach already used for schema
 dependency guards in
-``tests/visuals/test_schema_validation_dependency_policy.py`` and applies it
+``tests/test_schema_validation_dependency_policy.py`` and applies it
 across the whole test tree so new offenders are rejected at CI time.
 
 Legitimate conditional skips should use a *narrow* guard instead:

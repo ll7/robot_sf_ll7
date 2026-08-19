@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_belief_screening import (
     build_input_screening_report,
     build_screening_report,
@@ -479,7 +479,7 @@ def run_campaign(
             "not a calibrated perception model; not nominal or paper-grade until full "
             "predeclared matrix, seed-sufficiency budget, and claim-card review."
         ),
-        "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+        "runner": "robot_sf.benchmark.map_runner.map_runner.run_map_batch",
         "scenario_set": str(set_path),
         "scenario_names": [scenario.get("name") for scenario in scenarios],
         "seeds": list(seeds),

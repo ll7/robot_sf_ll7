@@ -3,7 +3,7 @@
   "$id": "https://robot-sf.invalid/schemas/dependency_license_profiles.v1.json",
   "title": "Robot SF dependency license profile manifest",
   "type": "object",
-  "required": ["schema_version", "target", "profiles"],
+  "required": ["schema_version", "target", "unrepresented_policy", "profiles"],
   "properties": {
     "$schema": {"type": "string"},
     "schema_version": {
@@ -41,6 +41,53 @@
           "properties": {
             "indexes": {"type": "array", "items": {"type": "string"}},
             "network": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "unrepresented_policy": {
+      "type": "object",
+      "required": ["schema_version", "rules", "unresolved"],
+      "properties": {
+        "schema_version": {
+          "const": "robot-sf.dependency-license-unrepresented.v1"
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "reason_code", "reviewed", "rationale"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "lockfile": {"type": "string", "minLength": 1},
+              "root_package": {"type": "string", "minLength": 1},
+              "field": {"enum": ["dev-dependencies", "optional-dependencies"]},
+              "groups": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "reason_code": {
+                "enum": [
+                  "alternate_lock_context",
+                  "development_group",
+                  "marker_inactive",
+                  "unresolved_membership"
+                ]
+              },
+              "reviewed": {"type": "boolean"},
+              "rationale": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        },
+        "unresolved": {
+          "type": "object",
+          "required": ["id", "reason_code", "reviewed", "rationale"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "reason_code": {"const": "unresolved_membership"},
+            "reviewed": {"const": false},
+            "rationale": {"type": "string", "minLength": 1}
           },
           "additionalProperties": false
         }

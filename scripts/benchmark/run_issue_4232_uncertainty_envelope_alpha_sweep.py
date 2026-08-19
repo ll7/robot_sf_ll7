@@ -22,7 +22,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.map_runner import map_runner
 from robot_sf.benchmark.runner import load_scenario_matrix
 from scripts.validation import build_issue_4232_uncertainty_envelope_evidence as evidence_builder
 from scripts.validation import check_issue_4232_uncertainty_envelope_claim_packet as packet_checker

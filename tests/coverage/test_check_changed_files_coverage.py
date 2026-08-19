@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.coverage.check_changed_files_coverage import (
+    _changed_files,
     _changed_line_coverage_details,
     _changed_line_numbers,
     _coverage_for_changed_lines,
@@ -360,6 +361,10 @@ def test_changed_line_parser_ignores_no_newline_marker(
             returncode=0,
             stdout="\n".join(
                 [
+                    "diff --git a/demo.py b/demo.py",
+                    "index 0000000..1111111 100644",
+                    "--- a/demo.py",
+                    "+++ b/demo.py",
                     "@@ -1 +1,2 @@",
                     "+first",
                     "\\ No newline at end of file",
@@ -371,3 +376,97 @@ def test_changed_line_parser_ignores_no_newline_marker(
     monkeypatch.setattr("scripts.coverage.check_changed_files_coverage.subprocess.run", fake_run)
 
     assert _changed_line_numbers("origin/main", Path("demo.py"), Path(".")) == {1, 2}
+
+
+def test_pure_rename_reports_zero_changed_lines_and_100_percent_coverage(
+    tmp_path: Path,
+) -> None:
+    """A pure ``git mv`` must not count every moved line as changed (issue #7552).
+
+    With ``--find-renames=50%`` the rename is detected, so the moved file has no
+    changed line numbers and the existing ``changed executable lines 0/0`` path
+    reports 100.0 instead of gating the whole moved module.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "coverage@example.invalid")
+    _git(repo, "config", "user.name", "coverage-fixture")
+    source = repo / "robot_sf" / "old" / "feature.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def answer() -> int:\n    return 1\n\ndef extra() -> int:\n    return 2\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+
+    moved = repo / "robot_sf" / "new" / "feature.py"
+    moved.parent.mkdir(parents=True)
+    source.rename(moved)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "rename")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+
+    # The renamed file must be reported (it is part of the diff as a rename), but
+    # the per-file changed-line diff must yield no changed line numbers.
+    moved_rel = Path("robot_sf/new/feature.py")
+    assert moved_rel in _changed_files(base_sha, repo, head=head_sha)
+    assert _changed_line_numbers(base_sha, moved_rel, repo, head=head_sha) == set()
+
+    # End-to-end: the coverage row for the moved file is fully covered.
+    details = _changed_line_coverage_details(
+        file_data={"executed_lines": [1, 4], "missing_lines": []},
+        changed_lines=_changed_line_numbers(base_sha, moved_rel, repo, head=head_sha),
+    )
+    assert details[0] == 100.0
+    assert details[1] == "changed executable lines 0/0"
+
+
+def test_renamed_and_substantially_modified_file_stays_gated(tmp_path: Path) -> None:
+    """A move plus real content change must still report the new lines (issue #7552).
+
+    Rename detection (``--find-renames=50%``) pairs the old and new paths but the
+    added lines remain changed: only the truly new hunk lines count, not the
+    whole moved file.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "coverage@example.invalid")
+    _git(repo, "config", "user.name", "coverage-fixture")
+    source = repo / "robot_sf" / "old" / "feature.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def answer() -> int:\n    return 1\n\ndef extra() -> int:\n    return 2\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+
+    moved = repo / "robot_sf" / "new" / "feature.py"
+    moved.parent.mkdir(parents=True)
+    source.rename(moved)
+    moved.write_text(
+        "def answer() -> int:\n    return 1\n\ndef extra() -> int:\n    return 2\n\n"
+        "def new() -> int:\n    return 3\n",
+        encoding="utf-8",
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "rename and modify")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+
+    moved_rel = Path("robot_sf/new/feature.py")
+    changed_lines = _changed_line_numbers(base_sha, moved_rel, repo, head=head_sha)
+    assert changed_lines == {6, 7, 8}  # only the new lines count, not the whole file
+
+    details = _changed_line_coverage_details(
+        file_data={"executed_lines": [1, 4, 8], "missing_lines": []},
+        changed_lines=changed_lines,
+    )
+    assert details[0] == 100.0
+    # Only executable changed lines count toward the scope label (line 8 is the
+    # single executable statement among the newly added lines 6-8).
+    assert details[1] == "changed executable lines 1/1"

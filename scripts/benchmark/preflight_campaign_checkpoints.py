@@ -13,8 +13,8 @@ Modes:
   boolean in the JSON output reports whether the resolvability is sufficient for ``sbatch``.
 - ``--stage``: enforced pre-submit staging -- actually download and checksum-verify each registry
   checkpoint into the durable cache so the compute node loads a validated file. After a successful
-  ``--stage`` run, ``submit_safe`` is ``true``. The ops ``sbatch`` wrapper must run this mode (or
-  the public submit gate
+  ``--stage`` run with at least one checkpoint reference, ``submit_safe`` is ``true``. The ops
+  ``sbatch`` wrapper must run this mode (or the public submit gate
   ``scripts/benchmark/submit_camera_ready_checkpoint_gate.sh``) before requeueing.
 
 Optionally persist the preflight JSON report with ``--report-path`` so the requeue packet records
@@ -67,10 +67,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--stage",
         action="store_true",
-        help="Download and checksum-verify each registry checkpoint into the durable cache "
-        "(enforced pre-submit staging; produces submit_safe=true) instead of the cheap "
-        "network-free resolvability check. The sbatch/submit wrapper must run this mode "
-        "(or scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) before requeueing.",
+        help=(
+            "Download and checksum-verify each registry checkpoint into the durable cache "
+            "(enforced pre-submit staging; produces submit_safe=true for non-empty coverage) "
+            "instead of the cheap network-free resolvability check. The sbatch/submit wrapper "
+            "must run this mode (or scripts/benchmark/submit_camera_ready_checkpoint_gate.sh) "
+            "before requeueing."
+        ),
     )
     parser.add_argument(
         "--registry-path",

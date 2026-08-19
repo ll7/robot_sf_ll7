@@ -42,6 +42,35 @@ uv run python scripts/validation/run_feasibility_first_scenario_search.py \
 
 The JSON report records the configuration digest, candidate and sampling seeds, rejection ledger, selected IDs, method summaries, and governance flags. `output/` is temporary worktree-local output; the report is not a durable benchmark artifact.
 
+## Real-manifest diagnostic
+
+Issue #7340 adds a bounded native probe over a versioned station-platform manifest. It uses the
+canonical random sampler to build a fixed four-candidate pool, certifies each candidate, and then
+compares seeded uniform selection with the hierarchical feasibility-first value on that same pool:
+
+```bash
+uv run python scripts/validation/run_feasibility_first_real_manifest.py \
+  --config configs/benchmarks/issue_7340_feasibility_first_real_manifest_v1.yaml \
+  --output output/issue_7340_real_manifest/report.json \
+  --output-dir output/issue_7340_real_manifest
+```
+
+The observed local run produced 4/4 feasible candidates with all four checks passing and native
+episode evidence. The four episodes ended in 3 collisions and 1 timeout. These are observed event
+counts, not safety rates or guarantees; the seeded comparison is not a budget-matched campaign and
+its baseline remains claim-ineligible. The report records unavailable or degraded rows separately,
+excludes rejected candidates from safety denominators, and keeps benchmark admission false until
+domain-aware approval is recorded on issue #7340.
+
+The search space uses `pedestrian.route_mode: template` to preserve an authored pedestrian route
+while varying candidate speed and start timing. In this mode `pedestrian_delay_s` is provenance-only
+because the scenario loader only binds waits on explicit trajectories. This is an issue-scoped
+adapter contract, not a general claim about all scenario templates.
+
 ## Next proof step
 
-To move beyond the fixture, provide a versioned scenario/seed manifest, attach real geometry/traffic and simulator-validation evidence, and pre-register a compute-bounded comparison against the existing adversarial baseline. Until then, fixture differences are research direction evidence only, with uncertainty dominated by the unexecuted simulator and the small candidate pool.
+To move beyond the diagnostic, resolve the stale #5303 pedestrian/map binding, broaden the manifest
+across approved scenario families, and pre-register a budget-matched comparison against the existing
+adversarial random sampler over identical seeds. Until then, fixture and four-candidate differences
+are research-direction evidence only, with uncertainty dominated by the small pool, one family, and
+the pending domain approval.

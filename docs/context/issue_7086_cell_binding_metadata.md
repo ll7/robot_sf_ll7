@@ -1,6 +1,6 @@
 # Issue #7086: Trace Dossier Cell-Binding Metadata
 
-This slice adds a small metadata contract for binding one future trace dossier
+This slice adds a small metadata contract for binding one trace dossier
 to one campaign cell. It lets a dossier manifest name the campaign cell,
 selected trace identity, terminal verdict counts, and selected verdict
 denominator mechanically.
@@ -19,12 +19,13 @@ returns a frozen `trace_dossier_cell_binding.v1` block with:
 
 Malformed identities, non-integer seeds, missing or uppercase trace checksums,
 empty counts, zero totals, and selected verdicts absent from the cell counts
-fail closed.
+fail closed. The package path now binds the selected trace to a diagnostic
+PNG/SVG/PDF dossier, a Markdown caption, and renderer/output checksums.
 
 ## Boundary
 
 This is provenance metadata only. It does not run a simulator, read or validate
-trace files, render a panel, compute metrics, rank planners, admit benchmark
-evidence, or make paper-facing claims. The remaining #7086 work still needs an
-actual pinned trace export, renderer integration, artifact checksums, and
-separate review before any dossier can support a scientific statement.
+trace files, compute metrics, rank planners, admit benchmark evidence, or make
+paper-facing claims. The remaining #7086 work is acquiring trace-capable runs
+for campaign cells that have no retained trace and reviewing this diagnostic
+publication candidate; no scientific statement follows from this package.

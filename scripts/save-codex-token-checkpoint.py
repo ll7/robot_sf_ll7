@@ -40,7 +40,13 @@ def _entrypoint_status(name: str) -> dict[str, object]:
     script = Path(configured).expanduser() / "scripts" / name
     if not script.is_file():
         return {"status": "unavailable", "reason": f"canonical entrypoint is missing: {script}"}
-    return {"status": "available", "path": str(script.resolve())}
+    resolved = script.resolve()
+    if resolved == (Path(__file__).resolve().parent / name).resolve():
+        return {
+            "status": "unavailable",
+            "reason": "configured route points to this compatibility wrapper",
+        }
+    return {"status": "available", "path": str(resolved)}
 
 
 def _build_checkpoint(task_class: str, prompt: str) -> dict[str, object]:

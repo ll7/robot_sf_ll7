@@ -58,6 +58,21 @@ def test_missing_canonical_route_entrypoints_fail_closed_with_json() -> None:
         assert payload["route_evidence_only"] is True
 
 
+def test_checkpoint_rejects_this_repository_as_shared_route_owner() -> None:
+    """The local compatibility wrapper cannot masquerade as the shared resolver."""
+    result = _run(
+        "save-codex-token-checkpoint.py",
+        "--format",
+        "json",
+        env={"CODEX_ROUTING_REPO": str(REPO_ROOT)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["route"]["status"] == "unavailable"
+    assert "compatibility wrapper" in payload["route"]["resolver"]["reason"]
+
+
 def test_route_help_is_available_without_shared_checkout() -> None:
     """The documented help command remains usable when shared routing is absent."""
     result = _run("resolve-route.py", "--help")

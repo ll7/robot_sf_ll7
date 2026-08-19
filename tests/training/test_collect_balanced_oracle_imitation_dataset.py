@@ -14,6 +14,8 @@ from robot_sf.training.action_bin_accounting import compute_action_bin_accountin
 from robot_sf.training.balanced_oracle_dataset_collector import (
     BalancedDatasetCollectionError,
     BalancedOracleCollector,
+    check_yield_status,
+    compute_packet_fingerprint,
     validate_split_and_episode_invariants,
 )
 from robot_sf.training.oracle_imitation_bc_smoke import (
@@ -606,3 +608,450 @@ def test_manifest_validator_requires_split_contract_fields(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="source_candidate_config"):
         validate_balanced_manifest(manifest_path)
+
+
+def test_yield_ledger_present_in_manifest(tmp_path: Path) -> None:
+    """Manifest includes yield_ledger with per-stratum declared/attempted/completed/usable counts."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+
+    ledger = manifest.get("yield_ledger")
+    assert isinstance(ledger, dict)
+    assert ledger["schema_version"] == "yield-ledger.v1"
+    assert "strata" in ledger
+    assert "totals" in ledger
+    assert "lineage" in ledger
+    assert "differential_remedy" in ledger
+
+    for split in ("train", "validation", "evaluation"):
+        assert split in ledger["strata"]
+        for sc_id in collector.scenario_ids:
+            stats = ledger["strata"][split][sc_id]
+            for field in (
+                "declared",
+                "attempted",
+                "completed",
+                "usable",
+                "nondegenerate",
+                "excluded",
+                "failed",
+                "missing",
+                "usable_transitions",
+                "reason_counts",
+                "target_minimum",
+                "shortfall",
+            ):
+                assert field in stats, f"Missing {field} in {split}/{sc_id}"
+
+
+def test_yield_ledger_totals_consistent(tmp_path: Path) -> None:
+    """Yield ledger totals are consistent with per-stratum counts."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    ledger = manifest["yield_ledger"]
+
+    totals = ledger["totals"]
+    assert totals["declared"] == 306
+    assert totals["attempted"] == 306
+    assert totals["usable"] == 306
+    assert totals["excluded"] == 0
+    assert totals["missing"] == 0
+
+
+def test_yield_ledger_observed_shortfall(tmp_path: Path) -> None:
+    """Yield ledger reports shortfall when usable < minimum per stratum."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=10,
+    )
+    episodes = _all_packet_episodes(collector)
+    doorway_eps = [ep for ep in episodes if "classic_doorway_low" in ep["episode_id"]]
+    non_doorway_eps = [ep for ep in episodes if "classic_doorway_low" not in ep["episode_id"]]
+    only_one_doorway = doorway_eps[:1]
+    manifest = collector.collect_dataset(
+        episodes_override=non_doorway_eps + only_one_doorway,
+        allow_insufficient_yield=True,
+    )
+    ledger = manifest["yield_ledger"]
+    doorway_stats = ledger["strata"]["train"]["classic_doorway_low"]
+    assert doorway_stats["usable"] == 1
+    assert doorway_stats["target_minimum"] == 10
+    assert doorway_stats["shortfall"] == 9
+
+
+def test_decision_packet_emitted(tmp_path: Path) -> None:
+    """A public-safe decision packet JSON is written alongside the manifest."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+
+    dp_path = tmp_path / "yield_decision_packet.json"
+    assert dp_path.is_file()
+    dp = json.loads(dp_path.read_text(encoding="utf-8"))
+    assert dp["schema_version"] == "yield-decision-packet.v1"
+    assert dp["check_status"] in {
+        "eligible_complete",
+        "blocked_scientific_yield",
+        "blocked_integrity_or_lineage",
+        "inconclusive_missing_input",
+    }
+    assert dp["dataset_id"] == "issue_6127_balanced_oracle_v1"
+    assert isinstance(dp["packet_fingerprint"], str)
+    assert len(dp["packet_fingerprint"]) == 64
+
+
+def test_decision_packet_shows_shortfall(tmp_path: Path) -> None:
+    """Decision packet reports observed shortfall for strata below minimum."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=10,
+    )
+    episodes = _all_packet_episodes(collector)
+    doorway_eps = [ep for ep in episodes if "classic_doorway_low" in ep["episode_id"]]
+    non_doorway_eps = [ep for ep in episodes if "classic_doorway_low" not in ep["episode_id"]]
+    only_one_doorway = doorway_eps[:1]
+    collector.collect_dataset(
+        episodes_override=non_doorway_eps + only_one_doorway,
+        allow_insufficient_yield=True,
+    )
+    dp = json.loads((tmp_path / "yield_decision_packet.json").read_text(encoding="utf-8"))
+    assert "train/classic_doorway_low" in dp["observed"]
+    observed = dp["observed"]["train/classic_doorway_low"]
+    assert observed["usable"] == 1
+    assert observed["minimum"] == 10
+    assert observed["shortfall"] == 9
+
+
+def test_packet_fingerprint_in_manifest(tmp_path: Path) -> None:
+    """Manifest includes a canonical scientific/execution packet fingerprint."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    assert isinstance(manifest["packet_fingerprint"], str)
+    assert len(manifest["packet_fingerprint"]) == 64
+    expected = compute_packet_fingerprint(collector.packet)
+    assert manifest["packet_fingerprint"] == expected
+
+
+def test_yield_check_eligible_complete(tmp_path: Path) -> None:
+    """check_yield_status returns eligible_complete when all gates pass."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    result = check_yield_status(tmp_path)
+    assert result["check_status"] == "eligible_complete"
+
+
+def test_yield_check_missing_manifest(tmp_path: Path) -> None:
+    """check_yield_status returns inconclusive_missing_input when no manifest exists."""
+    result = check_yield_status(tmp_path / "nonexistent")
+    assert result["check_status"] == "inconclusive_missing_input"
+
+
+def test_yield_check_blocked_yield(tmp_path: Path) -> None:
+    """check_yield_status returns blocked_scientific_yield when yield gates fail."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=10000,
+        min_episodes_per_stratum=10,
+    )
+    episodes = _all_packet_episodes(collector, steps=2)
+    collector.collect_dataset(
+        episodes_override=episodes,
+        allow_insufficient_yield=True,
+    )
+    result = check_yield_status(tmp_path)
+    assert result["check_status"] == "blocked_scientific_yield"
+
+
+def test_yield_check_blocked_integrity_leakage(tmp_path: Path) -> None:
+    """check_yield_status returns blocked_integrity_or_lineage for leakage."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    episodes = _all_packet_episodes(collector)
+    mismatched = episodes[0]
+    mismatched["seed"] += 1
+    for field in ("actions", "observations", "positions", "rewards", "terminated", "truncated"):
+        mismatched[field] = mismatched[field][:1]
+    collector.collect_dataset(
+        episodes_override=episodes,
+        allow_insufficient_yield=True,
+    )
+    result = check_yield_status(tmp_path)
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+
+
+def test_yield_check_fingerprint_mismatch(tmp_path: Path) -> None:
+    """check_yield_status returns blocked_integrity_or_lineage on fingerprint mismatch."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    fake_config = tmp_path / "different_packet.yaml"
+    fake_config.write_text("different: content\n", encoding="utf-8")
+    result = check_yield_status(tmp_path, config_path=fake_config)
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "fingerprint" in result["reason"].lower()
+
+
+def test_yield_check_deterministic(tmp_path: Path) -> None:
+    """check_yield_status is deterministic for identical inputs."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    r1 = check_yield_status(tmp_path)
+    r2 = check_yield_status(tmp_path)
+    assert r1 == r2
+
+
+def test_yield_check_side_effect_free(tmp_path: Path) -> None:
+    """check_yield_status does not modify files in the output root."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_mtime = (tmp_path / "balanced_oracle_dataset_manifest.json").stat().st_mtime_ns
+    check_yield_status(tmp_path)
+    assert (tmp_path / "balanced_oracle_dataset_manifest.json").stat().st_mtime_ns == manifest_mtime
+
+
+def test_differential_remedy_in_ledger(tmp_path: Path) -> None:
+    """yield_ledger includes exactly one differential_remedy with category and rationale."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    remedy = manifest["yield_ledger"]["differential_remedy"]
+    assert "category" in remedy
+    assert "rationale" in remedy
+    assert isinstance(remedy["category"], str)
+    assert isinstance(remedy["rationale"], str)
+
+
+def test_differential_remedy_shortfall_category(tmp_path: Path) -> None:
+    """differential_remedy records an unselected allowed category for a shortfall."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=10,
+    )
+    episodes = _all_packet_episodes(collector)
+    doorway_eps = [ep for ep in episodes if "classic_doorway_low" in ep["episode_id"]]
+    non_doorway_eps = [ep for ep in episodes if "classic_doorway_low" not in ep["episode_id"]]
+    only_one_doorway = doorway_eps[:1]
+    manifest = collector.collect_dataset(
+        episodes_override=non_doorway_eps + only_one_doorway,
+        allow_insufficient_yield=True,
+    )
+    remedy = manifest["yield_ledger"]["differential_remedy"]
+    assert remedy["category"] == "budget_or_sampling_change"
+    assert remedy["selected"] is False
+    assert remedy["selection_status"] == "pending_maintainer_ruling"
+    assert "classic_doorway_low" in remedy["rationale"]
+
+
+def test_existing_valid_behavior_unchanged(tmp_path: Path) -> None:
+    """Existing preflight behavior is unchanged by yield diagnostics additions."""
+    output_root = tmp_path / "preflight_out"
+    exit_code = cli_main(
+        [
+            "--config",
+            str(TEST_PACKET_PATH),
+            "--output-root",
+            str(output_root),
+            "--preflight",
+            "--json",
+        ]
+    )
+    assert exit_code == 0
+    plan_path = output_root / "balanced_oracle_collection_plan.json"
+    assert plan_path.is_file()
+    plan_data = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert plan_data["schema_version"] == "balanced-oracle-collection-plan.v1"
+
+
+def test_excluded_failed_rows_preserved(tmp_path: Path) -> None:
+    """Excluded and failed rows are preserved in manifest exclusions list."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    scenarios = collector.scenario_ids
+    episodes: list[dict[str, Any]] = []
+    ids_by_scenario: dict[str, list[str]] = {scenario: [] for scenario in scenarios}
+    for episode_id in collector.episodes_by_split["train"]:
+        _, scenario, _ = episode_id.split("__")
+        ids_by_scenario[scenario].append(episode_id)
+    for scenario in scenarios:
+        for episode_id in ids_by_scenario[scenario][:10]:
+            _, parsed_scenario, seed_token = episode_id.split("__")
+            episodes.append(
+                _make_episode(
+                    episode_id,
+                    parsed_scenario,
+                    int(seed_token.removeprefix("seed")),
+                    "train",
+                    steps=5,
+                )
+            )
+
+    flagged = ids_by_scenario[scenarios[0]][10:13]
+    for episode_id, kwargs in zip(
+        flagged,
+        ({"steps": 1}, {"steps": 5, "fallback": True}, {"steps": 5, "failed": True}),
+        strict=True,
+    ):
+        _, scenario, seed_token = episode_id.split("__")
+        episodes.append(
+            _make_episode(
+                episode_id,
+                scenario,
+                int(seed_token.removeprefix("seed")),
+                "train",
+                **kwargs,
+            )
+        )
+
+    manifest = collector.collect_dataset(
+        episodes_override=episodes,
+        allow_insufficient_yield=True,
+    )
+
+    exclusions = manifest["exclusions"]
+    assert len(exclusions) >= 3
+    reasons = [e["reason"] for e in exclusions]
+    assert "one-step" in reasons
+    assert "fallback" in reasons
+    assert "failed" in reasons
+
+
+def test_yield_cli_check(tmp_path: Path) -> None:
+    """The --yield-check CLI flag performs a side-effect-free check."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    exit_code = cli_main(
+        [
+            "--config",
+            str(TEST_PACKET_PATH),
+            "--output-root",
+            str(tmp_path),
+            "--yield-check",
+            "--json",
+        ]
+    )
+    assert exit_code == 0
+
+
+def test_packet_difference_rejects_unchanged_exhausted_attempt(tmp_path: Path) -> None:
+    """An unchanged exhausted packet is rejected before a preflight plan is written."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    attempt = {
+        "packet_fingerprint": collector._compute_packet_fingerprint(),
+        "packet_fingerprint_payload": collector.packet_fingerprint_payload(),
+    }
+
+    with pytest.raises(BalancedDatasetCollectionError, match="Unchanged exhausted packet"):
+        collector.build_preflight_plan(exhausted_attempts=[attempt])
+    assert not (tmp_path / "balanced_oracle_collection_plan.json").exists()
+
+
+def test_packet_difference_reports_exact_changed_fields(tmp_path: Path) -> None:
+    """A changed packet reports the changed scientific/execution fingerprint fields."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    changed_packet = dict(collector.packet)
+    changed_packet["scenario_ids"] = list(collector.scenario_ids) + ["diagnostic_only"]
+    attempt = {
+        "packet_fingerprint": compute_packet_fingerprint(collector.packet),
+        "packet_fingerprint_payload": collector.packet_fingerprint_payload(),
+    }
+
+    report = collector.validate_packet_difference([])
+    assert report["status"] == "not_checked"
+    changed_report = collector_module.validate_packet_difference(changed_packet, [attempt])
+    assert changed_report["status"] == "changed"
+    assert changed_report["comparisons"][0]["changed_fields"] == ["scenario_ids"]
+
+
+def test_yield_check_missing_lineage_is_integrity_blocked(tmp_path: Path) -> None:
+    """A summary missing required lineage cannot be treated as complete evidence."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    del manifest["yield_ledger"]["lineage"]["commit"]
+    Path(manifest["manifest_path"]).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    result = check_yield_status(tmp_path)
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "commit" in result["reason"]
+
+
+def test_duplicate_and_provenance_incomplete_rows_are_not_usable(tmp_path: Path) -> None:
+    """Duplicate and provenance-incomplete rows remain explicit diagnostic exclusions."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    episodes = _all_packet_episodes(collector, steps=2)
+    duplicate = dict(episodes[0])
+    incomplete = dict(episodes[1])
+    incomplete["provenance_incomplete"] = True
+    manifest = collector.collect_dataset(
+        episodes_override=[episodes[0], *episodes[2:], duplicate, incomplete],
+        allow_insufficient_yield=True,
+    )
+
+    assert any(item["kind"] == "duplicate_episode_id" for item in manifest["identity_defects"])
+    reasons = {item["reason"] for item in manifest["exclusions"]}
+    assert "leakage_invalid" in reasons
+    assert "provenance_incomplete" in reasons
+    assert manifest["yield_ledger"]["totals"]["usable"] < len(episodes) + 2

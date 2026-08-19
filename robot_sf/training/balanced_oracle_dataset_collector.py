@@ -27,6 +27,32 @@ EPISODE_ID_RE = re.compile(r"^(?P<split>[a-z_]+)__(?P<scenario>.+)__seed(?P<seed
 _SCHEMA_VERSION = "balanced-oracle-dataset-manifest.v1"
 _PLAN_SCHEMA_VERSION = "balanced-oracle-collection-plan.v1"
 _SPLITS = ("train", "validation", "evaluation")
+_PACKET_FINGERPRINT_FIELDS = (
+    "dataset_id",
+    "source_candidate",
+    "source_candidate_config",
+    "scenario_source",
+    "scenario_ids",
+    "seeds_by_split",
+    "episode_ids_by_split",
+    "hard_slice_assignment",
+    "relabeling_policy",
+    "exclusion_rules",
+)
+_DIFFERENTIAL_REMEDY_CATEGORIES = (
+    "scenario_roster_change",
+    "minimum_change_with_scientific_justification",
+    "budget_or_sampling_change",
+    "collector_or_eligibility_defect_fix",
+)
+_CHECK_STATUSES = frozenset(
+    {
+        "eligible_complete",
+        "blocked_scientific_yield",
+        "blocked_integrity_or_lineage",
+        "inconclusive_missing_input",
+    }
+)
 
 
 class BalancedDatasetCollectionError(RobotSfError, ValueError):
@@ -104,6 +130,81 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _packet_fingerprint_payload(packet: dict[str, Any]) -> dict[str, Any]:
+    """Return the scientific/execution fields that define a launch packet."""
+    return {field: copy.deepcopy(packet.get(field)) for field in _PACKET_FINGERPRINT_FIELDS}
+
+
+def compute_packet_fingerprint(packet: dict[str, Any]) -> str:
+    """Return a stable fingerprint for the packet's scientific/execution inputs."""
+    return _canonical_sha256(_packet_fingerprint_payload(packet))
+
+
+def _changed_packet_fields(proposed: dict[str, Any], reference: dict[str, Any] | None) -> list[str]:
+    """Return exact packet fingerprint fields that differ from a reference payload."""
+    if reference is None:
+        return ["unknown_without_reference_payload"]
+    return [
+        field for field in _PACKET_FINGERPRINT_FIELDS if proposed.get(field) != reference.get(field)
+    ]
+
+
+def validate_packet_difference(
+    packet: dict[str, Any], exhausted_attempts: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Reject a packet whose fingerprint matches an exhausted attempt.
+
+    Attempt records must carry ``packet_fingerprint`` or ``fingerprint``. They may also
+    carry ``packet_fingerprint_payload`` to make changed fields auditable.
+
+    Returns:
+        A deterministic comparison report, unless an unchanged attempt is rejected.
+    """
+    proposed_payload = _packet_fingerprint_payload(packet)
+    proposed_fingerprint = _canonical_sha256(proposed_payload)
+    attempts = exhausted_attempts or []
+    comparisons: list[dict[str, Any]] = []
+
+    for index, attempt in enumerate(attempts):
+        if isinstance(attempt, str):
+            attempt = {"fingerprint": attempt}
+        if not isinstance(attempt, dict):
+            raise BalancedDatasetCollectionError(
+                f"Exhausted attempt {index} must be a mapping with a packet fingerprint"
+            )
+        attempt_fingerprint = attempt.get("packet_fingerprint", attempt.get("fingerprint"))
+        if not isinstance(attempt_fingerprint, str) or not attempt_fingerprint:
+            raise BalancedDatasetCollectionError(
+                f"Exhausted attempt {index} is missing packet_fingerprint"
+            )
+        reference_payload = attempt.get(
+            "packet_fingerprint_payload", attempt.get("fingerprint_payload")
+        )
+        if reference_payload is not None and not isinstance(reference_payload, dict):
+            raise BalancedDatasetCollectionError(
+                f"Exhausted attempt {index} has an invalid fingerprint payload"
+            )
+        if proposed_fingerprint == attempt_fingerprint:
+            raise BalancedDatasetCollectionError(
+                "Unchanged exhausted packet rejected before collection submission: "
+                f"fingerprint={proposed_fingerprint}, attempt={index}"
+            )
+        comparisons.append(
+            {
+                "attempt_index": index,
+                "attempt_fingerprint": attempt_fingerprint,
+                "changed_fields": _changed_packet_fields(proposed_payload, reference_payload),
+            }
+        )
+
+    return {
+        "status": "changed" if comparisons else "not_checked",
+        "proposed_fingerprint": proposed_fingerprint,
+        "fingerprint_fields": list(_PACKET_FINGERPRINT_FIELDS),
+        "comparisons": comparisons,
+    }
+
+
 def parse_episode_id(episode_id: str, split: str | None = None) -> tuple[str, str, int]:
     """Parse launch-packet episode ID into (split, scenario_id, seed).
 
@@ -170,6 +271,130 @@ def validate_split_and_episode_invariants(packet: dict[str, Any]) -> None:  # no
                         f"Episode ID {ep_id!r} uses seed {seed} outside seeds_by_split.{split}"
                     )
                 all_ids.add(ep_id)
+
+
+def check_yield_status(  # noqa: C901
+    output_root: Path,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
+    """Check the yield status of an existing manifest. Deterministic and side-effect-free.
+
+    Returns exactly one of: eligible_complete, blocked_scientific_yield,
+    blocked_integrity_or_lineage, or inconclusive_missing_input.
+
+    Returns:
+        Dictionary with check_status, reason, and manifest_path fields.
+    """
+    manifest_path = Path(output_root) / "balanced_oracle_dataset_manifest.json"
+
+    if not manifest_path.is_file():
+        return {
+            "check_status": "inconclusive_missing_input",
+            "reason": "No manifest found at expected path",
+            "manifest_path": str(manifest_path),
+        }
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "check_status": "inconclusive_missing_input",
+            "reason": f"Manifest is unavailable or invalid: {type(exc).__name__}",
+            "manifest_path": str(manifest_path),
+        }
+
+    ledger = manifest.get("yield_ledger")
+    if not isinstance(ledger, dict) or not isinstance(ledger.get("lineage"), dict):
+        return {
+            "check_status": "inconclusive_missing_input",
+            "reason": "Manifest lacks the required yield ledger and lineage summary",
+            "manifest_path": str(manifest_path),
+        }
+
+    if manifest.get("identity_defects"):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": f"Identity defects detected: {manifest['identity_defects'][:5]}",
+            "manifest_path": str(manifest_path),
+        }
+
+    lineage = ledger["lineage"]
+    required_lineage = ("source_candidate", "config_path", "source_packet_sha256", "commit")
+    missing_lineage = [field for field in required_lineage if not lineage.get(field)]
+    if missing_lineage:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Missing lineage fields: " + ", ".join(missing_lineage),
+            "manifest_path": str(manifest_path),
+        }
+
+    missing = manifest.get("missing_episode_ids", [])
+    if missing:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": f"Missing episode IDs: {missing[:10]}",
+            "manifest_path": str(manifest_path),
+        }
+
+    exclusions = manifest.get("exclusions", [])
+    integrity_reasons = {
+        "leakage_invalid",
+        "provenance_incomplete",
+        "duplicate_episode_id",
+        "unexpected_episode_id",
+    }
+    if any(ex.get("reason") in integrity_reasons for ex in exclusions):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Integrity-invalid episode rows detected",
+            "manifest_path": str(manifest_path),
+        }
+
+    stored_fingerprint = manifest.get("packet_fingerprint")
+    if not isinstance(stored_fingerprint, str) or not stored_fingerprint:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Missing packet fingerprint",
+            "manifest_path": str(manifest_path),
+        }
+
+    if config_path:
+        try:
+            current_fingerprint = compute_packet_fingerprint(load_launch_packet(config_path))
+        except (OSError, ValueError) as exc:
+            return {
+                "check_status": "inconclusive_missing_input",
+                "reason": f"Packet input is unavailable or invalid: {type(exc).__name__}",
+                "manifest_path": str(manifest_path),
+            }
+        if current_fingerprint != stored_fingerprint:
+            return {
+                "check_status": "blocked_integrity_or_lineage",
+                "reason": "Packet fingerprint mismatch",
+                "manifest_path": str(manifest_path),
+            }
+
+    yield_gates = manifest.get("yield_gates", {})
+    if yield_gates.get("status") != "pass":
+        shortfalls: list[str] = []
+        for split, scenarios in ledger.get("strata", {}).items():
+            for scenario_id, stats in scenarios.items():
+                if int(stats.get("shortfall", 0)) > 0:
+                    shortfalls.append(
+                        f"{split}/{scenario_id}: usable={stats.get('usable', 0)}, "
+                        f"minimum={stats.get('target_minimum', 0)}, "
+                        f"shortfall={stats['shortfall']}"
+                    )
+        return {
+            "check_status": "blocked_scientific_yield",
+            "reason": "Yield gates failed" + (": " + "; ".join(shortfalls) if shortfalls else ""),
+            "manifest_path": str(manifest_path),
+        }
+
+    return {
+        "check_status": "eligible_complete",
+        "manifest_path": str(manifest_path),
+    }
 
 
 class _CaptureEnv:
@@ -291,6 +516,28 @@ class BalancedOracleCollector:
             )
         return current_sha
 
+    def _compute_packet_fingerprint(self) -> str:
+        """Compute a SHA-256 fingerprint of scientific/execution packet fields.
+
+        Returns:
+            Lowercase hex SHA-256 digest of the canonical packet payload.
+        """
+        return compute_packet_fingerprint(self.packet)
+
+    def packet_fingerprint_payload(self) -> dict[str, Any]:
+        """Return the auditable fields used by this collector's packet fingerprint."""
+        return _packet_fingerprint_payload(self.packet)
+
+    def validate_packet_difference(
+        self, exhausted_attempts: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Validate this packet against exhausted-attempt fingerprint records.
+
+        Returns:
+            Deterministic comparison report, unless an unchanged attempt is rejected.
+        """
+        return validate_packet_difference(self.packet, exhausted_attempts)
+
     def _repo_relative(self, path: Path) -> str:
         """Return ``path`` relative to the repo root, or as-is when it lies outside."""
         try:
@@ -298,12 +545,19 @@ class BalancedOracleCollector:
         except ValueError:
             return path.as_posix()
 
-    def build_preflight_plan(self) -> dict[str, Any]:
+    def build_preflight_plan(
+        self, *, exhausted_attempts: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Build a deterministic launch plan without performing simulation.
+
+        An optional exhausted-attempt ledger is checked before any plan is written. An
+        unchanged packet raises ``BalancedDatasetCollectionError`` and cannot proceed to
+        a collection command.
 
         Returns:
             Dictionary containing the deterministic launch plan.
         """
+        packet_difference = self.validate_packet_difference(exhausted_attempts)
         self.output_root.mkdir(parents=True, exist_ok=True)
         npz_filename = "expert_traj_v1.npz"
         manifest_destination = self.output_root / "balanced_oracle_dataset_manifest.json"
@@ -333,6 +587,9 @@ class BalancedOracleCollector:
             "candidate_registry_sha256": _file_sha256(self.candidate_registry),
             "config_path": self._repo_relative(self.config_path),
             "config_sha256": _file_sha256(self.config_path),
+            "packet_fingerprint": self._compute_packet_fingerprint(),
+            "packet_fingerprint_fields": list(_PACKET_FINGERPRINT_FIELDS),
+            "packet_difference": packet_difference,
             "output_npz_path": npz_filename,
             "manifest_destination": manifest_destination.name,
             "scenarios": self.scenario_ids,
@@ -372,6 +629,251 @@ class BalancedOracleCollector:
         plan_path = self.output_root / "balanced_oracle_collection_plan.json"
         plan_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return plan
+
+    def _build_yield_ledger(
+        self,
+        raw_episodes: list[dict[str, Any]],
+        usable_episodes: list[dict[str, Any]],
+        exclusions: list[dict[str, Any]],
+        missing_episode_ids: list[str],
+        stratum_counts: dict[str, dict[str, int]],
+        stratum_transitions: dict[str, dict[str, int]],
+        identity_defects: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Build the per-stratum yield ledger with declared/attempted/completed/usable counts.
+
+        Returns:
+            Yield ledger dictionary with strata, totals, lineage, and differential_remedy.
+        """
+        strata: dict[str, dict[str, dict[str, Any]]] = {}
+
+        for split in _SPLITS:
+            strata[split] = {}
+            for sc_id in self.scenario_ids:
+                declared_ids = [
+                    ep_id
+                    for ep_id in self.episodes_by_split.get(split, [])
+                    if parse_episode_id(str(ep_id), split)[1] == sc_id
+                ]
+                declared = len(declared_ids)
+
+                raw_for_stratum = [
+                    ep
+                    for ep in raw_episodes
+                    if ep.get("split") == split and ep.get("scenario_id") == sc_id
+                ]
+                attempted = len(raw_for_stratum)
+                completed = sum(
+                    1
+                    for ep in raw_for_stratum
+                    if not (
+                        isinstance(ep.get("provenance"), dict)
+                        and ep["provenance"].get("collection_error")
+                    )
+                )
+
+                usable = stratum_counts.get(split, {}).get(sc_id, 0)
+                excluded_for_stratum = [
+                    ex for ex in exclusions if ex["split"] == split and ex["scenario_id"] == sc_id
+                ]
+                excluded_count = len(excluded_for_stratum)
+
+                failed = sum(1 for ex in excluded_for_stratum if ex["reason"] == "failed")
+
+                missing = 0
+                for ep_id in missing_episode_ids:
+                    parsed = parse_episode_id(str(ep_id))
+                    if parsed[0] == split and parsed[1] == sc_id:
+                        missing += 1
+
+                usable_transitions = stratum_transitions.get(split, {}).get(sc_id, 0)
+
+                reason_counts: dict[str, int] = {}
+                for ex in excluded_for_stratum:
+                    reason = ex["reason"]
+                    reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+                target = self.min_episodes_per_stratum if split == "train" else 0
+                shortfall = max(0, target - usable) if split == "train" else 0
+
+                strata[split][sc_id] = {
+                    "declared": declared,
+                    "attempted": attempted,
+                    "completed": completed,
+                    "usable": usable,
+                    "nondegenerate": usable,
+                    "excluded": excluded_count,
+                    "failed": failed,
+                    "missing": missing,
+                    "usable_transitions": usable_transitions,
+                    "reason_counts": reason_counts,
+                    "target_minimum": target,
+                    "shortfall": shortfall,
+                }
+
+        total_declared = sum(len(self.episodes_by_split.get(split, [])) for split in _SPLITS)
+        total_attempted = len(raw_episodes)
+        total_completed = sum(
+            1
+            for ep in raw_episodes
+            if not (
+                isinstance(ep.get("provenance"), dict) and ep["provenance"].get("collection_error")
+            )
+        )
+        total_usable = len(usable_episodes)
+        total_excluded = len(exclusions)
+        total_failed = sum(1 for ex in exclusions if ex["reason"] == "failed")
+        total_missing = len(missing_episode_ids)
+        total_usable_transitions = sum(
+            stratum_transitions.get(split, {}).get(sc_id, 0)
+            for split in _SPLITS
+            for sc_id in self.scenario_ids
+        )
+
+        return {
+            "schema_version": "yield-ledger.v1",
+            "strata": strata,
+            "identity_defects": list(identity_defects or []),
+            "totals": {
+                "declared": total_declared,
+                "attempted": total_attempted,
+                "completed": total_completed,
+                "usable": total_usable,
+                "nondegenerate": total_usable,
+                "excluded": total_excluded,
+                "failed": total_failed,
+                "missing": total_missing,
+                "usable_transitions": total_usable_transitions,
+                "target_minimum_usable_transitions": self.min_usable_transitions,
+            },
+            "lineage": {
+                "source_candidate": self.source_candidate,
+                "config_path": self._repo_relative(self.config_path),
+                "source_packet_sha256": _file_sha256(self.config_path),
+                "commit": _git_sha(self.repo_root),
+                "source_candidate_config": str(self.packet.get("source_candidate_config", "")),
+                "job_id": self.packet.get("job_id"),
+                "artifact_uri": self.packet.get("artifact_uri"),
+            },
+            "differential_remedy": self._build_differential_remedy(strata),
+        }
+
+    def _build_differential_remedy(
+        self, strata: dict[str, dict[str, dict[str, Any]]]
+    ) -> dict[str, Any]:
+        """Build exactly one differential remedy category and rationale without selecting it.
+
+        Returns:
+            Dictionary with category and rationale strings.
+        """
+        worst_shortfall = 0
+        worst_stratum: tuple[str, str] | None = None
+
+        for split, scenarios in strata.items():
+            for sc_id, stats in scenarios.items():
+                if stats["shortfall"] > worst_shortfall:
+                    worst_shortfall = stats["shortfall"]
+                    worst_stratum = (split, sc_id)
+
+        if worst_shortfall > 0 and worst_stratum is not None:
+            split, sc_id = worst_stratum
+            stats = strata[split][sc_id]
+            return {
+                "category": "budget_or_sampling_change",
+                "selected": False,
+                "selection_status": "pending_maintainer_ruling",
+                "rationale": (
+                    f"Stratum {split}/{sc_id} has usable={stats['usable']}, "
+                    f"below target minimum of {self.min_episodes_per_stratum}. "
+                    f"Shortfall is {worst_shortfall}. "
+                    "A budget or sampling change is a diagnostic candidate only; it "
+                    "must not be applied without a maintainer ruling and fresh evidence."
+                ),
+                "fields_to_change": ["seeds_by_split", "episode_ids_by_split"],
+                "evidence_required": [
+                    "per-stratum yield ledger",
+                    "changed packet fingerprint",
+                    "maintainer ruling before submission",
+                ],
+            }
+
+        return {
+            "category": "collector_or_eligibility_defect_fix",
+            "selected": False,
+            "selection_status": "not_required_pending_new_failure",
+            "rationale": "All strata meet or exceed the target minimum; no remedy is selected.",
+            "fields_to_change": [],
+            "evidence_required": [],
+        }
+
+    def _build_decision_packet(
+        self,
+        yield_ledger: dict[str, Any],
+        check_status: str,
+        fingerprint: str,
+        packet_difference: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Build the public-safe decision packet for diagnostic/blocker-resolution.
+
+        Returns:
+            Decision packet dictionary with check_status, observed shortfalls, and yield gates.
+        """
+        observed: dict[str, dict[str, int]] = {}
+        for split, scenarios in yield_ledger["strata"].items():
+            for sc_id, stats in scenarios.items():
+                if stats["shortfall"] > 0:
+                    observed[f"{split}/{sc_id}"] = {
+                        "usable": stats["usable"],
+                        "minimum": stats["target_minimum"],
+                        "shortfall": stats["shortfall"],
+                    }
+
+        candidate_categories = [
+            {
+                "category": "scenario_roster_change",
+                "fields_to_change": ["scenario_source", "scenario_ids", "episode_ids_by_split"],
+                "evidence_required": ["scientific justification and maintainer ruling"],
+            },
+            {
+                "category": "minimum_change_with_scientific_justification",
+                "fields_to_change": ["min_episodes_per_stratum", "min_usable_transitions"],
+                "evidence_required": ["pre-specified threshold rationale and maintainer ruling"],
+            },
+            {
+                "category": "budget_or_sampling_change",
+                "fields_to_change": ["seeds_by_split", "episode_ids_by_split"],
+                "evidence_required": ["changed packet fingerprint and maintainer ruling"],
+            },
+            {
+                "category": "collector_or_eligibility_defect_fix",
+                "fields_to_change": ["exclusion_rules", "collector implementation"],
+                "evidence_required": ["reproducible defect and focused regression test"],
+            },
+        ]
+
+        return {
+            "schema_version": "yield-decision-packet.v1",
+            "check_status": check_status,
+            "dataset_id": self.dataset_id,
+            "packet_fingerprint": fingerprint,
+            "packet_fingerprint_fields": list(_PACKET_FINGERPRINT_FIELDS),
+            "packet_difference": packet_difference,
+            "observed": observed,
+            "differential_remedy": yield_ledger["differential_remedy"],
+            "candidate_remedy_categories": candidate_categories,
+            "evidence_required_before_submission": [
+                "current per-stratum ledger",
+                "complete source, commit, and artifact lineage",
+                "changed packet fingerprint",
+                "maintainer ruling selecting one differential remedy or stopping the lane",
+            ],
+            "claim_boundary": "diagnostic/blocker-resolution only; not dataset success or scientific evidence",
+            "yield_gates": {
+                "status": "pass" if check_status == "eligible_complete" else "fail",
+                "min_usable_transitions": self.min_usable_transitions,
+                "min_episodes_per_stratum": self.min_episodes_per_stratum,
+            },
+        }
 
     def _capture_episode(  # noqa: PLR0913
         self,
@@ -617,10 +1119,13 @@ class BalancedOracleCollector:
         exclusions: list[dict[str, Any]] = []
 
         for ep in raw_episodes:
-            ep_id = str(ep["episode_id"])
-            sc_id = str(ep["scenario_id"])
-            seed = int(ep["seed"])
-            split = str(ep["split"])
+            ep_id = str(ep.get("episode_id", ""))
+            sc_id = str(ep.get("scenario_id", ""))
+            try:
+                seed = int(ep.get("seed", -1))
+            except (TypeError, ValueError):
+                seed = -1
+            split = str(ep.get("split", ""))
             actions = ep.get("actions", np.zeros((0, 2), dtype=np.float32))
             steps = len(actions)
 
@@ -633,6 +1138,10 @@ class BalancedOracleCollector:
                 reason = "failed"
             elif bool(ep.get("fallback", False) or ep.get("degraded", False)):
                 reason = "fallback"
+            elif bool(ep.get("provenance_incomplete", False)) or (
+                isinstance(ep.get("provenance"), dict) and not ep["provenance"]
+            ):
+                reason = "provenance_incomplete"
 
             if reason is not None:
                 exclusions.append(
@@ -649,11 +1158,14 @@ class BalancedOracleCollector:
                 usable.append(ep)
         return usable, exclusions
 
-    def _validate_collected_identities(self, raw_episodes: list[dict[str, Any]]) -> list[str]:
-        """Verify collected episodes match predeclared packet identities; return missing ids.
+    def _validate_collected_identities(  # noqa: C901
+        self, raw_episodes: list[dict[str, Any]]
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """Verify packet identities and retain duplicate/unexpected defects for diagnosis.
 
         Returns:
-            Sorted list of predeclared episode ids absent from the collection.
+            Missing predeclared IDs and identity-defect records. Defective rows are marked
+            invalid so they remain in raw provenance but cannot become usable evidence.
         """
         expected: dict[str, tuple[str, str, int]] = {}
         for split in _SPLITS:
@@ -661,19 +1173,23 @@ class BalancedOracleCollector:
                 parsed_split, scenario_id, seed = parse_episode_id(str(episode_id), split)
                 expected[str(episode_id)] = (parsed_split, scenario_id, seed)
 
-        seen: set[str] = set()
+        counts: dict[str, int] = {}
         for episode in raw_episodes:
             episode_id = str(episode.get("episode_id", ""))
-            if episode_id in seen:
-                raise BalancedDatasetCollectionError(
-                    f"Collected duplicate episode ID: {episode_id!r}"
-                )
+            counts[episode_id] = counts.get(episode_id, 0) + 1
+
+        seen: set[str] = set()
+        defects: list[dict[str, Any]] = []
+        for episode in raw_episodes:
+            episode_id = str(episode.get("episode_id", ""))
+            duplicate = counts.get(episode_id, 0) > 1
             seen.add(episode_id)
             identity = expected.get(episode_id)
             if identity is None:
-                raise BalancedDatasetCollectionError(
-                    f"Collected episode is not predeclared by the packet: {episode_id!r}"
-                )
+                defects.append({"kind": "unexpected_episode_id", "episode_id": episode_id})
+                episode["leakage_invalid"] = True
+                episode.setdefault("provenance", {})["identity_defect"] = "unexpected_episode_id"
+                continue
             split, scenario_id, seed = identity
             mismatches: list[str] = []
             if str(episode.get("split")) != split:
@@ -682,6 +1198,10 @@ class BalancedOracleCollector:
                 mismatches.append("scenario_id")
             if int(episode.get("seed", -1)) != seed:
                 mismatches.append("seed")
+            if duplicate:
+                defects.append({"kind": "duplicate_episode_id", "episode_id": episode_id})
+                episode["leakage_invalid"] = True
+                episode.setdefault("provenance", {})["identity_defect"] = "duplicate_episode_id"
             if mismatches:
                 episode["leakage_invalid"] = True
                 provenance = episode.setdefault("provenance", {})
@@ -691,7 +1211,14 @@ class BalancedOracleCollector:
                     "scenario_id": scenario_id,
                     "seed": seed,
                 }
-        return sorted(set(expected) - seen)
+                defects.append(
+                    {
+                        "kind": "identity_mismatch",
+                        "episode_id": episode_id,
+                        "fields": mismatches,
+                    }
+                )
+        return sorted(set(expected) - seen), defects
 
     def _write_raw_provenance(self, raw_episodes: list[dict[str, Any]]) -> Path:
         """Write raw per-episode provenance as JSONL and return its path.
@@ -748,6 +1275,7 @@ class BalancedOracleCollector:
         self,
         *,
         episodes_override: list[dict[str, Any]] | None = None,
+        exhausted_attempts: list[dict[str, Any]] | None = None,
         allow_insufficient_yield: bool = False,
         cli_command: str | None = None,
         horizon: int = 500,
@@ -757,6 +1285,8 @@ class BalancedOracleCollector:
 
         Args:
             episodes_override: Optional list of episode dictionaries for testing.
+            exhausted_attempts: Optional prior-attempt fingerprint records. An unchanged
+                packet is rejected before collection starts.
             allow_insufficient_yield: Whether to bypass minimum yield gates.
             cli_command: Explicit CLI command string to record in manifest.
             horizon: Maximum simulation steps per episode.
@@ -765,6 +1295,7 @@ class BalancedOracleCollector:
         Returns:
             Manifest dictionary.
         """
+        packet_difference = self.validate_packet_difference(exhausted_attempts)
         self.output_root.mkdir(parents=True, exist_ok=True)
         raw_episodes = (
             episodes_override
@@ -772,7 +1303,7 @@ class BalancedOracleCollector:
             else self.collect_source_episodes(horizon=horizon, dt=dt)
         )
         self._write_raw_provenance(raw_episodes)
-        missing_episode_ids = self._validate_collected_identities(raw_episodes)
+        missing_episode_ids, identity_defects = self._validate_collected_identities(raw_episodes)
         raw_provenance_path = self._write_raw_provenance(raw_episodes)
         usable_episodes, exclusions = self._filter_episodes(raw_episodes)
 
@@ -799,7 +1330,20 @@ class BalancedOracleCollector:
             split: sum(1 for episode in usable_episodes if episode["split"] == split)
             for split in _SPLITS
         }
-        leakage_detected = any(bool(episode.get("leakage_invalid")) for episode in raw_episodes)
+        leakage_detected = bool(identity_defects) or any(
+            bool(episode.get("leakage_invalid")) for episode in raw_episodes
+        )
+
+        packet_fingerprint = self._compute_packet_fingerprint()
+        yield_ledger = self._build_yield_ledger(
+            raw_episodes,
+            usable_episodes,
+            exclusions,
+            missing_episode_ids,
+            stratum_counts,
+            stratum_transitions,
+            identity_defects,
+        )
 
         if not allow_insufficient_yield:
             self._assert_yield_gates(
@@ -848,6 +1392,17 @@ class BalancedOracleCollector:
                 all(usable_split_counts[split] > 0 for split in _SPLITS),
                 not leakage_detected,
             ]
+        )
+
+        if missing_episode_ids or identity_defects or leakage_detected:
+            check_status = "blocked_integrity_or_lineage"
+        elif not gates_passed:
+            check_status = "blocked_scientific_yield"
+        else:
+            check_status = "eligible_complete"
+
+        decision_packet = self._build_decision_packet(
+            yield_ledger, check_status, packet_fingerprint, packet_difference
         )
 
         cmd_str = cli_command or " ".join(sys.argv)
@@ -928,11 +1483,24 @@ class BalancedOracleCollector:
             "manifest_path": str(manifest_path),
             "npz_path": str(npz_path),
             "raw_provenance_path": str(raw_provenance_path),
+            "yield_ledger": yield_ledger,
+            "packet_fingerprint": packet_fingerprint,
+            "packet_fingerprint_fields": list(_PACKET_FINGERPRINT_FIELDS),
+            "packet_fingerprint_payload": self.packet_fingerprint_payload(),
+            "packet_difference": packet_difference,
+            "identity_defects": identity_defects,
         }
 
         manifest_path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+
+        decision_packet_path = self.output_root / "yield_decision_packet.json"
+        decision_packet_path.write_text(
+            json.dumps(decision_packet, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
         return manifest
 
 
@@ -1074,6 +1642,9 @@ def _write_expert_traj_npz(
 __all__ = [
     "BalancedDatasetCollectionError",
     "BalancedOracleCollector",
+    "check_yield_status",
+    "compute_packet_fingerprint",
     "parse_episode_id",
+    "validate_packet_difference",
     "validate_split_and_episode_invariants",
 ]

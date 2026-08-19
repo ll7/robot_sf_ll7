@@ -68,9 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("issue", type=int, help="Positive GitHub issue number.")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
-    parser.add_argument(
-        "--remote", default=DEFAULT_REMOTE, help="Git remote used by issue claims."
-    )
+    parser.add_argument("--remote", default=DEFAULT_REMOTE, help="Git remote used by issue claims.")
     parser.add_argument(
         "--source-ref",
         default=DEFAULT_SOURCE_REF,

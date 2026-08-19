@@ -145,9 +145,7 @@ def _heading_records(body: str) -> list[tuple[str, str]]:
         if fence is None:
             match = HEADING_RE.match(line.rstrip("\r\n"))
             if match is not None:
-                spans.append(
-                    (offset, offset + len(line), _normalize_heading(match.group("title")))
-                )
+                spans.append((offset, offset + len(line), _normalize_heading(match.group("title"))))
         offset += len(line)
 
     records: list[tuple[str, str]] = []
@@ -271,58 +269,88 @@ def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> boo
     return bool(decision_headings & set(contract["headings"]))
 
 
+def _classify_issue(
+    normalized: dict[str, Any],
+    claim: dict[str, Any],
+    contract: dict[str, Any],
+    labels: set[str],
+) -> tuple[str, list[str]]:
+    """Classify one normalized issue using the documented precedence order."""
+    rules = [
+        (
+            normalized["state"] != "OPEN",
+            "closed",
+            f"issue state is {normalized['state'] or 'unknown'}",
+        ),
+        (claim.get("ok") is not True, "error", "claim state is unavailable"),
+        (
+            claim.get("claimed") is True,
+            "already_claimed",
+            "an atomic issue claim already exists",
+        ),
+        (
+            bool(normalized["assignees"]),
+            "assigned",
+            "the issue already has an assignee",
+        ),
+        (
+            bool(labels & PARENT_LABELS) or PARENT_TITLE_RE.match(normalized["title"]) is not None,
+            "parent",
+            "parent or epic issues are not implementation leaves",
+        ),
+        (
+            bool(labels & HUMAN_DECISION_LABELS) or _pending_decision_heading(contract, labels),
+            "human_decision",
+            "a maintainer or author decision is required",
+        ),
+        (
+            bool(labels & COMPUTE_LABELS),
+            "needs_compute",
+            "the issue is routed to compute or campaign execution",
+        ),
+        (
+            bool(labels & EXTERNAL_LABELS),
+            "blocked",
+            "the issue requires external input",
+        ),
+        (
+            bool(labels & WORKING_LABELS),
+            "working",
+            "the issue is already in an active work state",
+        ),
+        (
+            bool(labels & REVIEW_LABELS),
+            "review",
+            "the issue is already in review",
+        ),
+        (
+            bool(labels & BLOCKING_LABELS) or _has_blocked_prefix(labels),
+            "blocked",
+            "a blocking workflow label is present",
+        ),
+        (
+            READY_LABEL not in labels,
+            "needs_ready_label",
+            f"required label {READY_LABEL!r} is absent",
+        ),
+        (
+            not contract["complete"],
+            "needs_spec",
+            "missing implementation-contract fields: " + ", ".join(contract["missing_fields"]),
+        ),
+    ]
+    for condition, classification, reason in rules:
+        if condition:
+            return classification, [reason]
+    return "ready", ["issue state and execution contract permit claim admission"]
+
+
 def evaluate_issue(issue: dict[str, Any], claim: dict[str, Any]) -> dict[str, Any]:
     """Return a deterministic, fail-closed issue implementability report."""
     normalized = normalize_issue(issue)
     contract = inspect_contract(normalized["body"])
     labels = set(normalized["labels"])
-    reasons: list[str] = []
-    classification = "error"
-
-    if normalized["state"] != "OPEN":
-        classification = "closed"
-        reasons.append(f"issue state is {normalized['state'] or 'unknown'}")
-    elif claim.get("ok") is not True:
-        classification = "error"
-        reasons.append("claim state is unavailable")
-    elif claim.get("claimed") is True:
-        classification = "already_claimed"
-        reasons.append("an atomic issue claim already exists")
-    elif normalized["assignees"]:
-        classification = "assigned"
-        reasons.append("the issue already has an assignee")
-    elif labels & PARENT_LABELS or PARENT_TITLE_RE.match(normalized["title"]):
-        classification = "parent"
-        reasons.append("parent or epic issues are not implementation leaves")
-    elif labels & HUMAN_DECISION_LABELS or _pending_decision_heading(contract, labels):
-        classification = "human_decision"
-        reasons.append("a maintainer or author decision is required")
-    elif labels & COMPUTE_LABELS:
-        classification = "needs_compute"
-        reasons.append("the issue is routed to compute or campaign execution")
-    elif labels & EXTERNAL_LABELS:
-        classification = "blocked"
-        reasons.append("the issue requires external input")
-    elif labels & WORKING_LABELS:
-        classification = "working"
-        reasons.append("the issue is already in an active work state")
-    elif labels & REVIEW_LABELS:
-        classification = "review"
-        reasons.append("the issue is already in review")
-    elif labels & BLOCKING_LABELS or _has_blocked_prefix(labels):
-        classification = "blocked"
-        reasons.append("a blocking workflow label is present")
-    elif READY_LABEL not in labels:
-        classification = "needs_ready_label"
-        reasons.append(f"required label {READY_LABEL!r} is absent")
-    elif not contract["complete"]:
-        classification = "needs_spec"
-        reasons.append(
-            "missing implementation-contract fields: " + ", ".join(contract["missing_fields"])
-        )
-    else:
-        classification = "ready"
-        reasons.append("issue state and execution contract permit claim admission")
+    classification, reasons = _classify_issue(normalized, claim, contract, labels)
 
     return {
         "schema": SCHEMA,

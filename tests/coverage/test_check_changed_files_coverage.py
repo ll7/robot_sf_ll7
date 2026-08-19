@@ -18,7 +18,6 @@ from scripts.coverage.check_changed_files_coverage import (
     _declaration_proofs_from_test_source,
     _has_declaration_only_test_proof,
     _is_doc_or_comment_only_python_change,
-<<<<<<< HEAD
     _no_changed_files_message,
     _resolve_comparison,
     _run_check,

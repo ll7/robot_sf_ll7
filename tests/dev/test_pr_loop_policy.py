@@ -2404,6 +2404,33 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     assert queue_result["decisions"][0]["action"] == "mark_ready_candidate"
 
 
+def test_classify_pending_pr_metadata_when_body_contains_not_ready_sentinels() -> None:
+    """A merge-ready PR with matching digest trailer but unapproved sentinels requires reconciliation."""
+    sha = "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2"
+    stale_body = (
+        "## Summary\n\nFix applied.\n\n"
+        "The PR remains unapproved and not merge-ready pending independent exact-head review."
+    )
+    digest = metadata_digest("fix: title", stale_body)
+    pr: dict[str, object] = {
+        "number": 7491,
+        "labels": ["merge-ready"],
+        "head_sha": sha,
+        "base_freshness": {"verdict": "fresh", "base_sha": sha, "main_sha": sha},
+        "checks": {"overall": "success"},
+        "gate_verdicts": [f"gate-verdict: accepted @ {sha}"],
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+        "body": stale_body,
+    }
+    state = classify_pr_state(pr)
+    assert state == "pending_pr_metadata"
+
+    decision = recommend_action(state, pr_number=7491, actions_remaining=3)
+    assert decision.action == "reconcile_pr_metadata"
+    assert decision.flow_decision == "continue"
+
+
 # ---------------------------------------------------------------------------
 # Issue #7515: stacked ancestry parking state
 # ---------------------------------------------------------------------------

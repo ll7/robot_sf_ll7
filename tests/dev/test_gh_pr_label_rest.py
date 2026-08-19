@@ -75,15 +75,15 @@ class TestAddLabel:
         """The helper must POST JSON labels[] and verify via re-read."""
         with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
             mock_run.side_effect = [
-                _proc(stdout=json.dumps({"name": "cheap-lane"})),
-                _proc(stdout=_mock_labels_payload("cheap-lane", "bug")),
+                _proc(stdout=json.dumps({"name": "state:running"})),
+                _proc(stdout=_mock_labels_payload("state:running", "bug")),
             ]
-            result = add_label(5220, "cheap-lane", repo="ll7/robot_sf_ll7")
+            result = add_label(5220, "state:running", repo="ll7/robot_sf_ll7")
 
         assert result == {
             "status": "ok",
             "number": 5220,
-            "label": "cheap-lane",
+            "label": "state:running",
             "action": "add",
             "repo": "ll7/robot_sf_ll7",
         }
@@ -97,7 +97,9 @@ class TestAddLabel:
             "--input",
             "-",
         ]
-        assert json.loads(mock_run.call_args_list[0].kwargs["input"]) == {"labels": ["cheap-lane"]}
+        assert json.loads(mock_run.call_args_list[0].kwargs["input"]) == {
+            "labels": ["state:running"]
+        }
         # Second call: GET to verify
         assert mock_run.call_args_list[1].args[0] == [
             "gh",
@@ -165,12 +167,12 @@ class TestRemoveLabel:
                 _proc(stdout=""),
                 _proc(stdout=_mock_labels_payload("bug")),
             ]
-            result = remove_label(5220, "cheap-lane", repo="ll7/robot_sf_ll7")
+            result = remove_label(5220, "state:running", repo="ll7/robot_sf_ll7")
 
         assert result == {
             "status": "ok",
             "number": 5220,
-            "label": "cheap-lane",
+            "label": "state:running",
             "action": "remove",
             "repo": "ll7/robot_sf_ll7",
         }
@@ -180,7 +182,7 @@ class TestRemoveLabel:
             "api",
             "--method",
             "DELETE",
-            "repos/ll7/robot_sf_ll7/issues/5220/labels/cheap-lane",
+            "repos/ll7/robot_sf_ll7/issues/5220/labels/state%3Arunning",
         ]
         # Second call: GET to verify
         assert mock_run.call_args_list[1].args[0] == [

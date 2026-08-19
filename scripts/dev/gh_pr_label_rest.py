@@ -35,6 +35,7 @@ import argparse
 import json
 import sys
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
@@ -171,7 +172,7 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
     if not label:
         return {"status": "error", "error": "label must be a non-empty string"}
 
-    path = f"repos/{repo}/issues/{number}/labels/{label}"
+    path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
     result = _gh_api_delete(path)
     if result.returncode != 0:
         detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"

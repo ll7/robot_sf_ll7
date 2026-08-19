@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -109,4 +110,47 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
     assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
     assert "# Benchmark namespace residual inventory (issue #7331)" in markdown_path.read_text(
         encoding="utf-8"
+    )
+
+
+def test_git_ref_probe_is_safe_for_detached_checkout(tmp_path: Path) -> None:
+    """The inventory records detached CI checkouts instead of aborting."""
+    repo = tmp_path / "detached-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "--quiet", "--initial-branch", "main"],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, timeout=30)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=contract-test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(["git", "checkout", "--quiet", "--detach", "HEAD"], cwd=repo, check=True)
+
+    assert (
+        audit_benchmark_namespace._git(
+            repo,
+            "symbolic-ref",
+            "--short",
+            "-q",
+            "HEAD",
+            check=False,
+        )
+        == ""
     )

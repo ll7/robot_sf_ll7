@@ -1806,6 +1806,8 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
         check=False,
     )
     tracked_branch = local_branch
+    if not tracked_branch:
+        tracked_branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", "")
     if upstream.returncode == 0 and "/" in upstream.stdout.strip():
         tracked_branch = upstream.stdout.strip().split("/", maxsplit=1)[1]
     assert len(call_lines) == 3
@@ -1813,6 +1815,84 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     assert "pulls/6529" in call_lines[1]
     assert "issues/6529/comments" in call_lines[2]
     assert all("gh pr" not in call for call in call_lines)
+
+
+def test_gh_comment_current_uses_event_ref_for_detached_checkout(tmp_path: Path) -> None:
+    """A detached CI checkout uses the event ref for REST lookup."""
+    repo = tmp_path / "detached-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "--quiet", "--initial-branch", "main"],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, timeout=30)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=contract-test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(["git", "checkout", "--quiet", "--detach", "HEAD"], cwd=repo, check=True)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'if [[ "$*" == *state=open* ]]; then\n'
+        "  printf '%s\\n' '6529'\n"
+        "else\n"
+        "  printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST detached comment\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+    env.pop("GITHUB_HEAD_REF", None)
+    env["GITHUB_REF_NAME"] = "main"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "--current",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert len(call_lines) == 3
+    assert "pulls?state=open&head=ll7:main" in call_lines[0]
 
 
 def test_gh_comment_current_falls_back_to_local_branch_without_upstream(tmp_path: Path) -> None:

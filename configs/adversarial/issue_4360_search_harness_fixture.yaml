@@ -1,0 +1,81 @@
+schema_version: adversarial_search_harness.v1
+name: issue_4360_preparation_fixture
+description: >-
+  Small finite proposal space for contract tests. It is preparation-only and is not a campaign
+  manifest or benchmark matrix.
+source_scenario: tests/adversarial/fixtures/issue_4360_search_harness/source_scenario.yaml
+variables:
+  start_x:
+    unit: m
+    kind: continuous
+    bounds:
+      min: 0.0
+      max: 1.0
+  start_y:
+    unit: m
+    kind: continuous
+    bounds:
+      min: 0.0
+      max: 1.0
+  goal_x:
+    unit: m
+    kind: continuous
+    bounds:
+      min: 2.0
+      max: 4.0
+  goal_y:
+    unit: m
+    kind: continuous
+    bounds:
+      min: 0.0
+      max: 1.0
+  spawn_time_s:
+    unit: s
+    kind: continuous
+    bounds:
+      min: 0.0
+      max: 1.0
+  pedestrian_speed_mps:
+    unit: m/s
+    kind: continuous
+    bounds:
+      min: 0.8
+      max: 1.4
+  pedestrian_delay_s:
+    unit: s
+    kind: continuous
+    bounds:
+      min: 0.0
+      max: 1.0
+  scenario_seed:
+    unit: seed
+    kind: integer
+    bounds:
+      min: 100
+      max: 103
+constraints:
+  - name: minimum_route_length
+    expression: "goal_x - start_x >= 2.0"
+  - name: positive_speed
+    expression: "pedestrian_speed_mps > 0.0"
+objective_vector:
+  components:
+    - name: collision_or_severe_intrusion
+      direction: maximize
+      unit: boolean
+    - name: liveness_or_goal_completion
+      direction: maximize
+      unit: boolean
+    - name: minimum_robot_pedestrian_distance
+      direction: minimize
+      unit: m
+seed_policy:
+  search_seed: 4360
+  candidate_seed_mode: index_derived
+  held_out_replay_seeds:
+    - 843601
+    - 843602
+rollout_budget:
+  candidate_budget: 8
+  rollouts_per_candidate: 1
+  max_steps: 64

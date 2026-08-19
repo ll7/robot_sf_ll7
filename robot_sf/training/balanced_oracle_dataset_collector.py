@@ -1183,6 +1183,16 @@ class BalancedOracleCollector:
 
         seen: set[str] = set()
         defects: list[dict[str, Any]] = []
+
+        def mark_identity_defect(episode: dict[str, Any], kind: str) -> None:
+            """Mark a row invalid while preserving a mapping provenance record."""
+            episode["leakage_invalid"] = True
+            provenance = episode.get("provenance")
+            if not isinstance(provenance, dict):
+                provenance = {}
+                episode["provenance"] = provenance
+            provenance["identity_defect"] = kind
+
         for episode in raw_episodes:
             episode_id = str(episode.get("episode_id", ""))
             duplicate = counts.get(episode_id, 0) > 1
@@ -1190,8 +1200,7 @@ class BalancedOracleCollector:
             identity = expected.get(episode_id)
             if identity is None:
                 defects.append({"kind": "unexpected_episode_id", "episode_id": episode_id})
-                episode["leakage_invalid"] = True
-                episode.setdefault("provenance", {})["identity_defect"] = "unexpected_episode_id"
+                mark_identity_defect(episode, "unexpected_episode_id")
                 continue
             split, scenario_id, seed = identity
             mismatches: list[str] = []
@@ -1199,15 +1208,21 @@ class BalancedOracleCollector:
                 mismatches.append("split")
             if str(episode.get("scenario_id")) != scenario_id:
                 mismatches.append("scenario_id")
-            if int(episode.get("seed", -1)) != seed:
+            try:
+                observed_seed = int(episode.get("seed", -1))
+            except (TypeError, ValueError):
+                observed_seed = None
+            if observed_seed != seed:
                 mismatches.append("seed")
             if duplicate:
                 defects.append({"kind": "duplicate_episode_id", "episode_id": episode_id})
-                episode["leakage_invalid"] = True
-                episode.setdefault("provenance", {})["identity_defect"] = "duplicate_episode_id"
+                mark_identity_defect(episode, "duplicate_episode_id")
             if mismatches:
                 episode["leakage_invalid"] = True
-                provenance = episode.setdefault("provenance", {})
+                provenance = episode.get("provenance")
+                if not isinstance(provenance, dict):
+                    provenance = {}
+                    episode["provenance"] = provenance
                 provenance["identity_mismatches"] = mismatches
                 provenance["expected_identity"] = {
                     "split": split,

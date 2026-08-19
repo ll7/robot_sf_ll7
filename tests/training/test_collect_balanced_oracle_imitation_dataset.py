@@ -1084,3 +1084,30 @@ def test_missing_or_non_mapping_provenance_is_not_usable(tmp_path: Path) -> None
         "provenance_incomplete",
         "provenance_incomplete",
     ]
+
+
+def test_malformed_identity_rows_are_preserved_as_defects(tmp_path: Path) -> None:
+    """Malformed identity fields fail closed without aborting diagnostic accounting."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    expected_id = collector.episodes_by_split["train"][0]
+    malformed = _make_episode(
+        expected_id,
+        "classic_doorway_low",
+        1001,
+        "train",
+        steps=2,
+    )
+    malformed["seed"] = "not-an-integer"
+    malformed["provenance"] = ["not", "a", "mapping"]
+    unexpected = dict(malformed)
+    unexpected["episode_id"] = "train__unexpected__seed9999"
+
+    manifest = collector.collect_dataset(
+        episodes_override=[malformed, unexpected],
+        allow_insufficient_yield=True,
+    )
+
+    defect_kinds = {item["kind"] for item in manifest["identity_defects"]}
+    assert {"identity_mismatch", "unexpected_episode_id"} <= defect_kinds
+    assert all(item["reason"] == "leakage_invalid" for item in manifest["exclusions"])
+    assert manifest["yield_ledger"]["totals"]["usable"] == 0

@@ -1,0 +1,2 @@
+executed 5184 fixed-scope episode rows across 108 cells
+wrote raw rows: output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl

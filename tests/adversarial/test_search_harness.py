@@ -389,8 +389,7 @@ def test_manifest_materializers_cover_inline_and_route_file_payloads() -> None:
     assert inline_scenario["name"] == "materializer_template_manifest_0000"
     assert inline_scenario["single_pedestrians"][0]["id"] == "probe"
     assert any(
-        entry["id"] == "manifest_candidate_0000"
-        for entry in inline_scenario["single_pedestrians"]
+        entry["id"] == "manifest_candidate_0000" for entry in inline_scenario["single_pedestrians"]
     )
     assert inline_scenario["simulation_config"]["peds_speed_mult"] == pytest.approx(1.0)
 

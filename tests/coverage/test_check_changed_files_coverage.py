@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.coverage.check_changed_files_coverage import (
+    _changed_files,
     _changed_line_coverage_details,
     _changed_line_numbers,
     _coverage_for_changed_lines,
@@ -371,3 +372,113 @@ def test_changed_line_parser_ignores_no_newline_marker(
     monkeypatch.setattr("scripts.coverage.check_changed_files_coverage.subprocess.run", fake_run)
 
     assert _changed_line_numbers("origin/main", Path("demo.py"), Path(".")) == {1, 2}
+
+
+def _move_fixture_repo(tmp_path: Path, *, edit: bool) -> tuple[Path, str, str]:
+    """Create a base commit plus a head commit that moves a module file."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "coverage@example.invalid")
+    _git(repo, "config", "user.name", "coverage-fixture")
+    source = repo / "robot_sf" / "feature.py"
+    source.parent.mkdir()
+    source.write_text("def answer() -> int:\n    return 1\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = _git(repo, "rev-parse", "HEAD")
+    destination = repo / "robot_sf" / "moved" / "feature.py"
+    destination.parent.mkdir()
+    _git(repo, "mv", "robot_sf/feature.py", "robot_sf/moved/feature.py")
+    if edit:
+        destination.write_text(
+            "def answer() -> int:\n    return 1\n\ndef changed() -> int:\n    return 2\n",
+            encoding="utf-8",
+        )
+        _git(repo, "add", "robot_sf/moved/feature.py")
+    _git(repo, "commit", "-q", "-m", "move")
+    head_sha = _git(repo, "rev-parse", "HEAD")
+    return repo, base_sha, head_sha
+
+
+def test_pure_move_is_rename_aware_and_reports_zero_changed_lines(tmp_path: Path) -> None:
+    """A pure git mv must not count every moved line as newly changed."""
+    repo, base_sha, head_sha = _move_fixture_repo(tmp_path, edit=False)
+
+    changed = _changed_files(base_sha, repo, head=head_sha)
+    destination = Path("robot_sf/moved/feature.py")
+    source = Path("robot_sf/feature.py")
+
+    assert changed.files == [destination]
+    assert changed.renames == {destination: source}
+    assert (
+        _changed_line_numbers(
+            base_sha,
+            destination,
+            repo,
+            head=head_sha,
+            renamed_from=source,
+        )
+        == set()
+    )
+
+
+def test_move_with_edit_reports_only_edited_lines(tmp_path: Path) -> None:
+    """A move that also edits content must gate only the edited lines."""
+    repo, base_sha, head_sha = _move_fixture_repo(tmp_path, edit=True)
+
+    changed = _changed_files(base_sha, repo, head=head_sha)
+    destination = Path("robot_sf/moved/feature.py")
+
+    assert changed.files == [destination]
+    assert _changed_line_numbers(
+        base_sha,
+        destination,
+        repo,
+        head=head_sha,
+        renamed_from=Path("robot_sf/feature.py"),
+    ) == {3, 4, 5}
+
+
+def test_pure_move_passes_the_end_to_end_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A fully moved module with a coverage row at its new path is fully covered."""
+    repo, base_sha, head_sha = _move_fixture_repo(tmp_path, edit=False)
+    coverage_path = repo / "coverage.json"
+    coverage_path.write_text(
+        json.dumps(
+            {
+                "files": {
+                    "robot_sf/moved/feature.py": {
+                        "executed_lines": [1, 2],
+                        "missing_lines": [],
+                        "summary": {"percent_covered": 100.0},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    report_path = repo / "changed-coverage.json"
+    monkeypatch.setattr("scripts.coverage.check_changed_files_coverage._repo_root", lambda: repo)
+    args = SimpleNamespace(
+        base="origin/main",
+        base_sha=base_sha,
+        head_sha=head_sha,
+        event_name="pull_request",
+        coverage=str(coverage_path),
+        min=80.0,
+        goal=100.0,
+        include=[],
+        exclude=[],
+        show_skipped=False,
+        json_output=report_path,
+        json=False,
+    )
+
+    assert _run_check(args) == 0
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["verdict"] == "passed"
+    assert report["files"][0]["changed_lines"] == []

@@ -115,18 +115,58 @@ def _resolve_comparison(args: argparse.Namespace, repo_root: Path) -> _Compariso
     return _Comparison(base_label=base_label, base_sha=base_sha, head_sha=head_sha)
 
 
-def _changed_files(base: str, repo_root: Path, *, head: str = "HEAD") -> list[Path]:
-    """List files changed relative to a base ref.
+@dataclass(frozen=True)
+class _ChangedFiles:
+    """Changed-file list with rename pairs resolved rename-aware.
+
+    Attributes:
+        files: Changed paths (rename destinations carry the destination path).
+        renames: Mapping from destination path to source path for detected renames.
+    """
+
+    files: list[Path]
+    renames: dict[Path, Path]
+
+
+def _changed_files(base: str, repo_root: Path, *, head: str = "HEAD") -> _ChangedFiles:
+    """List files changed relative to a base ref, resolving pure moves.
+
+    A rename-aware diff is required: without it a pure ``git mv`` appears as a
+    full-file addition and every line of the moved module counts as changed.
+    Rename destinations keep their destination path in ``files``; the source
+    path is recorded in ``renames`` so line numbers can be computed with a
+    move-insensitive content comparison.
 
     Returns:
-        Repository-relative paths changed in the comparison.
+        Changed repository-relative paths plus the rename map.
     """
     output = _run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"{base}...{head}"],
+        [
+            "git",
+            "diff",
+            "--name-status",
+            "--find-renames=50%",
+            "--diff-filter=ACMRT",
+            f"{base}...{head}",
+        ],
         cwd=repo_root,
     )
-    files = [Path(line.strip()) for line in output.splitlines() if line.strip()]
-    return files
+    files: list[Path] = []
+    renames: dict[Path, Path] = {}
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if not parts or not parts[0]:
+            continue
+        status = parts[0]
+        if status.startswith("R") and len(parts) >= 3:
+            source, destination = Path(parts[1]), Path(parts[2])
+            renames[destination] = source
+            files.append(destination)
+        elif len(parts) >= 2:
+            files.append(Path(parts[1]))
+        else:
+            files.append(Path(parts[0]))
+    return _ChangedFiles(files=files, renames=renames)
 
 
 def _file_at_ref(
@@ -654,27 +694,55 @@ def _changed_line_numbers(
     repo_root: Path,
     *,
     head: str = "HEAD",
+    renamed_from: Path | None = None,
 ) -> set[int]:
     """Return new-file line numbers touched by the diff against *base*.
+
+    Args:
+        base: Base ref for the comparison.
+        path: Repository-relative path on the head side.
+        repo_root: Repository root.
+        head: Head ref for the comparison.
+        renamed_from: Optional source path when *path* is a rename destination.
+            Path-limited diffs disable Git's rename pairing, so a moved file
+            would otherwise read as a full-file addition. A move-insensitive
+            content comparison between the base-side source and the head-side
+            destination reports only lines actually edited by the move.
 
     Returns:
         Set of line numbers on ``HEAD`` that were added or modified relative to the merge-base.
     """
-    proc = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--unified=0",
-            "--diff-filter=ACMRT",
-            f"{base}...{head}",
-            "--",
-            path.as_posix(),
-        ],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    if renamed_from is not None:
+        merge_base = _run(["git", "merge-base", base, head], cwd=repo_root)
+        proc = subprocess.run(
+            [
+                "git",
+                "diff",
+                "--unified=0",
+                f"{merge_base}:{renamed_from.as_posix()}",
+                f"{head}:{path.as_posix()}",
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    else:
+        proc = subprocess.run(
+            [
+                "git",
+                "diff",
+                "--unified=0",
+                "--diff-filter=ACMRT",
+                f"{base}...{head}",
+                "--",
+                path.as_posix(),
+            ],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     if proc.returncode != 0:
         stderr = getattr(proc, "stderr", "")
         raise RuntimeError(
@@ -954,6 +1022,7 @@ def _build_results(
     base: str,
     repo_root: Path,
     changed_files: Iterable[Path],
+    renames: dict[Path, Path] | None = None,
     head: str = "HEAD",
 ) -> list[_CoverageResult]:
     """Attach coverage data to selected changed files.
@@ -967,7 +1036,13 @@ def _build_results(
         file_coverage, resolved = _resolve_coverage(path_str, coverage_index)
         coverage = file_coverage
         scope = "file"
-        changed_lines = _changed_line_numbers(base, Path(path_str), repo_root, head=head)
+        changed_lines = _changed_line_numbers(
+            base,
+            Path(path_str),
+            repo_root,
+            head=head,
+            renamed_from=(renames or {}).get(Path(path_str)),
+        )
         executable_changed_lines: list[int] | None = None
         covered_changed_lines: list[int] | None = None
         missing_changed_lines: list[int] | None = None
@@ -1169,7 +1244,7 @@ def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report sta
             failure_reasons=[f"diff_unavailable:{exc}"],
         )
         return _finish(args, repo_root, report, 2)
-    if not changed_files:
+    if not changed_files.files:
         report = _new_report(
             args,
             comparison=comparison,
@@ -1184,7 +1259,7 @@ def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report sta
         return _finish(args, repo_root, report, 0)
 
     selected, skipped = _select_changed_files(
-        changed_files,
+        changed_files.files,
         repo_root,
         include_patterns,
         exclude_patterns,
@@ -1260,7 +1335,8 @@ def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report sta
             coverage_file_data,
             base=comparison.base_sha,
             repo_root=repo_root,
-            changed_files=changed_files,
+            changed_files=changed_files.files,
+            renames=changed_files.renames,
             head=comparison.head_sha,
         )
     except (OSError, RuntimeError, TypeError, ValueError) as exc:

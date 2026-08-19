@@ -409,7 +409,7 @@ def _resolve_merge_group_binding(
     return binding, str(queue_merging_strategy or "unknown").upper()
 
 
-def evaluate_merge_gate(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-closed admission dimensions.
+def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",

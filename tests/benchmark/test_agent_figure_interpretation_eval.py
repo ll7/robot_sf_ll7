@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import shutil
 import subprocess
@@ -51,17 +52,68 @@ def _clean_packet() -> dict[str, object]:
     return json.loads((FIXTURE_DIR / "clean.json").read_text(encoding="utf-8"))
 
 
-def _candidate(packet_id: str) -> dict[str, object]:
-    packet = json.loads((FIXTURE_DIR / f"{packet_id}.json").read_text(encoding="utf-8"))
-    return {
+def _candidate(packet_id: str, mutation_id: str | None = None) -> dict[str, object]:
+    if packet_id in eval_mod.SYNTHETIC_MUTATION_IDS:
+        packet = eval_mod._apply_synthetic_mutation(_clean_packet(), packet_id)
+    else:
+        packet = json.loads((FIXTURE_DIR / f"{packet_id}.json").read_text(encoding="utf-8"))
+    mutation_id = mutation_id or packet_id
+    manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+    artifact_id = "clean" if packet_id in eval_mod.SYNTHETIC_MUTATION_IDS else packet_id
+    artifact = next(item for item in manifest["artifacts"] if item["id"] == artifact_id)
+    figure = {
+        "spec": {"fixture_id": packet["source"]["source_id"], "mutation_id": mutation_id},
+        "caption": "Diagnostic fixture candidate; semantic review is unavailable.",
+    }
+    interpretation = packet["interpretation"]
+    candidate = {
         "schema_version": CANDIDATE_SCHEMA_VERSION,
         "artifact_kind": "candidate_interpretation",
         "provider": "none",
         "fixture_id": packet["source"]["source_id"],
-        "mutation_id": packet_id,
+        "mutation_id": mutation_id,
+        "workflow": {"id": "fixture-test-candidate", "revision": "test-revision-1"},
+        "figure": figure,
+        "limitations": ["frozen fixture only"],
+        "confidence": {"status": "not_available", "value": None},
+        "unresolved_questions": ["independent semantic review"],
         "claim_boundary": "fixture replay only; not benchmark evidence",
-        "interpretation": packet["interpretation"],
+        "interpretation": interpretation,
+        "mutation": {
+            "id": mutation_id,
+            "expected_detectors": [] if mutation_id == "clean" else [mutation_id],
+        },
+        "findings": {
+            dimension: {"status": "not_available", "critical": False} for dimension in DIMENSIONS
+        },
+        "unavailable": ["independent semantic review"],
+        "not_applicable": ["external provider execution"],
+        "provenance": {
+            "manifest_schema_version": "agent_figure_interpretation_eval_manifest.v1",
+            "source_sha256": artifact["source_sha256"],
+            "packet_sha256": artifact["sha256"],
+            "reference_sha256": artifact["reference_sha256"],
+            "candidate_sha256": "0" * 64,
+            "figure_sha256": {
+                "status": "available",
+                "sha256": eval_mod._canonical_digest(figure["spec"]),
+            },
+            "caption_sha256": {
+                "status": "available",
+                "sha256": hashlib.sha256(figure["caption"].encode("utf-8")).hexdigest(),
+            },
+            "review_sha256": {"status": "not_available", "sha256": None},
+        },
+        "replay_provenance": {
+            "mode": "fixture",
+            "deterministic": True,
+            "external_provider_called": False,
+            "network_access": "none",
+        },
+        "verdict": "pending",
     }
+    candidate["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(candidate)
+    return candidate
 
 
 def _review_scores(value: float = 1.0) -> dict[str, float]:
@@ -178,6 +230,10 @@ def test_replay_inventory_lists_source_fixtures_and_required_detectors() -> None
     assert mutation_by_id["clean"]["expected_detectors"] == []
     for mutation_id in CRITICAL_ERROR_KINDS:
         assert mutation_by_id[mutation_id]["expected_detectors"] == [mutation_id]
+    assert {item["mutation_id"] for item in inventory["integrity_mutations"]} == {
+        "digest_omission",
+        "stale_post_review_bytes",
+    }
     assert {fixture["fixture_id"] for fixture in inventory["fixtures"]} == {
         "issue-7030-frozen-figure-a",
         "issue-7030-frozen-figure-fallback",
@@ -191,6 +247,11 @@ def test_candidate_envelope_is_provider_free_and_exact() -> None:
     jsonschema.Draft202012Validator.check_schema(_candidate_schema())
     jsonschema.validate(candidate, _candidate_schema())
 
+    semantic_review = copy.deepcopy(candidate)
+    semantic_review["findings"]["caption_accuracy"]["status"] = "requires_semantic_review"
+    validate_candidate_envelope(semantic_review)
+    jsonschema.validate(semantic_review, _candidate_schema())
+
     invalid_provider = dict(candidate, provider="local-model")
     with pytest.raises(AgentFigureEvalError, match="provider must be 'none'"):
         validate_candidate_envelope(invalid_provider)
@@ -202,6 +263,37 @@ def test_candidate_envelope_is_provider_free_and_exact() -> None:
     with_reference = dict(candidate, reference=candidate["interpretation"])
     with pytest.raises(AgentFigureEvalError, match="unexpected reference"):
         validate_candidate_envelope(with_reference)
+
+
+def test_replay_digest_omission_and_stale_bytes_fail_closed() -> None:
+    omitted = _candidate("clean")
+    del omitted["provenance"]["source_sha256"]  # type: ignore[index]
+    with pytest.raises(AgentFigureEvalError, match="complete digest contract"):
+        validate_candidate_envelope(omitted)
+
+    for digest_name in ("figure_sha256", "caption_sha256", "review_sha256"):
+        omitted = _candidate("clean")
+        del omitted["provenance"][digest_name]  # type: ignore[index]
+        with pytest.raises(AgentFigureEvalError, match="complete digest contract"):
+            validate_candidate_envelope(omitted)
+
+    stale = _candidate("clean")
+    stale["provenance"]["packet_sha256"] = "0" * 64  # type: ignore[index]
+    with pytest.raises(AgentFigureEvalError, match="does not match verified bytes"):
+        replay_fixture_mutation(MANIFEST, stale)
+
+    reviewed = _candidate("clean")
+    reviewed["provenance"]["review_sha256"] = {  # type: ignore[index]
+        "status": "available",
+        "sha256": eval_mod._canonical_digest(eval_mod._review_digest_payload(reviewed)),
+    }
+    stale_review = copy.deepcopy(reviewed)
+    stale_review["findings"]["caption_accuracy"]["critical"] = True
+    stale_review["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(
+        stale_review
+    )
+    with pytest.raises(AgentFigureEvalError, match="post-review bytes"):
+        replay_fixture_mutation(MANIFEST, stale_review)
 
 
 @pytest.mark.parametrize("packet_id", ["clean", *CRITICAL_ERROR_KINDS])
@@ -223,10 +315,12 @@ def test_replay_all_requires_exact_corpus_coverage_and_is_deterministic() -> Non
 
     assert first == second
     assert first["mode"] == "all"
-    assert first["case_count"] == 8
-    assert first["passed_case_count"] == 8
+    assert first["case_count"] == 11
+    assert first["passed_case_count"] == 11
     assert first["failed_case_count"] == 0
     assert first["detector_status"] == "pass"
+    assert set(first["provenance"]) == {"code_sha256", "config_sha256", "fixture_sha256"}
+    assert all(len(digest) == 64 for digest in first["provenance"].values())
 
     with pytest.raises(AgentFigureEvalError, match="coverage mismatch"):
         replay_all_fixture_mutations(MANIFEST, candidates[:-1])
@@ -689,6 +783,22 @@ def test_cli_lists_and_replays_candidate_envelopes(tmp_path: Path) -> None:
         text=True,
     )
     assert json.loads(one.stdout)["detector_status"] == "pass"
+
+    validated = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(candidate_path),
+            "--validate",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(validated.stdout)["verdict"] == "valid"
 
     all_candidates_path = tmp_path / "candidates.json"
     all_candidates_path.write_text(

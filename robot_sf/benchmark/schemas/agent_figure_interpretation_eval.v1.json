@@ -39,7 +39,10 @@
         "fallback_degraded_promotion",
         "causal_overclaim",
         "unsupported_ranking",
-        "null_overclaim"
+        "null_overclaim",
+        "effect_direction_desirability",
+        "native_adapter_merge",
+        "multiplicity_language"
       ],
       "properties": {
         "unavailable_to_zero": {"type": "integer", "minimum": 0},
@@ -48,7 +51,10 @@
         "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
         "causal_overclaim": {"type": "integer", "minimum": 0},
         "unsupported_ranking": {"type": "integer", "minimum": 0},
-        "null_overclaim": {"type": "integer", "minimum": 0}
+        "null_overclaim": {"type": "integer", "minimum": 0},
+        "effect_direction_desirability": {"type": "integer", "minimum": 0},
+        "native_adapter_merge": {"type": "integer", "minimum": 0},
+        "multiplicity_language": {"type": "integer", "minimum": 0}
       }
     },
     "aggregate_summary": {
@@ -201,7 +207,10 @@
               "fallback_degraded_promotion",
               "causal_overclaim",
               "unsupported_ranking",
-              "null_overclaim"
+              "null_overclaim",
+              "effect_direction_desirability",
+              "native_adapter_merge",
+              "multiplicity_language"
             ],
             "properties": {
               "unavailable_to_zero": {"type": "boolean"},
@@ -210,7 +219,10 @@
               "fallback_degraded_promotion": {"type": "boolean"},
               "causal_overclaim": {"type": "boolean"},
               "unsupported_ranking": {"type": "boolean"},
-              "null_overclaim": {"type": "boolean"}
+              "null_overclaim": {"type": "boolean"},
+              "effect_direction_desirability": {"type": "boolean"},
+              "native_adapter_merge": {"type": "boolean"},
+              "multiplicity_language": {"type": "boolean"}
             }
           },
           "aggregate_score": {"type": "number", "minimum": 0, "maximum": 1},
@@ -318,7 +330,10 @@
         "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
         "causal_overclaim": {"type": "integer", "minimum": 0},
         "unsupported_ranking": {"type": "integer", "minimum": 0},
-        "null_overclaim": {"type": "integer", "minimum": 0}
+        "null_overclaim": {"type": "integer", "minimum": 0},
+        "effect_direction_desirability": {"type": "integer", "minimum": 0},
+        "native_adapter_merge": {"type": "integer", "minimum": 0},
+        "multiplicity_language": {"type": "integer", "minimum": 0}
       }
     },
     "case_status_counts": {
@@ -380,7 +395,10 @@
         "fallback_degraded_promotion",
         "causal_overclaim",
         "unsupported_ranking",
-        "null_overclaim"
+        "null_overclaim",
+        "effect_direction_desirability",
+        "native_adapter_merge",
+        "multiplicity_language"
       ],
       "properties": {
         "unavailable_to_zero": {"$ref": "#/$defs/packet_id_list"},
@@ -389,7 +407,10 @@
         "fallback_degraded_promotion": {"$ref": "#/$defs/packet_id_list"},
         "causal_overclaim": {"$ref": "#/$defs/packet_id_list"},
         "unsupported_ranking": {"$ref": "#/$defs/packet_id_list"},
-        "null_overclaim": {"$ref": "#/$defs/packet_id_list"}
+        "null_overclaim": {"$ref": "#/$defs/packet_id_list"},
+        "effect_direction_desirability": {"$ref": "#/$defs/packet_id_list"},
+        "native_adapter_merge": {"$ref": "#/$defs/packet_id_list"},
+        "multiplicity_language": {"$ref": "#/$defs/packet_id_list"}
       }
     },
     "packet_id_list": {
@@ -480,7 +501,10 @@
             "fallback_degraded_promotion",
             "causal_overclaim",
             "unsupported_ranking",
-            "null_overclaim"
+            "null_overclaim",
+            "effect_direction_desirability",
+            "native_adapter_merge",
+            "multiplicity_language"
           ],
           "properties": {
             "unavailable_to_zero": {"type": "boolean"},
@@ -489,7 +513,10 @@
             "fallback_degraded_promotion": {"type": "boolean"},
             "causal_overclaim": {"type": "boolean"},
             "unsupported_ranking": {"type": "boolean"},
-            "null_overclaim": {"type": "boolean"}
+            "null_overclaim": {"type": "boolean"},
+            "effect_direction_desirability": {"type": "boolean"},
+            "native_adapter_merge": {"type": "boolean"},
+            "multiplicity_language": {"type": "boolean"}
           }
         }
       }

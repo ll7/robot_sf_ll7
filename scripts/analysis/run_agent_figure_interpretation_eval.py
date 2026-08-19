@@ -16,6 +16,7 @@ from robot_sf.benchmark.agent_figure_interpretation_eval import (
     list_fixture_mutations,
     replay_all_fixture_mutations,
     replay_fixture_mutation,
+    validate_candidate_envelope,
 )
 
 DEFAULT_MANIFEST = (
@@ -57,6 +58,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Replay a JSON array of candidate envelopes against every verified pair.",
     )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Validate one candidate envelope without replaying it.",
+    )
     parser.add_argument("--fixture-id", help="Require this fixture ID in one-pair mode.")
     parser.add_argument("--mutation-id", help="Require this mutation ID in one-pair mode.")
     return parser
@@ -70,7 +76,7 @@ def _load_candidate_payload(path: Path) -> Any:
 
 
 def _run_list(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
-    if args.candidate or args.replay_all or args.fixture_id or args.mutation_id:
+    if args.candidate or args.replay_all or args.validate or args.fixture_id or args.mutation_id:
         raise AgentFigureEvalError("--list cannot be combined with replay arguments")
     return list_fixture_mutations(args.manifest), 0
 
@@ -82,6 +88,25 @@ def _run_all(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         raise AgentFigureEvalError("--replay-all cannot use --fixture-id or --mutation-id")
     result = replay_all_fixture_mutations(args.manifest, _load_candidate_payload(args.candidate))
     return result, 0 if result["detector_status"] == "pass" else 1
+
+
+def _run_validate(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if not args.candidate:
+        raise AgentFigureEvalError("--validate requires --candidate")
+    if args.replay_all or args.fixture_id or args.mutation_id:
+        raise AgentFigureEvalError("--validate cannot use replay selectors")
+    payload = _load_candidate_payload(args.candidate)
+    if not isinstance(payload, dict):
+        raise AgentFigureEvalError("--validate candidate must be a JSON object")
+    validate_candidate_envelope(payload)
+    return {
+        "schema_version": "agent_figure_interpretation_replay.v1",
+        "status": "evaluation_artifacts_only",
+        "claim_boundary": "fixture replay only; no external model calls, no benchmark claims, and no generated evidence promotion",
+        "mode": "validate",
+        "detector_status": "not_run",
+        "verdict": "valid",
+    }, 0
 
 
 def _run_one(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
@@ -101,6 +126,8 @@ def _run_requested_mode(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         return _run_list(args)
     if args.replay_all:
         return _run_all(args)
+    if args.validate:
+        return _run_validate(args)
     if args.candidate:
         return _run_one(args)
     if args.fixture_id or args.mutation_id:

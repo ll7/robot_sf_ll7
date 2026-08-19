@@ -42,8 +42,20 @@ REQUIRED_CANDIDATE_KEYS = frozenset(
         "provider",
         "fixture_id",
         "mutation_id",
+        "workflow",
+        "figure",
+        "limitations",
+        "confidence",
+        "unresolved_questions",
         "claim_boundary",
         "interpretation",
+        "mutation",
+        "findings",
+        "unavailable",
+        "not_applicable",
+        "provenance",
+        "replay_provenance",
+        "verdict",
     }
 )
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -66,8 +78,21 @@ CRITICAL_ERROR_KINDS = (
     "causal_overclaim",
     "unsupported_ranking",
     "null_overclaim",
+    "effect_direction_desirability",
+    "native_adapter_merge",
+    "multiplicity_language",
 )
 REQUIRED_SCIENTIFIC_ERROR_MUTATIONS = CRITICAL_ERROR_KINDS
+INTEGRITY_MUTATION_IDS = (
+    "digest_omission",
+    "stale_post_review_bytes",
+)
+SYNTHETIC_MUTATION_FIXTURE_ID = "issue-7030-frozen-figure-a"
+SYNTHETIC_MUTATION_IDS = (
+    "effect_direction_desirability",
+    "native_adapter_merge",
+    "multiplicity_language",
+)
 INTERPRETATION_VARIANTS = ("baseline", "packet_constrained")
 SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2}
 CRITICAL_ERROR_DIMENSIONS = {
@@ -78,6 +103,9 @@ CRITICAL_ERROR_DIMENSIONS = {
     "causal_overclaim": "claim_boundary",
     "unsupported_ranking": "visual_semantics",
     "null_overclaim": "claim_boundary",
+    "effect_direction_desirability": "visual_semantics",
+    "native_adapter_merge": "evidence_tier_availability",
+    "multiplicity_language": "stats_multiplicity",
 }
 _HIGHER_THAN_DIAGNOSTIC = {
     "smoke",
@@ -236,6 +264,9 @@ def validate_candidate_envelope(envelope: Mapping[str, Any]) -> None:
     _validate_candidate_keys(envelope)
     _validate_candidate_identity(envelope)
     _validate_candidate_interpretation(envelope)
+    _validate_candidate_context(envelope)
+    _validate_candidate_findings(envelope)
+    _validate_candidate_provenance(envelope)
 
 
 def _validate_candidate_keys(envelope: Mapping[str, Any]) -> None:
@@ -271,6 +302,167 @@ def _validate_candidate_identity(envelope: Mapping[str, Any]) -> None:
         value = envelope.get(key)
         if not isinstance(value, str) or not value:
             raise AgentFigureEvalError(f"candidate {key} must be a non-empty string")
+    if envelope.get("verdict") != "pending":
+        raise AgentFigureEvalError("candidate verdict must be 'pending' before replay")
+    _validate_candidate_mutation(envelope)
+
+
+def _validate_candidate_mutation(envelope: Mapping[str, Any]) -> None:
+    """Validate the candidate mutation identity and expected detector list."""
+
+    mutation = envelope.get("mutation")
+    if not isinstance(mutation, Mapping) or set(mutation) != {"id", "expected_detectors"}:
+        raise AgentFigureEvalError("candidate mutation must contain id and expected_detectors")
+    if mutation.get("id") != envelope.get("mutation_id"):
+        raise AgentFigureEvalError("candidate mutation.id must match mutation_id")
+    detectors = mutation.get("expected_detectors")
+    if not isinstance(detectors, list) or any(
+        not isinstance(detector, str) or detector not in CRITICAL_ERROR_KINDS
+        for detector in detectors
+    ):
+        raise AgentFigureEvalError(
+            "candidate mutation.expected_detectors must name known detectors"
+        )
+
+
+def _validate_candidate_context(envelope: Mapping[str, Any]) -> None:
+    """Validate workflow, figure, confidence, and explicit unavailable fields."""
+
+    _validate_candidate_workflow_and_figure(envelope)
+    _validate_candidate_text_lists(envelope)
+    _validate_candidate_confidence(envelope)
+
+
+def _validate_candidate_workflow_and_figure(envelope: Mapping[str, Any]) -> None:
+    """Validate workflow identity and the figure specification/caption."""
+
+    workflow = envelope.get("workflow")
+    if not isinstance(workflow, Mapping) or set(workflow) != {"id", "revision"}:
+        raise AgentFigureEvalError("candidate workflow must contain id and revision")
+    for key in ("id", "revision"):
+        if not isinstance(workflow.get(key), str) or not workflow[key]:
+            raise AgentFigureEvalError(f"candidate workflow.{key} must be non-empty text")
+
+    figure = envelope.get("figure")
+    if not isinstance(figure, Mapping) or set(figure) != {"spec", "caption"}:
+        raise AgentFigureEvalError("candidate figure must contain spec and caption")
+    if not isinstance(figure.get("spec"), Mapping):
+        raise AgentFigureEvalError("candidate figure.spec must be an object")
+    if not isinstance(figure.get("caption"), str):
+        raise AgentFigureEvalError("candidate figure.caption must be text")
+
+
+def _validate_candidate_text_lists(envelope: Mapping[str, Any]) -> None:
+    """Validate explicit list fields used for limitations and availability."""
+
+    for key in ("limitations", "unresolved_questions", "unavailable", "not_applicable"):
+        values = envelope.get(key)
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            raise AgentFigureEvalError(f"candidate {key} must be a list of strings")
+
+
+def _validate_candidate_confidence(envelope: Mapping[str, Any]) -> None:
+    """Validate confidence status and its nullable numeric value."""
+
+    confidence = envelope.get("confidence")
+    if not isinstance(confidence, Mapping) or set(confidence) != {"status", "value"}:
+        raise AgentFigureEvalError("candidate confidence must contain status and value")
+    status = confidence.get("status")
+    value = confidence.get("value")
+    if status not in {"available", "not_available", "not_applicable"}:
+        raise AgentFigureEvalError("candidate confidence.status is invalid")
+    if status == "available":
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 1:
+            raise AgentFigureEvalError("candidate confidence.value must be a number in [0, 1]")
+    elif value is not None:
+        raise AgentFigureEvalError("unavailable confidence must carry a null value")
+
+
+def _validate_candidate_findings(envelope: Mapping[str, Any]) -> None:
+    """Require per-dimension findings without allowing hidden aggregate results."""
+
+    findings = envelope.get("findings")
+    if not isinstance(findings, Mapping) or set(findings) != set(DIMENSIONS):
+        raise AgentFigureEvalError("candidate findings must cover exactly all scoring dimensions")
+    for dimension in DIMENSIONS:
+        finding = findings[dimension]
+        if not isinstance(finding, Mapping) or set(finding) != {"status", "critical"}:
+            raise AgentFigureEvalError(
+                f"candidate findings.{dimension} must contain status and critical"
+            )
+        if finding.get("status") not in {
+            "available",
+            "not_available",
+            "not_applicable",
+            "requires_semantic_review",
+        }:
+            raise AgentFigureEvalError(f"candidate findings.{dimension}.status is invalid")
+        if not isinstance(finding.get("critical"), bool):
+            raise AgentFigureEvalError(f"candidate findings.{dimension}.critical must be boolean")
+
+
+def _validate_candidate_provenance(envelope: Mapping[str, Any]) -> None:
+    """Validate explicit replay provenance and the no-provider boundary."""
+
+    provenance = envelope.get("provenance")
+    required = {
+        "manifest_schema_version",
+        "source_sha256",
+        "packet_sha256",
+        "reference_sha256",
+        "candidate_sha256",
+        "figure_sha256",
+        "caption_sha256",
+        "review_sha256",
+    }
+    if not isinstance(provenance, Mapping) or set(provenance) != required:
+        raise AgentFigureEvalError("candidate provenance must contain the complete digest contract")
+    if provenance.get("manifest_schema_version") != MANIFEST_SCHEMA_VERSION:
+        raise AgentFigureEvalError("candidate provenance manifest schema mismatch")
+    _validate_required_provenance_digests(provenance)
+    _validate_optional_provenance_digests(provenance)
+    _validate_candidate_replay_contract(envelope)
+
+
+def _validate_required_provenance_digests(provenance: Mapping[str, Any]) -> None:
+    """Validate digests that must always be bound to manifest or candidate bytes."""
+
+    for key in ("source_sha256", "packet_sha256", "reference_sha256", "candidate_sha256"):
+        if not isinstance(provenance.get(key), str) or not DIGEST_RE.fullmatch(provenance[key]):
+            raise AgentFigureEvalError(f"candidate provenance.{key} must be a SHA-256 digest")
+
+
+def _validate_optional_provenance_digests(provenance: Mapping[str, Any]) -> None:
+    """Validate status-bearing figure, caption, and review digest records."""
+
+    for key in ("figure_sha256", "caption_sha256", "review_sha256"):
+        digest = provenance.get(key)
+        if not isinstance(digest, Mapping) or set(digest) != {"status", "sha256"}:
+            raise AgentFigureEvalError(f"candidate provenance.{key} must contain status and sha256")
+        if digest.get("status") not in {"available", "not_available", "not_applicable"}:
+            raise AgentFigureEvalError(f"candidate provenance.{key}.status is invalid")
+        value = digest.get("sha256")
+        if digest["status"] == "available":
+            if not isinstance(value, str) or not DIGEST_RE.fullmatch(value):
+                raise AgentFigureEvalError(f"candidate provenance.{key}.sha256 must be a digest")
+        elif value is not None:
+            raise AgentFigureEvalError(f"candidate provenance.{key} must use null when unavailable")
+
+
+def _validate_candidate_replay_contract(envelope: Mapping[str, Any]) -> None:
+    """Validate the provider-free deterministic replay declaration."""
+
+    replay = envelope.get("replay_provenance")
+    expected_replay = {
+        "mode": "fixture",
+        "deterministic": True,
+        "external_provider_called": False,
+        "network_access": "none",
+    }
+    if replay != expected_replay:
+        raise AgentFigureEvalError(
+            "candidate replay_provenance must declare provider-free fixture mode"
+        )
 
 
 def _validate_candidate_interpretation(envelope: Mapping[str, Any]) -> None:
@@ -288,6 +480,31 @@ def _validate_candidate_interpretation(envelope: Mapping[str, Any]) -> None:
             raise AgentFigureEvalError(f"candidate interpretation.{dimension} must be an object")
 
 
+def _apply_synthetic_mutation(packet: Mapping[str, Any], mutation_id: str) -> dict[str, Any]:
+    """Apply one deterministic packet-field mutation without adding source artifacts.
+
+    Returns:
+        A canonicalized packet with the requested synthetic mutation applied.
+    """
+
+    if mutation_id not in SYNTHETIC_MUTATION_IDS:
+        raise AgentFigureEvalError(f"unknown synthetic mutation {mutation_id!r}")
+    mutated = json.loads(canonical_json(packet))
+    interpretation = mutated["interpretation"]
+    if mutation_id == "effect_direction_desirability":
+        visual = interpretation["visual_semantics"]
+        visual["effect_direction"] = "reversed"
+        visual["metric_desirability"] = "reversed"
+    elif mutation_id == "native_adapter_merge":
+        evidence = interpretation["evidence_tier_availability"]
+        evidence["row_provenance"] = ["native", "adapter"]
+        evidence["rows_disclosed"] = False
+    elif mutation_id == "multiplicity_language":
+        stats = interpretation["stats_multiplicity"]
+        stats["multiplicity_language"] = "unadjusted comparisons"
+    return mutated
+
+
 def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
     """List verified source fixtures and their deterministic mutation detectors.
 
@@ -299,10 +516,47 @@ def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
         Deterministic fixture and mutation inventory.
     """
 
+    verified_packets = load_verified_packets(manifest_path)
+    fixture_mutations, mutation_records, seen_mutations = _inventory_packet_mutations(
+        verified_packets
+    )
+    clean_packet = next(
+        (
+            packet
+            for _, packet in verified_packets
+            if packet.get("packet_id") == "clean"
+            and _required_mapping(packet, "source").get("source_id")
+            == SYNTHETIC_MUTATION_FIXTURE_ID
+        ),
+        None,
+    )
+    if clean_packet is None:
+        raise AgentFigureEvalError("synthetic mutation base packet is missing")
+    _inventory_synthetic_mutations(
+        clean_packet, fixture_mutations, mutation_records, seen_mutations
+    )
+
+    missing = sorted(set(REQUIRED_SCIENTIFIC_ERROR_MUTATIONS) - seen_mutations)
+    if missing:
+        raise AgentFigureEvalError(
+            "manifest is missing required scientific-error mutations: " + ", ".join(missing)
+        )
+    return _mutation_inventory_result(fixture_mutations, mutation_records)
+
+
+def _inventory_packet_mutations(
+    verified_packets: list[tuple[Path, dict[str, Any]]],
+) -> tuple[dict[str, set[str]], list[dict[str, Any]], set[str]]:
+    """Validate and inventory packet-backed mutation records.
+
+    Returns:
+        Fixture-to-mutation mapping, public mutation records, and seen IDs.
+    """
+
     fixture_mutations: dict[str, set[str]] = {}
     mutation_records: list[dict[str, Any]] = []
     seen_mutations: set[str] = set()
-    for _, packet in load_verified_packets(manifest_path):
+    for _, packet in verified_packets:
         source = _required_mapping(packet, "source")
         fixture_id = _required_text(source, "source_id")
         mutation_id = _required_text(packet, "packet_id")
@@ -333,12 +587,49 @@ def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
                 "expected_detectors": detectors,
             }
         )
+    return fixture_mutations, mutation_records, seen_mutations
 
-    missing = sorted(set(REQUIRED_SCIENTIFIC_ERROR_MUTATIONS) - seen_mutations)
-    if missing:
-        raise AgentFigureEvalError(
-            "manifest is missing required scientific-error mutations: " + ", ".join(missing)
+
+def _inventory_synthetic_mutations(
+    clean_packet: Mapping[str, Any],
+    fixture_mutations: dict[str, set[str]],
+    mutation_records: list[dict[str, Any]],
+    seen_mutations: set[str],
+) -> None:
+    """Apply and validate deterministic operators over the clean base packet."""
+
+    for mutation_id in SYNTHETIC_MUTATION_IDS:
+        if mutation_id in seen_mutations:
+            raise AgentFigureEvalError(f"duplicate mutation_id {mutation_id!r}")
+        mutated = _apply_synthetic_mutation(clean_packet, mutation_id)
+        detectors = [
+            kind for kind in CRITICAL_ERROR_KINDS if evaluate_packet(mutated).critical_errors[kind]
+        ]
+        if detectors != [mutation_id]:
+            raise AgentFigureEvalError(
+                f"synthetic mutation {mutation_id!r} must trigger exactly its named detector"
+            )
+        seen_mutations.add(mutation_id)
+        fixture_mutations.setdefault(SYNTHETIC_MUTATION_FIXTURE_ID, set()).add(mutation_id)
+        mutation_records.append(
+            {
+                "fixture_id": SYNTHETIC_MUTATION_FIXTURE_ID,
+                "mutation_id": mutation_id,
+                "expected_detectors": detectors,
+                "mode": "deterministic_operator",
+            }
         )
+
+
+def _mutation_inventory_result(
+    fixture_mutations: Mapping[str, set[str]], mutation_records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Build the public provider-free mutation inventory report.
+
+    Returns:
+        A deterministic diagnostic inventory report.
+    """
+
     return {
         "schema_version": REPLAY_SCHEMA_VERSION,
         "status": EXPECTED_MANIFEST_STATUS,
@@ -348,6 +639,14 @@ def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
             for fixture_id, mutation_ids in sorted(fixture_mutations.items())
         ],
         "mutations": sorted(mutation_records, key=lambda record: record["mutation_id"]),
+        "integrity_mutations": [
+            {
+                "mutation_id": mutation_id,
+                "expected_detectors": ["digest_drift"],
+                "mode": "manifest_validation",
+            }
+            for mutation_id in INTEGRITY_MUTATION_IDS
+        ],
     }
 
 
@@ -374,15 +673,31 @@ def replay_fixture_mutation(
 
     packets = _verified_packet_index(manifest_path)
     packet = packets.get((envelope_fixture_id, envelope_mutation_id))
+    artifact_id = envelope_mutation_id
+    if packet is None and (
+        envelope_fixture_id == SYNTHETIC_MUTATION_FIXTURE_ID
+        and envelope_mutation_id in SYNTHETIC_MUTATION_IDS
+    ):
+        packet = packets.get((envelope_fixture_id, "clean"))
+        if packet is not None:
+            packet = _apply_synthetic_mutation(packet, envelope_mutation_id)
+            artifact_id = "clean"
     if packet is None:
         raise AgentFigureEvalError(
             f"unknown fixture/mutation pair: {envelope_fixture_id!r}/{envelope_mutation_id!r}"
         )
 
+    artifact = _manifest_artifact(manifest_path, artifact_id)
     canonical_case = evaluate_packet(packet)
     expected_detectors = [
         kind for kind in CRITICAL_ERROR_KINDS if canonical_case.critical_errors[kind]
     ]
+    candidate_mutation = candidate_envelope["mutation"]
+    if candidate_mutation["expected_detectors"] != expected_detectors:
+        raise AgentFigureEvalError(
+            "candidate mutation.expected_detectors does not match the verified mutation"
+        )
+    _validate_replay_provenance(candidate_envelope, artifact)
     candidate_packet = dict(packet)
     candidate_packet["interpretation"] = dict(candidate_envelope["interpretation"])
     candidate_case = evaluate_packet(candidate_packet).to_dict()
@@ -400,7 +715,121 @@ def replay_fixture_mutation(
         "expected_detectors": expected_detectors,
         "detected_detectors": detected_detectors,
         "detector_status": "pass" if detector_match else "fail",
+        "verdict": "pass" if detector_match else "fail",
+        "replay_provenance": candidate_envelope["replay_provenance"],
+        "provenance": _replay_report_provenance(manifest_path),
         "case": candidate_case,
+    }
+
+
+def _manifest_artifact(manifest_path: Path, artifact_id: str) -> dict[str, Any]:
+    """Return one manifest artifact record for replay provenance checks."""
+
+    manifest = load_json(manifest_path)
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AgentFigureEvalError("manifest artifacts must be a list")
+    for artifact in artifacts:
+        if isinstance(artifact, dict) and artifact.get("id") == artifact_id:
+            return artifact
+    raise AgentFigureEvalError(f"manifest artifact {artifact_id!r} is missing")
+
+
+def _canonical_digest(value: Any) -> str:
+    """Digest canonical JSON for in-envelope provenance values.
+
+    Returns:
+        A lowercase SHA-256 digest.
+    """
+
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _validate_replay_provenance(envelope: Mapping[str, Any], artifact: Mapping[str, Any]) -> None:
+    """Bind candidate digests to the verified manifest and candidate bytes."""
+
+    provenance = envelope["provenance"]
+    expected = {
+        "source_sha256": artifact.get("source_sha256"),
+        "packet_sha256": artifact.get("sha256"),
+        "reference_sha256": artifact.get("reference_sha256"),
+        "candidate_sha256": _candidate_envelope_digest(envelope),
+    }
+    for key, value in expected.items():
+        if provenance[key] != value:
+            raise AgentFigureEvalError(f"candidate provenance.{key} does not match verified bytes")
+
+    figure_digest = provenance["figure_sha256"]
+    caption_digest = provenance["caption_sha256"]
+    if figure_digest["status"] == "available" and figure_digest["sha256"] != _canonical_digest(
+        envelope["figure"]["spec"]
+    ):
+        raise AgentFigureEvalError("candidate figure digest does not match figure.spec")
+    if (
+        caption_digest["status"] == "available"
+        and caption_digest["sha256"]
+        != hashlib.sha256(envelope["figure"]["caption"].encode("utf-8")).hexdigest()
+    ):
+        raise AgentFigureEvalError("candidate caption digest does not match figure.caption")
+    review_digest = provenance["review_sha256"]
+    if review_digest["status"] == "available" and review_digest["sha256"] != _canonical_digest(
+        _review_digest_payload(envelope)
+    ):
+        raise AgentFigureEvalError("candidate review digest does not match post-review bytes")
+
+
+def _candidate_envelope_digest(envelope: Mapping[str, Any]) -> str:
+    """Digest candidate envelope bytes without a circular candidate digest field.
+
+    Returns:
+        A lowercase SHA-256 digest for the canonical candidate envelope.
+    """
+
+    payload = json.loads(canonical_json(envelope))
+    payload["provenance"]["candidate_sha256"] = None
+    return _canonical_digest(payload)
+
+
+def _review_digest_payload(envelope: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the deterministic candidate fields covered by a post-review digest.
+
+    Returns:
+        The review-state payload whose canonical bytes are digest-bound.
+    """
+
+    return {
+        "confidence": envelope["confidence"],
+        "findings": envelope["findings"],
+        "limitations": envelope["limitations"],
+        "not_applicable": envelope["not_applicable"],
+        "unavailable": envelope["unavailable"],
+        "unresolved_questions": envelope["unresolved_questions"],
+    }
+
+
+def _replay_report_provenance(manifest_path: Path) -> dict[str, str]:
+    """Bind replay output to evaluator code, manifest config, and fixture bytes.
+
+    Returns:
+        Stable SHA-256 provenance fields for a replay report.
+    """
+
+    manifest = load_json(manifest_path)
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise AgentFigureEvalError("manifest artifacts must be a list")
+    fixture_records = [
+        {
+            key: artifact.get(key)
+            for key in ("id", "path", "sha256", "source_sha256", "reference_sha256")
+        }
+        for artifact in artifacts
+        if isinstance(artifact, Mapping)
+    ]
+    return {
+        "code_sha256": sha256_file(Path(__file__).resolve()),
+        "config_sha256": sha256_file(manifest_path),
+        "fixture_sha256": _canonical_digest(fixture_records),
     }
 
 
@@ -456,6 +885,7 @@ def replay_all_fixture_mutations(
         "passed_case_count": len(cases) - failed_count,
         "failed_case_count": failed_count,
         "detector_status": "pass" if failed_count == 0 else "fail",
+        "provenance": _replay_report_provenance(manifest_path),
         "cases": cases,
     }
 
@@ -727,6 +1157,20 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
         "null_overclaim": (
             ref_boundary.get("null_result_claim") == "not_supported"
             and obs_boundary.get("null_result_claim") != "not_supported"
+        ),
+        "effect_direction_desirability": (
+            ref_visual.get("effect_direction", "not_declared")
+            != obs_visual.get("effect_direction", "not_declared")
+            or ref_visual.get("metric_desirability", "not_declared")
+            != obs_visual.get("metric_desirability", "not_declared")
+        ),
+        "native_adapter_merge": (
+            len(obs_evidence.get("row_provenance", [])) > 1
+            and obs_evidence.get("rows_disclosed") is False
+        ),
+        "multiplicity_language": (
+            ref_stats.get("multiplicity_language", "not_declared")
+            != obs_stats.get("multiplicity_language", "not_declared")
         ),
     }
 
@@ -1139,9 +1583,11 @@ __all__ = [
     "DIMENSIONS",
     "EVAL_SCHEMA_VERSION",
     "EXPECTED_PACKET_SCHEMA",
+    "INTEGRITY_MUTATION_IDS",
     "MANIFEST_SCHEMA_VERSION",
     "REPLAY_SCHEMA_VERSION",
     "REQUIRED_SCIENTIFIC_ERROR_MUTATIONS",
+    "SYNTHETIC_MUTATION_IDS",
     "AgentFigureEvalError",
     "CaseEvaluation",
     "DimensionScore",

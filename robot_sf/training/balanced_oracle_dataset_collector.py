@@ -1128,6 +1128,7 @@ class BalancedOracleCollector:
             split = str(ep.get("split", ""))
             actions = ep.get("actions", np.zeros((0, 2), dtype=np.float32))
             steps = len(actions)
+            provenance = ep.get("provenance")
 
             reason: str | None = None
             if bool(ep.get("leakage_invalid", False)):
@@ -1138,8 +1139,10 @@ class BalancedOracleCollector:
                 reason = "failed"
             elif bool(ep.get("fallback", False) or ep.get("degraded", False)):
                 reason = "fallback"
-            elif bool(ep.get("provenance_incomplete", False)) or (
-                isinstance(ep.get("provenance"), dict) and not ep["provenance"]
+            elif (
+                bool(ep.get("provenance_incomplete", False))
+                or not isinstance(provenance, dict)
+                or not provenance
             ):
                 reason = "provenance_incomplete"
 

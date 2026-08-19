@@ -80,6 +80,7 @@ def _make_episode(
         "failed": failed,
         "fallback": fallback,
         "leakage_invalid": leakage_invalid,
+        "provenance": {"fixture": True},
     }
 
 
@@ -1055,3 +1056,31 @@ def test_duplicate_and_provenance_incomplete_rows_are_not_usable(tmp_path: Path)
     assert "leakage_invalid" in reasons
     assert "provenance_incomplete" in reasons
     assert manifest["yield_ledger"]["totals"]["usable"] < len(episodes) + 2
+
+
+def test_missing_or_non_mapping_provenance_is_not_usable(tmp_path: Path) -> None:
+    """Absent and malformed provenance must remain explicit diagnostic exclusions."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    episode_id = collector.episodes_by_split["train"][:2]
+    complete = [
+        _make_episode(
+            ep_id,
+            "_".join(ep_id.split("__")[1:-1]),
+            int(ep_id.rsplit("seed", 1)[1]),
+            "train",
+            steps=2,
+        )
+        for ep_id in episode_id
+    ]
+    missing = dict(complete[0])
+    missing.pop("provenance")
+    non_mapping = dict(complete[1])
+    non_mapping["provenance"] = ["not", "a", "mapping"]
+
+    usable, exclusions = collector._filter_episodes([missing, non_mapping])
+
+    assert usable == []
+    assert [item["reason"] for item in exclusions] == [
+        "provenance_incomplete",
+        "provenance_incomplete",
+    ]

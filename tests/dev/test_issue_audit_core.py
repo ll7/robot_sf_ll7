@@ -340,6 +340,127 @@ def test_decision_detection_distinguishes_resolved_records_from_open_gates() -> 
     assert {mutation["value"] for mutation in pending.mutations} == {"decision-required"}
 
 
+def test_canonical_same_issue_ruling_suppresses_older_decision_prompt() -> None:
+    """A later exact repository ruling ends a superseded decision prompt."""
+    issue = _issue(
+        7409,
+        body="Owner decision required: choose the disposition.",
+    )
+    issue["comments"] = [
+        {
+            "body": "ll7/robot_sf_ll7#7409: hold-artifact-rows",
+            "created_at": "2026-08-18T10:00:00Z",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is False
+    assert classification.mutations == ()
+
+
+def test_decision_request_after_canonical_ruling_reopens_gate() -> None:
+    """A genuine later reopen request remains actionable after a ruling."""
+    issue = _issue(7411, body="Owner decision required: choose the registry policy.")
+    issue["comments"] = [
+        {"body": "ll7/robot_sf_ll7#7411: use-commit-pinned-repository-registry"},
+        {"body": "Reopen the decision: the maintainer must choose a replacement."},
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
+def test_canonical_ruling_uses_timestamp_not_input_comment_order() -> None:
+    """A newer ruling suppresses an older prompt even when REST rows are reversed."""
+    issue = _issue(7410)
+    issue["comments"] = [
+        {
+            "body": "ll7/robot_sf_ll7#7410: hold-artifact-rows",
+            "created_at": "2026-08-18T10:00:00Z",
+        },
+        {
+            "body": "Owner decision required: choose the disposition.",
+            "created_at": "2026-08-18T09:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is False
+    assert classification.mutations == ()
+
+
+def test_incomplete_comment_order_does_not_suppress_decision_prompt() -> None:
+    """An untimestamped source cannot be treated as later ruling evidence."""
+    issue = _issue(7414)
+    issue["comments"] = [
+        {"body": "ll7/robot_sf_ll7#7414: hold-artifact-rows"},
+        {
+            "body": "Owner decision required: choose the disposition.",
+            "created_at": "2026-08-18T09:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
+def test_copied_example_ruling_line_does_not_suppress_decision_prompt() -> None:
+    """An exact ruling copied under an example marker is not a live ruling."""
+    issue = _issue(7415, body="Owner decision required: choose the disposition.")
+    issue["comments"] = [
+        {
+            "body": (
+                "Example copied ruling (do not apply):\nll7/robot_sf_ll7#7415: hold-artifact-rows"
+            ),
+            "created_at": "2026-08-18T10:00:00Z",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
+def test_wrong_quoted_or_malformed_ruling_does_not_suppress_decision() -> None:
+    """Only an exact same-issue ruling line is terminal decision evidence."""
+    issue = _issue(7412, body="Owner decision required: choose the release disposition.")
+    issue["comments"] = [
+        {"body": "> ll7/robot_sf_ll7#7412: create-v2.1-and-preserve-v2"},
+        {"body": "ll7/robot_sf_ll7#7413: unrelated-ruling"},
+        {"body": "ll7/robot_sf_ll7#7412 create-v2.1-and-preserve-v2"},
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:ready", "decision-required"},
+    )
+
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {"decision-required"}
+
+
 def test_blocker_replaces_single_stale_execution_state() -> None:
     """A proven blocker replaces one stale execution state with its blocker state."""
     classification = classify_issue(
@@ -746,6 +867,73 @@ def test_command_timeouts_return_failures_instead_of_raising(
     assert "timed out" in gh_result.stderr
     assert command_result.returncode == 124
     assert "timed out" in command_result.stderr
+
+
+def test_run_gh_uses_remaining_budget_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The aggregate budget can shorten an individual gh subprocess timeout."""
+    observed: dict[str, Any] = {}
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(args[0], 0, "[]", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = _run_gh(["api", "repos/ll7/robot_sf_ll7/issues"], timeout_seconds=1.25)
+
+    assert result.returncode == 0
+    assert observed["timeout"] == 1.25
+
+
+def test_deadline_runner_fails_closed_before_the_next_rest_call() -> None:
+    """An exhausted audit budget returns a structured error without invoking the runner."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("an exhausted budget must not invoke another REST call")
+
+    bounded = issue_audit_core._deadline_runner(runner, 0)
+    result = bounded(["api", "repos/ll7/robot_sf_ll7/issues"], None)
+
+    assert result.returncode == 124
+    assert "wall-time budget exhausted" in result.stderr
+    assert calls == []
+
+
+def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """CLI callers receive a non-admitting plan artifact when REST budget is exhausted."""
+
+    def fake_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(issue_audit_core, "_run_command", fake_command)
+    output = tmp_path / "issue-audit-plan.json"
+
+    result = main(
+        [
+            "plan",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--max-pages",
+            "1",
+            "--max-comment-pages",
+            "1",
+            "--max-wall-seconds",
+            "0",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result == 2
+    plan = json.loads(output.read_text(encoding="utf-8"))
+    assert plan["mutations"] == []
+    assert plan["truncation_or_errors"]
+    assert "wall-time budget exhausted" in json.dumps(plan["inventory"])
 
 
 def test_decision_queue_is_machine_readable_and_project_free() -> None:

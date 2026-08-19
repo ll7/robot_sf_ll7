@@ -1053,11 +1053,15 @@ class OccupancyGrid:
                 x2, y2 = grid_utils.world_to_ego(query.x2, query.y2, self._last_robot_pose)  # type: ignore[arg-type]
             grid_x2 = int((x2 - origin_x) / self.config.resolution)
             grid_y2 = int((y2 - origin_y) / self.config.resolution)
-            # Use Bresenham-like line traversal
-            line_cells = self._bresenham_line(grid_col, grid_row, grid_x2, grid_y2)
+            line_rows, line_cols = rasterization._bresenham_line(
+                row0=grid_row,
+                col0=grid_col,
+                row1=grid_y2,
+                col1=grid_x2,
+            )
             cells_to_check = [
                 (row, col)
-                for col, row in line_cells
+                for row, col in zip(line_rows.tolist(), line_cols.tolist(), strict=True)
                 if 0 <= col < self.config.grid_width and 0 <= row < self.config.grid_height
             ]
 
@@ -1179,22 +1183,6 @@ class OccupancyGrid:
         """Restore pickled state."""
         self.__dict__.update(state)
         self._prepared_obstacles = None
-
-    @staticmethod
-    def _bresenham_line(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
-        """Adapt the canonical vectorized Bresenham path to the legacy cell API.
-
-        Args:
-            x0: Starting x cell coordinate
-            y0: Starting y cell coordinate
-            x1: Ending x cell coordinate
-            y1: Ending y cell coordinate
-
-        Returns:
-            List of cells on the line from (x0, y0) to (x1, y1)
-        """
-        rows, cols = rasterization._bresenham_line(y0, x0, y1, x1)
-        return list(zip(cols.tolist(), rows.tolist(), strict=True))
 
     def render_pygame(
         self,

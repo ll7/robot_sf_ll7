@@ -17,6 +17,11 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
 
     text = PR_TEMPLATE.read_text(encoding="utf-8")
 
+    assert "- Closes #<id>" in text
+    assert "- Relates to #<id>" in text
+    assert "- Closes `#<id>`" not in text
+    assert "- Relates to `#<id>`" not in text
+
     for section in (
         "## Summary",
         "## Linked Issues",
@@ -52,3 +57,14 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     assert "Context index / memory note updated (yes/no/NA):" in text
     assert "Follow-up issue opened for deferred propagation (yes/no/NA):" in text
     assert "Not applicable because:" in text
+    assert "docs/context/issue_1512_issue_archetypes.md" in text
+    assert (
+        "Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / "
+        "full_matrix / analysis_only / synthesis / paper_grade / blocked"
+    ) in text
+    assert "Evidence applicability: evidence-bearing / docs-only / NA" in text
+    assert (
+        "Evidence tier: full benchmark / targeted smoke / diagnostic probe / launch packet"
+        not in text
+    )
+    assert "`docs-only` and `NA` are no-claim PR exceptions" in text

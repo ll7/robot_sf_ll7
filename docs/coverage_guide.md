@@ -14,12 +14,12 @@
 
 ## Overview
 
-The robot_sf_ll7 project uses `pytest-cov` and Python's `coverage` library for code coverage measurement. Coverage collection is opt-in for local test runs and runs automatically on non-PR CI events (main branch, merge queue, manual dispatch).
+The robot_sf_ll7 project uses `pytest-cov` and Python's `coverage` library for code coverage measurement. Coverage collection is opt-in for local test runs and runs automatically on CI events that need a coverage artifact. Pull requests and merge-queue runs use coverage for the exact-head changed-line gate; main-branch and manual runs additionally enforce the aggregate coverage floor.
 
 **Design Principles**:
-- **Explicit opt-in**: Default local pytest runs skip coverage collection for maximum speed; explicit wrapper opt-in (`ROBOT_SF_PYTEST_COVERAGE=1`) or non-PR CI runs collect coverage data.
+- **Explicit opt-in**: Default local pytest runs skip coverage collection for maximum speed; explicit wrapper opt-in (`ROBOT_SF_PYTEST_COVERAGE=1`) or CI runs collect coverage data.
 - **Informative**: Multiple report formats for different use cases (terminal, HTML, JSON).
-- **CI-friendly**: Non-PR CI runs enforce an absolute 85.0% coverage floor and report advisory baseline warnings.
+- **CI-friendly**: Main/manual CI runs enforce an absolute 85.0% coverage floor and report advisory baseline warnings; PR/merge-queue runs enforce exact-head changed-line coverage.
 - **Developer-focused**: Cross-platform HTML report helper and VS Code tasks for local workflow.
 
 ## Quick Start
@@ -41,6 +41,10 @@ uv run python scripts/coverage/compare_coverage.py \
   --current output/coverage/coverage.json \
   --baseline output/coverage/.coverage-baseline.json \
   --format terminal
+
+# Check changed modules for missing fast-lane contract-test registration
+uv run python scripts/dev/check_fast_lane_routing.py \
+  --base-sha origin/main --head-sha HEAD
 ```
 
 ## Coverage Collection
@@ -143,9 +147,16 @@ Files with decreased coverage:
 Coverage collection and enforcement run automatically in CI (`.github/workflows/ci.yml`) with the following architecture:
 
 1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across four runners (`PYTEST_SHARD_COUNT: 4`, `PYTEST_SHARD_INDEX: 1..4`).
-   - On **pull request** events, coverage collection is disabled (`ROBOT_SF_PYTEST_COVERAGE: 0`) to keep PR feedback fast.
-   - On **non-PR** events (`main`, `merge_group`, `workflow_dispatch`), coverage is enabled (`ROBOT_SF_PYTEST_COVERAGE: 1`, `ROBOT_SF_SHARD_INCLUDE_SLOW: 1`) using the high-performance CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`). Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).
-2. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
+   - On **pull request** events, coverage is enabled for the exact-head changed-line gate. The trace-based backend (`COVERAGE_CORE: ctrace`) is used because hosted xdist worker propagation must remain trustworthy.
+   - On **merge-queue** events, coverage is likewise enabled with `ctrace` for the exact-head gate.
+   - On **main** and **manual dispatch** events, coverage is enabled with `ROBOT_SF_SHARD_INCLUDE_SLOW: 1` and the faster CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`) for the aggregate floor. Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).
+2. **Fast-lane routing audit**: On pull-request and merge-queue events, `changed-coverage-gate` runs
+   `scripts/dev/check_fast_lane_routing.py` against the exact base/head pair before combining
+   coverage. The audit reuses `tests/conftest.py` fast-path policy, reports the exact changed module
+   and nearby test path, leaves explicit simulation/campaign tests slow, and fails closed for an
+   unregistered contract candidate or an ambiguous nearby test. It does not change coverage
+   thresholds or admit benchmark evidence.
+3. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
    - Downloads all shard databases (`coverage-shard-*`).
    - Combines them: `uv run coverage combine output/coverage`.
    - Exports JSON and HTML reports: `uv run coverage json` and `uv run coverage html`.

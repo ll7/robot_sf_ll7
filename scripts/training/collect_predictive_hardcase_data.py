@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner import _build_env_config
+from robot_sf.benchmark.map_runner.map_runner import _build_env_config
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_EGO_FEATURE_SCHEMA,

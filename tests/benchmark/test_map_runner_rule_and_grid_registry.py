@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.map_runner import map_runner
 from robot_sf.benchmark.map_runner_policies import gap_reference, rule_and_grid
 
 

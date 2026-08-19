@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from robot_sf.benchmark.fallback_policy import availability_payload
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.mpc_tuning_sensitivity import (
     analyze_results,
     build_candidate_plan,

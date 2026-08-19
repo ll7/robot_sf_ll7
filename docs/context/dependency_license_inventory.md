@@ -26,19 +26,27 @@ python scripts/tools/check_dependency_license_inventory.py \
 ```
 
 Strict mode returns `2` for unknown, proprietary, conflicting, unbound, stale,
-or policy-pending rows **that belong to at least one declared profile**. Lock
-rows that no declared profile resolves are reported separately under
-`unrepresented_lock_packages` and are deliberately outside the strict gate,
-because the profile matrix — not the lock file — defines the release surface.
-Whether every such row should be pulled into the gate is tracked separately;
-until then, do not read a strict pass as a statement about them. Strict mode is
-intentionally expected to remain blocked until a reviewer records a disposition;
-a user-installed dependency is not silently treated as redistributed, and a
-non-redistributed dependency is not silently approved. The report preserves
+or policy-pending rows that belong to at least one declared profile. Lock rows
+that no declared profile resolves remain listed under
+`unrepresented_lock_packages`, with one matching record in
+`unrepresented_lock_package_dispositions`. Each record is either a
+`reviewed_exclusion` (for a declared development/tooling group or a
+resolution marker proven inactive for the target) or `unresolved`; the latter
+is included in the strict failure count. A row without a reviewed reason is
+never silently treated as outside the release surface. The profile matrix —
+not the lock file alone — still defines the supported release surface, and a
+strict pass does not make a legal or redistribution claim. The report preserves
 lock-provided source URLs, artifact filenames, SHA-256 values, and profile
 membership, while installed metadata is labelled
 `installed_distribution_not_artifact_bound` unless an exact artifact binding is
 proved separately.
+
+The manifest records the reviewed exclusion rules for root development,
+documentation, CARLA, imitation, and standalone fast-pysf development
+contexts. Resolver rows for another target are excluded only when their
+explicit `resolution-markers` are proven false from the manifest target. Any
+remaining row is emitted as `unresolved_membership` and keeps strict mode
+blocked until a maintainer reviews its context.
 
 The committed profile matrix covers the root environment, every declared extra,
 the explicit `all` closure, standalone `fast-pysf`, `pyrvo2`, and SocNavBench.

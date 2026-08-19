@@ -3,7 +3,7 @@
 Continuation of the ``_build_policy`` decomposition (#3384), building on the package
 registry (#3400) and the neutral ``build_adapter_policy`` helper (#3403). Each builder
 is a faithful move of the corresponding ``if algo_key in {...}`` branch from
-``robot_sf.benchmark.map_runner`` — no semantic change.
+``robot_sf.benchmark.map_runner.map_runner`` — no semantic change.
 
 This module migrates the two adapter families whose dependencies all resolve from
 lower-level ``robot_sf.planner`` modules (no ``map_runner``-local helpers), so the

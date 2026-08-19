@@ -1,0 +1,24 @@
+schema_version: feasibility_first_real_manifest.v1
+claim_boundary: >-
+  diagnostic-only real-manifest comparison: native execution and observed safety events;
+  no simulator, planner, safety, benchmark, paper, or source-method claim
+evidence_tier: diagnostic-only
+scenario_template: configs/adversarial/issue_7340_station_platform_medium_v1.yaml
+search_space: configs/adversarial/issue_7340_station_platform_search_space_v1.yaml
+scenario_family: issue_7340_station_platform_medium
+policy: goal
+candidate_pool_budget: 4
+sample_budget: 2
+sampling_seed: 7340
+criticality_threshold: 0.2
+horizon: 60
+dt: 0.1
+workers: 1
+benchmark_profile: baseline-safe
+require_certification: true
+baseline: existing_adversarial_random_sampler.v1
+domain_approval:
+  status: required
+  note: >-
+    This diagnostic must not be promoted to benchmark evidence without domain-aware
+    approval recorded on issue #7340.

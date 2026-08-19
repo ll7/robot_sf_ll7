@@ -2,7 +2,7 @@
 #
 # This packet is an opt-in real-runner smoke contract, not a benchmark result.
 # The three arms differ only by the ScenarioBelief `belief_mode` knob consumed by
-# robot_sf.benchmark.map_runner through the stream_gap policy hook.
+# robot_sf.benchmark.map_runner.map_runner through the stream_gap policy hook.
 
 schema_version: scenario-belief-drop-vs-retain-launch-packet.v1
 issue: 3556

@@ -1,0 +1,68 @@
+{
+  "schema": "robot-sf-mpc-canary-diagnostic.v1",
+  "status": "diagnostic-only",
+  "scientific_outcome": "not_applicable",
+  "claim_boundary": "Solver and adapter smoke evidence only; no planner-quality, safety, route-completion, ranking, benchmark, or paper-facing claim.",
+  "provenance": {
+    "queue_id": "issue-7313-mpc-solver-canary-20260817",
+    "job_id": "14526",
+    "public_commit": "462032df2abc3e086655935288c806b9df8bda2b",
+    "config": "configs/analysis/issue_5579_mpc_tuning_sensitivity_v2.yaml",
+    "config_sha256": "dfbb3f1b71c53c3c1018ca688d9efbaa2d7681dfe9e2f10e6894520011814033",
+    "packet_sha256": "a8f63791a5de3583c3bc128cf842954837233b514888018cbe857183b47832b6",
+    "seed": 101,
+    "terminal_scheduler_state": "COMPLETED",
+    "exit_code": "0:0",
+    "derived_exit_code": "0:0",
+    "preserved_artifact": "wandb://ll7/robot_sf/campaign-issue7313_mpc_solver_canary_20260817:v0",
+    "preserved_manifest_digest": "sha256:a5c16092c2579715a2578a2c35a3ceb5dcec84d5b838b577d9a7917861df5705"
+  },
+  "scope": {
+    "arms": ["prediction_mpc", "prediction_mpc_cbf"],
+    "scenarios": [
+      "classic_bottleneck_medium",
+      "classic_cross_trap_high",
+      "francis2023_intersection_wait"
+    ],
+    "episodes_total": 6,
+    "episodes_per_arm": 3,
+    "horizon_steps": 100,
+    "required_eligible_episodes": 6
+  },
+  "arms": {
+    "prediction_mpc": {
+      "episodes": 3,
+      "route_complete": 0,
+      "timeouts": 3,
+      "collision_events": 0,
+      "solver_successes": 300,
+      "solver_failures": 0,
+      "fallback_stops": 0,
+      "minimum_clearance_m": 1.024167665602579,
+      "wall_time_sec": 47.64045214653015
+    },
+    "prediction_mpc_cbf": {
+      "episodes": 3,
+      "route_complete": 0,
+      "timeouts": 3,
+      "collision_events": 0,
+      "solver_successes": 300,
+      "solver_failures": 0,
+      "fallback_stops": 0,
+      "minimum_clearance_m": 1.024167665602579,
+      "wall_time_sec": 29.513559579849243,
+      "shield_intervention_rate": 1.0,
+      "shield_override_count": 0,
+      "shield_hard_constraint_violation_count": 0
+    }
+  },
+  "comparability": {
+    "paired_scenario_summary_metrics_equal": true,
+    "same_public_commit": true,
+    "same_config": true,
+    "same_seed": true,
+    "same_horizon": true,
+    "interpretation": "Equality is limited to the retained summary fields and does not establish trajectory identity or behavioral equivalence."
+  },
+  "next_proof": "Run the declared longer-horizon paired scope, verify CBF intervention semantics, and use route completion as the primary outcome before ranking or publication."
+}

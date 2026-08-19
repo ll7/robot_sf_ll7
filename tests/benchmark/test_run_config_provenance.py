@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner_env import representative_metric_affecting_config
+from robot_sf.benchmark.map_runner.map_runner_env import representative_metric_affecting_config
 from robot_sf.benchmark.run_config_provenance import (
     COLLISION_REGIME_BOUNCE_BACK,
     COLLISION_REGIME_TERMINATE_ON_CONTACT,

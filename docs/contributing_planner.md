@@ -33,7 +33,7 @@ to a different planner.
 
 1. Add the planner or adapter behind an existing public entry point.
    For map-benchmark adapters this usually means a planner module under `robot_sf/planner/`, a
-   `_build_policy()` branch in [`robot_sf/benchmark/map_runner.py`](../robot_sf/benchmark/map_runner.py),
+   `_build_policy()` branch in [`robot_sf/benchmark/map_runner/map_runner.py`](../robot_sf/benchmark/map_runner/map_runner.py),
    and no new benchmark semantics beyond that dispatch.
 
 2. Declare algorithm metadata and readiness.

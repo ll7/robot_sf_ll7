@@ -9,11 +9,13 @@ maintenance workflow and full discoverability surface.
 
 The trace dossier cell-binding metadata contract is documented in
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md); it remains
-metadata-only until trace export and renderer provenance are reviewed.
+metadata-only even though the retained-trace export and renderer provenance path is now
+covered by diagnostic checks.
 
 The deterministic representative selector is documented in
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md); it selects a future
-trace-dossier representative only and does not establish benchmark evidence.
+trace-dossier representative, with a diagnostic h600 pin for retained exemplars, and does not
+establish benchmark evidence.
 
 The fixture-only agent figure interpretation evaluator is documented in
 [issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md);
@@ -1599,6 +1601,10 @@ why a change was made rather than a full issue execution transcript.
   any public planner leaderboard work.
 
 ## Execution Workflow Notes
+
+* [Issue #7340 Real-Manifest Feasibility-First Diagnostic](issue_7340_real_manifest_feasibility_first.md) -
+  native diagnostic over a fixed station-platform candidate pool, including route-binding
+  provenance, observed event counts, and the pending budget-matched/domain-approval boundary.
 
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and

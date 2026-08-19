@@ -9,7 +9,14 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
+
+
+def append_non_empty_string_error(mapping: Mapping[str, Any], key: str, errors: list[str]) -> None:
+    """Append the historical validation error when ``mapping[key]`` lacks nonblank text."""
+    value = mapping.get(key)
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"{key} must be a non-empty string")
 
 
 def require_finite(name: str, value: Real, *, allow_negative: bool = True) -> float:
@@ -150,6 +157,7 @@ def _require_finite_position(position: list[object]) -> None:
 
 
 __all__ = [
+    "append_non_empty_string_error",
     "require_finite",
     "require_finite_array",
     "require_finite_fields",

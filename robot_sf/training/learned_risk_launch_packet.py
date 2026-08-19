@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.common.validation import append_non_empty_string_error
 from robot_sf.errors import RobotSfError
 
 _SCHEMA_VERSION = "learned-risk-launch-packet.v1"
@@ -128,13 +129,6 @@ def _resolve_path(path: Path | str, repo_root: Path) -> Path:
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
-def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Add a learned-risk validation error when a requested mapping value is not usable text."""
-    value = mapping.get(key)
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{key} must be a non-empty string")
-
-
 def _require_existing_path(
     mapping: dict[str, Any],
     key: str,
@@ -206,7 +200,7 @@ def _validate_baseline_packet(
     if not isinstance(baseline, dict):
         errors.append("baseline_comparison must be a mapping")
         return {}
-    _require_non_empty_string(baseline, "candidate_id", errors)
+    append_non_empty_string_error(baseline, "candidate_id", errors)
     _require_existing_path(baseline, "candidate_config", repo_root, errors)
     _require_existing_path(baseline, "source_report", repo_root, errors)
     _validate_required_list(baseline, "scenario_slices", _REQUIRED_SPLITS, errors)
@@ -250,8 +244,8 @@ def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> N
         errors.append("execution_boundary.submit_slurm_from_this_issue must be false")
     if execution.get("full_training_in_this_issue") is not False:
         errors.append("execution_boundary.full_training_in_this_issue must be false")
-    _require_non_empty_string(execution, "slurm_command_shape", errors)
-    _require_non_empty_string(execution, "local_preflight_command", errors)
+    append_non_empty_string_error(execution, "slurm_command_shape", errors)
+    append_non_empty_string_error(execution, "local_preflight_command", errors)
 
 
 def _validate_slurm_execution(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
@@ -273,7 +267,7 @@ def _validate_slurm_execution(packet: dict[str, Any], errors: list[str]) -> dict
         "status_artifact_path",
     )
     for key in required_keys:
-        _require_non_empty_string(slurm_execution, key, errors)
+        append_non_empty_string_error(slurm_execution, key, errors)
 
     command = slurm_execution.get("command")
     if not isinstance(command, list) or not command:

@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.common.validation import append_non_empty_string_error
 from robot_sf.errors import RobotSfError
 from robot_sf.training.oracle_trace_uri_registry import (
     OracleTraceUriRegistryError,
@@ -79,8 +80,8 @@ def validate_launch_packet(
     if packet.get("schema_version") != _SCHEMA_VERSION:
         errors.append(f"schema_version must be {_SCHEMA_VERSION!r}")
 
-    _require_non_empty_string(packet, "dataset_id", errors)
-    _require_non_empty_string(packet, "source_candidate", errors)
+    append_non_empty_string_error(packet, "dataset_id", errors)
+    append_non_empty_string_error(packet, "source_candidate", errors)
     _require_existing_path(packet, "source_candidate_config", root, errors)
     _require_existing_path(packet, "source_report", root, errors)
     _require_existing_path(packet, "split_contract", root, errors)
@@ -133,13 +134,6 @@ def _resolve_path(path: Path | str, repo_root: Path) -> Path:
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
-
-
-def _require_non_empty_string(packet: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Record an error unless ``packet[key]`` is a non-empty string."""
-    value = packet.get(key)
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{key} must be a non-empty string")
 
 
 def _require_existing_path(
@@ -364,8 +358,8 @@ def _validate_relabeling(packet: dict[str, Any], errors: list[str]) -> None:
     scope = policy.get("scope")
     if scope != "train":
         errors.append("relabeling_policy.scope must be 'train' when relabeling is enabled")
-    _require_non_empty_string(policy, "source_oracle", errors)
-    _require_non_empty_string(policy, "rule", errors)
+    append_non_empty_string_error(policy, "source_oracle", errors)
+    append_non_empty_string_error(policy, "rule", errors)
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:

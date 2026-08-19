@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.common.validation import append_non_empty_string_error
 from robot_sf.errors import RobotSfError
 
 _SCHEMA_VERSION = "orca-residual-bc-lineage-packet.v1"
@@ -124,7 +125,7 @@ def validate_launch_packet(
 
     if packet.get("schema_version") != _SCHEMA_VERSION:
         errors.append(f"schema_version must be {_SCHEMA_VERSION!r}")
-    _require_non_empty_string(packet, "campaign_id", errors)
+    append_non_empty_string_error(packet, "campaign_id", errors)
     _validate_generating_commit(packet, errors)
     _require_existing_path(packet, "slurm_handoff", root, errors)
 
@@ -256,13 +257,6 @@ def _resolve_path(path: Path | str, repo_root: Path) -> Path:
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
-
-
-def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Append a residual-lineage error when a requested mapping field lacks nonblank text."""
-    value = mapping.get(key)
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{key} must be a non-empty string")
 
 
 def _require_existing_path(
@@ -493,7 +487,7 @@ def _validate_comparison_references(
         if not isinstance(reference, dict):
             errors.append(f"comparison_references.{name} must be a mapping")
             continue
-        _require_non_empty_string(reference, "candidate_id", errors)
+        append_non_empty_string_error(reference, "candidate_id", errors)
         _require_existing_path(reference, "source", repo_root, errors)
     return {"reference_ids": sorted(references)}
 
@@ -535,11 +529,11 @@ def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> N
         errors.append("execution_boundary.bounded_slurm_followup_required must be true")
     if execution.get("nominal_gate_before_stress") is not True:
         errors.append("execution_boundary.nominal_gate_before_stress must be true")
-    _require_non_empty_string(execution, "local_preflight_command", errors)
-    _require_non_empty_string(execution, "dataset_command_shape", errors)
-    _require_non_empty_string(execution, "bc_training_command_shape", errors)
-    _require_non_empty_string(execution, "smoke_candidate_command_shape", errors)
-    _require_non_empty_string(execution, "slurm_command_shape", errors)
+    append_non_empty_string_error(execution, "local_preflight_command", errors)
+    append_non_empty_string_error(execution, "dataset_command_shape", errors)
+    append_non_empty_string_error(execution, "bc_training_command_shape", errors)
+    append_non_empty_string_error(execution, "smoke_candidate_command_shape", errors)
+    append_non_empty_string_error(execution, "slurm_command_shape", errors)
 
 
 def _validate_required_list(
@@ -574,7 +568,7 @@ def _validate_artifact_list(
         if not isinstance(artifact, dict):
             errors.append(f"{key}[{index}] must be a mapping")
             continue
-        _require_non_empty_string(artifact, "role", errors)
+        append_non_empty_string_error(artifact, "role", errors)
         pointer = artifact.get("uri") or artifact.get("path")
         if not isinstance(pointer, str) or not pointer.strip():
             errors.append(f"{key}[{index}] must define uri or path")

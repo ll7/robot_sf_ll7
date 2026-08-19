@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.common.validation import append_non_empty_string_error
 from robot_sf.errors import RobotSfError
 
 _SCHEMA_VERSION = "shielded-ppo-repair-launch-packet.v1"
@@ -60,7 +61,7 @@ def validate_launch_packet(
 
     if packet.get("schema_version") != _SCHEMA_VERSION:
         errors.append(f"schema_version must be {_SCHEMA_VERSION!r}")
-    _require_non_empty_string(packet, "campaign_id", errors)
+    append_non_empty_string_error(packet, "campaign_id", errors)
     _validate_generating_commit(packet, errors)
     _require_existing_path(packet, "slurm_handoff", root, errors)
     hypothesis = _validate_repair_hypothesis(packet, errors)
@@ -98,13 +99,6 @@ def _resolve_path(path: Path | str, repo_root: Path) -> Path:
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
-def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Append a shielded-PPO error for mapping fields that are missing, non-textual, or whitespace-only."""
-    value = mapping.get(key)
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{key} must be a non-empty string")
-
-
 def _require_existing_path(
     mapping: dict[str, Any],
     key: str,
@@ -140,8 +134,8 @@ def _validate_repair_hypothesis(
     if not isinstance(hypothesis, dict):
         errors.append("repair_hypothesis must be a mapping")
         return {}
-    _require_non_empty_string(hypothesis, "id", errors)
-    _require_non_empty_string(hypothesis, "statement", errors)
+    append_non_empty_string_error(hypothesis, "id", errors)
+    append_non_empty_string_error(hypothesis, "statement", errors)
     deltas = hypothesis.get("enabled_deltas")
     if not isinstance(deltas, list) or len(deltas) != 1:
         errors.append("repair_hypothesis.enabled_deltas must contain exactly one delta")
@@ -150,8 +144,8 @@ def _validate_repair_hypothesis(
     if not isinstance(delta, dict):
         errors.append("repair_hypothesis.enabled_deltas[0] must be a mapping")
         return {"enabled_deltas": []}
-    _require_non_empty_string(delta, "type", errors)
-    _require_non_empty_string(delta, "parameter", errors)
+    append_non_empty_string_error(delta, "type", errors)
+    append_non_empty_string_error(delta, "parameter", errors)
     if "value" not in delta:
         errors.append("repair_hypothesis.enabled_deltas[0].value is required")
     return {"id": hypothesis.get("id"), "enabled_deltas": [delta]}
@@ -226,7 +220,7 @@ def _validate_comparison_references(
         if not isinstance(reference, dict):
             errors.append(f"comparison_references.{name} must be a mapping")
             continue
-        _require_non_empty_string(reference, "candidate_id", errors)
+        append_non_empty_string_error(reference, "candidate_id", errors)
         _require_existing_path(reference, "config", repo_root, errors)
         _require_existing_path(reference, "source_report", repo_root, errors)
         _validate_seed_list(reference, f"comparison_references.{name}.seeds", errors)
@@ -269,8 +263,8 @@ def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> N
         errors.append("execution_boundary.submit_slurm_from_this_issue must be false")
     if execution.get("full_training_in_this_issue") is not False:
         errors.append("execution_boundary.full_training_in_this_issue must be false")
-    _require_non_empty_string(execution, "local_preflight_command", errors)
-    _require_non_empty_string(execution, "slurm_command_shape", errors)
+    append_non_empty_string_error(execution, "local_preflight_command", errors)
+    append_non_empty_string_error(execution, "slurm_command_shape", errors)
 
 
 def _validate_required_list(

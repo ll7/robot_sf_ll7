@@ -11,12 +11,6 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062,
-# the result-interpretation packet module, and the trace-dossier package added by #7114 (#7486);
-# this branch adds the shared issue-5409 campaign-identity module on top of them.
-# Keep this explicit so a new direct child fails the audit until it is
-# deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 297
 
 
 @pytest.fixture(scope="module")
@@ -30,18 +24,39 @@ def test_current_namespace_is_complete_and_routes_fail_closed(
 ) -> None:
     """Every direct child is classified and no low-risk move is selected."""
     payload = inventory
+    rows = payload["direct_children"]
+    classified_rows = [row for row in rows if row["classification"]]
 
     assert payload["schema"] == "benchmark-namespace-residual-inventory.v1"
-    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
-    assert len(payload["direct_children"]) == payload["direct_child_count"]
-    assert len({row["name"] for row in payload["direct_children"]}) == EXPECTED_DIRECT_CHILD_COUNT
+    assert payload["direct_child_count"] == len(rows)
+    assert {row["name"] for row in classified_rows} == {row["name"] for row in rows}
+    assert len({row["name"] for row in rows}) == len(rows)
     assert payload["recommendation"]["code"] == "pause_no_low_risk_cluster"
     assert payload["import_cycle_ledger"]
     assert all(cycle == sorted(cycle) for cycle in payload["import_cycle_ledger"])
-    assert all(row["ownership"]["status"] for row in payload["direct_children"])
+    assert all(row["ownership"]["status"] for row in rows)
     assert payload["ownership_reconciliation"]["duplicate_ownership_check"] == "passed"
-    assert all(row["compatibility_action"] for row in payload["direct_children"])
+    assert all(row["compatibility_action"] for row in rows)
     assert payload["scope_boundary"]["production_moves"] is False
+
+
+def test_new_direct_child_requires_a_named_classification_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new child fails closed with its name until the manifest is updated."""
+    current_units = audit_benchmark_namespace._direct_units(REPO_ROOT)
+    current_units.append(
+        audit_benchmark_namespace.Unit(
+            name="synthetic_new_child.py",
+            path="robot_sf/benchmark/synthetic_new_child.py",
+            kind="module",
+            dotted="robot_sf.benchmark.synthetic_new_child",
+        )
+    )
+    monkeypatch.setattr(audit_benchmark_namespace, "_direct_units", lambda _: current_units)
+
+    with pytest.raises(audit_benchmark_namespace.InventoryError, match="synthetic_new_child.py"):
+        audit_benchmark_namespace.build_inventory(REPO_ROOT)
 
 
 def test_known_facades_and_clusters_are_classified(inventory: dict[str, object]) -> None:
@@ -162,7 +177,7 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
+    assert payload["direct_child_count"] == len(payload["direct_children"])
     assert "# Benchmark namespace residual inventory (issue #7331)" in markdown_path.read_text(
         encoding="utf-8"
     )

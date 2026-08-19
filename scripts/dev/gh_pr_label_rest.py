@@ -22,6 +22,9 @@ Usage
     uv run python scripts/dev/gh_pr_label_rest.py add 5220 \\
         --label cheap-lane --repo ll7/robot_sf_ll7
 
+    uv run python scripts/dev/gh_pr_label_rest.py add 5220 \\
+        --label merge-ready --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+
     uv run python scripts/dev/gh_pr_label_rest.py remove 5220 \\
         --label cheap-lane --repo ll7/robot_sf_ll7
 """
@@ -31,12 +34,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
 from scripts.dev._gh_rest import subprocess  # noqa: F401
+from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 
@@ -70,7 +77,36 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
     return {"status": "ok", "labels": names}
 
 
-def add_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
+def _guarded_merge_ready_write(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str | None,
+    write: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Run a merge-ready label write only after the exact-head preflight."""
+    try:
+        with pr_write_lock(repo, number):
+            guard = guard_pr_write(
+                number,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                operation="merge_ready_label",
+            )
+            if guard["status"] != "ok":
+                return guard
+            return write()
+    except RuntimeError as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+def add_label(
+    number: int,
+    label: str,
+    *,
+    repo: str = DEFAULT_REPO,
+    expected_head_sha: str | None = None,
+) -> dict[str, Any]:
     """Add *label* to issue/PR *number* and verify it was applied.
 
     Returns a compact success or error payload rather than raising so shell callers
@@ -81,37 +117,47 @@ def add_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[str,
     if not label:
         return {"status": "error", "error": "label must be a non-empty string"}
 
-    path = f"repos/{repo}/issues/{number}/labels"
-    result = _gh_api_post(path, {"labels": [label]})
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return {"status": "error", "error": f"label add failed: {detail}"}
-    try:
-        json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
+    def _write() -> dict[str, Any]:
+        """Apply and verify one label after any required PR preflight."""
+        path = f"repos/{repo}/issues/{number}/labels"
+        result = _gh_api_post(path, {"labels": [label]})
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+            return {"status": "error", "error": f"label add failed: {detail}"}
+        try:
+            json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            snippet = result.stdout.strip()[:200]
+            return {
+                "status": "error",
+                "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
+            }
+
+        current = _get_label_names(number, repo=repo)
+        if current["status"] == "error":
+            return current
+        if label not in current["labels"]:
+            return {
+                "status": "error",
+                "error": f"label '{label}' was not found in labels after add; "
+                "the write may not have taken effect",
+            }
         return {
-            "status": "error",
-            "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
+            "status": "ok",
+            "number": number,
+            "label": label,
+            "action": "add",
+            "repo": repo,
         }
 
-    # Verify the label was actually applied by re-reading labels.
-    current = _get_label_names(number, repo=repo)
-    if current["status"] == "error":
-        return current
-    if label not in current["labels"]:
-        return {
-            "status": "error",
-            "error": f"label '{label}' was not found in labels after add; "
-            "the write may not have taken effect",
-        }
-    return {
-        "status": "ok",
-        "number": number,
-        "label": label,
-        "action": "add",
-        "repo": repo,
-    }
+    if label != "merge-ready":
+        return _write()
+    return _guarded_merge_ready_write(
+        number,
+        repo=repo,
+        expected_head_sha=expected_head_sha,
+        write=_write,
+    )
 
 
 def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
@@ -164,6 +210,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"owner/repo to update (default: {DEFAULT_REPO}).",
     )
     parser.add_argument("--label", required=True, help="Label name to add or remove.")
+    parser.add_argument(
+        "--expected-head-sha",
+        help="Full PR head SHA required when adding merge-ready.",
+    )
     return parser
 
 
@@ -171,13 +221,22 @@ def main(argv: list[str] | None = None) -> int:
     """Run the label helper and emit one compact JSON result."""
     args = _build_parser().parse_args(argv)
     if args.action == "add":
-        result = add_label(args.number, args.label, repo=args.repo)
+        result = add_label(
+            args.number,
+            args.label,
+            repo=args.repo,
+            expected_head_sha=args.expected_head_sha,
+        )
     else:
         result = remove_label(args.number, args.label, repo=args.repo)
 
     stream = sys.stdout if result["status"] == "ok" else sys.stderr
     print(json.dumps(result, sort_keys=True), file=stream)
-    return 0 if result["status"] == "ok" else 1
+    if result["status"] == "ok":
+        return 0
+    if result["status"] == "review_skipped_stale_state":
+        return 2
+    return 1
 
 
 if __name__ == "__main__":

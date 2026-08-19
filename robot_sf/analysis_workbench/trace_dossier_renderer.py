@@ -60,6 +60,9 @@ class TraceDossierRenderResult:
     png_path: Path
     manifest_path: Path
     manifest: dict[str, Any]
+    svg_path: Path | None = None
+    pdf_path: Path | None = None
+    caption_path: Path | None = None
 
 
 def render_trace_dossier(
@@ -68,12 +71,29 @@ def render_trace_dossier(
     output_png: Path,
     manifest_path: Path,
     command: str,
+    output_svg: Path | None = None,
+    output_pdf: Path | None = None,
+    caption_path: Path | None = None,
 ) -> TraceDossierRenderResult:
-    """Render one ``simulation_trace_export.v1`` trace as a four-panel PNG dossier.
+    """Render one trace as deterministic raster, vector, and caption outputs.
+
+    ``output_svg``, ``output_pdf``, and ``caption_path`` are optional for the
+    backwards-compatible direct renderer API.  The canonical package path
+    supplies all three so a dissertation-size publication candidate and its
+    caption are emitted alongside the PNG.  Partial publication output sets
+    fail closed rather than producing an apparently complete package.
 
     Returns:
         Paths and manifest payload for the generated diagnostic artifact.
     """
+
+    publication_outputs = (output_svg, output_pdf, caption_path)
+    if any(path is not None for path in publication_outputs) and not all(
+        path is not None for path in publication_outputs
+    ):
+        raise TraceDossierRenderError(
+            "output_svg, output_pdf, and caption_path must be supplied together"
+        )
 
     try:
         trace = load_simulation_trace_export(trace_path)
@@ -86,11 +106,29 @@ def render_trace_dossier(
 
     output_png.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    _render_png(trace, clearance_points, output_png)
+    if output_svg is not None and output_pdf is not None and caption_path is not None:
+        output_svg.parent.mkdir(parents=True, exist_ok=True)
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+        caption_path.parent.mkdir(parents=True, exist_ok=True)
+    _render_figure(
+        trace,
+        clearance_points,
+        output_png=output_png,
+        output_svg=output_svg,
+        output_pdf=output_pdf,
+    )
+    if caption_path is not None:
+        caption_path.write_text(
+            _caption_text(trace, clearance_points),
+            encoding="utf-8",
+        )
     manifest = _manifest_payload(
         trace,
         trace_path=trace_path,
         output_png=output_png,
+        output_svg=output_svg,
+        output_pdf=output_pdf,
+        caption_path=caption_path,
         command=command,
         clearance_points=clearance_points,
     )
@@ -102,6 +140,9 @@ def render_trace_dossier(
         png_path=output_png,
         manifest_path=manifest_path,
         manifest=manifest,
+        svg_path=output_svg,
+        pdf_path=output_pdf,
+        caption_path=caption_path,
     )
 
 
@@ -158,12 +199,15 @@ def _validate_renderable_trace(trace: SimulationTraceExport) -> None:
     _distance_convention(trace)
 
 
-def _render_png(
+def _render_figure(
     trace: SimulationTraceExport,
     clearance_points: list[ClearancePoint],
+    *,
     output_png: Path,
+    output_svg: Path | None,
+    output_pdf: Path | None,
 ) -> None:
-    """Write the deterministic four-panel Matplotlib PNG."""
+    """Write deterministic four-panel Matplotlib raster/vector outputs."""
 
     with plt.rc_context(
         {
@@ -175,6 +219,7 @@ def _render_png(
             "axes.labelsize": 9,
             "legend.fontsize": 7,
             "figure.constrained_layout.use": True,
+            "svg.hashsalt": "robot_sf.trace_dossier_renderer.issue_7086.v1",
         }
     ):
         fig, axes = plt.subplots(2, 2, figsize=(10.0, 7.2), constrained_layout=True)
@@ -192,12 +237,28 @@ def _render_png(
             "diagnostic-only simulation_trace_export.v1 dossier; not benchmark evidence",
             fontsize=8,
         )
-        fig.savefig(
-            output_png,
-            format="png",
-            metadata={"Software": "robot_sf trace_dossier_renderer issue_7086.v1"},
-        )
-        plt.close(fig)
+        png_metadata = {"Software": "robot_sf trace_dossier_renderer issue_7086.v1"}
+        svg_metadata = {
+            "Creator": "robot_sf trace_dossier_renderer issue_7086.v1",
+            "Title": "Robot SF diagnostic trace dossier",
+            "Date": None,
+        }
+        pdf_metadata = {
+            "Creator": "robot_sf trace_dossier_renderer issue_7086.v1",
+            "Producer": "robot_sf trace_dossier_renderer issue_7086.v1",
+            "Title": "Robot SF diagnostic trace dossier",
+            "Subject": "simulation_trace_export.v1 diagnostic-only dossier",
+            "CreationDate": None,
+            "ModDate": None,
+        }
+        try:
+            fig.savefig(output_png, format="png", metadata=png_metadata)
+            if output_svg is not None:
+                fig.savefig(output_svg, format="svg", metadata=svg_metadata)
+            if output_pdf is not None:
+                fig.savefig(output_pdf, format="pdf", metadata=pdf_metadata)
+        finally:
+            plt.close(fig)
 
 
 def _plot_trajectory(trace: SimulationTraceExport, ax: Any) -> None:
@@ -388,10 +449,36 @@ def _manifest_payload(
     *,
     trace_path: Path,
     output_png: Path,
+    output_svg: Path | None,
+    output_pdf: Path | None,
+    caption_path: Path | None,
     command: str,
     clearance_points: list[ClearancePoint],
 ) -> dict[str, Any]:
     minimum = min(clearance_points, key=lambda point: (point.value_m, point.time_s, point.step))
+    outputs: dict[str, Any] = {
+        "png": {
+            "path": str(output_png),
+            "sha256": _sha256_file(output_png),
+        }
+    }
+    if output_svg is not None and output_pdf is not None and caption_path is not None:
+        outputs.update(
+            {
+                "svg": {
+                    "path": str(output_svg),
+                    "sha256": _sha256_file(output_svg),
+                },
+                "pdf": {
+                    "path": str(output_pdf),
+                    "sha256": _sha256_file(output_pdf),
+                },
+                "caption": {
+                    "path": str(caption_path),
+                    "sha256": _sha256_file(caption_path),
+                },
+            }
+        )
     return {
         "schema_version": TRACE_DOSSIER_MANIFEST_SCHEMA_VERSION,
         "trace_schema_version": trace.schema_version,
@@ -405,13 +492,9 @@ def _manifest_payload(
             "name": "trace_dossier_renderer",
             "version": TRACE_DOSSIER_RENDERER_VERSION,
             "command": command,
+            "figure_size_inches": [10.0, 7.2],
         },
-        "outputs": {
-            "png": {
-                "path": str(output_png),
-                "sha256": _sha256_file(output_png),
-            }
-        },
+        "outputs": outputs,
         "panels": [
             "trajectory",
             "speed_profile",
@@ -430,6 +513,30 @@ def _manifest_payload(
         },
         "limitations": _limitations(clearance_points[0].distance_convention),
     }
+
+
+def _caption_text(
+    trace: SimulationTraceExport,
+    clearance_points: list[ClearancePoint],
+) -> str:
+    """Return a deterministic, diagnostic-only Markdown caption."""
+
+    minimum = min(clearance_points, key=lambda point: (point.value_m, point.time_s, point.step))
+    return (
+        "# Trace dossier caption\n\n"
+        f"Diagnostic-only dossier for `{trace.source.scenario_id}` with the "
+        f"`{trace.source.planner_id}` planner, seed `{trace.source.seed}`, and "
+        f"episode `{trace.source.episode_id}`. The four panels show the recorded "
+        "robot and pedestrian trajectories, robot speed and selected linear action, "
+        "closest robot–pedestrian clearance over time, and planner event annotations.\n\n"
+        f"The minimum plotted clearance is `{minimum.value_m:.6f} m` at step "
+        f"`{minimum.step}` (`{minimum.pedestrian_id}`, `{minimum.time_s:.6f} s`) "
+        f"under the `{minimum.distance_convention}` convention.\n\n"
+        "Source identity, input digest, renderer version, and output digests are recorded "
+        "in `renderer_manifest.json`. This artifact is for trace inspection and figure "
+        "reproduction only; it is not benchmark, statistical, safety, planner-ranking, "
+        "paper-facing, or dissertation evidence.\n"
+    )
 
 
 def _limitations(distance_convention: str) -> list[str]:

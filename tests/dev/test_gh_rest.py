@@ -104,12 +104,13 @@ def test_shared_json_and_string_normalization_keep_existing_contract() -> None:
         "scripts/dev/gh_issue_rest.py",
         "scripts/dev/gh_pr_comments_rest.py",
         "scripts/dev/gh_pr_label_rest.py",
+        "scripts/dev/gh_pr_review_rest.py",
         "scripts/dev/gh_pr_body_rest.py",
         "scripts/dev/open_issue_closure_audit.py",
     ],
 )
 def test_rest_tools_import_shared_transport_without_local_duplicates(relative_path: str) -> None:
-    """The five REST tools must share transport ownership rather than fork it."""
+    """The REST tools must share transport ownership rather than fork it."""
     source = (Path(__file__).parents[2] / relative_path).read_text(encoding="utf-8")
     assert "scripts.dev._gh_rest" in source
     assert "def _gh_api" not in source

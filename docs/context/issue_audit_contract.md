@@ -71,6 +71,14 @@ Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
 
+The command applies an aggregate REST wall-time budget (`--max-wall-seconds`,
+default 120 seconds) in addition to the 60-second timeout on each individual
+`gh` subprocess. When the aggregate budget expires, the core records a
+structured inventory error, writes the partial plan when an output path was
+requested, returns a non-zero status, and the apply path refuses all
+mutations. A partial plan is never a complete audit; callers may increase the
+budget only when the bounded inventory scope justifies it.
+
 ## Label rules
 
 Canonical execution-state labels are mutually exclusive. The repository also
@@ -214,7 +222,12 @@ interactive skill without guessing:
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,
 enforces a mutation budget, uses REST for issue/label writes, and reads every
-touched issue back. Project changes are intentionally absent.
+touched issue back. A repeated `remove_label` for a label that is already
+absent is recorded in the additive `already_applied` result bucket with
+`skipped_reason: already_absent`; it is not a failure, but the issue still
+goes through readback. The apply result also exposes `counts` for planned,
+applied, already-applied, and failed operations. Other 404s remain failures.
+Project changes are intentionally absent.
 
 ## Decision envelope
 

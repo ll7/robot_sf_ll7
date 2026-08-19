@@ -136,7 +136,7 @@ helpers instead of the broad `gh pr` commands:
 ```bash
 # merge-ready label add/remove (verify-on-write, pure REST issues-labels endpoint)
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-    --label merge-ready --repo ll7/robot_sf_ll7
+    --label merge-ready --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
     --label merge-ready --repo ll7/robot_sf_ll7
 
@@ -148,6 +148,10 @@ uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll
 # PR conversation comment publication (REST issues-comments endpoint)
 scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
 scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
+
+# Exact-head review publication; re-reads PR state/head while holding the local writer lock
+uv run python scripts/dev/gh_pr_review_rest.py <number> --event COMMENT \
+    --body-file <path> --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
 ```
 
 Use the label helper whenever the review loop applies, reapplies, or removes
@@ -156,7 +160,10 @@ Use the comment helper to re-read the conversation thread after a fix push
 before resolving review threads. Use `gh_comment.sh pr` for ordinary top-level
 PR conversation comments; it resolves the target through local/REST state and
 posts through `issues/{number}/comments`. The COMMENTED review event in step 8
-is a separate review-verdict operation. PR header/title fields that do not
+is a separate review-verdict operation and must use the guarded review helper
+above. If the helper reports the machine-readable
+`review_skipped_stale_state`, re-read the PR and stop the write path; classify a
+merged PR as `merged_externally` / `no_action`. PR header/title fields that do not
 involve comments can still use `gh pr view <number> --json ...`; only the
 label-edit and `--comments` paths hit the deprecated field. The REST helpers
 fail closed on auth, malformed, or truncated payloads.
@@ -348,11 +355,15 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
 8. After the full proof bar closes, reconcile the final title/body one more time and compute its
-   exact metadata digest. Then post an exact-head review-evidence comment by submitting a GitHub
-   COMMENTED review (`gh pr review --comment --body-file <path>`) naming the reviewed SHA, the
-   validation, findings disposition, any single-account waiver, and
+   exact metadata digest. Immediately before the write, use
+   `scripts/dev/gh_pr_review_rest.py` with the captured full head SHA to re-read PR lifecycle
+   state and head, then post an exact-head review-evidence comment by submitting a GitHub
+   COMMENTED review naming the reviewed SHA, the validation, findings disposition, any
+   single-account waiver, and
    `pr-metadata: reconciled @ <digest>` alongside `gate-verdict: accepted @ <head_sha>`. Then update
-   `merge-ready`. The
+   `merge-ready` through `gh_pr_label_rest.py` with the same expected head SHA. Both writes
+   return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
+   head moved. The
    review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
    does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the
    comment or record the gate-refresh blocker.

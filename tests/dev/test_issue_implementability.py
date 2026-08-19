@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -132,3 +136,48 @@ def test_contract_and_report_are_deterministic() -> None:
 
     assert first == second
     assert inspect_contract(COMPLETE_BODY) == inspect_contract(COMPLETE_BODY)
+
+
+def test_offline_cli_exercises_real_process_boundary(tmp_path: Path) -> None:
+    """The documented offline command must preserve JSON and exit-code semantics."""
+    body_file = tmp_path / "issue.md"
+    body_file.write_text(COMPLETE_BODY, encoding="utf-8")
+    root = Path(__file__).resolve().parents[2]
+
+    ready = subprocess.run(
+        [
+            sys.executable,
+            "scripts/dev/issue_implementability.py",
+            "1",
+            "--body-file",
+            str(body_file),
+            "--label",
+            "state:ready",
+            "--title",
+            "fixture issue",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    not_ready = subprocess.run(
+        [
+            sys.executable,
+            "scripts/dev/issue_implementability.py",
+            "1",
+            "--body-file",
+            str(body_file),
+            "--title",
+            "fixture issue",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert ready.returncode == 0
+    assert json.loads(ready.stdout)["classification"] == "ready"
+    assert not_ready.returncode == 2
+    assert json.loads(not_ready.stdout)["classification"] == "needs_ready_label"

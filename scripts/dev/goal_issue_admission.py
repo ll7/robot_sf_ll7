@@ -64,6 +64,7 @@ def admit_issue(
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("issue", type=int, help="Positive GitHub issue number.")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")

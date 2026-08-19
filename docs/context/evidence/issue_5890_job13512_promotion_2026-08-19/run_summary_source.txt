@@ -1,7 +1,7 @@
 label: 02b-issue3207-fidelity-full-fixed-scope
-project_root: /home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192
+project_root: ${JOB13512_WORKTREE}
 public_commit: ae0130d65cf232e0322cfd4800659a87d481490a
-results_root: /home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512
+results_root: ${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512
 command: |
   set -euo pipefail
 export OMP_NUM_THREADS=1

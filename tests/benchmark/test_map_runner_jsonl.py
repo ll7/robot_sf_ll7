@@ -1,4 +1,4 @@
-"""Tests for robot_sf.benchmark.map_runner_jsonl — JSONL record writing."""
+"""Tests for robot_sf.benchmark.map_runner.map_runner_jsonl — JSONL record writing."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import json
 import pytest
 from jsonschema import ValidationError
 
-from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
 
 
 def _valid_record() -> dict:

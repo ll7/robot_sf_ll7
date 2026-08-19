@@ -794,7 +794,7 @@ def test_canary_solver_contract_is_reachable_from_the_real_policy_builder() -> N
     the campaign stop rule silently became a permanent block. This test walks the real
     policy builder for both declared target configs and proves the gate can pass.
     """
-    from robot_sf.benchmark.map_runner import build_map_policy
+    from robot_sf.benchmark.map_runner.map_runner import build_map_policy
 
     config = load_sensitivity_config(CONFIG, repo_root=ROOT)
     contract = solver_execution_contract(config)

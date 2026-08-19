@@ -1,0 +1,72 @@
+{
+  "$schema": "scripts/validation/dependency_license_policy.v1.schema.json",
+  "schema_version": "robot-sf.dependency-license-policy.v1",
+  "claim_boundary": "This file records maintainer disposition requirements and provenance facts. It is not a legal opinion and does not approve redistribution by itself.",
+  "rules": [
+    {
+      "id": "user-installed-requires-disposition",
+      "distribution_mode": "user_installed",
+      "disposition": "review_required",
+      "rationale": "A user-installed dependency is not automatically redistributed by Robot SF, but unknown, proprietary, or conflicting metadata remains visible and requires an explicit release-surface decision."
+    },
+    {
+      "id": "bundled-source-requires-disposition",
+      "distribution_mode": "bundled_source",
+      "disposition": "review_required",
+      "rationale": "Source or package content carried by a Robot SF artifact requires a reviewed non-blocked disposition and matching notices/provenance."
+    },
+    {
+      "id": "built-companion-requires-disposition",
+      "distribution_mode": "built_companion",
+      "disposition": "review_required",
+      "rationale": "A built companion is a release surface and requires an explicit reviewed disposition, source identity, and license/notice proof."
+    },
+    {
+      "id": "not-distributed-excluded",
+      "distribution_mode": "not_distributed",
+      "disposition": "excluded",
+      "rationale": "Content explicitly excluded from the named release surface is not a redistribution claim; the exclusion must remain enforced by packaging checks."
+    }
+  ],
+  "components": [
+    {
+      "id": "python-rvo2",
+      "distribution_mode": "built_companion",
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "license_facts": {
+        "license_spdx": "Apache-2.0",
+        "upstream_repository": "https://github.com/mit-acl/Python-RVO2",
+        "provenance_record": "third_party/python-rvo2/UPSTREAM.md"
+      },
+      "evidence_paths": [
+        "third_party/python-rvo2/LICENSE",
+        "third_party/python-rvo2/UPSTREAM.md",
+        "third_party/python-rvo2/LOCAL_CHANGES.patch",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "disposition": "review_required"
+    },
+    {
+      "id": "socnavbench",
+      "distribution_mode": "bundled_source",
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "license_facts": {
+        "default_license_spdx": "MIT",
+        "override_manifest": "third_party/socnavbench/LICENSING.yaml",
+        "provenance_record": "third_party/socnavbench/UPSTREAM.md"
+      },
+      "evidence_paths": [
+        "third_party/socnavbench/LICENSE",
+        "third_party/socnavbench/LICENSING.yaml",
+        "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+        "third_party/socnavbench/UPSTREAM.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "disposition": "review_required"
+    }
+  ]
+}

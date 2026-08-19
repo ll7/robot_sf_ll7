@@ -17,6 +17,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.dev.pr_loop_policy import extract_sha_carriers, invalid_sha_carriers
+
 ISSUE_RE = re.compile(r"(?:#|/issues/)(\d+)\b")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -166,6 +168,17 @@ class BodyQualityReport:
     status: str
     source: str
     substantive_files: tuple[str, ...]
+    message: str
+
+
+@dataclass(frozen=True)
+class ShaCarrierReport:
+    """Compact exact-head SHA carrier report for a PR body."""
+
+    status: str
+    source: str
+    head_sha: str
+    invalid: tuple[str, ...]
     message: str
 
 
@@ -888,6 +901,89 @@ def _read_event_title(path: Path) -> str | None:
     return None
 
 
+def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCarrierReport:
+    """Return whether a body's exact-head SHA carriers match the PR head.
+
+    Skipped (never failing) when no head SHA is available to compare against;
+    the write-path guard in ``gh_pr_body_rest.py`` owns admission when no live
+    head is in scope. Otherwise every ``gate-verdict``/``base-policy``/
+    ``Exact head`` carrier must be a full 40-hex SHA equal to the head;
+    abbreviated or stale carriers fail closed so already-written bodies are
+    caught by the hosted contract.
+    """
+    if not head_sha:
+        return ShaCarrierReport(
+            status="skipped",
+            source=source,
+            head_sha="",
+            invalid=(),
+            message="No PR head SHA available; exact-head carrier check skipped.",
+        )
+    carriers = extract_sha_carriers(body)
+    if not carriers:
+        return ShaCarrierReport(
+            status="ok",
+            source=source,
+            head_sha=head_sha,
+            invalid=(),
+            message="No exact-head SHA carriers present.",
+        )
+    invalid = invalid_sha_carriers(carriers, head_sha)
+    if not invalid:
+        return ShaCarrierReport(
+            status="ok",
+            source=source,
+            head_sha=head_sha,
+            invalid=(),
+            message="All exact-head SHA carriers match the PR head.",
+        )
+    details = tuple(
+        f"{carrier.kind} {carrier.sha}" + ("" if carrier.full else " (abbreviated)")
+        for carrier in invalid
+    )
+    return ShaCarrierReport(
+        status="invalid_sha_carrier",
+        source=source,
+        head_sha=head_sha,
+        invalid=details,
+        message=(
+            "PR body carries exact-head SHA carrier(s) that do not match the "
+            f"PR head {head_sha}: {', '.join(details)}. Refuse fabricated or "
+            "stale exact-head attestations."
+        ),
+    )
+
+
+def _read_event_head_sha(path: Path) -> str:
+    """Extract the PR head SHA from a GitHub event payload, if any."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    pull_request = payload.get("pull_request")
+    if not isinstance(pull_request, dict):
+        return ""
+    head = pull_request.get("head")
+    if isinstance(head, dict) and isinstance(head.get("sha"), str):
+        return head["sha"]
+    return ""
+
+
+def _resolve_head_sha(args: argparse.Namespace) -> str:
+    """Resolve the PR head SHA from --head-sha or the event payload, or empty."""
+    if args.head_sha:
+        return args.head_sha
+    event_path: Path | None = args.github_event_path
+    if event_path:
+        return _read_event_head_sha(event_path)
+    env_event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if env_event_path:
+        return _read_event_head_sha(Path(env_event_path))
+    return ""
+
+
 def _resolve_title(args: argparse.Namespace) -> str:
     """Resolve PR title from --title arg or GitHub event payload, or return empty string."""
     if args.title:
@@ -984,10 +1080,24 @@ def _format_body_quality_report(report: BodyQualityReport) -> str:
     )
 
 
+def _format_sha_carrier_report(report: ShaCarrierReport) -> str:
+    invalid = ", ".join(report.invalid) if report.invalid else "none"
+    return (
+        "PR exact-head SHA check: "
+        f"status={report.status}; source={report.source}; head={report.head_sha or 'unavailable'}; "
+        f"invalid={invalid}; {report.message}"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--body-file", type=Path, help="Markdown PR body to check.")
     parser.add_argument("--title", type=str, help="PR title for evidence classification.")
+    parser.add_argument(
+        "--head-sha",
+        type=str,
+        help="PR head SHA (headRefOid) to validate exact-head SHA carriers against.",
+    )
     parser.add_argument(
         "--github-event-path",
         type=Path,
@@ -1097,6 +1207,7 @@ def main(argv: list[str] | None = None) -> int:
     domain_report = analyze_domain_approval(
         body, source=source, title=title, changed_files=changed_files
     )
+    sha_carrier_report = analyze_sha_carriers(body, source=source, head_sha=_resolve_head_sha(args))
     failing_statuses = {
         "missing_followup",
         "missing_section",
@@ -1115,6 +1226,7 @@ def main(argv: list[str] | None = None) -> int:
         "empty_body",
         "bot_only_body",
     }
+    sha_carrier_failing_statuses = {"invalid_sha_carrier"}
     if args.json:
         print(
             json.dumps(
@@ -1122,6 +1234,7 @@ def main(argv: list[str] | None = None) -> int:
                     "body_quality": body_quality_report.__dict__,
                     "followups": report.__dict__,
                     "domain_approval": domain_report.__dict__,
+                    "sha_carriers": sha_carrier_report.__dict__,
                 },
                 sort_keys=True,
             )
@@ -1139,12 +1252,17 @@ def main(argv: list[str] | None = None) -> int:
             else sys.stdout
         )
         print(_format_body_quality_report(body_quality_report), file=quality_stream)
+        sha_stream = (
+            sys.stderr if sha_carrier_report.status in sha_carrier_failing_statuses else sys.stdout
+        )
+        print(_format_sha_carrier_report(sha_carrier_report), file=sha_stream)
     failing_messages = [
         rep.message
         for rep, statuses in (
             (report, failing_statuses),
             (domain_report, domain_failing_statuses),
             (body_quality_report, body_quality_failing_statuses),
+            (sha_carrier_report, sha_carrier_failing_statuses),
         )
         if rep.status in statuses
     ]

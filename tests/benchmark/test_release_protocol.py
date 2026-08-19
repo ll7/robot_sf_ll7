@@ -50,6 +50,19 @@ def test_release_campaign_config_runs_single_worker() -> None:
     )
 
 
+def test_diagnostic_trace_pin_validates_against_non_paper_config() -> None:
+    """The #7086 trace pin validates without admitting a paper-facing release."""
+    manifest = load_release_manifest(
+        Path("configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml")
+    )
+
+    validation = validate_release_manifest(manifest)
+
+    assert manifest.maturity == "diagnostic"
+    assert validation["status"] == "valid"
+    assert validation["problem_count"] == 0
+
+
 def test_load_release_manifest_rejects_invalid_protocol_version(tmp_path: Path) -> None:
     """Protocol versions must be pinned to the supported benchmark protocol."""
     payload = {

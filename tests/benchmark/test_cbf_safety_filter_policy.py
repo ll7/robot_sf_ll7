@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
 
 def test_adapter_policy_cbf_filter_is_explicit_opt_in() -> None:

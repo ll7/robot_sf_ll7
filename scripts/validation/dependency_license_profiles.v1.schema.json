@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.invalid/schemas/dependency_license_profiles.v1.json",
+  "title": "Robot SF dependency license profile manifest",
+  "type": "object",
+  "required": ["schema_version", "target", "unrepresented_policy", "profiles"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {
+      "const": "robot-sf.dependency-license-profiles.v1"
+    },
+    "target": {
+      "type": "object",
+      "required": ["os", "architecture", "python", "resolver", "source_policy"],
+      "properties": {
+        "os": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "python": {
+          "type": "object",
+          "required": ["implementation", "version", "requires"],
+          "properties": {
+            "implementation": {"type": "string", "minLength": 1},
+            "version": {"type": "string", "minLength": 1},
+            "requires": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        },
+        "resolver": {
+          "type": "object",
+          "required": ["name", "version", "lock_mode"],
+          "properties": {
+            "name": {"const": "uv"},
+            "version": {"type": "string", "minLength": 1},
+            "lock_mode": {"const": "frozen"}
+          },
+          "additionalProperties": false
+        },
+        "source_policy": {
+          "type": "object",
+          "required": ["indexes", "network"],
+          "properties": {
+            "indexes": {"type": "array", "items": {"type": "string"}},
+            "network": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "unrepresented_policy": {
+      "type": "object",
+      "required": ["schema_version", "rules", "unresolved"],
+      "properties": {
+        "schema_version": {
+          "const": "robot-sf.dependency-license-unrepresented.v1"
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "reason_code", "reviewed", "rationale"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "lockfile": {"type": "string", "minLength": 1},
+              "root_package": {"type": "string", "minLength": 1},
+              "field": {"enum": ["dev-dependencies", "optional-dependencies"]},
+              "groups": {"type": "array", "items": {"type": "string", "minLength": 1}},
+              "reason_code": {
+                "enum": [
+                  "alternate_lock_context",
+                  "development_group",
+                  "marker_inactive",
+                  "unresolved_membership"
+                ]
+              },
+              "reviewed": {"type": "boolean"},
+              "rationale": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        },
+        "unresolved": {
+          "type": "object",
+          "required": ["id", "reason_code", "reviewed", "rationale"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "reason_code": {"const": "unresolved_membership"},
+            "reviewed": {"const": false},
+            "rationale": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "expected_resolution",
+          "distribution_mode"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "kind": {"type": "string", "minLength": 1},
+          "extra": {"type": "string"},
+          "extras": {"type": "array", "items": {"type": "string"}},
+          "excluded_extras": {"type": "array", "items": {"type": "string"}},
+          "pyproject": {"type": "string", "minLength": 1},
+          "lockfile": {"type": "string", "minLength": 1},
+          "root_package": {"type": "string", "minLength": 1},
+          "provenance_paths": {"type": "array", "items": {"type": "string"}},
+          "components": {"type": "array", "items": {"type": "string"}},
+          "expected_resolution": {
+            "enum": ["locked", "not_applicable", "unsupported"]
+          },
+          "distribution_mode": {
+            "enum": [
+              "user_installed",
+              "bundled_source",
+              "built_companion",
+              "not_distributed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

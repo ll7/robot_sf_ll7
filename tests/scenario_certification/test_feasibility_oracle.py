@@ -726,7 +726,7 @@ def test_oracle_end_to_end_on_committed_head_on_corridor_scenario() -> None:
     and checks the margins are internally consistent. It is marked slow because it
     builds the simulator; it does NOT make any benchmark claim.
     """
-    pytest.importorskip("robot_sf.benchmark.map_runner")
+    pytest.importorskip("robot_sf.benchmark.map_runner.map_runner")
     if not _SCENARIO_PATH.exists():
         pytest.skip("head-on-corridor archetype scenario not available in this checkout")
 

@@ -96,6 +96,12 @@ fi
 if [ "$use_current_pr" = true ]; then
   branch_name="$(git branch --show-current)"
   if [ -z "$branch_name" ]; then
+    # actions/checkout intentionally leaves CI jobs detached.  Prefer the PR
+    # source ref, then the checked-out event ref, so REST lookup remains
+    # deterministic without manufacturing a branch in the worktree.
+    branch_name="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-}}"
+  fi
+  if [ -z "$branch_name" ]; then
     echo "Error: could not resolve the current branch for --current." >&2
     exit 1
   fi

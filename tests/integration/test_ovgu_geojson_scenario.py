@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.nav.geojson_map_provenance import validate_import_provenance
 from robot_sf.scenario_certification import certify_scenario_file
 from robot_sf.training.scenario_loader import load_scenarios, resolve_map_definition

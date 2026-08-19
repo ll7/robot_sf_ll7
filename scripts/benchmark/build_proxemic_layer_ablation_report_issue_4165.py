@@ -29,7 +29,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("report-rows", "map-runner"),
         default="report-rows",
         help=(
-            "Use 'map-runner' for real robot_sf.benchmark.map_runner episode records; "
+            "Use 'map-runner' for real robot_sf.benchmark.map_runner.map_runner episode records; "
             "default keeps the legacy generic report-row input contract."
         ),
     )

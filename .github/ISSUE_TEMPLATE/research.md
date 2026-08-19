@@ -6,6 +6,15 @@ labels: ["research"]
 assignees: []
 ---
 
+## Archetype Metadata
+
+<!-- Choose exactly one canonical value from docs/context/issue_1512_issue_archetypes.md. -->
+```yaml
+archetype:
+evidence_tier:
+linked_policy:
+```
+
 ## Goal / Problem
 
 **Research question**
@@ -14,8 +23,8 @@ assignees: []
 **Hypothesis**
 <!-- What do we expect to find or prove? -->
 
-**Evidence grade / claim class**
-<!-- Mark observed, inferred, speculative, blocked, diagnostic-only, benchmark, or paper-facing. -->
+**Evidence grade**
+<!-- Use the canonical values from docs/context/issue_1512_issue_archetypes.md: observed, inferred, or proposal. Use the metadata evidence_tier above for the target evidence bar. -->
 
 **Competing explanations**
 <!-- List plausible alternatives this work should distinguish, not just the preferred hypothesis. -->

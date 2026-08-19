@@ -1,0 +1,193 @@
+{
+  "axes": [
+    {
+      "axis": "integration_timestep__dt_0_05",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.018518518518518528,
+        "comfort_exposure_mean": 0.0006509494058508149,
+        "mean_clearance": 0.014019630355716304,
+        "min_clearance": 0.0685992524057452,
+        "near_miss_rate": 0.004138291504524942,
+        "success_rate": 0.004629629629629627,
+        "time_to_goal_norm": 0.013204089506172726
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "integration_timestep__dt_0_20",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.013888888888888886,
+        "comfort_exposure_mean": 0.003126720478138119,
+        "mean_clearance": 0.009157888628756211,
+        "min_clearance": 0.005920839314842896,
+        "near_miss_rate": 0.003177629333759578,
+        "success_rate": 0.00462962962962963,
+        "time_to_goal_norm": 0.0030864197530863224
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "social_force_speed_archetypes__mixed_balanced",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.016203703703703665,
+        "comfort_exposure_mean": 0.0006867942861523124,
+        "mean_clearance": 0.005751813563133443,
+        "min_clearance": 0.018552245559982715,
+        "near_miss_rate": 0.0046530823716786,
+        "success_rate": 0.0069444444444444415,
+        "time_to_goal_norm": 0.007947530864197527
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "social_force_speed_archetypes__rush_hour",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.01157407407407407,
+        "comfort_exposure_mean": 0.0006201821696449594,
+        "mean_clearance": 0.007263760360526413,
+        "min_clearance": 0.03514324447302146,
+        "near_miss_rate": 0.005396807754416726,
+        "success_rate": 0.009259259259259257,
+        "time_to_goal_norm": 0.008950617283950598
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "observation_noise__pose_heading_low",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.02777777777777778,
+        "comfort_exposure_mean": 0.0006013401388861792,
+        "mean_clearance": 0.003666976248910582,
+        "min_clearance": 0.007824218397940721,
+        "near_miss_rate": 0.0033568195805439237,
+        "success_rate": 0.006944444444444441,
+        "time_to_goal_norm": 0.0033757716049383304
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "observation_noise__pedestrian_dropout_low",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.01620370370370372,
+        "comfort_exposure_mean": 0.0007508179609059343,
+        "mean_clearance": 0.0010174613401728431,
+        "min_clearance": 0.01163884000471286,
+        "near_miss_rate": 0.004004346179202225,
+        "success_rate": 0.00462962962962963,
+        "time_to_goal_norm": 0.007349537037037075
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "clearance_radius__radius_0_30",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.018518518518518528,
+        "comfort_exposure_mean": 0.0014853518497103813,
+        "mean_clearance": 0.009850570165709565,
+        "min_clearance": 0.03139076807297092,
+        "near_miss_rate": 0.0030724956688903877,
+        "success_rate": 0.004629629629629626,
+        "time_to_goal_norm": 0.003954475308642014
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    },
+    {
+      "axis": "clearance_radius__radius_0_50",
+      "kendall_tau": 1.0,
+      "metric_drift": {
+        "collision_rate": 0.023148148148148123,
+        "comfort_exposure_mean": 0.0008746779484458065,
+        "mean_clearance": 0.010803509207274164,
+        "min_clearance": 0.029717201174595382,
+        "near_miss_rate": 0.00553708960838738,
+        "success_rate": 0.00462962962962963,
+        "time_to_goal_norm": 0.010339506172839444
+      },
+      "rank_flips": 0,
+      "rank_identifiability_reason": null,
+      "rank_identifiable": true,
+      "ranking": [
+        "goal_seek",
+        "orca",
+        "baseline_social_force"
+      ],
+      "top1_changed": false
+    }
+  ],
+  "flipping_axes": [],
+  "higher_is_better": true,
+  "nominal_ranking": [
+    "goal_seek",
+    "orca",
+    "baseline_social_force"
+  ],
+  "non_identifiable_axes": [],
+  "primary_metric": "success_rate",
+  "rank_identifiability_reason": null,
+  "rank_identifiable": true,
+  "rank_stable": true,
+  "schema_version": "fidelity_rank_stability_report.v1"
+}

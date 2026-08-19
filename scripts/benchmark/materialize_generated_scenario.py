@@ -52,7 +52,7 @@ def main() -> int:
     smoke_failed = False
     if args.replay_smoke_output is not None:
         try:
-            from robot_sf.benchmark.map_runner import run_map_batch
+            from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
             summary = run_map_batch(
                 args.output,

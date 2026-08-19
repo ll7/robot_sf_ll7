@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.algorithm_metadata import resolve_observation_mode
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner.map_runner import (
     _apply_active_observation_mode_to_env_config,
     _apply_planner_selector_v2_context,
     _build_env_config,

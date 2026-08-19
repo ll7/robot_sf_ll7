@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.nav.map_config import SocialGroupDefinition
 
 

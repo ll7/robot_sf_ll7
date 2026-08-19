@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.map_runner import map_runner
 
 
 def _make_obs(goal=(5.0, 0.0), heading=0.0):

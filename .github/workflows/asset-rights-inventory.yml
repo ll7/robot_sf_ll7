@@ -1,0 +1,60 @@
+name: Asset Rights Inventory
+
+on:
+  pull_request:
+    paths:
+      - "maps/**"
+      - "fast-pysf/maps/**"
+      - "configs/maps/**"
+      - "configs/data/**"
+      - "configs/scenarios/maps/**"
+      - "examples/**"
+      - "robot_sf/render/assets/**"
+      - "robot_sf/render/web_assets/**"
+      - "robot_sf/maps/*.svg"
+      - "tests/fixtures/**"
+      - "tests/data/**"
+      - "tests/pygame/recordings/**"
+      - "docs/**"
+      - "fast-pysf/docs/assets/**"
+      - "specs/**"
+      - "third_party/socnavbench/**"
+      - "output/**"
+      - "scripts/tools/check_asset_rights_inventory.py"
+      - "scripts/validation/asset_rights_inventory.v1.yaml"
+      - "tests/dev/test_asset_rights_inventory.py"
+      - "docs/context/asset_rights_inventory.md"
+      - ".github/workflows/asset-rights-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    name: classify tracked assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv with bounded retry
+        env:
+          UV_VERSION: "0.11.21"
+          UV_INSTALL_MAX_ATTEMPTS: "3"
+          UV_INSTALL_BACKOFF_BASE: "5"
+          UV_INSTALL_BACKOFF_CAP: "30"
+        run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+      - name: Validate inventory and reject new classification gaps
+        run: >-
+          uv run python scripts/tools/check_asset_rights_inventory.py
+          --json --allow-known-blockers

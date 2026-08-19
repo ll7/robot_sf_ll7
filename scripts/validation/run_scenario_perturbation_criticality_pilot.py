@@ -22,7 +22,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _load_jsonl
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.scenario_certification import materialize_perturbation_pilot_matrix
 from robot_sf.scenario_certification.criticality_summary import (
     build_criticality_summary_from_pilot,

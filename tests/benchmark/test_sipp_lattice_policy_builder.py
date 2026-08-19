@@ -21,7 +21,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     get_algorithm_readiness,
     require_algorithm_allowed,
 )
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 
 

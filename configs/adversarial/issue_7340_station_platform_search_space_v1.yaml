@@ -1,0 +1,40 @@
+# Issue #7340 bounded real-manifest feasibility-first probe.
+#
+# The candidate corridor follows the open upper platform lane in
+# maps/svg_maps/classic_station_platform.svg.  The p2 binding is backed by a
+# single_ped_p2_start/goal marker pair in that map, so timing and speed fields
+# are materialized into a loader-valid runtime scenario.
+schema_version: adversarial-search-space.v1
+description: >-
+  Narrow, versioned station-platform candidate space for the issue #7340
+  diagnostic comparison. This is not a benchmark promotion space.
+variables:
+  start_x:
+    min: 6.0
+    max: 10.0
+  start_y:
+    min: 21.2
+    max: 22.8
+  goal_x:
+    min: 18.0
+    max: 26.0
+  goal_y:
+    min: 21.2
+    max: 22.8
+  spawn_time_s:
+    min: 0.0
+    max: 1.0
+  pedestrian_speed_mps:
+    min: 0.8
+    max: 1.4
+  pedestrian_delay_s:
+    min: 0.0
+    max: 1.0
+  scenario_seed:
+    min: 301
+    max: 303
+constraints:
+  min_start_goal_distance_m: 5.0
+pedestrian:
+  id: p2
+  route_mode: template

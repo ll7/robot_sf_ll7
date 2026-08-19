@@ -10,6 +10,7 @@ import pytest
 
 from scripts.dev.check_dependabot_update_policy import (
     PolicyError,
+    _diff_vs_head,
     changed_files,
     changed_lock_package_names,
     classify_package_names,
@@ -117,6 +118,38 @@ def test_authoritative_changed_file_list_avoids_unneeded_base_lookup(tmp_path: P
         "README.md",
         "docs/dev/example.md",
     ]
+
+
+def test_diff_vs_head_falls_back_to_two_dot_when_three_dot_lacks_merge_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shallow CI checkouts lack a merge base; the diff must fall back to two-dot."""
+
+    def fake_git_text(repo_root, args):
+        if args[:2] == ["diff", "--name-only"] and args[-1].endswith("...HEAD"):
+            return None
+        return "pyproject.toml\nuv.lock\n"
+
+    monkeypatch.setattr("scripts.dev.check_dependabot_update_policy._git_text", fake_git_text)
+    assert _diff_vs_head(tmp_path, "origin/main", ["--name-only"]) == "pyproject.toml\nuv.lock\n"
+
+
+def test_diff_vs_head_three_dot_preferred_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full clone keeps the three-dot diff as the primary path."""
+    calls: list[list[str]] = []
+
+    def fake_git_text(repo_root, args):
+        calls.append(args)
+        if args[:2] == ["diff", "--name-only"]:
+            return "README.md\n"
+        return None
+
+    monkeypatch.setattr("scripts.dev.check_dependabot_update_policy._git_text", fake_git_text)
+    assert _diff_vs_head(tmp_path, "origin/main", ["--name-only"]) == "README.md\n"
+    assert len(calls) == 1
+    assert calls[0][-1] == "origin/main...HEAD"
 
 
 def test_workflow_step_uses_the_policy_checker() -> None:

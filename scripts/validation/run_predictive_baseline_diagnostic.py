@@ -32,6 +32,7 @@ from robot_sf.planner.predictive_human_cost import (
 
 _METHOD_REFERENCE = "mppi_social_reference_v1"
 _METHOD_PGIF = "pgif_mppi_adapted_v1"
+_METHOD_ANISOTROPIC = "anisotropic_gaussian_mppi_v1"
 _METHOD_CONSTRAINED = "nmpc_cbf_internal_v1"
 _UNAVAILABLE_METRICS = {
     "success": "no simulator rollout",
@@ -143,6 +144,10 @@ def _build_smoke_planner(
         return MPPISocialPlannerAdapter(
             _mppi_config(config, human_cost=human_cost or PredictiveGaussianHumanCostConfig())
         )
+    if method_id == _METHOD_ANISOTROPIC:
+        return MPPISocialPlannerAdapter(
+            _mppi_config(config, human_cost=human_cost or PredictiveGaussianHumanCostConfig())
+        )
     if method_id == _METHOD_CONSTRAINED:
         return _constrained_planner(config)
     raise ValueError(f"unknown smoke method {method_id!r}")
@@ -200,10 +205,11 @@ def _build_method_cards(
     *,
     mppi_config: MPPISocialConfig,
     pgif_config: PredictiveGaussianHumanCostConfig,
+    aniso_config: PredictiveGaussianHumanCostConfig,
     nmpc_config: NMPCSocialConfig,
     cbf_config: CbfSafetyFilterConfig,
 ) -> tuple[PlannerMethodCard, ...]:
-    """Build the reference, PGIF-style, and constrained-MPC method cards."""
+    """Build the reference, PGIF-style, anisotropic, and constrained-MPC method cards."""
 
     common_observation = "structured SocNav robot, goal, and pedestrian position/velocity state"
     common_action = "unicycle command tuple (linear_speed_mps, angular_rate_rps)"
@@ -239,6 +245,27 @@ def _build_method_cards(
             config={"mppi": asdict(mppi_config), "predictive_human_cost": asdict(pgif_config)},
         ),
         PlannerMethodCard(
+            method_id=_METHOD_ANISOTROPIC,
+            display_name="Anisotropic Gaussian human-cost MPPI with cutoff and aggregation",
+            planner_family="sampling_based_mppi",
+            adapter_name="MPPISocialPlannerAdapter + PredictiveGaussianHumanCost(v2)",
+            observation_contract=common_observation,
+            action_contract=common_action,
+            source_reference="internal Robot SF anisotropic Gaussian cost adaptation",
+            license_status="internal implementation; no external code copied",
+            implementation_mode="adapter",
+            benchmark_status="diagnostic_only",
+            fallback_policy="Disabled by default; malformed cost configuration fails closed.",
+            claim_boundary=(
+                "diagnostic-only anisotropic cost smoke; no benchmark, safety, "
+                "ranking, or source-paper reproduction claim"
+            ),
+            config={
+                "mppi": asdict(mppi_config),
+                "predictive_human_cost": asdict(aniso_config),
+            },
+        ),
+        PlannerMethodCard(
             method_id=_METHOD_CONSTRAINED,
             display_name="Internal NMPC plus collision-cone CBF",
             planner_family="constrained_mpc_with_cbf_filter",
@@ -272,6 +299,22 @@ def run_diagnostic(config: dict[str, Any]) -> dict[str, Any]:
         lateral_sigma_m=float(config["pgif"]["lateral_sigma_m"]),
         forward_speed_gain=float(config["pgif"]["forward_speed_gain"]),
     )
+    aniso_payload = config.get("anisotropic", {})
+    aniso_config = PredictiveGaussianHumanCostConfig(
+        enabled=True,
+        weight=float(aniso_payload.get("weight", config["pgif"]["weight"])),
+        longitudinal_sigma_m=float(
+            aniso_payload.get("longitudinal_sigma_m", config["pgif"]["longitudinal_sigma_m"])
+        ),
+        lateral_sigma_m=float(
+            aniso_payload.get("lateral_sigma_m", config["pgif"]["lateral_sigma_m"])
+        ),
+        forward_speed_gain=float(
+            aniso_payload.get("forward_speed_gain", config["pgif"]["forward_speed_gain"])
+        ),
+        cutoff_distance_m=float(aniso_payload.get("cutoff_distance_m", 3.0)),
+        aggregation=str(aniso_payload.get("aggregation", "sum")),
+    )
     mppi_config = _mppi_config(config, human_cost=PredictiveGaussianHumanCostConfig())
     nmpc_config = NMPCSocialConfig(
         horizon_steps=int(config["horizon_steps"]),
@@ -288,6 +331,7 @@ def run_diagnostic(config: dict[str, Any]) -> dict[str, Any]:
     method_cards = _build_method_cards(
         mppi_config=mppi_config,
         pgif_config=pgif_config,
+        aniso_config=aniso_config,
         nmpc_config=nmpc_config,
         cbf_config=cbf_config,
     )
@@ -298,6 +342,12 @@ def run_diagnostic(config: dict[str, Any]) -> dict[str, Any]:
             observation=observation,
             config=config,
             human_cost=pgif_config,
+        ),
+        _run_smoke(
+            method_id=_METHOD_ANISOTROPIC,
+            observation=observation,
+            config=config,
+            human_cost=aniso_config,
         ),
         _run_smoke(method_id=_METHOD_CONSTRAINED, observation=observation, config=config),
     )

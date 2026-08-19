@@ -32,5 +32,5 @@ def test_predictive_baseline_fixture_is_schema_valid_and_fail_closed() -> None:
     assert report["campaign_approval_required"] is True
     assert {record["status"] for record in report["smoke_records"]} == {"smoke_pass"}
     assert all(record["deterministic"] for record in report["smoke_records"])
-    assert len(report["methods"]) == 3
+    assert len(report["methods"]) == 4
     assert all(len(card["config_digest"]) == 64 for card in report["methods"])

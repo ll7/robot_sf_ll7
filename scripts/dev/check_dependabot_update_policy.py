@@ -455,6 +455,27 @@ def git_file_at_ref(repo_root: Path, ref: str, relative_path: str) -> str | None
     return _git_text(repo_root, ["show", f"{ref}:{relative_path}"])
 
 
+def _diff_vs_head(
+    repo_root: Path,
+    base_ref: str,
+    options: list[str],
+    pathspec: str | None = None,
+) -> str | None:
+    """Return a base-vs-HEAD diff, tolerating shallow checkouts.
+
+    The three-dot form ``<base>...HEAD`` requires a merge base, which is absent
+    on GitHub's shallow ``pull_request`` checkout (issue #7524). When it fails,
+    fall back to the two-dot form ``<base> HEAD`` which compares the two trees
+    directly and works without a merge base.
+    """
+    suffix = [f"{base_ref}...HEAD"] if pathspec is None else [f"{base_ref}...HEAD", "--", pathspec]
+    output = _git_text(repo_root, ["diff", *options, *suffix])
+    if output is not None:
+        return output
+    suffix = [base_ref, "HEAD"] if pathspec is None else [base_ref, "HEAD", "--", pathspec]
+    return _git_text(repo_root, ["diff", *options, *suffix])
+
+
 def changed_files(
     repo_root: Path, base_ref: str, changed_files_path: Path | None = None
 ) -> list[str]:
@@ -470,7 +491,7 @@ def changed_files(
             raise PolicyError(
                 f"unable to read authoritative changed-files list {changed_files_path}: {exc}"
             ) from exc
-    output = _git_text(repo_root, ["diff", "--name-only", f"{base_ref}...HEAD"])
+    output = _diff_vs_head(repo_root, base_ref, ["--name-only"])
     if output is None:
         raise PolicyError(f"unable to compare HEAD with base ref {base_ref!r}")
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -482,10 +503,7 @@ def _changed_project_names(
     relative_path: str,
     direct_names: set[str],
 ) -> set[str]:
-    diff = _git_text(
-        repo_root,
-        ["diff", "--unified=0", f"{base_ref}...HEAD", "--", relative_path],
-    )
+    diff = _diff_vs_head(repo_root, base_ref, ["--unified=0"], pathspec=relative_path)
     if diff is None:
         raise PolicyError(f"unable to inspect dependency declaration diff {relative_path}")
     changed: set[str] = set()

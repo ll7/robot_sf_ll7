@@ -1,0 +1,998 @@
+{
+  "ade_fde_false_reassurance_case": {
+    "actor_id": "ped-1",
+    "ade_m": 0.0,
+    "case_id": "stationary_zero_ade_fde_but_robot_clearance_is_close",
+    "cutoff_frame_step": 2,
+    "cutoff_time_s": 2.0,
+    "fde_m": 0.0,
+    "horizon_s": 1.0,
+    "interpretation": "A stationary forecast is exactly right for this target, so ADE/FDE are zero, while the robot is within the 0.8 m diagnostic clearance reference. ADE/FDE alone do not measure robot clearance or collision relevance. This is a counterexample, not a safety claim.",
+    "predicate_reference": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json",
+    "predicate_reference_sha256": "4aa0d5cc013d8a28e4f207d0803c0f8ef84d857762515fbef1335d09c2c61645",
+    "risk_reference_m": 0.8,
+    "robot_pedestrian_clearance_m": 0.32999999999999996,
+    "robot_position_m": [
+      0.02,
+      0.0
+    ],
+    "source_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+    "source_sha256": "9123b42ce8df1fd257d5230487933b49e4f0ad104f92fe8299b4642fe1d9dc7d",
+    "stationary_prediction_m": [
+      0.35,
+      0.0
+    ],
+    "status": "analytic_trace_backed_diagnostic_only",
+    "target_frame_step": 3,
+    "target_position_m": [
+      0.35,
+      0.0
+    ],
+    "target_time_s": 3.0
+  },
+  "claim_boundary": "preparation-only matched oracle-versus-ego design evidence; not forecasting performance, training, planner integration, scientific claim, or real-world forecasting",
+  "coverage": {
+    "ego_observation_status": "not_available",
+    "observation_tiers": [
+      "oracle_full_state",
+      "ego_observation"
+    ],
+    "planners": [
+      "ammv_social_force",
+      "hybrid_rule_v0_minimal",
+      "orca"
+    ],
+    "scenario_families": [
+      "bottleneck",
+      "crossing_proxy",
+      "head_on_corridor"
+    ],
+    "unavailable_strata": [
+      {
+        "dimension": "observation_tier",
+        "reason": "simulation_trace_export.v1 has no tracked-agent observation field; no oracle-to-ego inference is allowed",
+        "status": "not_available",
+        "value": "ego_observation"
+      }
+    ]
+  },
+  "dependency_license_comparison": [
+    {
+      "availability": "core_dependency",
+      "component": "numpy",
+      "decision": "reuse_existing_dependency",
+      "evidence_paths": [
+        "pyproject.toml",
+        "docs/context/dependency_license_inventory.md"
+      ],
+      "license_or_rights": "BSD-3-Clause upstream package metadata; not a legal opinion",
+      "role": "array arithmetic for stationary/CV/CA/Kalman preparation"
+    },
+    {
+      "availability": "optional_benchmark_extra",
+      "component": "scipy",
+      "decision": "do_not_add_or_require",
+      "evidence_paths": [
+        "pyproject.toml",
+        "docs/context/dependency_license_inventory.md"
+      ],
+      "license_or_rights": "BSD-3-Clause upstream package metadata; not required here",
+      "role": "optional linear algebra implementation for a future Kalman baseline"
+    },
+    {
+      "availability": "vendored_existing",
+      "component": "fast-pysf/pysocialforce",
+      "decision": "reuse_only_if_future_baseline_is_separately_proven",
+      "evidence_paths": [
+        "fast-pysf/LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "license_or_rights": "MIT",
+      "role": "existing in-repository Social Force implementation"
+    },
+    {
+      "availability": "optional_orca_extra",
+      "component": "pyrvo2",
+      "decision": "record_provenance_only; no planner_integration_change",
+      "evidence_paths": [
+        "third_party/python-rvo2/LICENSE",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "license_or_rights": "Apache-2.0 for the vendored companion",
+      "role": "planner provenance for the selected ORCA source stratum"
+    },
+    {
+      "availability": "not_declared",
+      "component": "external socialforce package",
+      "decision": "do_not_add_dependency",
+      "evidence_paths": [
+        "docs/context/issue_653_social_navigation_pyenvs_socialforce_runtime.md"
+      ],
+      "license_or_rights": "not adopted; exact package/license would require a separate review",
+      "role": "external comparison point for a Social Force dependency"
+    }
+  ],
+  "ego_observation_source_key": "tracked_agents",
+  "evidence_references": [
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "17f5473adb40bba49b54dcf5a258387c58a5d0d5b2e85a22e216b818368f57c2"
+    },
+    {
+      "path": "docs/context/dependency_license_inventory.md",
+      "sha256": "49eb16d274c12a8ba184b3c2d07ea101de3027bb740d6b5bd21d6685ba5f75bc"
+    },
+    {
+      "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json",
+      "sha256": "4aa0d5cc013d8a28e4f207d0803c0f8ef84d857762515fbef1335d09c2c61645"
+    },
+    {
+      "path": "docs/context/issue_653_social_navigation_pyenvs_socialforce_runtime.md",
+      "sha256": "fb48e0bd71b6c834fb628548a18df8dc745bcae0cbf8689e5f21cc6edafd11a5"
+    },
+    {
+      "path": "fast-pysf/LICENSE",
+      "sha256": "2f003bf0d7662c4253816236f27098097609ff689235ecaa421b81dd8803cf49"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "70132874f821abd3e50e9b81a096763a8130b09a4fa87fef7c7b5706745699ac"
+    },
+    {
+      "path": "third_party/python-rvo2/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  ],
+  "evidence_status": "diagnostic-only",
+  "field_leakage_ledger": {
+    "future_target": "true only for supervision labels; any true field under row.input fails validation",
+    "robot_available": "true means the field is part of the robot/ego context at cutoff; false means privileged or future-only data unavailable to the robot",
+    "time_roles": {
+      "cutoff": "input state at or before the declared frame time",
+      "target": "supervision-only future label at cutoff_time_s + horizon_s"
+    }
+  },
+  "horizons_s": [
+    1.0
+  ],
+  "issue": 7602,
+  "observation_contract_changed": false,
+  "pair_count": 3,
+  "pair_identity_fields": [
+    "source_lineage_id",
+    "frame_step",
+    "cutoff_time_s",
+    "target_frame_step",
+    "target_time_s",
+    "actor_id",
+    "horizon_s"
+  ],
+  "row_count": 6,
+  "row_schema_version": "forecast_preparation_row.v1",
+  "rows": [
+    {
+      "availability_status": "available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "0",
+        "cutoff_time_s": 0.6000000000000001,
+        "frame_step": 5,
+        "horizon_s": 1.0,
+        "source_lineage_id": "a72467fcdcd92118561789104f5d0763f5186c1c4278f1bfbd69a35fe299e48a",
+        "target_frame_step": 15,
+        "target_time_s": 1.6
+      },
+      "input": {
+        "pedestrian_position_m": [
+          15.784143071834695,
+          22.234842813276497
+        ],
+        "pedestrian_velocity_mps": [
+          0.12922730161545104,
+          -0.5528344679292374
+        ],
+        "robot_heading_rad": 1.4569120407104492,
+        "robot_position_m": [
+          14.047303553358752,
+          5.084480165624772
+        ],
+        "robot_velocity_mps": [
+          0.24047250470877302,
+          1.9854906130423
+        ]
+      },
+      "lineage": {
+        "episode_id": "classic_head_on_corridor_low--111--5fde302d5414e476",
+        "lineage_group_id": "head_on_corridor:classic_head_on_corridor_low:111:classic_head_on_corridor_low--111--5fde302d5414e476",
+        "planner_id": "ammv_social_force",
+        "scenario_family": "head_on_corridor",
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 111,
+        "source_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+        "source_sha256": "2adb64c71028ba4abe1837884e90784e258c0d973d95abbb0aeb10ca776e3e6a",
+        "split": "test",
+        "trace_id": "classic_head_on_corridor_low-epclassic_head_on_corridor_low--111--5fde302d5414e476-seed111-source-f4bf98cd"
+      },
+      "observation_tier": "oracle_full_state",
+      "pair_id": "pair-4b52f01a983b5855b7ad1be9",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          15.916339068339271,
+          21.662157178418486
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    },
+    {
+      "availability_status": "not_available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "0",
+        "cutoff_time_s": 0.6000000000000001,
+        "frame_step": 5,
+        "horizon_s": 1.0,
+        "source_lineage_id": "a72467fcdcd92118561789104f5d0763f5186c1c4278f1bfbd69a35fe299e48a",
+        "target_frame_step": 15,
+        "target_time_s": 1.6
+      },
+      "input": {
+        "robot_heading_rad": 1.4569120407104492,
+        "robot_position_m": [
+          14.047303553358752,
+          5.084480165624772
+        ],
+        "robot_velocity_mps": [
+          0.24047250470877302,
+          1.9854906130423
+        ]
+      },
+      "lineage": {
+        "episode_id": "classic_head_on_corridor_low--111--5fde302d5414e476",
+        "lineage_group_id": "head_on_corridor:classic_head_on_corridor_low:111:classic_head_on_corridor_low--111--5fde302d5414e476",
+        "planner_id": "ammv_social_force",
+        "scenario_family": "head_on_corridor",
+        "scenario_id": "classic_head_on_corridor_low",
+        "seed": 111,
+        "source_path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+        "source_sha256": "2adb64c71028ba4abe1837884e90784e258c0d973d95abbb0aeb10ca776e3e6a",
+        "split": "test",
+        "trace_id": "classic_head_on_corridor_low-epclassic_head_on_corridor_low--111--5fde302d5414e476-seed111-source-f4bf98cd"
+      },
+      "observation_tier": "ego_observation",
+      "pair_id": "pair-4b52f01a983b5855b7ad1be9",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          15.916339068339271,
+          21.662157178418486
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    },
+    {
+      "availability_status": "available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "ped-1",
+        "cutoff_time_s": 2.0,
+        "frame_step": 2,
+        "horizon_s": 1.0,
+        "source_lineage_id": "32f5dc79a086d2642c105e69b065b527dfb6e10fa73d70481d9c8fb892f1b97b",
+        "target_frame_step": 3,
+        "target_time_s": 3.0
+      },
+      "input": {
+        "pedestrian_position_m": [
+          0.35,
+          0.0
+        ],
+        "pedestrian_velocity_mps": [
+          0.0,
+          0.0
+        ],
+        "robot_heading_rad": 0.0,
+        "robot_position_m": [
+          0.02,
+          0.0
+        ],
+        "robot_velocity_mps": [
+          0.0,
+          0.0
+        ]
+      },
+      "lineage": {
+        "episode_id": "issue-2667-synthetic-episode-001",
+        "lineage_group_id": "crossing_proxy:crossing_proxy:111:issue-2667-synthetic-episode-001",
+        "planner_id": "orca",
+        "scenario_family": "crossing_proxy",
+        "scenario_id": "crossing_proxy",
+        "seed": 111,
+        "source_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+        "source_sha256": "9123b42ce8df1fd257d5230487933b49e4f0ad104f92fe8299b4642fe1d9dc7d",
+        "split": "validation",
+        "trace_id": "issue-2667-synthetic-crossing-proxy-orca-111"
+      },
+      "observation_tier": "oracle_full_state",
+      "pair_id": "pair-4e1b655e293d727388e5b510",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          0.35,
+          0.0
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    },
+    {
+      "availability_status": "not_available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "ped-1",
+        "cutoff_time_s": 2.0,
+        "frame_step": 2,
+        "horizon_s": 1.0,
+        "source_lineage_id": "32f5dc79a086d2642c105e69b065b527dfb6e10fa73d70481d9c8fb892f1b97b",
+        "target_frame_step": 3,
+        "target_time_s": 3.0
+      },
+      "input": {
+        "robot_heading_rad": 0.0,
+        "robot_position_m": [
+          0.02,
+          0.0
+        ],
+        "robot_velocity_mps": [
+          0.0,
+          0.0
+        ]
+      },
+      "lineage": {
+        "episode_id": "issue-2667-synthetic-episode-001",
+        "lineage_group_id": "crossing_proxy:crossing_proxy:111:issue-2667-synthetic-episode-001",
+        "planner_id": "orca",
+        "scenario_family": "crossing_proxy",
+        "scenario_id": "crossing_proxy",
+        "seed": 111,
+        "source_path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+        "source_sha256": "9123b42ce8df1fd257d5230487933b49e4f0ad104f92fe8299b4642fe1d9dc7d",
+        "split": "validation",
+        "trace_id": "issue-2667-synthetic-crossing-proxy-orca-111"
+      },
+      "observation_tier": "ego_observation",
+      "pair_id": "pair-4e1b655e293d727388e5b510",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          0.35,
+          0.0
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    },
+    {
+      "availability_status": "available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "ped_1",
+        "cutoff_time_s": 0.5,
+        "frame_step": 5,
+        "horizon_s": 1.0,
+        "source_lineage_id": "bb7df37686bc17c89ba7a6582f00a793da2f51281978f1e0979c92854e6d10c1",
+        "target_frame_step": 15,
+        "target_time_s": 1.5
+      },
+      "input": {
+        "pedestrian_position_m": [
+          1.2,
+          0.5
+        ],
+        "pedestrian_velocity_mps": [
+          0.4,
+          0.0
+        ],
+        "robot_heading_rad": 0.0,
+        "robot_position_m": [
+          0.0,
+          0.0
+        ],
+        "robot_velocity_mps": [
+          0.0,
+          0.0
+        ]
+      },
+      "lineage": {
+        "episode_id": "issue_2937_bottleneck_motion_rich_ep0000",
+        "lineage_group_id": "bottleneck:classic_bottleneck_medium:111:issue_2937_bottleneck_motion_rich_ep0000",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "scenario_family": "bottleneck",
+        "scenario_id": "classic_bottleneck_medium",
+        "seed": 111,
+        "source_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+        "source_sha256": "a8f14b1d0a54ee7da51a3c341adbae46423ac356b05f753eb01d770b3f13878a",
+        "split": "train",
+        "trace_id": "issue_2937_bottleneck_motion_rich"
+      },
+      "observation_tier": "oracle_full_state",
+      "pair_id": "pair-ce63127c5afff61d3c681f68",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          1.6,
+          0.5
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    },
+    {
+      "availability_status": "not_available",
+      "field_leakage_ledger": [
+        {
+          "field": "input.pedestrian_position_m",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.pedestrian_velocity_mps",
+          "future_target": false,
+          "owner": "declared_ego_source.tracked_agents",
+          "reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+          "robot_available": false,
+          "status": "not_available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_position_m",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m"
+        },
+        {
+          "field": "input.robot_velocity_mps",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "m/s"
+        },
+        {
+          "field": "input.robot_heading_rad",
+          "future_target": false,
+          "owner": "simulation_trace_export.robot",
+          "robot_available": true,
+          "status": "available",
+          "time_role": "cutoff",
+          "unit": "rad"
+        },
+        {
+          "field": "target.future_position_m",
+          "future_target": true,
+          "owner": "simulation_trace_export.pedestrians",
+          "robot_available": false,
+          "status": "available",
+          "time_role": "target",
+          "unit": "m"
+        }
+      ],
+      "identity": {
+        "actor_id": "ped_1",
+        "cutoff_time_s": 0.5,
+        "frame_step": 5,
+        "horizon_s": 1.0,
+        "source_lineage_id": "bb7df37686bc17c89ba7a6582f00a793da2f51281978f1e0979c92854e6d10c1",
+        "target_frame_step": 15,
+        "target_time_s": 1.5
+      },
+      "input": {
+        "robot_heading_rad": 0.0,
+        "robot_position_m": [
+          0.0,
+          0.0
+        ],
+        "robot_velocity_mps": [
+          0.0,
+          0.0
+        ]
+      },
+      "lineage": {
+        "episode_id": "issue_2937_bottleneck_motion_rich_ep0000",
+        "lineage_group_id": "bottleneck:classic_bottleneck_medium:111:issue_2937_bottleneck_motion_rich_ep0000",
+        "planner_id": "hybrid_rule_v0_minimal",
+        "scenario_family": "bottleneck",
+        "scenario_id": "classic_bottleneck_medium",
+        "seed": 111,
+        "source_path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+        "source_sha256": "a8f14b1d0a54ee7da51a3c341adbae46423ac356b05f753eb01d770b3f13878a",
+        "split": "train",
+        "trace_id": "issue_2937_bottleneck_motion_rich"
+      },
+      "observation_tier": "ego_observation",
+      "pair_id": "pair-ce63127c5afff61d3c681f68",
+      "schema_version": "forecast_preparation_row.v1",
+      "target": {
+        "future_position_m": [
+          1.6,
+          0.5
+        ],
+        "source": "simulation_trace_export.pedestrians"
+      }
+    }
+  ],
+  "runtime_memory_estimates": [
+    {
+      "baseline_id": "stationary",
+      "dependency": "numpy (already a core dependency)",
+      "estimate_status": "preparation_estimate_not_measured",
+      "family": "zero_order_hold",
+      "memory_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "bytes, analytic only",
+        "estimated_peak_working_bytes_per_actor": 96
+      },
+      "runtime_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "scalar operations, analytic only",
+        "estimated_scalar_operations_per_actor_horizon": 2
+      }
+    },
+    {
+      "baseline_id": "constant_velocity",
+      "dependency": "numpy (already a core dependency)",
+      "estimate_status": "preparation_estimate_not_measured",
+      "family": "first_order_kinematic",
+      "memory_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "bytes, analytic only",
+        "estimated_peak_working_bytes_per_actor": 128
+      },
+      "runtime_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "scalar operations, analytic only",
+        "estimated_scalar_operations_per_actor_horizon": 8
+      }
+    },
+    {
+      "baseline_id": "constant_acceleration",
+      "dependency": "numpy (already a core dependency)",
+      "estimate_status": "preparation_estimate_not_measured",
+      "family": "second_order_kinematic",
+      "memory_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "bytes, analytic only",
+        "estimated_peak_working_bytes_per_actor": 160
+      },
+      "runtime_estimate": {
+        "complexity": "O(A * H)",
+        "estimate_unit": "scalar operations, analytic only",
+        "estimated_scalar_operations_per_actor_horizon": 18
+      }
+    },
+    {
+      "baseline_id": "kalman",
+      "dependency": "numpy; scipy is optional and not required for the small design filter",
+      "estimate_status": "preparation_estimate_not_measured",
+      "family": "linear_gaussian_state_space",
+      "memory_estimate": {
+        "complexity": "O(A * d^2)",
+        "estimate_unit": "bytes, analytic only",
+        "estimated_peak_working_bytes_per_actor": 2048
+      },
+      "runtime_estimate": {
+        "complexity": "O(A * H * d^3), d=4 state dimensions",
+        "estimate_unit": "scalar operations, analytic only",
+        "estimated_scalar_operations_per_actor_horizon": 256
+      }
+    },
+    {
+      "baseline_id": "social_force",
+      "dependency": "local fast-pysf/pysocialforce; no new dependency is proposed",
+      "estimate_status": "preparation_estimate_not_measured",
+      "family": "interaction_aware_force",
+      "memory_estimate": {
+        "complexity": "O(A * H + A * N_neighbors)",
+        "estimate_unit": "bytes, analytic only",
+        "estimated_peak_working_bytes_per_actor": "4096 + 512 * N_neighbors"
+      },
+      "runtime_estimate": {
+        "complexity": "O(H * A * (A - 1))",
+        "estimate_unit": "scalar operations, analytic only",
+        "estimated_scalar_operations_per_actor_horizon": "320 + 80 * N_neighbors"
+      }
+    }
+  ],
+  "schema_version": "forecast_preparation.v1",
+  "sha256_coverage": {
+    "algorithm": "SHA-256",
+    "covered_paths": [
+      "THIRD_PARTY_NOTICES.md",
+      "docs/context/dependency_license_inventory.md",
+      "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+      "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+      "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json",
+      "docs/context/evidence/issue_7399_forecast_preparation/README.md",
+      "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json",
+      "docs/context/issue_653_social_navigation_pyenvs_socialforce_runtime.md",
+      "fast-pysf/LICENSE",
+      "pyproject.toml",
+      "robot_sf/benchmark/forecast/forecast_preparation.py",
+      "scripts/validation/check_issue_7602_forecast_preparation.py",
+      "tests/benchmark/test_forecast_preparation.py",
+      "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+      "third_party/python-rvo2/LICENSE"
+    ],
+    "manifest_path": "docs/context/evidence/issue_7399_forecast_preparation/checksums.sha256",
+    "status": "complete_after_sidecar_generation"
+  },
+  "source_artifacts": [
+    {
+      "ego_observation_reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+      "ego_observation_source_key": "tracked_agents",
+      "ego_observation_status": "not_available",
+      "episode_id": "classic_head_on_corridor_low--111--5fde302d5414e476",
+      "frame_count": 20,
+      "lineage_group_id": "head_on_corridor:classic_head_on_corridor_low:111:classic_head_on_corridor_low--111--5fde302d5414e476",
+      "near_duplicate_fingerprint": "2f00d15800fd07da996dedbd1b4f180eb165af8d215ae5e9b2e627bed719ef4f",
+      "path": "docs/context/evidence/issue_2428_mechanism_trace_panels_2026-06-06/traces/ammv_social_force_trace_export.json",
+      "planner_id": "ammv_social_force",
+      "scenario_family": "head_on_corridor",
+      "scenario_id": "classic_head_on_corridor_low",
+      "seed": 111,
+      "sha256": "2adb64c71028ba4abe1837884e90784e258c0d973d95abbb0aeb10ca776e3e6a",
+      "size_bytes": 26117,
+      "split": "test",
+      "trace_id": "classic_head_on_corridor_low-epclassic_head_on_corridor_low--111--5fde302d5414e476-seed111-source-f4bf98cd"
+    },
+    {
+      "ego_observation_reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+      "ego_observation_source_key": "tracked_agents",
+      "ego_observation_status": "not_available",
+      "episode_id": "issue-2667-synthetic-episode-001",
+      "frame_count": 5,
+      "lineage_group_id": "crossing_proxy:crossing_proxy:111:issue-2667-synthetic-episode-001",
+      "near_duplicate_fingerprint": "0a89b3d8345c43bc05e7bab4904303962573deced9b3555175281355dd80fec9",
+      "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/inputs/synthetic_crossing_proxy_orca_111_trace_export.json",
+      "planner_id": "orca",
+      "scenario_family": "crossing_proxy",
+      "scenario_id": "crossing_proxy",
+      "seed": 111,
+      "sha256": "9123b42ce8df1fd257d5230487933b49e4f0ad104f92fe8299b4642fe1d9dc7d",
+      "size_bytes": 2817,
+      "split": "validation",
+      "trace_id": "issue-2667-synthetic-crossing-proxy-orca-111"
+    },
+    {
+      "ego_observation_reason": "simulation_trace_export.v1 source has no tracked_agents field; no oracle-to-ego inference is allowed",
+      "ego_observation_source_key": "tracked_agents",
+      "ego_observation_status": "not_available",
+      "episode_id": "issue_2937_bottleneck_motion_rich_ep0000",
+      "frame_count": 33,
+      "lineage_group_id": "bottleneck:classic_bottleneck_medium:111:issue_2937_bottleneck_motion_rich_ep0000",
+      "near_duplicate_fingerprint": "d87c7c81493e3abbe501ab6811d0f1effc8654061cd6f81227b2ce7b96b97487",
+      "path": "tests/fixtures/analysis_workbench/simulation_trace_export_v1/issue_2937/bottleneck_motion_rich_fixture.json",
+      "planner_id": "hybrid_rule_v0_minimal",
+      "scenario_family": "bottleneck",
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 111,
+      "sha256": "a8f14b1d0a54ee7da51a3c341adbae46423ac356b05f753eb01d770b3f13878a",
+      "size_bytes": 20379,
+      "split": "train",
+      "trace_id": "issue_2937_bottleneck_motion_rich"
+    }
+  ],
+  "source_owner": "robot_sf/benchmark/forecast/forecast_preparation.py",
+  "source_schema": "simulation_trace_export.v1",
+  "split_policy": {
+    "assignments": {
+      "bottleneck:classic_bottleneck_medium:111:issue_2937_bottleneck_motion_rich_ep0000": "train",
+      "crossing_proxy:crossing_proxy:111:issue-2667-synthetic-episode-001": "validation",
+      "head_on_corridor:classic_head_on_corridor_low:111:classic_head_on_corridor_low--111--5fde302d5414e476": "test"
+    },
+    "group_fields": [
+      "scenario_family",
+      "scenario_id",
+      "seed",
+      "episode_id"
+    ],
+    "group_id_definition": "scenario_family:scenario_id:seed:episode_id",
+    "near_duplicate_policy": {
+      "future_expansion": "before training, add an RMS-aligned trajectory threshold review; this packet does not perform a forecast campaign",
+      "rule": "round trace positions/velocities to 2 decimals and hash the normalized trajectory",
+      "scope": "an exact normalized fingerprint cannot occur in more than one split"
+    },
+    "split_names": [
+      "train",
+      "validation",
+      "test"
+    ],
+    "strategy": "deterministic_grouped_split"
+  }
+}

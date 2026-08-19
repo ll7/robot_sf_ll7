@@ -158,8 +158,8 @@ def _heading_records(body: str) -> list[tuple[str, str]]:
 
 
 def _heading_matches(heading: str, alias: str) -> bool:
-    """Return whether a normalized heading identifies one contract section."""
-    return heading == alias or heading.startswith(f"{alias} ")
+    """Return whether a normalized heading exactly identifies a contract section."""
+    return heading == alias
 
 
 def inspect_contract(body: str) -> dict[str, Any]:

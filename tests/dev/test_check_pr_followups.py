@@ -12,10 +12,12 @@ import pytest
 
 from scripts.dev.check_pr_followups import (
     DOMAIN_VALIDITY_LABELS,
+    _read_event_head_sha,
     _read_event_title,
     analyze_body,
     analyze_body_quality,
     analyze_domain_approval,
+    analyze_sha_carriers,
 )
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
@@ -1311,3 +1313,108 @@ def test_cli_advisory_downgrades_failure_to_warning(tmp_path: Path) -> None:
     )
     assert advisory.returncode == 0
     assert "::warning" in advisory.stdout
+
+
+CARRIER_LIVE_HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+CARRIER_OTHER_HEAD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+
+def test_analyze_sha_carriers_accepts_live_head() -> None:
+    """Carriers equal to the PR head pass the hosted contract check."""
+    body = f"## Summary\n\n- gate-verdict: accepted @ {CARRIER_LIVE_HEAD}\n"
+    report = analyze_sha_carriers(body, source="fixture", head_sha=CARRIER_LIVE_HEAD)
+    assert report.status == "ok"
+    assert report.invalid == ()
+
+
+def test_analyze_sha_carriers_rejects_fabricated_sha() -> None:
+    """A fabricated carrier fails closed even in advisory hosting."""
+    body = f"## Summary\n\n- gate-verdict: accepted @ {CARRIER_OTHER_HEAD}\n"
+    report = analyze_sha_carriers(body, source="fixture", head_sha=CARRIER_LIVE_HEAD)
+    assert report.status == "invalid_sha_carrier"
+    assert report.invalid == (f"gate-verdict {CARRIER_OTHER_HEAD}",)
+
+
+def test_analyze_sha_carriers_skips_without_head() -> None:
+    """Without a head SHA the hosted check must not invent a failing verdict."""
+    report = analyze_sha_carriers(
+        f"## Summary\n\n- Exact head: {CARRIER_OTHER_HEAD}\n",
+        source="fixture",
+    )
+    assert report.status == "skipped"
+
+
+def test_read_event_head_sha_extracts_pull_request_head(tmp_path: Path) -> None:
+    """A pull_request event payload exposes its head SHA for the contract check."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": "## Summary\nbody",
+                    "head": {"sha": CARRIER_LIVE_HEAD, "ref": "fix/example"},
+                }
+            }
+        )
+    )
+    assert _read_event_head_sha(event_path) == CARRIER_LIVE_HEAD
+
+
+def test_cli_carrier_check_advisory_warns_on_fabricated_sha(tmp_path: Path) -> None:
+    """The hosted contract surfaces a fabricated carrier as a warning, not a block."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": (f"## Summary\n\n- gate-verdict: accepted @ {CARRIER_OTHER_HEAD}\n"),
+                    "head": {"sha": CARRIER_LIVE_HEAD, "ref": "fix/example"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--advisory",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "PR exact-head SHA check" in result.stderr
+    assert "status=invalid_sha_carrier" in result.stderr
+    assert "::warning" in result.stdout
+
+
+def test_cli_carrier_check_fails_closed_without_advisory(tmp_path: Path) -> None:
+    """Without --advisory a fabricated carrier blocks the hosted contract."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": (f"## Summary\n\n- Exact head: {CARRIER_OTHER_HEAD}\n"),
+                    "head": {"sha": CARRIER_LIVE_HEAD, "ref": "fix/example"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--github-event-path", str(event_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "status=invalid_sha_carrier" in result.stderr

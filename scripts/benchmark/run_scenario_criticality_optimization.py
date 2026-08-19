@@ -257,7 +257,7 @@ def _evaluate_candidate(  # noqa: C901, PLR0912, PLR0913, PLR0915
     import uuid
     from types import SimpleNamespace
 
-    from robot_sf.benchmark.map_runner import run_map_batch
+    from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
     start_time = time.perf_counter()
     patch_s: float | None = None

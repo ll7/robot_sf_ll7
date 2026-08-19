@@ -1,0 +1,23 @@
+# Config-first Step 3 quality gate for issue #6318.
+# The committed preview is intentionally too small and should report
+# blocked_insufficient_data until a bounded train/holdout dataset is available.
+schema_version: open_dreamer_model_quality.v1
+dataset_path: ../../docs/context/evidence/issue_4011_rl_trajectory_dataset_smoke_2026-07-02/issue_4011_smoke.preview.jsonl
+train_split: train
+holdout_split: test
+action_bounds:
+  max_linear_speed: 1.0
+  max_angular_speed: 1.0
+  min_linear_speed: 0.0
+latent_dim: 5
+seed: 6318
+min_train_episodes: 2
+min_holdout_episodes: 2
+min_train_transitions: 8
+min_holdout_transitions: 4
+multi_step_horizon: 3
+mlp_hidden_dim: 16
+ridge_alpha: 0.0001
+required_baselines:
+  - persistence
+  - mlp

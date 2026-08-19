@@ -124,7 +124,7 @@ def test_adapter_delegates_non_plan_attributes():
 def test_map_runner_wires_belief_mode_adapter():
     """`stream_gap` with a `belief_mode` builds a BeliefModeStreamGapAdapter and sets the gate."""
     pytest.importorskip("torch", reason="map_runner imports torch-backed planners")
-    from robot_sf.benchmark.map_runner import _build_policy
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
     policy, _meta = _build_policy(
         "stream_gap",

@@ -1,7 +1,7 @@
 {
+  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_7322_ch7_evidence_package_v2/publication/cross_topology_inversion.sidecar.json",
-  "artifact_sha256": "f03c7d2cecb7e24419037034fc59bb417ad03730bd6267bdbd684bbf9dbe8a76",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "b0807ae30dc9e83715abdba19bff52f91abe0211ee972ab8ef6eaa00926a1b99",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "preserved_exact_bytes": true
 }

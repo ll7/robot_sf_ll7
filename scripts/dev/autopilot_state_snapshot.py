@@ -875,6 +875,11 @@ def _build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit the machine-readable JSON snapshot (the default; compatibility flag)",
+    )
+    parser.add_argument(
         "--issue-search",
         action="append",
         default=[],

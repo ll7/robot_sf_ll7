@@ -1,0 +1,115 @@
+label: 02b-issue3207-fidelity-full-fixed-scope
+project_root: ${JOB13512_WORKTREE}
+public_commit: ae0130d65cf232e0322cfd4800659a87d481490a
+results_root: ${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512
+command: |
+  set -euo pipefail
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export LOGURU_LEVEL=INFO
+
+EXPECTED_HEAD="ae0130d65cf232e0322cfd4800659a87d481490a"
+test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+git diff --quiet
+git diff --cached --quiet
+test -x .venv/bin/python
+
+# The immutable EXPECTED_HEAD is origin-visible and contains the complete #3207 contract.
+# Do not gate a branch-pinned campaign on unrelated origin/main content.
+
+ROOT="${PUBLIC_COMMAND_RESULTS_DIR:?PUBLIC_COMMAND_RESULTS_DIR required}/campaign"
+RAW_ROOT="$ROOT/raw"
+EVIDENCE_ROOT="$ROOT/evidence"
+mkdir -p "$ROOT"
+
+{
+    printf 'schema: robot_sf.execution_context.v1\n'
+    printf 'captured_at_utc: %s\n' "$(date -u -Iseconds)"
+    printf 'git_head: %s\n' "$(git rev-parse HEAD)"
+    printf 'origin_main: %s\n' "$(git rev-parse origin/main)"
+    printf 'git_status_porcelain: %q\n' "$(git status --porcelain)"
+    printf 'hostname: %s\n' "$(hostname)"
+    printf 'cpu_model: %s\n' \
+        "$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -n1)"
+    printf 'allocated_cpus: %s\n' "${SLURM_CPUS_PER_TASK:-unknown}"
+    printf 'slurm_job_id: %s\n' "${SLURM_JOB_ID:-unknown}"
+    printf 'issue: 3207\n'
+    printf 'pr_dependency: https://github.com/ll7/robot_sf_ll7/pull/5872\n'
+    printf 'config: configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml\n'
+    printf 'primary_metric: snqi\n'
+    printf 'expected_episode_count: 5184\n'
+} >"$ROOT/execution_context.txt"
+uv pip freeze >"$ROOT/environment.freeze.txt"
+
+uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py \
+    --config configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml \
+    --fixed-scope-plan-only \
+    --require-launchable \
+    --plan-out "$ROOT/plan" >"$ROOT/plan_stdout.txt"
+
+set +e
+uv run python scripts/benchmark/run_fidelity_sensitivity_campaign.py \
+    --config configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml \
+    --fixed-scope-execute \
+    --raw-root "$RAW_ROOT" \
+    --evidence-dir "$EVIDENCE_ROOT" \
+    --horizon 120 \
+    --date 2026-07-16 >"$ROOT/execute_stdout.txt" 2>"$ROOT/execute_stderr.txt"
+execute_rc=$?
+set -e
+if [ "$execute_rc" -ne 0 ] && [ "$execute_rc" -ne 1 ]; then
+    echo "unexpected fixed-scope runner exit: $execute_rc" >&2
+    exit "$execute_rc"
+fi
+
+ROOT="$ROOT" EXECUTE_RC="$execute_rc" uv run python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+root = Path(os.environ["ROOT"])
+rows_path = root / "raw" / "episode_rows.jsonl"
+report_path = root / "evidence" / "fidelity_rank_stability_report.json"
+assert rows_path.is_file(), rows_path
+assert report_path.is_file(), report_path
+rows = [
+    json.loads(line)
+    for line in rows_path.read_text(encoding="utf-8").splitlines()
+    if line.strip()
+]
+assert len(rows) == 5184, len(rows)
+assert {row["seed"] for row in rows} == {111, 112, 113}
+assert {row["planner_group"] for row in rows} == {"goal", "social_force", "orca"}
+assert {row["axis"] for row in rows} == {
+    "integration_timestep",
+    "social_force_speed_archetypes",
+    "observation_noise",
+    "clearance_radius",
+}
+
+report = json.loads(report_path.read_text(encoding="utf-8"))
+rank = report.get("rank_stability", report)
+status = {
+    "schema_version": "issue3207-fixed-scope-outcome.v1",
+    "execute_exit_code": int(os.environ["EXECUTE_RC"]),
+    "episode_count": len(rows),
+    "primary_metric": "snqi",
+    "rank_identifiable": rank.get("rank_identifiable"),
+    "rank_stable": rank.get("rank_stable"),
+    "rank_identifiability_reason": rank.get("rank_identifiability_reason"),
+    "evidence_boundary": (
+        "full fixed-scope internal simulator-fidelity sensitivity result; "
+        "not simulator-realism, sim-to-real, physical-platform, or paper-facing evidence"
+    ),
+}
+if status["execute_exit_code"] == 1:
+    assert status["rank_identifiable"] is False, status
+(root / "campaign_outcome.json").write_text(
+    json.dumps(status, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+print(json.dumps(status, sort_keys=True))
+PY
+exit_code: 0
+completed_at: 2026-07-16T18:17:22+02:00

@@ -362,6 +362,61 @@ def validate_gate1_report(  # noqa: C901
     }, errors
 
 
+def _validate_staged_arm_record(index: int, staged_arm: Any) -> list[str]:
+    """Validate one staged arm identity and checksum record."""
+    if not isinstance(staged_arm, dict):
+        return [f"checkpoint preflight arm {index} must be a mapping"]
+    errors: list[str] = []
+    if staged_arm.get("status") not in {"present_local", "staged"}:
+        errors.append(
+            f"checkpoint preflight arm {index} status={staged_arm.get('status')!r} is not submit-safe"
+        )
+    checkpoint_sha256 = staged_arm.get("checkpoint_sha256")
+    if not isinstance(checkpoint_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", checkpoint_sha256
+    ):
+        errors.append(f"checkpoint preflight arm {index} is missing a verified SHA-256")
+    return errors
+
+
+def _validate_submit_safe_checkpoint(checkpoint: Any) -> tuple[dict[str, Any], list[str]]:
+    """Validate and retain the staged checkpoint evidence from one arm preflight."""
+    errors: list[str] = []
+    if not isinstance(checkpoint, dict):
+        return {}, ["checkpoint_preflight must be a mapping"]
+
+    if checkpoint.get("mode") != "enforced_staged":
+        errors.append(
+            f"checkpoint preflight mode={checkpoint.get('mode')!r}, expected 'enforced_staged'"
+        )
+    if checkpoint.get("stage") is not True:
+        errors.append("checkpoint preflight stage must be true for submit-safe admission")
+    submit_safe = checkpoint.get("submit_safe") is True
+    if not submit_safe:
+        errors.append("checkpoint preflight must report submit_safe=true")
+
+    staged_arms = checkpoint.get("arms")
+    if not isinstance(staged_arms, list):
+        errors.append("checkpoint preflight arms must be a list")
+        staged_arms = []
+    expected_arm_count = checkpoint.get("checked")
+    if expected_arm_count != len(staged_arms):
+        errors.append(
+            f"checkpoint preflight checked={expected_arm_count!r}, expected {len(staged_arms)} arm records"
+        )
+    for index, staged_arm in enumerate(staged_arms):
+        errors.extend(_validate_staged_arm_record(index, staged_arm))
+
+    return {
+        "mode": checkpoint.get("mode"),
+        "stage": checkpoint.get("stage"),
+        "checked": checkpoint.get("checked"),
+        "resolved": checkpoint.get("resolved"),
+        "submit_safe": submit_safe,
+        "arms": staged_arms,
+    }, errors
+
+
 def validate_preflight_payload(
     payload: Any, *, arm_key: str, radius_m: float, config_sha256: str
 ) -> dict[str, Any]:
@@ -398,14 +453,10 @@ def validate_preflight_payload(
     expected_seeds = list(range(EXPECTED_SEED_RANGE[0], EXPECTED_SEED_RANGE[1] + 1))
     if resolved_seeds != expected_seeds:
         errors.append(f"resolved seeds {resolved_seeds!r}, expected {expected_seeds!r}")
-    checkpoint = payload.get("checkpoint_preflight")
-    if not isinstance(checkpoint, dict):
-        errors.append("checkpoint_preflight must be a mapping")
-        checkpoint = {}
-    if checkpoint.get("mode") != "metadata_only":
-        errors.append(
-            f"checkpoint preflight mode={checkpoint.get('mode')!r}, expected 'metadata_only'"
-        )
+    checkpoint, checkpoint_errors = _validate_submit_safe_checkpoint(
+        payload.get("checkpoint_preflight")
+    )
+    errors.extend(checkpoint_errors)
     submit_safe = checkpoint.get("submit_safe") is True
     episode_count = payload.get("episodes", 0)
     if episode_count not in (None, 0):
@@ -426,6 +477,7 @@ def validate_preflight_payload(
             "checked": checkpoint.get("checked"),
             "resolved": checkpoint.get("resolved"),
             "submit_safe": submit_safe,
+            "arms": checkpoint.get("arms", []),
         },
         "episodes": 0,
         "structural_status": "passed" if not errors else "blocked",
@@ -449,7 +501,7 @@ def _preflight_command(config_path: str, output_root: Path, campaign_id: str) ->
         "--mode",
         "preflight",
         "--checkpoint-preflight-mode",
-        "metadata_only",
+        "enforced_staged",
         "--log-level",
         "ERROR",
     ]

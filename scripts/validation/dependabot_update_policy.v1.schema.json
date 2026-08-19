@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf_ll7/schemas/dependabot-update-policy.v1.schema.json",
+  "title": "Robot SF Dependabot update policy",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "policy_name",
+    "dependabot_config",
+    "ci_workflow",
+    "aggregate_job",
+    "classes",
+    "transitive_fallback",
+    "security_updates",
+    "rollback"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "robot-sf.dependabot-update-policy.v1"
+    },
+    "policy_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dependabot_config": {
+      "const": ".github/dependabot.yml"
+    },
+    "ci_workflow": {
+      "const": ".github/workflows/ci.yml"
+    },
+    "aggregate_job": {
+      "const": "ci"
+    },
+    "classes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/class"
+      }
+    },
+    "transitive_fallback": {
+      "$ref": "#/$defs/classWithoutPackages"
+    },
+    "security_updates": {
+      "type": "object",
+      "required": ["independent", "grouping_rule", "required_jobs"],
+      "properties": {
+        "independent": {"const": true},
+        "grouping_rule": {"type": "string", "minLength": 1},
+        "required_jobs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "rollback": {
+      "type": "object",
+      "required": ["policy", "proof"],
+      "properties": {
+        "policy": {"type": "string", "minLength": 1},
+        "proof": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "class": {
+      "type": "object",
+      "required": [
+        "id",
+        "risk",
+        "update_lane",
+        "packages",
+        "required_jobs",
+        "focused_test_paths"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "risk": {"enum": ["high", "medium", "low"]},
+        "update_lane": {"type": "string", "minLength": 1},
+        "packages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "required_jobs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "focused_test_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "classWithoutPackages": {
+      "type": "object",
+      "required": [
+        "id",
+        "risk",
+        "update_lane",
+        "required_jobs",
+        "focused_test_paths"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "risk": {"const": "unknown"},
+        "update_lane": {"type": "string", "minLength": 1},
+        "required_jobs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "focused_test_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

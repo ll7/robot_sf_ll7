@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from robot_sf.benchmark.map_runner_episode import EpisodeData
+    from robot_sf.benchmark.map_runner.map_runner_episode import EpisodeData
 
 _LOGGER = logging.getLogger(__name__)
 

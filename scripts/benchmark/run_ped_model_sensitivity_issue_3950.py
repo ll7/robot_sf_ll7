@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.ped_model_sensitivity import (
     DEFAULT_MODELS,
     build_sensitivity_summary,

@@ -22,8 +22,8 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_runtime_population_control_trace_labels,
 )
 from robot_sf.benchmark.heterogeneous_population_ablation_runner import build_episode_scenario
-from robot_sf.benchmark.map_runner import build_map_policy
-from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import build_map_policy
+from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CONTROL_TRACE_PATH = ("algorithm_metadata", "pedestrian_control_trace", "pedestrians")

@@ -327,7 +327,7 @@ def test_policy_stack_build_config_preserves_nested_risk_dwa_fields() -> None:
 
 def test_policy_stack_map_runner_registration(monkeypatch: pytest.MonkeyPatch) -> None:
     """Map-runner should expose policy_stack_v1 as an experimental adapter planner."""
-    from robot_sf.benchmark.map_runner import _build_policy
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
     class _DummyStack:
         """Minimal policy-stack adapter used to verify map-runner registration."""
@@ -377,7 +377,7 @@ def test_policy_stack_map_runner_registration(monkeypatch: pytest.MonkeyPatch) -
 
 def test_policy_stack_runs_atomic_topology_smoke_through_map_runner(tmp_path: Path) -> None:
     """The stack should execute a topology-heavy atomic scenario through the benchmark runner."""
-    from robot_sf.benchmark.map_runner import run_map_batch
+    from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
     out_path = tmp_path / "episodes.jsonl"
     summary = run_map_batch(

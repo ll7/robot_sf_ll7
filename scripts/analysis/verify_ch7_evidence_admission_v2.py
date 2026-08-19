@@ -119,7 +119,10 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
 
     try:
         sums_sha, _listed = admission._verify_members(
-            package, label="Chapter 7 v2 evidence package", require_review_sidecars=False
+            package,
+            label="Chapter 7 v2 evidence package",
+            require_review_sidecars=False,
+            allow_review_sidecars=True,
         )
     except admission.Ch7EvidenceAdmissionError as exc:
         raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
@@ -161,8 +164,8 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     if any(item.get("issue") == 7042 for item in excluded if isinstance(item, Mapping)):
         blockers.append(
             {
-                "code": "metric_semantics_blocked_issue_7042",
-                "reason": "collision-sensitive metric naming remains unresolved by #7042",
+                "code": "metric_semantics_excluded_issue_7042",
+                "reason": "collision-sensitive metrics and SNQI are excluded by the closed #7042 ruling",
             }
         )
     return {

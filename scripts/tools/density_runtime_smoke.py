@@ -13,7 +13,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.map_runner_policies.map_runner_actions import (
     policy_command_to_env_action,
     vel_and_acc,

@@ -65,13 +65,35 @@ and six majority verdicts from its own `runs.jsonl` and require an exact match.
 
 ### Known divergence from `trace_dossier_selector.v1`
 
-The two selectors agree on odd-sized pools and differ on even-sized pools:
-`select_representative_index` takes the lower of the two middle runs *by rank*,
-while `select_representative` takes whichever middle run is closest to the
-interpolated median *value* and breaks the resulting tie on seed identity.
-Reconciling them changes which run the archived exhibits point at, so it is a
-domain decision rather than a refactor and is tracked separately. Do not
-silently align one with the other.
+The two selectors are intentionally distinct contracts, not accidental duplicate
+implementations. Issue #7131 records the following four decisions:
+
+1. **Median convention:** keep the campaign selector's lower-of-two-middle
+   choice *by rank* for an even pool because it is compatibility-pinned to the
+   archived exhibits. Keep `trace_dossier_selector.v1`'s nearest candidate to
+   the interpolated median value because it is a separately versioned,
+   provenance-neutral contract. The selectors therefore agree on odd-sized
+   pools but can choose different runs on even-sized pools.
+2. **Seed ordering:** keep numeric seed ordering in
+   `select_representative_index`; its input is an integer and the archived
+   campaign behavior is pinned. Keep lexicographic `seed_id` ordering in
+   `select_representative`; `seed_id` is an opaque stable identity, not a
+   number to reinterpret.
+3. **Tied verdict labels:** do not change the campaign majority tie behavior to
+   v1's fail-closed rule. The campaign has a declared total severity order and
+   a deterministic lexicographic fallback for unknown labels. Replacing that
+   behavior would alter the pinned campaign contract without resolving an
+   ambiguity in its vocabulary. v1 continues to fail closed when tied verdicts
+   have no unique weaker `label_strength`.
+4. **Archived exhibits:** do not regenerate the committed campaign bundle in
+   this decision. Its exact replay-seed regression remains in
+   `tests/test_render_emergent_phenomena_videos.py`; the bundle predates and
+   continues under the pinned campaign convention. This decision performs no
+   trace acquisition, benchmark run, evidence admission, or paper-facing
+   claim.
+
+Do not silently align one selector with the other: changing either convention
+requires a new compatibility or schema decision and its own regression proof.
 
 ## Evidence boundary
 
@@ -80,6 +102,16 @@ render. It does not compute a benchmark metric, establish a verdict, rank a
 planner, or admit an artifact as benchmark or paper-facing evidence. The
 selected row must still carry the source trace, release pin, cell metadata,
 and checksum before downstream provenance or publication review.
+
+## Diagnostic trace pin
+
+`configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml`
+pins the preregistered h600 trace-capable configuration and its seeds 20--24
+for trace export only. Its `diagnostic` maturity is intentional: it permits
+retained #4848/#4891 trace-series exemplars to be checked against a versioned
+configuration without treating them as a benchmark or paper release. The
+package path emits PNG/SVG/PDF plus a Markdown caption and checksums, but the
+resulting dossier remains diagnostic-only.
 
 ## Deferred work
 

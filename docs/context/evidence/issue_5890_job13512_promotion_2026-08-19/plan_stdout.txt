@@ -1,0 +1,2 @@
+wrote fixed-scope run plan: output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/plan/fidelity_fixed_scope_run_plan.json
+preflight_decision=preflight_ready executable=True launched=False run_cells=108 scenarios=48 expected_episodes=5184

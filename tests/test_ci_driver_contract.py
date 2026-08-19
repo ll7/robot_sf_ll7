@@ -26,11 +26,12 @@ PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
-    "coverage-gate": 10,
+    "coverage-gate": 20,
+    "changed-coverage-gate": 30,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
-    "reproducibility-check": 10,
+    "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
@@ -320,8 +321,10 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
     coverage_gate = workflow["jobs"]["coverage-gate"]
+    changed_coverage_gate = workflow["jobs"]["changed-coverage-gate"]
     fast_feedback_steps = fast_feedback["steps"]
     coverage_steps = coverage_gate["steps"]
+    checkout_step = next(step for step in fast_feedback_steps if step.get("name") == "Checkout")
     upload_step = next(
         step for step in fast_feedback_steps if step.get("name") == "Upload coverage shard"
     )
@@ -340,9 +343,15 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     assert (
         "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
     )
-    assert "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"]
+    assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
-    assert upload_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    coverage_core = workflow["env"]["COVERAGE_CORE"]
+    assert "github.event_name == 'pull_request'" in coverage_core
+    assert "github.event_name == 'merge_group'" in coverage_core
+    assert "ctrace" in coverage_core
+    assert "sysmon" in coverage_core
+    assert "github.event.pull_request.head.sha" in checkout_step["with"]["ref"]
+    assert "if" not in upload_step
     assert upload_step["with"]["include-hidden-files"] is True
     assert coverage_gate["needs"] == "fast-feedback"
     assert "github.event_name != 'pull_request'" in coverage_gate["if"]
@@ -358,6 +367,26 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     assert "--threshold 1.0" in baseline_step["run"]
     assert "--fail-on-decrease" not in baseline_step["run"]
     assert "coverage-gate" in workflow["jobs"]["ci"]["needs"]
+    assert changed_coverage_gate["needs"] == "fast-feedback"
+    assert "github.event_name == 'pull_request'" in changed_coverage_gate["if"]
+    assert "github.event_name == 'merge_group'" in changed_coverage_gate["if"]
+    changed_coverage_run = "\n".join(
+        str(step.get("run", "")) for step in changed_coverage_gate["steps"]
+    )
+    routing_step = next(
+        step
+        for step in changed_coverage_gate["steps"]
+        if step.get("name") == "Audit changed fast-lane routing"
+    )
+    assert "scripts/dev/check_fast_lane_routing.py" in routing_step["run"]
+    assert '"$BASE_SHA"' in routing_step["run"]
+    assert '"$HEAD_SHA"' in routing_step["run"]
+    assert "github.event.pull_request.base.sha" in routing_step["env"]["BASE_SHA"]
+    assert "github.event.pull_request.head.sha" in routing_step["env"]["HEAD_SHA"]
+    assert '--base-sha "$BASE_SHA"' in changed_coverage_run
+    assert '--head-sha "$HEAD_SHA"' in changed_coverage_run
+    assert "--json-output output/coverage/changed-coverage-result.json" in changed_coverage_run
+    assert "changed-coverage-gate" in workflow["jobs"]["ci"]["needs"]
 
 
 def test_parallel_test_driver_supports_full_sharded_coverage() -> None:
@@ -619,11 +648,38 @@ def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
         Requirement(dependency).name for dependency in project["project"]["dependencies"]
     }
     wheel_force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
-    sdist_includes = project["tool"]["hatchling"]["build"]["targets"]["sdist"]["include"]
+    sdist_includes = project["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
 
     assert "pysocialforce" not in dependency_names
     assert wheel_force_include["fast-pysf/pysocialforce"] == "pysocialforce"
     assert "/fast-pysf/pysocialforce" in sdist_includes
+
+
+def test_wheel_target_uses_hatch_namespace_without_inert_hatchling_block() -> None:
+    """The wheel target must live under tool.hatch and must not carry an inert tool.hatchling block."""
+    project = _pyproject()
+    wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+
+    assert "force-include" in wheel
+
+    hatchling_wheel = (
+        project.get("tool", {})
+        .get("hatchling", {})
+        .get("build", {})
+        .get("targets", {})
+        .get("wheel", {})
+    )
+    assert not hatchling_wheel
+
+
+def test_source_distribution_excludes_model_artifacts() -> None:
+    """Keep model weights outside the source-distribution boundary (issue #7297)."""
+    sdist = _pyproject()["tool"]["hatch"]["build"]["targets"]["sdist"]
+    includes = sdist["include"]
+    excludes = sdist["exclude"]
+
+    assert "/model/**" in excludes
+    assert not any(path == "/model" or path.startswith("/model/") for path in includes)
 
 
 def test_ci_driver_test_phase_excludes_separately_timed_examples() -> None:

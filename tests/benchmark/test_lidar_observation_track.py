@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import yaml
 
-from robot_sf.benchmark.map_runner import _run_map_job_worker
+from robot_sf.benchmark.map_runner.map_runner import _run_map_job_worker
 from robot_sf.benchmark.planner_command_contract import (
     PlannerContractValidationError,
     validate_planner_contract,
@@ -153,28 +153,30 @@ def test_stubbed_lidar_map_episode_records_track_metadata(
     )
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(map_def),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_policy",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy",
         lambda *args, **kwargs: (_dummy_policy, {"status": "ok"}),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 

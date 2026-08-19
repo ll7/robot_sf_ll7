@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
@@ -40,6 +42,20 @@ class _CoverageResult(TypedDict):
     coverage: float | None
     resolved: str | None
     scope: str
+    changed_lines: list[int]
+    executable_changed_lines: list[int] | None
+    covered_changed_lines: list[int] | None
+    missing_changed_lines: list[int] | None
+    declaration_only_proof: bool
+
+
+@dataclass(frozen=True)
+class _Comparison:
+    """Immutable base/head identities used by one coverage verdict."""
+
+    base_label: str
+    base_sha: str
+    head_sha: str
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> str:
@@ -71,14 +87,49 @@ def _repo_root() -> Path:
     return Path(_run(["git", "rev-parse", "--show-toplevel"]))
 
 
-def _changed_files(base: str, repo_root: Path) -> list[Path]:
+def _resolve_commit(ref: str, repo_root: Path) -> str:
+    """Resolve a ref to a full commit SHA or fail closed."""
+    try:
+        resolved = _run(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], cwd=repo_root)
+    except RuntimeError as exc:
+        raise RuntimeError(f"cannot resolve commit {ref!r}: {exc}") from exc
+    if not re.fullmatch(r"[0-9a-fA-F]{40}", resolved):
+        raise RuntimeError(f"resolved commit {ref!r} is not a full SHA: {resolved!r}")
+    return resolved.lower()
+
+
+def _resolve_comparison(args: argparse.Namespace, repo_root: Path) -> _Comparison:
+    """Resolve and validate the immutable base/head pair for one check."""
+    if args.base_sha and not re.fullmatch(r"[0-9a-fA-F]{40}", str(args.base_sha)):
+        raise RuntimeError(f"base SHA is malformed: {args.base_sha!r}")
+    if args.head_sha and not re.fullmatch(r"[0-9a-fA-F]{40}", str(args.head_sha)):
+        raise RuntimeError(f"head SHA is malformed: {args.head_sha!r}")
+    base_label = str(args.base_sha or args.base)
+    base_sha = _resolve_commit(base_label, repo_root)
+    head_selector = str(args.head_sha or "HEAD")
+    head_sha = _resolve_commit(head_selector, repo_root)
+    if args.head_sha:
+        actual_head = _resolve_commit("HEAD", repo_root)
+        if actual_head != head_sha:
+            raise RuntimeError(f"checked-out HEAD mismatch: expected {head_sha}, got {actual_head}")
+    return _Comparison(base_label=base_label, base_sha=base_sha, head_sha=head_sha)
+
+
+def _changed_files(base: str, repo_root: Path, *, head: str = "HEAD") -> list[Path]:
     """List files changed relative to a base ref.
 
     Returns:
         Repository-relative paths changed in the comparison.
     """
     output = _run(
-        ["git", "diff", "--name-only", "--diff-filter=ACMRT", f"{base}...HEAD"],
+        [
+            "git",
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMRT",
+            "--find-renames=50%",
+            f"{base}...{head}",
+        ],
         cwd=repo_root,
     )
     files = [Path(line.strip()) for line in output.splitlines() if line.strip()]
@@ -96,14 +147,20 @@ def _no_changed_files_message(base: str) -> str:
     return f"No committed changed files vs {base}."
 
 
-def _file_at_ref(base: str, path: Path, repo_root: Path) -> str | None:
+def _file_at_ref(
+    base: str,
+    path: Path,
+    repo_root: Path,
+    *,
+    head: str = "HEAD",
+) -> str | None:
     """Read a repository file at the merge-base for a comparison ref.
 
     Returns:
         File contents at the comparison base, or ``None`` when the file did not
         exist there.
     """
-    merge_base = _run(["git", "merge-base", base, "HEAD"], cwd=repo_root)
+    merge_base = _run(["git", "merge-base", base, head], cwd=repo_root)
     proc = subprocess.run(
         ["git", "show", f"{merge_base}:{path.as_posix()}"],
         cwd=repo_root,
@@ -180,11 +237,20 @@ def _is_doc_or_comment_only_python_change(before: str, after: str) -> bool:
     return before_ast == after_ast
 
 
-def _is_doc_or_comment_only_changed_file(path: Path, base: str, repo_root: Path) -> bool:
+def _is_doc_or_comment_only_changed_file(
+    path: Path,
+    base: str,
+    repo_root: Path,
+    *,
+    head: str = "HEAD",
+) -> bool:
     """Check whether a changed Python file has no executable AST changes."""
     if path.suffix != ".py":
         return False
-    before = _file_at_ref(base, path, repo_root)
+    if head == "HEAD":
+        before = _file_at_ref(base, path, repo_root)
+    else:
+        before = _file_at_ref(base, path, repo_root, head=head)
     if before is None:
         return False
     after_path = repo_root / path
@@ -499,9 +565,14 @@ def _has_declaration_only_test_proof(
     base: str,
     repo_root: Path,
     changed_files: Iterable[Path],
+    *,
+    head: str = "HEAD",
 ) -> bool:
     """Return whether a changed source file has bounded, changed-test proof."""
-    before = _file_at_ref(base, path, repo_root)
+    if head == "HEAD":
+        before = _file_at_ref(base, path, repo_root)
+    else:
+        before = _file_at_ref(base, path, repo_root, head=head)
     if before is None:
         return False
     try:
@@ -595,7 +666,13 @@ def _load_coverage_file_data(coverage_path: Path, repo_root: Path) -> dict[str, 
     return files
 
 
-def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
+def _changed_line_numbers(
+    base: str,
+    path: Path,
+    repo_root: Path,
+    *,
+    head: str = "HEAD",
+) -> set[int]:
     """Return new-file line numbers touched by the diff against *base*.
 
     Returns:
@@ -607,9 +684,8 @@ def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
             "diff",
             "--unified=0",
             "--diff-filter=ACMRT",
-            f"{base}...HEAD",
-            "--",
-            path.as_posix(),
+            "--find-renames=50%",
+            f"{base}...{head}",
         ],
         cwd=repo_root,
         capture_output=True,
@@ -617,11 +693,24 @@ def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
         check=False,
     )
     if proc.returncode != 0:
-        return set()
+        stderr = getattr(proc, "stderr", "")
+        raise RuntimeError(
+            f"cannot determine changed lines for {path}: {str(stderr).strip() or 'git diff failed'}"
+        )
 
     changed: set[int] = set()
+    in_target_file = False
     new_line: int | None = None
     for line in proc.stdout.splitlines():
+        if line.startswith("diff --git "):
+            # A rename-aware diff has no path limiter, so track which file the
+            # current hunk belongs to (issue #7552): the "b/" side is the new path.
+            target = line.split(" b/", 1)[1] if " b/" in line else ""
+            in_target_file = target == path.as_posix()
+            new_line = None
+            continue
+        if not in_target_file:
+            continue
         hunk_match = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
         if hunk_match:
             new_line = int(hunk_match.group(1))
@@ -640,30 +729,59 @@ def _changed_line_numbers(base: str, path: Path, repo_root: Path) -> set[int]:
     return changed
 
 
+def _changed_line_coverage_details(
+    *,
+    file_data: _CoverageFileData | None,
+    changed_lines: set[int],
+) -> tuple[float | None, str, list[int], list[int] | None, list[int] | None]:
+    """Return executable changed-line coverage, falling back when data is insufficient.
+
+    Returns:
+        Coverage percent, scope label, executable changed lines, covered changed
+        lines, and missing changed lines. ``None`` lists mean the artifact was
+        unavailable or malformed.
+    """
+    if file_data is None:
+        return None, "file", sorted(changed_lines), None, None
+    if not changed_lines:
+        return 100.0, "changed executable lines 0/0", [], [], []
+
+    executed_raw = file_data.get("executed_lines")
+    missing_raw = file_data.get("missing_lines")
+    if not isinstance(executed_raw, list) or not isinstance(missing_raw, list):
+        return None, "coverage malformed", sorted(changed_lines), None, None
+    try:
+        executed = {int(line) for line in executed_raw}
+        missing = {int(line) for line in missing_raw}
+    except (TypeError, ValueError):
+        return None, "coverage malformed", sorted(changed_lines), None, None
+
+    statement_lines = executed | missing
+    changed_statements = changed_lines & statement_lines
+    if not changed_statements:
+        return 100.0, "changed executable lines 0/0", [], [], []
+    covered_changed = changed_statements & executed
+    missing_changed = changed_statements - executed
+    return (
+        100.0 * len(covered_changed) / len(changed_statements),
+        f"changed executable lines {len(covered_changed)}/{len(changed_statements)}",
+        sorted(changed_statements),
+        sorted(covered_changed),
+        sorted(missing_changed),
+    )
+
+
 def _coverage_for_changed_lines(
     *,
     file_data: _CoverageFileData | None,
     changed_lines: set[int],
 ) -> tuple[float | None, str]:
-    """Return executable changed-line coverage, falling back when data is insufficient.
-
-    Returns:
-        Pair of coverage percent and a compact scope label.
-    """
-    if file_data is None or not changed_lines:
-        return None, "file"
-
-    executed = {int(line) for line in file_data.get("executed_lines", [])}
-    missing = {int(line) for line in file_data.get("missing_lines", [])}
-    statement_lines = executed | missing
-    changed_statements = changed_lines & statement_lines
-    if not changed_statements:
-        return 100.0, "changed executable lines 0/0"
-    covered_changed = changed_statements & executed
-    return (
-        100.0 * len(covered_changed) / len(changed_statements),
-        f"changed executable lines {len(covered_changed)}/{len(changed_statements)}",
+    """Return the legacy coverage/scope pair used by focused callers."""
+    coverage, scope, _, _, _ = _changed_line_coverage_details(
+        file_data=file_data,
+        changed_lines=changed_lines,
     )
+    return coverage, scope
 
 
 def _print_lines(lines: Iterable[str]) -> None:
@@ -682,6 +800,19 @@ def _parse_args() -> argparse.Namespace:
         description="Check per-file coverage for changed files relative to a base ref.",
     )
     parser.add_argument("--base", default="origin/main", help="Base ref to diff against")
+    parser.add_argument(
+        "--base-sha",
+        help="Immutable base commit SHA (takes precedence over --base)",
+    )
+    parser.add_argument(
+        "--head-sha",
+        help="Immutable head commit SHA; checkout HEAD must match",
+    )
+    parser.add_argument(
+        "--event-name",
+        default="local",
+        help="Event identity recorded in a machine-readable verdict",
+    )
     parser.add_argument(
         "--coverage",
         default="output/coverage/coverage.json",
@@ -706,6 +837,16 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print files skipped by include/exclude filters",
     )
+    parser.add_argument(
+        "--json-output",
+        type=Path,
+        help="Write the machine-readable changed-coverage.v1 verdict to this path",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the machine-readable verdict instead of the human report",
+    )
     return parser.parse_args()
 
 
@@ -719,6 +860,90 @@ def _resolve_coverage_path(coverage_arg: str, repo_root: Path) -> Path:
     if not coverage_path.is_absolute():
         coverage_path = repo_root / coverage_path
     return coverage_path
+
+
+def _sha256_file(path: Path) -> str | None:
+    """Return a file digest, or ``None`` when the artifact is unavailable."""
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError:
+        return None
+    return digest.hexdigest()
+
+
+def _new_report(  # noqa: PLR0913 - report dimensions are explicit contract fields.
+    args: argparse.Namespace,
+    *,
+    comparison: _Comparison | None,
+    coverage_path: Path,
+    include_patterns: Iterable[str],
+    exclude_patterns: Iterable[str],
+    selected_paths: Iterable[str] = (),
+    skipped_paths: Iterable[str] = (),
+    results: Iterable[_CoverageResult] = (),
+    verdict: str = "blocked",
+    required: bool = True,
+    failure_reasons: Iterable[str] = (),
+) -> dict[str, object]:
+    """Build the durable changed-coverage verdict payload."""
+    return {
+        "schema": "changed-coverage.v1",
+        "event": str(args.event_name),
+        "base": comparison.base_label if comparison else str(args.base_sha or args.base),
+        "base_sha": comparison.base_sha if comparison else None,
+        "head_sha": comparison.head_sha if comparison else None,
+        "coverage_artifact": {
+            "path": str(coverage_path),
+            "sha256": _sha256_file(coverage_path),
+        },
+        "thresholds": {
+            "minimum_percent": float(args.min),
+            "goal_percent": float(args.goal),
+        },
+        "include_patterns": list(include_patterns),
+        "exclude_patterns": list(exclude_patterns),
+        "selected_paths": sorted(selected_paths),
+        "skipped_paths": sorted(skipped_paths),
+        "files": [dict(row) for row in results],
+        "required": required,
+        "verdict": verdict,
+        "failure_reasons": sorted(set(failure_reasons)),
+        "no_merge": True,
+    }
+
+
+def _write_report(args: argparse.Namespace, report: dict[str, object], repo_root: Path) -> None:
+    """Write a machine-readable report when requested."""
+    payload = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    if args.json_output:
+        output_path = Path(args.json_output)
+        if not output_path.is_absolute():
+            output_path = repo_root / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(payload, encoding="utf-8")
+    if args.json:
+        print(payload, end="")
+
+
+def _finish(
+    args: argparse.Namespace,
+    repo_root: Path,
+    report: dict[str, object],
+    exit_code: int,
+) -> int:
+    """Emit an optional report and return the checker result."""
+    try:
+        _write_report(args, report, repo_root)
+    except OSError as exc:
+        if not args.json:
+            print(f"Could not write changed-coverage report: {exc}", file=sys.stderr)
+        return 2
+    return exit_code
 
 
 def _select_changed_files(
@@ -756,6 +981,7 @@ def _build_results(
     base: str,
     repo_root: Path,
     changed_files: Iterable[Path],
+    head: str = "HEAD",
 ) -> list[_CoverageResult]:
     """Attach coverage data to selected changed files.
 
@@ -768,20 +994,33 @@ def _build_results(
         file_coverage, resolved = _resolve_coverage(path_str, coverage_index)
         coverage = file_coverage
         scope = "file"
+        changed_lines = _changed_line_numbers(base, Path(path_str), repo_root, head=head)
+        executable_changed_lines: list[int] | None = None
+        covered_changed_lines: list[int] | None = None
+        missing_changed_lines: list[int] | None = None
+        declaration_only_proof = False
         if resolved is not None:
-            changed_coverage, changed_scope = _coverage_for_changed_lines(
+            (
+                changed_coverage,
+                changed_scope,
+                executable_changed_lines,
+                covered_changed_lines,
+                missing_changed_lines,
+            ) = _changed_line_coverage_details(
                 file_data=coverage_file_data.get(resolved),
-                changed_lines=_changed_line_numbers(base, Path(path_str), repo_root),
+                changed_lines=changed_lines,
             )
             if changed_coverage is not None:
                 coverage = changed_coverage
                 scope = changed_scope
-                if _has_declaration_only_test_proof(
+                declaration_only_proof = _has_declaration_only_test_proof(
                     Path(path_str),
                     base,
                     repo_root,
                     changed_files,
-                ):
+                    head=head,
+                )
+                if declaration_only_proof:
                     coverage = 100.0
                     scope = "declaration-only proof"
         results.append(
@@ -790,6 +1029,11 @@ def _build_results(
                 "coverage": coverage,
                 "resolved": resolved,
                 "scope": scope,
+                "changed_lines": sorted(changed_lines),
+                "executable_changed_lines": executable_changed_lines,
+                "covered_changed_lines": covered_changed_lines,
+                "missing_changed_lines": missing_changed_lines,
+                "declaration_only_proof": declaration_only_proof,
             }
         )
     return results
@@ -897,7 +1141,9 @@ def _handle_missing_or_below_min(
     return 0
 
 
-def _run_check(args: argparse.Namespace) -> int:
+def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report states.
+    args: argparse.Namespace,
+) -> int:
     """Execute the changed-files coverage check.
 
     Returns:
@@ -905,16 +1151,64 @@ def _run_check(args: argparse.Namespace) -> int:
     """
     repo_root = _repo_root()
     coverage_path = _resolve_coverage_path(args.coverage, repo_root)
-    if not _ensure_coverage_path(coverage_path):
-        return 1
-
     include_patterns = args.include or ["robot_sf/*.py", "robot_sf/**/*.py"]
     exclude_patterns = args.exclude or []
 
-    changed_files = _changed_files(args.base, repo_root)
+    try:
+        comparison = _resolve_comparison(args, repo_root)
+    except RuntimeError as exc:
+        if not args.json:
+            print(f"Changed-file coverage comparison unavailable: {exc}", file=sys.stderr)
+        report = _new_report(
+            args,
+            comparison=None,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            failure_reasons=[f"comparison_unavailable:{exc}"],
+        )
+        return _finish(args, repo_root, report, 2)
+
+    if not coverage_path.exists():
+        if not args.json:
+            _ensure_coverage_path(coverage_path)
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            failure_reasons=["coverage_artifact_missing"],
+        )
+        return _finish(args, repo_root, report, 1)
+
+    try:
+        changed_files = _changed_files(comparison.base_sha, repo_root, head=comparison.head_sha)
+    except RuntimeError as exc:
+        if not args.json:
+            print(f"Changed-file coverage diff unavailable: {exc}", file=sys.stderr)
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            failure_reasons=[f"diff_unavailable:{exc}"],
+        )
+        return _finish(args, repo_root, report, 2)
     if not changed_files:
-        print(_no_changed_files_message(args.base))
-        return 0
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            verdict="not_required",
+            required=False,
+        )
+        if not args.json:
+            print(_no_changed_files_message(args.base))
+        return _finish(args, repo_root, report, 0)
 
     selected, skipped = _select_changed_files(
         changed_files,
@@ -923,16 +1217,47 @@ def _run_check(args: argparse.Namespace) -> int:
         exclude_patterns,
     )
     if not selected:
-        print("No changed files matched include patterns.")
-        _report_skipped(skipped, args.show_skipped)
-        return 0
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            skipped_paths=skipped,
+            verdict="not_required",
+            required=False,
+        )
+        if not args.json:
+            print("No changed files matched include patterns.")
+            _report_skipped(skipped, args.show_skipped)
+        return _finish(args, repo_root, report, 0)
 
-    coverage_index = _load_coverage_index(coverage_path, repo_root)
-    coverage_file_data = _load_coverage_file_data(coverage_path, repo_root)
+    try:
+        coverage_index = _load_coverage_index(coverage_path, repo_root)
+        coverage_file_data = _load_coverage_file_data(coverage_path, repo_root)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        if not args.json:
+            print(f"coverage.json is malformed: {exc}", file=sys.stderr)
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            selected_paths=selected,
+            skipped_paths=skipped,
+            failure_reasons=["coverage_artifact_malformed"],
+        )
+        return _finish(args, repo_root, report, 1)
     doc_only = [
         path_str
         for path_str in selected
-        if _is_doc_or_comment_only_changed_file(Path(path_str), args.base, repo_root)
+        if _is_doc_or_comment_only_changed_file(
+            Path(path_str),
+            comparison.base_sha,
+            repo_root,
+            head=comparison.head_sha,
+        )
     ]
     if doc_only:
         doc_only_set = set(doc_only)
@@ -940,32 +1265,81 @@ def _run_check(args: argparse.Namespace) -> int:
         skipped.extend(f"{path_str} (doc/comment-only)" for path_str in doc_only)
 
     if not selected:
-        print("No changed files with executable Python changes matched include patterns.")
-        _report_skipped(skipped, args.show_skipped)
-        return 0
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            skipped_paths=skipped,
+            verdict="not_required",
+            required=False,
+        )
+        if not args.json:
+            print("No changed files with executable Python changes matched include patterns.")
+            _report_skipped(skipped, args.show_skipped)
+        return _finish(args, repo_root, report, 0)
 
-    results = _build_results(
-        selected,
-        coverage_index,
-        coverage_file_data,
-        base=args.base,
-        repo_root=repo_root,
-        changed_files=changed_files,
-    )
-
-    _log_header(args)
-    _print_results(results, args.min, args.goal)
-    _report_skipped(skipped, args.show_skipped)
+    try:
+        results = _build_results(
+            selected,
+            coverage_index,
+            coverage_file_data,
+            base=comparison.base_sha,
+            repo_root=repo_root,
+            changed_files=changed_files,
+            head=comparison.head_sha,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        if not args.json:
+            print(f"Changed-file coverage evidence unavailable: {exc}", file=sys.stderr)
+        report = _new_report(
+            args,
+            comparison=comparison,
+            coverage_path=coverage_path,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            selected_paths=selected,
+            skipped_paths=skipped,
+            failure_reasons=[f"coverage_evidence_unavailable:{exc}"],
+        )
+        return _finish(args, repo_root, report, 2)
 
     missing, below_min, below_goal = _summarize_results(results, args.min, args.goal)
-    failure_code = _handle_missing_or_below_min(missing, below_min)
-    if failure_code:
-        return failure_code
+    failure_reasons = [
+        *(f"coverage_missing:{row['file']}" for row in missing),
+        *(f"coverage_below_minimum:{row['file']}" for row in below_min),
+    ]
+    verdict = "blocked" if failure_reasons else "passed"
+    report = _new_report(
+        args,
+        comparison=comparison,
+        coverage_path=coverage_path,
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns,
+        selected_paths=selected,
+        skipped_paths=skipped,
+        results=results,
+        verdict=verdict,
+        failure_reasons=failure_reasons,
+    )
 
-    if below_goal:
+    if not args.json:
+        _log_header(args)
+        _print_results(results, args.min, args.goal)
+        _report_skipped(skipped, args.show_skipped)
+
+    if args.json:
+        failure_code = 1 if missing or below_min else 0
+    else:
+        failure_code = _handle_missing_or_below_min(missing, below_min)
+    if failure_code:
+        return _finish(args, repo_root, report, failure_code)
+
+    if below_goal and not args.json:
         _report_warnings(below_goal)
 
-    return 0
+    return _finish(args, repo_root, report, 0)
 
 
 def main() -> int:

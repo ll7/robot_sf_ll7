@@ -5,14 +5,32 @@ on:
     paths:
       - "pyproject.toml"
       - "uv.lock"
-      - "fast-pysf/pyproject.toml"
-      - "fast-pysf/uv.lock"
+      - "THIRD_PARTY_NOTICES.md"
+      - "fast-pysf/**"
+      - "third_party/python-rvo2/**"
+      - "third_party/socnavbench/**"
       - "third_party/python-rvo2/pyproject.toml"
       - "third_party/python-rvo2/setup.py"
       - "third_party/python-rvo2/requirements.txt"
       - "third_party/socnavbench/LICENSING.yaml"
+      - "third_party/socnavbench/LICENSE"
+      - "third_party/socnavbench/LICENSES/Apache-2.0.txt"
+      - "third_party/socnavbench/UPSTREAM.md"
+      - "third_party/python-rvo2/LICENSE"
+      - "third_party/python-rvo2/UPSTREAM.md"
+      - "third_party/python-rvo2/LOCAL_CHANGES.patch"
+      - "scripts/validation/dependency_license_profiles.v1.json"
+      - "scripts/validation/dependency_license_profiles.v1.schema.json"
+      - "scripts/validation/dependency_license_policy.v1.json"
+      - "scripts/validation/dependency_license_policy.v1.schema.json"
+      - "scripts/tools/check_dependency_license_inventory.py"
+      - "tests/tools/test_check_dependency_license_inventory.py"
+      - "docs/context/dependency_license_inventory.md"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
+      - "scripts/validation/release_legal_inputs.v1.json"
+      - "scripts/tools/check_release_legal_input_coverage.py"
+      - "tests/dev/test_release_legal_input_coverage.py"
   workflow_dispatch:
 
 permissions:
@@ -55,3 +73,21 @@ jobs:
             GPL-3.0-only,
             GPL-3.0-or-later
           comment-summary-in-pr: false
+
+      - name: Generate dependency license inventory evidence
+        run: >-
+          python scripts/tools/check_dependency_license_inventory.py
+          --output output/validation/dependency-license-inventory.json
+
+      - name: Check generated inventory freshness
+        run: >-
+          python scripts/tools/check_dependency_license_inventory.py
+          --check-freshness output/validation/dependency-license-inventory.json
+
+      - name: Upload dependency license inventory
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-license-inventory
+          path: output/validation/dependency-license-inventory.json
+          if-no-files-found: error

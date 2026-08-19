@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.baselines.brne import BRNE_PINNED_SHA, BRNEPlanner, build_brne_config
-from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
+from robot_sf.benchmark.map_runner.map_runner_observations import obs_to_brne_format
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_common import build_adapter_policy
 
 if TYPE_CHECKING:

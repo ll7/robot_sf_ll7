@@ -31,7 +31,15 @@ import numba
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner_identity import _scenario_with_episode_seed_defaults
+from robot_sf._execution_context import (
+    EXECUTION_CONTEXT_FIELDS,
+    EXECUTION_CONTEXT_SCHEMA_VERSION,
+    build_execution_context,
+    execution_context_digest,
+    public_machine_id,
+)
+from robot_sf._numerical_thread_env import THREAD_ENV_VARS
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_with_episode_seed_defaults
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 
@@ -44,15 +52,12 @@ HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_host_result.v1"
 VERIFIED_HOST_REPORT_SCHEMA_VERSION = "scenario_exact_repeat_verified_host_result.v1"
 CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
 RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
+CONTEXT_EXACT_MATCH = "exact_context_match"
+CONTEXT_APPROVED_NEAR_MISS = "approved_numpy_numba_near_miss"
+CONTEXT_INCOMPATIBLE = "incompatible_context"
+CONTEXT_UNCLASSIFIED = "unclassified_context"
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
-_CROSS_HOST_PROVENANCE_FIELDS = (
-    "numpy_version",
-    "numba_version",
-    "python_version",
-    "git_commit",
-    "lockfile_sha256",
-)
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
 # cannot construct on current main (for example, a planner registered only in a
@@ -138,6 +143,18 @@ _PROCESS_ISOLATION_FAILURE_SIGNATURES = (
     "policy_step_isolation_unavailable",
     "policy step isolation unavailable",
 )
+
+_CONTEXT_COMPARISON_FIELDS = (
+    "cpu_model",
+    "platform",
+    "python_version",
+    "thread_env",
+    "numpy_version",
+    "numba_version",
+    "cpu_only",
+    "workers",
+)
+_CONTEXT_RUNTIME_VERSION_FIELDS = {"numpy_version", "numba_version"}
 
 
 def _record_is_isolation_failure(record: Any) -> bool:
@@ -225,6 +242,96 @@ def _require_sha256(value: Any, label: str) -> str:
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest.lower()):
         raise ValueError(f"{label} must be a lowercase-or-uppercase SHA-256 digest")
     return digest.lower()
+
+
+def _validate_execution_context(  # noqa: C901
+    environment: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Validate the canonical execution context and its host-side bindings.
+
+    Returns:
+        The validated canonical context mapping.
+    """
+    context = _require_mapping(environment.get("execution_context"), "host execution_context")
+    if context.get("schema_version") != EXECUTION_CONTEXT_SCHEMA_VERSION:
+        raise ValueError("host execution_context has an unsupported schema_version")
+    if set(context) != set(EXECUTION_CONTEXT_FIELDS):
+        raise ValueError("host execution_context has unsupported fields")
+    for field in ("cpu_model", "platform", "python_version", "numpy_version", "numba_version"):
+        _require_text(context.get(field), f"host execution_context {field}")
+    thread_env = _require_mapping(context.get("thread_env"), "host execution_context thread_env")
+    if set(thread_env) != set(THREAD_ENV_VARS):
+        raise ValueError("host execution_context thread_env has unsupported fields")
+    for field in THREAD_ENV_VARS:
+        value = thread_env[field]
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"host execution_context thread_env.{field} must be text or null")
+    workers = context.get("workers")
+    if (
+        context.get("cpu_only") is not True
+        or isinstance(workers, bool)
+        or not isinstance(workers, int)
+        or workers != 1
+    ):
+        raise ValueError("host execution_context must record CPU-only single-worker execution")
+
+    context_digest = _require_sha256(
+        environment.get("execution_context_sha256"),
+        "host environment execution_context_sha256",
+    )
+    if context_digest != execution_context_digest(context):
+        raise ValueError("host execution_context_sha256 does not match execution_context")
+
+    for field in ("numpy_version", "numba_version", "python_version"):
+        if environment.get(field) != context.get(field):
+            raise ValueError(f"host environment {field} disagrees with execution_context")
+    if environment.get("cpu_only") != context.get("cpu_only"):
+        raise ValueError("host environment cpu_only disagrees with execution_context")
+    environment_workers = environment.get("workers")
+    if (
+        isinstance(environment_workers, bool)
+        or not isinstance(environment_workers, int)
+        or environment_workers != context.get("workers")
+    ):
+        raise ValueError("host environment workers disagrees with execution_context")
+
+    machine_id = _require_text(environment.get("machine_id"), "host environment machine_id")
+    machine_digest = _require_sha256(
+        environment.get("machine_id_sha256"), "host environment machine_id_sha256"
+    )
+    expected_machine_digest = hashlib.sha256(machine_id.encode("utf-8")).hexdigest()
+    if machine_digest != expected_machine_digest:
+        raise ValueError("host environment machine_id_sha256 does not match machine_id")
+    public_id = _require_text(
+        environment.get("public_machine_id"), "host environment public_machine_id"
+    )
+    if public_id != public_machine_id(machine_id):
+        raise ValueError("host environment public_machine_id does not match machine_id")
+    return context
+
+
+def _context_mismatches(
+    first_context: Mapping[str, Any], second_context: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Return every differing canonical context field, including thread knobs."""
+    mismatches: dict[str, dict[str, Any]] = {}
+    for field in _CONTEXT_COMPARISON_FIELDS:
+        if field == "thread_env":
+            first_threads = _require_mapping(first_context.get(field), "first thread_env")
+            second_threads = _require_mapping(second_context.get(field), "second thread_env")
+            for thread_name in THREAD_ENV_VARS:
+                if first_threads.get(thread_name) != second_threads.get(thread_name):
+                    mismatches[f"thread_env.{thread_name}"] = {
+                        "first": first_threads.get(thread_name),
+                        "second": second_threads.get(thread_name),
+                    }
+            continue
+        if first_context.get(field) != second_context.get(field):
+            mismatches[field] = {
+                "first": first_context.get(field),
+                "second": second_context.get(field),
+            }
+    return mismatches
 
 
 def _planner(record: Mapping[str, Any]) -> str:
@@ -648,11 +755,9 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
     if host_report.get("manifest_sha256") != manifest["manifest_sha256"]:
         raise ValueError("host report was not produced for this manifest")
     environment = _require_mapping(host_report.get("environment"), "host report environment")
-    for field in ("machine_id", "numpy_version", "numba_version", "python_version", "git_commit"):
-        _require_text(environment.get(field), f"host environment {field}")
+    _validate_execution_context(environment)
+    _require_text(environment.get("git_commit"), "host environment git_commit")
     _require_sha256(environment.get("lockfile_sha256"), "host environment lockfile_sha256")
-    if environment.get("cpu_only") is not True or environment.get("workers") != 1:
-        raise ValueError("host report must record CPU-only single-worker execution")
     expected_commits = {target["source_git_hash"] for target in targets.values()}
     if environment["git_commit"] not in expected_commits:
         raise ValueError("host report git_commit does not match the manifest source revision")
@@ -845,19 +950,35 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             raise ValueError("cross-host input belongs to a different manifest")
     first_env = _require_mapping(first.get("environment"), "first host environment")
     second_env = _require_mapping(second.get("environment"), "second host environment")
+    first_context = _validate_execution_context(first_env)
+    second_context = _validate_execution_context(second_env)
     first_machine = _require_text(first_env.get("machine_id"), "first machine_id")
     second_machine = _require_text(second_env.get("machine_id"), "second machine_id")
     if first_machine == second_machine:
         raise ValueError("cross-host comparison requires two distinct machine_id values")
-    version_match = all(
-        first_env.get(key) == second_env.get(key) for key in ("numpy_version", "numba_version")
-    )
-    provenance_mismatches = {
+    context_mismatches = _context_mismatches(first_context, second_context)
+    identity_mismatches = {
         key: {"first": first_env.get(key), "second": second_env.get(key)}
-        for key in _CROSS_HOST_PROVENANCE_FIELDS
+        for key in ("git_commit", "lockfile_sha256")
         if first_env.get(key) != second_env.get(key)
     }
-    provenance_match = not provenance_mismatches
+    provenance_mismatches = {**context_mismatches, **identity_mismatches}
+    version_mismatches = _CONTEXT_RUNTIME_VERSION_FIELDS.intersection(context_mismatches)
+    version_match = not version_mismatches
+    context_digest_match = first_env.get("execution_context_sha256") == second_env.get(
+        "execution_context_sha256"
+    )
+    if context_digest_match and not identity_mismatches and not context_mismatches:
+        context_comparison = CONTEXT_EXACT_MATCH
+    elif (
+        version_mismatches
+        and set(context_mismatches) == version_mismatches
+        and not identity_mismatches
+    ):
+        context_comparison = CONTEXT_APPROVED_NEAR_MISS
+    else:
+        context_comparison = CONTEXT_INCOMPATIBLE
+    provenance_match = context_comparison == CONTEXT_EXACT_MATCH
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
         """Index a verified host report's targets by ``(scenario_id, planner, seed)`` key.
@@ -929,8 +1050,18 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     return {
         "schema_version": CROSS_HOST_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
-        "hosts": [first_machine, second_machine],
+        "hosts": [
+            _require_text(first_env.get("public_machine_id"), "first public_machine_id"),
+            _require_text(second_env.get("public_machine_id"), "second public_machine_id"),
+        ],
+        "host_identity_sha256": [
+            _require_sha256(first_env.get("machine_id_sha256"), "first machine_id_sha256"),
+            _require_sha256(second_env.get("machine_id_sha256"), "second machine_id_sha256"),
+        ],
         "pinned_runtime_versions_match": version_match,
+        "context_comparison": context_comparison,
+        "context_digest_match": context_digest_match,
+        "context_mismatches": context_mismatches,
         "provenance_match": provenance_match,
         "provenance_mismatches": provenance_mismatches,
         "matrix": matrix,
@@ -939,6 +1070,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             "n_runnable_cells": len(runnable_rows),
             "n_unrunnable_cells": len(unrunnable_rows),
             "n_mixed_cells": len(mixed_rows),
+            "context_comparison": context_comparison,
             "all_cells_bitwise_identical": provenance_match
             and bool(runnable_rows)
             and all(row["bitwise_identical"] for row in runnable_rows),
@@ -1016,8 +1148,17 @@ def _get_environment_fingerprint() -> dict[str, Any]:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         git_commit = "unknown"
 
+    machine_id = platform.node()
+    context = build_execution_context(
+        numpy_version=np.__version__,
+        numba_version=str(numba.__version__),
+        cpu_only=True,
+        workers=1,
+    )
     return {
-        "machine_id": platform.node(),
+        "machine_id": machine_id,
+        "machine_id_sha256": hashlib.sha256(machine_id.encode("utf-8")).hexdigest(),
+        "public_machine_id": public_machine_id(machine_id),
         "cpu_only": True,
         "workers": 1,
         "numpy_version": np.__version__,
@@ -1027,6 +1168,8 @@ def _get_environment_fingerprint() -> dict[str, Any]:
         "lockfile_sha256": hashlib.sha256(
             (get_repository_root() / "uv.lock").read_bytes()
         ).hexdigest(),
+        "execution_context": context,
+        "execution_context_sha256": execution_context_digest(context),
     }
 
 

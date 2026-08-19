@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #7340 real-manifest feasibility-first diagnostic: a config-first native probe over a fixed
+station-platform candidate pool, with route certification, loader-backed pedestrian binding,
+separate rejection/unavailability accounting, and a fail-closed comparison contract. The bounded
+run is diagnostic-only: 4/4 candidates were feasible, with observed episode counts of 3 collisions
+and 1 timeout; no safety, planner, benchmark, paper, or source-method claim follows:
+[issue_7340_real_manifest_feasibility_first.md](issue_7340_real_manifest_feasibility_first.md).
+
 Issue #7261 stale-base observation: input-backed `stale_base_observation_window.v1` measurement
 with deterministic nearest-rank P50/P95 wait summaries, exact-head/base red-main classification,
 compatible baseline comparison, and fail-closed `not_available`/`invalid_contract` states. The
@@ -14,16 +21,17 @@ the measurement boundary for a later normal-throughput observation window:
 
 Issue #7086 trace dossier cell-binding metadata: a fail-closed,
 `trace_dossier_cell_binding.v1` manifest block that binds one selected trace to
-one campaign cell, preserves terminal-verdict denominators, and remains
-metadata-only until trace export and renderer provenance are reviewed:
+one campaign cell, preserves terminal-verdict denominators, and now composes
+diagnostic PNG/SVG/PDF/caption outputs with checksums without admitting
+scientific evidence:
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md).
 
 Issue #7086 trace dossier representative selection: deterministic majority,
 weaker-label, median-order, and seed-identity selection for one campaign cell,
 plus the shared `robot_sf.research.representative_selection` rule that the
 emergent-phenomena campaign, its figures, and its replay videos all call
-instead of carrying private copies, without trace execution or evidence
-admission:
+instead of carrying private copies, plus the diagnostic h600 trace pin for
+retained trace-series conversion, without evidence admission:
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md).
 
 Issue #7030 agent figure interpretation evaluation: digest-pinned fixture replay
@@ -44,6 +52,12 @@ canonical output-tree hashes, and an outcome-free `--check-only` result for the 
 package. The receipt is build provenance only; it is not domain approval, admission, publication,
 benchmark, or paper-facing evidence:
 [evidence/issue_7410_ch7_evidence_build_receipt.v1.json](evidence/issue_7410_ch7_evidence_build_receipt.v1.json).
+
+Issue #7128 exact-repeat execution context: a dependency-free,
+`benchmark_execution_context.v1` block and digest that binds CPU, platform,
+Python, numerical thread variables, and NumPy/Numba versions while keeping raw
+host identity separate from public comparison labels:
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md).
 
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
@@ -206,6 +220,12 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6318 Step 3 model-quality gate: config-first held-out prediction checks for the clean-room
+latent dynamics, reward, and continuation heads against persistence and a deterministic diagnostic
+MLP reference; the committed preview is intentionally blocked by train/holdout insufficiency and
+the gate makes no SAC, benchmark, or paper-facing claim:
+[issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md).
+
 Issue #6095 S10 (ten-seed) ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
 preflight configuration and its explicit no-result boundary:
 [issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
@@ -245,6 +265,13 @@ the effective radius and map-asset provenance are not retained/pinned, every col
 feasibility/planner/trajectory outcome is replay-required, and a radius-default inconsistency
 (`metrics.py` 1.0 m vs `runner.py` 0.3 m) is recorded as a Gate 1 input:
 [radius_sensitivity_gate0_audit_issue_6640.md](radius_sensitivity_gate0_audit_issue_6640.md).
+
+Issue #7445 release 0.0.3 DOI correction record: binds the `0.0.3` tag, release URL, asset name,
+and asset SHA-256 and records `doi_status: not_assigned` (no retroactive Zenodo deposit
+authorized) and `reproduction_status: not_run`; the historical embedded placeholder
+`10.5281/zenodo.<record-id>` in the release manifest remains as immutable bytes and was NOT
+rewritten:
+[release_0_0_3_doi_correction.v1.json](evidence/issue_4364_release_0_0_3_post1/release_0_0_3_doi_correction.v1.json).
 
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
@@ -469,7 +496,7 @@ or the normal diff wrapper.
 | SLURM and long jobs | [slurm_issue_batch_status_2026-05-21.md](slurm_issue_batch_status_2026-05-21.md), [slurm_job_discovery_2026-05-31.md](slurm_job_discovery_2026-05-31.md), [issue_1894_slurm_job_finalizer.md](issue_1894_slurm_job_finalizer.md), [issue_3075_durable_artifact_backend.md](issue_3075_durable_artifact_backend.md), [issue_3425_slurm_to_claim_blocker.md](issue_3425_slurm_to_claim_blocker.md), [../dev/slurm_submission.md](../dev/slurm_submission.md), [../dev/slurm_resource_audit.md](../dev/slurm_resource_audit.md), [open_issues_training_split_audit_2026-05-30.md](open_issues_training_split_audit_2026-05-30.md) | Canonical issue-status ledger, live discovery/dependency routing, launch packets, campaign state, resource limits, artifact finalization, the approved W&B durable artifact backend decision (#3075) plus the finalizer durable-URI contract, Issue #3425 local-machine blocker for the SLURM-to-claim vertical slice, and artifact preservation for long runs. |
 | Issue #4365 S30 diagnostic closeout | [pre-registration](issue_4365_h600_hybrid_vs_orca_s30_preregistration.md), [job 13378 evidence](evidence/issue_4365_job_13378_closeout/README.md) | Frozen six-arm h600/S30 campaign identity, exact original checksum inventory, recoverable final-public-commit diagnostic, and fail-closed non-promotion boundary after resume-append contamination. |
 | Root layout and cleanup | [root_layout_structured_migration_2026-06-01.md](root_layout_structured_migration_2026-06-01.md), [issue_2035_path_reference_audit.md](issue_2035_path_reference_audit.md), [issue_1573_root_layout_inventory.md](issue_1573_root_layout_inventory.md) | Current root-structure migration, path-reference cleanup validation, and the historical root-layout inventory retained as provenance. Superseded root-layout notes stay discoverable through `catalog.yaml` and the cleanup notes below instead of acting as current entry points. |
-| Adversarial search | [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md), [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md), [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md), [issue_3292_rare_event_probability_plan.md](issue_3292_rare_event_probability_plan.md), [issue_3474_seed_overlap_policy.md](issue_3474_seed_overlap_policy.md), [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md), [issue_2529_llm_manifest_interface.md](issue_2529_llm_manifest_interface.md), [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md), [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md), [issue_3281_naturalistic_vru_priors.md](issue_3281_naturalistic_vru_priors.md), [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md), [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md), [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md), [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md), [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md), [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md), [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md), [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md), [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md), [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md), [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md), [../ai/awesome_copilot_adaptation.md](../ai/awesome_copilot_adaptation.md) | Current #4360 dispatchable inventory and runbook, reactive residual-adversary capability contract, cross-method adversarial generation roadmap, rare-event probability language gates and compact pilot plan, seed-overlap policy for held-out proposal-vs-random evidence, validator-backed manifest generation, guarded LLM-to-manifest interface, route-materialized planner smoke, compact manifest quality metrics, additive naturalistic VRU prior metadata, learned-expansion gate, generated-manifest collision/low-progress smoke, validator-runner compact evidence smoke, generator-readiness and training-readiness gates, bounded generation, manifest freeze, smoke packets, two-family execution evidence, replay determinism, head-on replay determinism, stress synthesis, and workflow adaptation. |
+| Adversarial search | [issue_4360_adversarial_dispatchable_inventory.md](issue_4360_adversarial_dispatchable_inventory.md), [issue_4360_search_harness.md](issue_4360_search_harness.md), [issue_4360_reactive_adversary_design.md](issue_4360_reactive_adversary_design.md), [issue_2468_adversarial_generation_roadmap.md](issue_2468_adversarial_generation_roadmap.md), [issue_3292_rare_event_probability_plan.md](issue_3292_rare_event_probability_plan.md), [issue_3474_seed_overlap_policy.md](issue_3474_seed_overlap_policy.md), [issue_2524_adversarial_manifests.md](issue_2524_adversarial_manifests.md), [issue_2529_llm_manifest_interface.md](issue_2529_llm_manifest_interface.md), [issue_2562_adversarial_manifest_smoke.md](issue_2562_adversarial_manifest_smoke.md), [issue_2567_adversarial_manifest_quality.md](issue_2567_adversarial_manifest_quality.md), [issue_3281_naturalistic_vru_priors.md](issue_3281_naturalistic_vru_priors.md), [issue_2568_adversarial_expansion_gate.md](issue_2568_adversarial_expansion_gate.md), [issue_2618_adversarial_manifest_smoke.md](issue_2618_adversarial_manifest_smoke.md), [issue_2658_adversarial_manifest_smoke.md](issue_2658_adversarial_manifest_smoke.md), [issue_2725_generator_readiness.md](issue_2725_generator_readiness.md), [issue_1457_adversarial_generation_protocol.md](issue_1457_adversarial_generation_protocol.md), [issue_1500_adversarial_manifest.md](issue_1500_adversarial_manifest.md), [issue_1571_adversarial_smoke_packet_sharpening.md](issue_1571_adversarial_smoke_packet_sharpening.md), [issue_1502_adversarial_two_family_run.md](issue_1502_adversarial_two_family_run.md), [issue_1861_adversarial_replay_determinism_gate.md](issue_1861_adversarial_replay_determinism_gate.md), [issue_1878_head_on_route_replay_determinism.md](issue_1878_head_on_route_replay_determinism.md), [issue_1503_adversarial_stress_synthesis.md](issue_1503_adversarial_stress_synthesis.md), [../ai/awesome_copilot_adaptation.md](../ai/awesome_copilot_adaptation.md) | Current #4360 dispatchable inventory and runbook, bounded typed search-harness preparation, reactive residual-adversary capability contract, cross-method adversarial generation roadmap, rare-event probability language gates and compact pilot plan, seed-overlap policy for held-out proposal-vs-random evidence, validator-backed manifest generation, guarded LLM-to-manifest interface, route-materialized planner smoke, compact manifest quality metrics, additive naturalistic VRU prior metadata, learned-expansion gate, generated-manifest collision/low-progress smoke, validator-runner compact evidence smoke, generator-readiness and training-readiness gates, bounded generation, manifest freeze, smoke packets, two-family execution evidence, replay determinism, head-on replay determinism, stress synthesis, and workflow adaptation. |
 | Manual control and trace analysis | [issue_1151_manual_control_mvp_foundation.md](issue_1151_manual_control_mvp_foundation.md), [issue_1689_simulation_trace_export_schema.md](issue_1689_simulation_trace_export_schema.md), [issue_2038_real_trace_viewer_smoke.md](issue_2038_real_trace_viewer_smoke.md), [issue_2236_trace_mechanism_evidence_rubric.md](issue_2236_trace_mechanism_evidence_rubric.md), [issue_2463_mechanism_signal_checker.md](issue_2463_mechanism_signal_checker.md), [issue_2543_trace_failure_predicates.md](issue_2543_trace_failure_predicates.md), [issue_2667_trace_failure_predicate_tables.md](issue_2667_trace_failure_predicate_tables.md), [issue_2688_trace_predicate_matrix.md](issue_2688_trace_predicate_matrix.md), [issue_3278_real_trace_validation_contract.md](issue_3278_real_trace_validation_contract.md), [issue_2263_mechanism_activation_report_fields.md](issue_2263_mechanism_activation_report_fields.md), [issue_2227_mechanism_panels.md](issue_2227_mechanism_panels.md), [issue_2428_mechanism_trace_panels.md](issue_2428_mechanism_trace_panels.md), [issue_2270_panel_candidate_manifest.md](issue_2270_panel_candidate_manifest.md), [issue_2405_amv_step_export_decision.md](issue_2405_amv_step_export_decision.md), [issue_2527_waiting_crossing_fixture.md](issue_2527_waiting_crossing_fixture.md), [issue_2564_signal_state_proxy_smoke.md](issue_2564_signal_state_proxy_smoke.md), [issue_2526_cyclist_vru_smoke.md](issue_2526_cyclist_vru_smoke.md), [issue_2223_topology_hypothesis_planning.md](issue_2223_topology_hypothesis_planning.md), [issue_2258_topology_primary_route_audit.md](issue_2258_topology_primary_route_audit.md), [issue_2307_topology_score_diagnostic.md](issue_2307_topology_score_diagnostic.md), [issue_2946_mechanism_figure_pack.md](issue_2946_mechanism_figure_pack.md), [issue_1646_analysis_workbench_closeout.md](issue_1646_analysis_workbench_closeout.md), [../debug_visualization.md](../debug_visualization.md) | Recorder workflows, trace export shape, real-trace viewer smoke evidence, trace-mechanism evidence levels, nonzero mechanism-signal gate, trace-level failure predicates with fail-closed `not_available` rows, denominator-aware predicate-table diagnostic evidence, the proposed predeclared trace-predicate benchmark matrix, the metadata-only real-trace validation-contract checker for candidate micromobility datasets, mechanism activation report fields, mechanism-panel input readiness, first AMMV/default diagnostic trace-panel bundle, first compact mechanism-evidence figure pack from existing tracked traces, candidate-trace blockers, AMMV single-row step-export proof, authored waiting/crossing trace metadata, trace-only signal-state proxy smoke, cyclist-like VRU proxy trace metadata, topology-hypothesis explanation diagnostics, primary-route audit, score-overselection diagnostic, the #1646 analysis-workbench epic closeout audit (criterion→evidence map), and debug visualization boundaries. |
 | Worked-example process traces | [issue_6790_worked_example_process_trace.md](issue_6790_worked_example_process_trace.md) | Diagnostic-only `worked_example_process_trace.v1` schema, builder, CLI reproduction command, pair-compatibility gate, and fail-closed route/conflict/encounter/process diagnostics for renderer-neutral worked-example figures. |
 

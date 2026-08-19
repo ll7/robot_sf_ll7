@@ -13,6 +13,10 @@ from robot_sf.benchmark.trace_dossier_selection import (
     TraceDossierSelectionError,
     select_representative,
 )
+from robot_sf.research.representative_selection import (
+    RepresentativeCandidate,
+    select_representative_index,
+)
 
 
 def _candidate(
@@ -95,6 +99,31 @@ def test_large_even_primary_orders_use_numeric_median_without_overflow() -> None
     assert result.selected_seed_id == "seed-120"
     assert result.selected_primary_order == 1.2e308
     assert result.selection_reason == "seed_identity"
+
+
+def test_even_pool_divergence_between_campaign_and_trace_dossier_contracts() -> None:
+    """The two versioned selectors intentionally choose different middle runs."""
+
+    # These are the same two rows represented with the campaign's integer seed
+    # and v1's opaque identity.  The campaign chooses the lower-ranked row;
+    # v1's interpolated median ties both rows and then chooses episode-a.
+    campaign_candidates = [
+        RepresentativeCandidate(verdict="weak_partial", primary_order=0.0, seed=10),
+        RepresentativeCandidate(verdict="weak_partial", primary_order=10.0, seed=2),
+    ]
+    dossier_candidates = [
+        _candidate(verdict="weak_partial", primary_order=0.0, seed_id="episode-z"),
+        _candidate(verdict="weak_partial", primary_order=10.0, seed_id="episode-a"),
+    ]
+
+    campaign_selected = campaign_candidates[select_representative_index(campaign_candidates)]
+    dossier_selected = select_representative(dossier_candidates)
+
+    assert (campaign_selected.seed, campaign_selected.primary_order) == (10, 0.0)
+    assert (dossier_selected.selected_seed_id, dossier_selected.selected_primary_order) == (
+        "episode-a",
+        10.0,
+    )
 
 
 def test_seed_identity_breaks_exact_median_tie() -> None:

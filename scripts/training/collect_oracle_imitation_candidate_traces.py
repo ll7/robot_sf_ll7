@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.training.oracle_imitation_launch_packet import (
     load_launch_packet,
     validate_launch_packet,

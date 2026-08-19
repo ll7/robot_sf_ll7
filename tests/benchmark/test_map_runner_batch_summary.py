@@ -1,9 +1,9 @@
-"""Tests for robot_sf.benchmark.map_runner_batch_summary — batch-summary metadata."""
+"""Tests for robot_sf.benchmark.map_runner.map_runner_batch_summary — batch-summary metadata."""
 
 from __future__ import annotations
 
-from robot_sf.benchmark.map_runner_batch_runner import _initial_feasibility_totals
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_runner import _initial_feasibility_totals
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     WorkerMetadataBridgeUpdate,
     _float_metadata_value,
     accumulate_batch_metadata,

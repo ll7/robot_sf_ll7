@@ -1,0 +1,49 @@
+name: Model License Preflight
+
+on:
+  pull_request:
+    paths:
+      - "model/**"
+      - "scripts/tools/publish_model_registry_release.py"
+      - "tests/tools/test_publish_model_registry_release.py"
+      - "scripts/validation/release_legal_inputs.v1.json"
+      - "scripts/tools/check_release_legal_input_coverage.py"
+      - "tests/dev/test_release_legal_input_coverage.py"
+      - ".github/workflows/model-license-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  model-license-preflight:
+    name: model-license-preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv with bounded retry
+        env:
+          UV_VERSION: "0.11.21"
+          UV_INSTALL_MAX_ATTEMPTS: "3"
+          UV_INSTALL_BACKOFF_BASE: "5"
+          UV_INSTALL_BACKOFF_CAP: "30"
+        run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+      # Rows that declare no licensing mapping at all are the pre-existing model-weight rights
+      # gap owned by the separate rights review; they are reported, not silently cleared. Any
+      # row that declares licensing with invalid identity, training-data, or legal-file evidence
+      # still fails this gate, and the publication path stays strict regardless of this flag.
+      - name: Validate model legal inputs without publication side effects
+        run: >-
+          uv run python scripts/tools/publish_model_registry_release.py --validate-licensing
+          --allow-undeclared-licensing

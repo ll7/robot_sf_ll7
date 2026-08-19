@@ -10,7 +10,7 @@ rather than re-deriving them:
    ``scripts/training/train_learned_short_horizon_predictor_issue_4013.py`` when the
    checkpoint is missing, so the model-based arm loads real learned weights
    (``evidence_tier=checkpoint_loaded``) with no fallback.
-2. Run the three benchmark arms through ``robot_sf.benchmark.map_runner.run_map_batch``
+2. Run the three benchmark arms through ``robot_sf.benchmark.map_runner.map_runner.run_map_batch``
    and write per-role episode JSONL:
      - ``learned_prediction_mpc``  (learned short-horizon prediction + MPC)
      - ``cv_prediction_mpc``       (constant-velocity prediction + MPC)
@@ -43,7 +43,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.planner.learned_short_horizon_trainer import (
     ShortHorizonTrainerConfig,
     train_short_horizon_predictor,

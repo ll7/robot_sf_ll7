@@ -311,7 +311,7 @@ def test_global_route_probe_config_enables_route_waypoint_env_override() -> None
 
 def test_global_route_probe_env_override_propagates_to_sim_config() -> None:
     """apply_policy_env_observation_overrides propagates include_route_waypoints."""
-    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.benchmark.map_runner.map_runner_env import apply_policy_env_observation_overrides
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
     config = RobotSimulationConfig()
@@ -326,7 +326,7 @@ def test_global_route_probe_env_override_propagates_to_sim_config() -> None:
 
 def test_global_route_probe_env_override_absent_leaves_default() -> None:
     """Without env_overrides, include_route_waypoints stays False."""
-    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.benchmark.map_runner.map_runner_env import apply_policy_env_observation_overrides
     from robot_sf.gym_env.unified_config import RobotSimulationConfig
 
     config = RobotSimulationConfig()

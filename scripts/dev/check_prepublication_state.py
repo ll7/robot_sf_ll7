@@ -6,6 +6,17 @@ expensive readiness run.  A later check detects a newly opened covering PR, a
 merged PR that superseded the issue, movement of the base or remote branch, and
 local HEAD changes.  The ``sync`` command can safely integrate changed remote
 refs with ordinary Git merges; it never resets or deletes a worktree.
+
+Issue #7515: the gate also rejects publication when the branch carries
+non-``main`` ancestry that is undeclared, mismatched, or whose declared parent
+is invalid.  ``evaluate_state`` incorporates the snapshot's recorded
+``ancestry`` block (populated by ``collect_live_state`` via
+``scripts.dev.stack_ancestry``): a blocking ancestry state
+(``undeclared_stack`` / ``mismatched_declaration`` / ``parent_invalidated``)
+produces the new ``undeclared_stack_ancestry`` reason and blocks before PR
+creation, while a declared stack (``stacked``) is permitted to proceed to
+publication but is never independently merge-ready (see
+``scripts.dev.pr_loop_policy``).
 """
 
 from __future__ import annotations
@@ -22,6 +33,12 @@ from urllib.parse import urlparse
 
 from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
 from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows, fetch_open_pr_rows
+from scripts.dev.stack_ancestry import (
+    BLOCKING_STATES,
+    ancestry_state,
+    collect_ancestry_facts,
+    parse_stack_declaration,
+)
 
 SCHEMA = "prepublication_state.v1"
 DECISION_SCHEMA = "prepublication_decision.v1"
@@ -524,8 +541,14 @@ def collect_live_state(
     base_ref: str = "main",
     remote: str = "origin",
     max_pr_pages: int = DEFAULT_MAX_REST_PR_PAGES,
+    declaration_text: str = "",
 ) -> dict[str, Any]:
-    """Fetch and assemble the live issue, ref, and local worktree state."""
+    """Fetch and assemble the live issue, ref, and local worktree state.
+
+    ``declaration_text`` optionally carries the canonical ``## Stack
+    Declaration`` text (issue #7515) so the recorded snapshot's ``ancestry``
+    block can validate it against the live local git refs.
+    """
     max_pr_pages = _effective_page_budget(max_pr_pages)
     base_ref = _normalize_base_ref(base_ref, remote=remote)
     remote_state_sources = {
@@ -582,7 +605,7 @@ def collect_live_state(
         remote_state_sources["open_covering_prs"] = "rest"
         remote_state_fallbacks["open_covering_prs"] = str(exc)
 
-    return {
+    snapshot = {
         "schema": SCHEMA,
         "kind": "snapshot",
         "captured_at_utc": _utc_now(),
@@ -604,6 +627,9 @@ def collect_live_state(
         "local_head_sha": _git_output("rev-parse", "HEAD"),
         "tree_state": _tree_state(),
     }
+    if declaration_text:
+        snapshot["stack_declaration"] = declaration_text
+    return _record_ancestry(snapshot)
 
 
 def _sha_fields(snapshot: dict[str, Any]) -> dict[str, str | None]:
@@ -666,6 +692,75 @@ def _sha_drift(
     return drift
 
 
+def _ancestry_blocking_state(current: dict[str, Any]) -> str | None:
+    """Return a blocking ancestry state recorded in a live snapshot, or None.
+
+    The snapshot's ``ancestry`` block is written by ``collect_live_state`` and
+    carries the deterministic ``state`` from ``ancestry_state``.  Only the
+    fail-closed states (``undeclared_stack``, ``mismatched_declaration``,
+    ``parent_invalidated``) block pre-PR publication; a declared stack is
+    permitted to be published but is never independently merge-ready.
+    """
+    ancestry = current.get("ancestry")
+    if not isinstance(ancestry, dict):
+        return None
+    state = str(ancestry.get("state") or "")
+    if state in BLOCKING_STATES:
+        return state
+    return None
+
+
+def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Populate (or refresh) the snapshot's ``ancestry`` block from local git.
+
+    Runs the deterministic ancestry classifier (issue #7515) against the live
+    local git refs of the publication worktree.  The declaration is parsed from
+    the snapshot's recorded ``stack_declaration`` text (the PR body that will be
+    published, if any).  When the classifier cannot run (missing SHA/ref), the
+    snapshot records the failure fail-closed under ``ancestry.error``.
+    """
+    head_sha = str(snapshot.get("local_head_sha") or "")
+    base_ref = str(snapshot.get("base_ref") or "")
+    remote = str(snapshot.get("remote") or "origin")
+    if not head_sha or not base_ref:
+        snapshot["ancestry"] = {"state": "unknown", "error": "snapshot lacks head/base ref"}
+        return snapshot
+    facts, error = collect_ancestry_facts(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        worktree=Path.cwd(),
+        remote=remote,
+    )
+    if error or facts is None:
+        snapshot["ancestry"] = {"state": "unknown", "error": error}
+        return snapshot
+    declaration_text = str(snapshot.get("stack_declaration") or "")
+    declaration, parse_error = parse_stack_declaration(declaration_text)
+    if parse_error:
+        snapshot["ancestry"] = {"state": "unknown", "error": parse_error}
+        return snapshot
+    state = ancestry_state(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        main_tip_sha=facts["main_tip_sha"],
+        merge_base_sha=facts["merge_base_sha"],
+        commits=facts["commits"],
+        declaration=declaration,
+    )
+    state["unexpected_paths"] = facts["changed_paths"]
+    snapshot["ancestry"] = state
+    return snapshot
+
+
+def _drift_reason(drift: dict[str, dict[str, str | None]]) -> str:
+    """Map changed SHA fields to the canonical publication-freshness reason."""
+    if "remote_branch_sha" in drift:
+        return "remote_branch_changed"
+    if "base_sha" in drift:
+        return "base_changed"
+    return "local_head_changed"
+
+
 def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Classify a baseline/current pair without performing external I/O."""
     _validate_snapshot_pair(baseline, current)
@@ -710,19 +805,23 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
     if current.get("tree_state") != "clean":
         return _decision(baseline, current, decision="blocked", reason="dirty_worktree")
 
+    ancestry_state_value = _ancestry_blocking_state(current)
+    if ancestry_state_value is not None:
+        return _decision(
+            baseline,
+            current,
+            decision="blocked",
+            reason="undeclared_stack_ancestry",
+            extra={"ancestry": current.get("ancestry")},
+        )
+
     drift = _sha_drift(baseline, current)
     if drift:
-        if "remote_branch_sha" in drift:
-            reason = "remote_branch_changed"
-        elif "base_sha" in drift:
-            reason = "base_changed"
-        else:
-            reason = "local_head_changed"
         return _decision(
             baseline,
             current,
             decision="refresh-required",
-            reason=reason,
+            reason=_drift_reason(drift),
             extra={"drift": drift},
         )
     return _decision(baseline, current, decision="ready", reason="remote_state_unchanged")
@@ -866,6 +965,13 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     capture.add_argument("--snapshot-path")
+    capture.add_argument(
+        "--declaration-text",
+        help=(
+            "canonical ## Stack Declaration text (parent_pr + parent_head) used to "
+            "validate non-main ancestry before publication (issue #7515)"
+        ),
+    )
 
     for name, help_text in (
         ("check", "check a baseline against refreshed remote state"),
@@ -915,6 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
                 base_ref=args.base_ref,
                 remote=args.remote,
                 max_pr_pages=args.max_pr_pages,
+                declaration_text=args.declaration_text or "",
             )
             _write_json(snapshot_path, snapshot)
             decision = "ready" if snapshot["issue_state"] == "OPEN" else "superseded"

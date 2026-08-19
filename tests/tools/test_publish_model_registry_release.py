@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tarfile
 from typing import TYPE_CHECKING
 
@@ -287,3 +288,170 @@ def test_publish_model_registry_release_blocks_missing_weight_rights(
         assert "licensing mapping is required" in str(exc)
     else:
         raise AssertionError("missing weight rights evidence was not rejected")
+
+
+def test_model_licensing_preflight_is_read_only_and_hashes_dynamic_files(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """The licensing preflight proves registry legal files without publication side effects."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+    before = registry_path.read_bytes()
+
+    exit_code = publish_model_registry_release.main(
+        ["--registry-path", str(registry_path), "--validate-licensing"]
+    )
+
+    assert exit_code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema_version"] == "robot-sf-model-licensing-preflight.v1"
+    assert report["status"] == "passed"
+    assert report["read_only"] is True
+    assert report["uploads_performed"] is False
+    assert report["registry_writes_performed"] is False
+    row = report["rows"][0]
+    assert row["model_id"] == "demo_model"
+    assert {item["path"] for item in row["files"]} == {
+        "output/model_cache/demo_model/LICENSE",
+        "output/model_cache/demo_model/MODEL_CARD.md",
+    }
+    assert not (tmp_path / "output" / "model_registry_release").exists()
+    assert registry_path.read_bytes() == before
+
+
+def test_model_licensing_preflight_blocks_missing_rights_without_writing(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """A W&B-backed row without licensing evidence fails closed in read-only mode."""
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(
+        registry_path, _registry_text(tmp_path / "missing" / "model.zip", include_licensing=False)
+    )
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+    before = registry_path.read_bytes()
+
+    exit_code = publish_model_registry_release.main(
+        ["--registry-path", str(registry_path), "--validate-licensing"]
+    )
+
+    assert exit_code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "blocked"
+    assert any("licensing mapping is required" in issue for issue in report["issues"])
+    assert registry_path.read_bytes() == before
+    assert not (tmp_path / "output" / "model_registry_release").exists()
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks are unavailable")
+def test_model_licensing_preflight_rejects_symlinked_legal_file(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Legal evidence cannot be supplied through a symlinked repository path."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    license_path = model_path.parent / "LICENSE"
+    outside_license = tmp_path / "outside-LICENSE"
+    _write(outside_license, "MIT License\n")
+    license_path.unlink()
+    license_path.symlink_to(outside_license)
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_model_registry_release.main(
+        ["--registry-path", str(registry_path), "--validate-licensing"]
+    )
+
+    assert exit_code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert any("must not traverse symlinks" in issue for issue in report["issues"])
+
+
+def test_undeclared_licensing_is_reported_but_can_be_allowed_in_the_pr_gate(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """A row with no licensing mapping is a known rights gap, strict only outside the PR gate."""
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(
+        registry_path, _registry_text(tmp_path / "missing" / "model.zip", include_licensing=False)
+    )
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    strict_code = publish_model_registry_release.main(
+        ["--registry-path", str(registry_path), "--validate-licensing"]
+    )
+    strict_report = json.loads(capsys.readouterr().out)
+    allowed_code = publish_model_registry_release.main(
+        [
+            "--registry-path",
+            str(registry_path),
+            "--validate-licensing",
+            "--allow-undeclared-licensing",
+        ]
+    )
+    allowed_report = json.loads(capsys.readouterr().out)
+
+    assert strict_code == 2
+    assert allowed_code == 0
+    assert allowed_report["status"] == "blocked"
+    assert strict_report["undeclared_licensing_issues"]
+    assert allowed_report["undeclared_licensing_issues"]
+    assert allowed_report["invalid_licensing_evidence_issues"] == []
+
+
+def test_invalid_declared_licensing_evidence_still_fails_the_pr_gate(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    """Declared licensing whose legal file is missing cannot be waived by the PR-gate flag."""
+    model_path = tmp_path / "output" / "model_cache" / "demo_model" / "model.zip"
+    _write(model_path, b"checkpoint")
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(model_path))
+    (model_path.parent / "LICENSE").unlink()
+    monkeypatch.setattr(publish_model_registry_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_model_registry_release.main(
+        [
+            "--registry-path",
+            str(registry_path),
+            "--validate-licensing",
+            "--allow-undeclared-licensing",
+        ]
+    )
+
+    assert exit_code == 2
+    report = json.loads(capsys.readouterr().out)
+    assert report["invalid_licensing_evidence_issues"]
+    assert any("does not exist" in issue for issue in report["invalid_licensing_evidence_issues"])
+
+
+def test_allow_undeclared_licensing_requires_the_preflight_mode(tmp_path: Path) -> None:
+    """The PR-gate waiver cannot leak into the publication path."""
+    registry_path = tmp_path / "model" / "registry.yaml"
+    _write(registry_path, _registry_text(tmp_path / "missing" / "model.zip"))
+
+    with pytest.raises(SystemExit) as exc:
+        publish_model_registry_release.main(
+            [
+                "--registry-path",
+                str(registry_path),
+                "--tag",
+                "artifact/models-fixture",
+                "--allow-undeclared-licensing",
+            ]
+        )
+
+    assert exc.value.code == 2

@@ -16,6 +16,49 @@ if [ -f "$REPO_ROOT/.venv/bin/activate" ]; then
   source "$REPO_ROOT/.venv/bin/activate"
 fi
 
+# Verify that a selected worktree environment contains the declared profile before
+# a docs-proof entry point invokes `uv run`. A lightweight `uv run` in a fresh
+# worktree can create a Python-only `.venv`; later `UV_NO_SYNC=1` consumers then
+# fail with an opaque import error. Keep the check import-spec-only and fail with
+# the one supported recovery command instead of silently repairing or selecting a
+# different environment.
+preflight_check_worktree_dependency_profile() {
+  local profile="${1:-core}"
+  local venv_root
+  if [[ -d "$REPO_ROOT/.venv" || -L "$REPO_ROOT/.venv" ]]; then
+    venv_root="$REPO_ROOT/.venv"
+  elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    venv_root="$VIRTUAL_ENV"
+  else
+    printf "ERROR: worktree dependency profile '%s' has no initialized virtualenv.\n" "$profile" >&2
+    printf 'Run `cd %q && scripts/dev/bootstrap_worktree.sh`, then rerun this command.\n' \
+      "$REPO_ROOT" >&2
+    return 2
+  fi
+
+  if [[ "$venv_root" != /* ]]; then
+    venv_root="$REPO_ROOT/$venv_root"
+  fi
+  if [[ ! -x "$venv_root/bin/python" ]]; then
+    printf "ERROR: worktree dependency profile '%s' cannot use incomplete virtualenv: %s\n" \
+      "$profile" "$venv_root" >&2
+    printf 'Run `cd %q && scripts/dev/bootstrap_worktree.sh`, then rerun this command.\n' \
+      "$REPO_ROOT" >&2
+    return 2
+  fi
+
+  local report
+  if ! report="$("$venv_root/bin/python" \
+    "$REPO_ROOT/scripts/dev/check_worktree_optional_deps.py" \
+    --profile "$profile" 2>&1)"; then
+    printf "ERROR: worktree dependency profile '%s' is incomplete in %s.\n" "$profile" "$venv_root" >&2
+    printf '%s\n' "$report" >&2
+    printf 'Run `cd %q && scripts/dev/bootstrap_worktree.sh`, then rerun this command.\n' \
+      "$REPO_ROOT" >&2
+    return 2
+  fi
+}
+
 # Resolve the absolute path to a codex-agent-runs artifact subdirectory under
 # the shared Git common directory.  In a linked worktree `.git` is a file, so
 # writing to a literal `.git/codex-agent-runs/...` path fails.  This function

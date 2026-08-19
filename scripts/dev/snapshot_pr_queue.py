@@ -20,6 +20,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_name,
     _rollup_status,
 )
+from scripts.dev.github_graphql_retry import run_with_retry
 from scripts.dev.pr_loop_policy import BASE_POLICY_RE, GATE_VERDICT_RE
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
@@ -286,6 +287,8 @@ def _rest_fallback_row_error(
     *,
     error_kind: str,
     error: str,
+    data_source: str = "rest_fallback_graphql_quota",
+    review_threads: str = "unknown_graphql_quota",
 ) -> dict[str, Any]:
     """Return a fail-closed row while preserving REST route provenance."""
     return {
@@ -293,9 +296,9 @@ def _rest_fallback_row_error(
         "status": "error",
         "error_kind": error_kind,
         "error": error,
-        "data_source": "rest_fallback_graphql_quota",
+        "data_source": data_source,
         "route_evidence_only": True,
-        "review_threads": "unknown_graphql_quota",
+        "review_threads": review_threads,
         "review_threads_admission": "fail_closed_unknown",
     }
 
@@ -551,20 +554,33 @@ def _fetch_pr_rest(
     repo: str,
     expected_head_sha: str,
     current_main_sha: str = "",
+    fallback_kind: str = "quota",
+    fallback_diagnostic: str = "",
 ) -> dict[str, Any]:
-    """Build a compact PR snapshot from REST endpoints when GraphQL quota is exhausted.
+    """Build a compact PR snapshot from REST after a GraphQL read fails.
 
     Maps REST pull/reviews/comments/check-runs payloads into the gh-JSON shape consumed by
     ``_pr_payload_from_dict`` so the normal compacting logic is reused unchanged. Review threads
-    are GraphQL-only and have no REST endpoint, so the snapshot marks them
-    ``unknown_graphql_quota`` with a fail-closed admission note (issue #6564).
+    are GraphQL-only and have no REST endpoint, so the snapshot marks them unknown with a
+    fail-closed admission note (issue #6564 and #7371).
     """
+    transient = fallback_kind == "transient_exhausted"
+    data_source = "rest_fallback_graphql_transient" if transient else "rest_fallback_graphql_quota"
+    review_thread_status = "unknown_graphql_transient" if transient else "unknown_graphql_quota"
+    error_kind = "graphql_transient_exhausted" if transient else "graphql_quota_exhausted"
+    failure = (
+        "GraphQL transient retry budget exhausted and REST pull fallback failed"
+        if transient
+        else "GraphQL quota exhausted and REST pull fallback failed"
+    )
     pull = _rest_api_get(f"pulls/{number}", repo=repo)
     if not isinstance(pull, dict):
         return _rest_fallback_row_error(
             number,
-            error_kind="graphql_quota_exhausted",
-            error="GraphQL quota exhausted and REST pull fallback failed",
+            error_kind=error_kind,
+            error=f"{failure}; {fallback_diagnostic}" if fallback_diagnostic else failure,
+            data_source=data_source,
+            review_threads=review_thread_status,
         )
     head = pull.get("head")
     if not isinstance(head, dict) or not isinstance(head.get("sha"), str) or not head.get("sha"):
@@ -572,6 +588,8 @@ def _fetch_pr_rest(
             number,
             error_kind="rest_payload_malformed",
             error="REST pull response did not contain a non-empty head SHA",
+            data_source=data_source,
+            review_threads=review_thread_status,
         )
     base = pull.get("base")
     head_sha = head["sha"]
@@ -589,6 +607,7 @@ def _fetch_pr_rest(
         "url": str(pull.get("html_url", "") or ""),
         "headRefName": str(head.get("ref", "") or ""),
         "headRefOid": head_sha,
+        "merged_at": pull.get("merged_at"),
         "mergeable": str(pull.get("mergeable_state", "unknown") or "unknown").upper(),
         "statusCheckRollup": rollup,
         "reviews": reviews,
@@ -601,13 +620,14 @@ def _fetch_pr_rest(
         default_number=number,
         expected_head_sha=expected_head_sha,
     )
-    payload["data_source"] = "rest_fallback_graphql_quota"
+    payload["data_source"] = data_source
+    payload["graphql_fallback_diagnostic"] = fallback_diagnostic
     payload["rest_enrichment"] = {
         "reviews": reviews_status,
         "comments": comments_status,
         "checks": checks_status,
     }
-    payload["review_threads"] = "unknown_graphql_quota"
+    payload["review_threads"] = review_thread_status
     payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
     preflight = payload.get("preflight")
@@ -616,11 +636,12 @@ def _fetch_pr_rest(
         for endpoint, status in payload["rest_enrichment"].items():
             if status != "ok" and isinstance(reasons, list):
                 reasons.append(f"rest_{endpoint}_{status}")
-        if isinstance(reasons, list) and "review_threads_unknown_graphql_quota" not in reasons:
-            reasons.append("review_threads_unknown_graphql_quota")
+        reason = f"review_threads_{review_thread_status}"
+        if isinstance(reasons, list) and reason not in reasons:
+            reasons.append(reason)
         preflight["status"] = "blocked"
         preflight["rest_enrichment"] = payload["rest_enrichment"]
-        preflight["review_threads"] = "unknown_graphql_quota"
+        preflight["review_threads"] = review_thread_status
         preflight["review_threads_admission"] = "fail_closed_unknown"
     payload["next_action"] = "inspect_blocking_preflight"
     payload["attention"] = "preflight_attention"
@@ -632,7 +653,65 @@ def _dict_or_empty(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _review_thread_snapshot(
+def _validated_review_thread_payload(
+    payload: Any,
+) -> tuple[list[dict[str, Any]] | None, int | None, str, str, bool]:
+    """Validate a GraphQL review-thread response before compacting it."""
+    if not isinstance(payload, dict):
+        return None, None, "error", "GraphQL response is not an object", False
+    errors = payload.get("errors")
+    if isinstance(errors, list) and errors:
+        messages = [
+            str(error.get("message") or error) if isinstance(error, dict) else str(error)
+            for error in errors
+        ]
+        return None, None, "error", "; ".join(messages) or "GraphQL returned errors", False
+
+    data = payload.get("data")
+    repository = data.get("repository") if isinstance(data, dict) else None
+    pull_request = repository.get("pullRequest") if isinstance(repository, dict) else None
+    threads = pull_request.get("reviewThreads") if isinstance(pull_request, dict) else None
+    if not isinstance(threads, dict):
+        return (
+            None,
+            None,
+            "incomplete",
+            "reviewThreads response is missing or malformed; refusing a thread-free result",
+            False,
+        )
+
+    nodes_value = threads.get("nodes")
+    total_value = threads.get("totalCount")
+    page_info = threads.get("pageInfo")
+    has_next_page = page_info.get("hasNextPage") if isinstance(page_info, dict) else None
+    complete_shape = (
+        isinstance(nodes_value, list)
+        and all(isinstance(node, dict) for node in nodes_value)
+        and type(total_value) is int
+        and total_value >= 0
+        and type(has_next_page) is bool
+    )
+    if not complete_shape:
+        return (
+            None,
+            None,
+            "incomplete",
+            "reviewThreads response is incomplete; refusing a thread-free result",
+            False,
+        )
+    nodes = nodes_value
+    if has_next_page or total_value != len(nodes):
+        return (
+            nodes,
+            total_value,
+            "incomplete",
+            "reviewThreads response is paginated or incomplete; refusing a thread-free result",
+            True,
+        )
+    return nodes, total_value, "ok", "", False
+
+
+def _review_thread_snapshot(  # noqa: C901 - explicit retry and incomplete-response branches.
     pr_number: int,
     *,
     repo: str,
@@ -647,6 +726,7 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
     pullRequest(number:$number){
       reviewThreads(first:$threads){
         totalCount
+        pageInfo{hasNextPage}
         nodes{
           id
           isResolved
@@ -666,7 +746,8 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
   }
 }
 """
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "api",
             "graphql",
@@ -685,6 +766,7 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
         ],
         timeout=45,
     )
+    result = retry.result
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
@@ -696,6 +778,16 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
                     "refreshed via REST. Never admit a PR to merge-ready from this snapshot."
                 ),
             }
+        if retry.exhausted:
+            return {
+                "status": "unknown_graphql_transient",
+                "unresolved": None,
+                "retry_diagnostic": retry.terminal_diagnostic,
+                "guidance": (
+                    f"{retry.terminal_diagnostic}; review threads are GraphQL-only and cannot be "
+                    "refreshed via REST. Never admit a PR to merge-ready from this snapshot."
+                ),
+            }
         return {
             "status": "error",
             "error": stderr or f"gh returned exit code {result.returncode}",
@@ -704,11 +796,20 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         return {"status": "error", "error": f"invalid gh JSON: {exc}"}
-    data = _dict_or_empty(payload.get("data"))
-    repository = _dict_or_empty(data.get("repository"))
-    pull_request = _dict_or_empty(repository.get("pullRequest"))
-    threads = _dict_or_empty(pull_request.get("reviewThreads"))
-    nodes = [node for node in threads.get("nodes", []) or [] if isinstance(node, dict)]
+    nodes, total, payload_status, payload_error, contains_more = _validated_review_thread_payload(
+        payload
+    )
+    if payload_status != "ok" or nodes is None or total is None:
+        response: dict[str, Any] = {
+            "status": payload_status,
+            "unresolved": None,
+            "error": payload_error,
+        }
+        if total is not None:
+            response["total"] = total
+        if contains_more:
+            response["contains_more"] = True
+        return response
     compact_threads: list[dict[str, Any]] = []
     unresolved_count = 0
     for node in nodes:
@@ -740,7 +841,6 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
                 "diff_hunk_omitted": True,
             }
         )
-    total = int(threads.get("totalCount", len(nodes)) or 0)
     return {
         "status": "ok",
         "total": total,
@@ -1069,6 +1169,7 @@ def _pr_payload_from_dict(
         "status": "ok",
         "title": title,
         "state": pr.get("state", ""),
+        "merged_at": pr.get("merged_at") or pr.get("mergedAt"),
         "draft": is_draft,
         "url": pr.get("url", ""),
         "labels": labels,
@@ -1123,17 +1224,21 @@ def fetch_pr(
     expected_head_sha: str = "",
 ) -> dict[str, Any]:
     """Fetch one PR and return a compact queue snapshot."""
-    result = _gh(
-        [
-            "pr",
-            "view",
-            str(number),
-            "--repo",
-            repo,
-            "--json",
-            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
-        ]
+    args = [
+        "pr",
+        "view",
+        str(number),
+        "--repo",
+        repo,
+        "--json",
+        "number,title,body,state,mergedAt,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+    ]
+    retry = run_with_retry(
+        _gh,
+        args,
+        timeout=30,
     )
+    result = retry.result
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
@@ -1142,6 +1247,15 @@ def fetch_pr(
                 repo=repo,
                 expected_head_sha=expected_head_sha,
                 current_main_sha=current_main_sha,
+            )
+        if retry.exhausted:
+            return _fetch_pr_rest(
+                number,
+                repo=repo,
+                expected_head_sha=expected_head_sha,
+                current_main_sha=current_main_sha,
+                fallback_kind="transient_exhausted",
+                fallback_diagnostic=retry.terminal_diagnostic,
             )
         return {
             "number": number,
@@ -1189,9 +1303,11 @@ def _active_snapshot_envelope(
     }
     if data_source:
         payload["data_source"] = data_source
-        if data_source == "rest_fallback_graphql_quota":
+        if data_source.startswith("rest_fallback_graphql_"):
+            transient = data_source == "rest_fallback_graphql_transient"
+            review_threads = "unknown_graphql_transient" if transient else "unknown_graphql_quota"
             payload["route_evidence_only"] = True
-            payload["review_threads"] = "unknown_graphql_quota"
+            payload["review_threads"] = review_threads
             payload["review_threads_admission"] = "fail_closed_unknown"
     return payload
 
@@ -1201,15 +1317,17 @@ def _active_rest_fallback_error(
     repo: str,
     error: str,
     error_kind: str = "graphql_quota_exhausted",
+    data_source: str = "rest_fallback_graphql_quota",
+    review_threads: str = "unknown_graphql_quota",
 ) -> dict[str, Any]:
     """Return a bounded active-snapshot error for an unusable REST fallback."""
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,
         "mode": "active",
-        "data_source": "rest_fallback_graphql_quota",
+        "data_source": data_source,
         "route_evidence_only": True,
-        "review_threads": "unknown_graphql_quota",
+        "review_threads": review_threads,
         "review_threads_admission": "fail_closed_unknown",
         "truncated": False,
         "truncation_note": "",
@@ -1229,10 +1347,85 @@ def _active_rest_fallback_error(
     }
 
 
+def _snapshot_active_rest_fallback(
+    *,
+    repo: str,
+    limit: int,
+    current_main_sha: str,
+    fallback_kind: str,
+    fallback_diagnostic: str = "",
+) -> dict[str, Any]:
+    """Build an active snapshot through REST while preserving its failure provenance."""
+    transient = fallback_kind == "transient_exhausted"
+    data_source = "rest_fallback_graphql_transient" if transient else "rest_fallback_graphql_quota"
+    review_threads = "unknown_graphql_transient" if transient else "unknown_graphql_quota"
+    error_kind = "graphql_transient_exhausted" if transient else "graphql_quota_exhausted"
+    failure = (
+        "GraphQL transient retry budget exhausted and REST open-PR list fallback failed"
+        if transient
+        else "GraphQL quota exhausted and REST open-PR list fallback failed"
+    )
+    rest_listing = _rest_open_pr_list(repo=repo, limit=limit)
+    if rest_listing is None:
+        return _active_rest_fallback_error(
+            repo=repo,
+            error=f"{failure}; {fallback_diagnostic}" if fallback_diagnostic else failure,
+            error_kind=error_kind,
+            data_source=data_source,
+            review_threads=review_threads,
+        )
+
+    listed, truncated = rest_listing
+    prs: list[dict[str, Any]] = []
+    for listed_pr in listed:
+        number = listed_pr.get("number")
+        if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+            return _active_rest_fallback_error(
+                repo=repo,
+                error="REST active PR list contained a row without an integer number",
+                error_kind="rest_payload_malformed",
+                data_source=data_source,
+                review_threads=review_threads,
+            )
+        head = listed_pr.get("head")
+        head_sha = head.get("sha") if isinstance(head, dict) else ""
+        if not isinstance(head_sha, str) or not head_sha:
+            return _active_rest_fallback_error(
+                repo=repo,
+                error="REST active PR list contained a row without a non-empty head SHA",
+                error_kind="rest_payload_malformed",
+                data_source=data_source,
+                review_threads=review_threads,
+            )
+        prs.append(
+            _fetch_pr_rest(
+                number,
+                repo=repo,
+                expected_head_sha=head_sha,
+                current_main_sha=current_main_sha,
+                fallback_kind=fallback_kind,
+                fallback_diagnostic=fallback_diagnostic,
+            )
+        )
+    return _active_snapshot_envelope(
+        repo=repo,
+        prs=prs,
+        truncated=truncated,
+        truncation_note=(
+            "REST open-PR list may be capped: got "
+            f"{len(prs)} rows at --limit {limit}; raise --limit or paginate"
+            if truncated
+            else ""
+        ),
+        data_source=data_source,
+    )
+
+
 def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     """Return a compact active PR queue snapshot."""
     current_main_sha = _fetch_current_main_sha(repo=repo)
-    result = _gh(
+    retry = run_with_retry(
+        _gh,
         [
             "pr",
             "list",
@@ -1243,56 +1436,28 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "--limit",
             str(limit),
             "--json",
-            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
-        ]
+            "number,title,body,state,mergedAt,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+        ],
+        timeout=30,
     )
+    result = retry.result
 
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
-            rest_listing = _rest_open_pr_list(repo=repo, limit=limit)
-            if rest_listing is not None:
-                listed, truncated = rest_listing
-                prs: list[dict[str, Any]] = []
-                for listed_pr in listed:
-                    number = listed_pr.get("number")
-                    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
-                        return _active_rest_fallback_error(
-                            repo=repo,
-                            error_kind="rest_payload_malformed",
-                            error="REST active PR list contained a row without an integer number",
-                        )
-                    head = listed_pr.get("head")
-                    head_sha = head.get("sha") if isinstance(head, dict) else ""
-                    if not isinstance(head_sha, str) or not head_sha:
-                        return _active_rest_fallback_error(
-                            repo=repo,
-                            error_kind="rest_payload_malformed",
-                            error="REST active PR list contained a row without a non-empty head SHA",
-                        )
-                    prs.append(
-                        _fetch_pr_rest(
-                            number,
-                            repo=repo,
-                            expected_head_sha=head_sha,
-                            current_main_sha=current_main_sha,
-                        )
-                    )
-                return _active_snapshot_envelope(
-                    repo=repo,
-                    prs=prs,
-                    truncated=truncated,
-                    truncation_note=(
-                        "REST open-PR list may be capped: got "
-                        f"{len(prs)} rows at --limit {limit}; raise --limit or paginate"
-                        if truncated
-                        else ""
-                    ),
-                    data_source="rest_fallback_graphql_quota",
-                )
-            return _active_rest_fallback_error(
+            return _snapshot_active_rest_fallback(
                 repo=repo,
-                error="GraphQL quota exhausted and REST open-PR list fallback failed",
+                limit=limit,
+                current_main_sha=current_main_sha,
+                fallback_kind="quota",
+            )
+        if retry.exhausted:
+            return _snapshot_active_rest_fallback(
+                repo=repo,
+                limit=limit,
+                current_main_sha=current_main_sha,
+                fallback_kind="transient_exhausted",
+                fallback_diagnostic=retry.terminal_diagnostic,
             )
         return _active_snapshot_envelope(
             repo=repo,

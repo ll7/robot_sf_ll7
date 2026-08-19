@@ -1,0 +1,10 @@
+{
+  "episode_count": 5184,
+  "evidence_boundary": "full fixed-scope internal simulator-fidelity sensitivity result; not simulator-realism, sim-to-real, physical-platform, or paper-facing evidence",
+  "execute_exit_code": 0,
+  "primary_metric": "snqi",
+  "rank_identifiability_reason": null,
+  "rank_identifiable": true,
+  "rank_stable": true,
+  "schema_version": "issue3207-fixed-scope-outcome.v1"
+}

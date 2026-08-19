@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.dev.merge_queue_gate import (
+    CI_PATHS_IGNORE_PATTERNS,
+    _format_summary,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
     fetch_pr_snapshot,
@@ -25,6 +27,35 @@ def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> 
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
+def _exact_changed_coverage_response(
+    *, head_sha: str = FULL_SHA, status: str = "completed", conclusion: str | None = "success"
+) -> MagicMock:
+    """Build the exact-head REST check-run response used by live gate fixtures."""
+    return _gh_response(
+        stdout=json.dumps(
+            {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "id": 7001,
+                        "name": "changed-coverage-gate",
+                        "head_sha": head_sha,
+                        "status": status,
+                        "conclusion": conclusion,
+                        "started_at": "2026-08-18T01:00:00Z",
+                        "completed_at": "2026-08-18T01:01:00Z" if status == "completed" else None,
+                    }
+                ],
+            }
+        )
+    )
+
+
+def _changed_files_response(*filenames: str) -> MagicMock:
+    """Build a REST pull-files response for missing-proof scope tests."""
+    return _gh_response(stdout=json.dumps([{"filename": filename} for filename in filenames]))
+
+
 def _raw_pr(
     *,
     body: str = "",
@@ -39,7 +70,14 @@ def _raw_pr(
         "isDraft": False,
         "headRefOid": FULL_SHA,
         "labels": [{"name": "merge-ready"}],
-        "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+        "statusCheckRollup": [
+            {"status": "COMPLETED", "conclusion": "SUCCESS"},
+            {
+                "name": "changed-coverage-gate",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
         "comments": [
             {
                 "body": metadata_trailer(metadata_digest("merge queue test PR", "final body")),
@@ -97,6 +135,7 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr())),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -144,6 +183,7 @@ def test_fetch_pr_snapshot_records_outstanding_requested_reviewer() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -176,6 +216,7 @@ def test_fetch_pr_snapshot_ignores_superseded_failed_check_run() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -208,6 +249,7 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -246,11 +288,193 @@ def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
     assert error is None
     assert snapshot["checks"] == {"overall": expected}
+
+
+def test_fetch_pr_snapshot_binds_changed_coverage_to_exact_head() -> None:
+    """A passing coverage check on a later or unrelated SHA cannot prove this head."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(head_sha="b" * 40),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["changed_coverage"]["status"] == "stale"
+    audit = evaluate_merge_gate(snapshot, main_sha="base_sha", threads_resolved=True)
+    assert audit.passed is False
+    assert "changed_coverage_proof_stale" in audit.reasons
+
+
+def test_fetch_pr_snapshot_requires_a_changed_coverage_check() -> None:
+    """A missing proof remains a blocker when a non-ignored file changed."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+            _changed_files_response("scripts/dev/merge_queue_gate.py"),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["changed_coverage"]["status"] == "missing"
+    assert snapshot["changed_coverage"]["changed_files_complete"] is True
+    audit = evaluate_merge_gate(snapshot, main_sha="base_sha", threads_resolved=True)
+    assert audit.passed is False
+    assert "changed_coverage_proof_missing" in audit.reasons
+
+
+def test_fetch_pr_snapshot_accepts_complete_docs_only_scope_without_check() -> None:
+    """A skipped CI workflow is explainable only for its exact ignored paths."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+            _changed_files_response(
+                "README.md",
+                "docs/dev_guide.md",
+                ".agents/skills/example/SKILL.md",
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha="base_sha",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.changed_coverage_status == "not_required"
+    assert audit.changed_coverage_head_sha == ""
+
+
+def test_evaluate_merge_gate_requires_complete_scope_for_docs_only_bypass() -> None:
+    """An unproven or mixed changed-file set cannot satisfy missing coverage."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {
+                "status": "missing",
+                "head_sha": FULL_SHA,
+                "changed_files": ["README.md"],
+                "changed_files_complete": False,
+            },
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "missing"
+    assert "changed_coverage_proof_missing" in audit.reasons
+
+
+def test_evaluate_merge_gate_does_not_trust_unproven_not_required_status() -> None:
+    """The bypass status itself is not evidence of a docs-only changed set."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {
+                "status": "not_required",
+                "changed_files": ["../README.md"],
+                "changed_files_complete": True,
+            },
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "unknown"
+    assert "changed_coverage_proof_unknown" in audit.reasons
+
+
+def test_fetch_pr_snapshot_rejects_incomplete_exact_head_check_runs() -> None:
+    """A paginated check-run response cannot silently omit a newer proof."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr())),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "total_count": 2,
+                        "check_runs": [
+                            {
+                                "id": 7001,
+                                "name": "changed-coverage-gate",
+                                "head_sha": FULL_SHA,
+                                "status": "completed",
+                                "conclusion": "success",
+                            }
+                        ],
+                    }
+                )
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "incomplete" in error
+
+
+def test_evaluate_merge_gate_accepts_current_changed_coverage_proof() -> None:
+    """A successful changed-coverage check must bind to the evaluated PR head."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.changed_coverage_status == "success"
+    assert audit.changed_coverage_head_sha == FULL_SHA
 
 
 def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
@@ -304,6 +528,14 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "exit 0" in workflow
 
 
+def test_docs_only_bypass_matches_ci_workflow_path_filters() -> None:
+    """The gate's exemption cannot drift from the workflow that skips CI."""
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    for pattern in CI_PATHS_IGNORE_PATTERNS:
+        assert f'      - "{pattern}"' in workflow
+
+
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
 def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) -> None:
     """Accepted trailers after compact-body truncation remain available to the live gate."""
@@ -315,6 +547,7 @@ def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) ->
                 stdout=json.dumps(_raw_pr(body=f"{long_prefix}\n\n{trailer}", carrier=carrier))
             ),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -336,6 +569,7 @@ def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(carrier: str) 
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -423,6 +657,22 @@ def test_fetch_threads_resolved_rejects_partial_graphql_errors() -> None:
     assert resolved_state is None
     assert error is not None
     assert "incomplete" in error
+
+
+def test_fetch_threads_resolved_retries_transient_graphql_and_fails_closed() -> None:
+    """The merge gate never treats an exhausted GraphQL outage as thread-free."""
+    with (
+        patch(
+            "scripts.dev.merge_queue_gate._gh",
+            side_effect=[_gh_response(returncode=1, stderr="HTTP 503 Service Unavailable")] * 3,
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        resolved_state, error = fetch_threads_resolved(42, repo="owner/repo")
+
+    assert resolved_state is None
+    assert error is not None
+    assert "after 3 attempts" in error
 
 
 @pytest.mark.parametrize(
@@ -576,6 +826,7 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -608,6 +859,7 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -655,6 +907,7 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _exact_changed_coverage_response(),
             _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
@@ -674,6 +927,7 @@ def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> No
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _exact_changed_coverage_response(),
             _gh_response(returncode=1, stderr="main ref unavailable"),
         ]
         exit_code = main(["--pr", "42", "--repo", "owner/repo"])
@@ -716,3 +970,177 @@ def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
 
     assert excinfo.value.code == 2
     assert "--advisory is valid only with --pr" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "stale_body, expected_sentinel",
+    [
+        (
+            "The PR remains unapproved and not merge-ready pending independent exact-head review and current hosted checks.",
+            "not merge-ready",
+        ),
+        (
+            "This branch remains unapproved pending independent review.",
+            "remains unapproved",
+        ),
+        (
+            "WIP: do not merge yet.",
+            "do not merge",
+        ),
+        (
+            "The change is unapproved and not merge-ready.",
+            "unapproved and not merge-ready",
+        ),
+    ],
+)
+def test_evaluate_merge_gate_fails_closed_on_stale_not_ready_body_narrative(
+    stale_body: str,
+    expected_sentinel: str,
+) -> None:
+    """A merge-ready PR carrying unapproved/not-ready narrative sentinels fails closed."""
+    title = "fix: valid title"
+    digest = metadata_digest(title, stale_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": stale_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is False
+    assert "stale_not_ready_body_narrative" in audit.reasons
+    assert audit.body_narrative_status == "stale"
+    assert any(expected_sentinel.lower() in s.lower() for s in audit.body_not_ready_sentinels)
+
+
+def test_evaluate_merge_gate_passes_with_clean_body_narrative() -> None:
+    """A merge-ready PR carrying clean reconciliation narrative passes the gate."""
+    title = "fix: valid title"
+    clean_body = (
+        "## Summary\n\nAll review comments addressed and PR verified ready.\n\n"
+        f"pr-metadata: reconciled @ {metadata_digest(title, 'clean')}"
+    )
+    digest = metadata_digest(title, clean_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": clean_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.reasons == []
+    assert audit.body_narrative_status == "clean"
+    assert audit.body_not_ready_sentinels == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: stacked ancestry fails the merge gate closed
+# ---------------------------------------------------------------------------
+
+
+def _gate_ready_pr(**overrides: object) -> dict[str, object]:
+    """Build a PR snapshot that otherwise passes every merge-gate dimension."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    payload: dict[str, object] = {
+        "number": 42,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "draft": False,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        "metadata_digest": metadata,
+        "metadata_verdicts": [metadata_trailer(metadata)],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_stacked_ancestry_fails_gate_closed() -> None:
+    """A stacked-not-independently-mergeable PR must never pass the merge gate."""
+    for state in (
+        "undeclared_stack",
+        "mismatched_declaration",
+        "parent_invalidated",
+        "stacked",
+        "parent_merged",
+    ):
+        audit = evaluate_merge_gate(
+            _gate_ready_pr(ancestry={"state": state}),
+            main_sha=FULL_SHA,
+            threads_resolved=True,
+            reviewers_requested=False,
+        )
+
+        assert audit.passed is False, state
+        assert audit.ancestry_state == state
+        assert "stacked_ancestry_not_independently_mergeable" in audit.reasons
+
+
+def test_clean_ancestry_passes_gate() -> None:
+    """A clean ancestry block leaves the otherwise-ready PR mergeable."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(ancestry={"state": "clean"}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.ancestry_state == "clean"
+    assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+def test_missing_ancestry_block_is_not_evaluated() -> None:
+    """Legacy snapshots without an ancestry block keep the pre-gate verdict."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is True
+    assert audit.ancestry_state == ""
+    assert "stacked_ancestry_not_independently_mergeable" not in audit.reasons
+
+
+def test_audit_summary_records_ancestry_state(capsys) -> None:
+    """The human summary surfaces the evaluated ancestry state."""
+    audit = evaluate_merge_gate(
+        _gate_ready_pr(ancestry={"state": "stacked"}),
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    summary = _format_summary(audit)
+    assert "ancestry state: `stacked`" in summary
+    assert "stacked_ancestry_not_independently_mergeable" in summary

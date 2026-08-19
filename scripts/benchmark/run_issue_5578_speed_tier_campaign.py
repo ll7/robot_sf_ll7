@@ -1540,7 +1540,7 @@ def _run_native_batch(
     resume: bool,
 ) -> dict[str, Any]:
     """Invoke the canonical map runner; this seam is intentionally testable."""
-    from robot_sf.benchmark.map_runner import run_map_batch
+    from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
     return run_map_batch(
         scenarios,
@@ -1638,7 +1638,7 @@ def _campaign_command_environment_manifest(manifest: CampaignManifest) -> dict[s
             "--authorized-full-run --authorization-issue 6102"
         ),
         "entrypoint": "scripts/benchmark/run_issue_5578_speed_tier_campaign.py",
-        "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+        "runner": "robot_sf.benchmark.map_runner.map_runner.run_map_batch",
         "scenario_matrix": _repo_rel(CAMPAIGN_SCENARIO_MATRIX),
         "episode_schema": _repo_rel(EPISODE_SCHEMA_PATH),
         "planner_configs": sorted(

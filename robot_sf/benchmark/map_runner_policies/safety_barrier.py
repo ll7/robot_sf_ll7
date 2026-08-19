@@ -3,7 +3,7 @@
 Second slice of the ``_build_policy`` decomposition (#3384). Behavior is a
 faithful move of the original ``if algo_key == "safety_barrier"`` and
 ``if algo_key == "grid_route"`` branches from
-``robot_sf.benchmark.map_runner`` — no semantic change.
+``robot_sf.benchmark.map_runner.map_runner`` — no semantic change.
 
 Both branches construct an adapter and delegate to the shared
 ``build_adapter_policy`` helper in ``map_runner_policy_common``.

@@ -646,3 +646,210 @@ def test_cli_json_status_error_is_machine_readable(monkeypatch, capsys) -> None:
 
     assert main(["status", "--repo", "owner/repo", "--prs", "1", "--json"]) == 1
     assert json.loads(capsys.readouterr().out)["error"] == "fixture"
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: check-ancestry gate
+# ---------------------------------------------------------------------------
+
+
+def _ancestry_payload(
+    pr_number: int,
+    *,
+    head_ref: str,
+    head_sha: str,
+    base_ref: str,
+    body: str = "",
+) -> dict[str, Any]:
+    """Build a REST pull payload for check-ancestry fixture tests."""
+    return {
+        "number": pr_number,
+        "title": f"feat: ancestry {pr_number}",
+        "body": body,
+        "state": "open",
+        "merged": False,
+        "draft": False,
+        "head": {"ref": head_ref, "sha": head_sha},
+        "base": {"ref": base_ref, "sha": "b" * 40},
+    }
+
+
+def _ancestry_git_runner(tmp_path: Path) -> Any:
+    """Build a fake git runner with a synthetic contaminated-history layout.
+
+    ``origin/main`` sits at ``b*40``; the child head ``c*40`` has a non-main
+    ancestry whose merge base is ``a*40`` and whose commits include a foreign
+    commit plus the branch's own commit.
+    """
+
+    def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["fetch", "--no-tags", "origin", "main"]:
+            return _completed(args)
+        if args == ["rev-parse", "refs/remotes/origin/main"]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["merge-base", "refs/remotes/origin/main", "c" * 40]:
+            return _completed(args, stdout="a" * 40 + "\n")
+        if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
+            return _completed(
+                args, stdout=f"{'f' * 7} foreign work (#7308)\n{'e' * 7} intended work\n"
+            )
+        if args[:2] == ["diff", "--name-only"]:
+            return _completed(args, stdout="robot_sf/foreign.py\nrobot_sf/own.py\n")
+        raise AssertionError(f"unexpected git call: {args}")
+
+    return fake_git
+
+
+def test_check_ancestry_classifies_undeclared_contamination_blocked(
+    monkeypatch, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A PR with undeclared non-main ancestry fails closed (issue #7515)."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/1"):
+            return _ancestry_payload(
+                1,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body="no declaration",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="1",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "undeclared_stack"
+    assert result["status"] == "blocked"
+    assert result["unexpected_commits"] == [
+        f"{'f' * 7} foreign work (#7308)",
+        f"{'e' * 7} intended work",
+    ]
+    assert result["unexpected_paths"] == ["robot_sf/foreign.py", "robot_sf/own.py"]
+    assert "remediation_command" in result
+
+
+def test_check_ancestry_classifies_clean_pr_ok(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A PR created from current main with only intended commits passes."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["fetch", "--no-tags", "origin", "main"]:
+            return _completed(args)
+        if args == ["rev-parse", "refs/remotes/origin/main"]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["merge-base", "refs/remotes/origin/main", "c" * 40]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
+            return _completed(args, stdout=f"{'e' * 7} intended work\n")
+        if args[:2] == ["diff", "--name-only"]:
+            return _completed(args, stdout="robot_sf/own.py\n")
+        raise AssertionError(f"unexpected git call: {args}")
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/2"):
+            return _ancestry_payload(
+                2,
+                head_ref="fix/clean",
+                head_sha="c" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="2",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=fake_git,
+    )
+
+    assert result["state"] == "clean"
+    assert result["status"] == "ok"
+
+
+def test_check_ancestry_classifies_declared_stack(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A declared stack is stacked (never independently mergeable), not blocked."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    declaration = f"## Stack Declaration\nparent_pr: #7308\nparent_head: {'a' * 40}\n"
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        if path.endswith("/pulls/3"):
+            return _ancestry_payload(
+                3,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body=declaration,
+            ), None
+        if path.endswith("/pulls/7308"):
+            return _ancestry_payload(
+                7308,
+                head_ref="fix/parent",
+                head_sha="a" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="3",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "stacked"
+    assert result["status"] == "ok"
+    assert result["classification"] == "stacked_not_independently_mergeable"
+    assert result["mergeable"] is False
+    assert any(path.endswith("/pulls/7308") for path in calls)
+
+
+def test_check_ancestry_invalidates_closed_unmerged_parent(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A closed-unmerged declared parent fails closed (issue #7515)."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    declaration = f"## Stack Declaration\nparent_pr: #7308\nparent_head: {'a' * 40}\n"
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/4"):
+            return _ancestry_payload(
+                4,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body=declaration,
+            ), None
+        if path.endswith("/pulls/7308"):
+            payload = _ancestry_payload(
+                7308,
+                head_ref="fix/parent",
+                head_sha="a" * 40,
+                base_ref="main",
+                body="",
+            )
+            payload["state"] = "closed"
+            payload["merged"] = False
+            return payload, None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="4",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "parent_invalidated"
+    assert result["status"] == "blocked"

@@ -533,7 +533,7 @@ def _check_artifact_qualified_readiness(
         # Lazy import: ``map_runner`` pulls in heavy training-time deps (TensorFlow/torch).
         # ``_ppo_paper_gate_status`` is the canonical, pure-Python paper-grade gate; importing
         # it lazily keeps the admission check fast for non-PPO arms.
-        from robot_sf.benchmark.map_runner import _ppo_paper_gate_status  # noqa: PLC0415
+        from robot_sf.benchmark.map_runner.map_runner import _ppo_paper_gate_status  # noqa: PLC0415
 
         gate_ok, gate_reason = _ppo_paper_gate_status(config)
         if not gate_ok:

@@ -161,7 +161,7 @@ def test_build_predictive_planner_algo_config_preserves_custom_schema_and_applie
 
 def test_prediction_planner_metadata_overrides_expose_search_and_uncertainty_modes() -> None:
     """Map-runner metadata should surface predictive planner mode selection explicitly."""
-    from robot_sf.benchmark.map_runner import _prediction_planner_metadata_overrides
+    from robot_sf.benchmark.map_runner.map_runner import _prediction_planner_metadata_overrides
 
     probabilistic = _prediction_planner_metadata_overrides(
         {

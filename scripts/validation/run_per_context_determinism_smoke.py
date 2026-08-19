@@ -24,7 +24,7 @@ from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 # Force thread pinning before any heavy benchmark / scientific imports
 THREAD_ENV = pin_thread_env_for_determinism()
 
-from robot_sf.benchmark.map_runner import run_map_batch  # noqa: E402
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch  # noqa: E402
 from robot_sf.benchmark.runner import load_scenario_matrix  # noqa: E402
 from robot_sf.benchmark.step_trace_comparator import (  # noqa: E402
     canonical_step_trace_digest,

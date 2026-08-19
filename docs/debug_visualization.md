@@ -61,17 +61,42 @@ To render one deterministic, diagnostic-only four-panel trace dossier from the s
 uv run python scripts/tools/render_trace_dossier.py \
   --trace tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
   --output output/debug/trace_dossier/dossier.png \
+  --svg output/debug/trace_dossier/dossier.svg \
+  --pdf output/debug/trace_dossier/dossier.pdf \
+  --caption output/debug/trace_dossier/caption.md \
   --manifest output/debug/trace_dossier/trace_dossier_manifest.json
 ```
 
 The dossier contains trajectory, speed profile, clearance-over-time, and event timeline panels.
-It only uses `simulation_trace_export.v1` frame fields. The manifest records the canonical
-`distance_convention` (`center_center` or `surface_clearance`) from the metrics specification.
+The command writes a PNG plus optional deterministic SVG, PDF, and Markdown caption outputs when
+the three publication paths are supplied together. It only uses `simulation_trace_export.v1` frame
+fields. The manifest records the canonical `distance_convention` (`center_center` or
+`surface_clearance`) from the metrics specification, the 10.0 x 7.2 inch figure size, and each
+output digest.
 When actor radii are absent, the clearance panel reports center-to-center distance and records that
 limitation in `trace_dossier_manifest.v1`; mixed radius metadata or missing planner events fail
 closed instead of inventing body-edge clearance or event annotations. The renderer is
 diagnostic/tooling-only and does not acquire traces,
 run simulation, or admit benchmark or paper-facing evidence.
+
+To compose one cell-bound package from existing release-pinned campaign artifacts, provide a JSON
+list of candidate cell rows containing the selector fields (`cell_id`, `verdict`, `label_strength`,
+`primary_order`, and `seed_id`) plus the campaign/episode identity:
+
+```bash
+uv run python scripts/tools/build_trace_dossier_package.py \
+  --candidates output/debug/trace_dossier/cell_candidates.json \
+  --release-manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml \
+  --campaign-store output/campaign_results/example \
+  --output-dir output/debug/trace_dossier/package
+```
+
+The package composes the deterministic representative selection, existing-trace export, cell
+binding, four-panel PNG/SVG/PDF render, Markdown caption, and recursive `SHA256SUMS` manifest. The candidate campaign identity
+must agree with the campaign-store study identity; missing or mismatched source identity/checksums
+fail closed. Candidate cell and verdict metadata remain supplied metadata rather than inferred
+outcomes. It is diagnostic-only metadata and does not acquire traces, run simulation, submit
+compute, or admit benchmark evidence.
 
 To generate reusable static trajectory panels and failure mosaics from the same trace-export
 format, run:

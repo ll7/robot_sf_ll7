@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,11 +11,6 @@ import pytest
 from scripts.dev import audit_benchmark_namespace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-# Current ``main`` includes the fixture-only figure-interpretation evaluator added by #7062;
-# this PR adds the result-interpretation packet module.
-# Keep this explicit so a new direct child fails the audit until it is
-# deliberately classified, rather than silently changing the inventory size.
-EXPECTED_DIRECT_CHILD_COUNT = 295
 
 
 @pytest.fixture(scope="module")
@@ -28,18 +24,39 @@ def test_current_namespace_is_complete_and_routes_fail_closed(
 ) -> None:
     """Every direct child is classified and no low-risk move is selected."""
     payload = inventory
+    rows = payload["direct_children"]
+    classified_rows = [row for row in rows if row["classification"]]
 
     assert payload["schema"] == "benchmark-namespace-residual-inventory.v1"
-    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
-    assert len(payload["direct_children"]) == payload["direct_child_count"]
-    assert len({row["name"] for row in payload["direct_children"]}) == EXPECTED_DIRECT_CHILD_COUNT
+    assert payload["direct_child_count"] == len(rows)
+    assert {row["name"] for row in classified_rows} == {row["name"] for row in rows}
+    assert len({row["name"] for row in rows}) == len(rows)
     assert payload["recommendation"]["code"] == "pause_no_low_risk_cluster"
     assert payload["import_cycle_ledger"]
     assert all(cycle == sorted(cycle) for cycle in payload["import_cycle_ledger"])
-    assert all(row["ownership"]["status"] for row in payload["direct_children"])
+    assert all(row["ownership"]["status"] for row in rows)
     assert payload["ownership_reconciliation"]["duplicate_ownership_check"] == "passed"
-    assert all(row["compatibility_action"] for row in payload["direct_children"])
+    assert all(row["compatibility_action"] for row in rows)
     assert payload["scope_boundary"]["production_moves"] is False
+
+
+def test_new_direct_child_requires_a_named_classification_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new child fails closed with its name until the manifest is updated."""
+    current_units = audit_benchmark_namespace._direct_units(REPO_ROOT)
+    current_units.append(
+        audit_benchmark_namespace.Unit(
+            name="synthetic_new_child.py",
+            path="robot_sf/benchmark/synthetic_new_child.py",
+            kind="module",
+            dotted="robot_sf.benchmark.synthetic_new_child",
+        )
+    )
+    monkeypatch.setattr(audit_benchmark_namespace, "_direct_units", lambda _: current_units)
+
+    with pytest.raises(audit_benchmark_namespace.InventoryError, match="synthetic_new_child.py"):
+        audit_benchmark_namespace.build_inventory(REPO_ROOT)
 
 
 def test_known_facades_and_clusters_are_classified(inventory: dict[str, object]) -> None:
@@ -64,6 +81,13 @@ def test_known_facades_and_clusters_are_classified(inventory: dict[str, object])
     assert rows["result_interpretation_packet.py"]["compatibility_action"] == (
         "no_compatibility_action"
     )
+    assert rows["trace_dossier_package.py"]["classification"] == (
+        "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
+    )
+    assert rows["trace_dossier_package.py"]["compatibility_action"] == ("no_compatibility_action")
+    assert rows["issue_5409_campaign_identity.py"]["classification"] == (
+        "cross_cutting_schema_evidence_readiness_artifact_metric_utility_surface"
+    )
     assert rows["__init__.py"]["classification"] == "canonical_top_level_facade_api"
 
 
@@ -78,6 +102,61 @@ def test_serialized_outputs_are_deterministic(inventory: dict[str, object]) -> N
     assert audit_benchmark_namespace.render_markdown(
         first
     ) == audit_benchmark_namespace.render_markdown(second)
+
+
+def test_detached_worktree_uses_explicit_reference(tmp_path: Path) -> None:
+    """A detached linked worktree still emits a complete fail-closed inventory."""
+    detached_root = tmp_path / "detached-worktree"
+    created = False
+    try:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(REPO_ROOT),
+                "worktree",
+                "add",
+                "--detach",
+                str(detached_root),
+                "HEAD",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        created = True
+        expected_commit = subprocess.run(
+            ["git", "-C", str(detached_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        json_path = tmp_path / "detached_namespace_inventory.json"
+        markdown_path = tmp_path / "detached_namespace_inventory.md"
+        result = audit_benchmark_namespace.main(
+            [
+                "--repo-root",
+                str(detached_root),
+                "--json",
+                str(json_path),
+                "--markdown",
+                str(markdown_path),
+            ]
+        )
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    finally:
+        if created:
+            subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "worktree", "remove", str(detached_root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+    assert result == 0
+    assert payload["source"]["ref"] == "DETACHED"
+    assert payload["source"]["commit"] == expected_commit
+    assert payload["recommendation"]["code"] == "pause_no_low_risk_cluster"
 
 
 def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
@@ -98,7 +177,50 @@ def test_cli_writes_json_and_markdown(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["direct_child_count"] == EXPECTED_DIRECT_CHILD_COUNT
+    assert payload["direct_child_count"] == len(payload["direct_children"])
     assert "# Benchmark namespace residual inventory (issue #7331)" in markdown_path.read_text(
         encoding="utf-8"
+    )
+
+
+def test_git_ref_probe_is_safe_for_detached_checkout(tmp_path: Path) -> None:
+    """The inventory records detached CI checkouts instead of aborting."""
+    repo = tmp_path / "detached-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "--quiet", "--initial-branch", "main"],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, timeout=30)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=contract-test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(["git", "checkout", "--quiet", "--detach", "HEAD"], cwd=repo, check=True)
+
+    assert (
+        audit_benchmark_namespace._git(
+            repo,
+            "symbolic-ref",
+            "--short",
+            "-q",
+            "HEAD",
+            check=False,
+        )
+        == ""
     )

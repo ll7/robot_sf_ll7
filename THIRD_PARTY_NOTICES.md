@@ -28,6 +28,8 @@ and source-distribution consumers can find the applicable notice.
 - Four retained upstream mesh-loading files carry Apache-2.0 headers; the exact
   override list is machine-readable in `third_party/socnavbench/LICENSING.yaml`,
   with the full Apache-2.0 text in `third_party/socnavbench/LICENSES/Apache-2.0.txt`.
+- The pinned upstream revision and vendored file scope are recorded in
+  `third_party/socnavbench/UPSTREAM.md` and checked against that manifest.
 
 ## Scope note
 

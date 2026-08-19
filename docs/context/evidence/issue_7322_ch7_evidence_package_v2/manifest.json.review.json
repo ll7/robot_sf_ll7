@@ -1,7 +1,7 @@
 {
+  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_7322_ch7_evidence_package_v2/manifest.json",
-  "artifact_sha256": "76964d46c86e62202fa8db6ff707388fbf4bb2b2864528ac4992a0a5a9f36d25",
-  "preserved_exact_bytes": true,
+  "artifact_sha256": "61e5a70a4459b742c7aed7a18818222666a752a5f99dc32ef5d7072c4e722aab",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "schema_version": "evidence-review-marker.v1"
+  "preserved_exact_bytes": true
 }

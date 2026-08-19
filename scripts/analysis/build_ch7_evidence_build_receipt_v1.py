@@ -49,7 +49,7 @@ DIAGNOSTIC_SCHEMA_VERSION = "ch7-evidence-admission-diagnostic.v1"
 EXPECTED_BLOCKERS = [
     "domain_approval_pending",
     "external_admission_receipt_required",
-    "metric_semantics_blocked_issue_7042",
+    "metric_semantics_excluded_issue_7042",
 ]
 
 

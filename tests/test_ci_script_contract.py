@@ -247,6 +247,7 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
             "PR_READY_SKIP_PREFLIGHT": "1",
             "PYTEST_DEBUG_TEMPROOT": "fixture",
             "TMPDIR": str(temp_root),
+            "COVERAGE_FILE": str(tmp_path / "coverage" / f"{name}.coverage"),
             "FIXTURE_OUTPUT": str(output),
             "FIXTURE_EXIT": str(pytest_exit),
         }
@@ -263,6 +264,35 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
         assert result.returncode == expected, (name, result.stdout, result.stderr)
         assert not list(temp_root.glob("pytest_run.*.log")), name
         assert not list(temp_root.glob("pytest_serial.*.log")), name
+
+    missing_coverage_env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "PYTEST_NUM_WORKERS": "1",
+        "PYTEST_FAST_FAIL": "0",
+        "PYTEST_ORDER_MODE": "none",
+        "PYTEST_SHARD_COUNT": "2",
+        "PYTEST_SHARD_INDEX": "1",
+        "ROBOT_SF_SHARD_INCLUDE_SLOW": "0",
+        "ROBOT_SF_PYTEST_COVERAGE": "1",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PYTEST_DEBUG_TEMPROOT": "fixture",
+        "TMPDIR": str(temp_root),
+        "FIXTURE_OUTPUT": str(output),
+        "FIXTURE_EXIT": "0",
+    }
+    missing_coverage_env.pop("COVERAGE_FILE", None)
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh")],
+        cwd=repo,
+        env=missing_coverage_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Sharded coverage requires a unique COVERAGE_FILE per shard." in result.stderr
 
 
 def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
@@ -1201,6 +1231,8 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
+    assert "--profile NAME" in help_result.stdout
+    assert "all-extras" in help_result.stdout
 
 
 def test_worktree_shared_venv_helper_fails_for_missing_shared_env(tmp_path: Path) -> None:
@@ -1774,6 +1806,8 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
         check=False,
     )
     tracked_branch = local_branch
+    if not tracked_branch:
+        tracked_branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", "")
     if upstream.returncode == 0 and "/" in upstream.stdout.strip():
         tracked_branch = upstream.stdout.strip().split("/", maxsplit=1)[1]
     assert len(call_lines) == 3
@@ -1781,6 +1815,84 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     assert "pulls/6529" in call_lines[1]
     assert "issues/6529/comments" in call_lines[2]
     assert all("gh pr" not in call for call in call_lines)
+
+
+def test_gh_comment_current_uses_event_ref_for_detached_checkout(tmp_path: Path) -> None:
+    """A detached CI checkout uses the event ref for REST lookup."""
+    repo = tmp_path / "detached-repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "init", "--quiet", "--initial-branch", "main"],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    (repo / "README.md").write_text("fixture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, timeout=30)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=contract-test",
+            "-c",
+            "user.email=contract-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "fixture",
+        ],
+        cwd=repo,
+        check=True,
+        timeout=30,
+    )
+    subprocess.run(["git", "checkout", "--quiet", "--detach", "HEAD"], cwd=repo, check=True)
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "gh-calls.txt"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -eu\n"
+        'printf \'%s\\n\' "$*" >> "$GH_COMMENT_CALLS"\n'
+        'if [[ "$*" == *state=open* ]]; then\n'
+        "  printf '%s\\n' '6529'\n"
+        "else\n"
+        "  printf '%s\\n' '{\"id\": 1, \"number\": 6529}'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+    body_file = tmp_path / "comment.md"
+    body_file.write_text("REST detached comment\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+    env["GH_COMMENT_CALLS"] = str(calls)
+    env.pop("GITHUB_HEAD_REF", None)
+    env["GITHUB_REF_NAME"] = "main"
+
+    result = subprocess.run(
+        [
+            str(GH_COMMENT),
+            "pr",
+            "--current",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--body-file",
+            str(body_file),
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert len(call_lines) == 3
+    assert "pulls?state=open&head=ll7:main" in call_lines[0]
 
 
 def test_gh_comment_current_falls_back_to_local_branch_without_upstream(tmp_path: Path) -> None:
@@ -3035,13 +3147,22 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
     ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "COVERAGE_CORE: sysmon" in ci_workflow_text
+    assert "COVERAGE_CORE:" in ci_workflow_text
+    assert "ctrace" in ci_workflow_text
+    assert "sysmon" in ci_workflow_text
     assert "--minimum-total 85.0" in ci_workflow_text
     assert "coverage combine output/coverage" in ci_workflow_text
-    assert (
-        "ROBOT_SF_PYTEST_COVERAGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}"
-        in ci_workflow_text
-    )
+    assert 'ROBOT_SF_PYTEST_COVERAGE: "1"' in ci_workflow_text
+    assert "changed-coverage-gate:" in ci_workflow_text
+    assert '--base-sha "$BASE_SHA"' in ci_workflow_text
+    assert '--head-sha "$HEAD_SHA"' in ci_workflow_text
+    assert "--json-output output/coverage/changed-coverage-result.json" in ci_workflow_text
+    assert "github.event.pull_request.base.sha" in ci_workflow_text
+    assert "github.event.pull_request.head.sha" in ci_workflow_text
+    assert "github.event.merge_group.base_sha" in ci_workflow_text
+    assert '"changed-coverage.v1"' in (
+        ROOT / "scripts" / "coverage" / "check_changed_files_coverage.py"
+    ).read_text(encoding="utf-8")
 
     assert "sysmon" in cov_guide_text
     assert "--minimum-total 85.0" in cov_guide_text
@@ -3050,4 +3171,6 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     assert "coverage-gate" in cov_guide_text
 
     assert "coverage-gate" in dev_guide_text
+    assert "changed-coverage-gate" in dev_guide_text
+    assert "changed-coverage.v1" in dev_guide_text
     assert "85.0%" in dev_guide_text or "85.0" in dev_guide_text

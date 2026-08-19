@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner import _build_env_config, _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_env_config, _build_policy
 from robot_sf.benchmark.predictive.predictive_planner_config import (
     build_predictive_planner_algo_config,
 )

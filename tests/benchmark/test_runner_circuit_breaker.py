@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
-from robot_sf.benchmark.map_runner_batch_runner import _serial_execute_map_jobs
+from robot_sf.benchmark.map_runner.map_runner_batch_runner import _serial_execute_map_jobs
 from robot_sf.benchmark.runner import (
     DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
     _error_signature,

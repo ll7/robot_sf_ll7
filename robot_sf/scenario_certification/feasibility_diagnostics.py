@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.scenario_certification.failure_cause import (
     DiagnosticLaneEvidence,
     FamilyDiagnostics,

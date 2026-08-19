@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/trace_dossier_package.v1.json",
+  "title": "Robot SF Trace Dossier Package v1",
+  "$defs": {
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "cell_id",
+        "selected_seed_id",
+        "selected_verdict",
+        "selected_label_strength",
+        "selected_primary_order",
+        "candidate_count",
+        "majority_verdict",
+        "majority_count",
+        "selection_reason"
+      ],
+      "properties": {
+        "schema_version": {"const": "trace_dossier_selector.v1"},
+        "cell_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "selected_seed_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "selected_verdict": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "selected_label_strength": {"type": "number"},
+        "selected_primary_order": {"type": "number"},
+        "candidate_count": {"type": "integer", "minimum": 1},
+        "majority_verdict": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+        "majority_count": {"type": "integer", "minimum": 1},
+        "selection_reason": {
+          "enum": [
+            "single_candidate",
+            "majority_verdict",
+            "weaker_verdict",
+            "weakest_label",
+            "median_primary_order",
+            "seed_identity"
+          ]
+        }
+      }
+    },
+    "cell_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "cell",
+        "selected_trace",
+        "terminal_verdict_counts",
+        "cell_episode_count",
+        "selected_verdict_count",
+        "evidence_boundary"
+      ],
+      "properties": {
+        "schema_version": {"const": "trace_dossier_cell_binding.v1"},
+        "cell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["campaign_id", "cell_id", "scenario_id", "planner_id"],
+          "properties": {
+            "campaign_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "cell_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "scenario_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "planner_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "release_arm_id": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            },
+            "scenario_family": {
+              "type": ["string", "null"],
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            }
+          }
+        },
+        "selected_trace": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cell_id",
+            "episode_id",
+            "seed",
+            "trace_artifact_uri",
+            "trace_sha256",
+            "terminal_verdict"
+          ],
+          "properties": {
+            "cell_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "episode_id": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"},
+            "seed": {"type": "integer", "minimum": 0},
+            "trace_artifact_uri": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": ".*\\S.*"
+            },
+            "trace_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "terminal_verdict": {"type": "string", "minLength": 1, "pattern": ".*\\S.*"}
+          }
+        },
+        "terminal_verdict_counts": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"type": "string", "pattern": ".*\\S.*"},
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "cell_episode_count": {"type": "integer", "minimum": 1},
+        "selected_verdict_count": {"type": "integer", "minimum": 1},
+        "evidence_boundary": {
+          "const": "metadata_only_not_benchmark_evidence_until_trace_export_and_renderer_provenance_pass"
+        }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_boundary",
+    "claim_boundary",
+    "composition",
+    "command",
+    "campaign_cell",
+    "selection",
+    "cell_binding",
+    "trace_export",
+    "render",
+    "artifacts",
+    "package_checksums",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "trace_dossier_package.v1"},
+    "evidence_boundary": {"const": "diagnostic_only"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "trace_dossier_package"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "command": {"type": "string", "minLength": 1},
+    "campaign_cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign_id", "cell_id", "scenario_id", "planner_id"],
+      "properties": {
+        "campaign_id": {"type": "string", "minLength": 1},
+        "cell_id": {"type": "string", "minLength": 1},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "planner_id": {"type": "string", "minLength": 1},
+        "release_arm_id": {"type": ["string", "null"]},
+        "scenario_family": {"type": ["string", "null"]}
+      }
+    },
+    "selection": {"$ref": "#/$defs/selection"},
+    "cell_binding": {"$ref": "#/$defs/cell_binding"},
+    "trace_export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "trace", "checksums"],
+      "properties": {
+        "manifest": {"type": "string", "minLength": 1},
+        "trace": {"type": "string", "minLength": 1},
+        "checksums": {"type": "string", "minLength": 1}
+      }
+    },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dossier",
+        "svg",
+        "pdf",
+        "caption",
+        "manifest",
+        "evidence_boundary"
+      ],
+      "properties": {
+        "dossier": {"type": "string", "minLength": 1},
+        "svg": {"type": "string", "minLength": 1},
+        "pdf": {"type": "string", "minLength": 1},
+        "caption": {"type": "string", "minLength": 1},
+        "manifest": {"type": "string", "minLength": 1},
+        "evidence_boundary": {"const": "diagnostic_only"}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "package_checksums": {"const": "SHA256SUMS"},
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

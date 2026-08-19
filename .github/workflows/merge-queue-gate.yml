@@ -13,8 +13,9 @@ name: Merge Queue Gate
 # pull requests" (`ALLGREEN`) strategy so a passing tail entry cannot carry an
 # earlier ungated entry through a grouped merge. The audit record (evaluated
 # head/base SHAs, queue strategy, label set, metadata digest/status,
-# gate-verdict status, staleness verdict, CI conclusion, thread resolution, and
-# requested-reviewer status) is
+# gate-verdict status, exact-head changed-coverage status (or a proven
+# CI-ignored docs-only file set), staleness verdict, CI conclusion, thread
+# resolution, and requested-reviewer status) is
 # emitted to the job summary and stdout.
 #
 # Source-PR runs are advisory audits: they preserve failed reasons in the JSON

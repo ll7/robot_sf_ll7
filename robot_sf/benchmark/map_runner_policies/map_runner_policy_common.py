@@ -1,6 +1,6 @@
 """Shared policy-construction helpers for the map-runner benchmark.
 
-These helpers were previously defined inside ``robot_sf.benchmark.map_runner`` and
+These helpers were previously defined inside ``robot_sf.benchmark.map_runner.map_runner`` and
 called from ~20 of ``_build_policy``'s adapter branches. Hosting them in a neutral
 module lets the per-algorithm builder modules in ``map_runner_policies/`` reuse them
 without an import cycle back into ``map_runner`` (see #3403, follow-up to #3400/#3384).

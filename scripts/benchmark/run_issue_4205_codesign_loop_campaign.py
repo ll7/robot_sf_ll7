@@ -19,7 +19,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.runner import load_scenario_matrix
 from scripts.validation.check_issue_4205_static_constriction_codesign_loop import (
     EXPECTED_ARM_KEYS,

@@ -27,7 +27,7 @@ from loguru import logger
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.errors import AggregationMetadataError
 from robot_sf.benchmark.freeze_manifest import evaluate_freeze_manifest, safe_int
-from robot_sf.benchmark.map_runner import _signal_state_for_metric_metadata
+from robot_sf.benchmark.map_runner.map_runner import _signal_state_for_metric_metadata
 from robot_sf.benchmark.metrics import EpisodeData, compute_all_metrics, snqi
 from robot_sf.benchmark.obstacle_sampling import sample_obstacle_points
 from robot_sf.benchmark.path_utils import compute_shortest_path_length

@@ -189,6 +189,9 @@ VALID_EVIDENCE_TIERS: tuple[str, ...] = (
     "paper_grade",
     "blocked",
 )
+# Canonical epistemic grades used by research issue forms. These are distinct from the
+# evidence tier, which describes the target execution/evidence bar.
+VALID_EVIDENCE_GRADES: tuple[str, ...] = ("observed", "inferred", "proposal")
 # Deprecated evidence-tier spellings accepted on read and treated as their canonical value.
 EVIDENCE_TIER_ALIASES: dict[str, str] = {
     "proposal": "idea",

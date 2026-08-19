@@ -1,0 +1,20 @@
+# Issue #7340 real-manifest template.
+#
+# The map contains the explicit p2 single-pedestrian marker pair.  Keeping the
+# binding in this issue-scoped template makes the runtime-effective contract
+# visible without changing the established station-platform archetype.
+scenarios:
+  - name: issue_7340_station_platform_medium
+    map_file: ../../maps/svg_maps/classic_station_platform.svg
+    simulation_config:
+      max_episode_steps: 120
+      ped_density: 0.0
+    robot_config: {}
+    metadata:
+      archetype: station_platform
+      issue_7340_source: configs/scenarios/archetypes/classic_station_platform.yaml
+      generated_cases_are_benchmark_evidence: false
+      claim_boundary: diagnostic-only real-manifest feasibility probe
+    single_pedestrians:
+      - id: p2
+    seeds: [301, 302, 303]

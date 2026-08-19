@@ -52,8 +52,10 @@ owner-decision rate exceeded the 20% stop threshold:
 
 The ambiguous rate is 96%. The 2 historical rows have explicit execution-history markers. The
 other 48 rows remain needs_owner_decision, including all rows with evidence/release/legal/claim
-sensitivity that lack the required owner decision. No note was deleted or moved; no index or
-catalog row was added. The orphan count is 498 before and after the pilot.
+sensitivity that lack the required owner decision. No pilot note was deleted or moved, and no
+pilot note received an INDEX or catalog row. The two evidence artifacts themselves are registered
+as evidence entries in catalog.yaml so the repository integrity contract can discover them. The
+orphan count is 498 before and after the pilot.
 
 Use owner-first follow-up batches of 10 notes (about 50 batches for the full orphan set). If the
 pilot rate held, planning would require decisions for approximately 478 rows; this is a workload

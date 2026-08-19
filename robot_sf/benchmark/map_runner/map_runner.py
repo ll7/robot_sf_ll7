@@ -36,43 +36,45 @@ from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency.latency_stress import (
     not_available_latency_metrics,
 )
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_seed_jobs as _build_seed_jobs,
 )
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_worker_fixed_params as _build_worker_fixed_params,
 )
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     resolve_batch_kinematics_tag as _resolve_batch_kinematics_tag,
 )
-from robot_sf.benchmark.map_runner_batch_runner import execute_map_jobs as _execute_map_jobs
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_runner import (
+    execute_map_jobs as _execute_map_jobs,
+)
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     WorkerMetadataBridgeUpdate as _WorkerMetadataBridgeUpdate,  # noqa: F401 - compatibility export.
 )
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     accumulate_batch_metadata as _accumulate_batch_metadata,  # noqa: F401 - compatibility export.
 )
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     apply_worker_metadata_bridge as _apply_worker_metadata_bridge,
 )
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     build_completed_batch_summary as _build_completed_batch_summary,
 )
-from robot_sf.benchmark.map_runner_env import (
+from robot_sf.benchmark.map_runner.map_runner_env import (
     apply_active_observation_mode_to_env_config as _apply_active_observation_mode_to_env_config,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_env import (
+from robot_sf.benchmark.map_runner.map_runner_env import (
     apply_policy_env_observation_overrides as _apply_policy_env_observation_overrides,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_env import build_env_config as _build_env_config
-from robot_sf.benchmark.map_runner_env import (
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config as _build_env_config
+from robot_sf.benchmark.map_runner.map_runner_env import (
     representative_metric_affecting_config as _representative_metric_affecting_config,
 )
-from robot_sf.benchmark.map_runner_env import (
+from robot_sf.benchmark.map_runner.map_runner_env import (
     validate_sensor_fusion_adapter_config as _validate_sensor_fusion_adapter_config,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_episode import run_map_episode as _execute_map_episode
-from robot_sf.benchmark.map_runner_identity import (
+from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode as _execute_map_episode
+from robot_sf.benchmark.map_runner.map_runner_identity import (
     _compute_map_episode_id,
     _resolve_seed_list,
     _scenario_identity_payload,
@@ -80,28 +82,51 @@ from robot_sf.benchmark.map_runner_identity import (
     _select_seeds,  # noqa: F401 - compatibility re-export for tests.
     _suite_key,
 )
-from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle as _write_jsonl_record
-from robot_sf.benchmark.map_runner_metrics import (
+from robot_sf.benchmark.map_runner.map_runner_jsonl import (
+    write_validated_to_handle as _write_jsonl_record,
+)
+from robot_sf.benchmark.map_runner.map_runner_metrics import (
     floor_collision_metrics_from_flags as _floor_collision_metrics_from_flags,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_metrics import (
+from robot_sf.benchmark.map_runner.map_runner_metrics import (
     normalize_pedestrian_impact_controls as _normalize_pedestrian_impact_controls,
 )
-from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
-from robot_sf.benchmark.map_runner_native_command import build_native_command_policy
-from robot_sf.benchmark.map_runner_observations import (
+from robot_sf.benchmark.map_runner.map_runner_metrics import summarize_collision_metrics
+from robot_sf.benchmark.map_runner.map_runner_native_command import build_native_command_policy
+from robot_sf.benchmark.map_runner.map_runner_observations import (
     extract_ppo_dt as _extract_ppo_dt,  # noqa: F401 - compatibility re-export for tests.
 )
-from robot_sf.benchmark.map_runner_observations import (
+from robot_sf.benchmark.map_runner.map_runner_observations import (
     extract_ppo_pedestrians as _extract_ppo_pedestrians,  # noqa: F401 - compatibility re-export.
 )
-from robot_sf.benchmark.map_runner_observations import (
+from robot_sf.benchmark.map_runner.map_runner_observations import (
     normalize_xy_rows as _normalize_xy_rows,  # noqa: F401 - compatibility re-export for tests.
 )
-from robot_sf.benchmark.map_runner_observations import (
+from robot_sf.benchmark.map_runner.map_runner_observations import (
     obs_to_external_mpc_format as _obs_to_external_mpc_format,
 )
-from robot_sf.benchmark.map_runner_observations import obs_to_ppo_format as _obs_to_ppo_format
+from robot_sf.benchmark.map_runner.map_runner_observations import (
+    obs_to_ppo_format as _obs_to_ppo_format,
+)
+from robot_sf.benchmark.map_runner.map_runner_provenance import (
+    map_result_provenance as _map_result_provenance,
+)
+from robot_sf.benchmark.map_runner.map_runner_trace import (
+    _command_action_payload,  # noqa: F401 - compatibility re-export.
+    _cyclist_like_vru_summary,  # noqa: F401 - compatibility re-export.
+    _episode_metadata_for_signal_metrics,  # noqa: F401 - compatibility re-export.
+    _fast_bicycle_actor_summary,  # noqa: F401 - compatibility re-export.
+    _intent_conditioned_behavior_summary,  # noqa: F401 - compatibility re-export.
+    _observation_heading,  # noqa: F401 - compatibility re-export.
+    _scenario_id,
+    _signal_state_for_metric_metadata,  # noqa: F401 - compatibility re-export for tests.
+    _signal_state_promotion_contract,  # noqa: F401 - compatibility re-export for tests.
+    _signal_state_proxy_wrapper,  # noqa: F401 - compatibility re-export for tests.
+    _single_pedestrian_intent_metadata,  # noqa: F401 - compatibility re-export.
+    _single_pedestrian_vru_metadata,  # noqa: F401 - compatibility re-export.
+    _trace_pedestrians,  # noqa: F401 - compatibility re-export.
+)
+from robot_sf.benchmark.map_runner.map_runner_worker import execute_map_job as _execute_map_job
 from robot_sf.benchmark.map_runner_policies import adapters as _adapter_policy_builders
 from robot_sf.benchmark.map_runner_policies import adaptive_proxemic as _adaptive_proxemic_builder
 from robot_sf.benchmark.map_runner_policies import brne as _brne_builder
@@ -169,25 +194,6 @@ from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
 from robot_sf.benchmark.map_runner_policies.map_runner_profile_metadata import (
     load_synthetic_actuation_profile as _load_synthetic_actuation_profile_impl,
 )
-from robot_sf.benchmark.map_runner_provenance import (
-    map_result_provenance as _map_result_provenance,
-)
-from robot_sf.benchmark.map_runner_trace import (
-    _command_action_payload,  # noqa: F401 - compatibility re-export.
-    _cyclist_like_vru_summary,  # noqa: F401 - compatibility re-export.
-    _episode_metadata_for_signal_metrics,  # noqa: F401 - compatibility re-export.
-    _fast_bicycle_actor_summary,  # noqa: F401 - compatibility re-export.
-    _intent_conditioned_behavior_summary,  # noqa: F401 - compatibility re-export.
-    _observation_heading,  # noqa: F401 - compatibility re-export.
-    _scenario_id,
-    _signal_state_for_metric_metadata,  # noqa: F401 - compatibility re-export for tests.
-    _signal_state_promotion_contract,  # noqa: F401 - compatibility re-export for tests.
-    _signal_state_proxy_wrapper,  # noqa: F401 - compatibility re-export for tests.
-    _single_pedestrian_intent_metadata,  # noqa: F401 - compatibility re-export.
-    _single_pedestrian_vru_metadata,  # noqa: F401 - compatibility re-export.
-    _trace_pedestrians,  # noqa: F401 - compatibility re-export.
-)
-from robot_sf.benchmark.map_runner_worker import execute_map_job as _execute_map_job
 from robot_sf.benchmark.metrics import compute_all_metrics, post_process_metrics
 from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,

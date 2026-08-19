@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from robot_sf.benchmark import map_runner
+from robot_sf.benchmark.map_runner import map_runner
 
 SCHEMA_PATH = str(
     Path(__file__).resolve().parents[2] / "robot_sf/benchmark/schemas/episode.schema.v1.json"

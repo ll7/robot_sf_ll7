@@ -62,8 +62,10 @@ from robot_sf.common.artifact_paths import get_repository_root
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
-RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v1"
-RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v1"
+RADIUS_RANK_STABILITY_SCHEMA_V1 = "radius_rank_stability.v1"
+RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v2"
+RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1 = "issue_6643_radius_rank_stability_bundle.v1"
+RADIUS_EVIDENCE_BUNDLE_SCHEMA = "issue_6643_radius_rank_stability_bundle.v2"
 PAIRED_INFERENCE_CONTRACT_SCHEMA = "radius_paired_bootstrap_inference_contract.v2"
 PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA = "radius_paired_support_diagnostics.v2"
 SWEEP_SUMMARY_SCHEMA = "issue_6642_radius_sweep_summary.v1"
@@ -1760,7 +1762,7 @@ class RadiusSensitivityReport:
     verdict: VerdictDecision
 
     def to_dict(self) -> dict[str, object]:
-        """Return the ``radius_rank_stability.v1`` JSON-safe payload.
+        """Return the ``radius_rank_stability.v2`` JSON-safe payload.
 
         Returns:
             Mapping with schema, configuration, missingness, per-metric stability,
@@ -1789,6 +1791,115 @@ class RadiusSensitivityReport:
             "verdict": self.verdict.to_dict(),
             "claim_boundary": list(REQUIRED_CLAIM_BOUNDARY_PHRASES),
         }
+
+
+_REQUIRED_RADIUS_REPORT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "baseline_radius_m",
+        "radii_m",
+        "rank_metrics",
+        "planners",
+        "scenario_cell_count",
+        "seed_roster",
+        "sweep_available",
+        "missingness",
+        "metric_stability",
+        "paired_inference_contract",
+        "paired_changes",
+        "family_transitions",
+        "verdict",
+        "claim_boundary",
+    }
+)
+
+
+def _validate_paired_changes_payload(paired_changes: object) -> None:
+    """Validate v2 paired changes and their required support diagnostics."""
+    if not isinstance(paired_changes, Mapping):
+        raise ValueError("radius rank-stability v2 paired_changes must be an object")
+    for metric, by_radius in paired_changes.items():
+        if not isinstance(by_radius, Mapping):
+            raise ValueError(f"paired_changes[{metric!r}] must be an object")
+        for radius, changes in by_radius.items():
+            if not isinstance(changes, list):
+                raise ValueError(f"paired_changes[{metric!r}][{radius!r}] must be a list")
+            for index, change in enumerate(changes):
+                if not isinstance(change, Mapping):
+                    raise ValueError(
+                        f"paired_changes[{metric!r}][{radius!r}][{index}] must be an object"
+                    )
+                support = change.get("support")
+                if not isinstance(support, Mapping):
+                    raise ValueError(
+                        "radius rank-stability v2 paired changes require support diagnostics"
+                    )
+                if support.get("schema_version") != PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA:
+                    raise ValueError(
+                        "radius rank-stability paired support schema_version must be "
+                        f"{PAIRED_SUPPORT_DIAGNOSTICS_SCHEMA!r}"
+                    )
+
+
+def validate_radius_sensitivity_payload(payload: Mapping[str, object]) -> None:
+    """Validate the versioned report envelope and required paired diagnostics.
+
+    Historical ``radius_rank_stability.v1`` payloads remain identifiable as legacy
+    data, but are rejected rather than being interpreted as the v2 shape. This is
+    the writer-side contract check used before a result enters an evidence bundle.
+
+    Raises:
+        ValueError: If the payload has an unsupported version or misses v2 fields.
+    """
+    if not isinstance(payload, Mapping):
+        raise ValueError("radius rank-stability report must be a JSON object")
+    schema_version = payload.get("schema_version")
+    if schema_version != RADIUS_RANK_STABILITY_SCHEMA:
+        if schema_version == RADIUS_RANK_STABILITY_SCHEMA_V1:
+            raise ValueError(
+                "unsupported radius rank-stability report schema_version "
+                f"{schema_version!r}: historical v1 payloads are not reinterpreted as v2"
+            )
+        raise ValueError(
+            "radius rank-stability report schema_version must be "
+            f"{RADIUS_RANK_STABILITY_SCHEMA!r}, got {schema_version!r}"
+        )
+
+    missing = sorted(_REQUIRED_RADIUS_REPORT_FIELDS - set(payload))
+    if missing:
+        raise ValueError(f"radius rank-stability v2 report missing fields: {missing}")
+
+    contract = payload["paired_inference_contract"]
+    if not isinstance(contract, Mapping):
+        raise ValueError("radius rank-stability v2 paired_inference_contract must be an object")
+    if contract.get("schema_version") != PAIRED_INFERENCE_CONTRACT_SCHEMA:
+        raise ValueError(
+            "radius rank-stability paired_inference_contract schema_version must be "
+            f"{PAIRED_INFERENCE_CONTRACT_SCHEMA!r}"
+        )
+
+    _validate_paired_changes_payload(payload["paired_changes"])
+
+
+def validate_radius_evidence_bundle_provenance(payload: Mapping[str, object]) -> None:
+    """Validate bundle provenance version and its pinned report-envelope version."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("radius evidence-bundle provenance must be a JSON object")
+    schema_version = payload.get("schema_version")
+    if schema_version != RADIUS_EVIDENCE_BUNDLE_SCHEMA:
+        if schema_version == RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1:
+            raise ValueError(
+                "unsupported radius evidence-bundle schema_version "
+                f"{schema_version!r}: the bundle now pins the v2 report envelope"
+            )
+        raise ValueError(
+            "radius evidence-bundle schema_version must be "
+            f"{RADIUS_EVIDENCE_BUNDLE_SCHEMA!r}, got {schema_version!r}"
+        )
+    if payload.get("report_schema_version") != RADIUS_RANK_STABILITY_SCHEMA:
+        raise ValueError(
+            f"radius evidence-bundle report_schema_version must be {RADIUS_RANK_STABILITY_SCHEMA!r}"
+        )
 
 
 def _normalized_radii(sweep_summary: Mapping[str, object]) -> list[float]:
@@ -2083,8 +2194,9 @@ def build_analysis_provenance_payload(
     Returns:
         Mapping with schema, evidence tier, claim boundary, verdict, provenance, and hashes.
     """
-    return {
+    payload = {
         "schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+        "report_schema_version": RADIUS_RANK_STABILITY_SCHEMA,
         "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "evidence_status": evidence_tier_for_verdict(report.verdict.verdict),
         "claim_boundary": " ".join(
@@ -2100,6 +2212,8 @@ def build_analysis_provenance_payload(
         "provenance": provenance.to_dict(),
         "output_sha256": dict(output_sha256 or {}),
     }
+    validate_radius_evidence_bundle_provenance(payload)
+    return payload
 
 
 # --- markdown rendering and verdict propagation ---------------------------
@@ -2431,6 +2545,7 @@ def write_evidence_bundle(
 
     result_path = out / "result.json"
     result_payload = report.to_dict()
+    validate_radius_sensitivity_payload(result_payload)
     result_path.write_text(
         json.dumps(result_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

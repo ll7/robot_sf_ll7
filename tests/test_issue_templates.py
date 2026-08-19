@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-from scripts.tools.issue_template_audit import SECTION_ORDER
+from scripts.tools.issue_template_audit import (
+    SECTION_ORDER,
+    VALID_EVIDENCE_GRADES,
+    VALID_EVIDENCE_TIERS,
+    audit_archetype_metadata,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
@@ -89,19 +94,9 @@ CANONICAL_ARCHETYPES = (
     "refactor",
     "data",
 )
-CANONICAL_EVIDENCE_TIERS = (
-    "idea",
-    "launch_packet",
-    "preflight_valid",
-    "smoke",
-    "nominal",
-    "stress",
-    "full_matrix",
-    "analysis_only",
-    "synthesis",
-    "paper_grade",
-    "blocked",
-)
+CANONICAL_EVIDENCE_TIERS = VALID_EVIDENCE_TIERS
+CANONICAL_EVIDENCE_GRADES = VALID_EVIDENCE_GRADES
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "issue_templates"
 
 
 def _load_template(path: Path) -> tuple[dict[str, object], str]:
@@ -192,6 +187,37 @@ def test_issue_forms_cover_common_backlog_lanes() -> None:
         serialized = yaml.safe_dump(form, sort_keys=True)
         for marker in markers:
             assert marker in serialized, f"missing marker {marker!r} in {form_name}"
+
+
+def test_research_templates_use_canonical_evidence_vocabulary() -> None:
+    """Keep research issue grades and tiers distinct and canonical."""
+
+    _, research_body = _load_template(TEMPLATE_DIR / "research.md")
+    assert "**Evidence grade**" in research_body
+    assert "observed, inferred, or proposal" in research_body
+    assert "speculative, blocked, diagnostic-only, benchmark, or paper-facing" not in research_body
+
+    research_form = _load_form(TEMPLATE_DIR / "research-validation.yml")
+    fields = {
+        str(item.get("id")): item
+        for item in research_form["body"]
+        if isinstance(item, dict) and item.get("id") in {"evidence_grade", "evidence_tier"}
+    }
+    assert tuple(fields["evidence_grade"]["attributes"]["options"]) == CANONICAL_EVIDENCE_GRADES
+    assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
+
+
+def test_rendered_research_and_pr_fixtures_keep_fields_machine_readable() -> None:
+    """Exercise normalized rendered bodies for form and docs-only PR submissions."""
+
+    rendered_issue = (FIXTURE_DIR / "research_validation_rendered.md").read_text(encoding="utf-8")
+    assert audit_archetype_metadata(rendered_issue).findings == ()
+    assert "### Evidence grade\nobserved" in rendered_issue
+
+    rendered_pr = (FIXTURE_DIR / "pr_docs_only_rendered.md").read_text(encoding="utf-8")
+    assert "- Evidence tier:\n" in rendered_pr
+    assert "- Evidence applicability: docs-only\n" in rendered_pr
+    assert "- Evidence tier: docs-only" not in rendered_pr
 
 
 def test_every_issue_template_collects_canonical_issue_metadata() -> None:

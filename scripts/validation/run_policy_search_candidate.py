@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.policy_search_common import (
     infer_scenario_family,

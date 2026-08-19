@@ -11,8 +11,8 @@ from robot_sf.benchmark.ammv_feasibility import (
     evaluate_artifact_command_feasibility,
     evaluate_command_feasibility,
 )
-from robot_sf.benchmark.map_runner_batch_runner import _initial_feasibility_totals
-from robot_sf.benchmark.map_runner_batch_summary import (
+from robot_sf.benchmark.map_runner.map_runner_batch_runner import _initial_feasibility_totals
+from robot_sf.benchmark.map_runner.map_runner_batch_summary import (
     accumulate_batch_metadata,
     build_ammv_feasibility_summary,
 )

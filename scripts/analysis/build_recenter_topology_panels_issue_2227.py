@@ -46,7 +46,7 @@ from typing import Any
 from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
 )
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.trajectory_panels import generate_trajectory_panel_bundle
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_policy_search_candidate import load_candidate_definition

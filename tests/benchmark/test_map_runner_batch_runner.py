@@ -1,11 +1,11 @@
-"""Tests for robot_sf.benchmark.map_runner_batch_runner — job execution helpers."""
+"""Tests for robot_sf.benchmark.map_runner.map_runner_batch_runner — job execution helpers."""
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.map_runner_batch_runner import (
+from robot_sf.benchmark.map_runner.map_runner_batch_runner import (
     BatchExecutionResult,
     _initial_feasibility_totals,
     execute_map_jobs,

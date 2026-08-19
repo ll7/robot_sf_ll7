@@ -18,7 +18,7 @@ from robot_sf.benchmark.certification_transfer import (
     validate_probe_config,
     write_certification_transfer_evidence,
 )
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.runner import load_scenario_matrix
 from robot_sf.sim.pedestrian_model_variants import normalize_pedestrian_model
 

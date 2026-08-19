@@ -748,6 +748,73 @@ def test_command_timeouts_return_failures_instead_of_raising(
     assert "timed out" in command_result.stderr
 
 
+def test_run_gh_uses_remaining_budget_when_provided(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The aggregate budget can shorten an individual gh subprocess timeout."""
+    observed: dict[str, Any] = {}
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(args[0], 0, "[]", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = _run_gh(["api", "repos/ll7/robot_sf_ll7/issues"], timeout_seconds=1.25)
+
+    assert result.returncode == 0
+    assert observed["timeout"] == 1.25
+
+
+def test_deadline_runner_fails_closed_before_the_next_rest_call() -> None:
+    """An exhausted audit budget returns a structured error without invoking the runner."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("an exhausted budget must not invoke another REST call")
+
+    bounded = issue_audit_core._deadline_runner(runner, 0)
+    result = bounded(["api", "repos/ll7/robot_sf_ll7/issues"], None)
+
+    assert result.returncode == 124
+    assert "wall-time budget exhausted" in result.stderr
+    assert calls == []
+
+
+def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """CLI callers receive a non-admitting plan artifact when REST budget is exhausted."""
+
+    def fake_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(issue_audit_core, "_run_command", fake_command)
+    output = tmp_path / "issue-audit-plan.json"
+
+    result = main(
+        [
+            "plan",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--max-pages",
+            "1",
+            "--max-comment-pages",
+            "1",
+            "--max-wall-seconds",
+            "0",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result == 2
+    plan = json.loads(output.read_text(encoding="utf-8"))
+    assert plan["mutations"] == []
+    assert plan["truncation_or_errors"]
+    assert "wall-time budget exhausted" in json.dumps(plan["inventory"])
+
+
 def test_decision_queue_is_machine_readable_and_project_free() -> None:
     """Pending decisions expose evidence while keeping Project #5 out of scope."""
     plan = build_audit_plan(

@@ -399,6 +399,30 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/README.md
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/README.md.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/checksums.sha256
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/checksums.sha256.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/summary.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7313_mpc_solver_canary_2026-08-17/summary.json.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
 - path: docs/context/issue_6700_mpc_tuning_campaign_compute_blocker.md
   status: current
   freshness: maintained

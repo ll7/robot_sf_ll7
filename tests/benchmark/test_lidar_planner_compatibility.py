@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.algorithm_metadata import planner_contract_for_algorithm
-from robot_sf.benchmark.map_runner import _validate_sensor_fusion_adapter_config
+from robot_sf.benchmark.map_runner.map_runner import _validate_sensor_fusion_adapter_config
 from robot_sf.benchmark.planner_command_contract import (
     PlannerContractValidationError,
     validate_planner_contract,

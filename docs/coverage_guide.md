@@ -41,6 +41,10 @@ uv run python scripts/coverage/compare_coverage.py \
   --current output/coverage/coverage.json \
   --baseline output/coverage/.coverage-baseline.json \
   --format terminal
+
+# Check changed modules for missing fast-lane contract-test registration
+uv run python scripts/dev/check_fast_lane_routing.py \
+  --base-sha origin/main --head-sha HEAD
 ```
 
 ## Coverage Collection
@@ -146,7 +150,13 @@ Coverage collection and enforcement run automatically in CI (`.github/workflows/
    - On **pull request** events, coverage is enabled for the exact-head changed-line gate. The trace-based backend (`COVERAGE_CORE: ctrace`) is used because hosted xdist worker propagation must remain trustworthy.
    - On **merge-queue** events, coverage is likewise enabled with `ctrace` for the exact-head gate.
    - On **main** and **manual dispatch** events, coverage is enabled with `ROBOT_SF_SHARD_INCLUDE_SLOW: 1` and the faster CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`) for the aggregate floor. Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).
-2. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
+2. **Fast-lane routing audit**: On pull-request and merge-queue events, `changed-coverage-gate` runs
+   `scripts/dev/check_fast_lane_routing.py` against the exact base/head pair before combining
+   coverage. The audit reuses `tests/conftest.py` fast-path policy, reports the exact changed module
+   and nearby test path, leaves explicit simulation/campaign tests slow, and fails closed for an
+   unregistered contract candidate or an ambiguous nearby test. It does not change coverage
+   thresholds or admit benchmark evidence.
+3. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
    - Downloads all shard databases (`coverage-shard-*`).
    - Combines them: `uv run coverage combine output/coverage`.
    - Exports JSON and HTML reports: `uv run coverage json` and `uv run coverage html`.

@@ -99,11 +99,11 @@ class Reference:
     detail: str
 
 
-def _git(repo_root: Path, *args: str) -> str:
+def _git(repo_root: Path, *args: str, check: bool = True) -> str:
     """Run a read-only git command and return stripped stdout."""
     result = subprocess.run(
         ["git", "-C", str(repo_root), *args],
-        check=True,
+        check=check,
         capture_output=True,
         text=True,
     )
@@ -690,7 +690,15 @@ def build_inventory(  # noqa: C901 - assembles one complete deterministic report
             "repository": "ll7/robot_sf_ll7",
             "root": BENCHMARK_ROOT,
             "commit": _git(repo_root, "rev-parse", "HEAD"),
-            "ref": _git(repo_root, "symbolic-ref", "--short", "-q", "HEAD") or "DETACHED",
+            "ref": _git(
+                repo_root,
+                "symbolic-ref",
+                "--short",
+                "-q",
+                "HEAD",
+                check=False,
+            )
+            or "DETACHED",
             "clean": not dirty,
             "tracked_python_file_count": tracked_python_count,
         },

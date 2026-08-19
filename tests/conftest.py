@@ -386,6 +386,14 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # These smoke/fixture scenario tests run short deterministic simulation
+    # episodes through the map-runner trace recorder; they are the only
+    # fast-lane coverage for changed trace paths in the exact-head
+    # changed-coverage gate (see #7578). Each file runs in ~30s locally.
+    "test_issue_2526_cyclist_vru_smoke.py",
+    "test_issue_2527_waiting_crossing_fixture.py",
+    "test_issue_2727_fast_bicycle_actor.py",
+    "test_issue_3977_public_requirement_smoke.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

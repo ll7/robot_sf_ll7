@@ -68,6 +68,24 @@ def test_base_freshness_fresh_preserves_merge_ready_action() -> None:
     assert pr["next_action"] == "merge_readiness_local_check"
 
 
+def test_snapshot_preserves_merged_at_for_external_merge_classification() -> None:
+    """A closed REST/GraphQL row with mergedAt remains distinguishable downstream."""
+    pr_data = _base_freshness_pr(number=7571)
+    pr_data["state"] = "CLOSED"
+    pr_data["mergedAt"] = "2026-08-18T15:40:53Z"
+
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=7571,
+        expected_head_sha="head-sha",
+    )
+
+    assert pr["state"] == "CLOSED"
+    assert pr["merged_at"] == "2026-08-18T15:40:53Z"
+
+
 def test_base_freshness_stale_blocks_merge_ready_action() -> None:
     """A stale PR base must route to branch refresh before review or merge readiness."""
     pr = _pr_payload_from_dict(

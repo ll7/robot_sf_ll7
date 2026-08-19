@@ -43,9 +43,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 
-from robot_sf.benchmark import map_runner, runner
+from robot_sf.benchmark import runner
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
-from robot_sf.benchmark.map_runner import build_map_policy
+from robot_sf.benchmark.map_runner import map_runner
+from robot_sf.benchmark.map_runner.map_runner import build_map_policy
 from robot_sf.benchmark.runner import NATIVE_COMMAND_DIAGNOSTICS_KEY, run_episode
 from robot_sf.planner.protocol import BaselineStepToLocalAdapter
 

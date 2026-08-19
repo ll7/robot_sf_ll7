@@ -607,6 +607,7 @@ def _fetch_pr_rest(
         "url": str(pull.get("html_url", "") or ""),
         "headRefName": str(head.get("ref", "") or ""),
         "headRefOid": head_sha,
+        "merged_at": pull.get("merged_at"),
         "mergeable": str(pull.get("mergeable_state", "unknown") or "unknown").upper(),
         "statusCheckRollup": rollup,
         "reviews": reviews,
@@ -1168,6 +1169,7 @@ def _pr_payload_from_dict(
         "status": "ok",
         "title": title,
         "state": pr.get("state", ""),
+        "merged_at": pr.get("merged_at") or pr.get("mergedAt"),
         "draft": is_draft,
         "url": pr.get("url", ""),
         "labels": labels,
@@ -1229,7 +1231,7 @@ def fetch_pr(
         "--repo",
         repo,
         "--json",
-        "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+        "number,title,body,state,mergedAt,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
     ]
     retry = run_with_retry(
         _gh,
@@ -1434,7 +1436,7 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
             "--limit",
             str(limit),
             "--json",
-            "number,title,body,state,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
+            "number,title,body,state,mergedAt,isDraft,labels,url,headRefName,headRefOid,mergeable,statusCheckRollup,reviews,comments",
         ],
         timeout=30,
     )

@@ -1,4 +1,4 @@
-schema_version: issue-5409-horizon-ablation-launch-packet.v1
+schema_version: issue-5409-horizon-ablation-launch-packet.v2
 parent_issue: 5409
 campaign_family: issue_5409_horizon_ablation
 generating_commit: 96d8a8a5ab75ec7bfd86d130f8b2a919dcd957e6
@@ -25,6 +25,15 @@ claim_boundary: >
   with 1728 valid rows each and the paired matched-key comparison is computed.
   Fallback, degraded, unavailable, failed, partial, or provenance-invalid rows never
   count as success evidence.
+
+# --- Versioned pair identity. v1 packets remain canonical-only; v2 makes a reviewed
+# rerun pair explicit without allowing either consumer to infer arbitrary suffixes.
+campaign_identity:
+  schema_version: issue-5409-campaign-id-pair.v1
+  campaign_family: issue5409_horizon_ablation
+  ids:
+    h500: issue5409_horizon_ablation_h500
+    h600: issue5409_horizon_ablation_h600
 
 # --- The frozen comparison matrix. Every number here is measured from the mode=preflight
 # artifacts of both configs at generating_commit, not asserted by hand.

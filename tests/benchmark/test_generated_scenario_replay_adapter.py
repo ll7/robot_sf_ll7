@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation import (
     dump_generated_scenario_yaml,
     extract_critical_segment,
@@ -178,7 +178,7 @@ def test_materialize_cli_syncs_replay_validated_status_into_yaml(
     status_path = tmp_path / "status.json"
     entry_path.write_text(json.dumps(_entry()), encoding="utf-8")
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.run_map_batch",
+        "robot_sf.benchmark.map_runner.map_runner.run_map_batch",
         lambda *args, **kwargs: {"successful_jobs": 1, "failed_jobs": 0},
     )
     monkeypatch.setattr(
@@ -218,7 +218,7 @@ def test_materialize_cli_records_yaml_smoke_setup_errors(
     def raise_yaml_error(*args: object, **kwargs: object) -> None:
         raise yaml.YAMLError("malformed generated scenario")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.run_map_batch", raise_yaml_error)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.run_map_batch", raise_yaml_error)
     monkeypatch.setattr(
         sys,
         "argv",

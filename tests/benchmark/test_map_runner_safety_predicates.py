@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from robot_sf.benchmark.event_ledger import build_event_ledger
-from robot_sf.benchmark.map_runner_episode import _safety_predicates_for_episode
+from robot_sf.benchmark.map_runner.map_runner_episode import _safety_predicates_for_episode
 
 
 def test_map_runner_safety_predicates_feed_event_ledger_surrogates() -> None:

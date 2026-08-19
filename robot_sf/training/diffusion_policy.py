@@ -295,7 +295,7 @@ def build_representative_rollout(
     if not isinstance(config_payload, dict):
         raise ValueError("Diffusion policy smoke manifest config must be a mapping")
 
-    from robot_sf.benchmark.map_runner import _build_policy  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy  # noqa: PLC0415
 
     max_linear_speed = float(config_payload.get("max_linear_speed", 1.0))
     max_angular_speed = float(config_payload.get("max_angular_speed", 1.0))

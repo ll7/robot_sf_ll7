@@ -306,7 +306,7 @@ def test_harness_rejects_cold_only_evidence() -> None:
 
 def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
     """Harness must produce a full latency record on a fixture scenario for >= 2 planners."""
-    from robot_sf.benchmark.map_runner import _run_map_episode
+    from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
     from robot_sf.nav.map_config import MapDefinition
 
     # 1. Setup minimal map definition and stubs
@@ -347,24 +347,26 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(map_def),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 

@@ -754,6 +754,33 @@ def test_classify_error_status_is_no_action() -> None:
     assert classify_pr_state(pr) == "no_action"
 
 
+def test_classify_merged_pr_is_distinct_external_no_action() -> None:
+    """A merged queue row must not be mistaken for an open review candidate."""
+    pr = _pr(7571, overall="success", labels=["merge-ready"], head_sha=FULL_SHA)
+    pr["state"] = "CLOSED"
+    pr["merged_at"] = "2026-08-18T15:40:53Z"
+
+    assert classify_pr_state(pr) == "merged_externally"
+
+
+def test_classify_closed_unmerged_pr_remains_no_action() -> None:
+    """A closed queue row has no review action even without a merge timestamp."""
+    pr = _pr(7572, overall="success")
+    pr["state"] = "CLOSED"
+
+    assert classify_pr_state(pr) == "no_action"
+
+
+def test_merged_external_state_is_in_policy_contract() -> None:
+    """The lifecycle handoff is machine-recognized by the policy."""
+    assert "merged_externally" in VALID_STATES
+    decision = recommend_action("merged_externally", pr_number=7571, actions_remaining=3)
+    assert decision.action == "no_action"
+    assert decision.state == "merged_externally"
+    assert decision.flow_decision == "stop"
+    assert "do not post review evidence" in decision.reason
+
+
 # ---------------------------------------------------------------------------
 # Issue #7508: review-claim -> active_writer
 # ---------------------------------------------------------------------------

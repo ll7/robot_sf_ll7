@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation.catalog_writer import (
     deduplicate_catalog_entries,
     write_generated_catalog,

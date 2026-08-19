@@ -5,7 +5,7 @@
 quantifier (``robot_sf.benchmark.reactivity_ablation.assess_reactivity_ablation``); the **paired
 runs + open-loop replay pedestrian mode** were deferred. This script lands them: for each planner it
 runs two conditions over identical scenarios + seeds (common random numbers) through
-``robot_sf.benchmark.map_runner.run_map_batch`` and feeds the per-planner contrast into the
+``robot_sf.benchmark.map_runner.map_runner.run_map_batch`` and feeds the per-planner contrast into the
 quantifier:
 
 * **reactive** — current social-force pedestrians that respond to the robot
@@ -49,7 +49,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.reactivity_ablation import (
     REACTIVITY_ABLATION_SCHEMA,
     ReactivityContrast,
@@ -231,7 +231,7 @@ def run_campaign(
             "(>= ~150 on this family). Diagnostic-tier, not paper-grade until the predeclared matrix "
             "is run at seed-sufficiency budget with claim-card review."
         ),
-        "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+        "runner": "robot_sf.benchmark.map_runner.map_runner.run_map_batch",
         "scenario_set": str(set_path),
         "seeds": seeds,
         "planners": list(planners),

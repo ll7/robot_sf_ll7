@@ -26,12 +26,12 @@ PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
-    "coverage-gate": 10,
+    "coverage-gate": 20,
     "changed-coverage-gate": 15,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
-    "reproducibility-check": 10,
+    "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
@@ -345,6 +345,11 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     )
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
+    coverage_core = workflow["env"]["COVERAGE_CORE"]
+    assert "github.event_name == 'pull_request'" in coverage_core
+    assert "github.event_name == 'merge_group'" in coverage_core
+    assert "ctrace" in coverage_core
+    assert "sysmon" in coverage_core
     assert "github.event.pull_request.head.sha" in checkout_step["with"]["ref"]
     assert "if" not in upload_step
     assert upload_step["with"]["include-hidden-files"] is True
@@ -368,6 +373,16 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     changed_coverage_run = "\n".join(
         str(step.get("run", "")) for step in changed_coverage_gate["steps"]
     )
+    routing_step = next(
+        step
+        for step in changed_coverage_gate["steps"]
+        if step.get("name") == "Audit changed fast-lane routing"
+    )
+    assert "scripts/dev/check_fast_lane_routing.py" in routing_step["run"]
+    assert '"$BASE_SHA"' in routing_step["run"]
+    assert '"$HEAD_SHA"' in routing_step["run"]
+    assert "github.event.pull_request.base.sha" in routing_step["env"]["BASE_SHA"]
+    assert "github.event.pull_request.head.sha" in routing_step["env"]["HEAD_SHA"]
     assert '--base-sha "$BASE_SHA"' in changed_coverage_run
     assert '--head-sha "$HEAD_SHA"' in changed_coverage_run
     assert "--json-output output/coverage/changed-coverage-result.json" in changed_coverage_run

@@ -1,14 +1,14 @@
 """Data-driven registry for SocNav-family planner adapters (issue #6467).
 
 Replaces the hand-written 25-branch dispatch chain that previously lived in
-``robot_sf.benchmark.map_runner._build_socnav_family_adapter`` with a declarative
+``robot_sf.benchmark.map_runner.map_runner._build_socnav_family_adapter`` with a declarative
 spec table. Each registered algorithm key maps to a :class:`SocnavFamilySpec` that
 declares the adapter class, optional config builder, config overrides, fallback
 behavior, and metadata mutations. Adding a new SocNav-family planner is a one-line
 registry entry instead of another branch in ``map_runner``.
 
 Adapter classes, config builders, and lazy symbol resolvers are resolved through
-``robot_sf.benchmark.map_runner`` module attributes at build time so tests that
+``robot_sf.benchmark.map_runner.map_runner`` module attributes at build time so tests that
 monkeypatch those names keep the exact construction behavior of the historical
 inline dispatch.
 """
@@ -84,7 +84,7 @@ def _map_runner_attr(name: str) -> Any:
         Any: The resolved symbol.
     """
 
-    from robot_sf.benchmark import map_runner  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner import map_runner  # noqa: PLC0415
 
     symbol = getattr(map_runner, name, None)
     if symbol is None:

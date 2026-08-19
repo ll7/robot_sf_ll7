@@ -315,12 +315,26 @@ def test_release_retains_claim_when_open_pr_covers_issue(
                 stderr="",
             )
         if command[0:3] == ["gh", "pr", "list"]:
-            return issue_claim.CommandResult(
-                command=tuple(command),
-                returncode=0,
-                stdout='[{"number": 456, "body": "Refs #123", "title": "feature work"}]',
-                stderr="",
-            )
+            state_index = command.index("--state") + 1 if "--state" in command else None
+            state = command[state_index] if state_index else ""
+            if state == "open":
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=0,
+                    stdout='[{"number": 456, "body": "Refs #123", "title": "feature work"}]',
+                    stderr="",
+                )
+            if state == "all":
+                # Only an OPEN competing PR covers the issue; no MERGED coverage.
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=0,
+                    stdout=(
+                        '[{"number": 456, "body": "Refs #123", "title": "feature work", '
+                        '"state": "OPEN"}]'
+                    ),
+                    stderr="",
+                )
         raise AssertionError("claim ref must not be deleted while a PR is open")
 
     monkeypatch.setattr(issue_claim, "_run", fake_run)
@@ -332,10 +346,166 @@ def test_release_retains_claim_when_open_pr_covers_issue(
     assert payload["ok"] is False
     assert payload["error"].startswith("open_covering_pr_exists")
     assert payload["covering_prs"] == [456]
+    assert payload["merged_covering_prs"] == []
     assert [command[0:3] for command in calls] == [
         ["git", "ls-remote", "--heads"],
         ["gh", "pr", "list"],
+        ["gh", "pr", "list"],
     ]
+
+
+def test_release_releases_claim_when_merged_pr_covers_issue_with_open_competitor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A MERGED covering PR proves delivery, so an open competitor does not block release.
+
+    Regression for the #7467/#7487 friction: the canonical PR (#7510) merged while a
+    competing open PR (#7487) still referenced the issue. The release must proceed
+    and record the merged PR as the delivery evidence.
+    """
+    calls: list[list[str]] = []
+    release_run: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            state_index = command.index("--state") + 1 if "--state" in command else None
+            state = command[state_index] if state_index else ""
+            if state == "open":
+                # Open competitor PR #457 still references the issue.
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=0,
+                    stdout='[{"number": 457, "body": "Refs #123", "title": "competitor"}]',
+                    stderr="",
+                )
+            if state == "all":
+                # Canonical PR #456 already MERGED; competitor #457 still OPEN.
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=0,
+                    stdout=(
+                        '[{"number": 456, "body": "Closes #123", "title": "delivery", '
+                        '"state": "MERGED"}, '
+                        '{"number": 457, "body": "Refs #123", "title": "competitor", '
+                        '"state": "OPEN"}]'
+                    ),
+                    stderr="",
+                )
+        if command[0:2] == ["git", "push"]:
+            release_run.append(command)
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is True
+    assert payload["claimed"] is False
+    assert payload["release_class"] == "terminal"
+    assert payload["release_override"] == "delivered_open_competitor"
+    assert payload["merged_covering_prs"] == [456]
+    assert payload["delivered_by"] == [456]
+    assert len(release_run) == 1
+
+
+def test_release_keeps_claim_when_allstate_snapshot_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed/truncated all-state snapshot must not silently release the claim."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str]) -> issue_claim.CommandResult:
+        calls.append(command)
+        if command[0:2] == ["git", "ls-remote"]:
+            return issue_claim.CommandResult(
+                command=tuple(command),
+                returncode=0,
+                stdout="abc123\trefs/heads/agent-claims/issue-123\n",
+                stderr="",
+            )
+        if command[0:3] == ["gh", "pr", "list"]:
+            state_index = command.index("--state") + 1 if "--state" in command else None
+            state = command[state_index] if state_index else ""
+            if state == "open":
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=0,
+                    stdout='[{"number": 457, "body": "Refs #123", "title": "competitor"}]',
+                    stderr="",
+                )
+            if state == "all":
+                return issue_claim.CommandResult(
+                    command=tuple(command),
+                    returncode=1,
+                    stdout="",
+                    stderr="GraphQL transient failure",
+                )
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(issue_claim, "_run", fake_run)
+
+    payload = issue_claim.release_issue(
+        123, remote="origin", repo="ll7/robot_sf_ll7", reason="merged"
+    )
+
+    assert payload["ok"] is False
+    assert payload["error"].startswith("open_covering_pr_exists")
+    assert payload["merged_covering_prs"] == []
+
+
+def test_reconcile_classifies_delivered_open_competitor_as_releasable() -> None:
+    """Reconciliation must mark a claim safe-to-release when a MERGED PR coexists with an open one."""
+    claim = {"issue": 123, "claim_ref": "agent-claims/issue-123", "sha": "abc123"}
+    issue = {"ok": True, "state": "OPEN", "title": "t", "url": "u"}
+    prs = {
+        "open_ok": True,
+        "open_truncated": False,
+        "open_prs": [457],
+        "terminal_ok": True,
+        "terminal_truncated": False,
+        "terminal_prs": [456],
+        "merged_prs": [456],
+    }
+    row = issue_claim._classify_reconciliation_row(claim, issue=issue, prs=prs)
+
+    assert row["classification"] == "delivered_open_competitor"
+    assert row["safe_to_release"] is True
+    assert row["merged_covering_prs"] == [456]
+
+
+def test_reconcile_keeps_claim_when_only_closed_terminal_coverage_exists() -> None:
+    """Closed-unmerged coverage alone must not release a claim with an open PR."""
+    claim = {"issue": 123, "claim_ref": "agent-claims/issue-123", "sha": "abc123"}
+    issue = {"ok": True, "state": "OPEN", "title": "t", "url": "u"}
+    prs = {
+        "open_ok": True,
+        "open_truncated": False,
+        "open_prs": [457],
+        "terminal_ok": True,
+        "terminal_truncated": False,
+        "terminal_prs": [456],
+        "merged_prs": [],
+    }
+    row = issue_claim._classify_reconciliation_row(claim, issue=issue, prs=prs)
+
+    assert row["classification"] == "active_open_pr"
+    assert row["safe_to_release"] is False
 
 
 def test_build_open_pr_command_is_read_only() -> None:

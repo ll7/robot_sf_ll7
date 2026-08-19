@@ -293,7 +293,7 @@ def test_runnable_h600_config_loads_trace_capture_flags() -> None:
 def test_prediction_mpc_cbf_trace_campaign_arm_builds_map_runner_policy() -> None:
     """The trace-capable campaign path accepts the prediction_mpc_cbf roster arm."""
     from robot_sf.benchmark.camera_ready._config import load_campaign_config
-    from robot_sf.benchmark.map_runner import _build_policy
+    from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
     cfg = load_campaign_config(RUN_CONFIG_PATH)
     planner = next(planner for planner in cfg.planners if planner.key == "prediction_mpc_cbf")

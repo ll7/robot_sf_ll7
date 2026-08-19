@@ -40,7 +40,7 @@ GAP_REFERENCE_KEYS = TRIVIAL_REFERENCE_KEYS | STREAM_GAP_KEYS | GAP_PREDICTION_K
 
 def _map_runner_compat_attr(name: str, default: Any) -> Any:
     """Return old ``map_runner`` private test hook when monkeypatched."""
-    map_runner_module = sys.modules.get("robot_sf.benchmark.map_runner")
+    map_runner_module = sys.modules.get("robot_sf.benchmark.map_runner.map_runner")
     if map_runner_module is None:
         return default
     return getattr(map_runner_module, name, default)

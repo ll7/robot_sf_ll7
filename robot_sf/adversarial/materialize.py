@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import math
+from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any
 
 from robot_sf.adversarial.config import MultiPedAdversarialConfig, MultiPedCandidateSpec
@@ -10,6 +16,137 @@ from robot_sf.adversarial.scenario_manifest import (
     AdversarialScenarioManifest,
     ManifestCategory,
 )
+
+
+def _freeze_overlay_value(value: Any) -> Any:
+    """Recursively freeze a YAML/JSON-compatible overlay value."""
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_overlay_value(nested) for key, nested in value.items()}
+        )
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_overlay_value(nested) for nested in value)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("scenario overlay values must be finite")
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"scenario overlay contains unsupported value: {type(value).__name__}")
+
+
+def _thaw_overlay_value(value: Any) -> Any:
+    """Return a mutable JSON-compatible copy of a frozen overlay value."""
+    if isinstance(value, Mapping):
+        return {str(key): _thaw_overlay_value(nested) for key, nested in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_overlay_value(nested) for nested in value]
+    return value
+
+
+def _merge_overlay_values(source: Any, patch: Any) -> Any:
+    """Apply a mapping patch without mutating either input mapping."""
+    if isinstance(source, Mapping) and isinstance(patch, Mapping):
+        merged = {str(key): _thaw_overlay_value(value) for key, value in source.items()}
+        for key, value in patch.items():
+            key_string = str(key)
+            if key_string in merged:
+                merged[key_string] = _merge_overlay_values(merged[key_string], value)
+            else:
+                merged[key_string] = _thaw_overlay_value(value)
+        return merged
+    return _thaw_overlay_value(patch)
+
+
+def _overlay_digest(value: Any) -> str:
+    """Hash one frozen overlay value using deterministic JSON bytes."""
+    encoded = json.dumps(
+        _thaw_overlay_value(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class ImmutableScenarioOverlay:
+    """Pure, immutable candidate overlay on a source scenario.
+
+    The overlay is deliberately a data-only seam. It snapshots the source and patch mappings,
+    applies nested mapping updates without mutating either input, and exposes stable hashes for
+    preparation provenance. It does not write scenario files or invoke a simulator.
+    """
+
+    source: Mapping[str, Any]
+    patch: Mapping[str, Any]
+    candidate_id: str
+    adapter_id: str
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Freeze all nested mappings and reject incomplete overlay identity."""
+        if not isinstance(self.source, Mapping):
+            raise TypeError("scenario overlay source must be a mapping")
+        if not isinstance(self.patch, Mapping):
+            raise TypeError("scenario overlay patch must be a mapping")
+        if not isinstance(self.provenance, Mapping):
+            raise TypeError("scenario overlay provenance must be a mapping")
+        if not str(self.candidate_id).strip():
+            raise ValueError("scenario overlay candidate_id must be non-empty")
+        if not str(self.adapter_id).strip():
+            raise ValueError("scenario overlay adapter_id must be non-empty")
+        object.__setattr__(self, "source", _freeze_overlay_value(self.source))
+        object.__setattr__(self, "patch", _freeze_overlay_value(self.patch))
+        object.__setattr__(self, "provenance", _freeze_overlay_value(self.provenance))
+
+    @property
+    def materialized(self) -> Mapping[str, Any]:
+        """Return the immutable runtime-shaped mapping produced by this overlay."""
+        return _freeze_overlay_value(_merge_overlay_values(self.source, self.patch))
+
+    def to_mapping(self) -> Mapping[str, Any]:
+        """Return the materialized immutable mapping as an explicit method alias."""
+        return self.materialized
+
+    @property
+    def source_digest(self) -> str:
+        """Return the deterministic SHA-256 digest of the source scenario."""
+        return _overlay_digest(self.source)
+
+    @property
+    def patch_digest(self) -> str:
+        """Return the deterministic SHA-256 digest of the candidate patch."""
+        return _overlay_digest(self.patch)
+
+    @property
+    def materialized_digest(self) -> str:
+        """Return the deterministic SHA-256 digest of the effective scenario mapping."""
+        return _overlay_digest(self.materialized)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible provenance and payload snapshot."""
+        return {
+            "adapter_id": self.adapter_id,
+            "candidate_id": self.candidate_id,
+            "materialized": _thaw_overlay_value(self.materialized),
+            "materialized_digest": self.materialized_digest,
+            "patch": _thaw_overlay_value(self.patch),
+            "patch_digest": self.patch_digest,
+            "provenance": _thaw_overlay_value(self.provenance),
+            "source": _thaw_overlay_value(self.source),
+            "source_digest": self.source_digest,
+        }
+
+    def to_json(self, *, indent: int | None = None) -> str:
+        """Return deterministic JSON for preparation-only artifacts."""
+        return json.dumps(
+            self.to_dict(),
+            ensure_ascii=False,
+            sort_keys=True,
+            indent=indent,
+            separators=(",", ":") if indent is None else (",", ": "),
+            allow_nan=False,
+        )
 
 
 def _metadata_payload(

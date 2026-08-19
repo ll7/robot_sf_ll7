@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from robot_sf.benchmark.map_runner_native_command import (
+from robot_sf.benchmark.map_runner.map_runner_native_command import (
     _render_request,
     build_native_command_policy,
     native_command_metadata_for_record,

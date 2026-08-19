@@ -330,6 +330,7 @@ use targeted compact snapshots for specific needs:
 # Full orientation snapshot (worktrees, claims, issues, PRs)
 uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
+  --json \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
   --pr <pr-number>

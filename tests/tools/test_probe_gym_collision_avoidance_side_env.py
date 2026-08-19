@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.tools import probe_gym_collision_avoidance_side_env as probe
+from tests.support.command_results import command_result_factory
 
 
 def _write(path: Path, text: str) -> None:
@@ -69,21 +70,14 @@ def test_run_probe_preserves_venv_symlink_path(
 
     seen_commands: list[list[str]] = []
 
-    def fake_run(
-        name: str, command: list[str], cwd: Path, timeout_seconds: int
-    ) -> probe.CommandResult:
-        """Record explicit side-env commands while returning success."""
-        seen_commands.append(command)
-        return probe.CommandResult(
-            name=name,
-            command=command,
-            returncode=0,
-            failure_summary=None,
-            stdout_tail="ok",
-            stderr_tail="",
-        )
-
-    monkeypatch.setattr(probe, "_run_command", fake_run)
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        command_result_factory(
+            probe.CommandResult,
+            on_call=lambda _name, command, _cwd, _timeout: seen_commands.append(command),
+        ),
+    )
     probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
 
     assert seen_commands
@@ -103,22 +97,15 @@ def test_run_probe_uses_repo_relative_default_side_env_python(
 
     seen_commands: list[list[str]] = []
 
-    def fake_run(
-        name: str, command: list[str], cwd: Path, timeout_seconds: int
-    ) -> probe.CommandResult:
-        """Record default side-env commands while returning success."""
-        seen_commands.append(command)
-        return probe.CommandResult(
-            name=name,
-            command=command,
-            returncode=0,
-            failure_summary=None,
-            stdout_tail="ok",
-            stderr_tail="",
-        )
-
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(probe, "_run_command", fake_run)
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        command_result_factory(
+            probe.CommandResult,
+            on_call=lambda _name, command, _cwd, _timeout: seen_commands.append(command),
+        ),
+    )
 
     report = probe.run_probe(repo_root, None, timeout_seconds=10)
 

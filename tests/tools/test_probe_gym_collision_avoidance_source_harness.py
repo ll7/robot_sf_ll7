@@ -8,6 +8,7 @@ import pytest
 
 from scripts.tools import probe_gym_collision_avoidance_source_harness as probe
 from scripts.tools.probe_gym_collision_avoidance_source_harness import _render_markdown, run_probe
+from tests.support.command_results import command_result_factory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -150,20 +151,11 @@ def test_run_probe_marks_success_when_all_commands_pass(
     repo_root = tmp_path / "repo"
     _write_fake_repo(repo_root)
 
-    def fake_run(
-        name: str, command: list[str], cwd: Path, timeout_seconds: int
-    ) -> probe.CommandResult:
-        """Return successful results for every source-harness command."""
-        return probe.CommandResult(
-            name=name,
-            command=command,
-            returncode=0,
-            failure_summary=None,
-            stdout_tail="ok",
-            stderr_tail="",
-        )
-
-    monkeypatch.setattr(probe, "_run_command", fake_run)
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        command_result_factory(probe.CommandResult),
+    )
 
     report = run_probe(repo_root, timeout_seconds=5)
 

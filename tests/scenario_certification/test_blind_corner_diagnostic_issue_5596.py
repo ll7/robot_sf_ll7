@@ -374,7 +374,7 @@ def test_issue_5596_diagnostic_end_to_end_on_committed_blind_corner() -> None:
     is internally consistent and diagnostic-scoped. Marked slow because it builds the
     simulator. It does NOT make any benchmark claim.
     """
-    pytest.importorskip("robot_sf.benchmark.map_runner")
+    pytest.importorskip("robot_sf.benchmark.map_runner.map_runner")
     manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
 
     report = build_issue_5596_blind_corner_diagnostic(manifest, envelope_radii_m=(1.0, 0.5))
@@ -408,7 +408,7 @@ def test_issue_5596_diagnostic_is_deterministic_across_repeated_runs() -> None:
     ``source_commit`` legitimately varies per run and is excluded from the comparison.
     It does NOT make any benchmark claim.
     """
-    pytest.importorskip("robot_sf.benchmark.map_runner")
+    pytest.importorskip("robot_sf.benchmark.map_runner.map_runner")
     manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
 
     def normalized_sha(report: dict[str, Any]) -> str:
@@ -604,7 +604,7 @@ def test_planned_path_clearance_verdict_reports_negative_clearance_on_clipped_pa
     manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
     if not manifest.exists():
         pytest.skip("committed francis2023.yaml manifest not available")
-    pytest.importorskip("robot_sf.benchmark.map_runner")
+    pytest.importorskip("robot_sf.benchmark.map_runner.map_runner")
 
     # Load the real blind-corner scenario cell so the planner uses its own map/route.
     scenarios = load_scenarios(manifest)

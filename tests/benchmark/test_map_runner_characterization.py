@@ -21,8 +21,8 @@ from typing import Any
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner import _build_policy
-from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -298,27 +298,27 @@ class TestRunMapEpisodeCharacterization:
         )
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode._build_env_config",
+            "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
             lambda scenario, scenario_path: dummy_config,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode.make_robot_env",
+            "robot_sf.benchmark.map_runner.map_runner_episode.make_robot_env",
             lambda config, seed, debug: _DummyEnv(map_def),
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode.sample_obstacle_points",
+            "robot_sf.benchmark.map_runner.map_runner_episode.sample_obstacle_points",
             lambda *args: None,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode.compute_shortest_path_length",
+            "robot_sf.benchmark.map_runner.map_runner_episode.compute_shortest_path_length",
             lambda *args: 1.0,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode.compute_all_metrics",
+            "robot_sf.benchmark.map_runner.map_runner_episode.compute_all_metrics",
             lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode.post_process_metrics",
+            "robot_sf.benchmark.map_runner.map_runner_episode.post_process_metrics",
             lambda metrics, **kwargs: metrics,
         )
 
@@ -454,7 +454,7 @@ class TestErrorPathCharacterization:
         )
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner_episode._build_env_config",
+            "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
             lambda scenario, scenario_path: dummy_config,
         )
 

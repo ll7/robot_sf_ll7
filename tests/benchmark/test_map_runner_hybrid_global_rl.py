@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_policies.hybrid_global_rl import HYBRID_GLOBAL_RL_KEYS
 
 

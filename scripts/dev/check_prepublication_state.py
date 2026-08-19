@@ -55,13 +55,13 @@ _CLOSING_REFERENCE_RE = re.compile(
     re.IGNORECASE,
 )
 _REFERENCE_VERB_RE = re.compile(
-    r"(?i)\b(?P<verb>close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|references?|"
-    r"implement[sd]?|part\s+of|addresses?)\s*:?[ \t]*`?"
+    r"(?i)\b(?P<verb>close[sd]?|fix(?:e[sd])?|resolve[sd]?|"
+    r"implement[sd]?|addresses?)\s*:?[ \t]*`?"
     r"(?:(?:https?://github\.com/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)|"
     r"(?:(?P<repo>[\w.-]+/[\w.-]+)?#))?(?P<number>\d+)\b`?",
 )
 _TITLE_ISSUE_RE = re.compile(
-    r"(?i)(?:\((?:#|issue-)?(?P<paren_num>\d+)\)|(?:^|\s)(?:#|issue-)(?P<bare_num>\d+)\b)"
+    r"(?i)(?:\((?:#|issue-)(?P<paren_num>\d+)\)|(?:^|\s)(?:#|issue-)(?P<bare_num>\d+)\b)"
 )
 _BRANCH_ISSUE_RE = re.compile(r"(?i)(?:^|[/._-])issue-(?P<number>\d+)(?:[/._-]|$|\b)")
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
@@ -338,7 +338,7 @@ def _covering_issue_numbers(
     head_ref: str | None = None,
     repo: str,
 ) -> set[int]:
-    """Extract issue numbers referenced or closed by a pull request."""
+    """Extract issue numbers owned by explicit PR, title, or branch signals."""
     numbers: set[int] = set()
     searchable = f"{title}\n{body}"
     for match in _REFERENCE_VERB_RE.finditer(searchable):
@@ -368,12 +368,8 @@ def _fetch_claim_ref(*, remote: str, issue: int) -> dict[str, Any]:
     ref_name = f"refs/heads/agent-claims/issue-{issue}"
     result = _run(["git", "ls-remote", "--heads", remote, ref_name], check=False)
     if result.returncode != 0:
-        return {
-            "exists": False,
-            "ref": f"agent-claims/issue-{issue}",
-            "full_ref": ref_name,
-            "sha": None,
-        }
+        detail = result.stderr.strip() or result.stdout.strip() or "remote claim lookup failed"
+        raise GateError(f"git ls-remote claim ref {ref_name} failed: {detail}")
     lines = [line.split() for line in result.stdout.splitlines() if line.split()]
     if lines and len(lines[0]) >= 1:
         return {
@@ -881,7 +877,7 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
             baseline,
             current,
             decision="superseded",
-            reason="open_pr_closes_issue",
+            reason="open_pr_covers_issue",
             extra={
                 "open_covering_prs": competing_open_prs,
                 "new_open_covering_prs": new_open_covering_prs,
@@ -1129,7 +1125,7 @@ def _handle_capture(args: argparse.Namespace) -> int:
         reason = "merged_pr_closes_issue"
     elif competing_open_prs:
         decision = "superseded"
-        reason = "open_pr_closes_issue"
+        reason = "open_pr_covers_issue"
     elif snapshot["issue_state"] != "OPEN":
         decision = "superseded" if snapshot["issue_state"] == "CLOSED" else "blocked"
         reason = "issue_closed" if decision == "superseded" else "issue_state_unknown"

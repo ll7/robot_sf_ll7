@@ -95,7 +95,7 @@ def test_newly_opened_covering_pr_supersedes_issue() -> None:
     result = gate.evaluate_state(baseline, current)
 
     assert result["decision"] == "superseded"
-    assert result["reason"] == "open_pr_closes_issue"
+    assert result["reason"] == "open_pr_covers_issue"
     assert result["new_open_covering_prs"][0]["number"] == 7002
 
 
@@ -974,23 +974,30 @@ def test_collect_live_state_records_ancestry_block(monkeypatch) -> None:
     assert ancestry_state is not None
 
 
-def test_covering_issue_numbers_matches_various_formats() -> None:
-    """_covering_issue_numbers recognizes titles, branches, and body verbs."""
+def test_covering_issue_numbers_matches_ownership_formats_only() -> None:
+    """_covering_issue_numbers recognizes ownership, title, and branch signals."""
     repo = "ll7/robot_sf_ll7"
 
-    # Verb in body
-    assert 7448 in gate._covering_issue_numbers(body="Refs #7448.", repo=repo)
+    # Strong ownership verbs in the body
     assert 7448 in gate._covering_issue_numbers(body="Fixes #7448", repo=repo)
-    assert 7448 in gate._covering_issue_numbers(body="Part of #7448", repo=repo)
+    assert 7448 in gate._covering_issue_numbers(body="Implements #7448", repo=repo)
     assert 7448 in gate._covering_issue_numbers(body="Addresses #7448", repo=repo)
     assert 7448 in gate._covering_issue_numbers(
         body="Closes https://github.com/ll7/robot_sf_ll7/issues/7448", repo=repo
     )
 
+    # Context-only references must not block a dependent or stacked PR.
+    assert 7448 not in gate._covering_issue_numbers(body="Refs #7448.", repo=repo)
+    assert 7448 not in gate._covering_issue_numbers(body="Part of #7448", repo=repo)
+
     # Title conventions
     assert 7448 in gate._covering_issue_numbers(
         title="fix(dev): fail closed on non-live carriers (#7448)", repo=repo
     )
+    assert 7448 in gate._covering_issue_numbers(
+        title="fix(dev): fail closed on non-live carriers (issue-7448)", repo=repo
+    )
+    assert 3 not in gate._covering_issue_numbers(title="fix: parser behavior (3)", repo=repo)
     assert 7448 in gate._covering_issue_numbers(title="fix issue-7448 bug", repo=repo)
 
     # Branch conventions
@@ -1024,6 +1031,18 @@ def test_fetch_claim_ref_detects_existing_and_missing(monkeypatch) -> None:
     missing = gate._fetch_claim_ref(remote="origin", issue=9999)
     assert missing["exists"] is False
     assert missing["sha"] is None
+
+
+def test_fetch_claim_ref_lookup_failure_fails_closed(monkeypatch) -> None:
+    """A remote/authentication failure must not look like an absent claim ref."""
+
+    def fake_run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 128, "", "fatal: authentication failed")
+
+    monkeypatch.setattr(gate, "_run", fake_run)
+
+    with pytest.raises(gate.GateError, match="authentication failed"):
+        gate._fetch_claim_ref(remote="origin", issue=7474)
 
 
 def test_capture_cli_superseded_when_competing_open_pr_exists(
@@ -1066,7 +1085,7 @@ def test_capture_cli_superseded_when_competing_open_pr_exists(
     assert exit_code == 3
     output = json.loads(capsys.readouterr().out)
     assert output["decision"] == "superseded"
-    assert output["reason"] == "open_pr_closes_issue"
+    assert output["reason"] == "open_pr_covers_issue"
     assert output["open_covering_prs"][0]["number"] == 7462
 
 
@@ -1126,7 +1145,7 @@ def test_evaluate_state_superseded_on_competing_open_pr() -> None:
     result = gate.evaluate_state(baseline, current)
 
     assert result["decision"] == "superseded"
-    assert result["reason"] == "open_pr_closes_issue"
+    assert result["reason"] == "open_pr_covers_issue"
     assert result["open_covering_prs"][0]["number"] == 7462
 
 

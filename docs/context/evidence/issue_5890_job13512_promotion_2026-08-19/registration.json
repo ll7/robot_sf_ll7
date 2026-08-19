@@ -1,0 +1,67 @@
+{
+  "schema_version": "issue5890.job13512_artifact_promotion.v1",
+  "status": "promoted_for_custody_only",
+  "issue": 5890,
+  "parent_issue": 3207,
+  "job_id": "13512",
+  "source": {
+    "host": "imech192",
+    "accessed_at": "2026-08-19",
+    "remote_result_root": "/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512",
+    "campaign_root": "campaign",
+    "source_run_summary": {
+      "public_commit": "ae0130d65cf232e0322cfd4800659a87d481490a",
+      "execution_hostname": "auxme-imech254",
+      "execution_commit": "ae0130d65cf232e0322cfd4800659a87d481490a",
+      "slurm_job_id": "13512",
+      "config": "configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml",
+      "primary_metric": "snqi",
+      "expected_episode_count": 5184,
+      "command_record": "run_summary_source.txt",
+      "source_command_record_name": "run_summary.yaml"
+    }
+  },
+  "tracked_artifacts": [
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/planner_variant_metrics.csv", "source": "campaign/evidence/planner_variant_metrics.csv", "size_bytes": 6503, "sha256": "81eb9f6e2a368fae0722207c3bf8c774eedc5230aaa940a009a6e6fb84dd0635", "role": "compact_metric_rows"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/summary.json", "source": "campaign/evidence/summary.json", "size_bytes": 24344, "sha256": "b4c78ec3143babc0003b6d927c072091a37703773aa562bd6911debc80a3e146", "role": "campaign_summary"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/fidelity_rank_stability_report.json", "source": "campaign/evidence/fidelity_rank_stability_report.json", "size_bytes": 5894, "sha256": "ad191efdca328b1d0f1475b001aae9ac9c2fb75456fae6de4ff31b8b9dbe4dcd", "role": "source_rank_report"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/campaign_outcome.json", "source": "campaign/campaign_outcome.json", "size_bytes": 400, "sha256": "31515c0210fa661d9d77168c806a9e0716fc4465888120e2d5bbe0be1692c584", "role": "source_outcome_contract"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/fidelity_fixed_scope_run_plan.json", "source": "campaign/plan/fidelity_fixed_scope_run_plan.json", "size_bytes": 48804, "sha256": "270d2305b56f20b04eeb63f798a15fea0f1e47868efec5804ca97f61c615c8f3", "role": "scope_and_run_plan"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/run_summary_source.txt", "source": "run_summary.yaml", "size_bytes": 4432, "sha256": "38bc2c98c7bdc361c61eb0ec8689f8c259548aa8268da638253da200b9cbea45", "role": "command_and_provenance_record"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/execution_context.txt", "source": "campaign/execution_context.txt", "size_bytes": 531, "sha256": "ec665fd4e9c98bf89a49f9e707b3335fadae4d8144ddc1738094a162781e2e19", "role": "execution_context"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/environment.freeze.txt", "source": "campaign/environment.freeze.txt", "size_bytes": 5043, "sha256": "60d74cd269b1d3198b8a27ee7f084af6f8526aa05800568be8e57d758554c8dc", "role": "environment_provenance"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/source_evidence_README.md", "source": "campaign/evidence/README.md", "size_bytes": 2270, "sha256": "23fab70ea2e694476db712e2b2a3f2779c7998a5d34f7fba6f8f086dcd8c976e", "role": "source_claim_boundary"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/execute_stdout.txt", "source": "campaign/execute_stdout.txt", "size_bytes": 167, "sha256": "e26926bad691a6a185f740d324e451a21a2799533214270140e3e1c79c359fa5", "role": "execution_log"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/execute_stderr.txt", "source": "campaign/execute_stderr.txt", "size_bytes": 4126, "sha256": "741045e1ca9f40be0a46b75c91379e30c1c484de84bed45404d50e16f6cd4c0e", "role": "execution_log"},
+    {"path": "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/plan_stdout.txt", "source": "campaign/plan_stdout.txt", "size_bytes": 256, "sha256": "21bbaef79ae0e41f3effee5184adcb8647096645ef73ac249e099c83e163a8ae", "role": "planning_log"}
+  ],
+  "omitted_artifacts": [
+    {
+      "source_path": "campaign/raw/episode_rows.jsonl",
+      "size_bytes": 6556734,
+      "source_sha256": "d9efb9fe924eaff126fa5ec5f6b1303baa954d1e4b5400987b350f002ac9e9f3",
+      "tracked": false,
+      "location": "remote-only: imech192:/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
+      "reason": "raw episode rows remain on the source host; compact evidence is sufficient for custody and raw output must stay out of git"
+    }
+  ],
+  "observed_scope": {
+    "episode_count": 5184,
+    "csv_row_count": 36,
+    "scenario_count": 48,
+    "seeds": [111, 112, 113],
+    "summary_planners": ["baseline_social_force", "goal_seek", "orca"],
+    "csv_metric_columns": ["success_rate", "collision_rate", "min_clearance", "mean_clearance", "near_miss_rate", "comfort_exposure_mean", "time_to_goal_norm"],
+    "outcome_primary_metric": "snqi",
+    "rank_report_primary_metric": "success_rate",
+    "outcome_rank_identifiable": true,
+    "outcome_rank_stable": true
+  },
+  "reconciliation": {
+    "record": "reconciliation.md",
+    "status": "promotion_complete_pending_metric_scope_reconciliation",
+    "analysis_performed": false,
+    "benchmark_ready": false,
+    "paper_facing": false
+  }
+}

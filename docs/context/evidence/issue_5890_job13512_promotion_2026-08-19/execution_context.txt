@@ -1,0 +1,14 @@
+schema: robot_sf.execution_context.v1
+captured_at_utc: 2026-07-16T16:08:13+00:00
+git_head: ae0130d65cf232e0322cfd4800659a87d481490a
+origin_main: ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f
+git_status_porcelain: ''
+hostname: auxme-imech254
+cpu_model: Intel(R) Xeon(R) Silver 4310 CPU @ 2.10GHz
+allocated_cpus: 16
+slurm_job_id: 13512
+issue: 3207
+pr_dependency: https://github.com/ll7/robot_sf_ll7/pull/5872
+config: configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml
+primary_metric: snqi
+expected_episode_count: 5184

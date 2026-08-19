@@ -12,7 +12,8 @@ fail-closed preflight as ``gh-pr-merger``:
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
   - a current ``pr-metadata: reconciled @ <digest>`` trailer binding the
     final PR title/body to the review evidence,
-  - a successful ``changed-coverage-gate`` check on the exact live PR head,
+  - a successful ``changed-coverage-gate`` check on the exact live PR head, or
+    a proven docs-only changed-file set covered by CI's ``paths-ignore`` rules,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
@@ -108,6 +109,13 @@ COMPLETED_STATUS = "completed"
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
 CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
+# Keep this list in lockstep with the top-level ``paths-ignore`` filters in
+# ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
+# workflow did not create an exact-head changed-coverage check for a PR.
+CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
+CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
+_CHANGED_FILES_PAGE_SIZE = 100
+_MAX_CHANGED_FILES_PAGES = 100
 
 # GitHub's native merge-queue ref is exposed as either the full
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
@@ -257,7 +265,7 @@ def _core_preflight_reasons(
         reasons.append("missing_merge_ready_label")
     if ci_overall != "success":
         reasons.append(f"ci_not_green:{ci_overall}")
-    if changed_coverage_status != "success":
+    if changed_coverage_status not in {"success", CHANGED_COVERAGE_NOT_REQUIRED}:
         reasons.append(
             {
                 "missing": "changed_coverage_proof_missing",
@@ -325,6 +333,49 @@ def _fail_closed_reasons(  # noqa: PLR0913
     return reasons
 
 
+def _is_ci_paths_ignored(path: str) -> bool:
+    """Return whether ``path`` matches the CI workflow's ignored path set.
+
+    GitHub's ``**/*.md`` filter covers Markdown at any repository depth,
+    including a root-level README or changelog.  The explicit checks below
+    mirror that contract without making the admission gate depend on a local
+    glob implementation with subtly different ``**`` semantics.
+    """
+    normalized = path.strip()
+    if (
+        not normalized
+        or normalized != path
+        or normalized.startswith(("/", "./", "../"))
+        or "\\" in normalized
+        or any(part in {"", ".", ".."} for part in normalized.split("/"))
+    ):
+        return False
+    markdown_pattern, docs_pattern = CI_PATHS_IGNORE_PATTERNS
+    return bool(normalized) and (
+        (markdown_pattern == "**/*.md" and normalized.endswith(".md"))
+        or (docs_pattern == "docs/**" and (normalized == "docs" or normalized.startswith("docs/")))
+    )
+
+
+def _docs_only_changed_files(changed_files: Any, *, complete: bool) -> bool:
+    """Prove that a complete, non-empty changed-file set is CI-ignored."""
+    if not complete or not isinstance(changed_files, list) or not changed_files:
+        return False
+    if any(not isinstance(path, str) or not path.strip() for path in changed_files):
+        return False
+    return all(_is_ci_paths_ignored(path) for path in changed_files)
+
+
+def _proven_docs_only_scope(changed_coverage: Any) -> bool:
+    """Return whether a changed-coverage payload carries the required proof."""
+    if not isinstance(changed_coverage, dict):
+        return False
+    return _docs_only_changed_files(
+        changed_coverage.get("changed_files"),
+        complete=changed_coverage.get("changed_files_complete") is True,
+    )
+
+
 def _resolve_narrative_status(body_text: str, sentinels: list[str]) -> str:
     """Return narrative status classification for PR body."""
     if not body_text:
@@ -358,7 +409,7 @@ def _resolve_merge_group_binding(
     return binding, str(queue_merging_strategy or "unknown").upper()
 
 
-def evaluate_merge_gate(  # noqa: PLR0913 - explicit fail-closed admission dimensions.
+def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission dimensions.
     pr: dict[str, Any],
     *,
     main_sha: str = "",
@@ -432,6 +483,18 @@ def evaluate_merge_gate(  # noqa: PLR0913 - explicit fail-closed admission dimen
         if not changed_coverage_head_sha:
             changed_coverage_head_sha = str(changed_coverage.get("head_sha") or "")
     changed_coverage_status = str(changed_coverage_status or "").lower() or "unknown"
+    docs_only_scope_proven = _proven_docs_only_scope(changed_coverage)
+    if changed_coverage_status == "missing" and docs_only_scope_proven:
+        # The workflow is intentionally skipped for exactly this path set;
+        # accepting it is safe only after the live API proves the complete
+        # changed-file list.  No source-changing PR receives this bypass.
+        changed_coverage_status = CHANGED_COVERAGE_NOT_REQUIRED
+        changed_coverage_head_sha = ""
+    elif changed_coverage_status == CHANGED_COVERAGE_NOT_REQUIRED and not docs_only_scope_proven:
+        # Do not trust a caller-provided status without the same proof used by
+        # the live snapshot path.
+        changed_coverage_status = "unknown"
+        changed_coverage_head_sha = ""
     if changed_coverage_status == "success" and (
         not changed_coverage_head_sha or changed_coverage_head_sha.lower() != head_sha.lower()
     ):
@@ -789,7 +852,67 @@ def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, 
     return sha, None
 
 
-def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any], str | None]:
+def _fetch_pr_changed_files(
+    pr_number: str | int, *, repo: str
+) -> tuple[list[str] | None, str | None]:
+    """Fetch the complete changed-file set needed for a missing-proof ruling.
+
+    The REST files endpoint does not expose a total count in the response, so
+    page until a short page (including an empty terminal page) proves that no
+    file was omitted.  A bounded page count and strict response validation keep
+    an API truncation or malformed response from becoming a docs-only bypass.
+    """
+    changed_files: list[str] = []
+    for page in range(1, _MAX_CHANGED_FILES_PAGES + 1):
+        result = _gh(
+            [
+                "api",
+                f"repos/{repo}/pulls/{pr_number}/files?per_page={_CHANGED_FILES_PAGE_SIZE}&page={page}",
+            ]
+        )
+        if result.returncode != 0:
+            return None, result.stderr.strip() or "changed-file query failed"
+        payload, err = _parse_json(result.stdout)
+        if err or not isinstance(payload, list):
+            return None, err or "changed-file response is not a JSON array"
+
+        page_files: list[str] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return None, "changed-file response contains a malformed entry"
+            filename = item.get("filename")
+            if not isinstance(filename, str) or not filename.strip():
+                return None, "changed-file response contains an invalid filename"
+            page_files.append(filename)
+
+        changed_files.extend(page_files)
+        if len(page_files) < _CHANGED_FILES_PAGE_SIZE:
+            if not changed_files:
+                return None, "changed-file response is empty"
+            return changed_files, None
+
+    return None, "changed-file response exceeded the bounded pagination limit"
+
+
+def _attach_missing_coverage_scope(
+    changed_coverage: dict[str, Any], pr_number: str | int, *, repo: str
+) -> tuple[dict[str, Any], str | None]:
+    """Attach a complete changed-file proof when the exact coverage check is absent."""
+    if changed_coverage.get("status") != "missing":
+        return changed_coverage, None
+    changed_files, changed_files_err = _fetch_pr_changed_files(pr_number, repo=repo)
+    if changed_files_err:
+        return {}, f"failed to prove changed-file scope: {changed_files_err}"
+    return {
+        **changed_coverage,
+        "changed_files": changed_files,
+        "changed_files_complete": True,
+    }, None
+
+
+def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fields fail-closed.
+    pr_number: str | int, *, repo: str
+) -> tuple[dict[str, Any], str | None]:
     """Fetch a compact PR snapshot via ``gh pr view`` for gate evaluation.
 
     Returns ``(snapshot, error)``. The snapshot carries the fields consumed by
@@ -843,6 +966,11 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     changed_coverage, changed_coverage_err = _fetch_exact_head_changed_coverage(head_sha, repo=repo)
     if changed_coverage_err:
         return {}, f"failed to fetch exact-head changed coverage: {changed_coverage_err}"
+    changed_coverage, changed_scope_err = _attach_missing_coverage_scope(
+        changed_coverage, pr_number, repo=repo
+    )
+    if changed_scope_err:
+        return {}, changed_scope_err
 
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
@@ -1063,7 +1191,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
         "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
-        "trailer + exact-head `changed-coverage-gate` proof + resolved threads + no outstanding reviewer requests + "
+        "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
+        "file-set proof) + resolved threads + no outstanding reviewer requests + "
         "`ALLGREEN` queue strategy; fail-closed on any missing dimension. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."

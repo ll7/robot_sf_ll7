@@ -7,7 +7,7 @@
   "source": {
     "host": "imech192",
     "accessed_at": "2026-08-19",
-    "remote_result_root": "/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512",
+    "remote_result_root": "${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512",
     "campaign_root": "campaign",
     "source_run_summary": {
       "public_commit": "ae0130d65cf232e0322cfd4800659a87d481490a",
@@ -41,7 +41,7 @@
       "size_bytes": 6556734,
       "source_sha256": "d9efb9fe924eaff126fa5ec5f6b1303baa954d1e4b5400987b350f002ac9e9f3",
       "tracked": false,
-      "location": "remote-only: imech192:/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
+      "location": "remote-only: imech192:${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
       "reason": "raw episode rows remain on the source host; compact evidence is sufficient for custody and raw output must stay out of git"
     }
   ],

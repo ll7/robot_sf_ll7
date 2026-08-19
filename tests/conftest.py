@@ -351,15 +351,19 @@ _FAST_PATH_FRAGMENTS = (
     "tests/contract/",
     "tests/factories/",
     "tests/guard/",
+    "tests/scenario_certification/",
     "tests/sensor/",
     "tests/sim/",
+    "tests/training/",
     "tests/unit/",
 )
 _FAST_FILE_PREFIXES = (
     "test_action_adapters",
+    "test_campaign_arm_admission",
     "test_config_validation",
     "test_environment_factory_signatures",
     "test_error_policy",
+    "test_map_runner",
     "test_planner",
     "test_range_sensor",
     "test_seed_utils",
@@ -379,6 +383,9 @@ _FAST_FILES = {
     "test_release_protocol.py",
     "test_trace_dossier_package.py",
     "test_trace_dossier_renderer.py",
+    # Radius rank-stability schema tests exercise the changed benchmark producer;
+    # keep their deterministic contract coverage in pull-request fast shards.
+    "test_radius_rank_stability.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

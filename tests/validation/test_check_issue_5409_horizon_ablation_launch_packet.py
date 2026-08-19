@@ -47,6 +47,10 @@ def test_packet_passes_fail_closed_contract() -> None:
     assert summary["scenario_matrix_hash"] == "c10df617a87c"
     assert summary["pair_is_valid"] is True
     assert summary["pair_mismatch_count"] == 0
+    assert summary["campaign_identity"]["ids"] == {
+        "h500": "issue5409_horizon_ablation_h500",
+        "h600": "issue5409_horizon_ablation_h600",
+    }
     assert summary["arm_roles"] == ["h500", "h600"]
     assert summary["checkpoint_gate_status"] == "pending_submit_node_execution"
     assert summary["compute_submit_authorized"] is False
@@ -266,3 +270,51 @@ def test_cli_reports_malformed_for_a_missing_packet(tmp_path: Path) -> None:
     assert result.returncode == 2
     payload = json.loads(result.stdout)
     assert payload["status"] == "malformed"
+
+
+def test_v2_packet_accepts_one_explicit_reviewed_rerun_pair() -> None:
+    """A reviewed pair is accepted when both arm declarations use the packet pair."""
+    packet = copy.deepcopy(_load_packet())
+    pair = {
+        "h500": "issue5409_horizon_ablation_rerun1_h500_20260818",
+        "h600": "issue5409_horizon_ablation_rerun1_h600_20260818",
+    }
+    packet["campaign_identity"]["ids"] = pair
+    for arm in packet["arms"]:
+        campaign_id = pair[arm["role"]]
+        arm["campaign_id"] = campaign_id
+        arm["results_dir_template"] = (
+            "{submit_worktree}/output/benchmarks/camera_ready/" + campaign_id
+        )
+        arm["checkpoint_gate_report_template"] = (
+            arm["results_dir_template"] + "/preflight/checkpoint_staging.json"
+        )
+
+    summary = _MODULE.validate_packet(packet)
+
+    assert summary["campaign_identity"]["ids"] == pair
+
+
+def test_legacy_v1_packet_rejects_noncanonical_pair() -> None:
+    """Changing v1 IDs without versioning cannot silently broaden the old contract."""
+    packet = copy.deepcopy(_load_packet())
+    packet["schema_version"] = _MODULE.LEGACY_SCHEMA_VERSION
+    packet.pop("campaign_identity")
+    packet["arms"][0]["campaign_id"] = "issue5409_horizon_ablation_rerun_h500"
+
+    with pytest.raises(_MODULE.PacketError, match="campaign identity pair"):
+        _MODULE.validate_packet(packet)
+
+
+def test_legacy_v1_packet_keeps_canonical_pair_readable() -> None:
+    """A historical v1 packet remains valid without a new identity block."""
+    packet = copy.deepcopy(_load_packet())
+    packet["schema_version"] = _MODULE.LEGACY_SCHEMA_VERSION
+    packet.pop("campaign_identity")
+
+    summary = _MODULE.validate_packet(packet)
+
+    assert summary["campaign_identity"]["ids"] == {
+        "h500": "issue5409_horizon_ablation_h500",
+        "h600": "issue5409_horizon_ablation_h600",
+    }

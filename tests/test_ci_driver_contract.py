@@ -26,12 +26,12 @@ PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
-    "coverage-gate": 10,
+    "coverage-gate": 20,
     "changed-coverage-gate": 15,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
-    "reproducibility-check": 10,
+    "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,

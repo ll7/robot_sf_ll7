@@ -71,7 +71,7 @@ The exact side-effect-free check command is:
 scripts/dev/run_worktree_shared_venv.sh -- python scripts/validation/check_issue_7602_forecast_preparation.py --check --packet docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json
 ```
 
-Passing this command proves only that the design packet is internally
+Passing this command validates only that the design packet is internally
 consistent, leakage-audited, provenance-bound, and hash-covered. It is not
 forecasting-performance evidence. The ego stratum remains unavailable until a
 canonical observation adapter and its separate observation-contract review

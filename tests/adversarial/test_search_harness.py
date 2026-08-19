@@ -30,6 +30,7 @@ from robot_sf.adversarial.search_harness import (
     CandidateSpecOverlayAdapter,
     FiniteSearchSpaceManifest,
     MappingOverlayAdapter,
+    RejectionRecord,
     prepare_baseline,
     prepare_equal_budget_baselines,
 )
@@ -170,6 +171,25 @@ def test_cross_variable_rejection_happens_before_adapter_or_simulation() -> None
         for row in result.candidates
         if row.rejection
     )
+
+
+def test_rejection_record_deep_freezes_nested_details() -> None:
+    """Rejection provenance remains stable when adapter-owned nested values are mutated."""
+    details = {"errors": [{"path": "candidate", "code": "invalid"}]}
+    record = RejectionRecord(
+        candidate_id="adapter:0000",
+        candidate_values={"x": 1.0},
+        stage="adapter",
+        reasons=("adapter:invalid",),
+        details=details,
+    )
+
+    details["errors"][0]["code"] = "mutated"
+    details["errors"].append({"path": "late", "code": "mutated"})
+
+    assert record.to_dict()["details"] == {"errors": [{"path": "candidate", "code": "invalid"}]}
+    with pytest.raises(TypeError):
+        record.details["errors"][0]["code"] = "mutated"  # type: ignore[index]
 
 
 def test_mapping_overlay_is_immutable_and_serializes_stably() -> None:

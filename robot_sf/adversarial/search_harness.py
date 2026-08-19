@@ -85,6 +85,30 @@ def _canonical_json(payload: object) -> bytes:
     ).encode("utf-8")
 
 
+def _freeze_json_value(value: Any) -> Any:
+    """Recursively freeze JSON-compatible provenance values."""
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {str(key): _freeze_json_value(nested) for key, nested in value.items()}
+        )
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_json_value(nested) for nested in value)
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError("provenance values must be finite")
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"provenance contains unsupported value: {type(value).__name__}")
+
+
+def _thaw_json_value(value: Any) -> Any:
+    """Return a mutable JSON-compatible copy of a frozen provenance value."""
+    if isinstance(value, Mapping):
+        return {str(key): _thaw_json_value(nested) for key, nested in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json_value(nested) for nested in value]
+    return value
+
+
 def _sha256(payload: object) -> str:
     """Return the SHA-256 digest of a deterministic JSON payload."""
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
@@ -892,15 +916,15 @@ class RejectionRecord:
             raise ValueError("rejection.reasons must be non-empty")
         if self.simulation_executed:
             raise ValueError("pre-simulation rejection cannot record simulation execution")
-        object.__setattr__(self, "candidate_values", MappingProxyType(dict(self.candidate_values)))
-        object.__setattr__(self, "details", MappingProxyType(dict(self.details)))
+        object.__setattr__(self, "candidate_values", _freeze_json_value(self.candidate_values))
+        object.__setattr__(self, "details", _freeze_json_value(self.details))
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe rejection entry."""
         return {
             "candidate_id": self.candidate_id,
-            "candidate_values": dict(self.candidate_values),
-            "details": dict(self.details),
+            "candidate_values": _thaw_json_value(self.candidate_values),
+            "details": _thaw_json_value(self.details),
             "reasons": list(self.reasons),
             "simulation_executed": False,
             "stage": self.stage,

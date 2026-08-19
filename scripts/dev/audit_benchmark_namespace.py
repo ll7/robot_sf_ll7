@@ -102,9 +102,6 @@ class Reference:
     detail: str
 
 
-<<<<<<< HEAD
-def _git(repo_root: Path, *args: str, check: bool = True) -> str:
-=======
 def _load_classification_manifest() -> frozenset[str]:
     """Load the explicit direct-child classification ledger."""
     try:
@@ -153,8 +150,7 @@ def _validate_classification_manifest(units: Iterable[Unit]) -> None:
         )
 
 
-def _git(repo_root: Path, *args: str) -> str:
->>>>>>> 17541f92a (fix(dev): require explicit namespace classifications (#7507))
+def _git(repo_root: Path, *args: str, check: bool = True) -> str:
     """Run a read-only git command and return stripped stdout."""
     result = subprocess.run(
         ["git", "-C", str(repo_root), *args],

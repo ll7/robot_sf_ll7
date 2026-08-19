@@ -110,6 +110,7 @@
     "issue_5303_search_promotion_preflight.py",
     "issue_5303_search_promotion_preregistration.py",
     "issue_5303_search_promotion_preregistration_v2.py",
+    "issue_5409_campaign_identity.py",
     "issue_5578_speed_tier_synthesis.py",
     "issue_6412_real_reexport.py",
     "issue_6814_trace_reexport.py",
@@ -128,7 +129,7 @@
     "manifest_lineage.py",
     "manifest_lineage_backfill.py",
     "manifest_lineage_graph.py",
-    "map_runner.py",
+    "map_runner",
     "map_runner_actions.py",
     "map_runner_batch_plan.py",
     "map_runner_batch_runner.py",
@@ -299,4 +300,3 @@
     "visualization.py"
   ]
 }
-

@@ -8,10 +8,10 @@ sweep. This note does not add a new checker, move additional notes, or change be
 ## Historical Checker Note
 
 PR [#4442](https://github.com/ll7/robot_sf_ll7/pull/4442) and its hardening follow-up
-[#4463](https://github.com/ll7/robot_sf_ll7/pull/4463) introduced
-`scripts/tools/check_context_note_freshness_decay.py` as a parallel, experimental implementation
-of the same Rule A/B/C scope. That path is historical evidence for the July 2026 implementation;
-it is no longer an active checker. The canonical current path is
+[#4463](https://github.com/ll7/robot_sf_ll7/pull/4463) introduced the historical file named
+`check_context_note_freshness_decay.py` under the tools directory as a parallel, experimental
+implementation of the same Rule A/B/C scope. The merged PRs are the durable source for that retired
+implementation; the filename is not a live repository command or path. The canonical current path is
 [`scripts/tools/check_context_note_freshness.py`](../../../../scripts/tools/check_context_note_freshness.py),
 and review-gated archive proposals remain owned by
 [`scripts/tools/plan_context_note_archival.py`](../../../../scripts/tools/plan_context_note_archival.py).

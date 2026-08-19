@@ -12,9 +12,12 @@ contradictions.
 - Job: `13512`
 - Source host: `imech192`
 - Source result root:
-  `/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512`
+  `${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512`
 - Source access date: 2026-08-19
 - Raw episode rows remain remote-only and are not committed.
+
+`${JOB13512_WORKTREE}` is a stable placeholder for the source-host worktree root; it is not a
+local checkout path and must be expanded only by a source-host custodian with access to `imech192`.
 
 ## What was preserved
 

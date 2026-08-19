@@ -2,8 +2,9 @@
 What changed, in one or two sentences.
 
 ## Linked Issues
-- Closes `#<id>`
-- Relates to `#<id>`
+<!-- Keep issue references plain so GitHub recognizes closing keywords after merge. -->
+- Closes #<id>
+- Relates to #<id>
 
 ## Stack / Dependency
 - Base dependency: none / `PR #<id>` / branch `<name>`

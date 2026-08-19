@@ -17,6 +17,11 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
 
     text = PR_TEMPLATE.read_text(encoding="utf-8")
 
+    assert "- Closes #<id>" in text
+    assert "- Relates to #<id>" in text
+    assert "- Closes `#<id>`" not in text
+    assert "- Relates to `#<id>`" not in text
+
     for section in (
         "## Summary",
         "## Linked Issues",

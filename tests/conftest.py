@@ -377,6 +377,9 @@ _FAST_FILES = {
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.
     "test_feasibility_first_real.py",
+    # The preparation-only adversarial search harness uses deterministic data
+    # fixtures only; keep its contract coverage in pull-request fast shards.
+    "test_search_harness.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

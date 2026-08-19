@@ -19,6 +19,28 @@ from robot_sf.nav.occupancy_grid import (
 )
 
 
+def _classic_bresenham_cells(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
+    """Return the historical cell-order reference for all-octant line walks."""
+    cells: list[tuple[int, int]] = []
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+    x, y = x0, y0
+    while True:
+        cells.append((x, y))
+        if x == x1 and y == y1:
+            return cells
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+
+
 def test_poi_query_line_requires_endpoints() -> None:
     """Ensure LINE queries validate that end coordinates are provided."""
     with pytest.raises(ValueError):
@@ -43,15 +65,94 @@ def test_robot_pose_record_equality_and_hash() -> None:
     assert isinstance(hash(record), int)
 
 
+def test_bresenham_line_matches_legacy_cell_order_exhaustively() -> None:
+    """Characterize canonical rasterizer order across signed all-octant endpoints."""
+    coordinates = range(-2, 3)
+    for x0 in coordinates:
+        for y0 in coordinates:
+            for x1 in coordinates:
+                for y1 in coordinates:
+                    rows, cols = rasterization._bresenham_line(
+                        row0=y0,
+                        col0=x0,
+                        row1=y1,
+                        col1=x1,
+                    )
+                    actual = list(zip(cols.tolist(), rows.tolist(), strict=True))
+                    assert actual == _classic_bresenham_cells(x0, y0, x1, y1), (
+                        f"mismatch for ({x0}, {y0}) -> ({x1}, {y1})"
+                    )
+
+
 @pytest.mark.parametrize(
-    ("x0", "y0", "x1", "y1"),
-    [(0, 0, 2, 1), (4, 3, 1, -2), (2, 2, 2, 2), (-2, 4, 3, 4)],
+    ("start", "end"),
+    [
+        ((0.0, 0.0), (5.0, 3.0)),
+        ((5.0, 3.0), (0.0, 0.0)),
+        ((1.0, 0.0), (3.0, 3.0)),
+        ((0.0, 1.0), (5.0, 3.0)),
+        ((2.0, 1.0), (2.0, 1.0)),
+        ((-2.0, -1.0), (7.0, 5.0)),
+    ],
 )
-def test_bresenham_line_matches_canonical_rasterizer(x0: int, y0: int, x1: int, y1: int) -> None:
-    """Keep the legacy cell-order API equal to the canonical rasterizer."""
-    rows, cols = rasterization._bresenham_line(y0, x0, y1, x1)
-    expected = list(zip(cols.tolist(), rows.tolist(), strict=True))
-    assert OccupancyGrid._bresenham_line(x0, y0, x1, y1) == expected
+def test_line_query_preserves_statistics_on_non_square_grid(
+    start: tuple[float, float], end: tuple[float, float]
+) -> None:
+    """Preserve LINE cell filtering and statistics for boundary and octant variants."""
+    config = GridConfig(
+        resolution=1.0,
+        width=6.0,
+        height=4.0,
+        channels=[GridChannel.OBSTACLES, GridChannel.PEDESTRIANS],
+    )
+    grid = OccupancyGrid(config)
+    grid.generate(obstacles=[], pedestrians=[], robot_pose=((0.0, 0.0), 0.0))
+
+    obstacle_values = (
+        np.arange(config.grid_height * config.grid_width, dtype=float).reshape(
+            config.grid_height, config.grid_width
+        )
+        / 100.0
+    )
+    pedestrian_values = np.flip(obstacle_values, axis=(0, 1))
+    grid._grid_data[0] = obstacle_values
+    grid._grid_data[1] = pedestrian_values
+
+    start_col = int(start[0] / config.resolution)
+    start_row = int(start[1] / config.resolution)
+    start_col = int(np.clip(start_col, 0, config.grid_width - 1))
+    start_row = int(np.clip(start_row, 0, config.grid_height - 1))
+    end_col = int(end[0] / config.resolution)
+    end_row = int(end[1] / config.resolution)
+    expected_cells = [
+        (row, col)
+        for col, row in _classic_bresenham_cells(start_col, start_row, end_col, end_row)
+        if 0 <= col < config.grid_width and 0 <= row < config.grid_height
+    ]
+    expected_values = grid._grid_data[
+        :, [row for row, _col in expected_cells], [col for _row, col in expected_cells]
+    ].astype(float)
+    expected_per_cell_max = expected_values.max(axis=0)
+
+    result = grid.query(
+        POIQuery(
+            x=start[0],
+            y=start[1],
+            x2=end[0],
+            y2=end[1],
+            query_type=POIQueryType.LINE,
+        )
+    )
+
+    assert result.num_cells == len(expected_cells)
+    assert result.occupancy == pytest.approx(expected_per_cell_max.mean())
+    assert result.min_occupancy == pytest.approx(expected_per_cell_max.min())
+    assert result.max_occupancy == pytest.approx(expected_per_cell_max.max())
+    assert result.mean_occupancy == pytest.approx(expected_per_cell_max.mean())
+    assert result.channel_results[GridChannel.OBSTACLES] == pytest.approx(expected_values[0].mean())
+    assert result.channel_results[GridChannel.PEDESTRIANS] == pytest.approx(
+        expected_values[1].mean()
+    )
 
 
 def test_rasterize_obstacles_aggregates_out_of_bounds_debug_logs() -> None:

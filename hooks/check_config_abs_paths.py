@@ -82,6 +82,30 @@ PINNED_VERBATIM_EVIDENCE_SHA256 = {
     (
         "docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json"
     ): "2e14b777170450825f7671418ea8ed7130576adbd6bd473bf0d63062d9ee49ae",
+    # Job-13512 custody bundle (issue #5890, PR #7585). The bundle is a
+    # byte-exact, checksum-covered promotion of source-host artifacts; the
+    # embedded absolute paths are the remote-source-location provenance the
+    # custody handoff intentionally preserves (README.md/registration.json
+    # source-result root, run_summary_source.txt command record, and the
+    # environment freeze / stderr log of the source run). Rewriting them would
+    # break the SHA256SUMS byte custody, so they are pinned verbatim and stay
+    # fail-closed: any edit to any pinned file stops matching and restores the
+    # normal absolute-path scan.
+    (
+        "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/README.md"
+    ): "43c9f59d48825601159caed7669227a85499684e275421405634eace5c92a37f",
+    (
+        "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/environment.freeze.txt"
+    ): "60d74cd269b1d3198b8a27ee7f084af6f8526aa05800568be8e57d758554c8dc",
+    (
+        "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/execute_stderr.txt"
+    ): "741045e1ca9f40be0a46b75c91379e30c1c484de84bed45404d50e16f6cd4c0e",
+    (
+        "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/registration.json"
+    ): "66d231ca0076b3a88f4bc8c304952bd1b7f21e42a86e210406ca86d571870e88",
+    (
+        "docs/context/evidence/issue_5890_job13512_promotion_2026-08-19/run_summary_source.txt"
+    ): "38bc2c98c7bdc361c61eb0ec8689f8c259548aa8268da638253da200b9cbea45",
 }
 
 

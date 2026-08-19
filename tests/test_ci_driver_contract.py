@@ -345,6 +345,11 @@ def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> 
     )
     assert fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"] == "1"
     assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
+    coverage_core = workflow["env"]["COVERAGE_CORE"]
+    assert "github.event_name == 'pull_request'" in coverage_core
+    assert "github.event_name == 'merge_group'" in coverage_core
+    assert "ctrace" in coverage_core
+    assert "sysmon" in coverage_core
     assert "github.event.pull_request.head.sha" in checkout_step["with"]["ref"]
     assert "if" not in upload_step
     assert upload_step["with"]["include-hidden-files"] is True

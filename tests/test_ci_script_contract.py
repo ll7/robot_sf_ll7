@@ -3067,7 +3067,9 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
     ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
 
-    assert "COVERAGE_CORE: sysmon" in ci_workflow_text
+    assert "COVERAGE_CORE:" in ci_workflow_text
+    assert "ctrace" in ci_workflow_text
+    assert "sysmon" in ci_workflow_text
     assert "--minimum-total 85.0" in ci_workflow_text
     assert "coverage combine output/coverage" in ci_workflow_text
     assert 'ROBOT_SF_PYTEST_COVERAGE: "1"' in ci_workflow_text

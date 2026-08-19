@@ -2312,8 +2312,9 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
-  run the complete suite and upload one coverage database per shard.
+  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+  trace-based coverage database per shard for exact-head changed coverage, while non-PR events
+  run the complete suite and upload one coverage database per shard using the faster sysmon backend.
 - `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
@@ -2364,8 +2365,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
-  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker and
+  trace-based per-shard coverage for exact-head changed coverage, while main, manual, and merge-queue
+  events run the complete suite with per-shard coverage data. Merge-queue coverage also uses the
+  trace backend because it feeds the exact-head changed-coverage gate.
 - `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
   and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces

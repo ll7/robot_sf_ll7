@@ -13,6 +13,7 @@ from robot_sf.benchmark.forecast.forecast_preparation import (
     validate_forecast_preparation_packet,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.evidence.writers import write_json, write_review_sidecar, write_text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_7399_forecast_preparation"
@@ -63,10 +64,7 @@ def _checksum_paths() -> tuple[Path, ...]:
 
 
 def _write_packet(packet: dict[str, object]) -> None:
-    DEFAULT_PACKET.write_text(
-        json.dumps(packet, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(DEFAULT_PACKET, packet, catalog_area="benchmark_evidence")
 
 
 def _write_checksums(paths: tuple[Path, ...]) -> None:
@@ -76,7 +74,10 @@ def _write_checksums(paths: tuple[Path, ...]) -> None:
             set(paths), key=lambda item: item.resolve().relative_to(REPO_ROOT).as_posix()
         )
     ]
-    DEFAULT_MANIFEST.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(
+        DEFAULT_MANIFEST,
+        "# AI-GENERATED NEEDS-REVIEW\n" + "\n".join(lines) + "\n",
+    )
 
 
 def _build() -> dict[str, object]:
@@ -84,7 +85,7 @@ def _build() -> dict[str, object]:
     # The packet covers its own final bytes; a placeholder makes that path resolvable
     # while the deterministic packet is being constructed.
     if not DEFAULT_PACKET.exists():
-        DEFAULT_PACKET.write_text("{}\n", encoding="utf-8")
+        write_json(DEFAULT_PACKET, {})
     checksum_paths = _checksum_paths()
     packet = build_forecast_preparation_packet(
         SOURCE_SPECS,
@@ -93,6 +94,8 @@ def _build() -> dict[str, object]:
     )
     _write_packet(packet)
     _write_checksums(checksum_paths)
+    for artifact_path in (EVIDENCE_DIR / "README.md", DEFAULT_PACKET, DEFAULT_MANIFEST):
+        write_review_sidecar(artifact_path, repo_root=REPO_ROOT)
     return validate_forecast_preparation_packet(
         packet,
         repo_root=REPO_ROOT,

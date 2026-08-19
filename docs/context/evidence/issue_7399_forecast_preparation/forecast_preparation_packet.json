@@ -167,6 +167,7 @@
     "actor_id",
     "horizon_s"
   ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "row_count": 6,
   "row_schema_version": "forecast_preparation_row.v1",
   "rows": [

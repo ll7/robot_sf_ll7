@@ -39,7 +39,7 @@ from robot_sf._execution_context import (
     public_machine_id,
 )
 from robot_sf._numerical_thread_env import THREAD_ENV_VARS
-from robot_sf.benchmark.map_runner_identity import _scenario_with_episode_seed_defaults
+from robot_sf.benchmark.map_runner.map_runner_identity import _scenario_with_episode_seed_defaults
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.artifact_paths import get_repository_root
 

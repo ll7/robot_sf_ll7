@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.predictive.predictive_planner_config import (
     build_predictive_planner_algo_config,
 )

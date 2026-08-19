@@ -42,7 +42,7 @@ from robot_sf.benchmark.latency.latency_stress import (
     classify_feasibility,
     collect_environment_provenance,
 )
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -30,6 +30,8 @@ from pathlib import Path
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.radius_rank_stability import (
     ANALYSIS_BLOCKED_PENDING_GATE2,
+    RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+    RADIUS_RANK_STABILITY_SCHEMA,
     RadiusSensitivityReport,
     analyze_radius_sensitivity,
     build_evidence_provenance,
@@ -179,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "verdict": verdict,
+                    "report_schema_version": RADIUS_RANK_STABILITY_SCHEMA,
+                    "bundle_schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
                     "analysis_status": report.verdict.analysis_status,
                     "evidence_tier": evidence_tier_for_verdict(verdict),
                     "interpretation_promoted": report.verdict.interpretation_promoted,

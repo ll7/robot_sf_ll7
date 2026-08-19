@@ -17,7 +17,9 @@ from robot_sf.benchmark.radius_rank_stability import (
     EXPECTED_ROWS_PER_ARM,
     EXPECTED_SCENARIO_NAMES,
     RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+    RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1,
     RADIUS_RANK_STABILITY_SCHEMA,
+    RADIUS_RANK_STABILITY_SCHEMA_V1,
     REQUIRED_CLAIM_BOUNDARY_PHRASES,
     VERDICT_INVALID,
     VERDICT_NON_IDENTIFIABLE,
@@ -28,6 +30,7 @@ from robot_sf.benchmark.radius_rank_stability import (
     _radius_key,
     analyze_metric_rank_stability,
     analyze_radius_sensitivity,
+    build_analysis_provenance_payload,
     build_evidence_provenance,
     build_missingness_ledger,
     build_paired_inference_contract,
@@ -39,6 +42,8 @@ from robot_sf.benchmark.radius_rank_stability import (
     render_propagation_comment,
     render_verdict_comment,
     sweep_summary_available,
+    validate_radius_evidence_bundle_provenance,
+    validate_radius_sensitivity_payload,
     write_evidence_bundle,
 )
 
@@ -920,6 +925,8 @@ def test_analyze_radius_sensitivity_report_schema() -> None:
     report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))
     payload = report.to_dict()
     assert payload["schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    assert RADIUS_RANK_STABILITY_SCHEMA == "radius_rank_stability.v2"
+    validate_radius_sensitivity_payload(payload)
     assert payload["baseline_radius_m"] == 1.0
     assert payload["radii_m"] == [0.5, 0.8, 1.0]
     assert payload["scenario_cell_count"] == 48
@@ -927,6 +934,157 @@ def test_analyze_radius_sensitivity_report_schema() -> None:
     for phrase in REQUIRED_CLAIM_BOUNDARY_PHRASES:
         assert phrase in payload["claim_boundary"]
     assert report.verdict.verdict == VERDICT_STABLE
+
+
+def test_radius_report_rejects_historical_v1_without_v2_blocks() -> None:
+    """A legacy v1 payload is rejected instead of being upgraded implicitly."""
+    report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))
+    payload = report.to_dict()
+    payload["schema_version"] = RADIUS_RANK_STABILITY_SCHEMA_V1
+    payload.pop("paired_inference_contract")
+    for by_radius in payload["paired_changes"].values():
+        for changes in by_radius.values():
+            for change in changes:
+                change.pop("support")
+
+    with pytest.raises(ValueError, match="historical v1 payloads are not reinterpreted"):
+        validate_radius_sensitivity_payload(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("not_object", "must be a JSON object"),
+        ("unknown_schema", "schema_version must be"),
+        ("missing_field", "missing fields"),
+        ("contract_not_object", "paired_inference_contract must be an object"),
+        ("contract_schema", "paired_inference_contract schema_version must be"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_v2_envelopes(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 report envelope and inference contract fail closed."""
+    payload: object = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "not_object":
+        payload = None
+    else:
+        assert isinstance(payload, dict)
+        if case == "unknown_schema":
+            payload["schema_version"] = "radius_rank_stability.unknown"
+        elif case == "missing_field":
+            payload.pop("claim_boundary")
+        elif case == "contract_not_object":
+            payload["paired_inference_contract"] = None
+        elif case == "contract_schema":
+            payload["paired_inference_contract"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("paired_not_object", "paired_changes must be an object"),
+        ("metric_not_object", r"paired_changes\['success'\] must be an object"),
+        ("changes_not_list", "must be a list"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_containers(
+    case: str,
+    match: str,
+) -> None:
+    """The v2 paired-change containers must retain their JSON shapes."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    if case == "paired_not_object":
+        payload["paired_changes"] = None
+    else:
+        metric = next(iter(payload["paired_changes"]))
+        by_radius = payload["paired_changes"][metric]
+        radius = next(iter(by_radius))
+        if case == "metric_not_object":
+            payload["paired_changes"][metric] = []
+        else:
+            by_radius[radius] = {}
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    [
+        ("change_not_object", "must be an object"),
+        ("support_not_object", "require support diagnostics"),
+        ("support_schema", "paired support schema_version must"),
+    ],
+)
+def test_radius_report_validator_rejects_malformed_paired_entries(
+    case: str,
+    match: str,
+) -> None:
+    """Each v2 paired change must carry versioned support diagnostics."""
+    payload = analyze_radius_sensitivity(_sweep_summary(_stable_tables())).to_dict()
+    metric = next(iter(payload["paired_changes"]))
+    by_radius = payload["paired_changes"][metric]
+    radius = next(iter(by_radius))
+    changes = by_radius[radius]
+    if case == "change_not_object":
+        changes[0] = None
+    elif case == "support_not_object":
+        changes[0]["support"] = None
+    else:
+        changes[0]["support"]["schema_version"] = "unknown"
+
+    with pytest.raises(ValueError, match=match):
+        validate_radius_sensitivity_payload(payload)
+
+
+def test_radius_evidence_bundle_pins_v2_report_schema() -> None:
+    """The bundle provenance version records the report envelope it accepts."""
+    report = analyze_radius_sensitivity(None)
+    provenance = build_evidence_provenance(
+        report,
+        config_path="configs/benchmarks/radius_sensitivity_v1.yaml",
+        command="cmd",
+        campaign_commit=None,
+        analysis_commit="a" * 40,
+    )
+    payload = build_analysis_provenance_payload(report, provenance)
+    assert RADIUS_EVIDENCE_BUNDLE_SCHEMA == "issue_6643_radius_rank_stability_bundle.v2"
+    assert payload["schema_version"] == RADIUS_EVIDENCE_BUNDLE_SCHEMA
+    assert payload["report_schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    validate_radius_evidence_bundle_provenance(payload)
+
+    legacy = dict(payload)
+    legacy["schema_version"] = RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1
+    with pytest.raises(ValueError, match="bundle now pins the v2 report envelope"):
+        validate_radius_evidence_bundle_provenance(legacy)
+
+
+@pytest.mark.parametrize(
+    ("payload", "match"),
+    [
+        (None, "must be a JSON object"),
+        ({"schema_version": "unknown"}, "schema_version must be"),
+        (
+            {
+                "schema_version": RADIUS_EVIDENCE_BUNDLE_SCHEMA,
+                "report_schema_version": "radius_rank_stability.v1",
+            },
+            "report_schema_version must be",
+        ),
+    ],
+)
+def test_radius_bundle_validator_rejects_unsupported_provenance(
+    payload: object,
+    match: str,
+) -> None:
+    """Bundle provenance must pin the current bundle and report envelopes."""
+    with pytest.raises(ValueError, match=match):
+        validate_radius_evidence_bundle_provenance(payload)  # type: ignore[arg-type]
 
 
 def test_analyze_radius_sensitivity_end_to_end_verdicts() -> None:
@@ -1250,7 +1408,11 @@ def test_load_sweep_summary_fails_closed(tmp_path: Path) -> None:
 # --- CLI -------------------------------------------------------------------
 
 
-def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_blocked_exits_nonzero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Verify the blocked exit status and separate provenance.
 
     The blocked bundle must keep ``campaign_commit`` null and record the
@@ -1270,6 +1432,9 @@ def test_cli_blocked_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         ]
     )
     assert exit_code == cli.EXIT_BLOCKED_PENDING_GATE2
+    cli_summary = json.loads(capsys.readouterr().out)
+    assert cli_summary["report_schema_version"] == RADIUS_RANK_STABILITY_SCHEMA
+    assert cli_summary["bundle_schema_version"] == RADIUS_EVIDENCE_BUNDLE_SCHEMA
     assert (tmp_path / "bundle" / "result.json").is_file()
 
     provenance = json.loads((tmp_path / "bundle" / "analysis_provenance.json").read_text())[

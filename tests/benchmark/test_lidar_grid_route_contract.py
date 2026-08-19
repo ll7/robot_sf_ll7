@@ -11,7 +11,7 @@ from robot_sf.benchmark.algorithm_metadata import (
     resolve_observation_mode,
 )
 from robot_sf.benchmark.algorithm_readiness import require_algorithm_allowed
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
 
 def test_lidar_grid_route_metadata_accepts_lidar_level_without_privileged_inputs() -> None:

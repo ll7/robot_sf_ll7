@@ -27,9 +27,17 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.issue_5409_campaign_identity import (
+    DEFAULT_CAMPAIGN_ID_PAIR,
+    CampaignIdentityError,
+    CampaignIdPair,
+    campaign_identity_from_packet,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PACKET = REPO_ROOT / "configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml"
-SCHEMA_VERSION = "issue-5409-horizon-ablation-launch-packet.v1"
+SCHEMA_VERSION = "issue-5409-horizon-ablation-launch-packet.v2"
+LEGACY_SCHEMA_VERSION = "issue-5409-horizon-ablation-launch-packet.v1"
 
 EXPECTED_SCENARIO_MATRIX_HASH = "c10df617a87c"
 EXPECTED_PLANNER_COUNT = 12
@@ -140,7 +148,9 @@ def _validate_pair_validation(packet: dict[str, Any]) -> dict[str, Any]:
     return pair
 
 
-def _validate_arms(packet: dict[str, Any]) -> list[dict[str, Any]]:
+def _validate_arms(
+    packet: dict[str, Any], campaign_identity: CampaignIdPair
+) -> list[dict[str, Any]]:
     arms = packet.get("arms")
     _require(isinstance(arms, list) and len(arms) == 2, "arms must be a two-entry list")
     assert isinstance(arms, list)  # narrowed by _require
@@ -167,8 +177,8 @@ def _validate_arms(packet: dict[str, Any]) -> list[dict[str, Any]]:
 
         campaign_id = str(arm.get("campaign_id", ""))
         _require(
-            campaign_id == f"issue5409_horizon_ablation_{role}",
-            f"arm {role} campaign_id must be issue5409_horizon_ablation_{role}",
+            campaign_id == campaign_identity.for_role(str(role)),
+            f"arm {role} campaign_id must match the declared campaign identity pair",
         )
 
         results_dir = str(arm.get("results_dir_template", ""))
@@ -329,7 +339,19 @@ def _validate_fail_closed(packet: dict[str, Any]) -> dict[str, Any]:
 
 def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
     """Return a compact validation summary for a fail-closed launch packet."""
-    _require(packet.get("schema_version") == SCHEMA_VERSION, "unexpected schema_version")
+    packet_schema = packet.get("schema_version")
+    if packet_schema == LEGACY_SCHEMA_VERSION:
+        _require(
+            "campaign_identity" not in packet,
+            "legacy v1 packets must keep their fixed canonical campaign IDs",
+        )
+        campaign_identity = DEFAULT_CAMPAIGN_ID_PAIR
+    else:
+        _require(packet_schema == SCHEMA_VERSION, "unexpected schema_version")
+        try:
+            campaign_identity = campaign_identity_from_packet(packet)
+        except CampaignIdentityError as exc:
+            raise PacketError(str(exc)) from exc
     _require(packet.get("parent_issue") == 5409, "parent_issue must be 5409")
     _require(
         packet.get("no_benchmark_result_claim") is True,
@@ -350,7 +372,7 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
 
     matrix = _validate_matrix(packet)
     pair = _validate_pair_validation(packet)
-    arms = _validate_arms(packet)
+    arms = _validate_arms(packet, campaign_identity)
     env = _validate_environment_identity(packet)
     gate = _validate_checkpoint_gate(packet)
     manifest = _validate_artifact_manifest(packet)
@@ -387,7 +409,8 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "issue": 5409,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": packet_schema,
+        "campaign_identity": campaign_identity.to_payload(),
         "generating_commit": commit,
         "planner_count": matrix.get("planner_count"),
         "scenario_count": matrix.get("scenario_count"),

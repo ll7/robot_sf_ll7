@@ -18,7 +18,7 @@ from robot_sf.benchmark.braking_authority_sensitivity import (
     materialize_arm_scenario,
     write_report,
 )
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
 EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 

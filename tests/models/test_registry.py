@@ -899,8 +899,9 @@ def test_download_from_wandb_prefers_artifact_path(monkeypatch, tmp_path: Path) 
     assert calls == [("artifact", "ll7/robot_sf/demo-best:v1")]
 
 
-def test_download_from_wandb_rejects_missing_run_metadata(tmp_path: Path) -> None:
+def test_download_from_wandb_rejects_missing_run_metadata(monkeypatch, tmp_path: Path) -> None:
     """Download helper should fail clearly when the registry row lacks W&B location metadata."""
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=lambda: None))
     with pytest.raises(ValueError, match="missing wandb_artifact_path"):
         registry._download_from_wandb({"model_id": "demo"}, cache_dir=tmp_path / "cache")
 

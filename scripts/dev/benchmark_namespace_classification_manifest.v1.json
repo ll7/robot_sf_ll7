@@ -23,6 +23,7 @@
     "benchmark_protocol.py",
     "benchmark_row_claim.py",
     "braking_authority_sensitivity.py",
+    "calf_legnav_comparator.py",
     "camera_ready",
     "camera_ready_campaign.py",
     "camera_ready_campaign_config.py",

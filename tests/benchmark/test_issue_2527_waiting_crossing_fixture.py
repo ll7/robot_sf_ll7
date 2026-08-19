@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner.map_runner import (
     _episode_metadata_for_signal_metrics,
     _intent_conditioned_behavior_summary,
     _signal_state_for_metric_metadata,

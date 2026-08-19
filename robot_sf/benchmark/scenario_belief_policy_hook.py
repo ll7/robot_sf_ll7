@@ -2,7 +2,7 @@
 
 Plain-language summary: #3471 (PR #3553) showed, in a controlled scripted scenario, that *dropping*
 uncertain agents from the ``stream_gap`` planner's reasoning is less safe than *retaining* them. This
-hook lets the **real benchmark runner** (`robot_sf.benchmark.map_runner`) reproduce that
+hook lets the **real benchmark runner** (`robot_sf.benchmark.map_runner.map_runner`) reproduce that
 ``oracle`` / ``uncertain_retained`` / ``uncertain_dropped`` contrast: it builds a ScenarioBelief from
 each benchmark observation, applies a configurable field-of-view / range uncertainty source, projects
 it through the production ``project_scenario_belief_for_planner`` consumer, and merges the resulting

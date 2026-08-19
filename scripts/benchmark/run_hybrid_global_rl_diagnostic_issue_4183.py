@@ -20,7 +20,7 @@ from robot_sf.benchmark.hybrid_global_rl_diagnostic import (
     load_jsonl_records,
     preflight_configs,
 )
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.models.registry import resolve_model_path
 
 DEFAULT_ROUTE_CONFIG = Path("configs/benchmarks/issue_4183_hybrid_global_rl_route_conditioned.yaml")

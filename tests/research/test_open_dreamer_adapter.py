@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner_trace import _command_action_payload
+from robot_sf.benchmark.map_runner.map_runner_trace import _command_action_payload
 from robot_sf.benchmark.rl_trajectory_dataset import (
     RL_TRAJECTORY_EPISODE_SCHEMA_VERSION,
     RLTrajectoryEpisode,

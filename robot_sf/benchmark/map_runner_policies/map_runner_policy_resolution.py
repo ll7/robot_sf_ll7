@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
-from robot_sf.benchmark.map_runner_trace import _scenario_id
+from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id
 from robot_sf.planner.hybrid_rule_local_planner import (
     HybridRuleLocalPlannerAdapter,
     build_hybrid_rule_local_planner_config,

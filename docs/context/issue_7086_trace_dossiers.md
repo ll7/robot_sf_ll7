@@ -103,6 +103,16 @@ planner, or admit an artifact as benchmark or paper-facing evidence. The
 selected row must still carry the source trace, release pin, cell metadata,
 and checksum before downstream provenance or publication review.
 
+## Diagnostic trace pin
+
+`configs/benchmarks/releases/issue_7086_trace_dossier_diagnostic_v0_1.yaml`
+pins the preregistered h600 trace-capable configuration and its seeds 20--24
+for trace export only. Its `diagnostic` maturity is intentional: it permits
+retained #4848/#4891 trace-series exemplars to be checked against a versioned
+configuration without treating them as a benchmark or paper release. The
+package path emits PNG/SVG/PDF plus a Markdown caption and checksums, but the
+resulting dossier remains diagnostic-only.
+
 ## Deferred work
 
 The remaining #7086 slice is intentionally separate: acquiring trace-capable

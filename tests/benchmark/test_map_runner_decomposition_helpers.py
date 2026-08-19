@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner.map_runner import (
     _build_policy,
     _build_socnav_family_adapter,
     _enforce_ppo_paper_profile,
@@ -28,7 +28,7 @@ from robot_sf.benchmark.map_runner import (
     _is_holonomic_world_velocity_mode,
     _resolve_planner_obs_mode,
 )
-from robot_sf.benchmark.map_runner_episode import (
+from robot_sf.benchmark.map_runner.map_runner_episode import (
     _apply_cbf_safety_filter_step,
     _apply_safety_wrapper_step,
     _build_tracking_precision_summary,
@@ -453,7 +453,7 @@ class TestSafetyWrapperStepHelper:
             return (0.5, 0.25), {"corrected": True, "step_idx": step_idx}
 
         # The helper calls module-level apply_runtime_safety_wrapper; patch it for this test.
-        import robot_sf.benchmark.map_runner_episode as mod
+        import robot_sf.benchmark.map_runner.map_runner_episode as mod
 
         original = mod.apply_runtime_safety_wrapper
         mod.apply_runtime_safety_wrapper = fake_apply
@@ -532,7 +532,7 @@ class TestCbfSafetyFilterStepHelper:
         def fake_apply(*, command, env, config, runtime, previous_ped_positions, step_idx):
             return (0.3, -0.1), {"filtered": True, "step_idx": step_idx}
 
-        import robot_sf.benchmark.map_runner_episode as mod
+        import robot_sf.benchmark.map_runner.map_runner_episode as mod
 
         original = mod.apply_runtime_cbf_safety_filter
         mod.apply_runtime_cbf_safety_filter = fake_apply
@@ -643,7 +643,7 @@ class TestRunEpisodeStepLoop:
 
     def test_step_loop_returns_result_with_populated_trajectory(self, monkeypatch) -> None:
         """A one-step stubbed episode must populate trajectory lists and mark success."""
-        import robot_sf.benchmark.map_runner_episode as mod
+        import robot_sf.benchmark.map_runner.map_runner_episode as mod
 
         monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: _StepLoopDummyEnv())
         policy_fn, _ = _build_policy("goal", {}, robot_kinematics="differential_drive")
@@ -709,7 +709,7 @@ class TestRunEpisodeStepLoop:
         sources: list[str],
     ) -> None:
         """Both hybrid families must emit one normalized source per executed step."""
-        import robot_sf.benchmark.map_runner_episode as mod
+        import robot_sf.benchmark.map_runner.map_runner_episode as mod
 
         class _ThreeStepEnv(_StepLoopDummyEnv):
             def __init__(self) -> None:
@@ -802,7 +802,7 @@ class TestFinalizeEpisodeRecord:
 
     def test_finalize_returns_record_with_required_keys(self, monkeypatch) -> None:
         """The finalizer must assemble a full record from ctx/loop_result/post_loop."""
-        import robot_sf.benchmark.map_runner_episode as mod
+        import robot_sf.benchmark.map_runner.map_runner_episode as mod
 
         monkeypatch.setattr(mod, "make_robot_env", lambda config, seed, debug: _StepLoopDummyEnv())
         monkeypatch.setattr(mod, "compute_all_metrics", lambda *a, **kw: {"success": 1.0})

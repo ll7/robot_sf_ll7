@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.algorithm_metadata import observation_spec_for_algorithm
-from robot_sf.benchmark.map_runner import _build_policy, _run_map_episode
-from robot_sf.benchmark.map_runner_view_integrity import (
+from robot_sf.benchmark.map_runner.map_runner import _build_policy, _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner_view_integrity import (
     DEGENERATE_PLANNER_VIEW_REASON,
     DegeneratePlannerViewError,
     evaluate_effective_view_integrity,
@@ -319,23 +319,26 @@ def _patch_episode_env(monkeypatch: pytest.MonkeyPatch) -> None:
         {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
     )()
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _PedPresentEnv(),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length", lambda *args: 1.0
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics", lambda metrics, **kwargs: metrics
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
     )
 
 
@@ -367,7 +370,9 @@ def test_map_episode_fails_closed_on_degenerate_planner_view(monkeypatch) -> Non
         policy_fn._planner_adapter = _BlindSocnavAdapter()
         return policy_fn, algo_meta
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _blind_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _blind_build_policy
+    )
 
     with pytest.raises(DegeneratePlannerViewError, match=DEGENERATE_PLANNER_VIEW_REASON):
         _run_stream_gap_episode()

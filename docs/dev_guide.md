@@ -106,18 +106,25 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Create the worktree through the capacity-guarded helper from the main checkout:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
-  "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The helper checks the target filesystem before invoking Git. A low-space or
+non-writable target fails before checkout, so it cannot leave a partially
+populated worktree. The default threshold is 2 GiB and can be overridden for
+a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
+`--minimum-free-bytes`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
@@ -135,18 +142,18 @@ A cheap fresh-worktree check is:
   && [ ! -d .venv ]
 ```
 
-Use this order for a fresh worktree:
+Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
-scripts/dev/bootstrap_worktree.sh
-source .venv/bin/activate
-python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+scripts/dev/run_worktree_shared_venv.sh -- \
+  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
-`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
-`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
-commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
-intentionally resync the local environment, unset the guard for that command:
+The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
+scratch capacity before starting the command. This avoids materializing one full `.venv` per
+parallel worktree. Use `bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it creates and targets the local `.venv`, then adds `UV_NO_SYNC=1` to its activation
+script. To intentionally resync a local environment, unset the guard for that command:
 
 ```bash
 env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
@@ -167,6 +174,22 @@ If a current-worktree `.venv` is missing or incomplete, both entry points fail b
 lightweight Python-only environment from being reused as if it were a synchronized dependency
 profile. `--standalone` remains available only for commands whose no-project-import boundary is
 verified.
+
+When the host is under pressure, inspect reclaim candidates without deleting anything:
+
+```bash
+scripts/dev/check_worktree_capacity.py --inventory --json
+```
+
+The inventory covers ignored generated `output/`, the uv cache, repository worktree containers,
+and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
+evidence before pruning `output/`; remove only clean, pushed Git worktrees with
+`git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
+automated cleanup is performed. Each existing candidate is sized with a five-second per-path
+timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
+diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
+machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
+not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 
@@ -673,7 +696,9 @@ with the gate-side rationale above.
 the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
 fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
 and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
-`--head-sha` values. The same checker used by local readiness emits a `changed-coverage.v1`
+`--head-sha` values. Because this lane performs the complete exact-head checkout and shared
+all-extras setup before combining shards, its hosted job has a bounded 30-minute timeout. The
+same checker used by local readiness emits a `changed-coverage.v1`
 artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
 and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
 `not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
@@ -688,10 +713,14 @@ be proven by a core-only shard.
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
 output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
 `scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
-missing, pending, failed, malformed, or stale result. The existing `coverage-gate` absolute-floor
-and baseline checks continue to run on main/manual/merge-group full-suite events; they do not
-substitute for the changed-line proof. Direct merge dispatchers must consume the same exact-head
-check before their CAS step (tracked separately by #7407).
+missing, pending, failed, malformed, or stale result for source-changing PRs. The CI workflow
+intentionally skips a PR whose complete changed-file set matches `**/*.md` or `docs/**`; in that
+case the gate fetches and validates the complete GitHub changed-file set and records
+`changed_coverage_status: not_required`. An API failure, incomplete file listing, or any mixed/non-
+ignored path remains a blocker. The existing `coverage-gate` absolute-floor and baseline checks
+continue to run on main/manual/merge-group full-suite events; they do not substitute for the
+changed-line proof. Direct merge dispatchers must consume the same exact-head check before their
+CAS step (tracked separately by #7407).
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
@@ -858,6 +887,29 @@ is completed successfully and the check-run is still pending, then reads the che
 `completed/success`. Identity mismatches, terminal failures, missing jobs, and API errors remain
 fail-closed with a JSON report; the reconciliation job is diagnostic-only and outside the `ci`
 aggregate.
+
+For a pending Actions check with a job URL, the monitor performs bounded REST enrichment of the
+workflow run and job records to report the current phase separately from test conclusions. The
+default stale warning threshold is 900 seconds; set it explicitly when a different operational
+window is appropriate:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+  <pr-number> \
+  --expected-head-sha <head-sha> \
+  --actions-stale-after-seconds 900 \
+  --poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200 --json
+```
+
+`checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
+timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
+exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
+result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
+replacement rather than hiding the replacement relationship behind a count. When a stale run has
+an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
+and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
@@ -2289,8 +2341,9 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
-  run the complete suite and upload one coverage database per shard.
+  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+  trace-based coverage database per shard for exact-head changed coverage, while non-PR events
+  run the complete suite and upload one coverage database per shard using the faster sysmon backend.
 - `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
@@ -2341,8 +2394,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
-  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker and
+  trace-based per-shard coverage for exact-head changed coverage, while main, manual, and merge-queue
+  events run the complete suite with per-shard coverage data. Merge-queue coverage also uses the
+  trace backend because it feeds the exact-head changed-coverage gate.
 - `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
   and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces

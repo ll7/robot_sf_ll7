@@ -754,6 +754,33 @@ def test_classify_error_status_is_no_action() -> None:
     assert classify_pr_state(pr) == "no_action"
 
 
+def test_classify_merged_pr_is_distinct_external_no_action() -> None:
+    """A merged queue row must not be mistaken for an open review candidate."""
+    pr = _pr(7571, overall="success", labels=["merge-ready"], head_sha=FULL_SHA)
+    pr["state"] = "CLOSED"
+    pr["merged_at"] = "2026-08-18T15:40:53Z"
+
+    assert classify_pr_state(pr) == "merged_externally"
+
+
+def test_classify_closed_unmerged_pr_remains_no_action() -> None:
+    """A closed queue row has no review action even without a merge timestamp."""
+    pr = _pr(7572, overall="success")
+    pr["state"] = "CLOSED"
+
+    assert classify_pr_state(pr) == "no_action"
+
+
+def test_merged_external_state_is_in_policy_contract() -> None:
+    """The lifecycle handoff is machine-recognized by the policy."""
+    assert "merged_externally" in VALID_STATES
+    decision = recommend_action("merged_externally", pr_number=7571, actions_remaining=3)
+    assert decision.action == "no_action"
+    assert decision.state == "merged_externally"
+    assert decision.flow_decision == "stop"
+    assert "do not post review evidence" in decision.reason
+
+
 # ---------------------------------------------------------------------------
 # Issue #7508: review-claim -> active_writer
 # ---------------------------------------------------------------------------
@@ -2375,6 +2402,33 @@ def test_long_review_comment_trailer_beyond_180_chars_evaluates_as_ready_to_merg
     queue_result = evaluate_queue([pr_snapshot], max_actions=3)
     assert queue_result["decisions"][0]["state"] == "ready_to_merge"
     assert queue_result["decisions"][0]["action"] == "mark_ready_candidate"
+
+
+def test_classify_pending_pr_metadata_when_body_contains_not_ready_sentinels() -> None:
+    """A merge-ready PR with matching digest trailer but unapproved sentinels requires reconciliation."""
+    sha = "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2"
+    stale_body = (
+        "## Summary\n\nFix applied.\n\n"
+        "The PR remains unapproved and not merge-ready pending independent exact-head review."
+    )
+    digest = metadata_digest("fix: title", stale_body)
+    pr: dict[str, object] = {
+        "number": 7491,
+        "labels": ["merge-ready"],
+        "head_sha": sha,
+        "base_freshness": {"verdict": "fresh", "base_sha": sha, "main_sha": sha},
+        "checks": {"overall": "success"},
+        "gate_verdicts": [f"gate-verdict: accepted @ {sha}"],
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+        "body": stale_body,
+    }
+    state = classify_pr_state(pr)
+    assert state == "pending_pr_metadata"
+
+    decision = recommend_action(state, pr_number=7491, actions_remaining=3)
+    assert decision.action == "reconcile_pr_metadata"
+    assert decision.flow_decision == "continue"
 
 
 # ---------------------------------------------------------------------------

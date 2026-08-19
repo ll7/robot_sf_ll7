@@ -37,7 +37,7 @@ Rough effort band:
 - Planner family coverage matrix:
   [`docs/benchmark_planner_family_coverage.md`](../benchmark_planner_family_coverage.md)
 - Map-runner policy-builder surfaces:
-  [`robot_sf/benchmark/map_runner.py`](../../robot_sf/benchmark/map_runner.py) and
+  [`robot_sf/benchmark/map_runner/map_runner.py`](../../robot_sf/benchmark/map_runner/map_runner.py) and
   [`robot_sf/benchmark/map_runner_policies/`](../../robot_sf/benchmark/map_runner_policies/)
 
 ## Upstream Method Boundary

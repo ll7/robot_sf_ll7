@@ -24,8 +24,10 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -40,6 +42,8 @@ DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_COMMENT_PAGES = 3
 DEFAULT_MAX_TIMELINE_PAGES = 3
 DEFAULT_MAX_MUTATIONS = 250
+DEFAULT_GH_TIMEOUT_SECONDS = 60.0
+DEFAULT_MAX_AUDIT_WALL_SECONDS = 120.0
 PLAN_SCHEMA = "issue_audit_plan.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
 MAX_SOURCE_EXCERPT = 280
@@ -157,6 +161,19 @@ DECISION_PATTERNS = (
         r"|\bapprove\s+or\s+waive\b",
         re.IGNORECASE | re.DOTALL,
     ),
+    re.compile(
+        r"\breopen(?:s|ed|ing)?\b.{0,80}\b(?:decision|ruling|gate)\b",
+        re.IGNORECASE,
+    ),
+)
+CANONICAL_RULING_RE = re.compile(
+    r"^\s*ll7/robot_sf_ll7#(?P<issue>[1-9][0-9]*)\s*:\s*"
+    r"(?P<token>[a-z0-9][a-z0-9._-]*)\s*$"
+)
+NON_AUTHORITATIVE_RULING_CONTEXT_RE = re.compile(
+    r"\b(?:example|cop(?:y|ied|y-pasted)|quote|quoted|sample|historical|"
+    r"do\s+not\s+apply|not\s+a\s+ruling)\b",
+    re.IGNORECASE,
 )
 READY_HEADING_PATTERN = re.compile(
     r"^#{2,4}\s+(?:acceptance(?: criteria)?|definition of done|success criteria|"
@@ -205,15 +222,27 @@ PARENT_CLOSE_PATTERN = re.compile(
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess[str]]
 
 
-def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+def _run_gh(
+    args: list[str],
+    input_text: str | None = None,
+    *,
+    timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
     """Run gh with captured text output, returning failures to the caller."""
+    if timeout_seconds <= 0:
+        return subprocess.CompletedProcess(
+            ["gh", *args],
+            124,
+            "",
+            "gh command timed out before it started",
+        )
     try:
         return subprocess.run(
             ["gh", *args],
             input=input_text,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=timeout_seconds,
             check=False,
         )
     except FileNotFoundError:
@@ -230,6 +259,35 @@ def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.Comple
             "",
             f"gh command timed out after {exc.timeout}s",
         )
+
+
+def _deadline_runner(runner: Runner, max_wall_seconds: float | None) -> Runner:
+    """Wrap REST calls in an aggregate wall-time budget without weakening fail-closed reads."""
+    if max_wall_seconds is None:
+        return runner
+    if max_wall_seconds < 0:
+        raise ValueError("max_wall_seconds must be non-negative")
+    deadline = time.monotonic() + max_wall_seconds
+
+    def run(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        remaining = deadline - time.monotonic()
+        command = ["gh", *args]
+        if remaining <= 0:
+            return subprocess.CompletedProcess(
+                command,
+                124,
+                "",
+                "issue-audit wall-time budget exhausted",
+            )
+        if runner is _run_gh:
+            return _run_gh(
+                args,
+                input_text,
+                timeout_seconds=min(DEFAULT_GH_TIMEOUT_SECONDS, remaining),
+            )
+        return runner(args, input_text)
+
+    return run
 
 
 def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -791,26 +849,28 @@ def discover_inventory(
     max_pages: int = DEFAULT_MAX_PAGES,
     include_comments: bool = False,
     max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
+    max_wall_seconds: float | None = None,
     runner: Runner | None = None,
     command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
     """Build the complete read-only inventory consumed by the shared classifier."""
-    issues, issue_meta = discover_open_issues(repo, max_pages=max_pages, runner=runner)
+    rest_runner = _deadline_runner(runner or _run_gh, max_wall_seconds)
+    issues, issue_meta = discover_open_issues(repo, max_pages=max_pages, runner=rest_runner)
     comment_meta = (
         attach_issue_comments(
             repo,
             issues,
             max_pages=max_comment_pages,
-            runner=runner,
+            runner=rest_runner,
         )
         if include_comments
         else {"available": False, "reason": "not_requested", "errors": []}
     )
     open_prs, open_pr_meta = discover_pull_requests(
-        repo, state="open", max_pages=max_pages, runner=runner
+        repo, state="open", max_pages=max_pages, runner=rest_runner
     )
     closed_prs, closed_pr_meta = discover_pull_requests(
-        repo, state="closed", max_pages=max_pages, runner=runner
+        repo, state="closed", max_pages=max_pages, runner=rest_runner
     )
     merged_prs = [pr for pr in closed_prs if pr.get("merged_at")]
     timeline_prs: list[dict[str, Any]] = []
@@ -833,7 +893,7 @@ def discover_inventory(
             repo,
             [int(issue["number"]) for issue in issues],
             max_pages=min(max_pages, DEFAULT_MAX_TIMELINE_PAGES),
-            runner=runner,
+            runner=rest_runner,
         )
         timeline_meta["reason"] = "global closed-PR inventory partial"
         merged_prs = _merge_merged_pr_rows(merged_prs, timeline_prs)
@@ -847,7 +907,7 @@ def discover_inventory(
         "global_closed_prs_errors": list(closed_pr_meta.get("errors", [])),
         "timeline": timeline_meta,
     }
-    labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=runner)
+    labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=rest_runner)
     claims, claim_meta = discover_claims(remote, command_runner=command_runner)
     worktrees, worktree_meta = discover_worktrees(command_runner=command_runner)
     jobs, job_meta = discover_jobs(command_runner=command_runner)
@@ -876,16 +936,50 @@ def discover_inventory(
     }
 
 
-def _text_for_issue(issue: Mapping[str, Any]) -> str:
-    """Join body and comments for evidence matching without inventing content."""
-    parts = [str(issue.get("title") or ""), str(issue.get("body") or "")]
+def _comment_timestamp(value: object) -> datetime | None:
+    """Parse a timezone-aware comment timestamp, or return ``None`` fail-closed."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    timestamp = value.strip()
+    if timestamp.endswith("Z"):
+        timestamp = f"{timestamp[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _ordered_comment_texts(issue: Mapping[str, Any]) -> tuple[list[str], bool]:
+    """Return comment bodies in chronological order when timestamps are complete."""
     comments = issue.get("comments")
-    if isinstance(comments, Sequence) and not isinstance(comments, (str, bytes)):
-        for comment in comments:
-            if isinstance(comment, Mapping):
-                parts.append(str(comment.get("body") or ""))
-            elif isinstance(comment, str):
-                parts.append(comment)
+    if not isinstance(comments, Sequence) or isinstance(comments, (str, bytes)):
+        return [], True
+    rows: list[tuple[datetime | None, int, str]] = []
+    ordering_complete = True
+    for index, comment in enumerate(comments):
+        if isinstance(comment, Mapping):
+            timestamp = _comment_timestamp(comment.get("created_at"))
+            ordering_complete = ordering_complete and timestamp is not None
+            rows.append((timestamp, index, str(comment.get("body") or "")))
+        elif isinstance(comment, str):
+            ordering_complete = False
+            rows.append((None, index, comment))
+        else:
+            ordering_complete = False
+            rows.append((None, index, ""))
+    if ordering_complete:
+        rows.sort(key=lambda row: (row[0], row[1]))
+    return [row[2] for row in rows], ordering_complete
+
+
+def _text_for_issue(issue: Mapping[str, Any]) -> str:
+    """Join body and chronologically ordered comments for evidence matching."""
+    parts = [str(issue.get("title") or ""), str(issue.get("body") or "")]
+    comment_texts, _ = _ordered_comment_texts(issue)
+    parts.extend(comment_texts)
     return "\n".join(parts)
 
 
@@ -1000,8 +1094,14 @@ def _blocked_reason_evidence(text: str) -> list[str]:
     return evidence
 
 
-def _decision_evidence(text: str, labels: set[str]) -> list[str]:
-    """Return decision-gate evidence from explicit labels or issue text."""
+def _decision_evidence(
+    text: str,
+    labels: set[str],
+    *,
+    issue_number: int | None = None,
+    comment_order_complete: bool = True,
+) -> list[str]:
+    """Return decision evidence while respecting a later canonical ruling."""
     evidence = ["decision-required label present"] if DECISION_LABEL in labels else []
     lines = [" ".join(line.split()) for line in text.splitlines()]
     resolution_pattern = re.compile(
@@ -1020,6 +1120,23 @@ def _decision_evidence(text: str, labels: set[str]) -> list[str]:
         (index for index, line in enumerate(lines) if resolution_pattern.search(line)),
         default=-1,
     )
+    if issue_number is not None and comment_order_complete:
+        latest_ruling = max(
+            (
+                index
+                for index, line in enumerate(lines)
+                if (
+                    (match := CANONICAL_RULING_RE.fullmatch(line)) is not None
+                    and int(match.group("issue")) == issue_number
+                    and not any(
+                        NON_AUTHORITATIVE_RULING_CONTEXT_RE.search(context)
+                        for context in lines[max(0, index - 2) : index]
+                    )
+                )
+            ),
+            default=-1,
+        )
+        last_resolution = max(last_resolution, latest_ruling)
     for index, line in enumerate(lines):
         if not line:
             continue
@@ -1339,7 +1456,13 @@ def classify_issue(
         )
 
     terminal_review_evidence = _terminal_review_evidence(text)
-    decision_evidence = _decision_evidence(text, labels)
+    _, comment_order_complete = _ordered_comment_texts(issue)
+    decision_evidence = _decision_evidence(
+        text,
+        labels,
+        issue_number=number,
+        comment_order_complete=comment_order_complete,
+    )
     decision_evidence.extend(terminal_review_evidence)
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")
@@ -2295,6 +2418,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     plan_parser.add_argument("--max-comment-pages", type=int, default=DEFAULT_MAX_COMMENT_PAGES)
     plan_parser.add_argument("--max-mutations", type=int, default=DEFAULT_MAX_MUTATIONS)
+    plan_parser.add_argument(
+        "--max-wall-seconds",
+        type=float,
+        default=DEFAULT_MAX_AUDIT_WALL_SECONDS,
+        help="aggregate REST-discovery wall-time budget; zero emits a fail-closed empty plan",
+    )
     plan_parser.add_argument("--output", type=Path)
     apply_parser = subparsers.add_parser("apply", help="apply a previously emitted plan")
     apply_parser.add_argument("plan", type=Path)
@@ -2308,6 +2437,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     envelope_parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.command == "plan":
+        if args.max_wall_seconds < 0:
+            parser.error("--max-wall-seconds must be non-negative")
         plan = build_audit_plan(
             discover_inventory(
                 args.repo,
@@ -2315,6 +2446,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_pages=args.max_pages,
                 include_comments=args.include_comments,
                 max_comment_pages=args.max_comment_pages,
+                max_wall_seconds=args.max_wall_seconds,
             ),
             mode=args.mode,
             max_mutations=args.max_mutations,

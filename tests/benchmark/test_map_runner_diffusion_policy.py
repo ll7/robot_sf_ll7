@@ -6,7 +6,7 @@ import pytest
 
 pytest.importorskip("torch")
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 
 
 def _map_runner_obs() -> dict[str, object]:

@@ -36,6 +36,7 @@ SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
 CANONICAL_PROFILE_MANIFEST = "scripts/validation/dependency_license_profiles.v1.json"
 CANONICAL_POLICY = "scripts/validation/dependency_license_policy.v1.json"
 PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
+UNREPRESENTED_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-unrepresented.v1"
 POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
 _UNKNOWN_VALUES = frozenset({"", "unknown", "unknown license", "none", "null"})
 _REVIEW_MARKERS = (
@@ -53,6 +54,9 @@ _REQUIREMENT_RE = re.compile(
 _EXTRA_RE = re.compile(r"extra\s*(==|!=)\s*['\"]([^'\"]+)['\"]")
 _PYTHON_RE = re.compile(
     r"(?:python_full_version|python_version)\s*(==|!=|<=|>=|<|>)\s*['\"]([0-9.]+)['\"]"
+)
+_MARKER_ATOM_RE = re.compile(
+    r"^(?P<key>[A-Za-z_]+)\s*(?P<operator>==|!=|<=|>=|<|>)\s*['\"](?P<value>[^'\"]+)['\"]$"
 )
 _KNOWN_SPDX_IDS = frozenset(
     {
@@ -213,7 +217,20 @@ def _artifact_record(kind: str, artifact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:  # noqa: C901
+def _dependency_record(dependency: Any) -> dict[str, Any] | None:
+    """Normalize one lock dependency edge without dropping marker facts."""
+    if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+        return None
+    entry: dict[str, Any] = {"name": dependency["name"]}
+    for key in ("marker", "version"):
+        if isinstance(dependency.get(key), str):
+            entry[key] = dependency[key]
+    if isinstance(dependency.get("source"), dict):
+        entry["source"] = _normalise_json(dependency["source"])
+    return entry
+
+
+def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
     """Read and normalize all package identities from one uv lock."""
     payload = tomllib.loads(path.read_text(encoding="utf-8"))
     packages = payload.get("package")
@@ -231,6 +248,9 @@ def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
         if not isinstance(source, dict):
             source = {}
         source = _normalise_json(source)
+        resolution_markers = [
+            value for value in package.get("resolution-markers", []) if isinstance(value, str)
+        ]
         artifacts: list[dict[str, Any]] = []
         sdist = package.get("sdist")
         if isinstance(sdist, dict):
@@ -242,20 +262,15 @@ def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
             )
         dependencies: list[dict[str, Any]] = []
         for dependency in package.get("dependencies", []):
-            if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
-                continue
-            entry: dict[str, Any] = {"name": dependency["name"]}
-            for key in ("marker", "version"):
-                if isinstance(dependency.get(key), str):
-                    entry[key] = dependency[key]
-            if isinstance(dependency.get("source"), dict):
-                entry["source"] = _normalise_json(dependency["source"])
-            dependencies.append(entry)
+            entry = _dependency_record(dependency)
+            if entry is not None:
+                dependencies.append(entry)
         identity = {
             "lockfile": repo_relative_path,
             "name": package["name"],
             "version": version,
             "source": source,
+            "resolution_markers": resolution_markers,
             "artifacts": artifacts,
         }
         package_id = (
@@ -271,6 +286,7 @@ def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
                 "version": version,
                 "source_type": _lock_source_type(source),
                 "source": source,
+                "resolution_markers": resolution_markers,
                 "artifacts": artifacts,
                 "dependencies": dependencies,
                 "identity_sha256": _sha256_value(identity),
@@ -441,6 +457,156 @@ def _marker_applies(
     )
 
 
+def _strip_marker_parentheses(value: str) -> str:
+    """Remove balanced outer parentheses from one marker term."""
+    value = value.strip()
+    while value.startswith("(") and value.endswith(")"):
+        depth = 0
+        balanced = True
+        for index, character in enumerate(value):
+            if character == "(":
+                depth += 1
+            elif character == ")":
+                depth -= 1
+                if depth == 0 and index != len(value) - 1:
+                    balanced = False
+                    break
+        if not balanced or depth != 0:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def _target_marker_environment(manifest: dict[str, Any]) -> dict[str, str]:
+    """Map the profile target to the marker variables used by uv lock rows."""
+    target = manifest.get("target")
+    target = target if isinstance(target, dict) else {}
+    python = target.get("python")
+    python = python if isinstance(python, dict) else {}
+    python_version = str(python.get("version") or "")
+    version_parts = python_version.split(".")
+    if len(version_parts) == 2 and all(part.isdigit() for part in version_parts):
+        python_full_version = f"{python_version}.0"
+    else:
+        python_full_version = python_version
+    operating_system = str(target.get("os") or "")
+    if operating_system in {"linux", "darwin"}:
+        os_name = "posix"
+    elif operating_system == "win32":
+        os_name = "nt"
+    else:
+        os_name = operating_system
+    implementation = str(python.get("implementation") or "")
+    return {
+        "python_full_version": python_full_version,
+        "python_version": python_version,
+        "sys_platform": operating_system,
+        "os_name": os_name,
+        "platform_machine": str(target.get("architecture") or ""),
+        "platform_python_implementation": implementation,
+        "implementation_name": implementation.lower(),
+    }
+
+
+def _marker_comparison_state(
+    operator: str,
+    observed: str,
+    expected: str,
+    *,
+    version: bool,
+) -> bool | None:
+    """Evaluate a marker comparison, returning ``None`` when unsupported."""
+    if version:
+        if expected.endswith(".*"):
+            prefix = expected[:-2]
+            equal = observed == prefix or observed.startswith(f"{prefix}.")
+            if operator == "==":
+                return equal
+            if operator == "!=":
+                return not equal
+            return None
+        return _comparison_applies(operator, observed, expected)
+    if operator == "==":
+        return observed.casefold() == expected.casefold()
+    if operator == "!=":
+        return observed.casefold() != expected.casefold()
+    return None
+
+
+def _marker_state(  # noqa: C901
+    marker: str | None,
+    extras: set[str],
+    environment: dict[str, str],
+) -> bool | None:
+    """Evaluate a marker conservatively for the manifest target.
+
+    ``None`` means that the expression uses a variable or operator this small
+    offline evaluator cannot prove.  Unknown expressions are included by
+    dependency traversal and remain unresolved in the disposition report.
+    """
+    if not marker:
+        return True
+
+    def atom_state(atom: str) -> bool | None:
+        atom = _strip_marker_parentheses(atom)
+        match = _MARKER_ATOM_RE.fullmatch(atom)
+        if match is None:
+            return None
+        key = match.group("key")
+        operator = match.group("operator")
+        expected = match.group("value")
+        if key == "extra":
+            if operator == "==":
+                return expected.casefold() in {value.casefold() for value in extras}
+            if operator == "!=":
+                return expected.casefold() not in {value.casefold() for value in extras}
+            return None
+        observed = environment.get(key)
+        if observed is None:
+            return None
+        return _marker_comparison_state(
+            operator,
+            observed,
+            expected,
+            version=key in {"python_full_version", "python_version"},
+        )
+
+    term_states: list[bool | None] = []
+    for term in re.split(r"\s+or\s+", marker, flags=re.IGNORECASE):
+        atom_states = [
+            atom_state(atom) for atom in re.split(r"\s+and\s+", term, flags=re.IGNORECASE)
+        ]
+        if any(state is False for state in atom_states):
+            term_states.append(False)
+        elif all(state is True for state in atom_states):
+            term_states.append(True)
+        else:
+            term_states.append(None)
+    if any(state is True for state in term_states):
+        return True
+    if all(state is False for state in term_states):
+        return False
+    return None
+
+
+def _resolution_marker_state(
+    package: dict[str, Any],
+    environment: dict[str, str],
+) -> bool | None:
+    """Return whether a lock package row applies to the manifest target."""
+    markers = package.get("resolution_markers")
+    if not isinstance(markers, list) or not markers:
+        return True
+    states = [
+        _marker_state(value, set(), environment) for value in markers if isinstance(value, str)
+    ]
+    if any(state is True for state in states):
+        return True
+    if all(state is False for state in states):
+        return False
+    return None
+
+
 def _validate_manifest(  # noqa: C901
     manifest: dict[str, Any],
     root_project: dict[str, Any],
@@ -517,6 +683,75 @@ def _validate_manifest(  # noqa: C901
     return issues
 
 
+def _validate_unrepresented_policy(  # noqa: C901, PLR0912
+    manifest: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+    """Validate the reviewed reasons used for unrepresented lock rows."""
+    issues: list[str] = []
+    policy = manifest.get("unrepresented_policy")
+    if not isinstance(policy, dict):
+        return [], {}, ["profile manifest has no unrepresented_policy"]
+    if policy.get("schema_version") != UNREPRESENTED_POLICY_SCHEMA_VERSION:
+        issues.append("unrepresented policy has an unsupported schema_version")
+    raw_rules = policy.get("rules")
+    if not isinstance(raw_rules, list) or not raw_rules:
+        issues.append("unrepresented policy has no rules")
+        raw_rules = []
+    rules: list[dict[str, Any]] = []
+    rule_ids: list[str] = []
+    allowed_reason_codes = {
+        "alternate_lock_context",
+        "development_group",
+        "marker_inactive",
+        "unresolved_membership",
+    }
+    for index, raw_rule in enumerate(raw_rules):
+        if not isinstance(raw_rule, dict):
+            issues.append(f"unrepresented policy rule {index} is not an object")
+            continue
+        rule = dict(raw_rule)
+        rule_id = rule.get("id")
+        reason_code = rule.get("reason_code")
+        if not isinstance(rule_id, str) or not rule_id:
+            issues.append(f"unrepresented policy rule {index} has no id")
+        else:
+            rule_ids.append(rule_id)
+        if reason_code not in allowed_reason_codes:
+            issues.append(f"unrepresented policy rule {rule_id!r} has an invalid reason_code")
+        if not isinstance(rule.get("reviewed"), bool):
+            issues.append(f"unrepresented policy rule {rule_id!r} has no boolean reviewed field")
+        if not isinstance(rule.get("rationale"), str) or not rule["rationale"].strip():
+            issues.append(f"unrepresented policy rule {rule_id!r} has no rationale")
+        if reason_code == "development_group":
+            for key in ("lockfile", "root_package", "field"):
+                if not isinstance(rule.get(key), str) or not rule[key]:
+                    issues.append(f"development-group rule {rule_id!r} is missing {key}")
+            if rule.get("field") not in {"dev-dependencies", "optional-dependencies"}:
+                issues.append(f"development-group rule {rule_id!r} has an invalid field")
+            groups = rule.get("groups")
+            if (
+                not isinstance(groups, list)
+                or not groups
+                or not all(isinstance(group, str) and group for group in groups)
+            ):
+                issues.append(f"development-group rule {rule_id!r} has no groups")
+        rules.append(rule)
+    duplicates = sorted(name for name, count in Counter(rule_ids).items() if count > 1)
+    issues.extend(f"duplicate unrepresented policy rule id: {name}" for name in duplicates)
+
+    fallback = policy.get("unresolved")
+    if not isinstance(fallback, dict):
+        issues.append("unrepresented policy has no unresolved fallback")
+        fallback = {}
+    elif fallback.get("reason_code") != "unresolved_membership":
+        issues.append("unrepresented policy unresolved fallback must use unresolved_membership")
+    if not isinstance(fallback.get("reviewed"), bool):
+        issues.append("unrepresented policy unresolved fallback has no boolean reviewed field")
+    if not isinstance(fallback.get("rationale"), str) or not fallback["rationale"].strip():
+        issues.append("unrepresented policy unresolved fallback has no rationale")
+    return rules, fallback, issues
+
+
 def _profile_requirements(
     profile: dict[str, Any],
     manifest: dict[str, Any],
@@ -577,6 +812,179 @@ def _package_variants(
             candidate for candidate in candidates if candidate.get("source") == normalized_source
         ]
     return candidates
+
+
+def _lock_group_dependencies(
+    path: Path,
+    root_package: str,
+    field: str,
+    groups: list[str],
+) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+    """Read named development/alternate-context groups from one lock root."""
+    payload = tomllib.loads(path.read_text(encoding="utf-8"))
+    packages = payload.get("package")
+    if not isinstance(packages, list):
+        return {}, [f"{path} has no package rows"]
+    root = next(
+        (
+            package
+            for package in packages
+            if isinstance(package, dict)
+            and package.get("name") == root_package
+            and isinstance(package.get(field), dict)
+        ),
+        None,
+    )
+    if root is None:
+        return {}, [f"{path} has no {field} for root package {root_package}"]
+    raw_groups = root[field]
+    result: dict[str, list[dict[str, Any]]] = {}
+    issues: list[str] = []
+    for group in groups:
+        raw_edges = raw_groups.get(group)
+        if not isinstance(raw_edges, list):
+            issues.append(f"{path} {root_package} has no {field} group {group}")
+            continue
+        edges = [
+            dependency
+            for raw_edge in raw_edges
+            if (dependency := _dependency_record(raw_edge)) is not None
+        ]
+        result[group] = edges
+    return result, issues
+
+
+def _dependency_context_closure(
+    lock_packages: list[dict[str, Any]],
+    direct_dependencies: list[dict[str, Any]],
+    environment: dict[str, str],
+) -> set[str]:
+    """Resolve one reviewed non-release group conservatively from a lock."""
+    packages_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for package in lock_packages:
+        packages_by_name[package["normalized_name"]].append(package)
+    queue: deque[dict[str, Any]] = deque()
+    for dependency in direct_dependencies:
+        marker_state = _marker_state(dependency.get("marker"), set(), environment)
+        if marker_state is False:
+            continue
+        queue.extend(
+            variant
+            for variant in _package_variants(packages_by_name, dependency)
+            if _resolution_marker_state(variant, environment) is not False
+        )
+    seen: set[str] = set()
+    while queue:
+        package = queue.popleft()
+        package_id = package["package_id"]
+        if package_id in seen:
+            continue
+        seen.add(package_id)
+        for dependency in package["dependencies"]:
+            marker_state = _marker_state(dependency.get("marker"), set(), environment)
+            if marker_state is False:
+                continue
+            queue.extend(
+                variant
+                for variant in _package_variants(packages_by_name, dependency)
+                if _resolution_marker_state(variant, environment) is not False
+            )
+    return seen
+
+
+def _classify_unrepresented_packages(  # noqa: C901
+    packages: list[dict[str, Any]],
+    package_profiles: dict[str, set[str]],
+    packages_by_lockfile: dict[str, list[dict[str, Any]]],
+    manifest: dict[str, Any],
+    rules: list[dict[str, Any]],
+    fallback: dict[str, Any],
+    repo_root: Path,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Attach a reviewed or fail-closed disposition to every unrepresented row."""
+    environment = _target_marker_environment(manifest)
+    contexts: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    issues: list[str] = []
+    for rule in rules:
+        if rule.get("reason_code") != "development_group":
+            continue
+        lockfile = rule.get("lockfile")
+        root_package = rule.get("root_package")
+        field = rule.get("field")
+        groups = rule.get("groups")
+        if not all(isinstance(value, str) for value in (lockfile, root_package, field)):
+            continue
+        if not isinstance(groups, list) or not all(isinstance(group, str) for group in groups):
+            continue
+        lock_path = _resolve_path(repo_root, lockfile)
+        try:
+            group_edges, group_issues = _lock_group_dependencies(
+                lock_path,
+                root_package,
+                field,
+                groups,
+            )
+        except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+            issues.append(f"could not read unrepresented context {lockfile}: {exc}")
+            continue
+        issues.extend(group_issues)
+        lock_packages = packages_by_lockfile.get(lockfile, [])
+        for group, direct_dependencies in group_edges.items():
+            for package_id in _dependency_context_closure(
+                lock_packages,
+                direct_dependencies,
+                environment,
+            ):
+                contexts[package_id].append({"rule": rule, "group": group})
+
+    marker_rule = next(
+        (rule for rule in rules if rule.get("reason_code") == "marker_inactive"),
+        None,
+    )
+    dispositions: list[dict[str, Any]] = []
+    for package in packages:
+        package_id = package["package_id"]
+        if package_profiles.get(package_id):
+            continue
+        marker_state = _resolution_marker_state(package, environment)
+        if marker_state is False and marker_rule is not None:
+            selected_rules = [marker_rule]
+            groups: list[str] = []
+            reason_codes = ["marker_inactive"]
+        elif contexts.get(package_id):
+            selected_rules = [item["rule"] for item in contexts[package_id]]
+            groups = sorted({item["group"] for item in contexts[package_id]})
+            reason_codes = sorted({str(rule.get("reason_code")) for rule in selected_rules})
+        else:
+            selected_rules = [fallback]
+            groups = []
+            reason_codes = [str(fallback.get("reason_code", "unresolved_membership"))]
+        reviewed = all(bool(rule.get("reviewed")) for rule in selected_rules)
+        status = "reviewed_exclusion" if reviewed else "unresolved"
+        dispositions.append(
+            {
+                "package_id": package_id,
+                "name": package["name"],
+                "version": package.get("version"),
+                "lockfile": package["lockfile"],
+                "status": status,
+                "reviewed": reviewed,
+                "reason_codes": reason_codes,
+                "groups": groups,
+                "rule_ids": sorted(
+                    str(rule.get("id"))
+                    for rule in selected_rules
+                    if isinstance(rule.get("id"), str)
+                ),
+                "rationales": sorted(
+                    str(rule.get("rationale"))
+                    for rule in selected_rules
+                    if isinstance(rule.get("rationale"), str)
+                ),
+                "resolution_markers": package.get("resolution_markers", []),
+            }
+        )
+    return sorted(dispositions, key=lambda item: item["package_id"]), sorted(set(issues))
 
 
 def _direct_package_variants(
@@ -888,7 +1296,7 @@ def _input_paths(  # noqa: C901
     return inputs, issues
 
 
-def build_inventory(  # noqa: C901
+def build_inventory(  # noqa: C901, PLR0915
     repo_root: Path,
     *,
     distributions: Iterable[Any] | None = None,
@@ -910,6 +1318,10 @@ def build_inventory(  # noqa: C901
         if isinstance(profile, dict) and isinstance(profile.get("id"), str)
     ]
     structural_issues = _validate_manifest(manifest, root_document)
+    unrepresented_rules, unrepresented_fallback, unrepresented_policy_issues = (
+        _validate_unrepresented_policy(manifest)
+    )
+    structural_issues.extend(unrepresented_policy_issues)
     policy_rules, components, policy_issues = _policy_records(policy, repo_root)
     structural_issues.extend(policy_issues)
 
@@ -947,6 +1359,17 @@ def build_inventory(  # noqa: C901
             ]
         )
 
+    unrepresented_dispositions, unrepresented_context_issues = _classify_unrepresented_packages(
+        list(all_packages.values()),
+        package_profiles,
+        packages_by_lockfile,
+        manifest,
+        unrepresented_rules,
+        unrepresented_fallback,
+        repo_root,
+    )
+    structural_issues.extend(unrepresented_context_issues)
+    unrepresented_by_id = {record["package_id"]: record for record in unrepresented_dispositions}
     observed = _observed_distributions(distributions)
     package_records: list[dict[str, Any]] = []
     package_failures: list[str] = []
@@ -977,6 +1400,8 @@ def build_inventory(  # noqa: C901
                 }
             ),
         }
+        if package_id in unrepresented_by_id:
+            record["unrepresented_disposition"] = unrepresented_by_id[package_id]
         status_counts[record["license_status"]] += 1
         if package_id in package_profiles and rule.get("disposition") == "review_required":
             policy_failures.append(
@@ -989,9 +1414,23 @@ def build_inventory(  # noqa: C901
         for component in components
         if component.get("status") != "reviewed" or component.get("disposition") != "approved"
     ]
-    unrepresented = [
-        package_id for package_id in sorted(all_packages) if not package_profiles.get(package_id)
+    unrepresented = [record["package_id"] for record in unrepresented_dispositions]
+    unrepresented_failures = [
+        f"{record['name']} ({record['lockfile']}): unrepresented lock row has no reviewed exclusion reason"
+        for record in unrepresented_dispositions
+        if record["status"] == "unresolved"
     ]
+    unrepresented_reason_counts: Counter[str] = Counter(
+        reason_code
+        for record in unrepresented_dispositions
+        for reason_code in record["reason_codes"]
+    )
+    unrepresented_reviewed_count = sum(
+        record["status"] == "reviewed_exclusion" for record in unrepresented_dispositions
+    )
+    unrepresented_unresolved_count = sum(
+        record["status"] == "unresolved" for record in unrepresented_dispositions
+    )
     inputs, input_issues = _input_paths(
         repo_root,
         manifest,
@@ -1010,6 +1449,7 @@ def build_inventory(  # noqa: C901
             *package_failures,
             *policy_failures,
             *component_failures,
+            *unrepresented_failures,
         }
     )
     return {
@@ -1046,6 +1486,7 @@ def build_inventory(  # noqa: C901
         "profiles": profile_results,
         "packages": package_records,
         "unrepresented_lock_packages": unrepresented,
+        "unrepresented_lock_package_dispositions": unrepresented_dispositions,
         "installed_not_locked": sorted(
             {
                 f"{distribution.metadata.get('Name') or distribution.name}=={distribution.version}"
@@ -1064,6 +1505,9 @@ def build_inventory(  # noqa: C901
                 len(result.get("package_ids", [])) for result in profile_results
             ),
             "unrepresented_lock_package_count": len(unrepresented),
+            "unrepresented_reviewed_exclusion_count": unrepresented_reviewed_count,
+            "unrepresented_unresolved_count": unrepresented_unresolved_count,
+            "unrepresented_reason_counts": dict(sorted(unrepresented_reason_counts.items())),
             "installed_distribution_count": sum(len(values) for values in observed.values()),
             "installed_not_locked_count": len(
                 {

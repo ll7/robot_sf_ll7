@@ -33,7 +33,7 @@ except Exception:  # pragma: no cover - optional dependency fallback.
 
 import yaml
 
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner.map_runner import (
     _build_env_config,
     _build_policy,
     _policy_command_to_env_action,

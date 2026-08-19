@@ -35,6 +35,20 @@ propagated to #3207 only after the Gate 2 input gate is satisfied.
   promoted, and no verdict is posted to #6600 or propagated to #3207 while the required Gate 2
   input is absent.
 
+## Versioned report contract
+
+The current producer emits `radius_rank_stability.v2`. The v2 envelope is required because the
+report now carries the required `paired_inference_contract` block and per-contrast `support`
+diagnostics. The historical `radius_rank_stability.v1` shape remains a legacy identifier; it is
+not upgraded implicitly and is rejected by the v2 writer-side validator when its new blocks are
+missing.
+
+The durable bundle provenance emits
+`issue_6643_radius_rank_stability_bundle.v2` and pins `report_schema_version` to
+`radius_rank_stability.v2`. This is a compatibility contract only: no radius campaign, numeric
+result, evidence admission, ranking, safety conclusion, or paper-facing claim is created by the
+version change.
+
 ## Diagnostic bundle and evidence boundary
 
 The blocked-mode analyzer invocation registers a diagnostic-only bundle outside the product

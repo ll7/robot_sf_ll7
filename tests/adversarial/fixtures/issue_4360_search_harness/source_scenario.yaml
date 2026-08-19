@@ -1,0 +1,8 @@
+scenarios:
+  - name: issue_4360_fixture_source
+    single_pedestrians:
+      - id: p0
+        start: [0.0, 0.0]
+        goal: [3.0, 0.5]
+        speed_m_s: 1.0
+        start_delay_s: 0.0

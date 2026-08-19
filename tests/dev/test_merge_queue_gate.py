@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.dev.merge_queue_gate import (
+    CI_PATHS_IGNORE_PATTERNS,
     _format_summary,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
@@ -48,6 +49,11 @@ def _exact_changed_coverage_response(
             }
         )
     )
+
+
+def _changed_files_response(*filenames: str) -> MagicMock:
+    """Build a REST pull-files response for missing-proof scope tests."""
+    return _gh_response(stdout=json.dumps([{"filename": filename} for filename in filenames]))
 
 
 def _raw_pr(
@@ -308,20 +314,111 @@ def test_fetch_pr_snapshot_binds_changed_coverage_to_exact_head() -> None:
 
 
 def test_fetch_pr_snapshot_requires_a_changed_coverage_check() -> None:
-    """A missing exact-head changed-coverage check remains a merge blocker."""
+    """A missing proof remains a blocker when a non-ignored file changed."""
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr())),
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
             _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+            _changed_files_response("scripts/dev/merge_queue_gate.py"),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
     assert error is None
     assert snapshot["changed_coverage"]["status"] == "missing"
+    assert snapshot["changed_coverage"]["changed_files_complete"] is True
     audit = evaluate_merge_gate(snapshot, main_sha="base_sha", threads_resolved=True)
     assert audit.passed is False
     assert "changed_coverage_proof_missing" in audit.reasons
+
+
+def test_fetch_pr_snapshot_accepts_complete_docs_only_scope_without_check() -> None:
+    """A skipped CI workflow is explainable only for its exact ignored paths."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+            _changed_files_response(
+                "README.md",
+                "docs/dev_guide.md",
+                ".agents/skills/example/SKILL.md",
+            ),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha="base_sha",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.changed_coverage_status == "not_required"
+    assert audit.changed_coverage_head_sha == ""
+
+
+def test_evaluate_merge_gate_requires_complete_scope_for_docs_only_bypass() -> None:
+    """An unproven or mixed changed-file set cannot satisfy missing coverage."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {
+                "status": "missing",
+                "head_sha": FULL_SHA,
+                "changed_files": ["README.md"],
+                "changed_files_complete": False,
+            },
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "missing"
+    assert "changed_coverage_proof_missing" in audit.reasons
+
+
+def test_evaluate_merge_gate_does_not_trust_unproven_not_required_status() -> None:
+    """The bypass status itself is not evidence of a docs-only changed set."""
+    metadata = metadata_digest("merge queue test PR", "final body")
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "base_sha": FULL_SHA,
+            "draft": False,
+            "labels": ["merge-ready"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {
+                "status": "not_required",
+                "changed_files": ["../README.md"],
+                "changed_files_complete": True,
+            },
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "metadata_digest": metadata,
+            "metadata_verdicts": [metadata_trailer(metadata)],
+        },
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.changed_coverage_status == "unknown"
+    assert "changed_coverage_proof_unknown" in audit.reasons
 
 
 def test_fetch_pr_snapshot_rejects_incomplete_exact_head_check_runs() -> None:
@@ -429,6 +526,14 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
     assert "conversation resolution before merging" in workflow
     assert "exit 0" in workflow
+
+
+def test_docs_only_bypass_matches_ci_workflow_path_filters() -> None:
+    """The gate's exemption cannot drift from the workflow that skips CI."""
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    for pattern in CI_PATHS_IGNORE_PATTERNS:
+        assert f'      - "{pattern}"' in workflow
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
@@ -865,6 +970,94 @@ def test_merge_group_cannot_opt_into_advisory_mode(capsys) -> None:
 
     assert excinfo.value.code == 2
     assert "--advisory is valid only with --pr" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "stale_body, expected_sentinel",
+    [
+        (
+            "The PR remains unapproved and not merge-ready pending independent exact-head review and current hosted checks.",
+            "not merge-ready",
+        ),
+        (
+            "This branch remains unapproved pending independent review.",
+            "remains unapproved",
+        ),
+        (
+            "WIP: do not merge yet.",
+            "do not merge",
+        ),
+        (
+            "The change is unapproved and not merge-ready.",
+            "unapproved and not merge-ready",
+        ),
+    ],
+)
+def test_evaluate_merge_gate_fails_closed_on_stale_not_ready_body_narrative(
+    stale_body: str,
+    expected_sentinel: str,
+) -> None:
+    """A merge-ready PR carrying unapproved/not-ready narrative sentinels fails closed."""
+    title = "fix: valid title"
+    digest = metadata_digest(title, stale_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": stale_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is False
+    assert "stale_not_ready_body_narrative" in audit.reasons
+    assert audit.body_narrative_status == "stale"
+    assert any(expected_sentinel.lower() in s.lower() for s in audit.body_not_ready_sentinels)
+
+
+def test_evaluate_merge_gate_passes_with_clean_body_narrative() -> None:
+    """A merge-ready PR carrying clean reconciliation narrative passes the gate."""
+    title = "fix: valid title"
+    clean_body = (
+        "## Summary\n\nAll review comments addressed and PR verified ready.\n\n"
+        f"pr-metadata: reconciled @ {metadata_digest(title, 'clean')}"
+    )
+    digest = metadata_digest(title, clean_body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": clean_body,
+        "draft": False,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdict": {"verdict": "accepted", "sha": FULL_SHA},
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "metadata_digest": digest,
+    }
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is True
+    assert audit.reasons == []
+    assert audit.body_narrative_status == "clean"
+    assert audit.body_not_ready_sentinels == []
 
 
 # ---------------------------------------------------------------------------

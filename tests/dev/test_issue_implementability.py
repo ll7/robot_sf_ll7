@@ -77,6 +77,31 @@ def test_missing_contract_field_returns_needs_spec() -> None:
 
 
 @pytest.mark.parametrize(
+    ("exact_heading", "informational_heading", "missing_field"),
+    [
+        ("Objective", "Objective history", "objective"),
+        ("Scope", "Scope discussion", "scope"),
+        ("Candidate paths", "Candidate paths received", "inputs"),
+        ("Acceptance criteria", "Acceptance criteria discussion", "acceptance"),
+        ("Validation", "Validation results", "verification"),
+    ],
+)
+def test_alias_prefixed_headings_do_not_satisfy_contract(
+    exact_heading: str,
+    informational_heading: str,
+    missing_field: str,
+) -> None:
+    """Retrospective or informational headings must not authorize a claim write."""
+    body = COMPLETE_BODY.replace(f"## {exact_heading}", f"## {informational_heading}")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert missing_field in report["contract"]["missing_fields"]
+    assert report["write_allowed"] is False
+
+
+@pytest.mark.parametrize(
     ("labels", "classification"),
     [
         (["state:ready", "state:blocked"], "blocked"),

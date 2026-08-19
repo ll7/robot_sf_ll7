@@ -44,7 +44,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.map_runner.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.gym_env.environment_factory import make_robot_env
@@ -832,7 +832,7 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
     Returns:
         Callable that executes one actor-free scenario/seed/algo diagnostic rollout.
     """
-    from robot_sf.benchmark.map_runner import _run_map_episode  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner.map_runner import _run_map_episode  # noqa: PLC0415
 
     def _run(
         scenario: Mapping[str, Any],

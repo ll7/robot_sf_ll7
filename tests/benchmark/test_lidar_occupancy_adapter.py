@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from robot_sf.benchmark.map_runner import _build_policy, _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _build_policy, _run_map_episode
 from robot_sf.benchmark.planner_command_contract import validate_planner_contract
 from robot_sf.gym_env.observation_mode import ObservationMode
 from tests.benchmark.test_map_runner_utils import _minimal_map_def
@@ -108,21 +108,23 @@ def test_lidar_occupancy_map_episode_uses_sensor_fusion_observation(
         return _DummyEnv()
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.make_robot_env", _make_env)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.make_robot_env", _make_env)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -166,7 +168,7 @@ def test_lidar_safety_barrier_requires_explicit_occupancy_adapter(monkeypatch) -
         {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
     )()
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
 

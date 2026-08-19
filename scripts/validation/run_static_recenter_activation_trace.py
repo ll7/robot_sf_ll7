@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.training.scenario_loader import load_scenarios
 from scripts.validation.run_policy_search_candidate import (
     _effective_candidate_runtime_for_scenario,

@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("torch")
 
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
 from robot_sf.training.diffusion_policy import (
     DIAGNOSTIC_PACKET_SCHEMA_VERSION,
     MULTIMODAL_PROBE_SCHEMA_VERSION,

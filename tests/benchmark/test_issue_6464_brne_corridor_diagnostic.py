@@ -11,7 +11,7 @@ import yaml
 
 from robot_sf.baselines.brne import BRNE_PINNED_SHA
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
-from robot_sf.benchmark.map_runner_observations import obs_to_brne_format
+from robot_sf.benchmark.map_runner.map_runner_observations import obs_to_brne_format
 from scripts.benchmark.run_brne_corridor_diagnostic_issue_6464 import (
     _candidate_distribution_summary,
     _mechanism_table_row,

@@ -25,6 +25,7 @@ from robot_sf.benchmark.metrics import (
     success_rate,
     time_to_goal,
 )
+from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
 
 def _make_episode(T: int, K: int) -> EpisodeData:
@@ -645,9 +646,6 @@ def test_per_ped_force_quantiles_perf_smoke():
 
 def test_episode_schema_accepts_ped_force_metrics():
     """T017: Episode schema validation with ped_force_* metrics present."""
-
-    pytest.importorskip("jsonschema")
-    from robot_sf.benchmark.schemas.episode_schema import EpisodeSchema
 
     ep = _make_episode(T=3, K=1)
     ep.ped_forces[..., 0] = 2.0  # ensure finite force data

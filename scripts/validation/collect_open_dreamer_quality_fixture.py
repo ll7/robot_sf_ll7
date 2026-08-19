@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark.classic_interactions_loader import load_classic_matrix, select_scenario
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from scripts.benchmark.record_rl_trajectory_dataset import (
     convert_source_records,
     write_dataset_and_manifest,

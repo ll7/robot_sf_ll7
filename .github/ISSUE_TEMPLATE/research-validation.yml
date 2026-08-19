@@ -118,12 +118,11 @@ body:
     id: evidence_grade
     attributes:
       label: Evidence grade
-      description: How strong is the current evidence behind this issue?
+      description: Choose exactly one canonical evidence grade from docs/context/goal_driven_agent_loops_2026-05-13.md.
       options:
         - observed
         - inferred
-        - speculative
-        - blocked
+        - proposal
     validations:
       required: true
   - type: textarea

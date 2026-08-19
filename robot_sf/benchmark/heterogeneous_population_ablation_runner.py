@@ -25,8 +25,8 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     PopulationMixNotRealizableError,
     build_runtime_population_control_trace_labels,
 )
-from robot_sf.benchmark.map_runner import _build_policy
-from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.benchmark.map_runner.map_runner import _build_policy
+from robot_sf.benchmark.map_runner.map_runner_episode import run_map_episode
 from robot_sf.benchmark.orca_preflight import _has_orca_algo, check_rvo2_importable
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.nav.navigation import get_prepared_obstacles

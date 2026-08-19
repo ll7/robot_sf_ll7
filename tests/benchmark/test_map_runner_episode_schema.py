@@ -25,7 +25,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     validate_failure_mechanism_record,
 )
 from robot_sf.benchmark.interaction_exposure import INTERACTION_EXPOSURE_SCHEMA_VERSION
-from robot_sf.benchmark.map_runner_episode import (
+from robot_sf.benchmark.map_runner.map_runner_episode import (
     _INTERACTION_EXPOSURE_RADIUS_M,
     _episode_evidence_fields,
     _finite_pedestrian_frames,
@@ -198,7 +198,7 @@ class _PedEnv:
 
 def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     """A real map-runner episode record natively carries both schema blocks."""
-    from robot_sf.benchmark.map_runner import _run_map_episode
+    from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 
     dummy_config = type(
         "Cfg",
@@ -206,23 +206,26 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()},
     )()
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _PedEnv(),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length", lambda *args: 1.0
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics", lambda metrics, **kwargs: metrics
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
     )
 
     record = _run_map_episode(

@@ -54,3 +54,31 @@ def extract_metadata_digests(text: str) -> list[str]:
     if not isinstance(text, str):
         return []
     return list(dict.fromkeys(match.group(1).lower() for match in _PR_METADATA_RE.finditer(text)))
+
+
+_NOT_READY_SENTINEL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bnot\s+merge[-\s]?ready\b", re.IGNORECASE),
+    re.compile(r"\bremains\s+unapproved\b", re.IGNORECASE),
+    re.compile(
+        r"\bpending\s+(?:independent|hosted|external)(?:\s+[\w-]+)*\s+review\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bdo\s+not\s+merge\b", re.IGNORECASE),
+    re.compile(r"\bunapproved\s+and\s+not\s+merge[-\s]?ready\b", re.IGNORECASE),
+)
+
+
+def find_not_ready_body_sentinels(body: str) -> list[str]:
+    """Return matches for stale unapproved/not-ready narrative phrases in *body*."""
+    if not isinstance(body, str):
+        return []
+    matches: list[str] = []
+    for pattern in _NOT_READY_SENTINEL_PATTERNS:
+        for match in pattern.finditer(body):
+            matches.append(match.group(0))
+    return list(dict.fromkeys(matches))
+
+
+def has_not_ready_body_narrative(body: str) -> bool:
+    """Return True if *body* contains any unapproved or not-ready narrative sentinels."""
+    return bool(find_not_ready_body_sentinels(body))

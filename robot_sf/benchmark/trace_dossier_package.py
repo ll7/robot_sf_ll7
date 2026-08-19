@@ -99,10 +99,16 @@ def build_trace_dossier_package(
 
     trace_path = export_dir / "trace.json"
     render_path = render_dir / "dossier.png"
+    render_svg_path = render_dir / "dossier.svg"
+    render_pdf_path = render_dir / "dossier.pdf"
+    caption_path = render_dir / "caption.md"
     render_manifest_path = render_dir / "renderer_manifest.json"
     render_trace_dossier(
         trace_path,
         output_png=render_path,
+        output_svg=render_svg_path,
+        output_pdf=render_pdf_path,
+        caption_path=caption_path,
         manifest_path=render_manifest_path,
         command=command,
     )
@@ -135,6 +141,9 @@ def build_trace_dossier_package(
         "export/manifest.json",
         "export/SHA256SUMS",
         "render/dossier.png",
+        "render/dossier.svg",
+        "render/dossier.pdf",
+        "render/caption.md",
         "render/renderer_manifest.json",
     )
     artifacts = [
@@ -166,6 +175,9 @@ def build_trace_dossier_package(
         },
         "render": {
             "dossier": "render/dossier.png",
+            "svg": "render/dossier.svg",
+            "pdf": "render/dossier.pdf",
+            "caption": "render/caption.md",
             "manifest": "render/renderer_manifest.json",
             "evidence_boundary": render_manifest["evidence_boundary"],
         },
@@ -351,11 +363,20 @@ def _normalize_render_manifest(path: Path) -> dict[str, Any]:
             raise TraceDossierPackageError(
                 "renderer manifest source_trace and outputs must be JSON objects"
             )
-        png_output = outputs["png"]
-        if not isinstance(png_output, dict):
-            raise TraceDossierPackageError("renderer manifest outputs.png must be a JSON object")
+        output_blocks = {
+            "png": "render/dossier.png",
+            "svg": "render/dossier.svg",
+            "pdf": "render/dossier.pdf",
+            "caption": "render/caption.md",
+        }
+        for output_name, output_path in output_blocks.items():
+            output = outputs[output_name]
+            if not isinstance(output, dict):
+                raise TraceDossierPackageError(
+                    f"renderer manifest outputs.{output_name} must be a JSON object"
+                )
+            output["path"] = output_path
         source_trace["path"] = "export/trace.json"
-        png_output["path"] = "render/dossier.png"
         validate_trace_dossier_manifest(payload)
     except (KeyError, TypeError, TraceDossierRenderError, TraceDossierPackageError) as exc:
         raise TraceDossierPackageError(f"renderer manifest cannot be normalized: {exc}") from exc
@@ -373,7 +394,10 @@ def _prepare_output_dir(output_dir: Path) -> None:
         )
     for name, allowed_files in (
         ("export", {"trace.json", "normalization_receipt.json", "manifest.json", "SHA256SUMS"}),
-        ("render", {"dossier.png", "renderer_manifest.json"}),
+        (
+            "render",
+            {"dossier.png", "dossier.svg", "dossier.pdf", "caption.md", "renderer_manifest.json"},
+        ),
     ):
         child = output_dir / name
         if not child.exists():

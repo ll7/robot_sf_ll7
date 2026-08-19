@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from robot_sf.benchmark.map_runner import _build_socnav_family_adapter
+from robot_sf.benchmark.map_runner.map_runner import _build_socnav_family_adapter
 from robot_sf.benchmark.map_runner_policies.socnav_family import (
     _ORCA_VARIANTS,
     SOCNAV_FAMILY_SPECS,
@@ -282,7 +282,9 @@ class TestResolverRouting:
 
             return _RecordingAdapter, _builder
 
-        monkeypatch.setattr("robot_sf.benchmark.map_runner._sonic_crowdnav_symbols", _fake_resolver)
+        monkeypatch.setattr(
+            "robot_sf.benchmark.map_runner.map_runner._sonic_crowdnav_symbols", _fake_resolver
+        )
         adapter = _build_socnav_family_adapter(
             "sonic_crowdnav", "sonic_crowdnav", {"device": "cpu"}, meta={}
         )
@@ -302,7 +304,9 @@ class TestResolverRouting:
 
             return _RecordingAdapter, _builder
 
-        monkeypatch.setattr("robot_sf.benchmark.map_runner._sonic_crowdnav_symbols", _fake_resolver)
+        monkeypatch.setattr(
+            "robot_sf.benchmark.map_runner.map_runner._sonic_crowdnav_symbols", _fake_resolver
+        )
         adapter = _build_socnav_family_adapter(
             "gensafenav_ours_gst",
             "gensafenav_ours_gst",
@@ -329,7 +333,9 @@ class TestResolverRouting:
 
             return _RecordingAdapter, _builder
 
-        monkeypatch.setattr("robot_sf.benchmark.map_runner._sonic_crowdnav_symbols", _fake_resolver)
+        monkeypatch.setattr(
+            "robot_sf.benchmark.map_runner.map_runner._sonic_crowdnav_symbols", _fake_resolver
+        )
         _build_socnav_family_adapter(
             "gst_predictor_rand", "gst_predictor_rand", {"model_name": "kept"}, meta={}
         )
@@ -352,7 +358,7 @@ class TestResolverRouting:
             return _RecordingAdapter, _builder
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner._crowdnav_height_symbols", _fake_resolver
+            "robot_sf.benchmark.map_runner.map_runner._crowdnav_height_symbols", _fake_resolver
         )
         adapter = _build_socnav_family_adapter(
             "crowdnav_height", "crowdnav_height", {"device": "cpu"}, meta={}
@@ -372,10 +378,11 @@ class TestConfigBuilderRouting:
             return "dummy-config"
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter", _RecordingAdapter
+            "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsORCAAdapter",
+            _RecordingAdapter,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.build_social_navigation_pyenvs_orca_config",
+            "robot_sf.benchmark.map_runner.map_runner.build_social_navigation_pyenvs_orca_config",
             _fake_builder,
         )
         adapter = _build_socnav_family_adapter(
@@ -408,11 +415,11 @@ class TestConfigBuilderRouting:
             return "dummy-config"
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+            "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsForceModelAdapter",
             _RecordingAdapter,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.build_social_navigation_pyenvs_force_model_config",
+            "robot_sf.benchmark.map_runner.map_runner.build_social_navigation_pyenvs_force_model_config",
             _fake_builder,
         )
         adapter = _build_socnav_family_adapter(algo_key, algo_key, {"max_speed": 1.0}, meta={})
@@ -431,10 +438,11 @@ class TestConfigBuilderRouting:
             return "dummy-config"
 
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsHSFMAdapter", _RecordingAdapter
+            "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsHSFMAdapter",
+            _RecordingAdapter,
         )
         monkeypatch.setattr(
-            "robot_sf.benchmark.map_runner.build_social_navigation_pyenvs_hsfm_config",
+            "robot_sf.benchmark.map_runner.map_runner.build_social_navigation_pyenvs_hsfm_config",
             _fake_builder,
         )
         _build_socnav_family_adapter(

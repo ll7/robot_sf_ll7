@@ -42,6 +42,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import yaml
 
+from robot_sf.benchmark.issue_5409_campaign_identity import (
+    DEFAULT_CAMPAIGN_ID_PAIR,
+    CampaignIdentityError,
+    CampaignIdPair,
+    campaign_identity_from_packet,
+)
 from robot_sf.benchmark.utils import episode_metric_value
 
 if TYPE_CHECKING:
@@ -58,6 +64,9 @@ except ImportError:  # pragma: no cover - supports direct script execution from 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_H500_CONFIG = REPO_ROOT / "configs/benchmarks/issue_5409_horizon_ablation_h500.yaml"
 DEFAULT_H600_CONFIG = REPO_ROOT / "configs/benchmarks/issue_5409_horizon_ablation_h600.yaml"
+DEFAULT_LAUNCH_PACKET = (
+    REPO_ROOT / "configs/benchmarks/issue_5409_horizon_ablation_launch_packet.yaml"
+)
 
 COMPLETENESS_SCHEMA = "issue-5409-matched-key-completeness.v1"
 DELTA_SCHEMA = "issue-5409-paired-horizon-deltas.v1"
@@ -70,6 +79,22 @@ METRICS: tuple[str, ...] = (
     "snqi",
 )
 VALID_EXECUTION_MODES = frozenset({"native", "adapter"})
+BLOCKED_ROW_MARKERS = frozenset(
+    {
+        "blocked",
+        "degraded",
+        "diagnostic-only",
+        "excluded",
+        "failed",
+        "failure",
+        "fallback",
+        "not-available",
+        "not-run",
+        "partial",
+        "partial-failure",
+        "unavailable",
+    }
+)
 DEFAULT_SCENARIO_COUNT = 48
 DEFAULT_SEEDS = (111, 112, 113)
 DEFAULT_ROWS_PER_ARM = 1728
@@ -77,6 +102,7 @@ DEFAULT_SCENARIO_MATRIX_HASH = "c10df617a87c"
 DEFAULT_BOOTSTRAP_SAMPLES = 300
 DEFAULT_BOOTSTRAP_SEED = 123
 DEFAULT_CONFIDENCE = 0.95
+DEFAULT_CAMPAIGN_IDS = DEFAULT_CAMPAIGN_ID_PAIR.as_tuple()
 
 Key = tuple[str, str, int]
 
@@ -317,6 +343,76 @@ def _execution_mode(*payloads: dict[str, Any]) -> str:
     return ""
 
 
+def _row_status_markers(record: dict[str, Any]) -> list[tuple[str, str]]:
+    """Return fail-closed status markers declared directly on one episode row."""
+    paths = (
+        ("status",),
+        ("readiness_status",),
+        ("availability_status",),
+        ("benchmark_availability", "status"),
+        ("benchmark_availability", "readiness_status"),
+        ("benchmark_availability", "availability_status"),
+        ("algorithm_metadata", "status"),
+        ("algorithm_metadata_contract", "status"),
+    )
+    markers: list[tuple[str, str]] = []
+    for path in paths:
+        value = _nested(record, *path)
+        marker = str(value or "").strip().lower().replace("_", "-")
+        if marker in BLOCKED_ROW_MARKERS:
+            markers.append((".".join(path), marker))
+
+    for field in ("fallback", "fallback_triggered", "degraded", "diagnostic_only"):
+        if record.get(field) is True:
+            markers.append((field, "true"))
+    return markers
+
+
+def _checkpoint_coverage_is_nonempty(checkpoint: dict[str, Any]) -> bool:
+    """Reject an explicitly empty or malformed checkpoint coverage pair."""
+    checked = checkpoint.get("checked")
+    resolved = checkpoint.get("resolved")
+    if checked is None and resolved is None:
+        return True
+    return (
+        isinstance(checked, int)
+        and not isinstance(checked, bool)
+        and isinstance(resolved, int)
+        and not isinstance(resolved, bool)
+        and checked == resolved
+        and checked > 0
+    )
+
+
+def _checkpoint_gate_is_submit_safe(checkpoint: dict[str, Any]) -> bool:
+    """Accept the known submit-safe checkpoint receipt shapes.
+
+    Older campaign packets reported ``status=ok``.  The current enforced staging
+    gate reports ``mode=enforced_staged`` plus equal checked/resolved counts and
+    ``submit_safe=true`` instead.  Both shapes are accepted only when their
+    explicit submit-safe evidence is present.
+    """
+    if checkpoint.get("submit_safe") is not True:
+        return False
+    if not _checkpoint_coverage_is_nonempty(checkpoint):
+        return False
+    status = str(checkpoint.get("status") or "").strip().lower()
+    if status in {"ok", "staged"}:
+        return True
+    checked = checkpoint.get("checked")
+    resolved = checkpoint.get("resolved")
+    return (
+        checkpoint.get("mode") == "enforced_staged"
+        and checkpoint.get("stage") is True
+        and isinstance(checked, int)
+        and not isinstance(checked, bool)
+        and isinstance(resolved, int)
+        and not isinstance(resolved, bool)
+        and checked == resolved
+        and checked > 0
+    )
+
+
 def _run_entry_index(campaign_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Index campaign summary run entries by planner key."""
     entries = campaign_summary.get("runs")
@@ -363,6 +459,7 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_seeds: tuple[int, ...],
     expected_scenario_count: int,
     expected_scenario_matrix_hash: str,
+    expected_campaign_id: str,
     config_payload: dict[str, Any] | None,
     config_path: Path | None,
     manifest: dict[str, Any],
@@ -376,7 +473,6 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
 ) -> dict[str, Any]:
     """Validate campaign-level identity and return compact provenance."""
     campaign_id = str(manifest.get("campaign_id") or "").strip()
-    expected_campaign_id = f"issue5409_horizon_ablation_{role}"
     if campaign_id != expected_campaign_id:
         blockers.append(f"{role}: campaign_id={campaign_id!r}, expected {expected_campaign_id!r}")
 
@@ -476,8 +572,8 @@ def _validate_arm_metadata(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if amv_scenario_count is not None and amv_scenario_count != expected_scenario_count:
         blockers.append(f"{role}: AMV coverage scenario_count is not {expected_scenario_count}")
 
-    if checkpoint.get("status") != "ok" or checkpoint.get("submit_safe") is not True:
-        blockers.append(f"{role}: checkpoint staging receipt is not submit_safe")
+    if not _checkpoint_gate_is_submit_safe(checkpoint):
+        blockers.append(f"{role}: checkpoint staging receipt does not satisfy the submit-safe gate")
 
     horizon_from_config = _strict_seed(config_payload.get("horizon")) if config_payload else None
     if horizon_from_config is not None and horizon_from_config != expected_horizon:
@@ -545,6 +641,7 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_rows: int,
     expected_scenario_count: int,
     expected_scenario_matrix_hash: str,
+    expected_campaign_id: str,
     config_payload: dict[str, Any] | None,
     config_path: Path | None,
 ) -> ArmInspection:
@@ -579,6 +676,7 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_seeds=expected_seeds,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=expected_campaign_id,
         config_payload=config_payload,
         config_path=config_path,
         manifest=artifacts["campaign_manifest"],
@@ -661,7 +759,22 @@ def _inspect_arm(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 blockers.append(f"{role}: {planner_key!r} has a row with missing scenario_id/seed")
                 continue
             key = (planner_key, scenario_id, seed)
-            mode = _execution_mode(summary_for_status, record)
+            summary_mode = _execution_mode(summary_for_status)
+            record_mode = _execution_mode(record)
+            if summary_mode and record_mode and summary_mode != record_mode:
+                blockers.append(
+                    f"{role}: {_key_text(key)} execution mode {record_mode!r} "
+                    f"disagrees with run summary {summary_mode!r}"
+                )
+            if not record_mode:
+                blockers.append(
+                    f"{role}: {_key_text(key)} is missing explicit row-level execution mode"
+                )
+            for marker_path, marker in _row_status_markers(record):
+                blockers.append(
+                    f"{role}: {_key_text(key)} has blocked row marker {marker_path}={marker!r}"
+                )
+            mode = record_mode
             run_modes.add(mode)
             if mode not in VALID_EXECUTION_MODES:
                 fallback_rows.append(_key_text(key))
@@ -951,6 +1064,44 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _load_launch_packet_identity(path: Path) -> CampaignIdPair:
+    """Load the declared #5409 campaign pair without accepting arbitrary IDs."""
+    resolved = path.expanduser()
+    if not resolved.is_absolute():
+        resolved = REPO_ROOT / resolved
+    if not resolved.is_file():
+        raise ValueError(f"launch packet does not exist: {resolved}")
+    try:
+        payload = yaml.safe_load(resolved.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"launch packet could not be read: {resolved} ({exc})") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"launch packet must contain a YAML mapping: {resolved}")
+    try:
+        return campaign_identity_from_packet(payload, allow_legacy_default=True)
+    except CampaignIdentityError as exc:
+        raise ValueError(f"launch packet campaign identity is invalid: {exc}") from exc
+
+
+def _resolve_campaign_identity(
+    *,
+    expected_campaign_ids: Sequence[object] | None,
+    campaign_identity: CampaignIdPair | None,
+) -> CampaignIdPair:
+    """Resolve one validated pair and reject conflicting declarations."""
+    try:
+        explicit = (
+            CampaignIdPair.from_values(expected_campaign_ids)
+            if expected_campaign_ids is not None
+            else None
+        )
+    except CampaignIdentityError as exc:
+        raise ValueError(str(exc)) from exc
+    if campaign_identity is not None and explicit is not None and campaign_identity != explicit:
+        raise ValueError("expected campaign IDs do not match the launch-packet identity pair")
+    return campaign_identity or explicit or DEFAULT_CAMPAIGN_ID_PAIR
+
+
 def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
     h500_root: Path,
     h600_root: Path,
@@ -965,6 +1116,8 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_scenario_count: int = DEFAULT_SCENARIO_COUNT,
     expected_scenario_matrix_hash: str = DEFAULT_SCENARIO_MATRIX_HASH,
     expected_horizons: tuple[int, int] = (500, 600),
+    expected_campaign_ids: tuple[str, str] | None = None,
+    campaign_identity: CampaignIdPair | None = None,
     confidence: float = DEFAULT_CONFIDENCE,
     bootstrap_samples: int = DEFAULT_BOOTSTRAP_SAMPLES,
     bootstrap_seed: int = DEFAULT_BOOTSTRAP_SEED,
@@ -972,6 +1125,11 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
 ) -> dict[str, Any]:
     """Build all three issue #5409 handoff artifacts and return their statuses."""
     seeds = tuple(int(seed) for seed in expected_seeds)
+    identity = _resolve_campaign_identity(
+        expected_campaign_ids=expected_campaign_ids,
+        campaign_identity=campaign_identity,
+    )
+    campaign_ids = identity.as_tuple()
     scenario_ids = tuple(str(value) for value in expected_scenarios) if expected_scenarios else None
     config_payloads: list[dict[str, Any] | None] = []
     config_paths = [
@@ -1040,6 +1198,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_rows=expected_rows_per_arm,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=campaign_ids[0],
         config_payload=config_payloads[0],
         config_path=config_paths[0],
     )
@@ -1053,6 +1212,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_rows=expected_rows_per_arm,
         expected_scenario_count=expected_scenario_count,
         expected_scenario_matrix_hash=expected_scenario_matrix_hash,
+        expected_campaign_id=campaign_ids[1],
         config_payload=config_payloads[1],
         config_path=config_paths[1],
     )
@@ -1093,6 +1253,8 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "matched_key": ["planner_key", "scenario_id", "seed"],
             "scenario_matrix_hash": expected_scenario_matrix_hash,
             "horizons": {"h500": expected_horizons[0], "h600": expected_horizons[1]},
+            "campaign_ids": {"h500": campaign_ids[0], "h600": campaign_ids[1]},
+            "campaign_identity": identity.to_payload(),
         },
         "arms": {
             "h500": {
@@ -1115,12 +1277,14 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
         deltas = _blocked_payload(
             DELTA_SCHEMA,
             blockers,
+            campaign_identity=identity.to_payload(),
             expected_rows_per_horizon=expected_rows_per_arm,
             rows=[],
         )
         uncertainty = _blocked_payload(
             UNCERTAINTY_SCHEMA,
             blockers,
+            campaign_identity=identity.to_payload(),
             confidence={
                 "method": "bootstrap_mean_over_seed_means",
                 "confidence": confidence,
@@ -1161,6 +1325,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "h500": h500.metadata,
                 "h600": h600.metadata,
                 "matched_key": ["planner_key", "scenario_id", "seed"],
+                "campaign_identity": identity.to_payload(),
             },
             "rows": paired_rows,
             "planner_point_estimates": _point_estimates(paired_rows, ("planner_key",)),
@@ -1177,6 +1342,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "h500": h500.metadata,
                 "h600": h600.metadata,
                 "matched_key": ["planner_key", "scenario_id", "seed"],
+                "campaign_identity": identity.to_payload(),
             },
             "confidence": {
                 "method": "bootstrap_mean_over_seed_means",
@@ -1204,6 +1370,7 @@ def analyze_pair(  # noqa: C901, PLR0912, PLR0913, PLR0915
     return {
         "status": completeness["status"],
         "benchmark_success_allowed": completeness["benchmark_success_allowed"],
+        "campaign_identity": identity.to_payload(),
         "output_dir": str(output_dir.expanduser().resolve()),
         "artifacts": {
             "matched_key_completeness": str(
@@ -1227,6 +1394,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--h500-config", type=Path, default=DEFAULT_H500_CONFIG)
     parser.add_argument("--h600-config", type=Path, default=DEFAULT_H600_CONFIG)
+    parser.add_argument(
+        "--launch-packet",
+        type=Path,
+        default=DEFAULT_LAUNCH_PACKET,
+        help="Launch packet declaring the versioned h500/h600 campaign-ID pair.",
+    )
     parser.add_argument("--expected-rows-per-arm", type=int, default=DEFAULT_ROWS_PER_ARM)
     parser.add_argument("--expected-scenario-count", type=int, default=DEFAULT_SCENARIO_COUNT)
     parser.add_argument(
@@ -1240,6 +1413,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expected-scenario-matrix-hash",
         default=DEFAULT_SCENARIO_MATRIX_HASH,
     )
+    parser.add_argument(
+        "--expected-campaign-id",
+        nargs=2,
+        metavar=("H500_ID", "H600_ID"),
+        default=None,
+        dest="expected_campaign_ids",
+        help=(
+            "Explicit h500 and h600 IDs for a reviewed rerun; they must match the "
+            "pair declared by --launch-packet."
+        ),
+    )
     parser.add_argument("--bootstrap-samples", type=int, default=DEFAULT_BOOTSTRAP_SAMPLES)
     parser.add_argument("--bootstrap-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     parser.add_argument("--confidence", type=float, default=DEFAULT_CONFIDENCE)
@@ -1251,6 +1435,18 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the paired analysis and return a fail-closed exit code."""
     args = _build_parser().parse_args(argv)
+    try:
+        packet_identity = _load_launch_packet_identity(args.launch_packet)
+        explicit_campaign_ids = (
+            tuple(args.expected_campaign_ids) if args.expected_campaign_ids is not None else None
+        )
+        identity = _resolve_campaign_identity(
+            expected_campaign_ids=explicit_campaign_ids,
+            campaign_identity=packet_identity,
+        )
+    except ValueError as exc:
+        print(f"blocked: {exc}", file=sys.stderr)
+        return 2
     result = analyze_pair(
         args.h500_root,
         args.h600_root,
@@ -1261,6 +1457,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_rows_per_arm=args.expected_rows_per_arm,
         expected_scenario_count=args.expected_scenario_count,
         expected_scenario_matrix_hash=args.expected_scenario_matrix_hash,
+        expected_campaign_ids=explicit_campaign_ids,
+        campaign_identity=identity,
         confidence=args.confidence,
         bootstrap_samples=args.bootstrap_samples,
         bootstrap_seed=args.bootstrap_seed,

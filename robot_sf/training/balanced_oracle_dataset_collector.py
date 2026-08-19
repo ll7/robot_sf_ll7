@@ -14,8 +14,8 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.benchmark import map_runner
-from robot_sf.benchmark.map_runner import _run_map_episode
+from robot_sf.benchmark.map_runner import map_runner
+from robot_sf.benchmark.map_runner.map_runner import _run_map_episode
 from robot_sf.errors import RobotSfError
 from robot_sf.training.action_bin_accounting import compute_action_bin_accounting
 from robot_sf.training.oracle_imitation_launch_packet import (

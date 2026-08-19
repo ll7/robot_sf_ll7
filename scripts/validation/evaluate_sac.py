@@ -37,7 +37,7 @@ from typing import Any
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 
 _SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 _DEFAULT_ALGO_CONFIG = Path("configs/baselines/sac_gate_socnav_struct.yaml")

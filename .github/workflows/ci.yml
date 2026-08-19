@@ -30,9 +30,11 @@ env:
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg
   PYGAME_HIDE_SUPPORT_PROMPT: "1"
-  # Use CPython 3.12+ sys.monitoring backend for coverage: dramatically lower
-  # instrumentation overhead than the default trace-based core.
-  COVERAGE_CORE: sysmon
+  # The sys.monitoring backend is faster for full non-PR coverage, but its
+  # hosted pytest-xdist worker data is not reliable on PR/merge-group runs.
+  # Keep the trace backend for exact-head changed coverage so the shard union
+  # represents executed tests rather than collection-only lines.
+  COVERAGE_CORE: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ctrace' || 'sysmon' }}
 
 jobs:
   fast-feedback:

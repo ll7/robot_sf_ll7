@@ -52,6 +52,19 @@ def test_audit_records_compact_payload_for_merged_pr() -> None:
     assert "comment_url" not in result
 
 
+def test_audit_accepts_rest_closed_state_with_merge_timestamp() -> None:
+    """The REST pull-request representation uses closed plus a merge timestamp."""
+    with patch(
+        "scripts.dev.pr_audit_merged._gh_api_get",
+        return_value=_proc(stdout=_merged_payload(state="closed")),
+    ):
+        result = audit_merged_pr(7638)
+
+    assert result["status"] == "ok"
+    assert result["audit"]["state"] == "merged"
+    assert result["audit"]["merged_at"] == "2026-08-20T10:00:00Z"
+
+
 def test_audit_with_comment_posts_disposition() -> None:
     """--comment posts a compact audit comment naming the exact merge state."""
     with (
@@ -79,6 +92,18 @@ def test_audit_fails_closed_for_open_pr() -> None:
     with patch(
         "scripts.dev.pr_audit_merged._gh_api_get",
         return_value=_proc(stdout=_merged_payload(state="open", merged_at=None)),
+    ):
+        result = audit_merged_pr(7547)
+
+    assert result["status"] == "error"
+    assert "is not merged" in result["error"]
+
+
+def test_audit_fails_closed_for_closed_unmerged_pr() -> None:
+    """A closed PR without a merge timestamp is not a merged PR."""
+    with patch(
+        "scripts.dev.pr_audit_merged._gh_api_get",
+        return_value=_proc(stdout=_merged_payload(state="closed", merged_at=None)),
     ):
         result = audit_merged_pr(7547)
 

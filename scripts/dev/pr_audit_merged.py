@@ -46,7 +46,11 @@ def _audit_payload(number: int, *, repo: str) -> tuple[dict[str, Any] | None, st
     head = payload.get("head")
     base = payload.get("base")
     merge_commit_sha = payload.get("merge_commit_sha")
-    if state != "merged" or not isinstance(merged_at, str) or not merged_at:
+    # GitHub's REST pull-request endpoint reports merged PRs as ``closed`` and
+    # exposes the merge fact through ``merged_at``. Keep accepting the
+    # normalized ``merged`` state used by other callers, but require the
+    # timestamp and exact identities in either representation.
+    if state not in {"merged", "closed"} or not isinstance(merged_at, str) or not merged_at:
         return None, (
             f"PR {number} is not merged (state={state!r}, merged_at={merged_at!r}); "
             "no audit disposition recorded"

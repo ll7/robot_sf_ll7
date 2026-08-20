@@ -86,8 +86,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--exhausted-attempts-file",
         type=Path,
         help=(
-            "JSON file containing prior exhausted-attempt records with packet fingerprints. "
-            "An unchanged packet is rejected before preflight or collection."
+            "JSON file containing prior exhausted-attempt records with verified packet "
+            "fingerprints and complete fingerprint payloads. An unchanged packet is rejected "
+            "before preflight or collection."
         ),
     )
     return parser

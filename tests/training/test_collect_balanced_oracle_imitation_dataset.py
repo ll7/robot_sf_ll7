@@ -217,6 +217,57 @@ def test_one_step_and_fallback_exclusion(tmp_path: Path) -> None:
     assert balance_summary["total_excluded_episodes"] >= 3
 
 
+def test_invalid_and_failed_rows_remain_distinct(tmp_path: Path) -> None:
+    """Malformed and failed zero-step rows stay visible under separate reasons."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    episode_id = collector.episodes_by_split["train"][0]
+    _, scenario, seed_token = episode_id.split("__")
+    invalid = _make_episode(
+        episode_id,
+        scenario,
+        int(seed_token.removeprefix("seed")),
+        "train",
+        steps=2,
+    )
+    invalid["actions"] = None
+    failed = _make_episode(
+        collector.episodes_by_split["train"][1],
+        scenario,
+        int(seed_token.removeprefix("seed")) + 1,
+        "train",
+        steps=0,
+        failed=True,
+    )
+    failed["provenance"] = {"collection_error": "simulator failed"}
+
+    _usable, exclusions = collector._filter_episodes([invalid, failed])
+
+    assert [item["reason"] for item in exclusions] == ["invalid", "failed"]
+    assert exclusions[0]["steps"] == 0
+    assert exclusions[1]["steps"] == 0
+
+
+def test_misaligned_trajectory_is_invalid_not_usable(tmp_path: Path) -> None:
+    """A row with misaligned trajectory fields is preserved as an invalid exclusion."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    episode_id = collector.episodes_by_split["train"][0]
+    _, scenario, seed_token = episode_id.split("__")
+    malformed = _make_episode(
+        episode_id,
+        scenario,
+        int(seed_token.removeprefix("seed")),
+        "train",
+        steps=2,
+    )
+    malformed["observations"] = malformed["observations"][:1]
+
+    usable, exclusions = collector._filter_episodes([malformed])
+
+    assert usable == []
+    assert exclusions[0]["reason"] == "invalid"
+    assert exclusions[0]["steps"] == 0
+
+
 def test_action_bin_accounting_determinism() -> None:
     """Action-bin accounting produces deterministic weights and summary for identical inputs."""
     actions1 = np.array([[0.5, -0.2], [1.2, 0.1], [-0.5, 0.8], [0.5, -0.2]], dtype=np.float32)
@@ -688,6 +739,7 @@ def test_yield_ledger_observed_shortfall(tmp_path: Path) -> None:
     ledger = manifest["yield_ledger"]
     doorway_stats = ledger["strata"]["train"]["classic_doorway_low"]
     assert doorway_stats["usable"] == 1
+    assert doorway_stats["nondegenerate"] == 1
     assert doorway_stats["target_minimum"] == 10
     assert doorway_stats["shortfall"] == 9
 
@@ -881,6 +933,29 @@ def test_yield_check_deterministic(tmp_path: Path) -> None:
     assert r1 == r2
 
 
+def test_yield_check_rejects_inconsistent_pass_gate(tmp_path: Path) -> None:
+    """A forged pass flag cannot override inconsistent per-stratum counts."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_path = tmp_path / "balanced_oracle_dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stats = manifest["yield_ledger"]["strata"]["train"][collector.scenario_ids[0]]
+    stats["usable"] = 0
+    stats["nondegenerate"] = 0
+    stats["shortfall"] = 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "Yield ledger" in result["reason"]
+
+
 def test_yield_check_side_effect_free(tmp_path: Path) -> None:
     """check_yield_status does not modify files in the output root."""
     collector = BalancedOracleCollector(
@@ -1056,6 +1131,31 @@ def test_packet_difference_reports_exact_changed_fields(tmp_path: Path) -> None:
     changed_report = collector_module.validate_packet_difference(changed_packet, [attempt])
     assert changed_report["status"] == "changed"
     assert changed_report["comparisons"][0]["changed_fields"] == ["scenario_ids"]
+
+
+def test_packet_difference_rejects_fingerprint_payload_mismatch(tmp_path: Path) -> None:
+    """A stale exhausted-attempt digest cannot authorize a packet comparison."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    with pytest.raises(BalancedDatasetCollectionError, match="does not match its payload"):
+        collector_module.validate_packet_difference(
+            collector.packet,
+            [
+                {
+                    "packet_fingerprint": "0" * 64,
+                    "packet_fingerprint_payload": collector.packet_fingerprint_payload(),
+                }
+            ],
+        )
+
+
+def test_packet_difference_requires_complete_reference_payload(tmp_path: Path) -> None:
+    """Hash-only exhausted attempts cannot claim exact changed packet fields."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    with pytest.raises(BalancedDatasetCollectionError, match="complete packet fingerprint payload"):
+        collector_module.validate_packet_difference(
+            collector.packet,
+            [{"packet_fingerprint": collector._compute_packet_fingerprint()}],
+        )
 
 
 def test_yield_check_missing_lineage_is_integrity_blocked(tmp_path: Path) -> None:

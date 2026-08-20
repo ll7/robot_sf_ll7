@@ -53,6 +53,20 @@ _CHECK_STATUSES = frozenset(
         "inconclusive_missing_input",
     }
 )
+_YIELD_STAT_FIELDS = (
+    "declared",
+    "attempted",
+    "completed",
+    "usable",
+    "nondegenerate",
+    "excluded",
+    "failed",
+    "missing",
+    "usable_transitions",
+    "target_minimum",
+    "shortfall",
+)
+_YIELD_TOTAL_FIELDS = _YIELD_STAT_FIELDS[:-2] + ("target_minimum_usable_transitions",)
 
 
 class BalancedDatasetCollectionError(RobotSfError, ValueError):
@@ -121,6 +135,79 @@ def _contains_degraded_marker(value: Any) -> bool:
     return False
 
 
+def _is_explicit_true(value: Any) -> bool:
+    """Return whether a marker is a real boolean true, not a truthy string."""
+    return isinstance(value, (bool, np.bool_)) and bool(value)
+
+
+def _has_explicit_invalid_marker(episode: dict[str, Any]) -> bool:
+    """Return whether an episode carries an explicit invalid-result marker."""
+    if _is_explicit_true(episode.get("invalid")):
+        return True
+    if str(episode.get("status", "")).strip().lower() == "invalid":
+        return True
+    provenance = episode.get("provenance")
+    if not isinstance(provenance, dict):
+        return False
+    record = provenance.get("record")
+    if not isinstance(record, dict):
+        return False
+    if str(record.get("status", "")).strip().lower() == "invalid":
+        return True
+    exclusion = record.get("scenario_exclusion")
+    return isinstance(exclusion, dict) and (
+        str(exclusion.get("status", "")).strip().lower() == "invalid"
+    )
+
+
+def _trajectory_step_count(episode: dict[str, Any]) -> int | None:
+    """Return one aligned trajectory length, or ``None`` for a malformed row."""
+    fields = ("actions", "observations", "positions", "rewards", "terminated", "truncated")
+    lengths: list[int] = []
+    for field in fields:
+        value = episode.get(field)
+        if value is None or isinstance(value, (str, bytes, dict)):
+            return None
+        try:
+            lengths.append(len(value))
+        except (TypeError, ValueError):
+            return None
+    if len(set(lengths)) != 1:
+        return None
+    return lengths[0]
+
+
+def _episode_exclusion_reason(episode: dict[str, Any]) -> tuple[str | None, int]:
+    """Classify one row and return its reason plus a safe step count.
+
+    Returns:
+        Tuple of the exclusion reason, or ``None`` for usable rows, and step count.
+    """
+    provenance = episode.get("provenance")
+    raw_steps = _trajectory_step_count(episode)
+    steps = raw_steps or 0
+    if bool(episode.get("leakage_invalid", False)):
+        return "leakage_invalid", steps
+    if _has_explicit_invalid_marker(episode):
+        return "invalid", steps
+    if bool(episode.get("failed", False)):
+        return "failed", steps
+    if bool(episode.get("fallback", False) or episode.get("degraded", False)):
+        return "fallback", steps
+    if (
+        bool(episode.get("provenance_incomplete", False))
+        or not isinstance(provenance, dict)
+        or not provenance
+    ):
+        return "provenance_incomplete", steps
+
+    if raw_steps is None:
+        return "invalid", 0
+    if raw_steps <= 1:
+        return "one-step", raw_steps
+    return None, raw_steps
+
+
 def _file_sha256(path: Path) -> str:
     """Return the lowercase hex SHA-256 digest of a file's bytes."""
     h = hashlib.sha256()
@@ -140,6 +227,47 @@ def compute_packet_fingerprint(packet: dict[str, Any]) -> str:
     return _canonical_sha256(_packet_fingerprint_payload(packet))
 
 
+def _validate_exhausted_attempt(attempt: Any, index: int) -> tuple[str, dict[str, Any]]:
+    """Validate one exhausted-attempt digest and its complete comparison payload.
+
+    Returns:
+        Tuple of the verified digest and the payload used to compute it.
+    """
+    if isinstance(attempt, str):
+        attempt = {"fingerprint": attempt}
+    if not isinstance(attempt, dict):
+        raise BalancedDatasetCollectionError(
+            f"Exhausted attempt {index} must be a mapping with a packet fingerprint"
+        )
+    attempt_fingerprint = attempt.get("packet_fingerprint", attempt.get("fingerprint"))
+    if not isinstance(attempt_fingerprint, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", attempt_fingerprint
+    ):
+        raise BalancedDatasetCollectionError(
+            f"Exhausted attempt {index} must carry a lowercase 64-character packet fingerprint"
+        )
+    reference_payload = attempt.get(
+        "packet_fingerprint_payload", attempt.get("fingerprint_payload")
+    )
+    if not isinstance(reference_payload, dict):
+        raise BalancedDatasetCollectionError(
+            f"Exhausted attempt {index} must carry a complete packet fingerprint payload"
+        )
+    missing_fields = [
+        field for field in _PACKET_FINGERPRINT_FIELDS if field not in reference_payload
+    ]
+    if missing_fields:
+        raise BalancedDatasetCollectionError(
+            f"Exhausted attempt {index} fingerprint payload is missing fields: {missing_fields}"
+        )
+    reference_fingerprint = _canonical_sha256(_packet_fingerprint_payload(reference_payload))
+    if reference_fingerprint != attempt_fingerprint:
+        raise BalancedDatasetCollectionError(
+            f"Exhausted attempt {index} packet fingerprint does not match its payload"
+        )
+    return attempt_fingerprint, reference_payload
+
+
 def _changed_packet_fields(proposed: dict[str, Any], reference: dict[str, Any] | None) -> list[str]:
     """Return exact packet fingerprint fields that differ from a reference payload."""
     if reference is None:
@@ -154,8 +282,8 @@ def validate_packet_difference(
 ) -> dict[str, Any]:
     """Reject a packet whose fingerprint matches an exhausted attempt.
 
-    Attempt records must carry ``packet_fingerprint`` or ``fingerprint``. They may also
-    carry ``packet_fingerprint_payload`` to make changed fields auditable.
+    Attempt records must carry ``packet_fingerprint`` or ``fingerprint`` plus a complete
+    ``packet_fingerprint_payload`` to make changed fields auditable.
 
     Returns:
         A deterministic comparison report, unless an unchanged attempt is rejected.
@@ -166,24 +294,7 @@ def validate_packet_difference(
     comparisons: list[dict[str, Any]] = []
 
     for index, attempt in enumerate(attempts):
-        if isinstance(attempt, str):
-            attempt = {"fingerprint": attempt}
-        if not isinstance(attempt, dict):
-            raise BalancedDatasetCollectionError(
-                f"Exhausted attempt {index} must be a mapping with a packet fingerprint"
-            )
-        attempt_fingerprint = attempt.get("packet_fingerprint", attempt.get("fingerprint"))
-        if not isinstance(attempt_fingerprint, str) or not attempt_fingerprint:
-            raise BalancedDatasetCollectionError(
-                f"Exhausted attempt {index} is missing packet_fingerprint"
-            )
-        reference_payload = attempt.get(
-            "packet_fingerprint_payload", attempt.get("fingerprint_payload")
-        )
-        if reference_payload is not None and not isinstance(reference_payload, dict):
-            raise BalancedDatasetCollectionError(
-                f"Exhausted attempt {index} has an invalid fingerprint payload"
-            )
+        attempt_fingerprint, reference_payload = _validate_exhausted_attempt(attempt, index)
         if proposed_fingerprint == attempt_fingerprint:
             raise BalancedDatasetCollectionError(
                 "Unchanged exhausted packet rejected before collection submission: "
@@ -271,6 +382,108 @@ def validate_split_and_episode_invariants(packet: dict[str, Any]) -> None:  # no
                         f"Episode ID {ep_id!r} uses seed {seed} outside seeds_by_split.{split}"
                     )
                 all_ids.add(ep_id)
+
+
+def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed guards
+    manifest: dict[str, Any],
+    ledger: dict[str, Any],
+    strata: Any,
+    yield_gates: Any,
+) -> str | None:
+    """Return a reason when a yield ledger is structurally inconsistent."""
+    if ledger.get("schema_version") != "yield-ledger.v1":
+        return "Yield ledger schema_version is missing or unsupported"
+    if not isinstance(yield_gates, dict):
+        return "Manifest yield_gates must be a mapping"
+    gate_status = yield_gates.get("status")
+    if gate_status not in {"pass", "fail"}:
+        return "Manifest yield_gates.status must be 'pass' or 'fail'"
+
+    min_transitions = yield_gates.get("min_usable_transitions")
+    min_episodes = yield_gates.get("min_episodes_per_stratum")
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in (min_transitions, min_episodes)
+    ):
+        return "Manifest yield gate thresholds must be non-negative integers"
+
+    scenario_ids = manifest.get("scenario_ids")
+    if (
+        not isinstance(scenario_ids, list)
+        or not scenario_ids
+        or not all(isinstance(value, str) and value for value in scenario_ids)
+    ):
+        return "Manifest scenario_ids must be a non-empty list of strings"
+    if not isinstance(strata, dict):
+        return "Yield ledger strata must be a mapping"
+
+    totals = ledger.get("totals")
+    if not isinstance(totals, dict):
+        return "Yield ledger totals must be a mapping"
+    for field in _YIELD_TOTAL_FIELDS:
+        value = totals.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            return f"Yield ledger totals.{field} must be a non-negative integer"
+    if totals["target_minimum_usable_transitions"] != min_transitions:
+        return "Yield ledger transition threshold does not match yield_gates"
+
+    sums = dict.fromkeys(_YIELD_STAT_FIELDS, 0)
+    for split in _SPLITS:
+        scenarios = strata.get(split)
+        if not isinstance(scenarios, dict):
+            return f"Yield ledger is missing strata mapping for {split}"
+        missing_scenarios = [scenario for scenario in scenario_ids if scenario not in scenarios]
+        if missing_scenarios:
+            return f"Yield ledger is missing scenarios for {split}: {missing_scenarios}"
+        for scenario_id in scenario_ids:
+            stats = scenarios[scenario_id]
+            if not isinstance(stats, dict):
+                return f"Yield ledger stats for {split}/{scenario_id} must be a mapping"
+            for field in _YIELD_STAT_FIELDS:
+                value = stats.get(field)
+                if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                    return f"Yield ledger {split}/{scenario_id}.{field} is invalid"
+                sums[field] += value
+            reason_counts = stats.get("reason_counts")
+            if not isinstance(reason_counts, dict) or any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in reason_counts.values()
+            ):
+                return f"Yield ledger {split}/{scenario_id}.reason_counts is invalid"
+            if stats["nondegenerate"] != stats["usable"]:
+                return (
+                    f"Yield ledger {split}/{scenario_id} nondegenerate count must match usable "
+                    "under the one-step exclusion contract"
+                )
+            expected_shortfall = (
+                max(0, stats["target_minimum"] - stats["usable"]) if split == "train" else 0
+            )
+            if stats["shortfall"] != expected_shortfall:
+                return f"Yield ledger {split}/{scenario_id}.shortfall is inconsistent"
+            if stats["target_minimum"] != (min_episodes if split == "train" else 0):
+                return f"Yield ledger {split}/{scenario_id}.target_minimum is inconsistent"
+            if stats["usable"] > stats["completed"] or stats["completed"] > stats["attempted"]:
+                return f"Yield ledger {split}/{scenario_id} count ordering is inconsistent"
+            if stats["failed"] > stats["excluded"]:
+                return f"Yield ledger {split}/{scenario_id}.failed exceeds excluded"
+            if sum(reason_counts.values()) != stats["excluded"]:
+                return f"Yield ledger {split}/{scenario_id}.reason_counts do not sum to excluded"
+            if stats["usable"] + stats["excluded"] + stats["missing"] != stats["declared"]:
+                return f"Yield ledger {split}/{scenario_id} does not account for declared IDs"
+
+    for field in _YIELD_STAT_FIELDS[:-2]:
+        if sums[field] != totals[field]:
+            return f"Yield ledger totals.{field} does not match per-stratum sums"
+    if gate_status == "pass":
+        if manifest.get("eligibility_status") != "training_ready":
+            return "Passed yield gates require training_ready eligibility_status"
+        if any(strata["train"][scenario]["shortfall"] for scenario in scenario_ids):
+            return "Passed yield gates contain a training-stratum shortfall"
+        if totals["usable_transitions"] < min_transitions:
+            return "Passed yield gates do not satisfy the transition threshold"
+    elif manifest.get("eligibility_status") == "training_ready":
+        return "Failed yield gates cannot have training_ready eligibility_status"
+    return None
 
 
 def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict guards
@@ -410,15 +623,13 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
             "reason": "Manifest lacks a valid yield-gates or per-stratum ledger mapping",
             "manifest_path": str(manifest_path),
         }
-    for scenarios in strata.values():
-        if not isinstance(scenarios, dict) or any(
-            not isinstance(stats, dict) for stats in scenarios.values()
-        ):
-            return {
-                "check_status": "blocked_integrity_or_lineage",
-                "reason": "Yield ledger strata must map scenarios to statistic mappings",
-                "manifest_path": str(manifest_path),
-            }
+    ledger_integrity_error = _yield_ledger_integrity_error(manifest, ledger, strata, yield_gates)
+    if ledger_integrity_error is not None:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": ledger_integrity_error,
+            "manifest_path": str(manifest_path),
+        }
 
     if yield_gates.get("status") != "pass":
         shortfalls: list[str] = []
@@ -652,6 +863,7 @@ class BalancedOracleCollector:
             },
             "exclusion_rules": [
                 "one-step trajectories (steps <= 1)",
+                "malformed or explicitly invalid trajectory records",
                 "failed or crashed trajectories",
                 "fallback or degraded policy execution",
                 "leakage invalid or seed overlap trajectories",
@@ -746,6 +958,8 @@ class BalancedOracleCollector:
                     "attempted": attempted,
                     "completed": completed,
                     "usable": usable,
+                    # The current collector's nondegeneracy rule is steps > 1; those rows
+                    # are already excluded before usable counts are accumulated.
                     "nondegenerate": usable,
                     "excluded": excluded_count,
                     "failed": failed,
@@ -784,6 +998,8 @@ class BalancedOracleCollector:
                 "attempted": total_attempted,
                 "completed": total_completed,
                 "usable": total_usable,
+                # See the per-stratum note above: usable rows are nondegenerate
+                # under the existing one-step exclusion contract.
                 "nondegenerate": total_usable,
                 "excluded": total_excluded,
                 "failed": total_failed,
@@ -1171,25 +1387,7 @@ class BalancedOracleCollector:
             except (TypeError, ValueError):
                 seed = -1
             split = str(ep.get("split", ""))
-            actions = ep.get("actions", np.zeros((0, 2), dtype=np.float32))
-            steps = len(actions)
-            provenance = ep.get("provenance")
-
-            reason: str | None = None
-            if bool(ep.get("leakage_invalid", False)):
-                reason = "leakage_invalid"
-            elif steps <= 1:
-                reason = "one-step"
-            elif bool(ep.get("failed", False)):
-                reason = "failed"
-            elif bool(ep.get("fallback", False) or ep.get("degraded", False)):
-                reason = "fallback"
-            elif (
-                bool(ep.get("provenance_incomplete", False))
-                or not isinstance(provenance, dict)
-                or not provenance
-            ):
-                reason = "provenance_incomplete"
+            reason, steps = _episode_exclusion_reason(ep)
 
             if reason is not None:
                 exclusions.append(

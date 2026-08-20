@@ -311,19 +311,33 @@ def _changed_paths(previous: Any, current: Any, *, prefix: str = "") -> list[str
     return [] if previous == current else [prefix or "$"]
 
 
+def _decision_identity(receipt: Any) -> dict[str, Any]:
+    """Carry known receipt identity into a queue-consumable decision artifact."""
+    if not isinstance(receipt, Mapping):
+        return {}
+    return {
+        field: receipt[field]
+        for field in ("repository", "issue", _RECEIPT_DIGEST)
+        if field in receipt
+    }
+
+
 def compare_blocker_inputs(current_inputs: Mapping[str, Any], prior_receipt: Any) -> dict[str, Any]:
     """Compare current blocker inputs with a receipt without performing any writes."""
     validation = validate_receipt(prior_receipt)
+    identity = _decision_identity(prior_receipt)
     try:
         current_fingerprint = blocker_fingerprint(current_inputs)
     except ValueError as exc:
         return {
+            **identity,
             "status": "re_evaluate",
             "reason": "invalid_current_inputs",
             "errors": [str(exc)],
         }
     if not validation["valid"]:
         return {
+            **identity,
             "status": "re_evaluate",
             "reason": "invalid_or_stale_receipt",
             "errors": validation["errors"],
@@ -335,6 +349,7 @@ def compare_blocker_inputs(current_inputs: Mapping[str, Any], prior_receipt: Any
     changed_fields = _changed_paths(previous_inputs, current_inputs_canonical)
     if not changed_fields and current_fingerprint == prior_receipt["fingerprint"]:
         return {
+            **identity,
             "status": "blocked_unchanged",
             "reason": "blocker_fingerprint_unchanged",
             "current_fingerprint": current_fingerprint,
@@ -355,6 +370,7 @@ def compare_blocker_inputs(current_inputs: Mapping[str, Any], prior_receipt: Any
         )
     ]
     return {
+        **identity,
         "status": "blocker_changed",
         "reason": "fingerprint_changed",
         "current_fingerprint": current_fingerprint,

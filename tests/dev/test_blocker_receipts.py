@@ -230,3 +230,6 @@ def test_cli_compare_requires_re_evaluation_for_changed_blocker(tmp_path, capsys
 
     assert output["status"] == "blocker_changed"
     assert output["re_evaluate"] is True
+    assert output["issue"] == 7612
+    assert output["repository"] == "ll7/robot_sf_ll7"
+    assert output["receipt_digest"] == json.loads(receipt_path.read_text())["receipt_digest"]

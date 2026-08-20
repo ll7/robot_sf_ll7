@@ -14,6 +14,7 @@ from robot_sf.benchmark.forecast.forecast_preparation import (
     build_forecast_preparation_packet,
     validate_forecast_preparation_packet,
 )
+from robot_sf.benchmark.identity.hash_utils import stable_hash
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -279,6 +280,71 @@ def test_mismatched_pair_identity_fails_closed() -> None:
     ego_row["identity"]["cutoff_time_s"] += 0.25
 
     with pytest.raises(ValueError, match="pair_id does not match identity"):
+        _validate(payload)
+
+
+def test_pair_identity_and_target_are_bound_to_source_trace() -> None:
+    """A self-consistent but source-invented cutoff cannot pass validation."""
+    payload = _packet()
+    original_pair_id = payload["rows"][0]["pair_id"]
+    pair_rows = [row for row in payload["rows"] if row["pair_id"] == original_pair_id]
+    for row in pair_rows:
+        row["identity"].update(
+            {
+                "frame_step": 0,
+                "cutoff_time_s": 0.0,
+                "target_frame_step": 1,
+                "target_time_s": 1.0,
+            }
+        )
+        row["pair_id"] = f"pair-{stable_hash(row['identity'])[:24]}"
+
+    with pytest.raises(ValueError, match="does not match source trace"):
+        _validate(payload)
+
+
+def test_input_values_and_keys_are_bound_to_source_trace() -> None:
+    """Unknown privileged ego fields and fabricated robot values are rejected."""
+    payload = _packet()
+    ego_row = next(row for row in payload["rows"] if row["observation_tier"] == "ego_observation")
+    ego_row["input"]["pedestrian_heading_rad"] = 0.0
+
+    with pytest.raises(ValueError, match="input fields do not match"):
+        _validate(payload)
+
+
+def test_field_leakage_ledger_semantics_are_bound_to_row_tier() -> None:
+    """A packet cannot relabel privileged or future fields as robot-available."""
+    payload = _packet()
+    ego_row = next(row for row in payload["rows"] if row["observation_tier"] == "ego_observation")
+    robot_entry = next(
+        entry
+        for entry in ego_row["field_leakage_ledger"]
+        if entry["field"] == "input.robot_position_m"
+    )
+    robot_entry["robot_available"] = False
+
+    with pytest.raises(ValueError, match="ledger semantics drift"):
+        _validate(payload)
+
+
+def test_source_declaring_ego_field_cannot_claim_unavailability() -> None:
+    """The unavailable ego stratum is checked against the pinned source bytes."""
+    payload = _packet()
+    payload["ego_observation_source_key"] = "pedestrians"
+    for artifact in payload["source_artifacts"]:
+        artifact["ego_observation_source_key"] = "pedestrians"
+
+    with pytest.raises(ValueError, match="source ego observation field is present"):
+        _validate(payload)
+
+
+def test_split_policy_declaration_is_bound_to_validator_contract() -> None:
+    """A packet cannot rewrite split names while retaining matching assignments."""
+    payload = _packet()
+    payload["split_policy"]["split_names"] = ["train", "validation", "production"]
+
+    with pytest.raises(ValueError, match="split_names are not canonical"):
         _validate(payload)
 
 

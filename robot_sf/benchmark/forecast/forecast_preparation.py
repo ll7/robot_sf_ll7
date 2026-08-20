@@ -46,6 +46,15 @@ _FORBIDDEN_EGO_INPUT_PARTS = frozenset(
         "target_time_s",
     }
 )
+_SPLIT_GROUP_FIELDS = ("scenario_family", "scenario_id", "seed", "episode_id")
+_NEAR_DUPLICATE_POLICY = {
+    "rule": "round trace positions/velocities to 2 decimals and hash the normalized trajectory",
+    "scope": "an exact normalized fingerprint cannot occur in more than one split",
+    "future_expansion": (
+        "before training, add an RMS-aligned trajectory threshold review; this packet "
+        "does not perform a forecast campaign"
+    ),
+}
 
 _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
@@ -433,16 +442,9 @@ def build_forecast_preparation_packet(
         "split_policy": {
             "strategy": "deterministic_grouped_split",
             "split_names": list(SPLIT_NAMES),
-            "group_fields": ["scenario_family", "scenario_id", "seed", "episode_id"],
+            "group_fields": list(_SPLIT_GROUP_FIELDS),
             "group_id_definition": "scenario_family:scenario_id:seed:episode_id",
-            "near_duplicate_policy": {
-                "rule": "round trace positions/velocities to 2 decimals and hash the normalized trajectory",
-                "scope": "an exact normalized fingerprint cannot occur in more than one split",
-                "future_expansion": (
-                    "before training, add an RMS-aligned trajectory threshold review; this packet "
-                    "does not perform a forecast campaign"
-                ),
-            },
+            "near_duplicate_policy": deepcopy(_NEAR_DUPLICATE_POLICY),
             "assignments": {
                 group_id: split_by_group[group_id] for group_id in sorted(split_by_group)
             },
@@ -501,7 +503,7 @@ def validate_forecast_preparation_packet(  # noqa: C901
         source_artifacts, root, ego_source_key=ego_source_key
     )
     _validate_coverage_from_packet(payload, source_artifacts)
-    _validate_rows(payload, rows, source_by_path)
+    _validate_rows(payload, rows, source_by_path, root)
     _validate_split_policy(payload, source_artifacts)
     _validate_deterministic_split_assignments(payload, source_artifacts)
     _validate_estimates(payload.get("runtime_memory_estimates"))
@@ -656,10 +658,11 @@ def _ledger_entry(
     return entry
 
 
-def _validate_rows(  # noqa: C901, PLR0912
+def _validate_rows(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any],
     rows: list[Any],
     source_by_path: dict[str, dict[str, Any]],
+    root: Path,
 ) -> None:
     expected_fields = tuple(payload.get("pair_identity_fields", ()))
     if expected_fields != (
@@ -677,6 +680,8 @@ def _validate_rows(  # noqa: C901, PLR0912
     for index, raw_row in enumerate(rows):
         if not isinstance(raw_row, dict):
             raise ValueError(f"rows[{index}] must be a mapping")
+        if raw_row.get("schema_version") != FORECAST_PREPARATION_ROW_SCHEMA_VERSION:
+            raise ValueError(f"rows[{index}] schema_version is not canonical")
         pair_id = _require_text(raw_row.get("pair_id"), f"rows[{index}].pair_id")
         tier = _require_text(raw_row.get("observation_tier"), f"rows[{index}].observation_tier")
         if tier not in OBSERVATION_TIERS:
@@ -745,6 +750,15 @@ def _validate_rows(  # noqa: C901, PLR0912
                 raise ValueError(f"pair {pair_id} has mismatched lineage")
             if row["target"] != first_target:
                 raise ValueError(f"pair {pair_id} has mismatched future target")
+        source = source_by_path[first_lineage["source_path"]]
+        _validate_pair_against_source(
+            pair_rows,
+            identity=first_identity,
+            target=first_target,
+            source=source,
+            root=root,
+            pair_id=pair_id,
+        )
 
 
 def _validate_ego_input(input_fields: dict[str, Any], row: dict[str, Any], index: int) -> None:
@@ -758,7 +772,123 @@ def _validate_ego_input(input_fields: dict[str, Any], row: dict[str, Any], index
         raise ValueError(f"rows[{index}] ego input contains privileged pedestrian state")
 
 
-def _validate_row_ledger(row: dict[str, Any], index: int) -> None:
+def _validate_pair_against_source(
+    pair_rows: list[dict[str, Any]],
+    *,
+    identity: dict[str, Any],
+    target: Any,
+    source: Mapping[str, Any],
+    root: Path,
+    pair_id: str,
+) -> None:
+    """Recompute pair identity, target, and input values from the source trace."""
+    source_path = _require_text(source.get("path"), f"pair {pair_id}.source_path")
+    trace = load_simulation_trace_export(_resolve_repo_path(source_path, root))
+    frame_step = _require_int(identity.get("frame_step"), f"pair {pair_id}.frame_step")
+    target_frame_step = _require_int(
+        identity.get("target_frame_step"), f"pair {pair_id}.target_frame_step"
+    )
+    cutoff_time_s = _require_finite_number(
+        identity.get("cutoff_time_s"), f"pair {pair_id}.cutoff_time_s"
+    )
+    target_time_s = _require_finite_number(
+        identity.get("target_time_s"), f"pair {pair_id}.target_time_s"
+    )
+    horizon_s = _require_finite_number(identity.get("horizon_s"), f"pair {pair_id}.horizon_s")
+    if horizon_s <= 0.0:
+        raise ValueError(f"pair {pair_id}.horizon_s must be positive")
+    actor_id = _require_text(identity.get("actor_id"), f"pair {pair_id}.actor_id")
+    cutoff = _frame_for_step(trace, frame_step)
+    actor = _actor_for_frame(cutoff.pedestrians, actor_id)
+    expected_target = _target_for_horizon(
+        trace,
+        cutoff_step=frame_step,
+        horizon_s=horizon_s,
+        dt_s=_trace_dt_s(trace),
+        actor_id=actor_id,
+    )
+    if target_frame_step != expected_target["frame_step"]:
+        raise ValueError(f"pair {pair_id}.target_frame_step does not match source trace")
+    if not math.isclose(cutoff_time_s, cutoff.time_s, abs_tol=1e-9):
+        raise ValueError(f"pair {pair_id}.cutoff_time_s does not match source trace")
+    if not math.isclose(target_time_s, expected_target["time_s"], abs_tol=1e-9):
+        raise ValueError(f"pair {pair_id}.target_time_s does not match source trace")
+    if not math.isclose(
+        target_time_s - cutoff_time_s,
+        horizon_s,
+        abs_tol=1e-9,
+    ):
+        raise ValueError(f"pair {pair_id}.horizon_s does not match source times")
+    expected_target_payload = {
+        "future_position_m": expected_target["position"],
+        "source": "simulation_trace_export.pedestrians",
+    }
+    if target != expected_target_payload:
+        raise ValueError(f"pair {pair_id}.target does not match source trace")
+    for index, row in enumerate(pair_rows):
+        _validate_row_input_against_source(
+            row,
+            index=index,
+            cutoff=cutoff,
+            actor=actor,
+            pair_id=pair_id,
+        )
+
+
+def _validate_row_input_against_source(
+    row: dict[str, Any],
+    *,
+    index: int,
+    cutoff: Any,
+    actor: Mapping[str, Any],
+    pair_id: str,
+) -> None:
+    input_fields = row["input"]
+    robot = cutoff.robot
+    expected_robot = {
+        "robot_position_m": [float(value) for value in robot["position"]],
+        "robot_velocity_mps": [float(value) for value in robot["velocity"]],
+        "robot_heading_rad": float(robot["heading"]),
+    }
+    tier = row["observation_tier"]
+    if tier == "oracle_full_state":
+        expected = {
+            "pedestrian_position_m": [float(value) for value in actor["position"]],
+            "pedestrian_velocity_mps": [float(value) for value in actor["velocity"]],
+            **expected_robot,
+        }
+    elif tier == "ego_observation":
+        expected = expected_robot
+    else:  # pragma: no cover - fixed-tier validation runs before this helper
+        raise ValueError(f"pair {pair_id} has unsupported observation tier: {tier}")
+    if set(input_fields) != set(expected):
+        raise ValueError(f"rows[{index}] input fields do not match the declared observation tier")
+    for field, expected_value in expected.items():
+        actual_value = input_fields.get(field)
+        if isinstance(expected_value, list):
+            if not _vectors_close(actual_value, expected_value):
+                raise ValueError(f"rows[{index}] input field is not bound to source: {field}")
+        elif not isinstance(actual_value, (int, float)) or isinstance(actual_value, bool):
+            raise ValueError(f"rows[{index}] input field is not numeric: {field}")
+        elif not math.isclose(float(actual_value), expected_value, abs_tol=1e-9):
+            raise ValueError(f"rows[{index}] input field is not bound to source: {field}")
+
+
+def _vectors_close(actual: Any, expected: Sequence[float]) -> bool:
+    return (
+        isinstance(actual, list)
+        and len(actual) == len(expected)
+        and all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and math.isclose(float(value), expected_value, abs_tol=1e-9)
+            for value, expected_value in zip(actual, expected, strict=True)
+        )
+    )
+
+
+def _validate_row_ledger(row: dict[str, Any], index: int) -> None:  # noqa: C901, PLR0912
     ledger = row.get("field_leakage_ledger")
     if not isinstance(ledger, list):
         raise ValueError(f"rows[{index}].field_leakage_ledger must be a list")
@@ -769,6 +899,17 @@ def _validate_row_ledger(row: dict[str, Any], index: int) -> None:
         "input.robot_velocity_mps",
         "input.robot_heading_rad",
         "target.future_position_m",
+    }
+    pedestrian_status = (
+        "available" if row["observation_tier"] == "oracle_full_state" else "not_available"
+    )
+    expected_metadata = {
+        "input.pedestrian_position_m": ("m", "cutoff", False, False, pedestrian_status),
+        "input.pedestrian_velocity_mps": ("m/s", "cutoff", False, False, pedestrian_status),
+        "input.robot_position_m": ("m", "cutoff", True, False, "available"),
+        "input.robot_velocity_mps": ("m/s", "cutoff", True, False, "available"),
+        "input.robot_heading_rad": ("rad", "cutoff", True, False, "available"),
+        "target.future_position_m": ("m", "target", False, True, "available"),
     }
     actual_fields = set()
     for entry in ledger:
@@ -784,16 +925,56 @@ def _validate_row_ledger(row: dict[str, Any], index: int) -> None:
             raise ValueError(f"rows[{index}] ledger.future_target must be boolean")
         if field.startswith("input.") and entry["future_target"]:
             raise ValueError(f"rows[{index}] future target marked inside input ledger")
+        expected = expected_metadata.get(field)
+        if expected is not None:
+            unit, time_role, robot_available, future_target, status = expected
+            if (
+                entry["unit"] != unit
+                or entry["time_role"] != time_role
+                or entry["robot_available"] != robot_available
+                or entry["future_target"] != future_target
+                or entry["status"] != status
+            ):
+                raise ValueError(f"rows[{index}] ledger semantics drift: {field}")
+            if field.startswith("input.pedestrian_"):
+                owner = entry["owner"]
+                if row["observation_tier"] == "oracle_full_state":
+                    owner_matches = owner == "simulation_trace_export.pedestrians"
+                else:
+                    owner_matches = owner.startswith("declared_ego_source.") and len(owner) > len(
+                        "declared_ego_source."
+                    )
+                if not owner_matches:
+                    raise ValueError(f"rows[{index}] ledger owner drift: {field}")
+            elif field == "target.future_position_m":
+                if entry["owner"] != "simulation_trace_export.pedestrians":
+                    raise ValueError(f"rows[{index}] ledger owner drift: {field}")
+            elif entry["owner"] != "simulation_trace_export.robot":
+                raise ValueError(f"rows[{index}] ledger owner drift: {field}")
+        if entry["status"] == "not_available" and not entry.get("reason"):
+            raise ValueError(f"rows[{index}] unavailable ledger field needs a reason")
+    if len(actual_fields) != len(ledger):
+        raise ValueError(f"rows[{index}] field ledger contains duplicate fields")
     if actual_fields != required_fields:
         raise ValueError(f"rows[{index}] field ledger coverage mismatch")
 
 
-def _validate_split_policy(payload: Mapping[str, Any], source_artifacts: list[Any]) -> None:
+def _validate_split_policy(  # noqa: C901
+    payload: Mapping[str, Any], source_artifacts: list[Any]
+) -> None:
     policy = payload.get("split_policy")
     if not isinstance(policy, dict):
         raise ValueError("split_policy must be a mapping")
     if policy.get("strategy") != "deterministic_grouped_split":
         raise ValueError("split_policy strategy must be deterministic_grouped_split")
+    if policy.get("split_names") != list(SPLIT_NAMES):
+        raise ValueError("split_policy split_names are not canonical")
+    if policy.get("group_fields") != list(_SPLIT_GROUP_FIELDS):
+        raise ValueError("split_policy group_fields are not canonical")
+    if policy.get("group_id_definition") != ":".join(_SPLIT_GROUP_FIELDS):
+        raise ValueError("split_policy group_id_definition is not canonical")
+    if policy.get("near_duplicate_policy") != _NEAR_DUPLICATE_POLICY:
+        raise ValueError("split_policy near_duplicate_policy is not canonical")
     assignments = policy.get("assignments")
     if not isinstance(assignments, dict) or not assignments:
         raise ValueError("split_policy.assignments must be a non-empty mapping")
@@ -874,7 +1055,7 @@ def _validate_source_artifacts(
     return source_by_path
 
 
-def _validate_source_artifact_metadata(
+def _validate_source_artifact_metadata(  # noqa: C901
     raw_artifact: dict[str, Any],
     *,
     index: int,
@@ -909,9 +1090,15 @@ def _validate_source_artifact_metadata(
         raise ValueError(f"source metadata drift for {relative_path}: near_duplicate_fingerprint")
     if raw_artifact.get("ego_observation_source_key") != ego_source_key:
         raise ValueError(f"source metadata drift for {relative_path}: ego_observation_source_key")
+    raw_payload = _load_json_object(path)
+    ego_status, ego_reason = _ego_source_status(raw_payload, ego_source_key)
+    if ego_status != "not_available":
+        raise ValueError(f"source ego observation field is present: {relative_path}")
     ego_status = raw_artifact.get("ego_observation_status")
     if ego_status != "not_available":
         raise ValueError("source ego_observation_status must be not_available")
+    if raw_artifact.get("ego_observation_reason") != ego_reason:
+        raise ValueError(f"source metadata drift for {relative_path}: ego_observation_reason")
 
 
 def _validate_coverage_from_packet(
@@ -934,6 +1121,7 @@ def _validate_coverage_from_packet(
     unavailable = coverage.get("unavailable_strata")
     if not isinstance(unavailable, list):
         raise ValueError("coverage.unavailable_strata must be a list")
+    _validate_unavailable_strata(unavailable)
     if len(families) < 3 and not _has_unavailable_dimension(unavailable, "scenario_family"):
         raise ValueError("fewer than three scenario families without an unavailable stratum")
     if len(planners) < 2 and not _has_unavailable_dimension(unavailable, "planner"):
@@ -1355,6 +1543,21 @@ def _require_text(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} must be a non-empty string")
     return value.strip()
+
+
+def _require_int(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    return value
+
+
+def _require_finite_number(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a finite number")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{field} must be a finite number")
+    return result
 
 
 def _resolve_repo_path(value: Path | str, root: Path) -> Path:

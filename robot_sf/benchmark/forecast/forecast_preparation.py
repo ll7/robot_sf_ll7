@@ -503,6 +503,7 @@ def validate_forecast_preparation_packet(  # noqa: C901
     _validate_coverage_from_packet(payload, source_artifacts)
     _validate_rows(payload, rows, source_by_path)
     _validate_split_policy(payload, source_artifacts)
+    _validate_deterministic_split_assignments(payload, source_artifacts)
     _validate_estimates(payload.get("runtime_memory_estimates"))
     _validate_dependencies(payload.get("dependency_license_comparison"), root)
     _validate_false_reassurance_case(payload.get("ade_fde_false_reassurance_case"), root)
@@ -816,6 +817,24 @@ def _validate_split_policy(payload: Mapping[str, Any], source_artifacts: list[An
         if previous_group is not None and group_splits[previous_group] != split:
             raise ValueError(f"near-duplicate trajectory leakage across splits: {fingerprint}")
         fingerprints[fingerprint] = group_id
+
+
+def _validate_deterministic_split_assignments(
+    payload: Mapping[str, Any], source_artifacts: list[dict[str, Any]]
+) -> None:
+    """Recompute the declared grouped split instead of trusting packet assignments."""
+    policy = payload["split_policy"]
+    assignments = policy["assignments"]
+    group_ids = sorted({artifact["lineage_group_id"] for artifact in source_artifacts})
+    expected = {
+        group_id: SPLIT_NAMES[index % len(SPLIT_NAMES)] for index, group_id in enumerate(group_ids)
+    }
+    if assignments != expected:
+        raise ValueError("split assignments drift from the deterministic grouped policy")
+    for artifact in source_artifacts:
+        group_id = artifact["lineage_group_id"]
+        if artifact["split"] != expected[group_id]:
+            raise ValueError(f"source split drifts from deterministic grouped policy: {group_id}")
 
 
 def _validate_source_artifacts(

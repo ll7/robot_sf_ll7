@@ -244,6 +244,25 @@ def test_cross_partition_near_duplicate_fails_closed() -> None:
         _validate_split_policy(payload, [first, second])
 
 
+def test_split_assignments_are_recomputed_from_source_groups() -> None:
+    """A packet cannot move a group while keeping source and assignment fields self-consistent."""
+    payload = _packet()
+    artifact = payload["source_artifacts"][0]
+    group_id = artifact["lineage_group_id"]
+    expected_split = artifact["split"]
+    replacement_split = next(
+        split for split in ("train", "validation", "test") if split != expected_split
+    )
+    artifact["split"] = replacement_split
+    payload["split_policy"]["assignments"][group_id] = replacement_split
+    for row in payload["rows"]:
+        if row["lineage"]["lineage_group_id"] == group_id:
+            row["lineage"]["split"] = replacement_split
+
+    with pytest.raises(ValueError, match="split assignments drift"):
+        _validate(payload)
+
+
 def test_source_fingerprint_is_bound_to_trace_bytes() -> None:
     """A fabricated near-duplicate fingerprint cannot weaken split validation."""
     payload = _packet()

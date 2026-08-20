@@ -142,6 +142,23 @@ def test_report_matches_schema_and_records_runner_errors() -> None:
     assert report["conditions"]["sensor_limited"]["metrics"]["success_rate"]["status"] == "blocked"
 
 
+def test_missing_fallback_verdict_blocks_metrics() -> None:
+    """A trace without an explicit fallback verdict is not execution evidence."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    perfect.pop("fallback_degraded_status")
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert condition["execution"]["reason"] == (
+        "trace lacks an explicit fallback_or_degraded verdict"
+    )
+    assert condition["metrics"]["success_rate"]["status"] == "blocked"
+    assert report["status"] == "blocked"
+
+
 def test_horizon_exhaustion_is_recorded_as_timeout() -> None:
     """A fixed-horizon trace without success is not silently reported as zero timeout."""
     perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
@@ -167,6 +184,18 @@ def test_mismatched_pair_is_rejected() -> None:
             sensor,
             config=_config(),
         )
+
+
+def test_trace_identity_must_match_config() -> None:
+    """A pair from another candidate or scenario cannot borrow this config provenance."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    sensor["candidate"] = perfect["candidate"]
+    perfect["scenario_id"] = "other_scenario"
+    sensor["scenario_id"] = "other_scenario"
+
+    with pytest.raises(ValueError, match="trace identity disagrees with config: scenario_name"):
+        build_calf_legnav_comparator_report(perfect, sensor, config=_config())
 
 
 def test_mismatched_horizon_is_rejected() -> None:

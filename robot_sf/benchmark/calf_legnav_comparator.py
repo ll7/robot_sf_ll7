@@ -57,7 +57,9 @@ def _trace_rows(trace: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     rows = trace.get("steps")
     if not isinstance(rows, list):
         raise ValueError("trace.steps must be a list")
-    return [row for row in rows if isinstance(row, Mapping)]
+    if not all(isinstance(row, Mapping) for row in rows):
+        raise ValueError("trace.steps must contain only mapping rows")
+    return list(rows)
 
 
 def _metric(
@@ -207,9 +209,12 @@ def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
     if reported is True:
         status = "blocked"
         reason = "trace reports fallback_or_degraded execution"
-    else:
+    elif reported is False:
         status = "available"
         reason = None
+    else:
+        status = "blocked"
+        reason = "trace lacks an explicit fallback_or_degraded verdict"
     return {
         "status": status,
         "reason": reason,
@@ -489,6 +494,20 @@ def build_calf_legnav_comparator_report(
     ]
     if mismatches:
         raise ValueError("paired traces disagree on: " + ", ".join(mismatches))
+
+    config_identity = {
+        "candidate": "candidate",
+        "scenario_name": "scenario_id",
+        "seed": "seed",
+        "horizon": "horizon",
+    }
+    config_mismatches = [
+        config_field
+        for config_field, trace_field in config_identity.items()
+        if config.get(config_field) != perfect_trace.get(trace_field)
+    ]
+    if config_mismatches:
+        raise ValueError("trace identity disagrees with config: " + ", ".join(config_mismatches))
 
     personal_space_radius_m = _finite_number(config.get("personal_space_radius_m"))
     if personal_space_radius_m is None or personal_space_radius_m <= 0.0:

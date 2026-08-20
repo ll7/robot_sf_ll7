@@ -261,7 +261,12 @@ def _episode_metadata(record: dict[str, Any]) -> None:
             "episode planner_kinematics execution_mode is not native "
             "(adapter/fallback/degraded fail closed)"
         )
-    if kinematics.get("adapter_active") is True:
+    adapter_active = kinematics.get("adapter_active")
+    if not isinstance(adapter_active, bool):
+        raise ValueError(
+            "episode planner_kinematics adapter_active must be an explicit boolean false"
+        )
+    if adapter_active:
         raise ValueError("episode planner_kinematics reports active adapter execution")
 
 

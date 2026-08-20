@@ -506,6 +506,8 @@ def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> 
         ({"execution_mode": "adapter"}, "execution_mode is not native"),
         ({"execution_mode": "fallback"}, "execution_mode is not native"),
         ({"adapter_active": True}, "active adapter execution"),
+        ({"adapter_active": "false"}, "adapter_active must be an explicit boolean false"),
+        ({"adapter_active": 0}, "adapter_active must be an explicit boolean false"),
     ],
 )
 def test_producer_rejects_noncanonical_execution(

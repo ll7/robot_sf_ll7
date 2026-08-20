@@ -136,7 +136,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "f6268b8c1355cba77a8b3da6c9c12420737bd51f8c535a4c456f879eb32cee31"
+      "sha256": "563ecdfc7256af1eebaafd59b6209cd1c0cdc10b8a2fb158393bea6ba2323250"
     },
     {
       "path": "third_party/python-rvo2/LICENSE",

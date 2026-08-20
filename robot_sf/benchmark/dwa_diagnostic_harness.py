@@ -90,7 +90,7 @@ def load_scenario(
     if len(matches) != 1:
         raise ValueError(f"scenario {name!r} is ambiguous in matrix {matrix_path}")
     scenario = dict(matches[0])
-    scenario["seeds"] = [int(seed)]
+    scenario["seeds"] = [_require_integer(seed, "scenario seed")]
     return scenario
 
 

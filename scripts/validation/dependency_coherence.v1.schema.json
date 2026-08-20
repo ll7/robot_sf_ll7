@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.invalid/schemas/dependency_coherence.v1.json",
+  "title": "Robot SF dependency declaration and lock coherence manifest",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schema_version",
+    "profile_manifest",
+    "resolver",
+    "python_profiles",
+    "owners"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string", "minLength": 1},
+    "schema_version": {"const": "robot-sf.dependency-coherence.v1"},
+    "profile_manifest": {"type": "string", "minLength": 1},
+    "resolver": {
+      "type": "object",
+      "required": ["name", "version", "lock_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"const": "uv"},
+        "version": {"type": "string", "minLength": 1},
+        "lock_mode": {"const": "check"}
+      }
+    },
+    "python_profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "python", "required"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "python": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"},
+          "sys_platform": {"type": "string", "minLength": 1},
+          "platform_machine": {"type": "string", "minLength": 1},
+          "implementation": {"type": "string", "minLength": 1},
+          "implementation_name": {"type": "string", "minLength": 1},
+          "os_name": {"type": "string", "minLength": 1},
+          "required": {"const": true}
+        }
+      }
+    },
+    "owners": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "declaration",
+          "lockfile",
+          "root_package",
+          "profile_ids",
+          "coupling"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "declaration": {"type": "string", "minLength": 1},
+          "lockfile": {"type": "string", "minLength": 1},
+          "root_package": {"type": "string", "minLength": 1},
+          "profile_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "coupling": {"enum": ["independent", "workspace"]}
+        }
+      }
+    }
+  }
+}

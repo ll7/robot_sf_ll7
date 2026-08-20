@@ -139,6 +139,10 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 "enabled predictive human cost requires planner-visible pedestrian "
                 "positions and velocities"
             )
+        if pedestrian_count_raw is None:
+            raise ValueError(
+                "enabled predictive human cost requires planner-visible pedestrian count"
+            )
         try:
             positions = np.asarray(pedestrian_positions_raw, dtype=float)
             velocities = np.asarray(pedestrian_velocities_raw, dtype=float)
@@ -154,10 +158,9 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         if not np.all(np.isfinite(positions)) or not np.all(np.isfinite(velocities)):
             raise ValueError("planner-visible pedestrian positions and velocities must be finite")
-        if pedestrian_count_raw is not None:
-            count = _validate_active_pedestrian_count(pedestrian_count_raw, positions.shape[0])
-            positions = positions[:count]
-            velocities = velocities[:count]
+        count = _validate_active_pedestrian_count(pedestrian_count_raw, positions.shape[0])
+        positions = positions[:count]
+        velocities = velocities[:count]
         return positions, velocities
 
     def _extract_state(

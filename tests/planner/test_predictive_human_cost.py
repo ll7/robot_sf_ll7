@@ -298,6 +298,43 @@ def test_mppi_enabled_cost_honors_fixed_capacity_pedestrian_count() -> None:
     np.testing.assert_array_equal(velocities, np.zeros((1, 2)))
 
 
+@pytest.mark.parametrize(
+    "observation",
+    [
+        {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.2]},
+            "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+            "pedestrians": {
+                "positions": np.asarray([[0.8, 0.2]]),
+                "velocities": np.asarray([[0.0, 0.0]]),
+            },
+        },
+        {
+            "robot_position": np.asarray([0.0, 0.0]),
+            "robot_heading": np.asarray([0.0]),
+            "robot_speed": np.asarray([0.2]),
+            "goal_current": np.asarray([2.0, 0.0]),
+            "goal_next": np.asarray([2.0, 0.0]),
+            "pedestrians_positions": np.asarray([[0.8, 0.2]]),
+            "pedestrians_velocities": np.asarray([[0.0, 0.0]]),
+        },
+    ],
+)
+def test_mppi_enabled_cost_requires_declared_pedestrian_count(
+    observation: dict[str, object],
+) -> None:
+    """Enabled cost cannot score rows when the active-row declaration is absent."""
+
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(
+            predictive_human_cost=PredictiveGaussianHumanCostConfig(enabled=True),
+        )
+    )
+
+    with pytest.raises(ValueError, match="requires planner-visible pedestrian count"):
+        planner._extract_state(observation)
+
+
 @pytest.mark.parametrize("count", [[1.5], [4.0], [float("nan")], [-1.0], [1.0, 1.0]])
 def test_mppi_enabled_cost_rejects_invalid_pedestrian_count(count: list[float]) -> None:
     """Malformed active counts cannot silently change the enabled cost state."""

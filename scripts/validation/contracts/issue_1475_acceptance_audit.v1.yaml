@@ -1,0 +1,141 @@
+schema_version: acceptance-audit-contract.v1
+issue: 1475
+context_builder: issue_1475
+defaults:
+  smoke_summary_path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/summary.json
+  source_checksums_path: docs/context/evidence/issue_1475_orca_residual_bc_smoke_12913_2026-06-17/source_slurm_checksum_manifest.sha256
+  closure_audit_path: docs/context/evidence/issue_1475_closure_audit_2026-07-06.md
+  state_surface_path: docs/context/issue_1475_state.yaml
+evidence_paths:
+  - "{smoke_summary_path}"
+  - "{source_checksums_path}"
+  - "{closure_audit_path}"
+  - "{state_surface_path}"
+status_mapping:
+  allowed:
+    - met
+    - partially_met
+    - not_met
+  blocked:
+    - partially_met
+    - not_met
+  complete_when: all_criteria_met
+state_source:
+  path_input: state_surface_path
+  issue: 1475
+  selector: latest_recorded_at_utc
+  acceptance_evidence_path: acceptance_evidence
+  closure_call_path: closure_boundary.closure_call_for_this_pr
+  integration_report_path: integration_report.status
+  fallback_acceptance_evidence_path: null
+  include_latest_recorded_at_utc: true
+  include_entry_status: true
+  include_integration_report_status: true
+criteria:
+  - id: residual_dataset_manifest
+    criterion: Residual dataset manifest NPZ recorded durable artifacts.
+    evaluator: issue_1475_residual_dataset
+    evidence_paths:
+      - "{source_checksums_path}"
+      - "{smoke_summary_path}"
+    blocking_on: [not_met, partially_met]
+  - id: residual_checkpoint_pointer
+    criterion: Learned residual checkpoint pointer durable included in completion update.
+    evaluator: issue_1475_residual_checkpoint
+    evidence_paths:
+      - "{source_checksums_path}"
+      - "{smoke_summary_path}"
+    blocking_on: [not_met, partially_met]
+  - id: diagnostics_report_fields
+    criterion: Diagnostics report includes ORCA command, raw residual, bounded residual, final guarded command, residual clipping rate, guard veto rate, fallback/degraded status.
+    evaluator: issue_1475_diagnostics
+    evidence_paths:
+      - "{smoke_summary_path}"
+    blocking_on: [not_met]
+  - id: fallback_rows_excluded
+    criterion: Fallback/degraded rows are not counted learned-residual success evidence.
+    evaluator: issue_1475_fallback_exclusion
+    evidence_paths:
+      - "{smoke_summary_path}"
+    blocking_on: [not_met]
+  - id: smoke_before_nominal
+    criterion: Smoke result recorded before nominal escalation.
+    evaluator: issue_1475_smoke_before_nominal
+    evidence_paths:
+      - "{smoke_summary_path}"
+    blocking_on: [not_met]
+  - id: nominal_classification
+    criterion: "Nominal result classified ready #1358 continuation, revise, stop."
+    evaluator: issue_1475_nominal_classification
+    evidence_paths:
+      - "{smoke_summary_path}"
+    blocking_on: [not_met]
+report:
+  schema_version: issue-1475-acceptance-audit.v1
+  claim_boundary: CPU-only acceptance audit over tracked evidence; no Slurm/GPU submission, benchmark campaign, training run, or paper-facing claim.
+  checked_paths:
+    - "{smoke_summary_path}"
+    - "{source_checksums_path}"
+    - "{closure_audit_path}"
+    - "{state_surface_path}"
+  static_fields:
+    next_empirical_action: "Run one bounded ORCA-residual BC smoke rerun on a Slurm-capable host; only if validate_smoke_nominal_gate passes, escalate nominal and classify #1358 continuation/revise/stop."
+    source_thread_summary: "Issue #1475 live thread reviewed via gh api on 2026-07-07; latest issue comment is the 2026-07-07 post-PR #4726 state update keeping the issue open; PR #4737 later merged post-merge closure audit evidence without closing it."
+    merged_pr_evidence:
+      - pr: "#4561"
+        title: "Issue #1475 add ORCA-residual smoke nominal gate"
+        merged_at_utc: "2026-07-05T02:58:35Z"
+        evidence: Added CPU-only validate_smoke_nominal_gate() and CLI validation for required smoke telemetry, fallback/degraded status, durable artifact status, and smoke thresholds before nominal escalation.
+        criteria_supported:
+          - Fallback/degraded rows are not counted learned-residual success evidence.
+          - Smoke result recorded before nominal escalation.
+        closure_effect: partial
+      - pr: "#4661"
+        title: "Issue #1475: add executable acceptance audit"
+        merged_at_utc: "2026-07-06T15:44:15Z"
+        evidence: "Added the executable criterion-to-evidence audit over tracked issue #1475 smoke artifacts and fail-closed closure_call=keep_open behavior."
+        criteria_supported:
+          - All acceptance criteria mapped to repository evidence.
+        closure_effect: partial
+      - pr: "#4667"
+        title: "Issue #1475: add high-churn closure state surface"
+        merged_at_utc: "2026-07-06T16:52:33Z"
+        evidence: "Added docs/context/issue_1475_state.yaml as the canonical durable state surface for high-churn issue #1475 audit propagation."
+        criteria_supported:
+          - High-churn issue state recorded in one canonical durable surface.
+        closure_effect: partial
+      - pr: "#4678"
+        title: "Issue #1475: verify closure state surface"
+        merged_at_utc: "2026-07-06T18:12:15Z"
+        evidence: Verified the executable audit and canonical state surface stay aligned on acceptance statuses and blocked closure boundary.
+        criteria_supported:
+          - State surface agrees with executable acceptance evidence.
+        closure_effect: partial
+      - pr: "#4721"
+        title: "Issue #1475: add acceptance audit integration report"
+        merged_at_utc: "2026-07-07T02:26:36Z"
+        evidence: Added integration report fields naming remaining blockers, intentional compute exclusions, and the next empirical Slurm smoke action.
+        criteria_supported:
+          - Fragmentation guard satisfied by a consolidation/integration slice.
+          - Remaining blockers and next empirical action recorded.
+        closure_effect: partial_keep_open
+      - pr: "#4726"
+        title: "Issue #1475: add merged PR acceptance evidence"
+        merged_at_utc: "2026-07-07T03:10:15Z"
+        evidence: "Added ordered merged-pr_evidence records for #4561/#4661/#4667/#4678/#4721 and posted the live issue state update that the audit still keeps #1475 open."
+        criteria_supported:
+          - "Merged PR acceptance evidence mapped through PR #4721."
+          - Post-merge issue propagation recorded keep-open closure call.
+        closure_effect: post_merge_audit_keep_open
+      - pr: "#4737"
+        title: "Issue #1475: add post-merge closure audit evidence"
+        merged_at_utc: "2026-07-07T05:48:07Z"
+        evidence: "Added post-#4726 closure-audit evidence, kept #1475 open, and recorded the state-surface selector over the newest recorded_at_utc row."
+        criteria_supported:
+          - "Merged PR acceptance evidence mapped through PR #4726."
+          - Newest durable state row keeps closure blocked on external smoke rerun.
+        closure_effect: post_merge_audit_keep_open
+  computed_fields:
+    smoke_gate: context_smoke_gate
+    integration_report: issue_1475_integration_report
+    closure_audit_contains_issue_1475: context_closure_audit_contains_issue_1475

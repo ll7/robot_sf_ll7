@@ -1,0 +1,63 @@
+{
+  "$schema": "scripts/validation/dependency_coherence.v1.schema.json",
+  "schema_version": "robot-sf.dependency-coherence.v1",
+  "profile_manifest": "scripts/validation/dependency_license_profiles.v1.json",
+  "resolver": {
+    "name": "uv",
+    "version": "0.11.21",
+    "lock_mode": "check"
+  },
+  "python_profiles": [
+    {
+      "id": "linux-py311",
+      "python": "3.11",
+      "sys_platform": "linux",
+      "platform_machine": "x86_64",
+      "implementation": "CPython",
+      "required": true
+    },
+    {
+      "id": "linux-py313",
+      "python": "3.13",
+      "sys_platform": "linux",
+      "platform_machine": "x86_64",
+      "implementation": "CPython",
+      "required": true
+    }
+  ],
+  "owners": [
+    {
+      "id": "root",
+      "declaration": "pyproject.toml",
+      "lockfile": "uv.lock",
+      "root_package": "robot-sf",
+      "profile_ids": [
+        "core",
+        "viz",
+        "maps",
+        "benchmark",
+        "gpu",
+        "training",
+        "recurrent",
+        "rllib",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "orca",
+        "socnav",
+        "criticality",
+        "all"
+      ],
+      "coupling": "independent"
+    },
+    {
+      "id": "fast-pysf",
+      "declaration": "fast-pysf/pyproject.toml",
+      "lockfile": "fast-pysf/uv.lock",
+      "root_package": "pysocialforce",
+      "profile_ids": ["fast-pysf"],
+      "coupling": "independent"
+    }
+  ]
+}

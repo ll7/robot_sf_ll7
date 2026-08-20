@@ -51,6 +51,8 @@ _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
         "baseline_id": "stationary",
         "family": "zero_order_hold",
+        "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run",
+        "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
         "runtime_estimate": {
             "complexity": "O(A * H)",
             "estimated_scalar_operations_per_actor_horizon": 2,
@@ -67,6 +69,8 @@ _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
         "baseline_id": "constant_velocity",
         "family": "first_order_kinematic",
+        "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run",
+        "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
         "runtime_estimate": {
             "complexity": "O(A * H)",
             "estimated_scalar_operations_per_actor_horizon": 8,
@@ -83,6 +87,8 @@ _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
         "baseline_id": "constant_acceleration",
         "family": "second_order_kinematic",
+        "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run",
+        "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
         "runtime_estimate": {
             "complexity": "O(A * H)",
             "estimated_scalar_operations_per_actor_horizon": 18,
@@ -99,6 +105,8 @@ _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
         "baseline_id": "kalman",
         "family": "linear_gaussian_state_space",
+        "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run",
+        "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
         "runtime_estimate": {
             "complexity": "O(A * H * d^3), d=4 state dimensions",
             "estimated_scalar_operations_per_actor_horizon": 256,
@@ -115,6 +123,8 @@ _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
         "baseline_id": "social_force",
         "family": "interaction_aware_force",
+        "sample_size_assumption": "one actor over one forecast horizon with symbolic N_neighbors; no empirical sample was run",
+        "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
         "runtime_estimate": {
             "complexity": "O(H * A * (A - 1))",
             "estimated_scalar_operations_per_actor_horizon": "320 + 80 * N_neighbors",

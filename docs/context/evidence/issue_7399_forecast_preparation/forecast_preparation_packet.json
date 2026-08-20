@@ -814,6 +814,7 @@
       "dependency": "numpy (already a core dependency)",
       "estimate_status": "preparation_estimate_not_measured",
       "family": "zero_order_hold",
+      "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
       "memory_estimate": {
         "complexity": "O(A * H)",
         "estimate_unit": "bytes, analytic only",
@@ -823,13 +824,15 @@
         "complexity": "O(A * H)",
         "estimate_unit": "scalar operations, analytic only",
         "estimated_scalar_operations_per_actor_horizon": 2
-      }
+      },
+      "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run"
     },
     {
       "baseline_id": "constant_velocity",
       "dependency": "numpy (already a core dependency)",
       "estimate_status": "preparation_estimate_not_measured",
       "family": "first_order_kinematic",
+      "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
       "memory_estimate": {
         "complexity": "O(A * H)",
         "estimate_unit": "bytes, analytic only",
@@ -839,13 +842,15 @@
         "complexity": "O(A * H)",
         "estimate_unit": "scalar operations, analytic only",
         "estimated_scalar_operations_per_actor_horizon": 8
-      }
+      },
+      "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run"
     },
     {
       "baseline_id": "constant_acceleration",
       "dependency": "numpy (already a core dependency)",
       "estimate_status": "preparation_estimate_not_measured",
       "family": "second_order_kinematic",
+      "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
       "memory_estimate": {
         "complexity": "O(A * H)",
         "estimate_unit": "bytes, analytic only",
@@ -855,13 +860,15 @@
         "complexity": "O(A * H)",
         "estimate_unit": "scalar operations, analytic only",
         "estimated_scalar_operations_per_actor_horizon": 18
-      }
+      },
+      "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run"
     },
     {
       "baseline_id": "kalman",
       "dependency": "numpy; scipy is optional and not required for the small design filter",
       "estimate_status": "preparation_estimate_not_measured",
       "family": "linear_gaussian_state_space",
+      "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
       "memory_estimate": {
         "complexity": "O(A * d^2)",
         "estimate_unit": "bytes, analytic only",
@@ -871,13 +878,15 @@
         "complexity": "O(A * H * d^3), d=4 state dimensions",
         "estimate_unit": "scalar operations, analytic only",
         "estimated_scalar_operations_per_actor_horizon": 256
-      }
+      },
+      "sample_size_assumption": "one actor over one forecast horizon; no empirical sample was run"
     },
     {
       "baseline_id": "social_force",
       "dependency": "local fast-pysf/pysocialforce; no new dependency is proposed",
       "estimate_status": "preparation_estimate_not_measured",
       "family": "interaction_aware_force",
+      "hardware_assumption": "CPU-only analytic estimate; no hardware benchmark or runtime measurement",
       "memory_estimate": {
         "complexity": "O(A * H + A * N_neighbors)",
         "estimate_unit": "bytes, analytic only",
@@ -887,7 +896,8 @@
         "complexity": "O(H * A * (A - 1))",
         "estimate_unit": "scalar operations, analytic only",
         "estimated_scalar_operations_per_actor_horizon": "320 + 80 * N_neighbors"
-      }
+      },
+      "sample_size_assumption": "one actor over one forecast horizon with symbolic N_neighbors; no empirical sample was run"
     }
   ],
   "schema_version": "forecast_preparation.v1",

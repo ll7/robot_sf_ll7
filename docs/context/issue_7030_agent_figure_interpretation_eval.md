@@ -52,9 +52,9 @@ uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
 
 Replay-all fails closed unless it covers every verified fixture/mutation pair
 exactly once. In addition to the packet-backed mutations, `--list` reports
-deterministic operators for reversed effect direction/desirability, native and
-adapter row merging without disclosure, and inconsistent multiplicity
-language. `digest_omission` and `stale_post_review_bytes` are explicit
+deterministic operators for analysis-unit mismatch, reversed effect
+direction/desirability, native and adapter row merging without disclosure, and
+inconsistent multiplicity language. `digest_omission` and `stale_post_review_bytes` are explicit
 manifest-validation mutations; they fail closed before scoring. Exit code 1
 means the candidate did not reproduce the expected detector; exit code 2 means
 the manifest, envelope, identity, digest, or claim-boundary contract failed.
@@ -86,10 +86,13 @@ adjudication, and any external model execution remain separate follow-up work un
 
 ## Current local baseline
 
-On the 2026-08-17 current-main fixture corpus, the focused suite passed 50 tests and the replay
-contained eight cases: one clean case and seven deliberate failure cases. All seven existing
-critical mutation classes were detected. Reviewer accounting and paired workflow comparison were
-`not_available` because the committed corpus contains no independently reviewed workflow runs.
+On the current-main fixture corpus, the focused suite passes 73 tests and the replay inventory
+contains eight packet-backed cases plus four deterministic operator cases: one clean case and
+eleven deliberate failure cases. All eleven critical mutation classes are detected. Reviewer
+accounting and paired workflow comparison are `not_available` because the committed corpus
+contains no independently reviewed workflow runs. The packet-shaped fixtures still require
+integration with the repository's canonical result-packet loader before they can be treated as
+canonical research inputs.
 
 This is diagnostic implementation evidence only. It does not establish model quality, visualization
 quality on unseen inputs, a packet-constrained improvement, or any result-admission decision.

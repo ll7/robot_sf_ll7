@@ -10,7 +10,8 @@
     },
     "estimand_unit": {
       "estimand": "fallback diagnostic delta",
-      "unit": "percentage points"
+      "unit": "percentage points",
+      "analysis_unit": "paired_episode"
     },
     "stats_multiplicity": {
       "statistic": "descriptive median",
@@ -48,7 +49,8 @@
     },
     "estimand_unit": {
       "estimand": "fallback diagnostic delta",
-      "unit": "percentage points"
+      "unit": "percentage points",
+      "analysis_unit": "paired_episode"
     },
     "stats_multiplicity": {
       "statistic": "descriptive median",

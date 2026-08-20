@@ -340,8 +340,8 @@ def test_replay_all_requires_exact_corpus_coverage_and_is_deterministic() -> Non
 
     assert first == second
     assert first["mode"] == "all"
-    assert first["case_count"] == 11
-    assert first["passed_case_count"] == 11
+    assert first["case_count"] == 12
+    assert first["passed_case_count"] == 12
     assert first["failed_case_count"] == 0
     assert first["detector_status"] == "pass"
     assert set(first["provenance"]) == {"code_sha256", "config_sha256", "fixture_sha256"}
@@ -585,6 +585,16 @@ def test_variant_metadata_fails_closed_when_workflows_are_incomplete() -> None:
 
     with pytest.raises(AgentFigureEvalError, match="exactly baseline and packet_constrained"):
         evaluate_packet(packet)
+
+
+def test_analysis_unit_mutation_is_a_critical_detector() -> None:
+    packet = _clean_packet()
+    packet["interpretation"]["estimand_unit"]["analysis_unit"] = "unpaired_episode"  # type: ignore[index]
+
+    result = evaluate_packet(packet).to_dict()
+
+    assert result["critical_errors"]["analysis_unit_mismatch"] is True
+    assert sum(result["critical_errors"].values()) == 1
 
 
 def test_blinded_reviewer_disagreement_and_adjudication_are_accounted_for() -> None:

@@ -5,7 +5,8 @@
   },
   "estimand_unit": {
     "estimand": "paired collision-rate difference",
-    "unit": "percentage points"
+    "unit": "percentage points",
+    "analysis_unit": "paired_episode"
   },
   "stats_multiplicity": {
     "statistic": "paired bootstrap median",

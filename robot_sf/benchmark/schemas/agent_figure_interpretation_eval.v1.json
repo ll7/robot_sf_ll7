@@ -35,6 +35,7 @@
       "required": [
         "unavailable_to_zero",
         "denominator_loss",
+        "analysis_unit_mismatch",
         "wrong_pairing_resampling",
         "fallback_degraded_promotion",
         "causal_overclaim",
@@ -47,6 +48,7 @@
       "properties": {
         "unavailable_to_zero": {"type": "integer", "minimum": 0},
         "denominator_loss": {"type": "integer", "minimum": 0},
+        "analysis_unit_mismatch": {"type": "integer", "minimum": 0},
         "wrong_pairing_resampling": {"type": "integer", "minimum": 0},
         "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
         "causal_overclaim": {"type": "integer", "minimum": 0},
@@ -203,6 +205,7 @@
             "required": [
               "unavailable_to_zero",
               "denominator_loss",
+              "analysis_unit_mismatch",
               "wrong_pairing_resampling",
               "fallback_degraded_promotion",
               "causal_overclaim",
@@ -215,6 +218,7 @@
             "properties": {
               "unavailable_to_zero": {"type": "boolean"},
               "denominator_loss": {"type": "boolean"},
+              "analysis_unit_mismatch": {"type": "boolean"},
               "wrong_pairing_resampling": {"type": "boolean"},
               "fallback_degraded_promotion": {"type": "boolean"},
               "causal_overclaim": {"type": "boolean"},
@@ -317,15 +321,20 @@
       "required": [
         "unavailable_to_zero",
         "denominator_loss",
+        "analysis_unit_mismatch",
         "wrong_pairing_resampling",
         "fallback_degraded_promotion",
         "causal_overclaim",
         "unsupported_ranking",
-        "null_overclaim"
+        "null_overclaim",
+        "effect_direction_desirability",
+        "native_adapter_merge",
+        "multiplicity_language"
       ],
       "properties": {
         "unavailable_to_zero": {"type": "integer", "minimum": 0},
         "denominator_loss": {"type": "integer", "minimum": 0},
+        "analysis_unit_mismatch": {"type": "integer", "minimum": 0},
         "wrong_pairing_resampling": {"type": "integer", "minimum": 0},
         "fallback_degraded_promotion": {"type": "integer", "minimum": 0},
         "causal_overclaim": {"type": "integer", "minimum": 0},
@@ -391,6 +400,7 @@
       "required": [
         "unavailable_to_zero",
         "denominator_loss",
+        "analysis_unit_mismatch",
         "wrong_pairing_resampling",
         "fallback_degraded_promotion",
         "causal_overclaim",
@@ -403,6 +413,7 @@
       "properties": {
         "unavailable_to_zero": {"$ref": "#/$defs/packet_id_list"},
         "denominator_loss": {"$ref": "#/$defs/packet_id_list"},
+        "analysis_unit_mismatch": {"$ref": "#/$defs/packet_id_list"},
         "wrong_pairing_resampling": {"$ref": "#/$defs/packet_id_list"},
         "fallback_degraded_promotion": {"$ref": "#/$defs/packet_id_list"},
         "causal_overclaim": {"$ref": "#/$defs/packet_id_list"},
@@ -497,6 +508,7 @@
           "required": [
             "unavailable_to_zero",
             "denominator_loss",
+            "analysis_unit_mismatch",
             "wrong_pairing_resampling",
             "fallback_degraded_promotion",
             "causal_overclaim",
@@ -509,6 +521,7 @@
           "properties": {
             "unavailable_to_zero": {"type": "boolean"},
             "denominator_loss": {"type": "boolean"},
+            "analysis_unit_mismatch": {"type": "boolean"},
             "wrong_pairing_resampling": {"type": "boolean"},
             "fallback_degraded_promotion": {"type": "boolean"},
             "causal_overclaim": {"type": "boolean"},

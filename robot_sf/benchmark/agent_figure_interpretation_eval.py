@@ -73,6 +73,7 @@ DIMENSIONS = (
 CRITICAL_ERROR_KINDS = (
     "unavailable_to_zero",
     "denominator_loss",
+    "analysis_unit_mismatch",
     "wrong_pairing_resampling",
     "fallback_degraded_promotion",
     "causal_overclaim",
@@ -89,6 +90,7 @@ INTEGRITY_MUTATION_IDS = (
 )
 SYNTHETIC_MUTATION_FIXTURE_ID = "issue-7030-frozen-figure-a"
 SYNTHETIC_MUTATION_IDS = (
+    "analysis_unit_mismatch",
     "effect_direction_desirability",
     "native_adapter_merge",
     "multiplicity_language",
@@ -98,6 +100,7 @@ SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2}
 CRITICAL_ERROR_DIMENSIONS = {
     "unavailable_to_zero": "evidence_tier_availability",
     "denominator_loss": "source_denominator",
+    "analysis_unit_mismatch": "estimand_unit",
     "wrong_pairing_resampling": "stats_multiplicity",
     "fallback_degraded_promotion": "evidence_tier_availability",
     "causal_overclaim": "claim_boundary",
@@ -572,6 +575,9 @@ def _apply_synthetic_mutation(packet: Mapping[str, Any], mutation_id: str) -> di
     elif mutation_id == "multiplicity_language":
         stats = interpretation["stats_multiplicity"]
         stats["multiplicity_language"] = "unadjusted comparisons"
+    elif mutation_id == "analysis_unit_mismatch":
+        estimand = interpretation["estimand_unit"]
+        estimand["analysis_unit"] = "unpaired_episode"
     return mutated
 
 
@@ -1189,6 +1195,10 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
     obs_source = _required_mapping(
         observed, "source_denominator", label="interpretation.source_denominator"
     )
+    ref_estimand = _required_mapping(reference, "estimand_unit", label="reference.estimand_unit")
+    obs_estimand = _required_mapping(
+        observed, "estimand_unit", label="interpretation.estimand_unit"
+    )
     ref_boundary = _required_mapping(reference, "claim_boundary", label="reference.claim_boundary")
     obs_boundary = _required_mapping(
         observed, "claim_boundary", label="interpretation.claim_boundary"
@@ -1209,6 +1219,9 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
             )
         ),
         "denominator_loss": ref_source.get("denominator_n") != obs_source.get("denominator_n"),
+        "analysis_unit_mismatch": (
+            ref_estimand.get("analysis_unit") != obs_estimand.get("analysis_unit")
+        ),
         "wrong_pairing_resampling": (
             ref_stats.get("paired") != obs_stats.get("paired")
             or ref_stats.get("resampling") != obs_stats.get("resampling")

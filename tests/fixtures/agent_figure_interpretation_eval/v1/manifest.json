@@ -7,74 +7,74 @@
     {
       "id": "clean",
       "path": "clean.json",
-      "sha256": "933b9c65074643e2b6b8527bf2f84bc40dde3c124da09f269282978c940acb2e",
+      "sha256": "be8d8875c326334a3eae896777a0de59664548aa3ef96cb23adde45d363c32df",
       "source_path": "sources/clean.source.json",
       "source_sha256": "14a4c121efc2e583c9f1ad6ddd38185ea46235ff4c531b703b7aa491e67bd625",
       "reference_path": "references/clean.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     },
     {
       "id": "unavailable_to_zero",
       "path": "unavailable_to_zero.json",
-      "sha256": "6e2f7f0cce821fa9f49da0ca0a7a9d06559c60ab01e30c086802a6508d8e3a07",
+      "sha256": "3cd903a90c163328c791040fbdafcdbcd22b97e89a16506d53f5ffd5dda722fc",
       "source_path": "sources/unavailable_to_zero.source.json",
       "source_sha256": "cab17211c5062f79f7241132a0decf8ca6888cb217c78ba37c3d18a0471bbb2d",
       "reference_path": "references/unavailable_to_zero.reference.json",
-      "reference_sha256": "5ab28b5c1e9ca3209fbb8665c305804249eb90203f75fff2eaaeb489c4daeaa2"
+      "reference_sha256": "51da319c9d5a338c0f8d904b5f19b493fff1a8be3a4ebc1bcc403ce5c96a8496"
     },
     {
       "id": "denominator_loss",
       "path": "denominator_loss.json",
-      "sha256": "84d04264147cb8dc4853f7366773a53945d1f68e7cdde41efebd219cf8fd5ef7",
+      "sha256": "c54d7f0269fe55648ecd2e543e5900a65d8ec6fda2c99c525b63faa48d2c639f",
       "source_path": "sources/denominator_loss.source.json",
       "source_sha256": "0d819d9758fb68c18a4269df04e27d406ada451198af3aeb9e9bb71f76297a1a",
       "reference_path": "references/denominator_loss.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     },
     {
       "id": "wrong_pairing_resampling",
       "path": "wrong_pairing_resampling.json",
-      "sha256": "ab0698d17c3264fdf95c8f5e4c235e6422e9455617f3de097be8953d5fcf3d76",
+      "sha256": "ae62a58174f07229638186c77f8fc4194d23c6ffedf0c2b26d557bb84f01c5be",
       "source_path": "sources/wrong_pairing_resampling.source.json",
       "source_sha256": "8c5b99cbd96225c2d2bf4db65248851c6400a0084a659fb0f346fe6df438cda9",
       "reference_path": "references/wrong_pairing_resampling.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     },
     {
       "id": "fallback_degraded_promotion",
       "path": "fallback_degraded_promotion.json",
-      "sha256": "06548901e9924d25c2928d7376d478cf02cd4514b82addc9f4e57fb2d7a0d4f4",
+      "sha256": "1a12519c49273efd9a224be041dd210ac599db61ac57a9e18df921e9211704a9",
       "source_path": "sources/fallback_degraded_promotion.source.json",
       "source_sha256": "180d9ac0d48e58b2357c01144388ea9bf32340fbe567a71d847d1d83df31d19f",
       "reference_path": "references/fallback_degraded_promotion.reference.json",
-      "reference_sha256": "a16224451c9b8c963a667e8d7b1700de87c1681848011324788d628eb3519981"
+      "reference_sha256": "62a65d750d6cd7495ad6eb55aa1b10ea593b0111d4820de867e6086a87638b91"
     },
     {
       "id": "causal_overclaim",
       "path": "causal_overclaim.json",
-      "sha256": "786a3a06749669ae176e25b263a3140123a723b746d14ba9f481ed8686ca688a",
+      "sha256": "10ca73004a07bbbdce8d29ccebdae95b9d7be296b2c1ef03198196c98056f2e9",
       "source_path": "sources/causal_overclaim.source.json",
       "source_sha256": "be12220fcdce4b751f94a68b21cc9ac1e53035a6684fbb8001d808fec5ecb9f6",
       "reference_path": "references/causal_overclaim.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     },
     {
       "id": "unsupported_ranking",
       "path": "unsupported_ranking.json",
-      "sha256": "f2c7fb90b1e6b2cd4f6947a239b907c78cef82a46f8f17bf8989a8f8bac23865",
+      "sha256": "2ee2df4f3792da3862aa31cd80bba91f6039c21c6f25379aeb7d553a8ef90e0a",
       "source_path": "sources/unsupported_ranking.source.json",
       "source_sha256": "9e969ccb43ada4f95d02258f3779b142373524f50157c168266caa5c43ce371d",
       "reference_path": "references/unsupported_ranking.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     },
     {
       "id": "null_overclaim",
       "path": "null_overclaim.json",
-      "sha256": "e6bfea543f2bc8cc870c7cc3e61c0fea5d58ceea5cffe1f912a418fc9a6fb358",
+      "sha256": "37c242bc311c00af3b8581a03a842f3809574bcf22589b7d3f3b895dc4082cb3",
       "source_path": "sources/null_overclaim.source.json",
       "source_sha256": "1c343d15fb34daa2f661d350564623e838340bb37c2b864ad8b1f3c1be3b4138",
       "reference_path": "references/null_overclaim.reference.json",
-      "reference_sha256": "4f4d05253ffc022abff7b61150362a63586c058275566edf32ff96b194415d41"
+      "reference_sha256": "50fb5bb721b8ed6f2e28308713a33483bbed88ddd00da9037bdd57168ded1fae"
     }
   ]
 }

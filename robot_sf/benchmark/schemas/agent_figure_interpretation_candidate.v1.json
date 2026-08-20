@@ -63,7 +63,7 @@
         "expected_detectors": {
           "type": "array",
           "items": {"enum": [
-            "unavailable_to_zero", "denominator_loss", "wrong_pairing_resampling",
+            "unavailable_to_zero", "denominator_loss", "analysis_unit_mismatch", "wrong_pairing_resampling",
             "fallback_degraded_promotion", "causal_overclaim", "unsupported_ranking",
             "null_overclaim", "effect_direction_desirability", "native_adapter_merge",
             "multiplicity_language"

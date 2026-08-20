@@ -27,6 +27,8 @@ scenario family, while `scenario_params.candidate_manifest_id` and
 `scenario_params.scenario_seed` must equal the envelope's selected manifest and
 the external binding's frozen scenario seed. A record from another candidate
 or scenario is rejected even if its execution seed otherwise looks valid.
+Scenario and episode execution seeds must also be JSON integers, not numeric
+lookalikes such as floating-point values or booleans.
 
 ## Producer command
 

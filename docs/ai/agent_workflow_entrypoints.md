@@ -37,6 +37,25 @@ PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 Model resolution is owned by `robot_sf/models/registry.py`. Search or extend that registry
 instead of guessing there is a flat `robot_sf/models.py` module.
 
+## Token-saving and shared routing compatibility
+
+The repository keeps the shared provider/model policy in the canonical external resolver; it does
+not copy a provider inventory or local route table. These compatibility entrypoints make the
+token-saving workflow callable from a fresh checkout and return an explicit machine-readable
+`unavailable` state when `CODEX_ROUTING_REPO` is not configured:
+
+```bash
+python3 scripts/save-codex-token-checkpoint.py --task-class issue_implementation --format text
+python3 scripts/advise-provider-routing.py --json
+python3 scripts/read-active-ledger.py --json --limit 1
+python3 scripts/resolve-route.py --help
+```
+
+Set `CODEX_ROUTING_REPO` to a checkout of the canonical shared routing repository to delegate route
+resolution/advice. Until then, continue with compact local snapshots and record
+`route-unavailable`; route output remains evidence only and never substitutes for local diff,
+validation, benchmark, evidence, or merge acceptance.
+
 ## Large-File Navigation
 
 Large file work should be targeted. Locate an anchor first, read a bounded range, then re-locate

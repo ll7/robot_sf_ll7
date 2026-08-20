@@ -81,6 +81,45 @@ def test_issue_dependency_packet_build_and_validate_self_digest() -> None:
     assert packet.validate_packet(changed)["ok"] is False
 
 
+def test_issue_dependency_packet_extracts_one_embedded_canonical_packet() -> None:
+    """The live admission owner can consume one explicit JSON-fenced packet."""
+    built = _packet(_row("issue-open", "issue_state", {"number": 12, "state": "OPEN"}))
+    body = "## Dependencies\n\n```json\n" + json.dumps(built) + "\n```\n"
+
+    extracted, errors = packet.extract_packet_from_issue_body(body)
+
+    assert errors == []
+    assert extracted == built
+
+
+def test_issue_dependency_packet_extracts_bounded_repository_reference(tmp_path: Path) -> None:
+    """A named repository-relative packet path is read without crawling links."""
+    built = _packet(_row("issue-open", "issue_state", {"number": 12, "state": "OPEN"}))
+    packet_path = tmp_path / "dependency-packet.json"
+    packet_path.write_text(json.dumps(built), encoding="utf-8")
+
+    extracted, errors = packet.extract_packet_from_issue_body(
+        "Dependency packet: `dependency-packet.json`", repo_root=tmp_path
+    )
+
+    assert errors == []
+    assert extracted == built
+
+
+def test_issue_dependency_packet_rejects_ambiguous_or_remote_references(tmp_path: Path) -> None:
+    """Explicitly ambiguous packet references fail closed."""
+    embedded = _packet(_row("issue-open", "issue_state", {"number": 12, "state": "OPEN"}))
+    body = (
+        "Dependency packet: https://example.test/packet.json\n"
+        "```json\n" + json.dumps(embedded) + "\n```\n"
+    )
+
+    extracted, errors = packet.extract_packet_from_issue_body(body, repo_root=tmp_path)
+
+    assert extracted is None
+    assert errors == ["issue body contains both an embedded and referenced dependency packet"]
+
+
 def test_issue_dependency_packet_link_without_predicate_is_invalid() -> None:
     """An informational link cannot be represented as a satisfied predicate."""
     with pytest.raises(ValueError, match="predicate"):

@@ -84,6 +84,13 @@ When the aggregate is not satisfied, the adapter sets both `ready` and `write_al
 marks the classification as `needs_dependency` when appropriate, and preserves every failing row.
 The adapter performs no mutation itself.
 
+The live issue-claim preflight consumes this adapter automatically when an issue body contains one
+canonical packet JSON fence or an explicit repository-relative `Dependency packet: path/to/file.json`
+reference. It resolves the packet with read-only REST, Git, and local-path checks before the atomic
+claim call. Missing, ambiguous, malformed, remote, or out-of-root references fail closed as
+`needs_dependency`; an issue with no explicit packet retains the normal implementability path. The
+preflight never crawls arbitrary Markdown links or downloads a referenced document.
+
 ## Local validation
 
 ```bash

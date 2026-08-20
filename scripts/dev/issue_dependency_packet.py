@@ -59,6 +59,10 @@ FRESHNESS_KEYS = frozenset(
 PACKET_FIELDS = frozenset(
     {"schema", "repository", "issue", "contract", "dependencies", "packet_digest"}
 )
+PACKET_FENCE_RE = re.compile(r"(?ms)^[ \t]*```(?P<info>[^\n`]*)\n(?P<body>.*?)^[ \t]*```[ \t]*$")
+PACKET_REFERENCE_RE = re.compile(
+    r"(?im)^[ \t]*(?:dependency packet|issue dependency packet)[ \t]*:[ \t]*(?P<path>`[^`]+`|\S+)[ \t]*$"
+)
 ROW_FIELDS = frozenset(
     {
         "id",
@@ -78,6 +82,90 @@ PATH_TYPES = frozenset({"any", "file", "directory"})
 
 GhRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 GitRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
+
+
+def invalid_packet_evaluation(errors: list[str]) -> dict[str, Any]:
+    """Return an invalid evaluation for an explicitly malformed packet reference."""
+    return {
+        "schema": EVALUATION_SCHEMA,
+        "ok": False,
+        "verdict": "invalid",
+        "errors": list(errors),
+        "packet_digest": None,
+        "rows": [],
+        "mandatory_failures": [],
+        "advisory_failures": [],
+    }
+
+
+def _embedded_packets(body: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return canonical packets and explicit JSON-fence errors from one issue body."""
+    packets: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for match in PACKET_FENCE_RE.finditer(body):
+        info = match.group("info").strip().lower()
+        raw = match.group("body").strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            if "issue_dependency_packet" in info or "issue-dependency-packet" in info:
+                errors.append(f"embedded dependency packet is not valid JSON: {exc.msg}")
+            continue
+        if isinstance(parsed, Mapping) and parsed.get("schema") == SCHEMA:
+            packets.append(dict(parsed))
+    return packets, errors
+
+
+def _load_referenced_packet(
+    reference: str, *, repo_root: Path | str | None
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Read one safe repository-relative packet reference."""
+    reference_path = Path(reference)
+    if reference_path.is_absolute() or reference.startswith(("http://", "https://")):
+        return None, ["dependency packet reference must be a repository-relative local path"]
+    if repo_root is None:
+        return None, ["dependency packet path requires a repository root"]
+    root = Path(repo_root).resolve()
+    candidate = (root / reference_path).resolve()
+    if candidate == root or root not in candidate.parents:
+        return None, ["dependency packet path resolves outside the repository root"]
+    try:
+        parsed = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"dependency packet path could not be read: {exc}"]
+    if not isinstance(parsed, Mapping):
+        return None, ["referenced dependency packet must be a JSON object"]
+    return dict(parsed), []
+
+
+def extract_packet_from_issue_body(
+    body: str, *, repo_root: Path | str | None = None
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Extract one explicitly embedded or referenced dependency packet.
+
+    Only a canonical packet-shaped JSON fence or an explicit ``Dependency packet:``
+    repository-relative path is considered.  The helper never crawls Markdown links
+    or fetches remote content; ambiguous or malformed explicit references fail closed.
+    """
+    if not isinstance(body, str):
+        return None, ["issue body must be text before dependency-packet extraction"]
+
+    packets, errors = _embedded_packets(body)
+
+    references = [match.group("path").strip("`") for match in PACKET_REFERENCE_RE.finditer(body)]
+    if packets and references:
+        errors.append("issue body contains both an embedded and referenced dependency packet")
+    if len(packets) > 1:
+        errors.append("issue body contains more than one embedded dependency packet")
+    if len(references) > 1:
+        errors.append("issue body contains more than one dependency packet reference")
+    if errors:
+        return None, errors
+    if packets:
+        return packets[0], []
+    if not references:
+        return None, []
+    return _load_referenced_packet(references[0], repo_root=repo_root)
 
 
 def _is_int(value: object) -> bool:

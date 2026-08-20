@@ -108,8 +108,8 @@ def _superseded_candidates(
     for entry in entries:
         if entry.get("status") != "superseded":
             continue
-        source = checker._safe_repo_path(entry.get("path"))
-        replacement = checker._safe_repo_path(entry.get("replacement"))
+        source = checker._safe_repo_path(entry.get("path"), repo_root=repo_root)
+        replacement = checker._safe_repo_path(entry.get("replacement"), repo_root=repo_root)
         if source is None or replacement is None:
             continue
         if not (repo_root / replacement).exists():
@@ -215,6 +215,7 @@ def _approval_move_to_planned(
     raw_move: object,
     *,
     index: int,
+    repo_root: Path,
 ) -> tuple[PlannedMove | None, list[ApprovalFinding]]:
     """Parse one approved move into the same shape used by the generated plan."""
 
@@ -222,14 +223,14 @@ def _approval_move_to_planned(
         return None, [_approval_finding("move_shape", f"moves[{index}] must be a mapping")]
 
     findings: list[ApprovalFinding] = []
-    source = checker._safe_repo_path(raw_move.get("source"))
-    target = checker._safe_repo_path(raw_move.get("target"))
+    source = checker._safe_repo_path(raw_move.get("source"), repo_root=repo_root)
+    target = checker._safe_repo_path(raw_move.get("target"), repo_root=repo_root)
     category = raw_move.get("category")
     reason = raw_move.get("reason")
     raw_replacement = raw_move.get("replacement")
     replacement = None
     if raw_replacement is not None:
-        replacement = checker._safe_repo_path(raw_replacement)
+        replacement = checker._safe_repo_path(raw_replacement, repo_root=repo_root)
         if replacement is None:
             findings.append(
                 _approval_finding(
@@ -312,7 +313,7 @@ def validate_approval_manifest(  # noqa: C901
 
     approved_moves: list[PlannedMove] = []
     for index, raw_move in enumerate(raw_moves):
-        move, move_findings = _approval_move_to_planned(raw_move, index=index)
+        move, move_findings = _approval_move_to_planned(raw_move, index=index, repo_root=repo_root)
         findings.extend(move_findings)
         if move is not None:
             approved_moves.append(move)

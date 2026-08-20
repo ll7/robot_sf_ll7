@@ -9,9 +9,9 @@ This helper is the deterministic `gh` fallback for Project #5 score sync. It is
 intentionally kept scriptable for local/manual batch routing even as
 interactive issue/PR/project work moves toward GitHub MCP / app tools.
 
-The helper reads issue-backed project items via `gh project item-list`, applies
-defaults and clamping for missing or invalid inputs, and writes the derived
-numeric score back to a `Priority Score` project field.
+The helper reads issue-backed project items through an explicit cursor-paginated
+Projects API query, applies defaults and clamping for missing or invalid inputs,
+and writes the derived numeric score back to a `Priority Score` project field.
 
 The autopilot's ``sync --only-empty`` mode fails closed and returns a
 machine-readable blocked status when the GitHub token lacks ``read:project``.
@@ -76,6 +76,73 @@ MISSING_PROJECT_SCOPE_RE = re.compile(
     r"missing required scopes?\s*\[(?P<scopes>[^\]]*\bread:project\b[^\]]*)\]",
     re.IGNORECASE,
 )
+PROJECT_ITEM_GRAPHQL_PAGE_SIZE = 100
+PROJECT_ITEM_GRAPHQL_QUERY = """
+query($projectId: ID!, $first: Int!, $after: String) {
+  node(id: $projectId) {
+    __typename
+    ... on ProjectV2 {
+      items(first: $first, after: $after) {
+        nodes {
+          id
+          type
+          content {
+            __typename
+            ... on Issue {
+              number
+              title
+            }
+            ... on PullRequest {
+              number
+              title
+            }
+          }
+          fieldValues(first: 100) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+                field {
+                  ... on ProjectV2Field {
+                    id
+                    name
+                  }
+                }
+              }
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field {
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                  }
+                }
+              }
+              ... on ProjectV2ItemFieldTextValue {
+                text
+                field {
+                  ... on ProjectV2Field {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+""".strip()
 
 
 class MissingProjectScopeError(RuntimeError):
@@ -97,6 +164,23 @@ class MissingProjectScopeError(RuntimeError):
             + ", ".join(self.required_scopes)
             + ". Refresh the token before retrying Project #5 priority sync."
             + f"\n{details}"
+        )
+
+
+class ProjectQuotaBlockedError(RuntimeError):
+    """Raised when a later Project API operation would cross quota safety margins."""
+
+    def __init__(self, decision: dict[str, Any]) -> None:
+        """Store the machine-readable quota decision for resumable callers."""
+        self.decision = decision
+        super().__init__(
+            str(
+                decision.get(
+                    "message",
+                    "Project API operation is blocked until the configured quota safety margin "
+                    "is available.",
+                )
+            )
         )
 
 
@@ -129,6 +213,14 @@ class SyncPreview:
     old_score: float | None
     new_score: float
     inputs: ScoreInputs
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectItemFetchStats:
+    """Observable completeness summary for one cursor-paginated item read."""
+
+    pages: int
+    accumulated_items: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,10 +268,14 @@ def read_rate_limit() -> RateLimitSnapshot:
 
 
 def estimated_project_graphql_requests(options: SyncOptions) -> int:
-    """Estimate bounded Project #5 GraphQL requests before any project mutation."""
-    item_requests = (
-        1 if options.issue_number is not None else max(1, math.ceil(max(options.limit, 1) / 100))
-    )
+    """Estimate the initial bounded Project API requests before any mutation.
+
+    An unscoped cursor scan has no known page count until its first response;
+    later pages are guarded dynamically by ``item_list_paginated``. The
+    preflight therefore reserves only the first item page, not the caller's
+    per-page bound interpreted as a total-item cap.
+    """
+    item_requests = 1
     schema_requests = len(REQUIRED_NUMBER_FIELDS) + 1 if options.ensure_fields else 0
     return 2 + item_requests + schema_requests
 
@@ -198,6 +294,21 @@ def project_quota_decision(options: SyncOptions) -> dict[str, Any]:
         expected_core_requests=1,
         min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
     )
+
+
+def ensure_project_graphql_budget(
+    *, expected_graphql_requests: int, min_graphql_remaining: int
+) -> None:
+    """Fail closed when a future Project API step would cross quota margins."""
+    decision = graphql_budget_decision(
+        read_rate_limit(),
+        expected_graphql_requests=expected_graphql_requests,
+        min_graphql_remaining=min_graphql_remaining,
+        expected_core_requests=1,
+        min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
+    )
+    if decision["status"] != "ok":
+        raise ProjectQuotaBlockedError(decision)
 
 
 def _read_project_cache(path: Path) -> dict[str, Any] | None:
@@ -351,6 +462,10 @@ def compute_priority_score(inputs: ScoreInputs, *, alpha: float = DEFAULT_ALPHA)
 class GhProjectClient:
     """Small wrapper around the gh CLI for project field automation."""
 
+    def __init__(self) -> None:
+        """Initialize read telemetry without changing the existing CLI surface."""
+        self.last_item_fetch_stats: ProjectItemFetchStats | None = None
+
     def _run_completed(self, *args: str) -> subprocess.CompletedProcess[str]:
         """Run a gh command and raise a high-signal error on failure."""
 
@@ -420,7 +535,7 @@ class GhProjectClient:
     ) -> Any:
         """Run a `gh project` command with the known user-owner fallback."""
 
-        args = (
+        args: tuple[str, ...] = (
             "project",
             subcommand,
             str(project_number),
@@ -514,6 +629,242 @@ class GhProjectClient:
         # limit. Raise instead of writing a partial sync (issue #5048 / #4991).
         assert_not_truncated(items, limit=limit, context="gh project item-list")
         return items
+
+    def item_list_paginated(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        project_id: str | None = None,
+        limit: int,
+        min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+    ) -> list[dict[str, Any]]:
+        """Return every project item after explicit cursor-pagination completion.
+
+        ``gh project item-list`` exposes a numeric cap but not the continuation
+        cursor. This owner uses the same Projects API through ``gh api graphql``
+        so a full logical page is accepted only when ``pageInfo`` proves that
+        pagination is complete. The GraphQL API caps one request at 100 items;
+        ``limit`` remains the caller's requested per-page bound and is reduced
+        to that server maximum without changing the complete-scan contract.
+        """
+
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        resolved_project_id = project_id or self.project_id(
+            owner=owner,
+            project_number=project_number,
+        )
+        if not resolved_project_id:
+            raise RuntimeError("Project #5 item pagination requires a non-empty project ID")
+
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        seen_item_ids: set[str] = set()
+        items: list[dict[str, Any]] = []
+        page_count = 0
+        page_size = min(limit, PROJECT_ITEM_GRAPHQL_PAGE_SIZE)
+
+        while True:
+            ensure_project_graphql_budget(
+                expected_graphql_requests=1,
+                min_graphql_remaining=min_graphql_remaining,
+            )
+            payload = self._run_project_item_page(
+                project_id=resolved_project_id,
+                page_size=page_size,
+                cursor=cursor,
+            )
+            connection = self._project_item_connection(payload)
+            page_items = [self._normalize_project_item(item) for item in connection["nodes"]]
+            for item in page_items:
+                item_id = str(item["id"])
+                if item_id in seen_item_ids:
+                    raise RuntimeError(f"project item pagination repeated item ID: {item_id}")
+                seen_item_ids.add(item_id)
+            items.extend(page_items)
+            page_count += 1
+
+            page_info = connection["page_info"]
+            has_next_page = page_info["has_next_page"]
+            end_cursor = page_info["end_cursor"]
+            if not has_next_page:
+                self.last_item_fetch_stats = ProjectItemFetchStats(
+                    pages=page_count,
+                    accumulated_items=len(items),
+                )
+                return items
+            if not isinstance(end_cursor, str) or not end_cursor:
+                raise RuntimeError(
+                    "project item pagination reported hasNextPage without a non-empty endCursor"
+                )
+            if end_cursor == cursor or end_cursor in seen_cursors:
+                raise RuntimeError(f"project item pagination repeated cursor: {end_cursor}")
+            seen_cursors.add(end_cursor)
+            cursor = end_cursor
+
+    def _run_project_item_page(
+        self,
+        *,
+        project_id: str,
+        page_size: int,
+        cursor: str | None,
+    ) -> dict[str, Any]:
+        """Fetch one validated GraphQL project-item page."""
+
+        args: tuple[str, ...] = (
+            "api",
+            "graphql",
+            "-f",
+            f"query={PROJECT_ITEM_GRAPHQL_QUERY}",
+            "-f",
+            f"projectId={project_id}",
+            "-F",
+            f"first={page_size}",
+        )
+        if cursor is not None:
+            args += ("-f", f"after={cursor}")
+        payload = self.run_json(*args)
+        errors = payload.get("errors")
+        if errors:
+            if not isinstance(errors, list):
+                raise RuntimeError("GitHub GraphQL project-item response has malformed errors")
+            messages = [
+                str(error.get("message") or error) if isinstance(error, dict) else str(error)
+                for error in errors
+            ]
+            raise RuntimeError("GitHub GraphQL project-item query failed: " + "; ".join(messages))
+        return payload
+
+    @staticmethod
+    def _project_item_connection(payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate one GraphQL project-item connection and normalize page metadata."""
+
+        data = payload.get("data")
+        node = data.get("node") if isinstance(data, dict) else None
+        if not isinstance(node, dict) or node.get("__typename") != "ProjectV2":
+            raise RuntimeError("GitHub GraphQL project-item response is missing a ProjectV2 node")
+        connection = node.get("items")
+        if not isinstance(connection, dict):
+            raise RuntimeError("GitHub GraphQL project-item connection is missing")
+        nodes = connection.get("nodes")
+        page_info = connection.get("pageInfo")
+        if not isinstance(nodes, list) or any(not isinstance(item, dict) for item in nodes):
+            raise RuntimeError("GitHub GraphQL project-item nodes are malformed")
+        if not isinstance(page_info, dict):
+            raise RuntimeError("GitHub GraphQL project-item pageInfo is missing")
+        if not {"hasNextPage", "endCursor"}.issubset(page_info):
+            raise RuntimeError("GitHub GraphQL project-item pageInfo is missing required fields")
+        has_next_page = page_info.get("hasNextPage")
+        end_cursor = page_info.get("endCursor")
+        if type(has_next_page) is not bool:
+            raise RuntimeError("GitHub GraphQL project-item hasNextPage is malformed")
+        if end_cursor is not None and not isinstance(end_cursor, str):
+            raise RuntimeError("GitHub GraphQL project-item endCursor is malformed")
+        return {
+            "nodes": nodes,
+            "page_info": {
+                "has_next_page": has_next_page,
+                "end_cursor": end_cursor,
+            },
+        }
+
+    @staticmethod
+    def _normalize_project_item(item: dict[str, Any]) -> dict[str, Any]:
+        """Project the GraphQL item shape onto the existing score-sync item contract."""
+
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or not item_id:
+            raise RuntimeError("GitHub GraphQL project item has no stable ID")
+        normalized = {
+            "id": item_id,
+            "content": GhProjectClient._normalize_project_content(
+                item_id,
+                item.get("content"),
+            ),
+        }
+        normalized.update(
+            GhProjectClient._normalize_project_field_values(item_id, item.get("fieldValues"))
+        )
+        return normalized
+
+    @staticmethod
+    def _normalize_project_content(item_id: str, content_raw: Any) -> dict[str, Any] | None:
+        """Normalize issue/PR content while preserving draft or empty project items."""
+
+        if content_raw is None:
+            return None
+        if not isinstance(content_raw, dict):
+            raise RuntimeError(f"project item {item_id} has malformed content")
+        content_type = content_raw.get("__typename")
+        if not isinstance(content_type, str) or not content_type:
+            raise RuntimeError(f"project item {item_id} has malformed content type")
+        content = {"type": content_type}
+        for key in ("number", "title"):
+            if key in content_raw:
+                content[key] = content_raw[key]
+        return content
+
+    @staticmethod
+    def _normalize_project_field_values(item_id: str, field_values: Any) -> dict[str, Any]:
+        """Validate and normalize the field-value connection for one project item."""
+
+        if not isinstance(field_values, dict):
+            raise RuntimeError(f"project item {item_id} has malformed fieldValues")
+        value_nodes = field_values.get("nodes")
+        field_page_info = field_values.get("pageInfo")
+        if not isinstance(value_nodes, list) or any(
+            not isinstance(value, dict) for value in value_nodes
+        ):
+            raise RuntimeError(f"project item {item_id} has malformed field values")
+        if not isinstance(field_page_info, dict) or not {
+            "hasNextPage",
+            "endCursor",
+        }.issubset(field_page_info):
+            raise RuntimeError(f"project item {item_id} field values have malformed pageInfo")
+        if field_page_info.get("hasNextPage") is not False or (
+            field_page_info.get("endCursor") is not None
+            and not isinstance(field_page_info.get("endCursor"), str)
+        ):
+            raise RuntimeError(
+                f"project item {item_id} field values are incomplete; refusing a partial read"
+            )
+        normalized: dict[str, Any] = {}
+        for value in value_nodes:
+            field = GhProjectClient._normalize_project_field_value(value)
+            if field is not None:
+                name, field_value = field
+                normalized[name[:1].lower() + name[1:]] = field_value
+        return normalized
+
+    @staticmethod
+    def _normalize_project_field_value(value: dict[str, Any]) -> tuple[str, Any] | None:
+        """Map one supported GraphQL project field-value union to its visible name and value."""
+
+        field_name = GhProjectClient._project_item_field_name(value)
+        if field_name is None:
+            return None
+        value_type = value.get("__typename")
+        if not isinstance(value_type, str):
+            return None
+        value_key = {
+            "ProjectV2ItemFieldNumberValue": "number",
+            "ProjectV2ItemFieldSingleSelectValue": "name",
+            "ProjectV2ItemFieldTextValue": "text",
+        }.get(value_type)
+        if value_key is None:
+            return None
+        return field_name, value.get(value_key)
+
+    @staticmethod
+    def _project_item_field_name(value: dict[str, Any]) -> str | None:
+        """Return a recognized project field name from one field-value node."""
+
+        field = value.get("field")
+        if not isinstance(field, dict):
+            return None
+        name = field.get("name")
+        return name if isinstance(name, str) and name else None
 
     def item_list_until_issue(
         self,
@@ -716,6 +1067,29 @@ def build_previews(
     return previews
 
 
+def _pending_score_updates(
+    previews: Sequence[SyncPreview],
+    items_by_issue: dict[int, dict[str, Any]],
+    *,
+    dry_run: bool,
+    round_digits: int,
+) -> list[tuple[SyncPreview, dict[str, Any]]]:
+    """Return score mutations that remain after no-op and dry-run filtering."""
+    if dry_run:
+        return []
+    return [
+        (preview, items_by_issue[preview.issue_number])
+        for preview in previews
+        if preview.old_score is None
+        or not math.isclose(
+            preview.old_score,
+            preview.new_score,
+            rel_tol=1e-9,
+            abs_tol=10 ** (-round_digits),
+        )
+    ]
+
+
 def write_summary(path: Path, previews: Sequence[SyncPreview]) -> None:
     """Persist a machine-readable sync summary."""
 
@@ -792,12 +1166,14 @@ def sync_scores(
             limit=options.limit,
         )
     else:
-        # Unscoped sync keeps the explicit truncation protection: a full project
-        # page at the cap must fail closed rather than silently skip items.
-        items = client.item_list(
+        # Unscoped sync uses the cursor-aware owner so a full page is accepted
+        # only when the Projects API proves that no continuation remains.
+        items = client.item_list_paginated(
             owner=options.owner,
             project_number=options.project_number,
+            project_id=project_id,
             limit=options.limit,
+            min_graphql_remaining=options.min_graphql_remaining,
         )
     previews = build_previews(
         items,
@@ -818,17 +1194,19 @@ def sync_scores(
         items_by_issue[issue_number] = item
 
     score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
-    for preview in previews:
-        item = items_by_issue[preview.issue_number]
-        if preview.old_score is not None and math.isclose(
-            preview.old_score,
-            preview.new_score,
-            rel_tol=1e-9,
-            abs_tol=10 ** (-options.round_digits),
-        ):
-            continue
-        if options.dry_run:
-            continue
+    updates = _pending_score_updates(
+        previews,
+        items_by_issue,
+        dry_run=options.dry_run,
+        round_digits=options.round_digits,
+    )
+
+    if updates:
+        ensure_project_graphql_budget(
+            expected_graphql_requests=len(updates),
+            min_graphql_remaining=options.min_graphql_remaining,
+        )
+    for preview, item in updates:
         client.update_number_field(
             item_id=str(item["id"]),
             field_id=score_field_id,
@@ -851,7 +1229,12 @@ def _build_parser() -> argparse.ArgumentParser:
     sync = subparsers.add_parser("sync", help="Compute and sync the derived Priority Score field.")
     sync.add_argument("--owner", default="ll7", help="GitHub owner of the target project.")
     sync.add_argument("--project-number", type=int, default=5, help="Projects v2 number.")
-    sync.add_argument("--limit", type=int, default=400, help="Maximum project items to inspect.")
+    sync.add_argument(
+        "--limit",
+        type=int,
+        default=400,
+        help="Per-page item bound for the complete cursor-paginated project scan.",
+    )
     sync.add_argument(
         "--min-graphql-remaining",
         type=int,
@@ -990,8 +1373,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if args.only_empty else 2
 
+    client = GhProjectClient()
     try:
-        previews = sync_scores(GhProjectClient(), options)
+        previews = sync_scores(client, options)
     except MissingProjectScopeError as exc:
         if not args.only_empty:
             raise
@@ -1007,6 +1391,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
+    except ProjectQuotaBlockedError as exc:
+        if not args.only_empty:
+            raise
+        print(
+            json.dumps(
+                _blocked_project_quota_payload(
+                    owner=args.owner,
+                    project_number=args.project_number,
+                    decision=exc.decision,
+                    non_fatal=True,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     if args.summary_file is not None:
         write_summary(args.summary_file, previews)
@@ -1016,6 +1416,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             {
                 "project_number": args.project_number,
                 "owner": args.owner,
+                "item_fetch": (
+                    asdict(client.last_item_fetch_stats)
+                    if client.last_item_fetch_stats is not None
+                    else None
+                ),
                 "items": [
                     {
                         "issue_number": preview.issue_number,

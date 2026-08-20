@@ -187,7 +187,7 @@ pyogrio==0.12.1
 pyopengl==3.1.10
 pyparsing==3.3.2
 pyproj==3.7.2
-pyrvo2 @ file:///home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/third_party/python-rvo2
+pyrvo2 @ file://${JOB13512_WORKTREE}/third_party/python-rvo2
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-split==0.11.0
@@ -212,7 +212,7 @@ rfc3986-validator==0.1.1
 rfc3987-syntax==1.1.0
 rich==15.0.0
 rich-rst==2.0.1
--e file:///home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192
+-e file://${JOB13512_WORKTREE}
 rpds-py==0.30.0
 ruff==0.15.12
 sb3-contrib==2.9.0

@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from robot_sf.common.string_validation import require_non_empty_string as _require_non_empty_string
 from robot_sf.errors import RobotSfError
 from robot_sf.training.oracle_trace_uri_registry import (
     OracleTraceUriRegistryError,
@@ -133,13 +134,6 @@ def _resolve_path(path: Path | str, repo_root: Path) -> Path:
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
-
-
-def _require_non_empty_string(packet: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Record an error unless ``packet[key]`` is a non-empty string."""
-    value = packet.get(key)
-    if not isinstance(value, str) or not value.strip():
-        errors.append(f"{key} must be a non-empty string")
 
 
 def _require_existing_path(

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import HTTPError
 
 import pytest
 
@@ -346,6 +349,239 @@ models:
     ]
 
 
+def test_github_release_download_retries_429_and_honors_retry_after(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Transient rate limits retry with the bounded server-provided delay."""
+    payload = b"checkpoint"
+
+    class _Response:
+        def __init__(self) -> None:
+            self._done = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._done:
+                return b""
+            self._done = True
+            return payload
+
+    calls: list[int] = []
+
+    def fake_urlopen(url: str, *, timeout: int):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise HTTPError(url, 429, "rate limited", {"Retry-After": "7"}, None)
+        return _Response()
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    target = tmp_path / "cache" / "model.zip"
+    target.parent.mkdir(parents=True)
+    registry._stream_download_url(
+        "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip",
+        target,
+        max_attempts=2,
+        backoff_seconds=1.0,
+        sleep=sleeps.append,
+    )
+
+    assert calls == [60, 60]
+    assert sleeps == [7.0]
+    assert target.read_bytes() == payload
+    assert list(target.parent.glob("*.part")) == []
+
+
+def test_github_release_retry_after_is_capped(monkeypatch, tmp_path: Path) -> None:
+    """A hostile or accidental long Retry-After cannot defeat the retry time bound."""
+    target = tmp_path / "cache" / "model.zip"
+    target.parent.mkdir(parents=True)
+    sleeps: list[float] = []
+
+    def fake_urlopen(url: str, *, timeout: int):
+        raise HTTPError(url, 429, "rate limited", {"Retry-After": "999"}, None)
+
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    with pytest.raises(HTTPError):
+        registry._stream_download_url(
+            "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip",
+            target,
+            max_attempts=2,
+            max_backoff_seconds=2.0,
+            sleep=sleeps.append,
+        )
+
+    assert sleeps == [2.0]
+
+
+@pytest.mark.parametrize("retry_after", [None, "not-a-delay"])
+def test_github_release_download_uses_bounded_backoff_for_missing_or_malformed_retry_after(
+    monkeypatch, tmp_path: Path, retry_after: str | None
+) -> None:
+    """Invalid server delay headers fall back to the bounded local backoff."""
+    calls: list[int] = []
+
+    def fake_urlopen(url: str, *, timeout: int):
+        calls.append(timeout)
+        headers = {} if retry_after is None else {"Retry-After": retry_after}
+        raise HTTPError(url, 503, "temporarily unavailable", headers, None)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    target = tmp_path / "cache" / "model.zip"
+    with pytest.raises(HTTPError):
+        registry._stream_download_url(
+            "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip",
+            target,
+            max_attempts=3,
+            backoff_seconds=0.5,
+            max_backoff_seconds=2.0,
+            sleep=sleeps.append,
+        )
+
+    assert calls == [60, 60, 60]
+    assert sleeps == [0.5, 1.0]
+    assert not target.exists()
+    assert list(target.parent.glob("*.part")) == []
+
+
+@pytest.mark.parametrize(
+    ("retry_delta", "expected_delay"),
+    [(timedelta(seconds=45), 45.0), (timedelta(seconds=-5), 0.0)],
+    ids=["future-date", "past-date"],
+)
+def test_retry_after_http_date_uses_injected_clock(
+    monkeypatch, tmp_path: Path, retry_delta: timedelta, expected_delay: float
+) -> None:
+    """HTTP-date retry headers honor a deterministic clock, including past dates."""
+    current = datetime(2026, 8, 18, 12, 0, tzinfo=UTC)
+    target = tmp_path / "cache" / "model.zip"
+    target.parent.mkdir(parents=True)
+    sleeps: list[float] = []
+    calls: list[int] = []
+
+    class _Response:
+        def __init__(self) -> None:
+            self._done = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._done:
+                return b""
+            self._done = True
+            return b"checkpoint"
+
+    def fake_urlopen(url: str, *, timeout: int):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise HTTPError(
+                url,
+                429,
+                "rate limited",
+                {"Retry-After": format_datetime(current + retry_delta, usegmt=True)},
+                None,
+            )
+        return _Response()
+
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    registry._stream_download_url(
+        "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip",
+        target,
+        max_attempts=2,
+        max_backoff_seconds=30.0,
+        sleep=sleeps.append,
+        clock=lambda: current,
+    )
+
+    assert calls == [60, 60]
+    assert sleeps == [min(expected_delay, 30.0)]
+    assert target.read_bytes() == b"checkpoint"
+
+
+def test_github_release_cache_reuses_only_matching_sha256(monkeypatch, tmp_path: Path) -> None:
+    """A corrupted cache entry is rejected before a verified replacement download."""
+    payload = b"verified-checkpoint"
+    source = tmp_path / "source"
+    source.write_bytes(payload)
+    expected_sha = registry._sha256(source)
+    cache_dir = tmp_path / "cache"
+    cached = cache_dir / "public_model" / "public_model-model.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"corrupt")
+    calls: list[str] = []
+
+    class _Response:
+        def __init__(self) -> None:
+            self._done = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._done:
+                return b""
+            self._done = True
+            return payload
+
+    def fake_urlopen(url: str, *, timeout: int):
+        calls.append(url)
+        return _Response()
+
+    monkeypatch.setattr(registry, "urlopen", fake_urlopen)
+    entry = {
+        "model_id": "public_model",
+        "github_release": {
+            "url": "https://github.com/ll7/robot_sf_ll7/releases/download/tag/public_model-model.zip",
+            "asset_name": "public_model-model.zip",
+            "sha256": expected_sha,
+        },
+    }
+
+    resolved = registry._download_from_github_release(entry, cache_dir=cache_dir)
+
+    assert resolved == cached
+    assert cached.read_bytes() == payload
+    assert calls == [entry["github_release"]["url"]]
+
+
+def test_github_release_exhaustion_is_marked_external_unavailable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Release retrieval failure stays a blocking external result at the registry boundary."""
+    error = HTTPError(
+        "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.zip", 503, "down", {}, None
+    )
+
+    def fail_stream(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(registry, "_stream_download_url", fail_stream)
+    entry = {
+        "model_id": "public_model",
+        "github_release": {
+            "url": error.url,
+            "asset_name": "model.zip",
+            "sha256": "0" * 64,
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="external_unavailable"):
+        registry._download_from_github_release(entry, cache_dir=tmp_path / "cache")
+
+
 def test_resolve_model_path_rejects_bad_github_release_checksum(
     monkeypatch,
     tmp_path: Path,
@@ -663,8 +899,9 @@ def test_download_from_wandb_prefers_artifact_path(monkeypatch, tmp_path: Path) 
     assert calls == [("artifact", "ll7/robot_sf/demo-best:v1")]
 
 
-def test_download_from_wandb_rejects_missing_run_metadata(tmp_path: Path) -> None:
+def test_download_from_wandb_rejects_missing_run_metadata(monkeypatch, tmp_path: Path) -> None:
     """Download helper should fail clearly when the registry row lacks W&B location metadata."""
+    monkeypatch.setattr(registry, "wandb", SimpleNamespace(Api=lambda: None))
     with pytest.raises(ValueError, match="missing wandb_artifact_path"):
         registry._download_from_wandb({"model_id": "demo"}, cache_dir=tmp_path / "cache")
 

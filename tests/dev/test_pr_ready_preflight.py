@@ -189,6 +189,37 @@ def _make_fake_scripts(repo: Path) -> None:
     support_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(OPTIONAL_ALLOWLIST, support_dir / "optional_test_allowlist.txt")
 
+    # The optional-lane dependency probe runs before the optional test wrapper.
+    # Keep the fake repository self-contained so lane-routing tests do not invoke
+    # the host project's uv environment.
+    bin_dir = repo / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    fake_uv = bin_dir / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == "run" ]]; then\n'
+        "  shift\n"
+        '  exec "$@"\n'
+        "fi\n"
+        f'exec "{shutil.which("uv") or "uv"}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    optional_dep_check = scripts_dir / "check_worktree_optional_deps.py"
+    optional_dep_check.write_text(
+        "import json\n"
+        "print(json.dumps({'schema': 'robot_sf.worktree_optional_deps.v1', "
+        "'profile': 'all-extras', 'status': 'ready', 'exit_code': 0, "
+        "'missing_optional': [], 'check_failures': [], "
+        "'project_imports_performed': False}))\n",
+        encoding="utf-8",
+    )
+    shutil.copy2(
+        SCRIPTS_DEV / "validate_worktree_optional_deps.py",
+        scripts_dir / "validate_worktree_optional_deps.py",
+    )
+
 
 def _write_lane_logging_stub(repo: Path) -> Path:
     """Replace the test wrapper with a logger that records each lane invocation."""
@@ -331,6 +362,105 @@ def test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane(
         "optional --lane optional",
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
+
+
+def test_optional_lane_preflight_reports_missing_extras_as_setup_evidence(
+    preflight_repo: Path,
+) -> None:
+    """Missing optional imports block that lane with structured, actionable evidence."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+    _make_real_python_bin(preflight_repo)
+
+    optional_dep_check = preflight_repo / "scripts" / "dev" / "check_worktree_optional_deps.py"
+    optional_dep_check.write_text(
+        "import json\n"
+        "print(json.dumps({\n"
+        "    'schema': 'robot_sf.worktree_optional_deps.v1',\n"
+        "    'profile': 'all-extras',\n"
+        "    'status': 'missing_optional',\n"
+        "    'exit_code': 2,\n"
+        "    'missing_optional': ['pandas'],\n"
+        "    'check_failures': [],\n"
+        "    'project_imports_performed': False,\n"
+        "}))\n"
+        "raise SystemExit(2)\n",
+        encoding="utf-8",
+    )
+    changed_file = preflight_repo / "tests" / "planner" / "test_missing_extra.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_missing_extra(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "optional dependency setup evidence")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 2, result.stderr
+    assert '"status": "missing_optional"' in result.stderr
+    assert "pandas" in result.stderr
+    assert "This is setup evidence, not a changed-code failure." in result.stderr
+    assert "uv sync --all-extras" in result.stderr
+    assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
+
+
+@pytest.mark.parametrize(
+    ("probe_output", "probe_exit_code"),
+    [
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"check_failed","exit_code":1,"missing_optional":[],'
+            '"check_failures":["pandas"],"project_imports_performed":false}',
+            1,
+        ),
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"ready","exit_code":0,"missing_optional":[],'
+            '"check_failures":[],"project_imports_performed":false}',
+            1,
+        ),
+        ("not-json", 1),
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"ready","exit_code":7,"missing_optional":[],'
+            '"check_failures":[],"project_imports_performed":false}',
+            7,
+        ),
+    ],
+    ids=["probe-failure", "status-exit-disagreement", "malformed-json", "unknown-exit"],
+)
+def test_optional_lane_preflight_rejects_invalid_probe_contract(
+    preflight_repo: Path,
+    probe_output: str,
+    probe_exit_code: int,
+) -> None:
+    """Probe failures and contract disagreements never receive install guidance."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+    _make_real_python_bin(preflight_repo)
+    optional_dep_check = preflight_repo / "scripts" / "dev" / "check_worktree_optional_deps.py"
+    optional_dep_check.write_text(
+        f"print({probe_output!r})\nraise SystemExit({probe_exit_code})\n",
+        encoding="utf-8",
+    )
+    changed_file = preflight_repo / "tests" / "planner" / "test_invalid_preflight.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_invalid_preflight(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "invalid optional dependency evidence")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "HEAD~1", "PR_READY_MODE": "interim"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "Optional dependency preflight tool failure" in result.stderr
+    assert "uv sync --all-extras" not in result.stderr
+    assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
 
 
 def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo: Path) -> None:
@@ -506,6 +636,7 @@ def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.Monk
     """The pytest collection hook should keep optional files out of the core lane."""
     import tests.conftest as test_conftest
 
+    forecast_packet_test = Path("tests/prediction/test_forecast_heavy_model_decision_packet.py")
     monkeypatch.setenv("ROBOT_SF_TEST_LANE", "core")
     assert (
         test_conftest.pytest_ignore_collect(Path("tests/planner/test_sonic_crowdnav.py"), None)
@@ -519,6 +650,8 @@ def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.Monk
         test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
         is False
     )
+    assert test_conftest.pytest_ignore_collect(forecast_packet_test, None) is True
+    assert test_conftest._is_optional_readiness_test_path(forecast_packet_test.as_posix()) is True
     assert (
         test_conftest._is_optional_readiness_test_path(
             "/tmp/tests-parent/repo/tests/planner/test_sonic_crowdnav.py::test_case"
@@ -539,6 +672,12 @@ def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.Monk
     assert (
         test_conftest.pytest_ignore_collect(Path("tests/dev/test_pr_ready_preflight.py"), None)
         is True
+    )
+    assert (
+        test_conftest.pytest_ignore_collect(
+            Path("tests/prediction/test_forecast_heavy_model_decision_packet.py"), None
+        )
+        is False
     )
 
 

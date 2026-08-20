@@ -7,6 +7,12 @@ metadata:
   category: research
 ---
 
+> Status: historical background snapshot from 2026-06-19. For current scientific states and
+> next discriminating experiments, use [research lane states](../docs/context/research_lane_states.md),
+> the [scenario-intelligence epic (#7381)](https://github.com/ll7/robot_sf_ll7/issues/7381), and the
+> [coordination queue (#7457)](https://github.com/ll7/robot_sf_ll7/issues/7457). The direction
+> summaries below remain useful context but are not the current research queue.
+
 # Robot SF Research Status
 
 **Last Updated**: 2026-06-19
@@ -144,8 +150,9 @@ For new research directions:
 4. **Next step**: Smallest proof that moves evidence grade up by one tier
 5. **Tracking**: Issue number or branch name
 
-Store hypotheses close to experiments: config files, issue comments, or feature branch README. Central
-hypothesis ledger is opt-in (see `memory/research_hypotheses.md` if cross-run tracking is needed).
+Store hypotheses close to experiments: config files, issue comments, or feature branch README. The
+central hypothesis ledger remains opt-in; create and link a separate scoped ledger only when a
+cross-run tracking need is approved.
 
 ### Blocker Documentation
 

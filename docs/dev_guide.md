@@ -84,6 +84,13 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
+When readiness dispatches the optional lane, it first runs
+`scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
+reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
+message; they are not reported as changed-code failures. The core lane remains dependency-minimal
+and excludes optional-only test paths listed in `tests/support/optional_test_allowlist.txt`.
+Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
+preflight-tool failures and never receive the missing-extra install guidance.
 
 ### Claim-map validation
 
@@ -1305,6 +1312,12 @@ Any explicit `blocked:*` label is likewise retained for audit but classifies as 
 including the exact blocker label in its reason, and is excluded from autonomous implementation
 dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
 and remain outside autonomous implementation dispatch until the review gate is cleared.
+Before any autonomous claim write, route the candidate through
+`scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
+and claim preflight before calling the atomic claim writer. Snapshot consumers should use the
+canonical `admission` projection; direct `issue_claim.py acquire` calls are reserved for an
+explicit maintainer override with an actor, reason, and declaration that no scientific claim is
+being made.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

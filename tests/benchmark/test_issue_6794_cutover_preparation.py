@@ -53,6 +53,82 @@ def test_preparation_contract_rejects_escape_paths_and_malformed_arms(tmp_path: 
         preparation_module._validate_protocol_arms({"planner_arms": [{"key": "ppo"}, "malformed"]})
 
 
+def test_load_path_inventory_rejects_escape_and_unknown_checkpoint() -> None:
+    """Load-path selectors stay confined and reference a declared checkpoint."""
+    with pytest.raises(ValueError, match="repository-relative"):
+        preparation_module._validate_load_paths(
+            REPO_ROOT,
+            {
+                "checkpoint_snapshots": {"default": {}},
+                "load_path_inventory": [
+                    {
+                        "id": "escape",
+                        "checkpoint": "default",
+                        "path": "../outside.py",
+                        "selector": "anything",
+                    }
+                ],
+            },
+        )
+    with pytest.raises(ValueError, match="unknown checkpoint"):
+        preparation_module._validate_load_paths(
+            REPO_ROOT,
+            {
+                "checkpoint_snapshots": {"default": {}},
+                "load_path_inventory": [
+                    {
+                        "id": "unknown",
+                        "checkpoint": "missing",
+                        "path": "README.md",
+                        "selector": "anything",
+                    }
+                ],
+            },
+        )
+
+
+def test_preparation_contract_rejects_protocol_type_coercion() -> None:
+    """Boolean lookalikes cannot satisfy frozen numeric or arm contracts."""
+    config = preparation_module.yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    config["parity_protocol"]["workers"] = True
+    with pytest.raises(ValueError, match="workers must be an integer"):
+        preparation_module._validate_protocol(REPO_ROOT, config["parity_protocol"])
+
+    config = preparation_module.yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    config["parity_protocol"]["comparison"]["float_rel_tolerance"] = False
+    with pytest.raises(ValueError, match="finite number"):
+        preparation_module._validate_protocol(REPO_ROOT, config["parity_protocol"])
+
+    config = preparation_module.yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    config["parity_protocol"]["planner_arms"][0]["execution_mode"] = "adapter"
+    with pytest.raises(ValueError, match="unexpected execution_mode"):
+        preparation_module._validate_protocol(REPO_ROOT, config["parity_protocol"])
+
+
+def test_release_component_set_must_match_declared_sources() -> None:
+    """A bundle cannot silently omit or add registry components."""
+    digest = "a" * 64
+    with pytest.raises(ValueError, match="component set"):
+        preparation_module._verify_release_components(
+            "bundle",
+            {
+                "registry_per_file_sha256": {
+                    "one.data": digest,
+                    "one.meta": digest,
+                    "extra.meta": digest,
+                }
+            },
+            {
+                "per_file_sha256": {
+                    "one.data": digest,
+                    "one.meta": digest,
+                    "extra.meta": digest,
+                }
+            },
+            {"model/one.data": digest, "model/one.meta": digest},
+        )
+
+
 def _row(seed: int, *, delta: float = 0.0, status: str = "native") -> dict:
     """Return one complete synthetic parity row."""
     return {
@@ -105,6 +181,30 @@ def test_compare_parity_rows_rejects_status_and_metric_drift(tmp_path: Path) -> 
     assert report["status"] == "failed"
     assert any("non-native" in blocker for blocker in report["blockers"])
     assert any("metric drift" in blocker for blocker in report["blockers"])
+
+
+def test_compare_parity_rows_rejects_coerced_identity_and_status_types(tmp_path: Path) -> None:
+    """Self-consistent boolean/string lookalikes cannot pass parity comparison."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    malformed_before = _row(111)
+    malformed_after = _row(111)
+    malformed_before["seed"] = True
+    malformed_after["seed"] = True
+    _write_rows(before, [malformed_before])
+    _write_rows(after, [malformed_after])
+    with pytest.raises(ValueError, match="seed"):
+        compare_parity_rows(before, after)
+
+    malformed_before = _row(111)
+    malformed_after = _row(111)
+    malformed_before["benchmark_success"] = "true"
+    malformed_after["benchmark_success"] = "true"
+    _write_rows(before, [malformed_before])
+    _write_rows(after, [malformed_after])
+    report = compare_parity_rows(before, after)
+    assert report["status"] == "failed"
+    assert any("invalid status field type" in blocker for blocker in report["blockers"])
 
 
 def test_cli_rejects_one_sided_comparison_input(

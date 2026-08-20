@@ -13,8 +13,8 @@
       "occurrences": 462
     },
     "tests": {
-      "files": 181,
-      "occurrences": 1249
+      "files": 180,
+      "occurrences": 1243
     }
   },
   "files": {
@@ -131,7 +131,6 @@
     "tests/test_fast_pysf_wrapper.py": 3,
     "tests/test_feature_extractors.py": 4,
     "tests/test_force_field_figure.py": 2,
-    "tests/test_full_classic_visuals_basic.py": 6,
     "tests/test_full_classic_visuals_edge_cases.py": 12,
     "tests/test_full_classic_visuals_missing_matplotlib.py": 8,
     "tests/test_full_classic_visuals_renderer_toggle.py": 12,
@@ -228,7 +227,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 201,
-    "total_occurrences": 1711
+    "files": 200,
+    "total_occurrences": 1705
   }
 }

@@ -1,13 +1,26 @@
 {
   "schema_version": "issue5890.job13512_artifact_promotion.v1",
   "status": "promoted_for_custody_only",
+  "reconciliation_schema_version": "issue5890.job13512_reconciliation.v1",
+  "disposition": "invalid_provenance_or_scope",
+  "custody_only": true,
+  "source_bytes_unchanged": true,
+  "eligibility": {
+    "benchmark": false,
+    "claim": false,
+    "paper_facing": false,
+    "planner_ordering": false,
+    "rank_identifiability": false,
+    "rank_stability": false,
+    "reproduction": false
+  },
   "issue": 5890,
   "parent_issue": 3207,
   "job_id": "13512",
   "source": {
     "host": "imech192",
     "accessed_at": "2026-08-19",
-    "remote_result_root": "${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512",
+    "remote_result_root": "${JOB13512_WORKTREE}/<external-results-root>/02b-issue3207-fidelity-full-fixed-scope-job-13512",
     "campaign_root": "campaign",
     "source_run_summary": {
       "public_commit": "ae0130d65cf232e0322cfd4800659a87d481490a",
@@ -41,7 +54,7 @@
       "size_bytes": 6556734,
       "source_sha256": "d9efb9fe924eaff126fa5ec5f6b1303baa954d1e4b5400987b350f002ac9e9f3",
       "tracked": false,
-      "location": "remote-only: imech192:${JOB13512_WORKTREE}/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
+      "location": "remote-only: imech192:${JOB13512_WORKTREE}/<external-results-root>/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
       "reason": "raw episode rows remain on the source host; compact evidence is sufficient for custody and raw output must stay out of git"
     }
   ],
@@ -59,9 +72,44 @@
   },
   "reconciliation": {
     "record": "reconciliation.md",
-    "status": "promotion_complete_pending_metric_scope_reconciliation",
+    "status": "invalid_provenance_or_scope",
     "analysis_performed": false,
+    "claim_eligible": false,
     "benchmark_ready": false,
-    "paper_facing": false
+    "paper_facing": false,
+    "source_bytes_unchanged": true
+  },
+  "execution_provenance": {
+    "status": "unresolved_conflict",
+    "verified": false,
+    "lineages": [
+      {
+        "source": "execution_context.txt",
+        "commit": "ae0130d65cf232e0322cfd4800659a87d481490a",
+        "config": "configs/research/issue_3207_fidelity_sensitivity_full_fixed_scope.yaml"
+      },
+      {
+        "source": "summary.json",
+        "commit": "c153848d7be2851b5c5e89c11055bf96ea778a84",
+        "config": "configs/research/fidelity_sensitivity_v1.yaml"
+      }
+    ],
+    "conflict": "execution_context and generated summary disagree on commit and config; neither lineage is verified"
+  },
+  "ruling": {
+    "materialized_metric": "success_rate",
+    "unmaterialized_metric": "snqi",
+    "materialized_planners": ["baseline_social_force", "goal_seek", "orca"],
+    "stale_metadata": ["SNQI result labels", "two-planner descriptions"],
+    "ranking_accepted": false,
+    "rank_identifiability_accepted": false,
+    "rank_stability_accepted": false
+  },
+  "custody_review_gap": {
+    "merged_pr": 7585,
+    "merged_head": "633428c8",
+    "reviewed_head": "2d736f27",
+    "evidence_bytes_unchanged": true,
+    "exact_head_review_covers_merged_head": false
   }
 }

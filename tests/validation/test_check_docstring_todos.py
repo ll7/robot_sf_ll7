@@ -288,6 +288,15 @@ def test_committed_baseline_matches_base_ref_no_phantom_keys():
     report so an intentional branch baseline update does not create false drift.
     """
     repo_root = check_docstring_todos._repo_root()
+    if check_docstring_todos._path_changed_from_ref(
+        repo_root / check_docstring_todos.DEFAULT_BASELINE_PATH,
+        repo_root,
+        "origin/main",
+    ):
+        # A cleanup PR intentionally changes the baseline before its new blob exists
+        # in origin/main. The working-tree contract below validates that replacement;
+        # after merge this test resumes checking the base-owned baseline directly.
+        return
     baseline = check_docstring_todos._read_backlog_baseline_for_ref(
         repo_root / check_docstring_todos.DEFAULT_BASELINE_PATH,
         repo_root,
@@ -392,6 +401,7 @@ def test_run_verify_baseline_check_working_tree_fails_on_stale_baseline(monkeypa
         "_read_backlog_baseline_for_ref",
         lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
     )
+    monkeypatch.setattr(check_docstring_todos, "_path_changed_from_ref", lambda *_args: False)
 
     namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
 
@@ -425,6 +435,7 @@ def test_run_verify_baseline_check_working_tree_passes_when_clean(monkeypatch, t
         "_read_backlog_baseline_for_ref",
         lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
     )
+    monkeypatch.setattr(check_docstring_todos, "_path_changed_from_ref", lambda *_args: False)
 
     namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
 
@@ -459,6 +470,7 @@ def test_run_verify_baseline_check_working_tree_passes_regenerated_cleanup(
         "_read_backlog_baseline_for_ref",
         lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
     )
+    monkeypatch.setattr(check_docstring_todos, "_path_changed_from_ref", lambda *_args: True)
     namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
 
     rc = check_docstring_todos._run_verify_baseline(namespace, tmp_path)

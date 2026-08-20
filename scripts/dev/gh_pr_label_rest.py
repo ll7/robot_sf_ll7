@@ -23,7 +23,8 @@ Usage
         --label cheap-lane --repo ll7/robot_sf_ll7
 
     uv run python scripts/dev/gh_pr_label_rest.py add 5220 \\
-        --label merge-ready --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
+        --label merge-ready --expected-head-sha <head_sha> \\
+        --expected-base-sha <base_sha> --repo ll7/robot_sf_ll7
 
     uv run python scripts/dev/gh_pr_label_rest.py remove 5220 \\
         --label cheap-lane --repo ll7/robot_sf_ll7
@@ -41,6 +42,7 @@ from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
 from scripts.dev._gh_rest import subprocess  # noqa: F401
+from scripts.dev.pr_carrier_gate import check_merge_ready_carriers
 from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
 
 if TYPE_CHECKING:
@@ -83,19 +85,41 @@ def _guarded_merge_ready_write(
     *,
     repo: str,
     expected_head_sha: str | None,
+    expected_base_sha: str | None,
     write: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Run a merge-ready label write only after the exact-head preflight."""
+    """Run a merge-ready label write only after the exact-head/base preflight.
+
+    The write additionally requires the PR body and its exact-head review
+    comments to be bound to the live head/base: a stale body or a
+    stale-narrative review comment (including any pending domain-review
+    disposition) withholds ``merge-ready`` fail-closed (issue #7610).
+    """
     try:
         with pr_write_lock(repo, number):
             guard = guard_pr_write(
                 number,
                 repo=repo,
                 expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
                 operation="merge_ready_label",
             )
             if guard["status"] != "ok":
                 return guard
+            observed_base = guard.get("observed_base_sha")
+            if not observed_base:
+                return {
+                    "status": "error",
+                    "error": "live PR base SHA unavailable for the carrier gate",
+                }
+            carriers = check_merge_ready_carriers(
+                number,
+                repo=repo,
+                live_head=guard["observed_head_sha"],
+                live_base=observed_base,
+            )
+            if carriers["status"] != "ok":
+                return carriers
             return write()
     except RuntimeError as exc:
         return {"status": "error", "error": str(exc)}
@@ -107,6 +131,7 @@ def add_label(
     *,
     repo: str = DEFAULT_REPO,
     expected_head_sha: str | None = None,
+    expected_base_sha: str | None = None,
 ) -> dict[str, Any]:
     """Add *label* to issue/PR *number* and verify it was applied.
 
@@ -157,6 +182,7 @@ def add_label(
         number,
         repo=repo,
         expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
         write=_write,
     )
 
@@ -215,6 +241,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expected-head-sha",
         help="Full PR head SHA required when adding merge-ready.",
     )
+    parser.add_argument(
+        "--expected-base-sha",
+        help="Full PR base SHA required when adding merge-ready.",
+    )
     return parser
 
 
@@ -227,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
             args.label,
             repo=args.repo,
             expected_head_sha=args.expected_head_sha,
+            expected_base_sha=args.expected_base_sha,
         )
     else:
         result = remove_label(args.number, args.label, repo=args.repo)

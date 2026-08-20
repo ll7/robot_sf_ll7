@@ -52,10 +52,13 @@ files that agents read on demand.
 
 ### Current Research Queue
 
-- [Issue #2571 Active Research Queue](../docs/context/issue_2571_active_research_queue.md)
-  Current next-cycle research handoff for adversarial manifest quality/learned-expansion gating,
-  oracle trace artifact access, and coupled signal-state/ScenarioBelief uncertainty semantics,
-  including the diagnostic ScenarioBelief-to-planner projection smoke from Issue #2538.
+- [Current Research Lane States](../docs/context/research_lane_states.md) (updated 2026-08-20)
+  is the current scientific-state surface for active lanes, next discriminating experiments,
+  and stop conditions. It does not promote diagnostic or exploratory rows to benchmark evidence.
+- [Scenario-intelligence research epic (#7381)](https://github.com/ll7/robot_sf_ll7/issues/7381)
+  is the current research-program direction surface.
+- [Coordination and execution queue (#7457)](https://github.com/ll7/robot_sf_ll7/issues/7457)
+  records current cross-lane sequencing; Project #5 remains advisory.
 
 ### `workflows/`
 

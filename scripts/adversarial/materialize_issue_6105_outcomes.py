@@ -1,4 +1,4 @@
-"""CLI entry point for the issue #6105 adapter outcome producer."""
+"""CLI entry point for the issue #6105 native-only outcome producer."""
 
 from robot_sf.adversarial.independent_outcome_producer import main
 

@@ -6,7 +6,8 @@ The repository separates automated dependency updates by compatibility risk so a
 
 - .github/dependabot.yml defines the root update lanes.
 - scripts/validation/dependabot_update_policy.v1.json maps direct packages to risk, lane, rollback, and existing CI evidence.
-- scripts/dev/check_dependabot_update_policy.py validates the three surfaces together.
+- scripts/dev/check_dependabot_update_policy.py validates the three surfaces together and reuses
+  the coherence helper's frozen supported-profile comparison for lock changes.
 - scripts/validation/dependency_coherence.v1.json maps each declaration to its required lock and supported profile owners.
 - scripts/dev/check_dependency_coherence.py checks that map against the exact pull-request base.
 - .github/workflows/pr-contract-check.yml runs the checker for every pull request.
@@ -28,7 +29,14 @@ Security updates remain independently actionable. Every root group explicitly ap
 
 ## Evidence and merge boundary
 
-The checker identifies changed lock rows against the exact pull-request base and reports the direct risk class. A mixed direct update, an unknown direct package, a missing required CI job, or a compatibility command that loses its declared focused paths fails closed in the existing PR contract check.
+The checker identifies changed lock rows against the exact pull-request base and reports both the
+configured direct risk class and the effective material-resolution lane. A lock row whose
+before/after normalized resolution is identical remains visible as `lock_normalization` but does
+not add a second direct risk class. The report retains per-profile before/after resolution and
+closure digests, environment predicates, selected package identities, and configured class
+evidence. An unavailable or unsupported profile fails closed. A mixed material direct update, an
+unknown direct package, a missing required CI job, or a compatibility command that loses its
+declared focused paths fails closed in the existing PR contract check.
 
 The checker does not claim a benchmark result, a performance change, or a research result. Passing it means only that the dependency update is routed to the declared existing CI surfaces. Those CI jobs still need to pass before the pull request can be treated as merge-ready.
 

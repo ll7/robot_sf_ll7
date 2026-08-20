@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import jsonschema
 
 from scripts.dev.check_dependency_coherence import (
+    compare_lock_resolution,
     evaluate_coherence,
     load_manifest,
     validate_profile_manifest,
@@ -422,6 +423,9 @@ def test_marker_only_lock_churn_is_reported_without_material_resolution_change()
     assert report["status"] == "coherent"
     assert report["classification"] == "lock_normalization"
     assert report["material_packages"] == []
+    profile = report["lock_resolution"]["uv.lock"]["profiles"][0]
+    assert profile["state"] == "lock_normalization"
+    assert profile["before_resolution_digest"] == profile["after_resolution_digest"]
 
 
 def test_unsupported_profile_marker_is_not_equivalence_evidence() -> None:
@@ -447,3 +451,27 @@ def test_unsupported_profile_marker_is_not_equivalence_evidence() -> None:
     )
 
     assert report["status"] == "profile_unavailable"
+
+
+def test_profile_evidence_retains_digests_predicates_and_artifact_identity() -> None:
+    base_lock = _lock("robot-sf", "alpha")
+    head_lock = base_lock.replace(
+        'version = "1.0.0"\nsource = { registry = "https://pypi.org/simple" }',
+        'version = "2.0.0"\nsource = { registry = "https://pypi.org/simple" }\n'
+        'sdist = { url = "https://example.invalid/alpha-2.0.0.tar.gz", '
+        'hash = "sha256:head", size = 10 }',
+    )
+
+    report = compare_lock_resolution(
+        base_lock,
+        head_lock,
+        [{"id": "linux-py311", "python": "3.11", "required": True}],
+    )
+
+    profile = report["profiles"][0]
+    assert profile["environment"]["python_version"] == "3.11"
+    assert profile["before_resolution_digest"] != profile["after_resolution_digest"]
+    assert profile["before_closure_digest"] == profile["after_closure_digest"]
+    assert profile["state"] == "material"
+    assert profile["selected_identities"]["alpha"]["after"][0]["version"] == "2.0.0"
+    assert profile["selected_identities"]["alpha"]["after"][0]["sdist"]["hash"] == "sha256:head"

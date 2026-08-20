@@ -3,7 +3,7 @@
   "$id": "https://robot-sf.invalid/schemas/dependency_license_policy.v1.json",
   "title": "Robot SF dependency license disposition policy",
   "type": "object",
-  "required": ["schema_version", "claim_boundary", "rules", "components"],
+  "required": ["schema_version", "claim_boundary", "rules", "components", "package_dispositions"],
   "properties": {
     "$schema": {"type": "string"},
     "schema_version": {"const": "robot-sf.dependency-license-policy.v1"},
@@ -53,6 +53,144 @@
           "license_facts": {"type": "object"},
           "evidence_paths": {"type": "array", "items": {"type": "string"}},
           "disposition": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "package_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "package",
+          "version",
+          "license_expression",
+          "python_requires",
+          "target",
+          "source",
+          "artifacts",
+          "upstream",
+          "profiles",
+          "allowed_distribution_modes",
+          "blocked_distribution_modes",
+          "blocked_surface_conditions",
+          "status",
+          "disposition",
+          "ruling",
+          "rationale",
+          "evidence_paths"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+          "package": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+          "version": {"type": "string", "minLength": 1},
+          "license_expression": {"type": "string", "minLength": 1},
+          "python_requires": {"type": "string", "minLength": 1},
+          "target": {
+            "type": "object",
+            "required": ["os", "architecture", "python"],
+            "properties": {
+              "os": {"type": "string", "minLength": 1},
+              "architecture": {"type": "string", "minLength": 1},
+              "python": {
+                "type": "object",
+                "required": ["implementation", "version"],
+                "properties": {
+                  "implementation": {"type": "string", "minLength": 1},
+                  "version": {"type": "string", "minLength": 1}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "source": {
+            "type": "object",
+            "required": ["registry"],
+            "properties": {"registry": {"type": "string", "format": "uri"}},
+            "additionalProperties": false
+          },
+          "artifacts": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["kind", "filename", "sha256", "platform_tags"],
+              "properties": {
+                "kind": {"enum": ["sdist", "wheel"]},
+                "filename": {"type": "string", "minLength": 1},
+                "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "size": {"type": "integer", "minimum": 0},
+                "platform_tags": {"type": "array", "items": {"type": "string"}}
+              },
+              "additionalProperties": false
+            }
+          },
+          "upstream": {
+            "type": "object",
+            "required": ["repository", "tag", "notice_paths"],
+            "properties": {
+              "repository": {"type": "string", "format": "uri"},
+              "tag": {"type": "string", "minLength": 1},
+              "notice_paths": {
+                "type": "array",
+                "minItems": 2,
+                "items": {"type": "string", "format": "uri"}
+              }
+            },
+            "additionalProperties": false
+          },
+          "profiles": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "allowed_distribution_modes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "enum": [
+                "user_installed",
+                "bundled_source",
+                "built_companion",
+                "not_distributed"
+              ]
+            }
+          },
+          "blocked_distribution_modes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "user_installed",
+                "bundled_source",
+                "built_companion",
+                "not_distributed"
+              ]
+            }
+          },
+          "blocked_surface_conditions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "mirrored",
+                "vendored",
+                "container_bundled",
+                "unknown",
+                "unavailable",
+                "conflicting"
+              ]
+            }
+          },
+          "status": {"enum": ["pending_review", "reviewed", "excluded"]},
+          "disposition": {"type": "string", "minLength": 1},
+          "ruling": {"type": "string", "minLength": 1},
+          "rationale": {"type": "string", "minLength": 1},
+          "evidence_paths": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          }
         },
         "additionalProperties": false
       }

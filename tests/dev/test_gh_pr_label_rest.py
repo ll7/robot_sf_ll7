@@ -25,11 +25,20 @@ class TestAddLabel:
     def test_merge_ready_requires_matching_open_head(self) -> None:
         """The merge-ready write performs the exact-head preflight first."""
         head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        base_sha = "b1c2d3e4f5061728394a5b6c7d8e9f0011121314"
         with (
             patch(
                 "scripts.dev.gh_pr_label_rest.guard_pr_write",
-                return_value={"status": "ok"},
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": head_sha,
+                    "observed_base_sha": base_sha,
+                },
             ) as mock_guard,
+            patch(
+                "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
+                return_value={"status": "ok"},
+            ) as mock_carriers,
             patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
@@ -41,6 +50,7 @@ class TestAddLabel:
                 "merge-ready",
                 repo="ll7/robot_sf_ll7",
                 expected_head_sha=head_sha,
+                expected_base_sha=base_sha,
             )
 
         assert result["status"] == "ok"
@@ -48,8 +58,46 @@ class TestAddLabel:
             5220,
             repo="ll7/robot_sf_ll7",
             expected_head_sha=head_sha,
+            expected_base_sha=base_sha,
             operation="merge_ready_label",
         )
+        mock_carriers.assert_called_once_with(
+            5220,
+            repo="ll7/robot_sf_ll7",
+            live_head=head_sha,
+            live_base=base_sha,
+        )
+
+    def test_merge_ready_withholds_write_when_carrier_gate_fails(self) -> None:
+        """A stale carrier (e.g. pending domain review) blocks the label write."""
+        head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+        with (
+            patch(
+                "scripts.dev.gh_pr_label_rest.guard_pr_write",
+                return_value={
+                    "status": "ok",
+                    "observed_head_sha": head_sha,
+                    "observed_base_sha": "b1c2d3e4f5061728394a5b6c7d8e9f0011121314",
+                },
+            ),
+            patch(
+                "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
+                return_value={
+                    "status": "error",
+                    "error": "review comment carries stale-carrier sentinel(s)",
+                },
+            ),
+            patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
+        ):
+            result = add_label(
+                5220,
+                "merge-ready",
+                expected_head_sha=head_sha,
+            )
+
+        assert result["status"] == "error"
+        assert "stale-carrier sentinel" in result["error"]
+        mock_post.assert_not_called()
 
     def test_merge_ready_stale_state_skips_post(self) -> None:
         """A merged or moved PR must not receive a merge-ready label write."""

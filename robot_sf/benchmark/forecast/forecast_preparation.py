@@ -926,14 +926,6 @@ def _validate_estimates(estimates: Any) -> None:
         if baseline_id not in expected_by_id or item != expected_by_id[baseline_id]:
             raise ValueError(f"baseline estimate contract drift: {baseline_id}")
         actual.add(baseline_id)
-        if item.get("estimate_status") != "preparation_estimate_not_measured":
-            raise ValueError(f"baseline {baseline_id} must remain an analytic estimate")
-        if not isinstance(item.get("runtime_estimate"), dict):
-            raise ValueError(f"baseline {baseline_id} runtime estimate missing")
-        if not isinstance(item.get("memory_estimate"), dict):
-            raise ValueError(f"baseline {baseline_id} memory estimate missing")
-        _require_text(item.get("sample_size_assumption"), "sample_size_assumption")
-        _require_text(item.get("hardware_assumption"), "hardware_assumption")
     if len(actual) != len(estimates) or actual != expected:
         raise ValueError(
             "baseline estimate coverage must include stationary, CV, CA, Kalman, Social Force"

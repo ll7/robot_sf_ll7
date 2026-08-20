@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -101,6 +102,121 @@ def test_packet_emits_matched_rows_and_explicit_ego_unavailability() -> None:
         )
 
     _validate(payload)
+
+
+def test_tracked_packet_checksum_manifest_is_valid() -> None:
+    """The committed packet validates against its complete SHA-256 manifest."""
+    packet_path = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json"
+    )
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+
+    summary = validate_forecast_preparation_packet(payload, repo_root=REPO_ROOT)
+
+    assert summary["status"] == "passed"
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    (
+        ("not_mapping", "packet must be a mapping"),
+        ("schema_version", "schema_version must be"),
+        ("issue", "issue must be 7602"),
+        ("evidence_status", "evidence_status must be diagnostic-only"),
+        ("observation_contract", "observation_contract_changed must be false"),
+        ("empty_rows", "rows must be a non-empty list"),
+        ("empty_sources", "source_artifacts must be a non-empty list"),
+        ("row_count", "row_count does not match rows"),
+        ("pair_count", "pair_count does not match rows"),
+        ("odd_rows", "rows must contain two rows per pair"),
+    ),
+)
+def test_packet_shape_contract_fails_closed(case: str, match: str) -> None:
+    """Top-level packet shape and identity fields cannot be bypassed."""
+    payload = _packet()
+    invalid_payload = {
+        "not_mapping": lambda packet: [],
+        "schema_version": lambda packet: packet | {"schema_version": "unknown"},
+        "issue": lambda packet: packet | {"issue": 7603},
+        "evidence_status": lambda packet: packet | {"evidence_status": "success"},
+        "observation_contract": lambda packet: packet | {"observation_contract_changed": True},
+        "empty_rows": lambda packet: packet | {"rows": []},
+        "empty_sources": lambda packet: packet | {"source_artifacts": []},
+        "row_count": lambda packet: packet | {"row_count": packet["row_count"] + 1},
+        "pair_count": lambda packet: packet | {"pair_count": packet["pair_count"] + 1},
+        "odd_rows": lambda packet: (
+            packet | {"rows": packet["rows"][:-1], "row_count": 5, "pair_count": 2}
+        ),
+    }[case](payload)
+
+    with pytest.raises(ValueError, match=match):
+        validate_forecast_preparation_packet(
+            invalid_payload,  # type: ignore[arg-type]
+            repo_root=REPO_ROOT,
+            verify_checksums=False,
+        )
+
+
+@pytest.mark.parametrize("field", ("trace_id", "episode_id", "scenario_id", "seed", "planner_id"))
+def test_trace_metadata_is_bound_to_source_export(field: str) -> None:
+    """Packet identity fields cannot be rewritten independently of the trace export."""
+    payload = _packet()
+    payload["source_artifacts"][0][field] = "fabricated"
+
+    with pytest.raises(ValueError, match="source metadata drift"):
+        _validate(payload)
+
+
+@pytest.mark.parametrize("field", ("lineage_group_id", "frame_count", "size_bytes"))
+def test_derived_source_metadata_is_bound_to_source_export(field: str) -> None:
+    """Derived source metadata cannot be replaced with packet-authored values."""
+    payload = _packet()
+    artifact = payload["source_artifacts"][0]
+    artifact[field] = "fabricated" if field == "lineage_group_id" else artifact[field] + 1
+
+    with pytest.raises(ValueError, match="source metadata drift"):
+        _validate(payload)
+
+
+def test_ego_source_key_is_bound_to_source_artifacts() -> None:
+    """A packet cannot relabel the source key after source metadata is emitted."""
+    payload = _packet()
+    payload["source_artifacts"][0]["ego_observation_source_key"] = "other_agents"
+
+    with pytest.raises(ValueError, match="ego_observation_source_key"):
+        _validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("case", "match"),
+    (
+        ("coverage_mapping", "coverage must be a mapping"),
+        ("families", "scenario family coverage drift"),
+        ("planners", "planner coverage drift"),
+        ("tiers", "observation tier coverage drift"),
+        ("ego_status", "ego observation availability must remain explicit"),
+        ("unavailable", "coverage.unavailable_strata must be a list"),
+    ),
+)
+def test_coverage_contract_fails_closed(case: str, match: str) -> None:
+    """Coverage declarations must describe the emitted source and observation strata."""
+    payload = _packet()
+    if case == "coverage_mapping":
+        payload["coverage"] = []
+    elif case == "families":
+        payload["coverage"]["scenario_families"] = ["fabricated"]
+    elif case == "planners":
+        payload["coverage"]["planners"] = ["fabricated"]
+    elif case == "tiers":
+        payload["coverage"]["observation_tiers"] = ["fabricated"]
+    elif case == "ego_status":
+        payload["coverage"]["ego_observation_status"] = "available"
+    elif case == "unavailable":
+        payload["coverage"]["unavailable_strata"] = None
+
+    with pytest.raises(ValueError, match=match):
+        _validate(payload)
 
 
 def test_cross_partition_group_leakage_fails_closed() -> None:

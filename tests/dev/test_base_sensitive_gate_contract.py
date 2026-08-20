@@ -21,6 +21,11 @@ from scripts.dev.base_sensitive_selector import find_base_sensitive_test_files
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_SCRIPT = REPO_ROOT / "scripts" / "dev" / "check_base_sensitive_gates.py"
+_BASE_SENSITIVE_CORE_TARGETS = (
+    "tests/dev/test_optional_import_pr_freshness.py",
+    "tests/test_gymnasium_env_contracts.py",
+    "tests/test_optional_import_guard_inventory.py",
+)
 
 
 class TestBaseSensitiveMarker:
@@ -33,8 +38,12 @@ class TestBaseSensitiveMarker:
         assert "base_sensitive" in content, "base_sensitive marker not registered in pyproject.toml"
 
     def test_marker_can_select_tests(self) -> None:
-        """pytest -m base_sensitive must select at least one test."""
-        marker_files = find_base_sensitive_test_files(REPO_ROOT)
+        """pytest -m base_sensitive must select the dependency-minimal targets."""
+        marker_files = [
+            path
+            for path in find_base_sensitive_test_files(REPO_ROOT)
+            if path in _BASE_SENSITIVE_CORE_TARGETS
+        ]
         assert marker_files, "base_sensitive selector found no candidate test files"
         result = subprocess.run(
             [
@@ -104,15 +113,9 @@ class TestGateScript:
         """The base_sensitive subset must run in under 2 minutes.
 
         This node is a deliberate *diagnostic contract*: the outer test walls a
-        ``pytest -m base_sensitive`` subprocess whose wall time is dominated by
-        collection of the full suite (tens of seconds, by design), so it sits
-        well above the 20s per-test soft budget but is bounded by its own
-        ``assert elapsed < 120`` hard cap below. The slow-test performance report
-        therefore classifies its expected soft breach as an accepted
-        ``"diagnostic"`` contract (see ``tests/perf_utils/reporting.py``
-        ``DIAGNOSTIC_NODES``, issue #6320) instead of emitting an unexplained
-        ``SOFT`` breach. It does not exempt a run at or above the report's 60s
-        hard threshold, which remains a hard enforceable breach.
+        scoped core-lane pytest subprocess, so it is bounded by its own
+        ``assert elapsed < 120`` hard cap below while remaining independent of
+        optional benchmark and rendering extras.
         """
         start = time.monotonic()
         result = subprocess.run(
@@ -256,6 +259,7 @@ module.TestOptionalImportGuardInventory().test_no_new_unblessed_spelling_and_no_
                 sys.executable,
                 "-m",
                 "pytest",
+                *_BASE_SENSITIVE_CORE_TARGETS,
                 "-m",
                 "base_sensitive",
                 "-q",

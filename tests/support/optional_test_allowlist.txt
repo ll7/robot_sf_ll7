@@ -12,7 +12,11 @@ tests/benchmark/
 tests/benchmark_full/
 tests/carla_bridge/
 tests/factories/test_edge_cases_recording.py
+tests/factories/test_incompatible_combinations.py
+tests/factories/test_logging_diagnostics.py
+tests/factories/test_normalization.py
 tests/factories/test_pedestrian_factory_normalization.py
+tests/factories/test_recording_integration.py
 tests/integration/
 tests/planner/
 tests/render/

@@ -401,6 +401,36 @@ def _validate_candidate_findings(envelope: Mapping[str, Any]) -> None:
             raise AgentFigureEvalError(f"candidate findings.{dimension}.critical must be boolean")
 
 
+def _validate_candidate_findings_against_case(
+    envelope: Mapping[str, Any], case: Mapping[str, Any]
+) -> None:
+    """Require candidate critical flags to match deterministic detector output.
+
+    Finding status remains candidate metadata because semantic language may require
+    independent review, but deterministic critical flags are evaluator-owned facts.
+    A candidate cannot make a replay appear clean by declaring all critical flags false.
+    """
+
+    critical_errors = case.get("critical_errors")
+    if not isinstance(critical_errors, Mapping):
+        raise AgentFigureEvalError("replay case critical_errors must be an object")
+    expected_by_dimension = dict.fromkeys(DIMENSIONS, False)
+    for kind, triggered in critical_errors.items():
+        if not isinstance(triggered, bool) or kind not in CRITICAL_ERROR_DIMENSIONS:
+            raise AgentFigureEvalError("replay case critical_errors has an invalid detector")
+        if triggered:
+            expected_by_dimension[CRITICAL_ERROR_DIMENSIONS[kind]] = True
+
+    findings = envelope["findings"]
+    for dimension, expected in expected_by_dimension.items():
+        actual = findings[dimension]["critical"]
+        if actual != expected:
+            raise AgentFigureEvalError(
+                f"candidate findings.{dimension}.critical must match deterministic detector "
+                f"output ({expected})"
+            )
+
+
 def _validate_candidate_provenance(envelope: Mapping[str, Any]) -> None:
     """Validate explicit replay provenance and the no-provider boundary."""
 
@@ -741,6 +771,7 @@ def replay_fixture_mutation(
     candidate_packet = dict(packet)
     candidate_packet["interpretation"] = dict(candidate_envelope["interpretation"])
     candidate_case = evaluate_packet(candidate_packet).to_dict()
+    _validate_candidate_findings_against_case(candidate_envelope, candidate_case)
     detected_detectors = [
         kind for kind in CRITICAL_ERROR_KINDS if candidate_case["critical_errors"][kind]
     ]

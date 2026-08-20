@@ -84,7 +84,11 @@ def _candidate(packet_id: str, mutation_id: str | None = None) -> dict[str, obje
             "expected_detectors": [] if mutation_id == "clean" else [mutation_id],
         },
         "findings": {
-            dimension: {"status": "not_available", "critical": False} for dimension in DIMENSIONS
+            dimension: {
+                "status": "not_available",
+                "critical": dimension == eval_mod.CRITICAL_ERROR_DIMENSIONS.get(mutation_id),
+            }
+            for dimension in DIMENSIONS
         },
         "unavailable": ["independent semantic review"],
         "not_applicable": ["external provider execution"],
@@ -317,6 +321,15 @@ def test_replay_one_pair_requires_the_named_detector(packet_id: str) -> None:
     assert report["expected_detectors"] == expected
     assert report["detected_detectors"] == expected
     assert report["detector_status"] == "pass"
+
+
+def test_replay_rejects_candidate_critical_flags_that_disagree_with_detectors() -> None:
+    candidate = _candidate("causal_overclaim")
+    candidate["findings"]["claim_boundary"]["critical"] = False  # type: ignore[index]
+    candidate["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(candidate)
+
+    with pytest.raises(AgentFigureEvalError, match="must match deterministic detector output"):
+        replay_fixture_mutation(MANIFEST, candidate)
 
 
 def test_replay_all_requires_exact_corpus_coverage_and_is_deterministic() -> None:

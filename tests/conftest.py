@@ -583,6 +583,9 @@ _FAST_FILES = {
     # Full Classic phase-boundary tests are deterministic scheduler/context/finalizer
     # contracts; keep extracted orchestration coverage in exact-head fast shards.
     "test_orchestration_boundaries.py",
+    # The legacy checkpoint cutover preparation contract is read-only and
+    # digest-bound; keep its focused provenance tests in fast pull-request shards.
+    "test_issue_6794_cutover_preparation.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

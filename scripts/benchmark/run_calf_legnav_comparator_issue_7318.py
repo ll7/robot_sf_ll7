@@ -307,12 +307,28 @@ def main(argv: list[str] | None = None) -> int:
         "candidate_registry": str(candidate_registry_path.relative_to(REPO_ROOT)),
         "candidate_registry_sha256": _sha256(candidate_registry_path),
     }
-    report = build_calf_legnav_comparator_report(
-        traces["perfect_perception"],
-        traces["sensor_limited"],
-        config=config,
-        input_refs=input_refs,
-    )
+    try:
+        report = build_calf_legnav_comparator_report(
+            traces["perfect_perception"],
+            traces["sensor_limited"],
+            config=config,
+            input_refs=input_refs,
+        )
+    except (TypeError, ValueError) as exc:
+        runner_errors.append(
+            {
+                "condition": "paired",
+                "status": "blocked",
+                "reason": f"trace pair failed validation: {exc}",
+                "command": ["build_calf_legnav_comparator_report"],
+            }
+        )
+        report = build_calf_legnav_comparator_report(
+            _placeholder_trace(config),
+            _placeholder_trace(config),
+            config=config,
+            input_refs=input_refs,
+        )
     if runner_errors:
         report["status"] = "blocked"
         report["runner_errors"] = runner_errors

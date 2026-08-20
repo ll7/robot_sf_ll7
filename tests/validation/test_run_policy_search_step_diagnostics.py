@@ -249,6 +249,13 @@ def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
         ({"fallback_count": 1}, True),
         ({"checkpoint_provenance": {"fallback_triggered": False}}, False),
         ({"checkpoint_provenance": {"load_status": "fallback"}}, True),
+        (
+            {
+                "fallback_degraded_status": "clear",
+                "foresight_prediction": {"fallback_used": True},
+            },
+            True,
+        ),
     ],
 )
 def test_planner_fallback_status_uses_structured_verdict(summary, expected) -> None:

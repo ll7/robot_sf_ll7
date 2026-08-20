@@ -24,7 +24,15 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_7600_context_curation_pilot/inventory.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/inventory.json.review.json
   status: evidence
   freshness: evidence
   area: workflow_evidence

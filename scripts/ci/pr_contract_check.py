@@ -953,25 +953,33 @@ def build_comment_body(
 
 
 def get_changed_files(changed_files_file: Path | None, base_ref: str) -> list[str]:
-    """Get list of changed files from a file or fallback to git diff."""
+    """Get changed files from the current-base diff, with a safe API fallback.
+
+    The GitHub PR files endpoint describes the PR against its stored base, which
+    can differ from the current base after ``main`` advances.  When the base is
+    available locally, the current-base ``base...HEAD`` diff is therefore the
+    authoritative changed-file source.  The API-provided file list remains a
+    fallback for shallow/local runs where that base cannot be resolved.
+    """
+    if base_ref_is_resolvable(base_ref):
+        try:
+            res = subprocess.run(
+                ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if res.returncode == 0:
+                return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        except _BEST_EFFORT_ERRORS:
+            pass
+
     if changed_files_file and os.path.exists(changed_files_file):
         try:
             with open(changed_files_file, encoding="utf-8") as f:
                 return [line.strip() for line in f if line.strip()]
         except _BEST_EFFORT_ERRORS:
             pass
-
-    try:
-        res = subprocess.run(
-            ["git", "diff", "--name-only", base_ref],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if res.returncode == 0:
-            return [line.strip() for line in res.stdout.splitlines() if line.strip()]
-    except _BEST_EFFORT_ERRORS:
-        pass
     return []
 
 

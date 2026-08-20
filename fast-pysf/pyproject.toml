@@ -9,7 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26.4",
     "toml>=0.10.2",
-    "numba>=0.60.0",
+    "numba>=0.67.0",
     "loguru>=0.7.2",
     "scipy>=1.17.1",
     "matplotlib>=3.11.1",

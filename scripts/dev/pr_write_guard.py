@@ -48,37 +48,60 @@ def _base_result(
     *,
     repo: str,
     operation: str,
-    expected_head_sha: str | None,
+    expected_shas: tuple[str | None, str | None],
     observed_state: str,
     observed_head_sha: str,
+    observed_base_sha: str | None,
     merged_at: Any,
 ) -> dict[str, Any]:
     """Build the shared machine-readable state fields."""
+    expected_head_sha, expected_base_sha = expected_shas
     return {
         "number": number,
         "repo": repo,
         "operation": operation,
         "expected_head_sha": expected_head_sha or "",
+        "expected_base_sha": expected_base_sha or "",
         "observed_state": observed_state,
         "observed_head_sha": observed_head_sha,
+        "observed_base_sha": observed_base_sha or "",
         "merged_at": merged_at,
     }
 
 
-def guard_pr_write(
-    number: int,
+def _write_verdict(
     *,
-    repo: str = DEFAULT_REPO,
-    expected_head_sha: str | None,
-    operation: str,
+    observed_state: str,
+    merged_at: Any,
+    observed_head_sha: str,
+    expected_head_sha: str,
+    observed_base_sha: str | None,
+    expected_base_sha: str | None,
+    base: dict[str, Any],
 ) -> dict[str, Any]:
-    """Read PR state/head immediately before a review or merge-ready write.
+    """Return the fail-closed stale verdict or the admission verdict."""
+    if observed_state != "OPEN" or merged_at:
+        return {"status": STALE_WRITE_STATUS, "reason": "pr_not_open", **base}
+    if observed_head_sha.lower() != expected_head_sha.lower():
+        return {"status": STALE_WRITE_STATUS, "reason": "head_sha_changed", **base}
+    if (
+        expected_base_sha is not None
+        and observed_base_sha is not None
+        and observed_base_sha.lower() != expected_base_sha.lower()
+    ):
+        return {"status": STALE_WRITE_STATUS, "reason": "base_sha_changed", **base}
+    return {"status": "ok", **base}
 
-    A non-open PR or a head mismatch returns ``review_skipped_stale_state`` and
-    must never be followed by a write. Transport or malformed-payload failures
-    return ``error`` so callers fail closed rather than treating uncertainty as
-    a safe skip.
-    """
+
+def _validate_expected_shas(
+    *,
+    number: int,
+    repo: str,
+    operation: str,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+) -> dict[str, Any] | None:
+    """Return a fail-closed error dict for invalid expected SHAs, or None."""
     if number < 1:
         return {"status": "error", "error": f"PR number must be positive, got {number}"}
     if not isinstance(expected_head_sha, str) or not FULL_SHA_RE.fullmatch(expected_head_sha):
@@ -89,6 +112,45 @@ def guard_pr_write(
             "repo": repo,
             "operation": operation,
         }
+    if expected_base_sha is not None and (
+        not isinstance(expected_base_sha, str) or not FULL_SHA_RE.fullmatch(expected_base_sha)
+    ):
+        return {
+            "status": "error",
+            "error": "expected_base_sha must be a full 40-character SHA when provided",
+            "number": number,
+            "repo": repo,
+            "operation": operation,
+        }
+    return None
+
+
+def guard_pr_write(
+    number: int,
+    *,
+    repo: str = DEFAULT_REPO,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None = None,
+    operation: str,
+) -> dict[str, Any]:
+    """Read PR state/head/base immediately before a review or merge-ready write.
+
+    A non-open PR, a head mismatch, or a base mismatch when
+    ``expected_base_sha`` is supplied returns ``review_skipped_stale_state`` and
+    must never be followed by a write. Transport or malformed-payload failures
+    return ``error`` so callers fail closed rather than treating uncertainty as
+    a safe skip.
+    """
+    validation_error = _validate_expected_shas(
+        number=number,
+        repo=repo,
+        operation=operation,
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+    )
+    if validation_error is not None:
+        return validation_error
+    assert isinstance(expected_head_sha, str)
 
     result = _gh_api_get(f"repos/{repo}/pulls/{number}")
     payload, error = _parse_json(result, what=f"PR {number} write-state read")
@@ -99,6 +161,7 @@ def guard_pr_write(
 
     raw_state = payload.get("state")
     raw_head = payload.get("head")
+    raw_base = payload.get("base")
     merged_at = payload.get("merged_at")
     if not isinstance(raw_state, str) or not raw_state:
         return {"status": "error", "error": "PR write-state payload has no state"}
@@ -106,28 +169,32 @@ def guard_pr_write(
         return {"status": "error", "error": "PR write-state payload has no head SHA"}
     if merged_at is not None and not isinstance(merged_at, str):
         return {"status": "error", "error": "PR write-state payload has malformed merged_at"}
+    if expected_base_sha is not None and (
+        not isinstance(raw_base, dict) or not isinstance(raw_base.get("sha"), str)
+    ):
+        return {"status": "error", "error": "PR write-state payload has no base SHA"}
 
     observed_state = raw_state.upper()
     observed_head_sha = raw_head["sha"]
+    observed_base_sha: str | None = None
+    if isinstance(raw_base, dict) and isinstance(raw_base.get("sha"), str):
+        observed_base_sha = raw_base["sha"]
     base = _base_result(
         number,
         repo=repo,
         operation=operation,
-        expected_head_sha=expected_head_sha,
+        expected_shas=(expected_head_sha, expected_base_sha),
         observed_state=observed_state,
         observed_head_sha=observed_head_sha,
+        observed_base_sha=observed_base_sha,
         merged_at=merged_at,
     )
-    if observed_state != "OPEN" or merged_at:
-        return {
-            "status": STALE_WRITE_STATUS,
-            "reason": "pr_not_open",
-            **base,
-        }
-    if observed_head_sha.lower() != expected_head_sha.lower():
-        return {
-            "status": STALE_WRITE_STATUS,
-            "reason": "head_sha_changed",
-            **base,
-        }
-    return {"status": "ok", **base}
+    return _write_verdict(
+        observed_state=observed_state,
+        merged_at=merged_at,
+        observed_head_sha=observed_head_sha,
+        expected_head_sha=expected_head_sha,
+        observed_base_sha=observed_base_sha,
+        expected_base_sha=expected_base_sha,
+        base=base,
+    )

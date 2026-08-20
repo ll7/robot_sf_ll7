@@ -822,8 +822,35 @@ def test_main_returns_failure_when_acquire_push_fails(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(issue_claim, "_run", fake_run)
 
-    assert issue_claim.main(["acquire", "123"]) == 1
+    assert (
+        issue_claim.main(
+            [
+                "acquire",
+                "123",
+                "--manual-override",
+                "--override-actor",
+                "maintainer@example.test",
+                "--override-reason",
+                "incident recovery",
+                "--no-scientific-claim",
+            ]
+        )
+        == 1
+    )
     assert calls[-1][0:4] == ["gh", "api", "-X", "POST"]
+
+
+def test_main_rejects_direct_acquire_without_manual_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ordinary CLI callers must use the canonical admission wrapper first."""
+    monkeypatch.setattr(
+        issue_claim,
+        "_run",
+        lambda command: pytest.fail(f"unguarded acquire executed: {command}"),
+    )
+
+    assert issue_claim.main(["acquire", "123"]) == 1
 
 
 def test_open_pr_coverage_detects_ref_in_title(monkeypatch: pytest.MonkeyPatch) -> None:

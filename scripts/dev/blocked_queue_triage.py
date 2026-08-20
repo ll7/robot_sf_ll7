@@ -27,6 +27,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
+from scripts.dev import blocker_transition
+from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev._gh_rest import run_gh_command as _run_gh_command
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_LABEL = "state:blocked"
 SCHEMA = "blocked_queue_triage.v1"
@@ -80,32 +84,29 @@ class MutationError(TriageError):
 
 def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run ``gh`` with bounded output capture."""
-
-    try:
-        return subprocess.run(
-            ["gh", *args],
-            input=input_text,
-            capture_output=True,
-            text=True,
-            timeout=90,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise TriageError("gh CLI is not installed or unavailable on PATH") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise TriageError(f"gh command timed out after {exc.timeout}s") from exc
+    result = _run_gh_command(args, input_text, timeout=90, timeout_context="blocked queue triage")
+    if result.returncode == 127:
+        raise TriageError("gh CLI is not installed or unavailable on PATH")
+    if result.returncode == 124:
+        raise TriageError("gh command timed out after 90s")
+    return result
 
 
-def _json_result(result: subprocess.CompletedProcess[str], *, operation: str) -> Any:
+def _json_result(
+    result: subprocess.CompletedProcess[str],
+    *,
+    operation: str,
+    allow_concatenated: bool = False,
+) -> Any:
     """Parse one successful ``gh api`` response or fail closed."""
-
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
-        raise TriageError(f"{operation} failed with exit code {result.returncode}: {detail}")
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise TriageError(f"{operation} returned invalid JSON: {exc}") from exc
+    payload, error = _parse_json(
+        result,
+        what=operation,
+        allow_concatenated=allow_concatenated,
+    )
+    if error:
+        raise TriageError(error)
+    return payload
 
 
 def _flatten_pages(payload: Any, *, operation: str) -> list[dict[str, Any]]:
@@ -138,8 +139,8 @@ def _api_json(
     args = ["api"]
     if paginate:
         args.append("--paginate")
-    if slurp:
-        args.append("--slurp")
+    # GitHub CLI 2.45 does not support ``--slurp``.  ``parse_json`` performs
+    # the equivalent concatenated-page normalization after ``--paginate``.
     if method:
         args.extend(["--method", method])
     args.append(path)
@@ -147,7 +148,11 @@ def _api_json(
     if payload is not None:
         args.extend(["--input", "-"])
         input_text = json.dumps(dict(payload), sort_keys=True)
-    return _json_result(runner(args, input_text), operation=operation)
+    return _json_result(
+        runner(args, input_text),
+        operation=operation,
+        allow_concatenated=paginate and slurp,
+    )
 
 
 def _labels(row: Mapping[str, Any]) -> set[str]:
@@ -402,6 +407,17 @@ def _triage_row(
     blocker_class, confidence, evidence, references = _classify(row, comments)
     condition, watcher, condition_mode = _condition_for(blocker_class, references, repo=repo)
     last_progress, progress_source = _last_progress(row, comments)
+    try:
+        transition_input = dict(row)
+        transition_input.setdefault("state", "OPEN")
+        transition = blocker_transition.plan_transition(transition_input)
+    except (TypeError, ValueError, blocker_transition.TransitionError) as exc:
+        transition = {
+            "schema": blocker_transition.SCHEMA,
+            "status": "error",
+            "error": str(exc),
+            "no_write": True,
+        }
     return {
         "issue": raw_number,
         "title": title,
@@ -417,6 +433,7 @@ def _triage_row(
         "evidence": evidence,
         "referenced_issues": list(references),
         "closure_recommendation": "keep_open",
+        "transition": transition,
     }
 
 
@@ -457,6 +474,15 @@ def render_comment(row: Mapping[str, Any]) -> str:
     digest = _digest(row)
     evidence = "\n".join(f"  - {item}" for item in row.get("evidence", [])) or "  - unavailable"
     references = ", ".join(f"#{number}" for number in row.get("referenced_issues", [])) or "none"
+    transition = row.get("transition")
+    if isinstance(transition, Mapping) and transition.get("status") != "error":
+        transition_lines = [
+            f"- Transition class: `{transition.get('blocker_class', 'unknown')}`",
+            f"- Transition owner: `{transition.get('authority_owner', 'unknown')}`",
+            f"- Transition next action: {transition.get('next_action', 'unavailable')}",
+        ]
+    else:
+        transition_lines = ["- Transition plan: unavailable; retain the conservative triage hold."]
     return (
         "\n".join(
             [
@@ -473,6 +499,7 @@ def render_comment(row: Mapping[str, Any]) -> str:
                 f"- Last meaningful progress: `{row['last_meaningful_progress_at'] or 'unavailable'}` ({row['last_progress_source']})",
                 f"- Referenced issues: {references}",
                 "- Closure recommendation: **keep open** under the maintainer TRIAGE-WITH-UNBLOCK-CONDITIONS ruling.",
+                *transition_lines,
                 "",
                 "Evidence used:",
                 evidence,
@@ -617,6 +644,12 @@ def build_report(
     ]
     as_of = _parse_timestamp(generated_at) or datetime.now(UTC)
     class_counts = Counter(row["blocker_class"] for row in rows)
+    transition_counts = Counter(
+        transition.get("blocker_class")
+        for row in rows
+        if isinstance((transition := row.get("transition")), Mapping)
+        and isinstance(transition.get("blocker_class"), str)
+    )
     confidence_counts = Counter(row["classification_confidence"] for row in rows)
     condition_counts = Counter(row["condition_mode"] for row in rows)
     age_counts = Counter(
@@ -635,6 +668,7 @@ def build_report(
         },
         "counts": {
             "by_blocker_class": {name: class_counts.get(name, 0) for name in BLOCKER_CLASSES},
+            "by_transition_class": dict(sorted(transition_counts.items())),
             "by_confidence": dict(sorted(confidence_counts.items())),
             "by_condition_mode": {
                 "machine_testable": condition_counts.get("machine_testable", 0),

@@ -51,7 +51,6 @@
       "scripts/tools/benchmark_feature_extractors.py": 2,
       "scripts/tools/benchmark_publication_bundle.py": 1,
       "scripts/tools/campaign_result_store.py": 1,
-      "scripts/tools/check_context_note_freshness.py": 1,
       "scripts/tools/classify_observation_noise_mechanisms.py": 1,
       "scripts/tools/compare_holonomic_vs_differential_rollout.py": 1,
       "scripts/tools/compile_benchmark_artifacts.py": 1,
@@ -106,7 +105,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 179
+    "total": 178
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -928,15 +927,6 @@
       "lineno": 142,
       "path": "scripts/tools/campaign_result_store.py",
       "source": "except Exception as exc:"
-    },
-    {
-      "col_offset": 8,
-      "context": "_has_inbound_markdown_reference",
-      "fingerprint": "e5404a3281d3fecd",
-      "handler": "Exception",
-      "lineno": 242,
-      "path": "scripts/tools/check_context_note_freshness.py",
-      "source": "except Exception:"
     },
     {
       "col_offset": 4,

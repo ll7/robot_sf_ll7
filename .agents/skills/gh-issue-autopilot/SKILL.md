@@ -108,15 +108,15 @@ repo-owner URLs, omitted recent comments, and duplicate PR coverage as expected 
 5. Acquire the cross-machine issue claim before any implementation branch or worktree setup:
 
    ```bash
-   uv run python scripts/dev/issue_claim.py acquire <issue-number>
+   uv run python scripts/dev/goal_issue_admission.py <issue-number>
    ```
 
-   The command atomically creates the remote ref `agent-claims/issue-<issue-number>` through
-   GitHub's create-ref API, which fails when the ref already exists. If it exits non-zero, another
-   PC or agent probably claimed the issue first; run
-   `uv run python scripts/dev/issue_claim.py status <issue-number>`, record the collision, and skip
-   to the next candidate. Do not reimplement the issue unless the remote claim is confirmed stale
-   and deliberately released.
+   The wrapper runs the live implementation and dependency preflight before atomically creating the
+   remote ref `agent-claims/issue-<issue-number>` through GitHub's create-ref API. If it exits
+   non-zero, the issue is not admitted or another PC/agent probably claimed it first; run
+   `uv run python scripts/dev/issue_claim.py status <issue-number>`, record the outcome, and skip
+   to the next candidate. Direct low-level acquire is reserved for an explicit maintainer
+   incident/forensic override.
 6. After a successful claim, make the claim visible in GitHub issue/project state: move the issue to
    `In progress`, add or preserve `state:running` when using state labels, assign the local actor
    when practical, and add a short issue comment naming the claim ref, machine/thread, intended

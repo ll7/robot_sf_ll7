@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev import goal_issue_admission
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import _latest_check_runs
 from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
@@ -58,6 +59,8 @@ TOKEN_EFFICIENCY_ACTIONS = (
     "store verbose validation, worker, and CI logs outside the parent thread",
     "record unavailable worker routes and reset times before retrying delegation",
 )
+DEFAULT_REPO = "ll7/robot_sf_ll7"
+DEFAULT_REMOTE = "origin"
 
 
 @dataclass(frozen=True)
@@ -641,8 +644,74 @@ def claim_snapshot(
     return rows, sources, errors
 
 
+def _queue_issue_admission(
+    issue: dict[str, Any], *, repo: str = DEFAULT_REPO, remote: str = DEFAULT_REMOTE
+) -> dict[str, Any]:
+    """Return read-only admission evidence for one queue issue.
+
+    Only ``state:ready`` rows need a live preflight.  Other rows are visibly
+    ineligible before an atomic claim could be attempted, so the snapshot
+    records that no claim check was needed and avoids spending one GitHub read
+    per blocked queue item.
+    """
+    number = issue.get("number")
+    labels = {
+        str(label.get("name"))
+        for label in issue.get("labels", []) or []
+        if isinstance(label, dict) and label.get("name")
+    }
+    state = str(issue.get("state") or "").strip().upper()
+    if state != "OPEN":
+        reason = f"issue state is {state or 'unknown'}; skip autonomous claim"
+        classification = "closed" if state else "state_unknown"
+    elif "state:ready" not in labels:
+        reason = "required label 'state:ready' is absent; skip autonomous claim"
+        classification = "needs_ready_label"
+    elif not isinstance(number, int) or number <= 0:
+        reason = "issue number is invalid; skip autonomous claim"
+        classification = "error"
+    else:
+        try:
+            payload = goal_issue_admission.admit_issue(
+                number,
+                repo=repo,
+                remote=remote,
+                source_ref=goal_issue_admission.DEFAULT_SOURCE_REF,
+                check_only=True,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return {
+                "schema": goal_issue_admission.SCHEMA,
+                "ok": False,
+                "outcome": "error",
+                "write_attempted": False,
+                "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+                "classification": "error",
+                "reasons": [str(exc)],
+                "ready": False,
+                "write_allowed": False,
+                "claim": None,
+                "claim_outcome": "unavailable",
+            }
+        return goal_issue_admission.compact_admission(payload)
+
+    return {
+        "schema": goal_issue_admission.SCHEMA,
+        "ok": False,
+        "outcome": "not_admitted",
+        "write_attempted": False,
+        "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+        "classification": classification,
+        "reasons": [reason],
+        "ready": False,
+        "write_allowed": False,
+        "claim": None,
+        "claim_outcome": "not_checked",
+    }
+
+
 def issue_queue_snapshot(
-    searches: list[str], *, limit: int
+    searches: list[str], *, limit: int, repo: str = DEFAULT_REPO, remote: str = DEFAULT_REMOTE
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[dict[str, Any]]]:
     """Return compact issue rows for one or more GitHub issue searches.
 
@@ -700,6 +769,9 @@ def issue_queue_snapshot(
             if not isinstance(number, int) or number in seen:
                 continue
             seen.add(number)
+            admission = _queue_issue_admission(issue, repo=repo, remote=remote)
+            if admission.get("outcome") == "error":
+                errors.append(f"issue {number}: admission unavailable")
             labels = issue.get("labels", []) or []
             rows.append(
                 {
@@ -713,6 +785,7 @@ def issue_queue_snapshot(
                     ),
                     "updated_at": issue.get("updatedAt", ""),
                     "url": issue.get("url", ""),
+                    "admission": admission,
                 }
             )
     return rows, sources, errors, truncations

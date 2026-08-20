@@ -1,20 +1,27 @@
 # Job 13512 artifact promotion for Issue #5890
 
 Plain-language summary: the missing compact result bundle for job 13512 was found at the
-maintainer-recorded `imech192` path and copied into tracked evidence. This resolves the
-missing-artifact blocker for custody, but it does not resolve the bundle's metric and scope
-contradictions.
+maintainer-recorded `imech192` path and copied into tracked evidence. The bytes remain preserved
+for custody, but the final ruling classifies the original contract as invalid because execution
+provenance and metric/scope identity are contradictory.
 
 ## Status
 
 - Promotion status: `promoted_for_custody_only`
+- Reconciliation disposition: `invalid_provenance_or_scope`
+- Benchmark/claim/paper eligibility: `false` / `false` / `false`
+- Execution provenance: unresolved conflict; neither recorded lineage is verified
 - Issue: #5890; parent campaign issue: #3207
 - Job: `13512`
 - Source host: `imech192`
 - Source result root:
-  `/home/luttkule/git/robot_sf_ll7.worktrees/camp5326-192/output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512`
+  `${JOB13512_WORKTREE}/<external-results-root>/02b-issue3207-fidelity-full-fixed-scope-job-13512`
 - Source access date: 2026-08-19
 - Raw episode rows remain remote-only and are not committed.
+
+`${JOB13512_WORKTREE}` and `<external-results-root>` are stable placeholders for the source-host
+worktree and non-repository results root; they are not local checkout paths and must be expanded
+only by a source-host custodian with access to `imech192`.
 
 ## What was preserved
 
@@ -47,6 +54,9 @@ the older packet has 30 episodes, 10 rows, two planners, and a non-identifiable 
 `success_rate` result. The new bundle has a different scope and unresolved metric/summary
 inconsistencies. No per-axis ranking was recomputed here.
 
-Until a maintainer selects and verifies the canonical metric and scope contract, classify this as
-durable internal simulator-fidelity custody evidence only. It is not full #3207 acceptance,
-simulator-realism, sim-to-real, safety, planner-superiority, or paper-facing evidence.
+The final ruling records `success_rate` as the only materialized metric, SNQI as unmaterialized,
+and the three-planner/5,184-episode scope as materialized. The two-planner descriptions and the
+SNQI outcome labels remain stale source metadata. The conflicting execution lineages prevent
+verified reproducibility. Classify this as durable internal simulator-fidelity custody evidence
+only: it is not full #3207 acceptance, simulator-realism, sim-to-real, safety, planner-superiority,
+ranking, or paper-facing evidence. `registration.json` is the machine-readable disposition owner.

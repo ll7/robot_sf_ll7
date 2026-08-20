@@ -11,14 +11,23 @@
 tests/benchmark/
 tests/benchmark_full/
 tests/carla_bridge/
+tests/factories/test_edge_cases_recording.py
+tests/factories/test_incompatible_combinations.py
+tests/factories/test_logging_diagnostics.py
+tests/factories/test_normalization.py
+tests/factories/test_pedestrian_factory_normalization.py
+tests/factories/test_recording_integration.py
 tests/integration/
 tests/planner/
 tests/render/
+tests/unit/benchmark/
 tests/training/
 tests/visuals/
 
 # Individual test files (optional even when outside optional directories)
+tests/dev/test_check_worktree_optional_deps.py
 tests/sb3_test.py
+tests/test_environment_factory_signatures.py
 tests/tools/test_probe_sonic_model_inference.py
 tests/test_baseline_ppo_smoke.py
 tests/test_benchmark_visualization_integration.py
@@ -29,8 +38,19 @@ tests/test_map_runner_sac.py
 tests/test_output_root_migration.py
 tests/test_ppo_diagnostics.py
 tests/test_predictive_model.py
+tests/prediction/test_forecast_heavy_model_decision_packet.py
+tests/sim/test_zanlungo_corridor_acceptance.py
+tests/unit/test_ch8_statistics.py
+tests/unit/test_evidence_integration_inventory.py
+tests/unit/test_full_classic_visuals.py
+tests/unit/test_geojson_map_builder.py
 tests/unit/test_cli_logging_flags.py
 tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py
 tests/unit/test_runner_video.py
 tests/validation/test_publication_preflight.py
+
+# Adversarial sampler/campaign tests that require optimizer extras.
+tests/adversarial/test_adversarial_search.py
+tests/adversarial/test_adversarial_warm_start.py
+tests/adversarial/test_issue_5308_qd_campaign.py

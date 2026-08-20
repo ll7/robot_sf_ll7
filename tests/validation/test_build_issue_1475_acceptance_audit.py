@@ -119,3 +119,29 @@ def test_issue_1475_acceptance_audit_is_byte_deterministic(tmp_path: Path) -> No
         )
         assert result.returncode == 0, result.stderr
     assert outputs[0].read_bytes() == outputs[1].read_bytes()
+
+
+def test_issue_1475_cli_check_contract_does_not_write_evidence(tmp_path: Path) -> None:
+    """Contract-only validation works without the tracked smoke inputs."""
+
+    output = tmp_path / "should-not-exist.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/build_issue_1475_acceptance_audit.py",
+            "--repo-root",
+            str(tmp_path / "missing-repo"),
+            "--output",
+            str(output),
+            "--write",
+            "--check-contract",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "contract valid" in result.stdout
+    assert not output.exists()

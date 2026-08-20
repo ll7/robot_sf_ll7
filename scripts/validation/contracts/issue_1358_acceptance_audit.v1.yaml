@@ -1,0 +1,103 @@
+schema_version: acceptance-audit-contract.v1
+issue: 1358
+context_builder: issue_1358
+defaults:
+  closure_audit_path: docs/context/issue_1358_closure_audit_2026-07-07.md
+  state_surface_path: docs/context/issue_1358_state.yaml
+evidence_paths:
+  - robot_sf/benchmark/orca_residual_lane_readiness.py
+  - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+  - docs/context/issue_1475_state.yaml
+  - "{state_surface_path}"
+status_mapping:
+  allowed:
+    - met
+    - partially_met
+    - not_met
+  blocked:
+    - partially_met
+    - not_met
+  complete_when: all_criteria_met
+state_source:
+  path_input: state_surface_path
+  issue: 1358
+  selector: last
+  acceptance_evidence_path: acceptance_evidence
+  closure_call_path: closure_boundary.closure_call_for_this_pr
+  integration_report_path: null
+  fallback_acceptance_evidence_path: closure_boundary.acceptance_evidence
+  include_latest_recorded_at_utc: true
+  include_entry_status: true
+  include_integration_report_status: false
+criteria:
+  - id: candidate_design
+    criterion: Candidate design records exact observation additions and residual action bounds.
+    evaluator: issue_1358_candidate_design
+    evidence_paths:
+      - robot_sf/benchmark/orca_residual_lane_readiness.py
+    blocking_on: [not_met]
+  - id: training_config
+    criterion: Training config versioned and runnable by one canonical handoff command.
+    evaluator: issue_1358_training_config
+    evidence_paths:
+      - robot_sf/benchmark/orca_residual_lane_readiness.py
+    blocking_on: [not_met]
+  - id: checkpoint_lineage
+    criterion: Trained checkpoint durable lineage explicit artifact pointer.
+    evaluator: issue_1358_checkpoint_lineage
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    blocking_on: [not_met]
+  - id: smoke_nominal_sanity
+    criterion: Smoke nominal-sanity policy-search stages run without fallback/degraded success.
+    evaluator: issue_1358_smoke_nominal_sanity
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    blocking_on: [not_met]
+  - id: comparator_report
+    criterion: Report compares ORCA, current PPO leader, failed guarded-PPO variants, and new residual policy.
+    evaluator: issue_1358_comparator_report
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    blocking_on: [not_met]
+  - id: result_classification
+    criterion: Result classified promote, revise, or reject using scenario-stratified evidence.
+    evaluator: issue_1358_result_classification
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    blocking_on: [not_met]
+  - id: parent_stays_open
+    criterion: "Parent stays open until Issue #1475 classifies lane continue/revise/stop durable evidence."
+    evaluator: issue_1358_parent_stays_open
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+      - docs/context/issue_1475_state.yaml
+    blocking_on: [not_met]
+  - id: no_training_children
+    criterion: "No new residual-policy training children added before Issue #1475 reports durable evidence or fail-closed blocker."
+    evaluator: issue_1358_no_training_children
+    evidence_paths:
+      - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    blocking_on: [not_met]
+report:
+  schema_version: issue-1358-acceptance-audit.v1
+  claim_boundary: CPU-only parent acceptance audit over tracked merged evidence; no Slurm/GPU submission, benchmark campaign, training run, release, or paper-facing claim.
+  checked_paths:
+    - "{closure_audit_path}"
+    - robot_sf/benchmark/orca_residual_lane_readiness.py
+    - docs/context/evidence/issue_1475_acceptance_audit_2026-07-06.json
+    - docs/context/issue_1475_state.yaml
+    - "{state_surface_path}"
+  static_fields:
+    next_empirical_action: "On a Slurm-capable lane, run one bounded ORCA-residual BC smoke rerun against current post-gate code. Only if the smoke gate passes, escalate a bounded nominal run and record the #1358 continue/revise/stop classification."
+    forbidden_actions_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false
+  computed_fields:
+    readiness: context_readiness
+    issue_1475_audit: context_child_1475_summary

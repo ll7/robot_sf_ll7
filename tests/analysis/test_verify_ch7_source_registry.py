@@ -95,3 +95,24 @@ def test_moving_commit_reference_is_blocked(tmp_path: Path) -> None:
 
     with pytest.raises(registry.SourceRegistryBlockedError, match="immutable"):
         registry.verify_source_registry(registry_path=path)
+
+
+@pytest.mark.parametrize("package_id", [None, [], {}])
+def test_malformed_package_id_is_blocked(tmp_path: Path, package_id: object) -> None:
+    """Malformed package identity cannot escape as an incidental Python error."""
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    packages = record["packages"]
+    assert isinstance(packages, list)
+    first_package = packages[0]
+    assert isinstance(first_package, dict)
+    first_package["package_id"] = package_id
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="malformed package ID"):
+        registry.verify_source_registry(registry_path=path)

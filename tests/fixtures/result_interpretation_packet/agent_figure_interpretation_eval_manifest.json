@@ -5,7 +5,7 @@
   "claim_boundary": "frozen fixture replay only; no external model calls, no benchmark claims, no generated evidence promotion",
   "packet": {
     "id": "ch7_visualization_causal_abstention_fixture",
-    "path": "ch7_visualization_causal_abstention.json",
+    "path": "v1/ch7_visualization_causal_abstention.json",
     "sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca",
     "source_sha256": "1c14a36202a9ab8146cf577d450ec8899f4d78e0d8246cc3dbe1a019928394d8",
     "reference_sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca"

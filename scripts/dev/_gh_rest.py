@@ -11,7 +11,52 @@ from __future__ import annotations
 import json
 import subprocess
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+
+def run_gh_command(
+    args: Sequence[str],
+    input_text: str | None = None,
+    *,
+    timeout: int = 30,
+    timeout_context: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run one ``gh`` command without a shell and return its result.
+
+    Missing ``gh`` and timeouts become deterministic failed
+    ``CompletedProcess`` values so callers can retain their own error and
+    reporting contracts.
+    """
+    command = ["gh", *args]
+    run_kwargs: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+    }
+    if input_text is not None:
+        run_kwargs["input"] = input_text
+    try:
+        return subprocess.run(command, check=False, **run_kwargs)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=127,
+            stdout="",
+            stderr="gh CLI not found on PATH; install GitHub CLI and authenticate it",
+        )
+    except subprocess.TimeoutExpired:
+        detail = f"gh command timed out after {timeout} seconds"
+        if timeout_context:
+            detail += f"; {timeout_context}"
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=124,
+            stdout="",
+            stderr=detail,
+        )
 
 
 def run_gh_api(
@@ -29,43 +74,27 @@ def run_gh_api(
     ``gh`` and timeouts become deterministic failed ``CompletedProcess`` values
     so endpoint helpers can preserve their own structured error contracts.
     """
-    args = ["gh", "api"]
+    api_args = ["api"]
     if method is not None:
-        args.extend(["--method", method])
-    args.append(path)
+        api_args.extend(["--method", method])
+    api_args.append(path)
     if extra_args:
-        args.extend(extra_args)
+        api_args.extend(extra_args)
     stdin_payload: str | None = None
     if payload is not None:
-        args.extend(["--input", "-"])
+        api_args.extend(["--input", "-"])
         stdin_payload = json.dumps(payload)
-
-    run_kwargs: dict[str, Any] = {
-        "capture_output": True,
-        "text": True,
-        "timeout": timeout,
-    }
-    if stdin_payload is not None:
-        run_kwargs["input"] = stdin_payload
-    try:
-        return subprocess.run(args, check=False, **run_kwargs)
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=127,
-            stdout="",
-            stderr="gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)",
-        )
-    except subprocess.TimeoutExpired:
-        detail = f"gh api timed out after {timeout} seconds"
-        if timeout_context:
-            detail += f"; {timeout_context}"
-        return subprocess.CompletedProcess(
-            args=args,
-            returncode=124,
-            stdout="",
-            stderr=detail,
-        )
+    result = run_gh_command(
+        api_args,
+        stdin_payload,
+        timeout=timeout,
+        timeout_context=timeout_context,
+    )
+    if result.returncode == 127:
+        result.stderr = "gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)"
+    if result.returncode == 124:
+        result.stderr = result.stderr.replace("gh command timed out", "gh api timed out", 1)
+    return result
 
 
 def run_gh_api_or_raise(
@@ -82,14 +111,42 @@ def run_gh_api_or_raise(
     return result
 
 
-def parse_json(result: subprocess.CompletedProcess[str], *, what: str) -> tuple[Any, str]:
-    """Parse a REST result using the shared bounded diagnostic format."""
+def parse_json(
+    result: subprocess.CompletedProcess[str],
+    *,
+    what: str,
+    allow_concatenated: bool = False,
+) -> tuple[Any, str]:
+    """Parse a CLI result using the shared bounded diagnostic format.
+
+    ``gh api --paginate`` on older GitHub CLI versions emits one JSON page
+    after another because it does not support ``--slurp``.  Callers that need
+    the equivalent slurped result can opt into concatenated-document parsing;
+    the default remains strict single-document JSON.
+    """
     if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+        detail = result.stderr.strip() or result.stdout.strip()
+        detail = detail or f"gh api exited with code {result.returncode}"
         return None, f"{what} failed: {detail}"
     try:
         return json.loads(result.stdout), ""
     except json.JSONDecodeError as exc:
+        if allow_concatenated:
+            decoder = json.JSONDecoder()
+            values: list[Any] = []
+            cursor = 0
+            try:
+                while cursor < len(result.stdout):
+                    while cursor < len(result.stdout) and result.stdout[cursor].isspace():
+                        cursor += 1
+                    if cursor >= len(result.stdout):
+                        break
+                    value, cursor = decoder.raw_decode(result.stdout, cursor)
+                    values.append(value)
+            except json.JSONDecodeError:
+                values = []
+            if len(values) > 1:
+                return values, ""
         snippet = result.stdout.strip()[:200]
         return None, f"{what} returned invalid JSON: {exc}; stdout snippet: {snippet!r}"
 

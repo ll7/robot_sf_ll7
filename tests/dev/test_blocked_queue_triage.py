@@ -205,8 +205,8 @@ def test_fetch_blocked_issues_excludes_pull_requests_and_flattens_pages() -> Non
     )
 
     assert [row["number"] for row in rows] == [1]
-    assert calls[0][0:3] == ["api", "--paginate", "--slurp"]
-    assert calls[0][3] == ("repos/owner/repo/issues?state=open&labels=state%3Ablocked&per_page=100")
+    assert calls[0][0:2] == ["api", "--paginate"]
+    assert calls[0][2] == ("repos/owner/repo/issues?state=open&labels=state%3Ablocked&per_page=100")
 
 
 def test_fetch_blocked_issues_rejects_invalid_issue_number() -> None:
@@ -312,6 +312,21 @@ def test_malformed_inventory_fails_closed() -> None:
         triage._fetch_blocked_issues(
             repo="owner/repo", label="state:blocked", limit=10, runner=runner
         )
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (CompletedProcess(["api"], 1, "", "permission denied"), "permission denied"),
+        (CompletedProcess(["api"], 0, "not json", ""), "returned invalid JSON"),
+    ],
+)
+def test_shared_transport_failures_translate_to_triage_errors(
+    result: CompletedProcess[str], expected: str
+) -> None:
+    """The shared parser remains behind the established TriageError boundary."""
+    with pytest.raises(triage.TriageError, match=expected):
+        triage._json_result(result, operation="issue inventory")
 
 
 def test_timestamp_parser_normalizes_utc() -> None:

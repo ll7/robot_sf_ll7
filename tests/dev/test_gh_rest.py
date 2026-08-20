@@ -8,7 +8,13 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.dev._gh_rest import as_str, parse_json, run_gh_api, run_gh_api_or_raise
+from scripts.dev._gh_rest import (
+    as_str,
+    parse_json,
+    run_gh_api,
+    run_gh_api_or_raise,
+    run_gh_command,
+)
 
 
 def _completed(*, stdout: str = "{}") -> subprocess.CompletedProcess[str]:
@@ -61,6 +67,41 @@ def test_run_gh_api_get_does_not_invent_stdin() -> None:
     assert "input" not in mock_run.call_args.kwargs
 
 
+def test_run_gh_command_preserves_argv_stdin_and_timeout() -> None:
+    """Generic GitHub CLI commands use the same bounded no-shell transport."""
+    with patch("scripts.dev._gh_rest.subprocess.run", return_value=_completed()) as mock_run:
+        result = run_gh_command(
+            ["api", "graphql", "-f", "query=query"],
+            '{"variables": {}}',
+            timeout=7,
+        )
+
+    assert result.returncode == 0
+    assert mock_run.call_args.args[0] == ["gh", "api", "graphql", "-f", "query=query"]
+    assert mock_run.call_args.kwargs["input"] == '{"variables": {}}'
+    assert mock_run.call_args.kwargs["timeout"] == 7
+    assert mock_run.call_args.kwargs["check"] is False
+    assert mock_run.call_args.kwargs.get("shell", False) is False
+
+
+@pytest.mark.parametrize(
+    ("side_effect", "expected_code", "expected_text"),
+    [
+        (FileNotFoundError("gh"), 127, "gh CLI not found"),
+        (subprocess.TimeoutExpired(cmd=["gh", "api"], timeout=4), 124, "timed out after 4"),
+    ],
+)
+def test_run_gh_command_normalizes_process_failures(
+    side_effect: BaseException, expected_code: int, expected_text: str
+) -> None:
+    """Generic command callers receive deterministic missing-CLI/timeout results."""
+    with patch("scripts.dev._gh_rest.subprocess.run", side_effect=side_effect):
+        result = run_gh_command(["api", "graphql"], timeout=4)
+
+    assert result.returncode == expected_code
+    assert expected_text in result.stderr
+
+
 @pytest.mark.parametrize(
     ("side_effect", "expected_code", "expected_text"),
     [
@@ -98,6 +139,32 @@ def test_shared_json_and_string_normalization_keep_existing_contract() -> None:
     assert as_str(0) == "0"
 
 
+def test_parse_json_normalizes_concatenated_paginated_pages_when_requested() -> None:
+    """Older ``gh`` versions emit one JSON page per document without slurp."""
+    result = _completed(stdout='[{"number": 1}]\n[{"number": 2}]\n')
+
+    data, error = parse_json(result, what="paged issues", allow_concatenated=True)
+
+    assert data == [[{"number": 1}], [{"number": 2}]]
+    assert error == ""
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "stderr", "expected"),
+    [(1, "API detail", "", "API detail"), (0, "not json", "", "returned invalid JSON")],
+)
+def test_parse_json_preserves_nonzero_diagnostics_and_malformed_json(
+    returncode: int, stdout: str, stderr: str, expected: str
+) -> None:
+    """Non-zero and empty/malformed results remain explicit and fail closed."""
+    result = subprocess.CompletedProcess(["gh", "api"], returncode, stdout=stdout, stderr=stderr)
+
+    data, error = parse_json(result, what="issue inventory")
+
+    assert data is None
+    assert expected in error
+
+
 @pytest.mark.parametrize(
     "relative_path",
     [
@@ -107,6 +174,8 @@ def test_shared_json_and_string_normalization_keep_existing_contract() -> None:
         "scripts/dev/gh_pr_review_rest.py",
         "scripts/dev/gh_pr_body_rest.py",
         "scripts/dev/open_issue_closure_audit.py",
+        "scripts/dev/blocked_queue_triage.py",
+        "scripts/dev/blocked_queue_watcher.py",
     ],
 )
 def test_rest_tools_import_shared_transport_without_local_duplicates(relative_path: str) -> None:
@@ -114,3 +183,8 @@ def test_rest_tools_import_shared_transport_without_local_duplicates(relative_pa
     source = (Path(__file__).parents[2] / relative_path).read_text(encoding="utf-8")
     assert "scripts.dev._gh_rest" in source
     assert "def _gh_api" not in source
+    if relative_path in {
+        "scripts/dev/blocked_queue_triage.py",
+        "scripts/dev/blocked_queue_watcher.py",
+    }:
+        assert "subprocess.run" not in source

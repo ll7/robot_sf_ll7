@@ -88,7 +88,7 @@ def _metric(
     return row
 
 
-def _distance_values(rows: Sequence[Mapping[str, Any]]) -> list[float]:
+def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bool]:
     """Extract one conservative ground-truth distance per executed action.
 
     The diagnostics producer records the distance before and after each action.
@@ -101,15 +101,20 @@ def _distance_values(rows: Sequence[Mapping[str, Any]]) -> list[float]:
         One finite distance per row that contains at least one distance.
     """
     values: list[float] = []
+    malformed = False
     for row in rows:
-        row_values = [
-            value
-            for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance")
-            if (value := _finite_number(row.get(key))) is not None
-        ]
+        row_values: list[float] = []
+        for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance"):
+            if key not in row or row[key] is None:
+                continue
+            value = _finite_number(row[key])
+            if value is None:
+                malformed = True
+            else:
+                row_values.append(value)
         if row_values:
             values.append(min(row_values))
-    return values
+    return values, malformed
 
 
 def _boolean_values(rows: Sequence[Mapping[str, Any]], field: str) -> tuple[list[bool], bool]:
@@ -135,20 +140,31 @@ def _optional_boolean(mapping: Mapping[str, Any], field: str) -> tuple[bool | No
     return (value, False) if isinstance(value, bool) else (None, True)
 
 
-def _action_values(rows: Sequence[Mapping[str, Any]]) -> np.ndarray:
+def _action_values(rows: Sequence[Mapping[str, Any]]) -> tuple[np.ndarray, bool]:
     """Extract finite two-channel actions, preferring environment actions.
 
     Returns:
-        An ``(n, 2)`` array, or an empty array when no action is usable.
+        An ``(n, 2)`` array, or an empty array when no action is usable, and a
+        malformed-input flag.
     """
     actions: list[list[float]] = []
+    malformed = False
     for row in rows:
-        raw = row.get("env_action", row.get("policy_command"))
+        raw = row.get("env_action")
+        if raw is None:
+            raw = row.get("policy_command")
         if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
             values = [_finite_number(item) for item in raw]
             if len(values) >= 2 and values[0] is not None and values[1] is not None:
                 actions.append([values[0], values[1]])
-    return np.asarray(actions, dtype=float).reshape(-1, 2) if actions else np.empty((0, 2))
+            else:
+                malformed = True
+        else:
+            malformed = True
+    return (
+        np.asarray(actions, dtype=float).reshape(-1, 2) if actions else np.empty((0, 2)),
+        malformed,
+    )
 
 
 def _observation_contract(
@@ -165,47 +181,60 @@ def _observation_contract(
         A condition and observation-provenance mapping.
     """
     rows = _trace_rows(trace)
-    classes = {
-        str(_mapping(row.get("observed_observation")).get("evidence_class"))
-        for row in rows
-        if _mapping(row.get("observed_observation")).get("evidence_class") is not None
-    }
-    profiles = sorted(
-        {
-            str(_mapping(row.get("observed_observation")).get("noise_profile"))
-            for row in rows
-            if _mapping(row.get("observed_observation")).get("noise_profile") is not None
-        }
-    )
+    classes: set[str] = set()
+    profiles: set[str] = set()
+    malformed_rows = False
+    for row in rows:
+        observed = row.get("observed_observation")
+        if not isinstance(observed, Mapping):
+            malformed_rows = True
+            continue
+        evidence_class = observed.get("evidence_class")
+        noise_profile = observed.get("noise_profile")
+        if not isinstance(evidence_class, str) or not evidence_class.strip():
+            malformed_rows = True
+        else:
+            classes.add(evidence_class)
+        if not isinstance(noise_profile, str) or not noise_profile.strip():
+            malformed_rows = True
+        else:
+            profiles.add(noise_profile)
     if classes == {"ideal_state"}:
-        status = "available"
         condition = CONDITION_IDEAL
     elif classes == {"perception_limited"}:
-        status = "available"
         condition = CONDITION_SENSOR
     else:
-        status = "unavailable"
         condition = "unknown"
+    status = "available" if not malformed_rows and condition != "unknown" else "unavailable"
     mismatch_reason: str | None = None
     if expected_condition is not None and condition != expected_condition:
-        status = "unavailable"
         mismatch_reason = (
             f"observed observation contract {condition!r} does not match the paired "
             f"slot {expected_condition!r}; the pair is not a valid contrast"
         )
+        status = "unavailable"
+    malformed_reason = (
+        "each trace row must expose a typed observed observation evidence class and noise profile"
+        if malformed_rows
+        else None
+    )
     config = _mapping(trace.get("observation_perturbation_config"))
     return {
         "condition": condition,
         "expected_condition": expected_condition,
         "condition_binding": (
             "unavailable"
-            if mismatch_reason
+            if mismatch_reason or malformed_reason
             else ("matched" if expected_condition is not None else "not_checked")
         ),
-        **({"reason": mismatch_reason} if mismatch_reason else {}),
+        **(
+            {"reason": mismatch_reason or malformed_reason}
+            if mismatch_reason or malformed_reason
+            else {}
+        ),
         "status": status,
         "evidence_classes": sorted(classes),
-        "noise_profiles": profiles,
+        "noise_profiles": sorted(profiles),
         "config": dict(config),
         "observed_actor_count": {
             "min": min(
@@ -387,9 +416,19 @@ def _condition_metrics(
             or (horizon_reached and not bool(success))
         )
     )
-    distances = _distance_values(rows)
-    actions = _action_values(rows)
+    distances, malformed_distances = _distance_values(rows)
+    actions, malformed_actions = _action_values(rows)
     boolean_reason = "outcome flags must be booleans when present"
+    distance_reason = (
+        "distance fields must be finite numbers when present"
+        if malformed_distances
+        else "ground-truth simulator distance is not present"
+    )
+    action_reason = (
+        "action fields must contain at least two finite numeric channels"
+        if malformed_actions
+        else "at least three finite action rows are required"
+    )
     metric_rows = {
         "success_rate": row(
             value=success,
@@ -406,44 +445,48 @@ def _condition_metrics(
             reason=boolean_reason if collision is None else None,
         ),
         "minimum_human_distance_m": row(
-            value=min(distances) if distances else None,
+            value=min(distances) if distances and not malformed_distances else None,
             units="m",
             source="trace.ground_truth_simulator_distance",
             mapping="qualified_proxy",
-            reason="ground-truth simulator distance is not present",
+            reason=distance_reason,
         ),
         "personal_space_compliance_rate": row(
             value=(
                 float(np.mean(np.asarray(distances) >= personal_space_radius_m))
-                if distances
+                if distances and not malformed_distances
                 else None
             ),
             units="fraction",
             source="trace.ground_truth_simulator_distance",
             mapping="qualified_proxy",
-            reason="ground-truth simulator distance is not present",
+            reason=distance_reason,
         ),
         "angular_jerk_rad_s3": row(
             value=(
                 float(np.mean(np.abs(np.diff(actions[:, 1], n=2))) / dt_s**2)
-                if actions.shape[0] >= 3
+                if actions.shape[0] >= 3 and not malformed_actions
                 else None
             ),
             units="rad/s^3",
             source="trace.env_action[1]",
             mapping="qualified_proxy",
-            reason="at least three finite action rows are required",
+            reason=action_reason,
         ),
         "action_smoothness_l2": row(
             value=(
                 float(np.mean(np.linalg.norm(np.diff(actions, axis=0), axis=1)))
-                if actions.shape[0] >= 2
+                if actions.shape[0] >= 2 and not malformed_actions
                 else None
             ),
             units="action_units/step",
             source="trace.env_action",
             mapping="exact_local",
-            reason="at least two finite action rows are required",
+            reason=(
+                "action fields must contain at least two finite numeric channels"
+                if malformed_actions
+                else "at least two finite action rows are required"
+            ),
         ),
         "timeout_rate": row(
             value=(

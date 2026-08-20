@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
+import scripts.benchmark.run_calf_legnav_comparator_issue_7318 as comparator_runner
 from robot_sf.benchmark.calf_legnav_comparator import (
     build_calf_legnav_comparator_report,
     canonical_config_digest,
@@ -135,6 +137,74 @@ def test_malformed_outcome_flags_are_unavailable_not_truthy() -> None:
         assert metrics[name]["status"] == "unavailable"
         assert metrics[name]["value"] is None
         assert metrics[name]["reason"] == "outcome flags must be booleans when present"
+
+
+def test_missing_observation_contract_row_blocks_the_condition() -> None:
+    """A partial evidence-class trace cannot become an available paired condition."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    del sensor["steps"][1]["observed_observation"]
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["sensor_limited"]
+    assert condition["status"] == "blocked"
+    assert condition["observation_contract"]["status"] == "unavailable"
+    assert "typed observed observation" in condition["observation_contract"]["reason"]
+    assert report["status"] == "blocked"
+
+
+def test_malformed_metric_fields_do_not_produce_partial_values() -> None:
+    """A malformed distance or action row invalidates the affected metric."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["steps"][1]["min_robot_ped_distance"] = "not-a-distance"
+    sensor["steps"][1]["env_action"] = ["not-an-action", 0.2]
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    perfect_metrics = report["conditions"]["perfect_perception"]["metrics"]
+    sensor_metrics = report["conditions"]["sensor_limited"]["metrics"]
+    for name in ("minimum_human_distance_m", "personal_space_compliance_rate"):
+        assert perfect_metrics[name]["status"] == "unavailable"
+        assert perfect_metrics[name]["value"] is None
+        assert perfect_metrics[name]["reason"] == (
+            "distance fields must be finite numbers when present"
+        )
+    for name in ("angular_jerk_rad_s3", "action_smoothness_l2"):
+        assert sensor_metrics[name]["status"] == "unavailable"
+        assert sensor_metrics[name]["value"] is None
+        assert sensor_metrics[name]["reason"] == (
+            "action fields must contain at least two finite numeric channels"
+        )
+
+
+def test_runner_materializes_blocked_report_for_malformed_trace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A malformed runner trace becomes a schema-valid blocked handoff."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    monkeypatch.setattr(
+        comparator_runner,
+        "_run_condition",
+        lambda *args, **kwargs: ({"candidate": "malformed"}, None),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_calf_legnav_comparator_issue_7318.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert comparator_runner.main() == 2
+    report = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert report["status"] == "blocked"
+    assert report["runner_errors"][0]["condition"] == "paired"
 
 
 def test_durable_smoke_config_matches_config_schema() -> None:

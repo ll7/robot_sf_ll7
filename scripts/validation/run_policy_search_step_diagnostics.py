@@ -349,29 +349,61 @@ def _fallback_status_verdict(value: Any) -> bool | None:
     return None
 
 
+def _fallback_field_signals(key: Any, value: Any) -> tuple[list[bool], bool]:
+    """Return fallback signals and malformed state for one known diagnostic field."""
+    if key in {
+        "fallback_or_degraded",
+        "fallback_used",
+        "fallback_triggered",
+        "fallback_applied",
+        "reported_fallback_or_degraded",
+    }:
+        return ([value], False) if isinstance(value, bool) else ([], value is not None)
+    if key in {"fallback_degraded_status", "load_status"}:
+        if isinstance(value, str):
+            status_verdict = _fallback_status_verdict(value)
+            neutral_statuses = {
+                "not_run",
+                "not_attempted",
+                "not_requested",
+                "unavailable",
+                "unknown",
+            }
+            if status_verdict is not None:
+                return [status_verdict], False
+            return [], value.strip().lower() not in neutral_statuses
+        return [], value is not None and not isinstance(value, dict)
+    if key in {"fallback_count", "fallback_stop_count", "fallback_step_count"}:
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            return [value > 0], False
+        return [], value is not None
+    return [], False
+
+
+def _collect_fallback_signals(value: Any) -> tuple[list[bool], bool]:
+    """Collect explicit fallback signals recursively from structured diagnostics."""
+    if not isinstance(value, dict):
+        return [], False
+    verdicts: list[bool] = []
+    malformed = False
+    for key, item in value.items():
+        field_verdicts, field_malformed = _fallback_field_signals(key, item)
+        verdicts.extend(field_verdicts)
+        malformed = malformed or field_malformed
+        nested_verdicts, nested_malformed = _collect_fallback_signals(item)
+        verdicts.extend(nested_verdicts)
+        malformed = malformed or nested_malformed
+    return verdicts, malformed
+
+
 def _planner_fallback_verdict(summary: dict[str, Any]) -> bool | None:
-    """Resolve a fallback verdict only from explicit structured diagnostics."""
-    direct = summary.get("fallback_or_degraded")
-    if isinstance(direct, bool):
-        return direct
-
-    status_verdict = _fallback_status_verdict(summary.get("fallback_degraded_status"))
-    if status_verdict is not None:
-        return status_verdict
-
-    fallback_count = summary.get("fallback_count")
-    if isinstance(fallback_count, (int, float)) and not isinstance(fallback_count, bool):
-        numeric_count = float(fallback_count)
-        if np.isfinite(numeric_count) and numeric_count >= 0.0:
-            return numeric_count > 0.0
-
-    checkpoint = summary.get("checkpoint_provenance")
-    if isinstance(checkpoint, dict):
-        triggered = checkpoint.get("fallback_triggered")
-        if isinstance(triggered, bool):
-            return triggered
-        return _fallback_status_verdict(checkpoint.get("load_status"))
-    return None
+    """Resolve nested fallback diagnostics without allowing contradictory clear flags."""
+    verdicts, malformed = _collect_fallback_signals(summary)
+    if malformed:
+        return None
+    if any(verdicts):
+        return True
+    return False if verdicts else None
 
 
 def parse_args() -> argparse.Namespace:

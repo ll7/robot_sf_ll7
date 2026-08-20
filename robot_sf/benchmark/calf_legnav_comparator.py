@@ -89,18 +89,50 @@ def _metric(
 
 
 def _distance_values(rows: Sequence[Mapping[str, Any]]) -> list[float]:
-    """Extract finite ground-truth robot-human distances from trace rows.
+    """Extract one conservative ground-truth distance per executed action.
+
+    The diagnostics producer records the distance before and after each action.
+    Those observations overlap between adjacent rows, so treating both fields
+    as independent samples would double-weight interior states in compliance
+    rates. The per-action representative is the minimum finite distance in the
+    interval; if only one field is present, that field is used.
 
     Returns:
-        Finite distances in trace order.
+        One finite distance per row that contains at least one distance.
     """
     values: list[float] = []
     for row in rows:
-        for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance"):
-            value = _finite_number(row.get(key))
-            if value is not None:
-                values.append(value)
+        row_values = [
+            value
+            for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance")
+            if (value := _finite_number(row.get(key))) is not None
+        ]
+        if row_values:
+            values.append(min(row_values))
     return values
+
+
+def _boolean_values(rows: Sequence[Mapping[str, Any]], field: str) -> tuple[list[bool], bool]:
+    """Return boolean field values and whether any present value is malformed."""
+    values: list[bool] = []
+    malformed = False
+    for row in rows:
+        if field not in row:
+            continue
+        value = row[field]
+        if isinstance(value, bool):
+            values.append(value)
+        else:
+            malformed = True
+    return values, malformed
+
+
+def _optional_boolean(mapping: Mapping[str, Any], field: str) -> tuple[bool | None, bool]:
+    """Return one optional boolean and whether a present value is malformed."""
+    if field not in mapping:
+        return None, False
+    value = mapping[field]
+    return (value, False) if isinstance(value, bool) else (None, True)
 
 
 def _action_values(rows: Sequence[Mapping[str, Any]]) -> np.ndarray:
@@ -327,35 +359,51 @@ def _condition_metrics(
             reason=None if value is not None else (reason or "required trace field unavailable"),
         )
 
-    success_values = [bool(row_item.get("is_success")) for row_item in rows]
+    success_values, malformed_row_success = _boolean_values(rows, "is_success")
     done_info = _mapping(trace.get("done_info"))
-    success = bool(done_info.get("success")) or any(success_values)
-    collision = any(
-        bool(row_item.get(key))
-        for row_item in rows
-        for key in ("is_pedestrian_collision", "is_obstacle_collision", "is_robot_collision")
+    done_success, malformed_done_success = _optional_boolean(done_info, "success")
+    success = (
+        None
+        if malformed_row_success or malformed_done_success
+        else float(bool(done_success) or any(success_values))
     )
+    collision_values: list[bool] = []
+    malformed_collision = False
+    for key in ("is_pedestrian_collision", "is_obstacle_collision", "is_robot_collision"):
+        values, malformed = _boolean_values(rows, key)
+        collision_values.extend(values)
+        malformed_collision = malformed_collision or malformed
+    collision = None if malformed_collision else float(any(collision_values))
     horizon = _finite_number(trace.get("horizon"))
     horizon_reached = horizon is not None and horizon > 0.0 and len(rows) >= int(horizon)
+    row_truncated_values, malformed_row_truncated = _boolean_values(rows, "truncated")
+    done_truncated, malformed_done_truncated = _optional_boolean(done_info, "truncated")
     truncated = (
-        bool(done_info.get("truncated"))
-        or any(bool(row_item.get("truncated")) for row_item in rows)
-        or (horizon_reached and not success)
+        None
+        if success is None or malformed_row_truncated or malformed_done_truncated
+        else float(
+            bool(done_truncated)
+            or any(row_truncated_values)
+            or (horizon_reached and not bool(success))
+        )
     )
     distances = _distance_values(rows)
     actions = _action_values(rows)
+    boolean_reason = "outcome flags must be booleans when present"
     metric_rows = {
         "success_rate": row(
-            value=float(success),
+            value=success,
             units="fraction",
             source="trace.done_info.success|trace.is_success",
             mapping="exact_local",
+            reason=boolean_reason if success is None else None,
         ),
         "collision_rate": row(
-            value=float(collision),
+            value=collision,
             units="fraction",
             source="trace.collision_flags",
             mapping="exact_local",
+            reason=boolean_reason if collision is None else None,
         ),
         "minimum_human_distance_m": row(
             value=min(distances) if distances else None,
@@ -398,10 +446,15 @@ def _condition_metrics(
             reason="at least two finite action rows are required",
         ),
         "timeout_rate": row(
-            value=float(truncated and not success),
+            value=(
+                float(bool(truncated) and not bool(success))
+                if truncated is not None and success is not None
+                else None
+            ),
             units="fraction",
             source="trace.done_info.truncated|trace.truncated|trace.horizon",
             mapping="exact_local",
+            reason=boolean_reason if truncated is None else None,
         ),
     }
     return metric_rows

@@ -58,6 +58,12 @@ The report keeps local and proxy semantics explicit:
 | Action smoothness | successive two-channel action difference | exact local |
 | Timeout rate | trace termination fields | exact local |
 
+For each executed action, the distance metrics use the conservative minimum of
+the available pre-step and post-step ground-truth distances. This keeps the
+shared state between adjacent rows from being counted twice while preserving
+within-step clearance violations. Outcome flags must be JSON booleans; malformed
+flags are reported as unavailable rather than coerced into results.
+
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`
 or `unavailable` fields rather than fabricated zeros.

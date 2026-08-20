@@ -104,6 +104,39 @@ def test_paired_report_preserves_observation_and_proxy_boundaries() -> None:
     assert report["provenance"]["config_digest"] == canonical_config_digest(config)
 
 
+def test_distance_metrics_use_one_conservative_sample_per_action() -> None:
+    """Pre/post distances in one row do not double-weight a control interval."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    for trace in (perfect, sensor):
+        for row in trace["steps"]:
+            row["min_robot_ped_distance"] = 2.0
+            row["post_step_min_robot_ped_distance"] = 1.0
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+    metrics = report["conditions"]["perfect_perception"]["metrics"]
+
+    assert metrics["minimum_human_distance_m"]["value"] == 1.0
+    assert metrics["personal_space_compliance_rate"]["value"] == 0.0
+
+
+def test_malformed_outcome_flags_are_unavailable_not_truthy() -> None:
+    """Stringified booleans cannot silently become positive outcome metrics."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["steps"][0]["is_success"] = "false"
+    perfect["steps"][0]["is_pedestrian_collision"] = "false"
+    perfect["done_info"]["truncated"] = "false"
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+    metrics = report["conditions"]["perfect_perception"]["metrics"]
+
+    for name in ("success_rate", "collision_rate", "timeout_rate"):
+        assert metrics[name]["status"] == "unavailable"
+        assert metrics[name]["value"] is None
+        assert metrics[name]["reason"] == "outcome flags must be booleans when present"
+
+
 def test_durable_smoke_config_matches_config_schema() -> None:
     """The checked-in fixture config is itself schema-valid and reproducible."""
     config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"

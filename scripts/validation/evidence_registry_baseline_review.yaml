@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 7322
-latest_reviewed_date: 2026-08-17
+latest_reconciliation_issue: 7046
+latest_reviewed_date: 2026-08-20
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 423
-refreshed_baseline_files_with_findings: 94
+refreshed_baseline_total_findings: 429
+refreshed_baseline_files_with_findings: 95
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active

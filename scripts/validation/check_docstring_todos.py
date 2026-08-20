@@ -133,6 +133,16 @@ def _parse_changed_line_ranges(diff_text: str) -> dict[str, list[tuple[int, int]
     return {k: v for k, v in ranges.items() if v}
 
 
+def _no_changed_python_files_message() -> str:
+    """Describe an empty committed-HEAD Python diff truthfully.
+
+    Interim readiness prints dirty paths separately; this checker intentionally
+    inspects only committed diff hunks, so the message must not imply that a
+    dirty implementation tree was included in the scan.
+    """
+    return "No committed changed Python files detected."
+
+
 def _matches_any(path_str: str, patterns: Iterable[str]) -> bool:
     """Check whether a path matches any glob pattern.
 
@@ -635,7 +645,7 @@ def _run_diff_mode(args: argparse.Namespace, repo_root: Path) -> int:
     diff_text = _diff_text(args.base, repo_root)
     changed = _parse_changed_line_ranges(diff_text)
     if not changed:
-        print("No changed Python files detected.")
+        print(_no_changed_python_files_message())
         return 0
 
     warnings: list[str] = []

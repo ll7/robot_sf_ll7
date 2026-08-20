@@ -67,3 +67,29 @@ claim state fails closed with `not_admitted` and `write_attempted: false`.
 The low-level `issue_claim.py acquire` command is rejected by default. Maintainer incident or
 forensic recovery must explicitly provide `--manual-override`, `--override-actor`,
 `--override-reason`, and `--no-scientific-claim`; this path is not ordinary autonomous dispatch.
+
+## Blocker transition reconciliation
+
+Queue snapshots and blocked receipts may also expose a read-only
+`blocker_transition_plan.v1` projection from
+[`blocker_transition.py`](../../scripts/dev/blocker_transition.py). It preserves distinct blocker
+classes, exact owners, source and freshness keys, required child or PR links, and secondary
+blockers; it is not a numeric priority or a second dependency resolver.
+
+Operators and autonomous workers must keep the following boundary:
+
+- `report-only` and `plan` never write. A ruling must carry an exact token and carrier, and a
+  dependency link alone never proves satisfaction.
+- A valid ruling without an executable bounded child remains `ruled_pending_child`. A satisfied
+  dependency still requires a fresh `issue_implementability.v1` result before `state:ready` can be
+  proposed.
+- `apply` is exact-item only. It requires explicit authorization, an expected plan digest, an
+  observed issue body, live state/label/body compare-and-swap, and current source revalidation for
+  ruling, dependency, child, PR, or implementability observations. Concurrent drift aborts the
+  operation; no repository-wide apply mode exists.
+- Closed-item label cleanup remains delegated to `#7651`. No transition plan authorizes merge,
+  issue closure, compute, publication, evidence admission, release, or scientific claims.
+
+For an offline plan, use `uv run python scripts/dev/blocker_transition.py --issue <number>
+--issue-json <fixture> --mode plan`. An apply caller must additionally provide the exact digest,
+explicit authorization, and a current source projection through `--revalidated-sources-json`.

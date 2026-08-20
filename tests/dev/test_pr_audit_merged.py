@@ -86,6 +86,31 @@ def test_audit_fails_closed_for_open_pr() -> None:
     assert "is not merged" in result["error"]
 
 
+def test_audit_accepts_rest_closed_state_when_merged() -> None:
+    """The REST pulls endpoint reports merged PRs as state=closed with merged_at set."""
+    with patch(
+        "scripts.dev.pr_audit_merged._gh_api_get",
+        return_value=_proc(stdout=_merged_payload(state="closed")),
+    ):
+        result = audit_merged_pr(7547)
+
+    assert result["status"] == "ok"
+    assert result["audit"]["state"] == "closed"
+    assert result["audit"]["merge_commit_sha"] == MERGE_SHA
+
+
+def test_audit_fails_closed_for_closed_without_merge() -> None:
+    """A closed-but-unmerged PR must not receive a merge audit disposition."""
+    with patch(
+        "scripts.dev.pr_audit_merged._gh_api_get",
+        return_value=_proc(stdout=_merged_payload(state="closed", merged_at=None)),
+    ):
+        result = audit_merged_pr(7547)
+
+    assert result["status"] == "error"
+    assert "is not merged" in result["error"]
+
+
 def test_audit_fails_closed_on_transport_error() -> None:
     """An unreadable PR object is an error, never an audit disposition."""
     with patch(

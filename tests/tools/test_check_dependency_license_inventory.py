@@ -208,7 +208,11 @@ def test_inventory_records_profiles_sources_and_deterministic_output(tmp_path: P
     _write_inputs(tmp_path)
     distributions = _resolved_distributions(
         ("robot_sf", "0.0.0.dev0", {"License_Expression": "GPL-3.0-only"}),
-        ("demo-package", "1.0.0", {"License_Expression": "MIT OR Apache-2.0"}),
+        (
+            "demo-package",
+            "1.0.0",
+            {"License_Expression": "BSD-2-Clause AND Apache-2.0 WITH LLVM-exception"},
+        ),
     )
 
     first = build_inventory(tmp_path, distributions=distributions)

@@ -60,7 +60,11 @@ quota exhaustion mid-batch.
 
 Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work when available.
 Use REST (`gh api repos/...`) for ordinary issue/PR/label/comment operations and local `git` for
-repository state. Reserve GraphQL for Projects v2 writes and review-thread operations.
+repository state. Reserve GraphQL for Projects v2 reads/writes and review-thread operations. The
+unscoped score sync uses a cursor-paginated Project item read so a project larger than the `gh
+project item-list` cap is accumulated and validated before any score calculation or write. Its
+`--limit` value is a per-page bound; completion is decided from explicit cursor metadata, never
+from a short page.
 Keep `scripts/tools/project_priority_score.py` as the deterministic `gh` fallback for scripted
 batch sync and local/manual score recomputation.
 
@@ -234,6 +238,9 @@ Useful flags:
 - `--dry-run` computes scores without writing them back
 - `--issue-number <n>` updates one issue only
 - `--skip-status Done` skips completed work
+
+Successful unscoped sync output includes `item_fetch.pages` and
+`item_fetch.accumulated_items`, which provide a compact read-completeness record for the run.
 
 This helper is intentionally `gh`-based even when interactive GitHub work is MCP-first.
 

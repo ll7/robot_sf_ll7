@@ -18,6 +18,7 @@ from scripts.tools.project_priority_score import (
     REQUIRED_NUMBER_FIELDS,
     GhProjectClient,
     MissingProjectScopeError,
+    ProjectItemFetchStats,
     ScoreInputs,
     SyncOptions,
     build_previews,
@@ -62,6 +63,8 @@ class FakeGhProjectClient:
         self.updated_numbers: list[tuple[str, str, str, float]] = []
         self.field_list_calls = 0
         self.targeted_limits: list[int] = []
+        self.paginated_limits: list[int] = []
+        self.paginated_project_ids: list[str | None] = []
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return a stable fake project ID for update calls."""
@@ -84,6 +87,20 @@ class FakeGhProjectClient:
         """Return project items up to the requested limit."""
 
         return self._items[:limit]
+
+    def item_list_paginated(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        project_id: str | None = None,
+        limit: int,
+    ) -> list[dict]:
+        """Return the fake's complete cursor-paginated item accumulation."""
+
+        self.paginated_limits.append(limit)
+        self.paginated_project_ids.append(project_id)
+        return list(self._items)
 
     def item_list_until_issue(
         self,
@@ -275,6 +292,113 @@ def test_sync_scores_ensures_fields_and_writes_updates() -> None:
         ("item-699", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
     ]
     assert client.field_list_calls == 2
+
+
+def test_sync_scores_unscoped_uses_paginated_item_owner() -> None:
+    """Unscoped sync must use explicit cursor completion before any score write."""
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(699, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=1000,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=None,
+            dry_run=False,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert [preview.issue_number for preview in previews] == [699]
+    assert client.paginated_limits == [1000]
+    assert client.paginated_project_ids == ["project-id"]
+    assert client.updated_numbers
+
+
+def test_sync_scores_does_not_write_when_paginated_read_fails() -> None:
+    """A later item-read failure happens before score previews or writes."""
+
+    class LatePaginationFailureClient(FakeGhProjectClient):
+        """Fail while completing the logical item scan."""
+
+        def item_list_paginated(self, **kwargs: object) -> list[dict]:
+            raise RuntimeError("second page failed")
+
+    client = LatePaginationFailureClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(700, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    with pytest.raises(RuntimeError, match="second page failed"):
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+            ),
+        )
+
+    assert client.updated_numbers == []
+
+
+def test_sync_scores_unscoped_dry_run_does_not_write() -> None:
+    """A complete unscoped dry run computes previews without item-edit writes."""
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(701, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=1000,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=None,
+            dry_run=True,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert [preview.issue_number for preview in previews] == [701]
+    assert client.updated_numbers == []
 
 
 def test_sync_scores_skips_malformed_issue_numbers_when_indexing_items() -> None:
@@ -655,6 +779,32 @@ def test_main_non_empty_scope_failure_remains_fail_closed(
 
     with pytest.raises(MissingProjectScopeError):
         main(["sync"])
+
+
+def test_main_reports_complete_item_fetch_stats(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Successful sync output exposes the cursor-scan completeness evidence."""
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(702, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+    client.last_item_fetch_stats = ProjectItemFetchStats(pages=32, accumulated_items=3137)
+    monkeypatch.setattr(project_priority_score, "GhProjectClient", lambda: client)
+
+    assert main(["sync", "--dry-run", "--limit", "1000"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["item_fetch"] == {"pages": 32, "accumulated_items": 3137}
+    assert payload["items"][0]["issue_number"] == 702
 
 
 def test_main_quota_block_is_explicit_and_performs_no_project_writes(

@@ -12,6 +12,7 @@ import pytest
 
 from scripts.dev.issue_audit_core import build_audit_plan, classify_issue
 from scripts.dev.issue_completion_receipt import (
+    VERIFICATION_SCHEMA,
     admit_completion_receipt,
     build_receipt,
     compute_receipt_digest,
@@ -127,7 +128,7 @@ def _verification(receipt: dict[str, Any]) -> dict[str, Any]:
     """Build the minimal exact-head verification result consumed by admission."""
     delivery = receipt["delivery"]
     return {
-        "schema": "issue_completion_receipt_verification.v1",
+        "schema": VERIFICATION_SCHEMA,
         "ok": True,
         "receipt_digest": receipt["receipt_digest"],
         "base_sha": delivery["base_sha"],
@@ -238,6 +239,7 @@ def test_git_verifier_checks_exact_diff_and_pull_request_snapshot() -> None:
     )
 
     assert result["ok"] is True
+    assert result["schema"] == VERIFICATION_SCHEMA
     assert result["git"]["diff"] == receipt["diff"]
 
 
@@ -324,6 +326,34 @@ def test_admission_requires_independent_git_verification() -> None:
     assert pending["eligible"] is False
     assert "exact-head Git verification" in pending["reason"]
     assert accepted["eligible"] is True
+
+
+def test_admission_rejects_untrusted_or_mismatched_verification_evidence() -> None:
+    """A producer-shaped verification map cannot authorize completion by itself."""
+    receipt = _receipt()
+    verification = _verification(receipt)
+
+    missing_schema = copy.deepcopy(verification)
+    missing_schema.pop("schema")
+    rejected_schema = admit_completion_receipt(
+        {"receipt": receipt, "verification": missing_schema},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+    assert rejected_schema["eligible"] is False
+    assert "verification.schema" in rejected_schema["reason"]
+
+    mismatched_diff = copy.deepcopy(verification)
+    mismatched_diff["git"]["diff"] = {"changed_paths": [], "stat": {}}
+    rejected_diff = admit_completion_receipt(
+        {"receipt": receipt, "verification": mismatched_diff},
+        expected_repository="ll7/robot_sf_ll7",
+        expected_issue=7614,
+        issue_contract=CONTRACT,
+    )
+    assert rejected_diff["eligible"] is False
+    assert "Git diff" in rejected_diff["reason"]
 
 
 def test_issue_audit_withholds_close_without_receipt_and_accepts_verified_entry() -> None:

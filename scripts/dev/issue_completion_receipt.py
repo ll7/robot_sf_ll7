@@ -25,6 +25,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCHEMA = "issue_completion_receipt.v1"
+VERIFICATION_SCHEMA = "issue_completion_receipt_verification.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 SHA_RE = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -525,6 +526,8 @@ def admit_completion_receipt(  # noqa: C901 - close/promotion admission is fail-
     elif verification.get("ok") is not True:
         errors.append("exact-head Git verification did not succeed")
     else:
+        if verification.get("schema") != VERIFICATION_SCHEMA:
+            errors.append(f"verification.schema must be {VERIFICATION_SCHEMA!r}")
         delivery = receipt.get("delivery") if isinstance(receipt.get("delivery"), Mapping) else {}
         for field in ("receipt_digest", "base_sha", "head_sha", "branch"):
             expected = (
@@ -535,6 +538,8 @@ def admit_completion_receipt(  # noqa: C901 - close/promotion admission is fail-
         git_details = verification.get("git")
         if not isinstance(git_details, Mapping) or not isinstance(git_details.get("diff"), Mapping):
             errors.append("exact-head Git diff evidence is missing from verification")
+        elif git_details["diff"] != receipt.get("diff"):
+            errors.append("verification Git diff does not match the receipt diff")
     validation = receipt.get("validation")
     if isinstance(validation, list):
         disallowed = [
@@ -746,7 +751,7 @@ def verify_receipt_against_git(  # noqa: C901, PLR0912, PLR0913, PLR0915 - exact
     branch = delivery.get("branch")
     if not _is_sha(base_sha) or not _is_sha(head_sha) or not isinstance(branch, str):
         return {
-            "schema": SCHEMA,
+            "schema": VERIFICATION_SCHEMA,
             "ok": False,
             "errors": errors or ["delivery binding is malformed"],
             **details,
@@ -877,7 +882,7 @@ def verify_receipt_against_git(  # noqa: C901, PLR0912, PLR0913, PLR0915 - exact
     )
     errors.extend(error for error in admission["errors"] if error not in errors)
     return {
-        "schema": SCHEMA,
+        "schema": VERIFICATION_SCHEMA,
         "ok": not errors,
         "errors": errors,
         "receipt_digest": receipt.get("receipt_digest"),
@@ -950,7 +955,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         _dump(result)
         return 0 if result.get("ok") else 2
     except (OSError, ValueError, json.JSONDecodeError) as exc:
-        _dump({"schema": SCHEMA, "ok": False, "errors": [str(exc)]})
+        _dump(
+            {
+                "schema": VERIFICATION_SCHEMA if args.command == "verify" else SCHEMA,
+                "ok": False,
+                "errors": [str(exc)],
+            }
+        )
         return 2
 
 

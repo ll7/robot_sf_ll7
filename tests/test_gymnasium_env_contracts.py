@@ -106,6 +106,8 @@ def test_public_factories_adhere_to_gymnasium_step_reset_contract(
     supports_env_checker,
 ):
     """Run Gymnasium contract checks for public factories excluding image-specific render constraints."""
+    if factory in {make_pedestrian_env, make_multi_robot_env}:
+        pytest.importorskip("pygame")
     env = factory(**factory_kwargs)
     try:
         check_action_space(env.action_space)
@@ -138,6 +140,7 @@ def test_public_factories_adhere_to_gymnasium_step_reset_contract(
 @pytest.mark.base_sensitive
 def test_image_factory_smoke_path_keeps_gymnasium_tuple_shape():
     """Smoke test for image envs, which still need a focused manual check."""
+    pytest.importorskip("pygame")
     env = make_image_robot_env(config=RobotSimulationConfig(map_id="uni_campus_big"))
     try:
         assert isinstance(env.action_space, spaces.Space)

@@ -53,6 +53,76 @@ def test_builds_typed_schema_validated_six_card_atlas(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("cards", [None]),
+        ("cards", ["not a card"]),
+        ("source_refs", {"bad": {}}),
+    ],
+)
+def test_malformed_manifest_shapes_fail_closed(
+    tmp_path: Path,
+    field: str,
+    replacement: object,
+) -> None:
+    payload = _payload()
+    if field == "cards":
+        payload[field] = replacement
+    else:
+        payload["cards"][0][field] = replacement
+    malformed = tmp_path / f"malformed-{field}.json"
+    malformed.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(MechanismBoundaryAtlasError) as error:
+        build_atlas(malformed, repo_root=REPO_ROOT)
+
+    assert error.value.issues
+    assert "AttributeError" not in str(error.value)
+
+
+@pytest.mark.parametrize("field", ["digest_verified", "tracked"])
+def test_durable_source_provenance_flags_must_match_inspection(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    payload = json.loads(
+        (
+            REPO_ROOT / "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    payload["cards"][0]["source_refs"][0][field] = False
+    mutated = tmp_path / f"mutated-{field}.json"
+    mutated.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(MechanismBoundaryAtlasError) as error:
+        load_atlas(mutated, repo_root=REPO_ROOT)
+
+    assert any(
+        issue.path.endswith(f"/{field}") and "flag mismatch" in issue.message
+        for issue in error.value.issues
+    )
+
+
+def test_blocked_source_provenance_flags_must_remain_false(tmp_path: Path) -> None:
+    payload = json.loads(
+        (
+            REPO_ROOT / "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    payload["cards"][3]["source_refs"][0]["tracked"] = True
+    mutated = tmp_path / "mutated-blocked-source.json"
+    mutated.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(MechanismBoundaryAtlasError) as error:
+        load_atlas(mutated, repo_root=REPO_ROOT)
+
+    assert any(
+        issue.path.endswith("/tracked") and "expected False" in issue.message
+        for issue in error.value.issues
+    )
+
+
 def test_cards_preserve_the_full_issue_interpretation_contract() -> None:
     atlas = build_atlas(INPUT, repo_root=REPO_ROOT)
 

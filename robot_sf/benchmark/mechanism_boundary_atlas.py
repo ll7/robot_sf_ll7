@@ -305,6 +305,9 @@ def build_atlas(
             [AtlasValidationIssue("/", "expected object payload")],
             source=input_path,
         )
+    schema_issues = _schema_issues(payload)
+    if schema_issues:
+        raise MechanismBoundaryAtlasError(schema_issues, source=input_path)
     output_payload = _payload_with_verified_sources(payload, repo_root=repo_root)
     issues = validate_atlas_payload(output_payload, repo_root=repo_root)
     if issues:
@@ -727,6 +730,16 @@ def _source_issues(  # noqa: C901
             if not isinstance(path_value, str):
                 continue
             source_path = _safe_source_path(repo_root, path_value)
+            if status != "available":
+                issues.extend(
+                    _provenance_flag_issues(
+                        source,
+                        prefix,
+                        digest_verified=False,
+                        tracked=False,
+                    )
+                )
+                continue
             if source_path is None:
                 issues.append(
                     AtlasValidationIssue(
@@ -735,16 +748,28 @@ def _source_issues(  # noqa: C901
                     )
                 )
                 continue
-            if status != "available":
-                continue
+            expected_sha = source.get("sha256")
+            actual_tracked = _is_tracked(repo_root, path_value)
+            actual_digest_verified = (
+                source_path.is_file()
+                and isinstance(expected_sha, str)
+                and sha256_file(source_path) == expected_sha
+            )
+            issues.extend(
+                _provenance_flag_issues(
+                    source,
+                    prefix,
+                    digest_verified=actual_digest_verified,
+                    tracked=actual_tracked,
+                )
+            )
             if not source_path.is_file():
                 issues.append(AtlasValidationIssue(f"{prefix}/path", "available source is missing"))
                 continue
-            if not _is_tracked(repo_root, path_value):
+            if not actual_tracked:
                 issues.append(
                     AtlasValidationIssue(f"{prefix}/path", "available source is not tracked")
                 )
-            expected_sha = source.get("sha256")
             if isinstance(expected_sha, str):
                 actual_sha = sha256_file(source_path)
                 if actual_sha != expected_sha:
@@ -754,6 +779,35 @@ def _source_issues(  # noqa: C901
                             f"checksum mismatch: expected {expected_sha}, got {actual_sha}",
                         )
                     )
+    return issues
+
+
+def _provenance_flag_issues(
+    source: Mapping[str, Any],
+    prefix: str,
+    *,
+    digest_verified: bool,
+    tracked: bool,
+) -> list[AtlasValidationIssue]:
+    """Reject persisted provenance flags that disagree with the inspected source.
+
+    Returns:
+        Validation issues for mismatched persisted flags.
+    """
+
+    issues: list[AtlasValidationIssue] = []
+    expected_flags = {"digest_verified": digest_verified, "tracked": tracked}
+    for field, expected in expected_flags.items():
+        claimed = source.get(field)
+        if claimed is None:
+            continue
+        if claimed is not expected:
+            issues.append(
+                AtlasValidationIssue(
+                    f"{prefix}/{field}",
+                    f"{field} flag mismatch: expected {expected}, got {claimed}",
+                )
+            )
     return issues
 
 

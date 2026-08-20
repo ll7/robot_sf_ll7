@@ -145,6 +145,12 @@ For planner additions or modifications, review:
 If a planner is added but never executed in the local benchmark stack, treat the change as
 incomplete.
 
+Planner or benchmark adapter PRs must cover every changed admission/fallback path: either add a
+direct regression assertion for each affected admission, provenance, quality-gate, or fallback
+field, or state precisely in the PR that the field is validated by preflight integration tests
+(rather than by a typed-constructor regression). Claiming direct regression coverage that the PR
+does not add is a review-blocking overclaim (issue #7610).
+
 ## Native Execution Criterion For The #5579 Canary
 
 Reviewers keep re-deriving an unsatisfiable probe on MPC canary work: treating

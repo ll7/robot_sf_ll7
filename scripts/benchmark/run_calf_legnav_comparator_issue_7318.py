@@ -298,14 +298,14 @@ def main(argv: list[str] | None = None) -> int:
         if error is not None:
             runner_errors.append(error)
 
+    candidate_registry_path = _repo_path(str(config["candidate_registry"]))
     input_refs = {
         "config": str(config_path.relative_to(REPO_ROOT)),
         "config_sha256": _sha256(config_path),
         "scenario_matrix": str(_repo_path(str(config["scenario_matrix"])).relative_to(REPO_ROOT)),
         "scenario_matrix_sha256": _sha256(_repo_path(str(config["scenario_matrix"]))),
-        "candidate_registry": str(
-            _repo_path(str(config["candidate_registry"])).relative_to(REPO_ROOT)
-        ),
+        "candidate_registry": str(candidate_registry_path.relative_to(REPO_ROOT)),
+        "candidate_registry_sha256": _sha256(candidate_registry_path),
     }
     report = build_calf_legnav_comparator_report(
         traces["perfect_perception"],

@@ -317,18 +317,61 @@ def _diagnostics_stdout_payload(
 def _planner_fallback_degraded_status(planner_summary: Any) -> dict[str, Any]:
     """Return a compact fallback/degraded status from planner diagnostics."""
     summary = _json_ready(planner_summary)
-    if summary is None:
+    if not isinstance(summary, dict):
         return {
             "source": "planner_adapter_diagnostics",
             "available": False,
             "reported_fallback_or_degraded": None,
+            "reason": "planner diagnostics did not expose a structured fallback verdict",
         }
-    rendered = json.dumps(summary, sort_keys=True).lower()
-    return {
+
+    verdict = _planner_fallback_verdict(summary)
+
+    result = {
         "source": "planner_adapter_diagnostics",
-        "available": True,
-        "reported_fallback_or_degraded": "fallback" in rendered or "degraded" in rendered,
+        "available": verdict is not None,
+        "reported_fallback_or_degraded": verdict,
     }
+    if verdict is None:
+        result["reason"] = "planner diagnostics lacked an explicit fallback/degraded verdict"
+    return result
+
+
+def _fallback_status_verdict(value: Any) -> bool | None:
+    """Translate a known fallback status token into a boolean verdict."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"clear", "native", "ok", "available", "none", "loaded"}:
+        return False
+    if normalized in {"fallback", "degraded", "blocked", "failed"}:
+        return True
+    return None
+
+
+def _planner_fallback_verdict(summary: dict[str, Any]) -> bool | None:
+    """Resolve a fallback verdict only from explicit structured diagnostics."""
+    direct = summary.get("fallback_or_degraded")
+    if isinstance(direct, bool):
+        return direct
+
+    status_verdict = _fallback_status_verdict(summary.get("fallback_degraded_status"))
+    if status_verdict is not None:
+        return status_verdict
+
+    fallback_count = summary.get("fallback_count")
+    if isinstance(fallback_count, (int, float)) and not isinstance(fallback_count, bool):
+        numeric_count = float(fallback_count)
+        if np.isfinite(numeric_count) and numeric_count >= 0.0:
+            return numeric_count > 0.0
+
+    checkpoint = summary.get("checkpoint_provenance")
+    if isinstance(checkpoint, dict):
+        triggered = checkpoint.get("fallback_triggered")
+        if isinstance(triggered, bool):
+            return triggered
+        return _fallback_status_verdict(checkpoint.get("load_status"))
+    return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -822,7 +865,10 @@ def main() -> int:  # noqa: C901, PLR0912, PLR0915
                 break
     finally:
         planner_summary = None
-        if planner_adapter is not None:
+        planner_stats = getattr(policy_fn, "_planner_stats", None)
+        if callable(planner_stats):
+            planner_summary = planner_stats()
+        elif planner_adapter is not None:
             diagnostics = getattr(planner_adapter, "diagnostics", None)
             if callable(diagnostics):
                 planner_summary = diagnostics()

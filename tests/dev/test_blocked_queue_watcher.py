@@ -11,6 +11,7 @@ import yaml
 if TYPE_CHECKING:
     from pathlib import Path
 
+from scripts.dev import blocked_queue_watcher as watcher
 from scripts.dev.blocked_queue_watcher import (
     Evaluation,
     IssueCandidate,
@@ -209,6 +210,22 @@ def test_evaluate_candidates_reports_graphql_failure_as_error() -> None:
     assert result[0].status == "error"
     assert "dependency API error" in result[0].reason
     assert result[0].status != "not-fired"
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected"),
+    [("inventory detail", "", "inventory detail"), ("", "", "code 1")],
+)
+def test_inventory_translates_shared_transport_diagnostics(
+    stdout: str, stderr: str, expected: str
+) -> None:
+    """Inventory failures remain watcher-specific RuntimeErrors with detail."""
+
+    def runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, stdout, stderr)
+
+    with pytest.raises(RuntimeError, match=expected):
+        watcher._inventory("owner/repo", runner=runner)
 
 
 def test_build_report_surfaces_graphql_failure_as_top_level_error() -> None:

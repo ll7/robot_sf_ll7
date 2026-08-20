@@ -122,7 +122,9 @@ jobs:
 
   changed-coverage-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # This lane performs a complete exact-head checkout and the shared all-extras
+    # setup before it can combine shards and emit merge-admission proof.
+    timeout-minutes: 30
     needs: fast-feedback
     if: >-
       (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&

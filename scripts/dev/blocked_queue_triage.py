@@ -27,6 +27,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
+from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev._gh_rest import run_gh_command as _run_gh_command
+
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_LABEL = "state:blocked"
 SCHEMA = "blocked_queue_triage.v1"
@@ -80,32 +83,29 @@ class MutationError(TriageError):
 
 def _run_gh(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run ``gh`` with bounded output capture."""
-
-    try:
-        return subprocess.run(
-            ["gh", *args],
-            input=input_text,
-            capture_output=True,
-            text=True,
-            timeout=90,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise TriageError("gh CLI is not installed or unavailable on PATH") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise TriageError(f"gh command timed out after {exc.timeout}s") from exc
+    result = _run_gh_command(args, input_text, timeout=90, timeout_context="blocked queue triage")
+    if result.returncode == 127:
+        raise TriageError("gh CLI is not installed or unavailable on PATH")
+    if result.returncode == 124:
+        raise TriageError("gh command timed out after 90s")
+    return result
 
 
-def _json_result(result: subprocess.CompletedProcess[str], *, operation: str) -> Any:
+def _json_result(
+    result: subprocess.CompletedProcess[str],
+    *,
+    operation: str,
+    allow_concatenated: bool = False,
+) -> Any:
     """Parse one successful ``gh api`` response or fail closed."""
-
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
-        raise TriageError(f"{operation} failed with exit code {result.returncode}: {detail}")
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise TriageError(f"{operation} returned invalid JSON: {exc}") from exc
+    payload, error = _parse_json(
+        result,
+        what=operation,
+        allow_concatenated=allow_concatenated,
+    )
+    if error:
+        raise TriageError(error)
+    return payload
 
 
 def _flatten_pages(payload: Any, *, operation: str) -> list[dict[str, Any]]:
@@ -138,8 +138,8 @@ def _api_json(
     args = ["api"]
     if paginate:
         args.append("--paginate")
-    if slurp:
-        args.append("--slurp")
+    # GitHub CLI 2.45 does not support ``--slurp``.  ``parse_json`` performs
+    # the equivalent concatenated-page normalization after ``--paginate``.
     if method:
         args.extend(["--method", method])
     args.append(path)
@@ -147,7 +147,11 @@ def _api_json(
     if payload is not None:
         args.extend(["--input", "-"])
         input_text = json.dumps(dict(payload), sort_keys=True)
-    return _json_result(runner(args, input_text), operation=operation)
+    return _json_result(
+        runner(args, input_text),
+        operation=operation,
+        allow_concatenated=paginate and slurp,
+    )
 
 
 def _labels(row: Mapping[str, Any]) -> set[str]:

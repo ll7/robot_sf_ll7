@@ -1,0 +1,666 @@
+{
+  "aggregates": {
+    "clearance_radius__radius_0_30": {
+      "baseline_social_force": {
+        "collision_rate": 0.25,
+        "comfort_exposure_mean": 0.03228161898844317,
+        "mean_clearance": 7.053572645599011,
+        "min_clearance": 3.0361620718826106,
+        "near_miss_rate": 0.03134725702544503,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8992476851851853
+      },
+      "goal_seek": {
+        "collision_rate": 0.4791666666666667,
+        "comfort_exposure_mean": 0.0387345966480177,
+        "mean_clearance": 6.740578940370564,
+        "min_clearance": 1.7677869784250795,
+        "near_miss_rate": 0.043477186739482726,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7394097222222221
+      },
+      "orca": {
+        "collision_rate": 0.2569444444444444,
+        "comfort_exposure_mean": 0.028702592448254453,
+        "mean_clearance": 6.81078504155571,
+        "min_clearance": 2.458535484747446,
+        "near_miss_rate": 0.024467292277085058,
+        "success_rate": 0.1111111111111111,
+        "time_to_goal_norm": 0.8957754629629631
+      }
+    },
+    "clearance_radius__radius_0_40_nominal": {
+      "baseline_social_force": {
+        "collision_rate": 0.2916666666666667,
+        "comfort_exposure_mean": 0.03266239686838908,
+        "mean_clearance": 6.990754577750571,
+        "min_clearance": 2.9624688994570447,
+        "near_miss_rate": 0.02755229236642419,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.889236111111111
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.03930422193894126,
+        "mean_clearance": 6.683347168058784,
+        "min_clearance": 1.7237951585485933,
+        "near_miss_rate": 0.04276342165650859,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7348958333333334
+      },
+      "orca": {
+        "collision_rate": 0.25,
+        "comfort_exposure_mean": 0.031579337363145756,
+        "mean_clearance": 6.694747234929712,
+        "min_clearance": 2.360877169646054,
+        "near_miss_rate": 0.029031100641178285,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8924768518518518
+      }
+    },
+    "clearance_radius__radius_0_50": {
+      "baseline_social_force": {
+        "collision_rate": 0.2986111111111111,
+        "comfort_exposure_mean": 0.032667369049048024,
+        "mean_clearance": 6.935366438045749,
+        "min_clearance": 2.8950784279292985,
+        "near_miss_rate": 0.03429093152997864,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8863425925925926
+      },
+      "goal_seek": {
+        "collision_rate": 0.5416666666666666,
+        "comfort_exposure_mean": 0.03779130289868094,
+        "mean_clearance": 6.616654565868231,
+        "min_clearance": 1.658766791689157,
+        "near_miss_rate": 0.034308541059609704,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.7171875
+      },
+      "orca": {
+        "collision_rate": 0.2708333333333333,
+        "comfort_exposure_mean": 0.031092157840780083,
+        "mean_clearance": 6.632554019226903,
+        "min_clearance": 2.2880376493749206,
+        "near_miss_rate": 0.025933053920005108,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8880208333333335
+      }
+    },
+    "integration_timestep__dt_0_05": {
+      "baseline_social_force": {
+        "collision_rate": 0.2569444444444444,
+        "comfort_exposure_mean": 0.03376680416149405,
+        "mean_clearance": 6.958887122988861,
+        "min_clearance": 2.9192851991144684,
+        "near_miss_rate": 0.03050867073980665,
+        "success_rate": 0.006944444444444444,
+        "time_to_goal_norm": 0.9004918981481482
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.039083038707807466,
+        "mean_clearance": 6.834325921226628,
+        "min_clearance": 1.9946532215160617,
+        "near_miss_rate": 0.035078085914165016,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7203993055555559
+      },
+      "orca": {
+        "collision_rate": 0.2361111111111111,
+        "comfort_exposure_mean": 0.031160460315302545,
+        "mean_clearance": 6.7754038884902315,
+        "min_clearance": 2.408994611122174,
+        "near_miss_rate": 0.025577642586865117,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.8741608796296299
+      }
+    },
+    "integration_timestep__dt_0_10_nominal": {
+      "baseline_social_force": {
+        "collision_rate": 0.2847222222222222,
+        "comfort_exposure_mean": 0.03287266027733903,
+        "mean_clearance": 7.019330299578046,
+        "min_clearance": 2.977968947231406,
+        "near_miss_rate": 0.026696573536257553,
+        "success_rate": 0.006944444444444444,
+        "time_to_goal_norm": 0.8944444444444444
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.039708436948527194,
+        "mean_clearance": 6.674297528859452,
+        "min_clearance": 1.7126347873800576,
+        "near_miss_rate": 0.04185079837798492,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7354166666666668
+      },
+      "orca": {
+        "collision_rate": 0.2638888888888889,
+        "comfort_exposure_mean": 0.03159376640798024,
+        "mean_clearance": 6.711835316392018,
+        "min_clearance": 2.358470380916982,
+        "near_miss_rate": 0.02740770743307094,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8927083333333332
+      }
+    },
+    "integration_timestep__dt_0_20": {
+      "baseline_social_force": {
+        "collision_rate": 0.2847222222222222,
+        "comfort_exposure_mean": 0.035922340240024546,
+        "mean_clearance": 6.931515754516538,
+        "min_clearance": 2.959987572416312,
+        "near_miss_rate": 0.029654675059870475,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8907407407407406
+      },
+      "goal_seek": {
+        "collision_rate": 0.5,
+        "comfort_exposure_mean": 0.04293903385060968,
+        "mean_clearance": 6.6153704006327985,
+        "min_clearance": 1.7202546667023575,
+        "near_miss_rate": 0.036473498808321896,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.7369212962962961
+      },
+      "orca": {
+        "collision_rate": 0.22916666666666666,
+        "comfort_exposure_mean": 0.0346936509776266,
+        "mean_clearance": 6.670662806937688,
+        "min_clearance": 2.3756286534359927,
+        "near_miss_rate": 0.028605194341073725,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8886574074074073
+      }
+    },
+    "observation_noise__none_nominal": {
+      "baseline_social_force": {
+        "collision_rate": 0.2847222222222222,
+        "comfort_exposure_mean": 0.033893221869428766,
+        "mean_clearance": 6.997312795616054,
+        "min_clearance": 2.9715849532856877,
+        "near_miss_rate": 0.0297195402147882,
+        "success_rate": 0.006944444444444444,
+        "time_to_goal_norm": 0.8921874999999999
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.04017246288061896,
+        "mean_clearance": 6.68142396889829,
+        "min_clearance": 1.7138457920405918,
+        "near_miss_rate": 0.040336161896308925,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7362847222222224
+      },
+      "orca": {
+        "collision_rate": 0.2638888888888889,
+        "comfort_exposure_mean": 0.031605817482974134,
+        "mean_clearance": 6.70702711078291,
+        "min_clearance": 2.3716736663665405,
+        "near_miss_rate": 0.026420438064234286,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8893518518518518
+      }
+    },
+    "observation_noise__pedestrian_dropout_low": {
+      "baseline_social_force": {
+        "collision_rate": 0.2916666666666667,
+        "comfort_exposure_mean": 0.03368991165912356,
+        "mean_clearance": 7.002940661786598,
+        "min_clearance": 2.9686297003276017,
+        "near_miss_rate": 0.03091447790622214,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8885995370370368
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.0387505153715604,
+        "mean_clearance": 6.672891764132438,
+        "min_clearance": 1.7227731552892862,
+        "near_miss_rate": 0.03556464870226703,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7387152777777779
+      },
+      "orca": {
+        "collision_rate": 0.3055555555555556,
+        "comfort_exposure_mean": 0.032071047331946725,
+        "mean_clearance": 6.708433547437341,
+        "min_clearance": 2.297478784559916,
+        "near_miss_rate": 0.02891669192499513,
+        "success_rate": 0.09722222222222222,
+        "time_to_goal_norm": 0.8798032407407407
+      }
+    },
+    "observation_noise__pose_heading_low": {
+      "baseline_social_force": {
+        "collision_rate": 0.24305555555555555,
+        "comfort_exposure_mean": 0.033915502770412526,
+        "mean_clearance": 6.975000865018881,
+        "min_clearance": 2.957653924066333,
+        "near_miss_rate": 0.031879977156482234,
+        "success_rate": 0.020833333333333332,
+        "time_to_goal_norm": 0.8924768518518518
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.040344607931549606,
+        "mean_clearance": 6.672268431746227,
+        "min_clearance": 1.6983997756869191,
+        "near_miss_rate": 0.03880444812063978,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7354166666666667
+      },
+      "orca": {
+        "collision_rate": 0.2222222222222222,
+        "comfort_exposure_mean": 0.03146875946741761,
+        "mean_clearance": 6.741243729051151,
+        "min_clearance": 2.3781379543014993,
+        "near_miss_rate": 0.02556700256900899,
+        "success_rate": 0.1111111111111111,
+        "time_to_goal_norm": 0.9008680555555555
+      }
+    },
+    "social_force_speed_archetypes__homogeneous_standard_nominal": {
+      "baseline_social_force": {
+        "collision_rate": 0.2916666666666667,
+        "comfort_exposure_mean": 0.0329883033643762,
+        "mean_clearance": 6.979412525228158,
+        "min_clearance": 2.951618184182854,
+        "near_miss_rate": 0.030970076499922457,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8864004629629628
+      },
+      "goal_seek": {
+        "collision_rate": 0.4930555555555556,
+        "comfort_exposure_mean": 0.03864215646352573,
+        "mean_clearance": 6.689308216395876,
+        "min_clearance": 1.7295465397579464,
+        "near_miss_rate": 0.03452013355140507,
+        "success_rate": 0.125,
+        "time_to_goal_norm": 0.7381944444444446
+      },
+      "orca": {
+        "collision_rate": 0.25,
+        "comfort_exposure_mean": 0.032070304801958355,
+        "mean_clearance": 6.705092368708748,
+        "min_clearance": 2.375357853406484,
+        "near_miss_rate": 0.027755830823319973,
+        "success_rate": 0.10416666666666667,
+        "time_to_goal_norm": 0.8932870370370369
+      }
+    },
+    "social_force_speed_archetypes__mixed_balanced": {
+      "baseline_social_force": {
+        "collision_rate": 0.2777777777777778,
+        "comfort_exposure_mean": 0.032892244323448686,
+        "mean_clearance": 6.951650831017707,
+        "min_clearance": 2.9439902952727137,
+        "near_miss_rate": 0.03239309215809838,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8865162037037035
+      },
+      "goal_seek": {
+        "collision_rate": 0.5138888888888888,
+        "comfort_exposure_mean": 0.03842899378277683,
+        "mean_clearance": 6.669561613784564,
+        "min_clearance": 1.659614770770687,
+        "near_miss_rate": 0.036479896343677855,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.7241319444444445
+      },
+      "orca": {
+        "collision_rate": 0.2847222222222222,
+        "comfort_exposure_mean": 0.030832410761383322,
+        "mean_clearance": 6.665496833105947,
+        "min_clearance": 2.3271296801128134,
+        "near_miss_rate": 0.030299533891958844,
+        "success_rate": 0.1111111111111111,
+        "time_to_goal_norm": 0.8880787037037038
+      }
+    },
+    "social_force_speed_archetypes__rush_hour": {
+      "baseline_social_force": {
+        "collision_rate": 0.2847222222222222,
+        "comfort_exposure_mean": 0.03292150498116889,
+        "mean_clearance": 6.944620492454447,
+        "min_clearance": 2.9005971723759507,
+        "near_miss_rate": 0.033714630647695115,
+        "success_rate": 0.0,
+        "time_to_goal_norm": 0.8826388888888889
+      },
+      "goal_seek": {
+        "collision_rate": 0.5208333333333334,
+        "comfort_exposure_mean": 0.03813964716257902,
+        "mean_clearance": 6.6612515925881155,
+        "min_clearance": 1.6329123699363073,
+        "near_miss_rate": 0.03827611836785458,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.7268518518518519
+      },
+      "orca": {
+        "collision_rate": 0.2708333333333333,
+        "comfort_exposure_mean": 0.0313508543888234,
+        "mean_clearance": 6.65013213938543,
+        "min_clearance": 2.2808796062355934,
+        "near_miss_rate": 0.03300539357475321,
+        "success_rate": 0.11805555555555555,
+        "time_to_goal_norm": 0.8862268518518519
+      }
+    }
+  },
+  "claim_boundary": "bounded_actual_campaign_slice_not_full_benchmark_evidence: executes real Robot SF episodes for a compact two-planner local fidelity-sensitivity slice. It measures internal sensitivity on this slice only; it is not simulator-realism, sim-to-real, paper-facing planner-ranking, or full #3207 acceptance evidence.",
+  "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
+  "date": "2026-07-16",
+  "git_head": "c153848d7",
+  "git_status_short_at_generation": [],
+  "git_worktree_dirty": false,
+  "issue": 3207,
+  "prior_smoke_boundary": "diagnostic_smoke_not_benchmark_evidence: summarizes a small local same-scenario fidelity sensitivity smoke. It can show wiring, metric drift, and rank-stability calculation behavior, but it does not establish planner ranking, simulator realism, sim-to-real validity, or paper-facing benchmark evidence.",
+  "rank_stability": {
+    "axes": [
+      {
+        "axis": "integration_timestep__dt_0_05",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.018518518518518528,
+          "comfort_exposure_mean": 0.0006509494058508149,
+          "mean_clearance": 0.014019630355716304,
+          "min_clearance": 0.0685992524057452,
+          "near_miss_rate": 0.004138291504524942,
+          "success_rate": 0.004629629629629627,
+          "time_to_goal_norm": 0.013204089506172726
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "integration_timestep__dt_0_20",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.013888888888888886,
+          "comfort_exposure_mean": 0.003126720478138119,
+          "mean_clearance": 0.009157888628756211,
+          "min_clearance": 0.005920839314842896,
+          "near_miss_rate": 0.003177629333759578,
+          "success_rate": 0.00462962962962963,
+          "time_to_goal_norm": 0.0030864197530863224
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "social_force_speed_archetypes__mixed_balanced",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.016203703703703665,
+          "comfort_exposure_mean": 0.0006867942861523124,
+          "mean_clearance": 0.005751813563133443,
+          "min_clearance": 0.018552245559982715,
+          "near_miss_rate": 0.0046530823716786,
+          "success_rate": 0.0069444444444444415,
+          "time_to_goal_norm": 0.007947530864197527
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "social_force_speed_archetypes__rush_hour",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.01157407407407407,
+          "comfort_exposure_mean": 0.0006201821696449594,
+          "mean_clearance": 0.007263760360526413,
+          "min_clearance": 0.03514324447302146,
+          "near_miss_rate": 0.005396807754416726,
+          "success_rate": 0.009259259259259257,
+          "time_to_goal_norm": 0.008950617283950598
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "observation_noise__pose_heading_low",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.02777777777777778,
+          "comfort_exposure_mean": 0.0006013401388861792,
+          "mean_clearance": 0.003666976248910582,
+          "min_clearance": 0.007824218397940721,
+          "near_miss_rate": 0.0033568195805439237,
+          "success_rate": 0.006944444444444441,
+          "time_to_goal_norm": 0.0033757716049383304
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "observation_noise__pedestrian_dropout_low",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.01620370370370372,
+          "comfort_exposure_mean": 0.0007508179609059343,
+          "mean_clearance": 0.0010174613401728431,
+          "min_clearance": 0.01163884000471286,
+          "near_miss_rate": 0.004004346179202225,
+          "success_rate": 0.00462962962962963,
+          "time_to_goal_norm": 0.007349537037037075
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "clearance_radius__radius_0_30",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.018518518518518528,
+          "comfort_exposure_mean": 0.0014853518497103813,
+          "mean_clearance": 0.009850570165709565,
+          "min_clearance": 0.03139076807297092,
+          "near_miss_rate": 0.0030724956688903877,
+          "success_rate": 0.004629629629629626,
+          "time_to_goal_norm": 0.003954475308642014
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      },
+      {
+        "axis": "clearance_radius__radius_0_50",
+        "kendall_tau": 1.0,
+        "metric_drift": {
+          "collision_rate": 0.023148148148148123,
+          "comfort_exposure_mean": 0.0008746779484458065,
+          "mean_clearance": 0.010803509207274164,
+          "min_clearance": 0.029717201174595382,
+          "near_miss_rate": 0.00553708960838738,
+          "success_rate": 0.00462962962962963,
+          "time_to_goal_norm": 0.010339506172839444
+        },
+        "rank_flips": 0,
+        "rank_identifiability_reason": null,
+        "rank_identifiable": true,
+        "ranking": [
+          "goal_seek",
+          "orca",
+          "baseline_social_force"
+        ],
+        "top1_changed": false
+      }
+    ],
+    "flipping_axes": [],
+    "higher_is_better": true,
+    "nominal_ranking": [
+      "goal_seek",
+      "orca",
+      "baseline_social_force"
+    ],
+    "non_identifiable_axes": [],
+    "primary_metric": "success_rate",
+    "rank_identifiability_reason": null,
+    "rank_identifiable": true,
+    "rank_stable": true,
+    "schema_version": "fidelity_rank_stability.v2"
+  },
+  "raw_output_policy": "raw JSONL remains ignored under ignored_output/",
+  "raw_rows_path": "ignored_output/slurm/02b-issue3207-fidelity-full-fixed-scope-job-13512/campaign/raw/episode_rows.jsonl",
+  "result_caveats": [
+    "ranking_stability_is_on_bounded_two_planner_slice_only",
+    "full_fixed_scope_planners_not_run"
+  ],
+  "scenario_set": "configs/scenarios/classic_interactions_francis2023.yaml",
+  "schema_version": "issue_3207_fidelity_sensitivity_campaign_slice.v1",
+  "scope": {
+    "classification": "bounded_actual_slice",
+    "episode_count": 5184,
+    "horizon": 120,
+    "not_full_fixed_scope_reason": "local torch/rvo2-independent slice uses two non-learned planners; full config fixed_scope planners remain future work",
+    "planners": [
+      "baseline_social_force",
+      "goal_seek",
+      "orca"
+    ],
+    "scenario_count": 48,
+    "seeds": [
+      111,
+      112,
+      113
+    ]
+  },
+  "status": "actual_campaign_slice",
+  "study_id": "issue_3207_fidelity_sensitivity_full_fixed_scope",
+  "variants": [
+    {
+      "axis": "integration_timestep",
+      "baseline": false,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_05",
+      "variant": "integration_timestep__dt_0_05"
+    },
+    {
+      "axis": "integration_timestep",
+      "baseline": true,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_10_nominal",
+      "variant": "integration_timestep__dt_0_10_nominal"
+    },
+    {
+      "axis": "integration_timestep",
+      "baseline": false,
+      "runtime_binding": "sim_config.time_per_step_in_secs",
+      "source_key": "dt_0_20",
+      "variant": "integration_timestep__dt_0_20"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": true,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "homogeneous_standard_nominal",
+      "variant": "social_force_speed_archetypes__homogeneous_standard_nominal"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": false,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "mixed_balanced",
+      "variant": "social_force_speed_archetypes__mixed_balanced"
+    },
+    {
+      "axis": "social_force_speed_archetypes",
+      "baseline": false,
+      "runtime_binding": "sim_config.archetype_composition",
+      "source_key": "rush_hour",
+      "variant": "social_force_speed_archetypes__rush_hour"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": true,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "none_nominal",
+      "variant": "observation_noise__none_nominal"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": false,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "pose_heading_low",
+      "variant": "observation_noise__pose_heading_low"
+    },
+    {
+      "axis": "observation_noise",
+      "baseline": false,
+      "runtime_binding": "planner_observation_noise",
+      "source_key": "pedestrian_dropout_low",
+      "variant": "observation_noise__pedestrian_dropout_low"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": true,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_40_nominal",
+      "variant": "clearance_radius__radius_0_40_nominal"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": false,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_30",
+      "variant": "clearance_radius__radius_0_30"
+    },
+    {
+      "axis": "clearance_radius",
+      "baseline": false,
+      "runtime_binding": "sim_config.ped_radius",
+      "source_key": "radius_0_50",
+      "variant": "clearance_radius__radius_0_50"
+    }
+  ]
+}

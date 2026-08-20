@@ -161,6 +161,13 @@ The following are fail-closed gates:
 - maintainer decision: explicit decision-required label or issue text asking a
   maintainer to choose, approve, confirm, or set policy.
 
+Canonical ruling comments use the exact unquoted form
+`ll7/robot_sf_ll7#<issue>: <token>`. The classifier orders timestamped comments
+chronologically before deciding whether a ruling follows an older prompt. If
+any comment timestamp is missing or invalid, the ruling cannot suppress the
+decision gate. Exact lines under an example, copied, quoted, historical, or
+"do not apply" context are not treated as live rulings.
+
 When a gate is proven, the autonomous path makes the blocker visible only with
 existing labels. It does not answer the gate. Optional research remains open
 unless it is duplicate, invalid, superseded, or complete.

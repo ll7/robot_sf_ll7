@@ -84,6 +84,13 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
+When readiness dispatches the optional lane, it first runs
+`scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
+reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
+message; they are not reported as changed-code failures. The core lane remains dependency-minimal
+and excludes optional-only test paths listed in `tests/support/optional_test_allowlist.txt`.
+Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
+preflight-tool failures and never receive the missing-extra install guidance.
 
 ### Claim-map validation
 
@@ -106,18 +113,25 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Create the worktree through the capacity-guarded helper from the main checkout:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
-  "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The helper checks the target filesystem before invoking Git. A low-space or
+non-writable target fails before checkout, so it cannot leave a partially
+populated worktree. The default threshold is 2 GiB and can be overridden for
+a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
+`--minimum-free-bytes`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
@@ -135,18 +149,18 @@ A cheap fresh-worktree check is:
   && [ ! -d .venv ]
 ```
 
-Use this order for a fresh worktree:
+Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
-scripts/dev/bootstrap_worktree.sh
-source .venv/bin/activate
-python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+scripts/dev/run_worktree_shared_venv.sh -- \
+  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
-`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
-`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
-commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
-intentionally resync the local environment, unset the guard for that command:
+The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
+scratch capacity before starting the command. This avoids materializing one full `.venv` per
+parallel worktree. Use `bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it creates and targets the local `.venv`, then adds `UV_NO_SYNC=1` to its activation
+script. To intentionally resync a local environment, unset the guard for that command:
 
 ```bash
 env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
@@ -167,6 +181,22 @@ If a current-worktree `.venv` is missing or incomplete, both entry points fail b
 lightweight Python-only environment from being reused as if it were a synchronized dependency
 profile. `--standalone` remains available only for commands whose no-project-import boundary is
 verified.
+
+When the host is under pressure, inspect reclaim candidates without deleting anything:
+
+```bash
+scripts/dev/check_worktree_capacity.py --inventory --json
+```
+
+The inventory covers ignored generated `output/`, the uv cache, repository worktree containers,
+and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
+evidence before pruning `output/`; remove only clean, pushed Git worktrees with
+`git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
+automated cleanup is performed. Each existing candidate is sized with a five-second per-path
+timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
+diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
+machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
+not change the separate capacity verdict.
 
 ### Local CI scratch capacity
 
@@ -673,7 +703,9 @@ with the gate-side rationale above.
 the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
 fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
 and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
-`--head-sha` values. The same checker used by local readiness emits a `changed-coverage.v1`
+`--head-sha` values. Because this lane performs the complete exact-head checkout and shared
+all-extras setup before combining shards, its hosted job has a bounded 30-minute timeout. The
+same checker used by local readiness emits a `changed-coverage.v1`
 artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
 and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
 `not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
@@ -688,10 +720,14 @@ be proven by a core-only shard.
 The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
 output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
 `scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
-missing, pending, failed, malformed, or stale result. The existing `coverage-gate` absolute-floor
-and baseline checks continue to run on main/manual/merge-group full-suite events; they do not
-substitute for the changed-line proof. Direct merge dispatchers must consume the same exact-head
-check before their CAS step (tracked separately by #7407).
+missing, pending, failed, malformed, or stale result for source-changing PRs. The CI workflow
+intentionally skips a PR whose complete changed-file set matches `**/*.md` or `docs/**`; in that
+case the gate fetches and validates the complete GitHub changed-file set and records
+`changed_coverage_status: not_required`. An API failure, incomplete file listing, or any mixed/non-
+ignored path remains a blocker. The existing `coverage-gate` absolute-floor and baseline checks
+continue to run on main/manual/merge-group full-suite events; they do not substitute for the
+changed-line proof. Direct merge dispatchers must consume the same exact-head check before their
+CAS step (tracked separately by #7407).
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
@@ -1276,6 +1312,12 @@ Any explicit `blocked:*` label is likewise retained for audit but classifies as 
 including the exact blocker label in its reason, and is excluded from autonomous implementation
 dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
 and remain outside autonomous implementation dispatch until the review gate is cleared.
+Before any autonomous claim write, route the candidate through
+`scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
+and claim preflight before calling the atomic claim writer. Snapshot consumers should use the
+canonical `admission` projection; direct `issue_claim.py acquire` calls are reserved for an
+explicit maintainer override with an actor, reason, and declaration that no scientific claim is
+being made.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

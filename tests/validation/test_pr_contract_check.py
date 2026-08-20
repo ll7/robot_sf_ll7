@@ -376,6 +376,36 @@ def test_get_added_files(tmp_path: Path) -> None:
     }
 
 
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+@patch("scripts.ci.pr_contract_check.base_ref_is_resolvable", return_value=True)
+def test_get_changed_files_prefers_current_base_diff_over_stale_api_list(
+    _mock_resolvable: MagicMock, mock_run: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #7668: stale PR API files cannot override a resolvable current-base diff."""
+    api_files = tmp_path / "pr_changed_files.txt"
+    api_files.write_text("stale-base-only.py\n", encoding="utf-8")
+    mock_run.return_value = MagicMock(returncode=0, stdout="current-base.py\n", stderr="")
+
+    assert pr_contract_check.get_changed_files(api_files, "origin/main") == ["current-base.py"]
+    mock_run.assert_called_once_with(
+        ["git", "diff", "--name-only", "origin/main...HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@patch("scripts.ci.pr_contract_check.base_ref_is_resolvable", return_value=False)
+def test_get_changed_files_uses_api_fallback_when_base_is_unavailable(
+    _mock_resolvable: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #7668: shallow/local runs retain the API changed-file fallback."""
+    api_files = tmp_path / "pr_changed_files.txt"
+    api_files.write_text("api-fallback.py\n\n", encoding="utf-8")
+
+    assert pr_contract_check.get_changed_files(api_files, "origin/main") == ["api-fallback.py"]
+
+
 def test_check_evidence_tree_hygiene_authoritative_added_files(tmp_path: Path) -> None:
     """Issue #5464: with an authoritative added set, only added files get marker blockers.
 

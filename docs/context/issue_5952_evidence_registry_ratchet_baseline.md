@@ -36,6 +36,24 @@ was missing.
   pre-rendered report to the infra-error exit code (2) instead of an uncaught
   traceback, matching the documented exit-code contract.
 
+## Pre-write review guard (issue #7513)
+
+An opt-in pre-write review guard lets a maintainer inspect a candidate baseline
+before the machine-generated file is replaced. Run
+`--write-baseline --prewrite-review` to compare the candidate with the current
+baseline, check the human companion against its recorded prior baseline, and emit
+the deterministic `evidence_registry_baseline_review_delta.v1` YAML template. The
+template includes new files, per-code increases, removed/decreased findings, exact
+baseline digests, and evidence-tree drift. It is structurally non-approving:
+`template_only: true`, `approval.status: not_approved`, and `TODO` dispositions
+cannot satisfy the human companion schema.
+
+The pre-write path refuses to replace the machine baseline while either delta needs
+review, and it never writes the real human companion. A separately reviewed
+exception may pass `--prewrite-review-override "<reason>"`; placeholder reasons
+are rejected. Existing `--check`, ordinary `--write-baseline`, `--aggregate-only`,
+and read-only `--companion-delta` behavior is unchanged.
+
 ## Per-file disposition (48 findings across 12 files)
 
 All twelve files were reviewed against their source. Every introduced code is
@@ -76,6 +94,12 @@ uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline
 # then add/adjust the per-file disposition in
 # scripts/validation/evidence_registry_baseline_review.yaml and update
 # prior_baseline_files_with_findings + the refreshed counts.
+```
+
+For a guarded refresh that leaves the machine baseline untouched until review:
+
+```bash
+uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline --prewrite-review --review-template output/validation/evidence_registry_baseline_review_delta.yaml
 ```
 
 ## Boundary

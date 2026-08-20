@@ -57,12 +57,33 @@ revision = 3
 name = "robot-sf"
 source = { editable = "." }
 dependencies = [{ name = "demo-package" }]
+[package.dev-dependencies]
+dev = [
+    { name = "dev-tool" },
+    { name = "inactive-tool", marker = "python_full_version < '3.12'" },
+]
 
 [[package]]
 name = "demo-package"
 version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", hash = "sha256:abc123", size = 12 }
+
+[[package]]
+name = "dev-tool"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "inactive-tool"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = ["python_full_version < '3.12'"]
+
+[[package]]
+name = "orphan-tool"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
 """.lstrip(),
         encoding="utf-8",
     )
@@ -74,6 +95,33 @@ sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", hash = "sha25
             "python": {"implementation": "CPython", "version": "3.13", "requires": ">=3.11"},
             "resolver": {"name": "uv", "version": "0.11.21", "lock_mode": "frozen"},
             "source_policy": {"indexes": ["https://pypi.org/simple"], "network": "offline"},
+        },
+        "unrepresented_policy": {
+            "schema_version": "robot-sf.dependency-license-unrepresented.v1",
+            "rules": [
+                {
+                    "id": "fixture-development-group",
+                    "lockfile": "uv.lock",
+                    "root_package": "robot-sf",
+                    "field": "dev-dependencies",
+                    "groups": ["dev"],
+                    "reason_code": "development_group",
+                    "reviewed": True,
+                    "rationale": "fixture development inputs are outside the release profile",
+                },
+                {
+                    "id": "fixture-inactive-marker",
+                    "reason_code": "marker_inactive",
+                    "reviewed": True,
+                    "rationale": "fixture row is inactive for the target",
+                },
+            ],
+            "unresolved": {
+                "id": "fixture-unresolved",
+                "reason_code": "unresolved_membership",
+                "reviewed": False,
+                "rationale": "fixture orphan row has no reviewed membership reason",
+            },
         },
         "profiles": [
             {
@@ -177,6 +225,28 @@ def test_inventory_records_profiles_sources_and_deterministic_output(tmp_path: P
     assert set(demo["profiles"]) == {"core", "foo", "all"}
 
 
+def test_unrepresented_rows_require_reviewed_reason_or_remain_strictly_unresolved(
+    tmp_path: Path,
+) -> None:
+    """Development, inactive-marker, and unexplained rows stay distinguishable."""
+    _write_inputs(tmp_path)
+
+    inventory = build_inventory(tmp_path, distributions=[])
+
+    dispositions = {
+        row["name"]: row for row in inventory["unrepresented_lock_package_dispositions"]
+    }
+    assert dispositions["dev-tool"]["status"] == "reviewed_exclusion"
+    assert dispositions["dev-tool"]["reason_codes"] == ["development_group"]
+    assert dispositions["inactive-tool"]["status"] == "reviewed_exclusion"
+    assert dispositions["inactive-tool"]["reason_codes"] == ["marker_inactive"]
+    assert dispositions["orphan-tool"]["status"] == "unresolved"
+    assert dispositions["orphan-tool"]["reviewed"] is False
+    assert inventory["summary"]["unrepresented_reviewed_exclusion_count"] == 2
+    assert inventory["summary"]["unrepresented_unresolved_count"] == 1
+    assert any("orphan-tool" in failure for failure in inventory["failures"])
+
+
 def test_inventory_keeps_unknown_proprietary_and_conflicting_metadata_blocked(
     tmp_path: Path,
 ) -> None:
@@ -234,6 +304,23 @@ def test_current_profile_matrix_is_explicit_and_all_exclusion_is_visible() -> No
     assert all(
         profile["status"] in {"complete", "not_applicable"} for profile in inventory["profiles"]
     )
+
+
+def test_current_unrepresented_rows_have_explicit_dispositions() -> None:
+    """The live lock closure cannot hide unrepresented rows behind a count only."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(root, distributions=[])
+
+    rows = inventory["unrepresented_lock_package_dispositions"]
+    assert {row["package_id"] for row in rows} == set(inventory["unrepresented_lock_packages"])
+    assert len(rows) == inventory["summary"]["unrepresented_lock_package_count"]
+    assert all(row["reason_codes"] for row in rows)
+    assert all(row["status"] in {"reviewed_exclusion", "unresolved"} for row in rows)
+    assert inventory["summary"]["unrepresented_reviewed_exclusion_count"] + inventory["summary"][
+        "unrepresented_unresolved_count"
+    ] == len(rows)
+    if inventory["summary"]["unrepresented_unresolved_count"]:
+        assert any("unrepresented lock row" in failure for failure in inventory["failures"])
 
 
 def test_freshness_rejects_a_report_built_from_a_substitute_policy(tmp_path: Path) -> None:

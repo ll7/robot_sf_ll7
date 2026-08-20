@@ -151,6 +151,19 @@ sha256sum output/model_cache/<model_id>/<asset_name>
 
 The checksum must match `model/registry.yaml`.
 
+### CI cache and transient release throttling
+
+GitHub-release model downloads use a bounded three-attempt retry policy for HTTP 429 and 5xx
+responses. A numeric or HTTP-date `Retry-After` header is honored, capped at 30 seconds; malformed
+or missing headers use the local backoff. Every downloaded artifact is still checksum-verified
+before atomic publication. A cache entry is reused only when its registry-pinned SHA-256 matches;
+an invalid entry is replaced, never trusted.
+
+CI may use the repository's pre-populated, SHA-keyed model cache (`actions/cache`) as an optimization,
+but this path does not add credentials, a mirror, or a redistribution authorization. If the public
+release endpoint remains unavailable after bounded retries, preflight exits with a blocking
+`external_unavailable` result and must not admit a fallback or nominal readiness result.
+
 Also inspect:
 
 ```bash

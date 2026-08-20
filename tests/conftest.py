@@ -380,6 +380,11 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # Occupancy-grid rasterization helpers are pure unit contracts with
+    # numpy fixtures; keep their coverage in fast pull-request shards for the
+    # exact-head changed-coverage gate (see #7282).
+    "test_occupancy_grid.py",
+    "test_occupancy_grid_helpers.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

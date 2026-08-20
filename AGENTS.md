@@ -89,28 +89,27 @@ repository-safe commands. Never store secrets in local machine context files.
 When working in a linked Git worktree, detect bootstrap state before running expensive commands.
 Honor explicit user/native-tool worktree locations first. Otherwise prefer a sibling container such
 as `../robot_sf_ll7.worktrees/<branch-or-issue-slug>`; use issue number plus a short slug when possible.
+Create it with `scripts/dev/create_worktree.sh`, which performs a read-only filesystem-capacity
+check before invoking `git worktree add` and refuses low-space targets before partial checkout.
 Treat a checkout as linked when `.git` is a file pointing into `.git/worktrees/...`, or when
 `git rev-parse --git-common-dir` differs from `git rev-parse --git-dir`.
 
 A linked worktree is fresh only when it lacks both `local.machine.md` and `.venv` plus any
-team-specific initialized marker. In a fresh worktree, run
-`scripts/dev/bootstrap_worktree.sh` (preferred) or manually: derive the main checkout from the
-common Git dir, symlink the main `local.machine.md` when present, then run
-`uv venv .venv && uv sync --all-extras`. The `uv venv .venv` step is required: `uv sync --all-extras`
-alone may silently detect and reuse the main checkout's `.venv` without creating one locally,
-leaving `.venv/bin/activate` missing. After sync, verify `.venv/bin/python` exists before
-continuing; if absent, the environment is not usable and the caller must fail closed. The
-bootstrap script pins sync to the local `.venv` and adds `UV_NO_SYNC=1` to its activation script,
-so `source .venv/bin/activate` before Python tooling. For a dependency-only check that separates
+team-specific initialized marker. In a fresh worktree, default to
+`scripts/dev/run_worktree_shared_venv.sh -- <command>`. It reuses the initialized main checkout
+environment, pins imports to the active worktree, and avoids materializing one full `.venv` per
+worker. Use `scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it still performs `uv venv .venv && uv sync --all-extras`, verifies `.venv/bin/python`,
+and adds `UV_NO_SYNC=1` to the activation script. For a dependency-only check that separates
 missing optional packages from changed-code failures, run
-`python scripts/dev/check_worktree_optional_deps.py --profile all-extras`. Use a matching named
-profile such as `--profile training` when bootstrap was invoked with `--extra training`. For quick
-targeted validation, prefer
-`scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized current-worktree
-`.venv` when available, otherwise reuses the main checkout `.venv`, while `PYTHONPATH` points at
-the active worktree. Use a full local `.venv` and final PR readiness for merge proof. Do not include
-CARLA in routine `--all-extras`; opt into `--group carla` only for
-CARLA-capable worktrees and prove runtime with `scripts/dev/check_carla_runtime.sh` when needed.
+`python scripts/dev/check_worktree_optional_deps.py --profile all-extras` through the shared wrapper.
+Use a matching named profile such as `--profile training` when a local environment was bootstrapped
+with `--extra training`. Before manual reclaim, run
+`scripts/dev/check_worktree_capacity.py --inventory --json`; it never deletes files. Preserve
+durable evidence before pruning `output/`, remove only clean pushed worktrees, and remove only
+task-owned no-longer-running `/dev/shm` scratch. Do not include CARLA in routine `--all-extras`;
+opt into `--group carla` only for CARLA-capable worktrees and prove runtime with
+`scripts/dev/check_carla_runtime.sh` when needed.
 
 If the current branch is not `main`, fetch latest `origin/main` and merge it early:
 `git fetch origin main && git merge origin/main`. Do not create divergent per-worktree machine

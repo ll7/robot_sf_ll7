@@ -40,6 +40,7 @@ GRAPHQL_REST_FALLBACK_MARKERS = (
     "doesn't exist on type",
     "is unsupported",
 )
+MANUAL_OVERRIDE_ERROR = "manual_override_required"
 
 
 @dataclass(frozen=True)
@@ -1139,12 +1140,62 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Revalidate and compare-and-delete stale candidates; never delete blindly.",
     )
+    parser.add_argument(
+        "--manual-override",
+        action="store_true",
+        help="Explicitly enter the maintainer-only incident/forensic acquire lane.",
+    )
+    parser.add_argument(
+        "--override-actor",
+        help="Named maintainer actor for a manual acquire override.",
+    )
+    parser.add_argument(
+        "--override-reason",
+        help="Bounded incident or forensic reason for a manual acquire override.",
+    )
+    parser.add_argument(
+        "--no-scientific-claim",
+        action="store_true",
+        help="Acknowledge that the manual acquire makes no scientific or benchmark claim.",
+    )
     return parser
 
 
 def _dump_json(payload: dict[str, Any]) -> None:
     """Print stable JSON to stdout."""
     print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _manual_override_payload(args: argparse.Namespace) -> dict[str, Any]:
+    """Return a fail-closed payload for an unguarded direct acquire attempt."""
+    missing: list[str] = []
+    if not args.manual_override:
+        missing.append("--manual-override")
+    if not isinstance(args.override_actor, str) or not args.override_actor.strip():
+        missing.append("--override-actor")
+    if not isinstance(args.override_reason, str) or not args.override_reason.strip():
+        missing.append("--override-reason")
+    if not args.no_scientific_claim:
+        missing.append("--no-scientific-claim")
+    return {
+        "schema": "issue_claim.v1",
+        "action": "acquire",
+        "ok": False,
+        "claimed": False,
+        "issue": args.issue,
+        "repo": args.repo,
+        "remote": args.remote,
+        "source_ref": args.source_ref,
+        "claim_ref": short_claim_ref(args.issue) if args.issue is not None else None,
+        "command": [],
+        "error": MANUAL_OVERRIDE_ERROR,
+        "missing_override_fields": missing,
+        "write_attempted": False,
+        "authority_boundary": (
+            "Direct low-level acquire is reserved for maintainer incident recovery or forensic "
+            "operation; ordinary autonomous work must use goal_issue_admission.py."
+        ),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1164,12 +1215,24 @@ def main(argv: list[str] | None = None) -> int:
     elif args.action == "status":
         payload = status_issue(args.issue, remote=args.remote)
     elif args.action == "acquire":
-        payload = acquire_issue(
-            args.issue,
-            repo=args.repo,
-            remote=args.remote,
-            source_ref=args.source_ref,
-        )
+        override_payload = _manual_override_payload(args)
+        if override_payload["missing_override_fields"]:
+            payload = override_payload
+        else:
+            payload = acquire_issue(
+                args.issue,
+                repo=args.repo,
+                remote=args.remote,
+                source_ref=args.source_ref,
+            )
+            payload.update(
+                {
+                    "manual_override": True,
+                    "override_actor": args.override_actor.strip(),
+                    "override_reason": args.override_reason.strip(),
+                    "no_scientific_claim": True,
+                }
+            )
     else:
         payload = release_issue(
             args.issue,

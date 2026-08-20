@@ -347,6 +347,11 @@ uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
 uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 
+# Optional blocker-receipt comparison for a pre-claim snapshot.  The JSON file
+# must contain all goal_blocker_receipt.v1 fingerprint fields.
+uv run python -m scripts.dev.snapshot_issue_batch <issue-number> \
+  --json --blocker-current-inputs <private-current-inputs.json>
+
 # Compact active PR queue and explicit PR headline snapshots
 uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n> --json
 uv run python -m scripts.dev.snapshot_pr_queue --prs <pr> [<pr> ...] --json
@@ -373,6 +378,16 @@ CI or merge-readiness decisions.
 Treat all snapshot output as **route evidence only**. Run fresh local checks before issue claim,
 push, PR publication, label/project mutation, merge-ready application, merge, or benchmark/paper-facing
 publication decisions.
+
+Issue snapshots also expose ``blocker_receipt`` evidence and a ``redispatch`` summary. Workers
+that stop on a blocker should build and validate ``goal_blocker_receipt.v1`` with
+``scripts.dev.goal_blocker_receipt.build_receipt`` and write it with ``write_receipt``. The default
+location is the common Git ``codex-agent-runs/active/goal-blocker-receipts/issue-<number>.json``
+artifact owner, so per-run receipts never enter a PR diff. Before a new implementation worker is
+started, ``blocked_unchanged`` means ``no_action``; ``blocker_changed`` means ``re_evaluate``.
+Missing, unavailable, malformed, or stale receipt/current-input state always fails open to
+re-evaluation. A receipt recommendation is evidence only: it cannot mutate labels, authorize
+compute or external inputs, or replace issue claims and PR admission.
 
 The helper emits `autopilot_state_snapshot.v1` JSON with source commands, branch/head SHA,
 `origin/main` SHA, worktree rows, issue queue rows, claim refs, explicit PR headline state, and

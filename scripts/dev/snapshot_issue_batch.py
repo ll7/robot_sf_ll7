@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import subprocess
 import sys
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +21,14 @@ from scripts.dev.github_quota import (
     RateLimitSnapshot,
     graphql_budget_decision,
     parse_rate_limit_payload,
+)
+from scripts.dev.goal_blocker_receipt import (
+    build_fingerprint_inputs,
+    evaluate_redispatch,
+    load_receipt,
+    missing,
+    normalize_fingerprint_inputs,
+    summarize_redispatch,
 )
 from scripts.dev.issue_claim import short_claim_ref, status_issue
 
@@ -595,6 +605,91 @@ def _body_excerpt(body: Any, *, limit: int) -> tuple[str, bool]:
     return text[:limit], len(text) > limit
 
 
+def _body_digest(body: Any) -> str | dict[str, str]:
+    """Return a body digest, keeping an absent body distinct from an empty body."""
+    if not isinstance(body, str):
+        return missing("issue body was not returned by the issue reader")
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _blocker_receipt_snapshot(
+    *,
+    issue_number: int,
+    repository: str,
+    labels: list[str],
+    body_digest: Any,
+    receipts_dir: str = "",
+    current_inputs: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return receipt evidence and a fail-open redispatch decision for one issue."""
+    receipt_state = load_receipt(
+        issue_number=issue_number,
+        directory=receipts_dir or None,
+    )
+    if receipt_state["status"] != "available":
+        decision = {
+            "decision": "no_receipt" if receipt_state["status"] == "missing" else "invalid_receipt",
+            "action": "re_evaluate",
+            "reason": (
+                "no_prior_receipt" if receipt_state["status"] == "missing" else "receipt_invalid"
+            ),
+            "changed_fields": [],
+            "errors": receipt_state.get("errors", []),
+        }
+        return {
+            "status": receipt_state["status"],
+            "path": receipt_state["path"],
+            "fingerprint": None,
+            **decision,
+        }
+
+    raw_inputs = current_inputs
+    if raw_inputs is None:
+        raw_inputs = build_fingerprint_inputs(
+            issue_body_digest=body_digest,
+            issue_labels=labels,
+        )
+    else:
+        # The live issue reader owns the issue body and labels.  Fill only fields
+        # absent from a caller-supplied state file; an explicit unavailable state
+        # must never be replaced with a convenient local value.
+        raw_inputs = dict(raw_inputs)
+        target = raw_inputs.get("fingerprint_inputs")
+        if isinstance(target, Mapping):
+            nested = dict(target)
+            nested.setdefault("issue.body_digest", body_digest)
+            nested.setdefault("issue.labels", labels)
+            raw_inputs["fingerprint_inputs"] = nested
+        else:
+            raw_inputs.setdefault("issue.body_digest", body_digest)
+            raw_inputs.setdefault("issue.labels", labels)
+    try:
+        normalized_inputs = normalize_fingerprint_inputs(raw_inputs)
+    except (TypeError, ValueError) as exc:
+        return {
+            "status": "available",
+            "path": receipt_state["path"],
+            "fingerprint": receipt_state["receipt"]["blocker"]["fingerprint"],
+            "decision": "current_state_unavailable",
+            "action": "re_evaluate",
+            "reason": "current_fingerprint_inputs_malformed",
+            "changed_fields": [],
+            "errors": [str(exc)],
+        }
+    decision = evaluate_redispatch(
+        receipt_state["receipt"],
+        current_inputs=normalized_inputs,
+        repository=repository,
+        issue_number=issue_number,
+    )
+    return {
+        "status": "available",
+        "path": receipt_state["path"],
+        "fingerprint": receipt_state["receipt"]["blocker"]["fingerprint"],
+        **decision,
+    }
+
+
 def _recommended_context_pack(number: int, labels: list[str], title: str) -> str:
     """Return a conservative context-pack hint for a worker prompt."""
     label_text = " ".join(labels).lower()
@@ -633,7 +728,15 @@ def _validate_explicit_rest_issue(issue: Any, *, requested_number: int) -> str |
     return None
 
 
-def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict[str, Any]:
+def fetch_issue(
+    number: int,
+    *,
+    repo: str,
+    body_limit: int,
+    remote: str,
+    blocker_receipts_dir: str = "",
+    blocker_current_inputs: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Fetch one issue and return a compact orchestration snapshot.
 
     The explicit read routes through the REST-backed normalized reader
@@ -681,6 +784,18 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         labels=labels,
         state=state,
     )
+    body_digest = _body_digest(issue.get("body"))
+    blocker_receipt = _blocker_receipt_snapshot(
+        issue_number=number,
+        repository=repo,
+        labels=labels,
+        body_digest=body_digest,
+        receipts_dir=blocker_receipts_dir,
+        current_inputs=blocker_current_inputs,
+    )
+    if blocker_receipt["decision"] == "blocked_unchanged":
+        classification = "blocked_receipt"
+        reason = "unchanged blocker fingerprint; skip autonomous claim"
     excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
         "number": issue.get("number", number),
@@ -692,10 +807,13 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         "assignees": assignees,
         "body_excerpt": excerpt,
         "body_truncated": truncated,
+        "body_digest": body_digest,
         "claim": _claim_payload(claim),
         "classification": classification,
+        "dispatch_allowed": classification == "claimable",
         "reason": reason,
         "linked_prs": [],
+        "blocker_receipt": blocker_receipt,
         "recommended_context_pack": _recommended_context_pack(
             int(issue.get("number", number)), labels, str(issue.get("title", ""))
         ),
@@ -703,7 +821,13 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
 
 
 def _snapshot_from_issue_list(
-    issue: dict[str, Any], *, remote: str, claim_statuses: dict[int, dict[str, Any]] | None = None
+    issue: dict[str, Any],
+    *,
+    remote: str,
+    repository: str = DEFAULT_REPO,
+    blocker_receipts_dir: str = "",
+    blocker_current_inputs: Mapping[str, Any] | None = None,
+    claim_statuses: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build an issue snapshot using preloaded issue fields."""
     try:
@@ -734,6 +858,18 @@ def _snapshot_from_issue_list(
         labels=labels,
         state=state,
     )
+    body_digest = missing("claimable issue list omits issue body")
+    blocker_receipt = _blocker_receipt_snapshot(
+        issue_number=number,
+        repository=repository,
+        labels=labels,
+        body_digest=body_digest,
+        receipts_dir=blocker_receipts_dir,
+        current_inputs=blocker_current_inputs,
+    )
+    if blocker_receipt["decision"] == "blocked_unchanged":
+        classification = "blocked_receipt"
+        reason = "unchanged blocker fingerprint; skip autonomous claim"
     return {
         "number": number,
         "status": "ok",
@@ -745,13 +881,16 @@ def _snapshot_from_issue_list(
         "claim": _claim_payload(claim),
         "body_excerpt": "",
         "body_truncated": False,
+        "body_digest": body_digest,
         "classification": classification,
+        "dispatch_allowed": classification == "claimable",
         "reason": reason,
         "linked_prs": [],
+        "blocker_receipt": blocker_receipt,
     }
 
 
-def snapshot_claimable_issues(
+def snapshot_claimable_issues(  # noqa: PLR0913 - keeps the public snapshot seam explicit
     *,
     repo: str,
     remote: str,
@@ -760,6 +899,8 @@ def snapshot_claimable_issues(
     include_blocked_external: bool = False,
     min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
     resume_page: int = 1,
+    blocker_receipts_dir: str = "",
+    blocker_current_inputs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a compact claimable/open issue snapshot.
 
@@ -805,7 +946,14 @@ def snapshot_claimable_issues(
     ]
     claim_statuses = _batch_claim_statuses(issue_numbers, remote=remote)
     snapshots = [
-        _snapshot_from_issue_list(issue, remote=remote, claim_statuses=claim_statuses)
+        _snapshot_from_issue_list(
+            issue,
+            remote=remote,
+            repository=repo,
+            blocker_receipts_dir=blocker_receipts_dir,
+            blocker_current_inputs=blocker_current_inputs,
+            claim_statuses=claim_statuses,
+        )
         for issue in listed
     ]
     issues = [
@@ -836,6 +984,7 @@ def snapshot_claimable_issues(
                 1 for issue in snapshots if issue.get("classification") == "blocked_external"
             ),
         },
+        "redispatch": summarize_redispatch(snapshots),
         "issues": issues,
     }
 
@@ -1226,11 +1375,26 @@ def _write_capsules(issues: list[dict[str, Any]], capsule_dir: pathlib.Path) -> 
 
 
 def snapshot_issues(
-    numbers: list[int], *, repo: str, body_limit: int, remote: str, capsule_dir: str = ""
+    numbers: list[int],
+    *,
+    repo: str,
+    body_limit: int,
+    remote: str,
+    capsule_dir: str = "",
+    blocker_receipts_dir: str = "",
+    blocker_current_inputs: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a compact issue-batch snapshot."""
     issues = [
-        fetch_issue(number, repo=repo, body_limit=body_limit, remote=remote) for number in numbers
+        fetch_issue(
+            number,
+            repo=repo,
+            body_limit=body_limit,
+            remote=remote,
+            blocker_receipts_dir=blocker_receipts_dir,
+            blocker_current_inputs=blocker_current_inputs,
+        )
+        for number in numbers
     ]
     if capsule_dir:
         _write_capsules(issues, pathlib.Path(capsule_dir))
@@ -1238,8 +1402,23 @@ def snapshot_issues(
         "schema": "issue_batch_snapshot.v1",
         "repo": repo,
         "body_excerpt_chars": body_limit,
+        "redispatch": summarize_redispatch(issues),
         "issues": issues,
     }
+
+
+def _load_blocker_current_inputs(path: str) -> Mapping[str, Any]:
+    """Load a complete fingerprint-input JSON object for receipt comparison."""
+    try:
+        raw = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"blocker current-inputs read failed: {exc}") from exc
+    if not isinstance(raw, Mapping):
+        raise ValueError("blocker current-inputs must be a JSON object")
+    # Validate the shape here while retaining the original wrappers for the
+    # snapshot row and its explicit unavailable/not-applicable states.
+    normalize_fingerprint_inputs(raw)
+    return raw
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -1299,6 +1478,22 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Optional directory for per-issue context capsule JSON files.",
     )
     parser.add_argument(
+        "--blocker-receipts-dir",
+        default="",
+        help=(
+            "Optional external goal-blocker receipt directory; defaults to the common Git "
+            "codex-agent-runs/active owner."
+        ),
+    )
+    parser.add_argument(
+        "--blocker-current-inputs",
+        default="",
+        help=(
+            "Optional JSON object containing all goal-blocker fingerprint fields for the "
+            "current dispatch decision."
+        ),
+    )
+    parser.add_argument(
         "--no-expand-range",
         action="store_true",
         help="Treat two issue numbers as exactly two issues instead of an inclusive range.",
@@ -1348,6 +1543,11 @@ def _validate_args(args: argparse.Namespace) -> int:
 
 def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, Any]:
     """Build the requested CLI payload after argument validation."""
+    blocker_current_inputs = (
+        _load_blocker_current_inputs(args.blocker_current_inputs)
+        if args.blocker_current_inputs
+        else None
+    )
     if args.active_portfolio:
         return snapshot_active_issue_portfolio(
             repo=args.repo,
@@ -1374,6 +1574,8 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
             include_blocked_external=args.include_blocked_external,
             min_graphql_remaining=args.min_graphql_remaining,
             resume_page=args.resume_page,
+            blocker_receipts_dir=args.blocker_receipts_dir,
+            blocker_current_inputs=blocker_current_inputs,
         )
     return snapshot_issues(
         numbers,
@@ -1381,6 +1583,8 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
         body_limit=max(args.body_chars, 0),
         remote=args.remote,
         capsule_dir=args.capsule_dir,
+        blocker_receipts_dir=args.blocker_receipts_dir,
+        blocker_current_inputs=blocker_current_inputs,
     )
 
 

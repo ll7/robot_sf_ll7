@@ -18,6 +18,12 @@ from typing import Any
 
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import _latest_check_runs
+from scripts.dev.goal_blocker_receipt import (
+    evaluate_redispatch,
+    load_receipt,
+    normalize_fingerprint_inputs,
+    summarize_redispatch,
+)
 from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
 from scripts.dev.routed_worker_manifest import classify_worker_output
 
@@ -58,6 +64,7 @@ TOKEN_EFFICIENCY_ACTIONS = (
     "store verbose validation, worker, and CI logs outside the parent thread",
     "record unavailable worker routes and reset times before retrying delegation",
 )
+DEFAULT_REPOSITORY = "ll7/robot_sf_ll7"
 
 
 @dataclass(frozen=True)
@@ -520,6 +527,7 @@ def controller_checkpoint(
     prs: list[dict[str, Any]],
     errors: list[str],
     route_failures: list[dict[str, Any]] | None = None,
+    blocker_receipts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return a one-screen resume checkpoint for long Codex controller threads."""
     pr_next_actions = [
@@ -581,6 +589,7 @@ def controller_checkpoint(
         ],
         "issue_numbers": [issue.get("number") for issue in issues],
         "prs": pr_next_actions,
+        "blocker_receipts": blocker_receipts or summarize_redispatch([]),
         "route_failure_manifest_count": len(route_failures),
         "route_failure_attempt_count": route_failure_count,
         "route_incomplete_output_attempt_count": route_incomplete_output_count,
@@ -718,6 +727,46 @@ def issue_queue_snapshot(
     return rows, sources, errors, truncations
 
 
+def blocker_receipt_snapshot(
+    issue_numbers: list[int],
+    *,
+    repository: str,
+    receipts_dir: str = "",
+    current_inputs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return compact blocker receipt decisions for explicitly tracked issues."""
+    rows: list[dict[str, Any]] = []
+    for issue in sorted(set(issue_numbers)):
+        state = load_receipt(issue_number=issue, directory=receipts_dir or None)
+        if state["status"] == "available":
+            decision = evaluate_redispatch(
+                state["receipt"],
+                current_inputs=current_inputs,
+                repository=repository,
+                issue_number=issue,
+            )
+            receipt = {
+                "status": "available",
+                "path": state["path"],
+                "fingerprint": state["receipt"]["blocker"]["fingerprint"],
+                **decision,
+            }
+        else:
+            receipt = {
+                "status": state["status"],
+                "path": state["path"],
+                "fingerprint": None,
+                "decision": "no_receipt" if state["status"] == "missing" else "invalid_receipt",
+                "action": "re_evaluate",
+                "reason": "no_prior_receipt" if state["status"] == "missing" else "receipt_invalid",
+                "changed_fields": [],
+                "errors": state.get("errors", []),
+            }
+        rows.append({"issue": issue, "blocker_receipt": receipt})
+    summary = summarize_redispatch(rows)
+    return {**summary, "issues": rows}
+
+
 def _rollup_conclusion(check: dict[str, Any]) -> str:
     """Return a normalized check conclusion."""
     return str(check.get("conclusion") or check.get("state") or "pending").lower()
@@ -831,6 +880,25 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     sources.extend(pr_sources)
     errors.extend(pr_errors)
 
+    blocker_receipts = summarize_redispatch([])
+    blocker_issue_numbers = args.blocker_issue or args.claim_issue
+    if blocker_issue_numbers:
+        current_inputs: dict[str, Any] | None = None
+        if args.blocker_current_inputs:
+            try:
+                raw_inputs = json.loads(
+                    Path(args.blocker_current_inputs).read_text(encoding="utf-8")
+                )
+                current_inputs = normalize_fingerprint_inputs(raw_inputs)
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                errors.append(f"blocker current-inputs unavailable: {exc}")
+        blocker_receipts = blocker_receipt_snapshot(
+            blocker_issue_numbers,
+            repository=args.repository,
+            receipts_dir=args.blocker_receipts_dir,
+            current_inputs=current_inputs,
+        )
+
     route_failures: list[dict[str, Any]] = []
     for manifest_path in getattr(args, "route_manifest", []):
         route_row = route_manifest_snapshot(manifest_path)
@@ -845,6 +913,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         prs=prs,
         errors=errors,
         route_failures=route_failures,
+        blocker_receipts=blocker_receipts,
     )
 
     return {
@@ -864,6 +933,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "issues_truncated_any": any(marker.get("truncated") for marker in issue_truncations),
         "issues_truncated": issue_truncations,
         "prs": prs,
+        "blocker_receipts": blocker_receipts,
         "route_failures": route_failures,
         "controller_checkpoint": checkpoint,
         "errors": errors,
@@ -896,6 +966,28 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="issue number whose agent-claim ref should be summarized",
+    )
+    parser.add_argument(
+        "--blocker-issue",
+        type=int,
+        action="append",
+        default=[],
+        help="issue number whose external blocker receipt should be summarized",
+    )
+    parser.add_argument(
+        "--blocker-receipts-dir",
+        default="",
+        help="optional external goal-blocker receipt directory",
+    )
+    parser.add_argument(
+        "--blocker-current-inputs",
+        default="",
+        help="optional JSON file containing all current goal-blocker fingerprint fields",
+    )
+    parser.add_argument(
+        "--repository",
+        default=DEFAULT_REPOSITORY,
+        help="repository identity used when validating blocker receipt ownership",
     )
     parser.add_argument(
         "--route-manifest",

@@ -27,6 +27,14 @@ The default stop condition is queue exhaustion. A user-provided time budget is a
 time budget stops the loop, the agent must leave a concise handoff that names the last completed
 item, current blocker, changed GitHub objects, and next recommended action.
 
+Blocked implementation, review, and execution outcomes may persist a compact
+``goal_blocker_receipt.v1`` through ``scripts.dev.goal_blocker_receipt``. The receipt lives under
+the common Git ``codex-agent-runs/active`` artifact owner rather than in a repository diff. A
+pre-claim issue snapshot may suppress only an exact ``blocked_unchanged`` fingerprint; changed,
+missing, unavailable, malformed, or stale inputs route back to re-evaluation. The receipt is
+routing evidence and does not mutate issue labels, authorize compute or external inputs, replace
+claims, or make scientific or maintainer decisions.
+
 Goal-loop skills are orchestration layers, not replacements for narrower workflow skills. They
 should delegate to existing repo-local skills for concrete work:
 

@@ -46,7 +46,10 @@ def _audit_payload(number: int, *, repo: str) -> tuple[dict[str, Any] | None, st
     head = payload.get("head")
     base = payload.get("base")
     merge_commit_sha = payload.get("merge_commit_sha")
-    if state != "merged" or not isinstance(merged_at, str) or not merged_at:
+    # The REST pulls endpoint reports a merged PR with ``state: closed`` and a
+    # set ``merged_at``; accept both the GraphQL-style ``merged`` and the
+    # REST-style ``closed`` when the merge timestamp is present.
+    if state not in ("merged", "closed") or not isinstance(merged_at, str) or not merged_at:
         return None, (
             f"PR {number} is not merged (state={state!r}, merged_at={merged_at!r}); "
             "no audit disposition recorded"
@@ -71,7 +74,7 @@ def _audit_payload(number: int, *, repo: str) -> tuple[dict[str, Any] | None, st
             "schema": AUDIT_SCHEMA,
             "number": number,
             "repo": repo,
-            "state": "merged",
+            "state": state,
             "head_sha": head["sha"],
             "base_sha": base["sha"],
             "merge_commit_sha": merge_commit_sha,

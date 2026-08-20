@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
-from scripts.dev import gh_issue_rest
+from scripts.dev import gh_issue_rest, goal_issue_admission, issue_implementability
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.github_quota import (
     DEFAULT_CORE_SAFETY_THRESHOLD,
@@ -423,18 +423,18 @@ def expand_issue_numbers(values: list[int], *, expand_range: bool) -> list[int]:
 def _labels(issue: dict[str, Any]) -> list[str]:
     """Return compact label names from gh issue JSON."""
     return sorted(
-        str(label.get("name", ""))
+        label if isinstance(label, str) else str(label.get("name", ""))
         for label in issue.get("labels", [])
-        if isinstance(label, dict) and label.get("name")
+        if (isinstance(label, str) and label) or (isinstance(label, dict) and label.get("name"))
     )
 
 
 def _assignees(issue: dict[str, Any]) -> list[str]:
     """Return compact assignee logins from gh issue JSON."""
     return sorted(
-        str(user.get("login", ""))
+        user if isinstance(user, str) else str(user.get("login", ""))
         for user in issue.get("assignees", [])
-        if isinstance(user, dict) and user.get("login")
+        if (isinstance(user, str) and user) or (isinstance(user, dict) and user.get("login"))
     )
 
 
@@ -506,6 +506,85 @@ def _claim_payload(claim: dict[str, Any]) -> dict[str, Any]:
         "claim_ref": claim.get("claim_ref"),
         "sha": claim.get("sha"),
     }
+
+
+def _admission_error(*, claim: dict[str, Any], error: str) -> dict[str, Any]:
+    """Return a fail-closed admission row when the canonical preflight is unavailable."""
+    return {
+        "schema": goal_issue_admission.SCHEMA,
+        "ok": False,
+        "outcome": "error",
+        "write_attempted": False,
+        "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+        "classification": "error",
+        "reasons": [error],
+        "ready": False,
+        "write_allowed": False,
+        "claim": goal_issue_admission.compact_admission(
+            {
+                "outcome": "error",
+                "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+                "preflight": {"claim": claim},
+            }
+        )["claim"],
+        "claim_outcome": "unavailable",
+    }
+
+
+def _issue_admission(
+    issue: dict[str, Any],
+    *,
+    number: int,
+    claim: dict[str, Any],
+    repo: str,
+    remote: str,
+) -> dict[str, Any]:
+    """Attach the canonical read-only admission result to one issue snapshot.
+
+    Ready candidates use the live wrapper so optional typed dependency packets
+    are consumed by the owner that defines them.  Obvious non-ready rows use
+    the same pure evaluator locally, avoiding a second GitHub read while still
+    exposing the exact generic classification and claim state.
+    """
+    labels = _labels(issue)
+    state = _issue_state(issue)
+    assignees = _assignees(issue)
+    has_obvious_blocker = (
+        _is_blocked_external_issue(labels)
+        or COMPUTE_ROUTING_LABEL in labels
+        or _explicit_blocker_label(labels) is not None
+        or any(label in UNCLAIMABLE_LABELS for label in labels)
+    )
+    use_live_preflight = (
+        state == "OPEN"
+        and "state:ready" in labels
+        and not assignees
+        and not has_obvious_blocker
+        and claim.get("ok") is True
+        and claim.get("claimed") is not True
+    )
+    if use_live_preflight:
+        try:
+            payload = goal_issue_admission.admit_issue(
+                number,
+                repo=repo,
+                remote=remote,
+                source_ref=goal_issue_admission.DEFAULT_SOURCE_REF,
+                check_only=True,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            return _admission_error(claim=claim, error=str(exc))
+        return goal_issue_admission.compact_admission(payload)
+
+    normalized_issue = dict(issue)
+    normalized_issue["body"] = issue.get("body", "")
+    normalized_issue["title"] = issue.get("title", "") or ""
+    normalized_issue["url"] = issue.get("url", "") or ""
+    try:
+        preflight = issue_implementability.evaluate_issue(normalized_issue, claim)
+    except (TypeError, ValueError) as exc:
+        return _admission_error(claim=claim, error=str(exc))
+    return goal_issue_admission.compact_preflight(preflight)
 
 
 def _claim_status_payload(
@@ -693,6 +772,13 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         "body_excerpt": excerpt,
         "body_truncated": truncated,
         "claim": _claim_payload(claim),
+        "admission": _issue_admission(
+            issue,
+            number=int(issue.get("number", number)),
+            claim=claim,
+            repo=repo,
+            remote=remote,
+        ),
         "classification": classification,
         "reason": reason,
         "linked_prs": [],
@@ -703,7 +789,11 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
 
 
 def _snapshot_from_issue_list(
-    issue: dict[str, Any], *, remote: str, claim_statuses: dict[int, dict[str, Any]] | None = None
+    issue: dict[str, Any],
+    *,
+    repo: str,
+    remote: str,
+    claim_statuses: dict[int, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build an issue snapshot using preloaded issue fields."""
     try:
@@ -748,6 +838,13 @@ def _snapshot_from_issue_list(
         "classification": classification,
         "reason": reason,
         "linked_prs": [],
+        "admission": _issue_admission(
+            issue,
+            number=number,
+            claim=claim,
+            repo=repo,
+            remote=remote,
+        ),
     }
 
 
@@ -805,7 +902,7 @@ def snapshot_claimable_issues(
     ]
     claim_statuses = _batch_claim_statuses(issue_numbers, remote=remote)
     snapshots = [
-        _snapshot_from_issue_list(issue, remote=remote, claim_statuses=claim_statuses)
+        _snapshot_from_issue_list(issue, repo=repo, remote=remote, claim_statuses=claim_statuses)
         for issue in listed
     ]
     issues = [
@@ -1200,6 +1297,7 @@ def _context_capsule(issue: dict[str, Any]) -> dict[str, Any]:
             "labels": issue.get("labels", []),
             "body_excerpt": issue.get("body_excerpt", ""),
         },
+        "admission": issue.get("admission", {}),
         "claim": issue.get("claim", {}),
         "files_to_read": [issue.get("recommended_context_pack", "docs/context/INDEX.md")],
         "tests_to_run": [],

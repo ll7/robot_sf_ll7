@@ -249,11 +249,66 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
 
     assert payload["mode"] == "claimable"
     assert payload["issues"][0]["classification"] == "claimable"
+    assert payload["issues"][0]["admission"]["classification"] == "needs_ready_label"
+    assert payload["issues"][0]["admission"]["claim_outcome"] == "unclaimed"
     assert payload["issues"][0]["body_excerpt"] == ""
     assert payload["issues"][0]["body_truncated"] is False
     assert payload["issues"][1]["classification"] == "blocked_label"
     assert "reason" in payload["issues"][1]
     claim.assert_called_once_with([2667, 2668], remote="origin")
+
+
+def test_snapshot_claimable_issues_uses_live_admission_for_ready_candidates() -> None:
+    """Ready candidates must use the canonical check-only wrapper, including future gates."""
+    issue_list = [
+        {
+            "number": 2669,
+            "title": "ready issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2669",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        }
+    ]
+    preflight = {
+        "schema": "issue_implementability.v1",
+        "classification": "needs_dependency",
+        "reasons": ["mandatory dependency is unsatisfied"],
+        "ready": False,
+        "write_allowed": False,
+        "claim": _claim_status(2669),
+    }
+    with (
+        patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh,
+        patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim,
+        patch("scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue") as admit,
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        claim.return_value = {2669: _claim_status(2669)}
+        admit.return_value = {
+            "schema": "goal_issue_admission.v1",
+            "ok": False,
+            "outcome": "not_admitted",
+            "write_attempted": False,
+            "source_ref": "origin/main",
+            "preflight": preflight,
+            "claim": preflight["claim"],
+        }
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7", remote="origin", body_limit=150, limit=1
+        )
+
+    admission = payload["issues"][0]["admission"]
+    assert admission["classification"] == "needs_dependency"
+    assert admission["outcome"] == "not_admitted"
+    assert admission["claim_outcome"] == "unclaimed"
+    admit.assert_called_once_with(
+        2669,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        source_ref="origin/main",
+        check_only=True,
+    )
 
 
 def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:

@@ -1312,6 +1312,12 @@ Any explicit `blocked:*` label is likewise retained for audit but classifies as 
 including the exact blocker label in its reason, and is excluded from autonomous implementation
 dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
 and remain outside autonomous implementation dispatch until the review gate is cleared.
+Before any autonomous claim write, route the candidate through
+`scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
+and claim preflight before calling the atomic claim writer. Snapshot consumers should use the
+canonical `admission` projection; direct `issue_claim.py acquire` calls are reserved for an
+explicit maintainer override with an actor, reason, and declaration that no scientific claim is
+being made.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only

@@ -273,7 +273,7 @@ def validate_split_and_episode_invariants(packet: dict[str, Any]) -> None:  # no
                 all_ids.add(ep_id)
 
 
-def check_yield_status(  # noqa: C901
+def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict guards
     output_root: Path,
     config_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -303,6 +303,13 @@ def check_yield_status(  # noqa: C901
             "manifest_path": str(manifest_path),
         }
 
+    if not isinstance(manifest, dict):
+        return {
+            "check_status": "inconclusive_missing_input",
+            "reason": "Manifest must contain a JSON object",
+            "manifest_path": str(manifest_path),
+        }
+
     ledger = manifest.get("yield_ledger")
     if not isinstance(ledger, dict) or not isinstance(ledger.get("lineage"), dict):
         return {
@@ -311,10 +318,17 @@ def check_yield_status(  # noqa: C901
             "manifest_path": str(manifest_path),
         }
 
-    if manifest.get("identity_defects"):
+    identity_defects = manifest.get("identity_defects", [])
+    if not isinstance(identity_defects, list):
         return {
             "check_status": "blocked_integrity_or_lineage",
-            "reason": f"Identity defects detected: {manifest['identity_defects'][:5]}",
+            "reason": "Manifest identity_defects must be a list",
+            "manifest_path": str(manifest_path),
+        }
+    if identity_defects:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": f"Identity defects detected: {identity_defects[:5]}",
             "manifest_path": str(manifest_path),
         }
 
@@ -329,6 +343,12 @@ def check_yield_status(  # noqa: C901
         }
 
     missing = manifest.get("missing_episode_ids", [])
+    if not isinstance(missing, list):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Manifest missing_episode_ids must be a list",
+            "manifest_path": str(manifest_path),
+        }
     if missing:
         return {
             "check_status": "blocked_integrity_or_lineage",
@@ -343,6 +363,14 @@ def check_yield_status(  # noqa: C901
         "duplicate_episode_id",
         "unexpected_episode_id",
     }
+    if not isinstance(exclusions, list) or any(
+        not isinstance(exclusion, dict) for exclusion in exclusions
+    ):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Manifest exclusions must be a list of mappings",
+            "manifest_path": str(manifest_path),
+        }
     if any(ex.get("reason") in integrity_reasons for ex in exclusions):
         return {
             "check_status": "blocked_integrity_or_lineage",
@@ -374,10 +402,27 @@ def check_yield_status(  # noqa: C901
                 "manifest_path": str(manifest_path),
             }
 
-    yield_gates = manifest.get("yield_gates", {})
+    yield_gates = manifest.get("yield_gates")
+    strata = ledger.get("strata")
+    if not isinstance(yield_gates, dict) or not isinstance(strata, dict):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Manifest lacks a valid yield-gates or per-stratum ledger mapping",
+            "manifest_path": str(manifest_path),
+        }
+    for scenarios in strata.values():
+        if not isinstance(scenarios, dict) or any(
+            not isinstance(stats, dict) for stats in scenarios.values()
+        ):
+            return {
+                "check_status": "blocked_integrity_or_lineage",
+                "reason": "Yield ledger strata must map scenarios to statistic mappings",
+                "manifest_path": str(manifest_path),
+            }
+
     if yield_gates.get("status") != "pass":
         shortfalls: list[str] = []
-        for split, scenarios in ledger.get("strata", {}).items():
+        for split, scenarios in strata.items():
             for scenario_id, stats in scenarios.items():
                 if int(stats.get("shortfall", 0)) > 0:
                     shortfalls.append(

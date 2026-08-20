@@ -829,6 +829,44 @@ def test_yield_check_fingerprint_mismatch(tmp_path: Path) -> None:
     assert "fingerprint" in result["reason"].lower()
 
 
+def test_yield_check_missing_config_is_inconclusive(tmp_path: Path) -> None:
+    """A missing configured packet cannot be silently treated as an unverified check."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+
+    missing_config = tmp_path / "missing_packet.yaml"
+    result = check_yield_status(tmp_path, config_path=missing_config)
+    assert result["check_status"] == "inconclusive_missing_input"
+    assert "unavailable" in result["reason"].lower()
+
+    exit_code = cli_main(
+        [
+            "--config",
+            str(missing_config),
+            "--output-root",
+            str(tmp_path),
+            "--yield-check",
+            "--json",
+        ]
+    )
+    assert exit_code == 0
+
+
+def test_yield_check_rejects_malformed_manifest_shape(tmp_path: Path) -> None:
+    """A syntactically valid non-object manifest is missing required check input."""
+    manifest_path = tmp_path / "balanced_oracle_dataset_manifest.json"
+    manifest_path.write_text("[]\n", encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+    assert result["check_status"] == "inconclusive_missing_input"
+    assert "json object" in result["reason"].lower()
+
+
 def test_yield_check_deterministic(tmp_path: Path) -> None:
     """check_yield_status is deterministic for identical inputs."""
     collector = BalancedOracleCollector(

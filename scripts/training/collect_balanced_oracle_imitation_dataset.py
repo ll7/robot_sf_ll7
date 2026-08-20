@@ -113,8 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     exhausted_attempts = _load_exhausted_attempts(args.exhausted_attempts_file)
 
     if args.yield_check:
-        config_path = args.config if args.config.exists() else None
-        result = check_yield_status(args.output_root, config_path=config_path)
+        result = check_yield_status(args.output_root, config_path=args.config)
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
         else:

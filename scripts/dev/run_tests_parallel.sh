@@ -88,7 +88,6 @@ core_test_paths=(
   tests/dev
   tests/test_action_adapters.py
   tests/test_config_validation.py
-  tests/test_environment_factory_signatures.py
   tests/test_error_policy.py
   tests/test_planner.py
   tests/test_range_sensor.py

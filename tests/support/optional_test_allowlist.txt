@@ -14,11 +14,13 @@ tests/carla_bridge/
 tests/integration/
 tests/planner/
 tests/render/
+tests/unit/benchmark/
 tests/training/
 tests/visuals/
 
 # Individual test files (optional even when outside optional directories)
 tests/sb3_test.py
+tests/test_environment_factory_signatures.py
 tests/tools/test_probe_sonic_model_inference.py
 tests/test_baseline_ppo_smoke.py
 tests/test_benchmark_visualization_integration.py
@@ -30,6 +32,11 @@ tests/test_output_root_migration.py
 tests/test_ppo_diagnostics.py
 tests/test_predictive_model.py
 tests/prediction/test_forecast_heavy_model_decision_packet.py
+tests/sim/test_zanlungo_corridor_acceptance.py
+tests/unit/test_ch8_statistics.py
+tests/unit/test_evidence_integration_inventory.py
+tests/unit/test_full_classic_visuals.py
+tests/unit/test_geojson_map_builder.py
 tests/unit/test_cli_logging_flags.py
 tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py

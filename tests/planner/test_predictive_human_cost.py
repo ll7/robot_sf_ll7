@@ -271,6 +271,8 @@ def test_mppi_enabled_cost_preserves_scalar_batch_parity() -> None:
         {},
         {"positions": [[0.5, 0.0]], "velocities": []},
         {"positions": [[float("nan"), 0.0]], "velocities": [[0.0, 0.0]]},
+        {"positions": [["not-a-number", 0.0]], "velocities": [[0.0, 0.0]]},
+        {"positions": [0.5, 0.0], "velocities": [[0.0, 0.0]]},
     ],
 )
 def test_mppi_enabled_cost_rejects_missing_or_invalid_pedestrian_state(
@@ -295,6 +297,25 @@ def test_mppi_enabled_cost_rejects_missing_or_invalid_pedestrian_state(
 
     with pytest.raises(ValueError, match="planner-visible pedestrian"):
         planner._extract_state(observation)
+
+
+def test_mppi_default_cost_preserves_empty_state_normalization() -> None:
+    """The default-disabled cost keeps the legacy empty pedestrian-state behavior."""
+    planner = MPPISocialPlannerAdapter()
+    observation = {
+        "robot": {
+            "position": np.asarray([0.0, 0.0]),
+            "heading": np.asarray([0.0]),
+            "speed": np.asarray([0.2]),
+        },
+        "goal": {"current": np.asarray([2.0, 0.0]), "next": np.asarray([2.0, 0.0])},
+        "pedestrians": {},
+    }
+
+    *_prefix, ped_positions, ped_velocities = planner._extract_state(observation)
+
+    assert ped_positions.shape == (0, 2)
+    assert ped_velocities.shape == (0, 2)
 
 
 # ---------------------------------------------------------------------------

@@ -1032,6 +1032,36 @@ def test_yield_check_rejects_inconsistent_pass_gate(tmp_path: Path) -> None:
     assert "Yield ledger" in result["reason"]
 
 
+def test_yield_check_rejects_unexpected_ledger_keys(tmp_path: Path) -> None:
+    """Unexpected ledger splits or strata cannot crash or bypass exact-key validation."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_path = tmp_path / "balanced_oracle_dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    manifest["yield_ledger"]["strata"]["unexpected"] = {}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "strata keys" in result["reason"]
+
+    del manifest["yield_ledger"]["strata"]["unexpected"]
+    manifest["yield_ledger"]["strata"]["train"]["unexpected"] = {}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "unexpected scenarios" in result["reason"]
+
+
 def test_yield_check_side_effect_free(tmp_path: Path) -> None:
     """check_yield_status does not modify files in the output root."""
     collector = BalancedOracleCollector(

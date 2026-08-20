@@ -417,6 +417,16 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
         return "Manifest scenario_ids must be a non-empty list of strings"
     if not isinstance(strata, dict):
         return "Yield ledger strata must be a mapping"
+    expected_splits = set(_SPLITS)
+    actual_splits = set(strata)
+    if actual_splits != expected_splits:
+        missing_splits = sorted(expected_splits - actual_splits)
+        unexpected_splits = sorted(actual_splits - expected_splits)
+        return (
+            "Yield ledger strata keys are inconsistent"
+            f" (missing={missing_splits}, unexpected={unexpected_splits})"
+        )
+    expected_scenarios = set(scenario_ids)
 
     totals = ledger.get("totals")
     if not isinstance(totals, dict):
@@ -436,6 +446,9 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
         missing_scenarios = [scenario for scenario in scenario_ids if scenario not in scenarios]
         if missing_scenarios:
             return f"Yield ledger is missing scenarios for {split}: {missing_scenarios}"
+        unexpected_scenarios = sorted(set(scenarios) - expected_scenarios)
+        if unexpected_scenarios:
+            return f"Yield ledger has unexpected scenarios for {split}: {unexpected_scenarios}"
         for scenario_id in scenario_ids:
             stats = scenarios[scenario_id]
             if not isinstance(stats, dict):

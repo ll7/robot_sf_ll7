@@ -534,5 +534,8 @@ def test_require_answerable_rejects_unbound_diagnostic_proof_chain(tmp_path: Pat
 
     assert completed.returncode == 2
     assert "answerability gate requires state=answerable" in completed.stderr
-    assert "blocked_missing_proof" in completed.stderr or "diagnostic_only" in completed.stderr
+    assert any(
+        state in completed.stderr
+        for state in ("blocked_missing_proof", "blocked_analysis_contract", "blocked_underpowered")
+    )
     assert not (tmp_path / "packet" / "summary.json").exists()

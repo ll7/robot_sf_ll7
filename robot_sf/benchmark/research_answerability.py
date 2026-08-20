@@ -440,6 +440,22 @@ def evaluate_answerability(  # noqa: C901
         )
 
     if enforce_admission_proof and design["mode"] == "decision_capable":
+        if analysis["dry_run_status"] != "passed":
+            return AnswerabilityResult(
+                "blocked_analysis_contract",
+                (
+                    "decision-capable admission requires analysis dry-run status 'passed'; "
+                    f"got {analysis['dry_run_status']!r}",
+                ),
+            )
+        if design["power_status"] != "adequate":
+            return AnswerabilityResult(
+                "blocked_underpowered",
+                (
+                    "decision-capable admission requires power status 'adequate'; "
+                    f"got {design['power_status']!r}",
+                ),
+            )
         binding_error = _proof_binding_error(contract)
         if binding_error:
             return AnswerabilityResult("blocked_missing_proof", (binding_error,))

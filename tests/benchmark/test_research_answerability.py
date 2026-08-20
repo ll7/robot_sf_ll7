@@ -160,6 +160,47 @@ def test_strict_admission_requires_verified_proof_binding() -> None:
     assert "proof_binding" in result.reasons[0]
 
 
+@pytest.mark.parametrize(
+    ("section", "field", "value", "expected_state", "reason_fragment"),
+    [
+        (
+            "analysis",
+            "dry_run_status",
+            "not_required",
+            "blocked_analysis_contract",
+            "requires analysis dry-run status 'passed'",
+        ),
+        (
+            "design",
+            "power_status",
+            "not_required",
+            "blocked_underpowered",
+            "requires power status 'adequate'",
+        ),
+    ],
+)
+def test_strict_decision_capable_admission_rejects_waived_dry_run_or_power(
+    section: str,
+    field: str,
+    value: str,
+    expected_state: str,
+    reason_fragment: str,
+) -> None:
+    """Decision-capable admission cannot waive the dry-run or power proof floor."""
+    contract = _proof_contract()
+    contract["proof_binding"] = _proof_binding()
+    contract["design"]["mode"] = "decision_capable"
+    contract["artifacts"]["durability_status"] = "ready"
+    contract["analysis"]["dry_run_status"] = "passed"
+    contract["design"]["power_status"] = "adequate"
+    contract[section][field] = value
+
+    result = evaluate_answerability(contract, enforce_admission_proof=True)
+
+    assert result.state == expected_state
+    assert reason_fragment in result.reasons[0]
+
+
 def test_optional_fallback_producer_remains_visible_as_warning() -> None:
     """Optional fallback/degraded producers cannot disappear from the answerability report."""
     contract = json.loads(ISSUE_6474_FIXTURE.read_text(encoding="utf-8"))

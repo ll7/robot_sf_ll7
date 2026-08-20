@@ -16,6 +16,102 @@ DEFAULT_REMOTE = "origin"
 DEFAULT_SOURCE_REF = "origin/main"
 
 
+def _claim_outcome(claim: Any, *, admission_outcome: str) -> str:
+    """Return the explicit atomic-claim outcome exposed to queue consumers."""
+    if admission_outcome == "claim_acquired":
+        return "acquired"
+    if admission_outcome == "claim_failed":
+        return "write_failed"
+    if not isinstance(claim, dict):
+        return "not_checked"
+    if claim.get("ok") is not True:
+        return "unavailable"
+    if claim.get("claimed") is True:
+        return "already_claimed"
+    return "unclaimed"
+
+
+def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
+    """Project one admission result into the stable queue-snapshot contract.
+
+    Queue snapshots are read-only route evidence.  They must expose the same
+    preflight and claim verdicts as the live admission wrapper without copying
+    the implementability rules into each snapshot producer.
+    """
+    preflight = payload.get("preflight")
+    if not isinstance(preflight, dict):
+        preflight = {}
+    outcome = str(payload.get("outcome") or "error")
+    claim = payload.get("claim")
+    if not isinstance(claim, dict):
+        claim = preflight.get("claim")
+    if not isinstance(claim, dict):
+        claim = None
+    return {
+        "schema": SCHEMA,
+        "ok": payload.get("ok") is True,
+        "outcome": outcome,
+        "write_attempted": payload.get("write_attempted") is True,
+        "source_ref": payload.get("source_ref", DEFAULT_SOURCE_REF),
+        "classification": preflight.get("classification"),
+        "reasons": list(preflight.get("reasons", [])),
+        "ready": preflight.get("ready") is True,
+        "write_allowed": preflight.get("write_allowed") is True,
+        "claim": claim,
+        "claim_outcome": _claim_outcome(claim, admission_outcome=outcome),
+    }
+
+
+def compact_preflight(
+    preflight: dict[str, Any], *, source_ref: str = DEFAULT_SOURCE_REF
+) -> dict[str, Any]:
+    """Project a pure preflight into the same read-only admission shape.
+
+    This is used when a snapshot already has the issue and claim payloads for
+    an obviously non-ready row.  Snapshot callers route ready candidates
+    through :func:`admit_issue` so future preflight extensions, including typed
+    dependency packets, remain owned by the canonical live path.
+    """
+    ready = preflight.get("ready") is True
+    payload = {
+        "schema": SCHEMA,
+        "ok": ready,
+        "outcome": "ready_check_only" if ready else "not_admitted",
+        "write_attempted": False,
+        "source_ref": source_ref,
+        "preflight": preflight,
+        "claim": preflight.get("claim"),
+    }
+    return compact_admission(payload)
+
+
+def _preflight_fingerprint(preflight: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the live issue inputs that must remain stable before a claim write."""
+    issue = preflight.get("issue")
+    contract = preflight.get("contract")
+    if not isinstance(issue, dict) or not isinstance(contract, dict):
+        return None
+    body_sha256 = contract.get("body_sha256")
+    state = issue.get("state")
+    labels = issue.get("labels")
+    assignees = issue.get("assignees")
+    if (
+        not isinstance(body_sha256, str)
+        or not isinstance(state, str)
+        or not isinstance(labels, list)
+        or not isinstance(assignees, list)
+    ):
+        return None
+    return {
+        "number": issue.get("number"),
+        "title": issue.get("title"),
+        "state": state,
+        "labels": list(labels),
+        "assignees": list(assignees),
+        "body_sha256": body_sha256,
+    }
+
+
 def admit_issue(
     issue_number: int,
     *,
@@ -39,15 +135,47 @@ def admit_issue(
         "check_only": check_only,
         "preflight": preflight,
         "write_attempted": False,
-        "claim": None,
+        "claim": preflight.get("claim"),
         "ok": False,
     }
     if preflight.get("ready") is not True:
         payload["outcome"] = "not_admitted"
+        payload["claim_outcome"] = _claim_outcome(
+            payload["claim"], admission_outcome=payload["outcome"]
+        )
         return payload
     if check_only:
         payload["ok"] = True
         payload["outcome"] = "ready_check_only"
+        payload["claim_outcome"] = _claim_outcome(
+            payload["claim"], admission_outcome=payload["outcome"]
+        )
+        return payload
+
+    revalidated = issue_implementability.live_issue_report(
+        issue_number,
+        repo=repo,
+        remote=remote,
+    )
+    initial_fingerprint = _preflight_fingerprint(preflight)
+    revalidated_fingerprint = _preflight_fingerprint(revalidated)
+    inputs_match = (
+        initial_fingerprint is not None
+        and revalidated_fingerprint is not None
+        and initial_fingerprint == revalidated_fingerprint
+    )
+    payload["initial_preflight"] = preflight
+    payload["preflight"] = revalidated
+    payload["claim"] = revalidated.get("claim")
+    payload["revalidation"] = {
+        "performed": True,
+        "inputs_match": inputs_match,
+    }
+    if not inputs_match or revalidated.get("ready") is not True:
+        payload["outcome"] = "not_admitted"
+        payload["claim_outcome"] = _claim_outcome(
+            payload["claim"], admission_outcome=payload["outcome"]
+        )
         return payload
 
     payload["write_attempted"] = True
@@ -60,6 +188,7 @@ def admit_issue(
     payload["claim"] = claim
     payload["ok"] = claim.get("ok") is True
     payload["outcome"] = "claim_acquired" if payload["ok"] else "claim_failed"
+    payload["claim_outcome"] = _claim_outcome(claim, admission_outcome=payload["outcome"])
     return payload
 
 

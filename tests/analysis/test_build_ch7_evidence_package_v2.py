@@ -14,12 +14,33 @@ from scripts.analysis import build_ch7_evidence_package_v2 as builder
 SOURCE_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
 )
+DURABLE_V2_PACKAGE = (
+    Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
+)
 CONFIG_PATH = Path(__file__).parents[2] / "configs/analysis/ch7_evidence_package.v2.yaml"
 FROZEN_CONFIG_PATH = Path(__file__).parents[2] / "configs/analysis/ch7_evidence_package.v2.1.yaml"
 
 
 def _read_atlas(output: Path) -> dict[str, object]:
     return json.loads((output / "publication/reduced_atlas.json").read_text(encoding="utf-8"))
+
+
+def _payload_tree_hash(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(
+        (
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and path.name != "SHA256SUMS"
+            and not path.name.endswith(".review.json")
+        ),
+        key=lambda path: path.relative_to(root).as_posix(),
+    ):
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(path.read_bytes())
+    digest.update((root / "SHA256SUMS").read_bytes())
+    return digest.hexdigest()
 
 
 def test_v2_projection_is_deterministic_and_contains_both_inversions(tmp_path: Path) -> None:
@@ -98,6 +119,18 @@ def test_v2_publishes_terminal_mapping_and_keeps_receipt_external(tmp_path: Path
     )
     assert source_verification["admission_receipt"]["schema"] == "ch7-evidence-admission.v2"
     assert not (output / "admission/receipt.json").exists()
+
+
+def test_v2_rebuild_matches_the_immutable_durable_package(tmp_path: Path) -> None:
+    output = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE,
+        output=output,
+        config_path=CONFIG_PATH,
+        check_determinism=True,
+    )
+
+    assert _payload_tree_hash(output) == _payload_tree_hash(DURABLE_V2_PACKAGE)
 
 
 def test_v2_selection_fails_closed_when_a_requested_cell_is_missing() -> None:

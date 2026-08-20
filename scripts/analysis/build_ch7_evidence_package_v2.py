@@ -99,13 +99,13 @@ FROZEN_RULING_CLAIM_BOUNDARY = (
     "excluded by the frozen #7042 ruling. No trace-level, causal, universal-ranking, or admission "
     "claim is produced by this builder."
 )
-LEGACY_EXCLUSION_REASON = (
-    "collision-related metric naming remains blocked; v2 does not quote this field"
-)
+LEGACY_EXCLUSION_REASON = "collision-related metrics and SNQI are excluded by the closed #7042 ruling; v2 does not quote this field"
 FROZEN_EXCLUSION_REASON = (
     "collision-related metrics and SNQI are excluded by the frozen #7042 ruling; v2.1 does not "
     "quote these fields"
 )
+LEGACY_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the closed #7042 ruling"
+FROZEN_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the frozen #7042 ruling"
 
 
 class Ch7EvidencePackageV2Error(ValueError):
@@ -686,9 +686,9 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                     "limitations": [
                         "release-cell grain only",
                         (
-                            "collision-related metrics and SNQI excluded by the frozen #7042 ruling"
+                            FROZEN_PANEL_LIMITATION
                             if _is_frozen_ruling_config(config)
-                            else "collision-related metrics omitted pending #7042"
+                            else LEGACY_PANEL_LIMITATION
                         ),
                         "no trace or mechanism-level causal evidence",
                         "no universal ranking claim",

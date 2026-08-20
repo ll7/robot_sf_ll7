@@ -13,7 +13,7 @@ import json
 import math
 import sys
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -74,6 +74,26 @@ def _string(value: Any, *, name: str) -> str:
     return value.strip()
 
 
+def _repo_declared_path(repo_root: Path, value: Any, *, name: str) -> Path:
+    """Resolve a declared repository path without following it outside the checkout.
+
+    Returns:
+        A path whose resolved target remains inside ``repo_root``.
+    """
+    relative = Path(_string(value, name=name))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"{name} must be a repository-relative path without '..'")
+    root = repo_root.resolve()
+    candidate = root / relative
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"{name} cannot be resolved safely within the repository") from exc
+    if resolved != root and root not in resolved.parents:
+        raise ValueError(f"{name} must resolve within the repository root")
+    return candidate
+
+
 def _digest(value: Any, *, name: str) -> str:
     """Return a lowercase hexadecimal digest or raise a contract-shaped error."""
     digest = _string(value, name=name).lower()
@@ -122,7 +142,11 @@ def _verify_source_files(
     observed: dict[str, str] = {}
     for raw_path in paths:
         rel_path = _string(raw_path, name=f"checkpoint {checkpoint_name}.source_paths[]")
-        path = repo_root / rel_path
+        path = _repo_declared_path(
+            repo_root,
+            rel_path,
+            name=f"checkpoint {checkpoint_name}.source_paths[]",
+        )
         if not path.is_file():
             raise ValueError(f"checkpoint {checkpoint_name} source is not a file: {rel_path}")
         digest = _sha256(path)
@@ -296,10 +320,13 @@ def _validate_protocol(repo_root: Path, protocol: Mapping[str, Any]) -> dict[str
         The normalized protocol fields needed in the preparation report.
     """
     scenario_path = _string(protocol.get("scenario_matrix"), name="parity_protocol.scenario_matrix")
+    scenario_file = _repo_declared_path(
+        repo_root, scenario_path, name="parity_protocol.scenario_matrix"
+    )
     scenario_digest = _digest(
         protocol.get("scenario_matrix_sha256"), name="parity_protocol.scenario_matrix_sha256"
     )
-    if _sha256(repo_root / scenario_path) != scenario_digest:
+    if _sha256(scenario_file) != scenario_digest:
         raise ValueError("parity scenario matrix digest does not match the current worktree")
     _validate_digest_map(
         repo_root,
@@ -307,8 +334,9 @@ def _validate_protocol(repo_root: Path, protocol: Mapping[str, Any]) -> dict[str
         name="parity_protocol.included_scenario_manifests",
     )
     seed_path = _string(protocol.get("seed_set_path"), name="parity_protocol.seed_set_path")
+    seed_file = _repo_declared_path(repo_root, seed_path, name="parity_protocol.seed_set_path")
     seed_digest = _digest(protocol.get("seed_set_sha256"), name="parity_protocol.seed_set_sha256")
-    if _sha256(repo_root / seed_path) != seed_digest:
+    if _sha256(seed_file) != seed_digest:
         raise ValueError("parity seed-set digest does not match the current worktree")
     seeds = protocol.get("seeds")
     if seeds != [111, 112, 113]:
@@ -344,7 +372,7 @@ def _validate_digest_map(repo_root: Path, value: Any, *, name: str) -> None:
     for raw_path, raw_digest in digest_map.items():
         path_value = _string(raw_path, name=f"{name} path")
         digest = _digest(raw_digest, name=f"{name}[{path_value}]")
-        path = repo_root / path_value
+        path = _repo_declared_path(repo_root, path_value, name=f"{name} path")
         if not path.is_file() or _sha256(path) != digest:
             raise ValueError(f"{name} digest does not match the current worktree: {path_value}")
 
@@ -377,17 +405,20 @@ def _validate_protocol_shape(protocol: Mapping[str, Any]) -> None:
 def _validate_protocol_arms(protocol: Mapping[str, Any]) -> None:
     """Validate the PPO and SACADRL fail-fast arm declarations."""
     planner_arms = protocol.get("planner_arms")
-    if not isinstance(planner_arms, list) or [arm.get("key") for arm in planner_arms] != [
-        "ppo",
-        "sacadrl",
-    ]:
-        raise ValueError("parity protocol must compare the PPO and SACADRL arms in order")
-    if planner_arms[0].get("runtime_overrides", {}).get("fallback_to_goal") is not False:
-        raise ValueError("PPO parity arm must disable goal fallback")
     if (
-        planner_arms[1].get("runtime_overrides", {}).get("socnav_missing_prereq_policy")
-        != "fail-fast"
+        not isinstance(planner_arms, list)
+        or len(planner_arms) != 2
+        or not all(isinstance(arm, Mapping) for arm in planner_arms)
+        or [arm.get("key") for arm in planner_arms] != ["ppo", "sacadrl"]
     ):
+        raise ValueError("parity protocol must compare two mapping arms, PPO then SACADRL")
+    ppo_overrides = planner_arms[0].get("runtime_overrides")
+    sacadrl_overrides = planner_arms[1].get("runtime_overrides")
+    if not isinstance(ppo_overrides, Mapping) or not isinstance(sacadrl_overrides, Mapping):
+        raise ValueError("parity protocol arm runtime_overrides must be mappings")
+    if ppo_overrides.get("fallback_to_goal") is not False:
+        raise ValueError("PPO parity arm must disable goal fallback")
+    if sacadrl_overrides.get("socnav_missing_prereq_policy") != "fail-fast":
         raise ValueError("SACADRL parity arm must fail fast on missing prerequisites")
 
 
@@ -422,7 +453,9 @@ def _validate_output_paths(protocol: Mapping[str, Any]) -> dict[str, Any]:
     normalized: dict[str, str] = {}
     for field in fields:
         path_value = _string(output_paths.get(field), name=f"parity_protocol.output_paths.{field}")
-        if not path_value.startswith("output/benchmarks/issue_6794_phase_c_parity"):
+        path = PurePosixPath(path_value)
+        root = PurePosixPath("output/benchmarks/issue_6794_phase_c_parity")
+        if path.is_absolute() or ".." in path.parts or path.parts[: len(root.parts)] != root.parts:
             raise ValueError(
                 f"parity output path must remain under the issue-6794 output root: {path_value}"
             )
@@ -438,12 +471,21 @@ def validate_preparation_contract(
     Returns:
         A machine-readable preparation-only validation report.
     """
-    config_path = config_path if config_path.is_absolute() else repo_root / config_path
+    if config_path.is_absolute():
+        root = repo_root.resolve()
+        try:
+            resolved_config = config_path.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("config path cannot be resolved safely") from exc
+        if resolved_config != root and root not in resolved_config.parents:
+            raise ValueError("config path must resolve within the repository root")
+    else:
+        config_path = _repo_declared_path(repo_root, str(config_path), name="config")
     config = _load_preparation_config(config_path)
 
     registry_block = _mapping(config.get("registry"), name="registry")
     registry_rel = _string(registry_block.get("path"), name="registry.path")
-    registry_path = repo_root / registry_rel
+    registry_path = _repo_declared_path(repo_root, registry_rel, name="registry.path")
     registry = load_registry(registry_path)
     common_tag = _string(registry_block.get("release_tag"), name="registry.release_tag")
     common_version = _string(

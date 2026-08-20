@@ -119,7 +119,15 @@ class TestGateScript:
         """
         start = time.monotonic()
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-m", "base_sensitive", "-q"],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                *_BASE_SENSITIVE_CORE_TARGETS,
+                "-m",
+                "base_sensitive",
+                "-q",
+            ],
             capture_output=True,
             text=True,
             cwd=str(REPO_ROOT),

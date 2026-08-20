@@ -25,6 +25,7 @@ tests/training/
 tests/visuals/
 
 # Individual test files (optional even when outside optional directories)
+tests/dev/test_check_worktree_optional_deps.py
 tests/sb3_test.py
 tests/test_environment_factory_signatures.py
 tests/tools/test_probe_sonic_model_inference.py

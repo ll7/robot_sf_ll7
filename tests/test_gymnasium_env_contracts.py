@@ -138,6 +138,7 @@ def test_public_factories_adhere_to_gymnasium_step_reset_contract(
 @pytest.mark.base_sensitive
 def test_image_factory_smoke_path_keeps_gymnasium_tuple_shape():
     """Smoke test for image envs, which still need a focused manual check."""
+    pytest.importorskip("pygame")
     env = make_image_robot_env(config=RobotSimulationConfig(map_id="uni_campus_big"))
     try:
         assert isinstance(env.action_space, spaces.Space)

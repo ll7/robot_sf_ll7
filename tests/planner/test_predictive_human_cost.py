@@ -512,6 +512,9 @@ def test_predictive_cost_aggregation_invalid_rejects() -> None:
     with pytest.raises(ValueError, match="aggregation must be one of"):
         PredictiveGaussianHumanCostConfig(enabled=True, aggregation="invalid")
 
+    with pytest.raises(ValueError, match="aggregation must be one of"):
+        PredictiveGaussianHumanCostConfig(enabled=True, aggregation=[])  # type: ignore[arg-type]
+
 
 # ---------------------------------------------------------------------------
 # Opt-in / default preservation

@@ -21,7 +21,7 @@ Formula (per pedestrian *p* at future time *t*)::
     lateral      = dot(delta, [-sin(heading_p), cos(heading_p)])
     sigma_L(t)   = longitudinal_sigma_m + forward_speed_gain * ||v_p|| * t
     exponent     = -0.5 * ((longitudinal / sigma_L(t))^2 + (lateral / lateral_sigma_m)^2)
-    cost_p       = amplitude * exp(exponent)   if ||delta|| <= cutoff_distance_m  else 0
+    cost_p       = exp(exponent)              if ||delta|| <= cutoff_distance_m  else 0
 
 Aggregation across pedestrians: ``sum`` (default), ``max``, or ``mean``.
 """
@@ -98,7 +98,7 @@ class PredictiveGaussianHumanCostConfig:
         _validate_non_negative_finite(float(self.weight), "weight")
         if not np.isfinite(float(self.stationary_heading_rad)):
             raise ValueError("predictive human cost stationary_heading_rad must be finite")
-        if self.aggregation not in _AGGREGATION_MODES:
+        if not isinstance(self.aggregation, str) or self.aggregation not in _AGGREGATION_MODES:
             raise ValueError(
                 f"predictive human cost aggregation must be one of {sorted(_AGGREGATION_MODES)}; "
                 f"got {self.aggregation!r}"

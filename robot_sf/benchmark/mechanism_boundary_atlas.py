@@ -207,6 +207,27 @@ def load_schema() -> dict[str, Any]:
     return json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+def _read_json(path: Path) -> Any:
+    """Read JSON input and turn filesystem/parser failures into validation errors.
+
+    Returns:
+        Parsed JSON value.
+    """
+
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise MechanismBoundaryAtlasError(
+            [AtlasValidationIssue("/", f"cannot read JSON input: {exc}")],
+            source=path,
+        ) from exc
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise MechanismBoundaryAtlasError(
+            [AtlasValidationIssue("/", f"invalid JSON input: {exc}")],
+            source=path,
+        ) from exc
+
+
 def load_atlas(path: Path, *, repo_root: Path | None = None) -> MechanismBoundaryAtlas:
     """Load, validate, and type an atlas JSON payload.
 
@@ -214,7 +235,7 @@ def load_atlas(path: Path, *, repo_root: Path | None = None) -> MechanismBoundar
         Typed atlas payload.
     """
 
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _read_json(path)
     if not isinstance(payload, Mapping):
         raise MechanismBoundaryAtlasError(
             [AtlasValidationIssue("/", "expected object payload")],
@@ -299,7 +320,7 @@ def build_atlas(
         Typed atlas payload.
     """
 
-    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    payload = _read_json(input_path)
     if not isinstance(payload, Mapping):
         raise MechanismBoundaryAtlasError(
             [AtlasValidationIssue("/", "expected object payload")],
@@ -314,11 +335,17 @@ def build_atlas(
         raise MechanismBoundaryAtlasError(issues, source=input_path)
     atlas = atlas_from_payload(output_payload)
     if output_path is not None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(
-            json.dumps(atlas.to_dict(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(atlas.to_dict(), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise MechanismBoundaryAtlasError(
+                [AtlasValidationIssue("/output", f"cannot write atlas output: {exc}")],
+                source=output_path,
+            ) from exc
     return atlas
 
 

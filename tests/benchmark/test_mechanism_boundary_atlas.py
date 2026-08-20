@@ -453,6 +453,48 @@ def test_cli_error_path_does_not_write_output_for_invalid_digest(tmp_path: Path)
     assert not output.exists()
 
 
+@pytest.mark.parametrize(
+    ("input_name", "content", "message"),
+    [
+        ("malformed.json", "{broken", "invalid JSON input"),
+        ("missing.json", None, "cannot read JSON input"),
+    ],
+)
+def test_builder_cli_rejects_unreadable_json_without_traceback(
+    tmp_path: Path,
+    input_name: str,
+    content: str | None,
+    message: str,
+) -> None:
+    input_path = tmp_path / input_name
+    if content is not None:
+        input_path.write_text(content, encoding="utf-8")
+    output = tmp_path / "out.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(BUILDER),
+            "--input",
+            str(input_path),
+            "--output",
+            str(output),
+            "--repo-root",
+            str(REPO_ROOT),
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert message in result.stderr
+    assert "Traceback" not in result.stderr
+    assert not output.exists()
+
+
 def test_builder_help_forwards_arguments_without_writing(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(BUILDER), "--help"],

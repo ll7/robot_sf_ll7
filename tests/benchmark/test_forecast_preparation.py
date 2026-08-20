@@ -9,6 +9,7 @@ import pytest
 
 from robot_sf.benchmark.forecast.forecast_preparation import (
     ForecastPreparationSourceSpec,
+    _validate_split_policy,
     build_forecast_preparation_packet,
     validate_forecast_preparation_packet,
 )
@@ -114,7 +115,7 @@ def test_cross_partition_group_leakage_fails_closed() -> None:
             row["lineage"]["split"] = second["split"]
 
     with pytest.raises(ValueError, match="group leakage across splits"):
-        _validate(payload)
+        _validate_split_policy(payload, [first, second])
 
 
 def test_cross_partition_near_duplicate_fails_closed() -> None:
@@ -124,6 +125,15 @@ def test_cross_partition_near_duplicate_fails_closed() -> None:
     second["near_duplicate_fingerprint"] = first["near_duplicate_fingerprint"]
 
     with pytest.raises(ValueError, match="near-duplicate trajectory leakage"):
+        _validate_split_policy(payload, [first, second])
+
+
+def test_source_fingerprint_is_bound_to_trace_bytes() -> None:
+    """A fabricated near-duplicate fingerprint cannot weaken split validation."""
+    payload = _packet()
+    payload["source_artifacts"][0]["near_duplicate_fingerprint"] = "fabricated"
+
+    with pytest.raises(ValueError, match="near_duplicate_fingerprint"):
         _validate(payload)
 
 
@@ -185,3 +195,32 @@ def test_false_reassurance_case_is_trace_backed_and_not_a_performance_claim() ->
     assert case["ade_m"] == 0.0
     assert case["fde_m"] == 0.0
     assert case["robot_pedestrian_clearance_m"] < case["risk_reference_m"]
+
+
+def test_baseline_estimates_record_sample_and_hardware_assumptions() -> None:
+    """Analytic baseline estimates must state their preparation assumptions."""
+    payload = _packet()
+
+    for estimate in payload["runtime_memory_estimates"]:
+        assert estimate["sample_size_assumption"]
+        assert estimate["hardware_assumption"]
+
+
+def test_baseline_estimate_values_are_bound_to_contract() -> None:
+    """Analytic estimate values cannot be changed without changing the owner contract."""
+    payload = _packet()
+    payload["runtime_memory_estimates"][0]["runtime_estimate"][
+        "estimated_scalar_operations_per_actor_horizon"
+    ] = 999
+
+    with pytest.raises(ValueError, match="baseline estimate contract drift"):
+        _validate(payload)
+
+
+def test_dependency_license_metadata_is_bound_to_contract() -> None:
+    """Dependency and rights dispositions cannot drift in the tracked packet."""
+    payload = _packet()
+    payload["dependency_license_comparison"][0]["decision"] = "adopt_external_dependency"
+
+    with pytest.raises(ValueError, match="dependency/license comparison contract drift"):
+        _validate(payload)

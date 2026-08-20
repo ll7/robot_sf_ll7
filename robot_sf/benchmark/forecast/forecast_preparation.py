@@ -14,6 +14,7 @@ import json
 import math
 import re
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -436,8 +437,10 @@ def build_forecast_preparation_packet(
                 group_id: split_by_group[group_id] for group_id in sorted(split_by_group)
             },
         },
-        "runtime_memory_estimates": [dict(item) for item in _BASELINE_ESTIMATES],
-        "dependency_license_comparison": [dict(item) for item in _DEPENDENCY_LICENSE_COMPARISON],
+        "runtime_memory_estimates": [deepcopy(item) for item in _BASELINE_ESTIMATES],
+        "dependency_license_comparison": [
+            deepcopy(item) for item in _DEPENDENCY_LICENSE_COMPARISON
+        ],
         "ade_fde_false_reassurance_case": _build_false_reassurance_case(loaded, root),
         "rows": rows,
         "sha256_coverage": _build_sha256_coverage(root, checksum_paths),
@@ -481,7 +484,12 @@ def validate_forecast_preparation_packet(  # noqa: C901
         raise ValueError("rows must contain two rows per pair")
 
     root = (Path(repo_root) if repo_root is not None else _repository_root()).resolve()
-    source_by_path = _validate_source_artifacts(source_artifacts, root)
+    ego_source_key = _require_text(
+        payload.get("ego_observation_source_key"), "ego_observation_source_key"
+    )
+    source_by_path = _validate_source_artifacts(
+        source_artifacts, root, ego_source_key=ego_source_key
+    )
     _validate_coverage_from_packet(payload, source_artifacts)
     _validate_rows(payload, rows, source_by_path)
     _validate_split_policy(payload, source_artifacts)
@@ -803,6 +811,8 @@ def _validate_split_policy(payload: Mapping[str, Any], source_artifacts: list[An
 def _validate_source_artifacts(
     source_artifacts: list[Any],
     root: Path,
+    *,
+    ego_source_key: str,
 ) -> dict[str, dict[str, Any]]:
     source_by_path: dict[str, dict[str, Any]] = {}
     for index, raw_artifact in enumerate(source_artifacts):
@@ -821,22 +831,58 @@ def _validate_source_artifacts(
         if actual_sha != expected_sha:
             raise ValueError(f"source SHA-256 mismatch: {relative_path}")
         trace = load_simulation_trace_export(path)
-        for field, actual in (
-            ("trace_id", trace.trace_id),
-            ("episode_id", trace.source.episode_id),
-            ("scenario_id", trace.source.scenario_id),
-            ("seed", trace.source.seed),
-            ("planner_id", trace.source.planner_id),
-        ):
-            if raw_artifact.get(field) != actual:
-                raise ValueError(f"source metadata drift for {relative_path}: {field}")
-        ego_status = raw_artifact.get("ego_observation_status")
-        if ego_status != "not_available":
-            raise ValueError("source ego_observation_status must be not_available")
+        _validate_source_artifact_metadata(
+            raw_artifact,
+            index=index,
+            relative_path=relative_path,
+            path=path,
+            trace=trace,
+            ego_source_key=ego_source_key,
+        )
         source_by_path[relative_path] = raw_artifact
     if len(source_by_path) != len(source_artifacts):
         raise ValueError("duplicate source artifact path")
     return source_by_path
+
+
+def _validate_source_artifact_metadata(
+    raw_artifact: dict[str, Any],
+    *,
+    index: int,
+    relative_path: str,
+    path: Path,
+    trace: SimulationTraceExport,
+    ego_source_key: str,
+) -> None:
+    for field, actual in (
+        ("trace_id", trace.trace_id),
+        ("episode_id", trace.source.episode_id),
+        ("scenario_id", trace.source.scenario_id),
+        ("seed", trace.source.seed),
+        ("planner_id", trace.source.planner_id),
+    ):
+        if raw_artifact.get(field) != actual:
+            raise ValueError(f"source metadata drift for {relative_path}: {field}")
+    scenario_family = _require_text(
+        raw_artifact.get("scenario_family"), f"source_artifacts[{index}].scenario_family"
+    )
+    expected_group_id = (
+        f"{scenario_family}:{trace.source.scenario_id}:{trace.source.seed}:"
+        f"{trace.source.episode_id}"
+    )
+    if raw_artifact.get("lineage_group_id") != expected_group_id:
+        raise ValueError(f"source metadata drift for {relative_path}: lineage_group_id")
+    if raw_artifact.get("frame_count") != len(trace.frames):
+        raise ValueError(f"source metadata drift for {relative_path}: frame_count")
+    if raw_artifact.get("size_bytes") != path.stat().st_size:
+        raise ValueError(f"source metadata drift for {relative_path}: size_bytes")
+    if raw_artifact.get("near_duplicate_fingerprint") != _near_duplicate_fingerprint(trace):
+        raise ValueError(f"source metadata drift for {relative_path}: near_duplicate_fingerprint")
+    if raw_artifact.get("ego_observation_source_key") != ego_source_key:
+        raise ValueError(f"source metadata drift for {relative_path}: ego_observation_source_key")
+    ego_status = raw_artifact.get("ego_observation_status")
+    if ego_status != "not_available":
+        raise ValueError("source ego_observation_status must be not_available")
 
 
 def _validate_coverage_from_packet(
@@ -872,10 +918,13 @@ def _validate_estimates(estimates: Any) -> None:
         raise ValueError("runtime_memory_estimates must be a list")
     expected = {item["baseline_id"] for item in _BASELINE_ESTIMATES}
     actual = set()
+    expected_by_id = {item["baseline_id"]: item for item in _BASELINE_ESTIMATES}
     for item in estimates:
         if not isinstance(item, dict):
             raise ValueError("baseline estimates must be mappings")
         baseline_id = _require_text(item.get("baseline_id"), "baseline_id")
+        if baseline_id not in expected_by_id or item != expected_by_id[baseline_id]:
+            raise ValueError(f"baseline estimate contract drift: {baseline_id}")
         actual.add(baseline_id)
         if item.get("estimate_status") != "preparation_estimate_not_measured":
             raise ValueError(f"baseline {baseline_id} must remain an analytic estimate")
@@ -883,7 +932,9 @@ def _validate_estimates(estimates: Any) -> None:
             raise ValueError(f"baseline {baseline_id} runtime estimate missing")
         if not isinstance(item.get("memory_estimate"), dict):
             raise ValueError(f"baseline {baseline_id} memory estimate missing")
-    if actual != expected:
+        _require_text(item.get("sample_size_assumption"), "sample_size_assumption")
+        _require_text(item.get("hardware_assumption"), "hardware_assumption")
+    if len(actual) != len(estimates) or actual != expected:
         raise ValueError(
             "baseline estimate coverage must include stationary, CV, CA, Kalman, Social Force"
         )
@@ -894,17 +945,20 @@ def _validate_dependencies(dependencies: Any, root: Path) -> None:
         raise ValueError("dependency_license_comparison must be a list")
     expected = {item["component"] for item in _DEPENDENCY_LICENSE_COMPARISON}
     actual = set()
+    expected_by_component = {item["component"]: item for item in _DEPENDENCY_LICENSE_COMPARISON}
     for item in dependencies:
         if not isinstance(item, dict):
             raise ValueError("dependency comparison rows must be mappings")
         component = _require_text(item.get("component"), "dependency component")
+        if component not in expected_by_component or item != expected_by_component[component]:
+            raise ValueError(f"dependency/license comparison contract drift: {component}")
         actual.add(component)
         paths = item.get("evidence_paths")
         if not isinstance(paths, list) or not paths:
             raise ValueError(f"dependency {component} has no evidence paths")
         for path in paths:
             _resolve_repo_path(path, root)
-    if actual != expected:
+    if len(actual) != len(dependencies) or actual != expected:
         raise ValueError("dependency/license comparison coverage drift")
 
 

@@ -783,6 +783,7 @@ def _apply_blocker_decision(
         **issue,
         "classification": classification,
         "reason": reason,
+        "dispatch_allowed": False,
         "blocker_decision": {
             "status": status,
             "reason": decision.get("reason", ""),

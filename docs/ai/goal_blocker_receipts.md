@@ -10,7 +10,7 @@ PR head, dependency/input values, evidence, safe work, next owner, and exact unb
 Its fingerprint preserves the distinction between a missing value, an explicit unavailable value,
 an empty string, and `false`.
 
-Use the side-effect-free helper with JSON artifacts:
+Use the side-effect-free fingerprint/validation/comparison commands with JSON artifacts:
 
 ```bash
 uv run python scripts/dev/blocker_receipt.py fingerprint inputs.json
@@ -18,6 +18,18 @@ uv run python scripts/dev/blocker_receipt.py validate blocker-receipt.json
 uv run python scripts/dev/blocker_receipt.py compare \
   --inputs current-inputs.json --receipt blocker-receipt.json
 ```
+
+To store a validated receipt in the common-Git active artifact owner (outside the worktree), use
+the explicit write command. Without `--path`, it writes
+`codex-agent-runs/active/goal-blocker-receipts/issue-<number>.json`:
+
+```bash
+uv run python scripts/dev/blocker_receipt.py write blocker-receipt.json
+```
+
+`write` is the only mutating command; it replaces the selected small receipt atomically after
+validation. The Python API exposes the same boundary through `receipt_artifact_path`,
+`write_receipt`, and `load_receipt`.
 
 `blocked_unchanged` suppresses redispatch and reports the recorded owner and unblock condition.
 `blocker_changed` re-enters evaluation and names changed fields. Invalid or stale receipts return

@@ -372,6 +372,7 @@ def test_blocker_decision_fences_claimable_snapshot_dispatch(
     assert row["classification"] == classification
     assert reason_fragment in row["reason"]
     assert row["blocker_decision"]["status"] == status
+    assert row["dispatch_allowed"] is False
 
 
 def test_malformed_blocker_decision_fails_closed_before_issue_discovery(tmp_path) -> None:  # type: ignore[no-untyped-def]

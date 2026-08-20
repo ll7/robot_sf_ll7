@@ -12,12 +12,16 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import sys
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from scripts.dev.git_common import resolve_agent_artifact_dir
 
 SCHEMA_VERSION = "goal_blocker_receipt.v1"
 FINGERPRINT_SCHEMA_VERSION = "goal_blocker_fingerprint.v1"
@@ -38,6 +42,7 @@ _UNAVAILABLE_STATE = "$state"
 _UNAVAILABLE_VALUE = "unavailable"
 _MISSING_VALUE = "missing"
 _RECEIPT_DIGEST = "receipt_digest"
+DEFAULT_RECEIPT_SUBDIR = "goal-blocker-receipts"
 
 
 def unavailable(reason: str = "not_observed") -> dict[str, str]:
@@ -149,6 +154,43 @@ def build_receipt(  # noqa: PLR0913 - the versioned contract names each receipt 
         raise ValueError("invalid blocker receipt: " + "; ".join(report["errors"]))
     receipt[_RECEIPT_DIGEST] = _receipt_digest(receipt)
     return receipt
+
+
+def receipt_artifact_path(issue: int) -> Path:
+    """Return the canonical private active-artifact path for one issue receipt."""
+    if not isinstance(issue, int) or isinstance(issue, bool) or issue <= 0:
+        raise ValueError("issue must be a positive integer")
+    return resolve_agent_artifact_dir(DEFAULT_RECEIPT_SUBDIR) / f"issue-{issue}.json"
+
+
+def write_receipt(receipt: Mapping[str, Any], path: str | Path | None = None) -> Path:
+    """Atomically store a validated receipt outside the repository worktree."""
+    report = validate_receipt(receipt)
+    if not report["valid"]:
+        raise ValueError("invalid blocker receipt: " + "; ".join(report["errors"]))
+    target = Path(path) if path is not None else receipt_artifact_path(receipt["issue"])
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(dict(receipt), handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except OSError:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+    return target
 
 
 def _is_sha(value: Any) -> bool:
@@ -410,6 +452,17 @@ def _load_json(path: str) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def load_receipt(path: str | Path) -> dict[str, Any]:
+    """Load and validate a stored receipt, refusing malformed artifacts."""
+    payload = _load_json(str(path))
+    if not isinstance(payload, dict):
+        raise ValueError("blocker receipt must be a JSON object")
+    report = validate_receipt(payload)
+    if not report["valid"]:
+        raise ValueError("invalid blocker receipt: " + "; ".join(report["errors"]))
+    return payload
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -420,6 +473,13 @@ def _build_parser() -> argparse.ArgumentParser:
     compare_parser = subparsers.add_parser("compare")
     compare_parser.add_argument("--inputs", required=True, type=Path)
     compare_parser.add_argument("--receipt", required=True, type=Path)
+    write_parser = subparsers.add_parser("write")
+    write_parser.add_argument("receipt", type=Path)
+    write_parser.add_argument(
+        "--path",
+        type=Path,
+        help="explicit private artifact path; defaults to the common-Git active owner",
+    )
     return parser
 
 
@@ -432,6 +492,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "validate":
             report = validate_receipt(_load_json(str(args.receipt)))
             payload = report
+        elif args.command == "write":
+            path = write_receipt(_load_json(str(args.receipt)), args.path)
+            payload = {"status": "stored", "path": str(path)}
         else:
             payload = compare_blocker_inputs(
                 _load_json(str(args.inputs)),

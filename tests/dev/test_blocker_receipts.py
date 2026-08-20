@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from scripts.dev.autopilot_state_snapshot import blocker_receipt_snapshot
 from scripts.dev.blocker_receipt import (
     blocker_fingerprint,
     build_receipt,
     compare_blocker_inputs,
+    load_receipt,
     main,
+    receipt_artifact_path,
     summarize_decisions,
     unavailable,
     validate_receipt,
+    write_receipt,
 )
 
 
@@ -52,6 +57,47 @@ def test_build_receipt_produces_a_self_validating_exact_head_contract() -> None:
     assert report["valid"] is True
     assert receipt["fingerprint"] == blocker_fingerprint(receipt["fingerprint_inputs"])
     assert receipt["pr_head_sha"]["$state"] == "unavailable"
+
+
+def test_receipt_storage_round_trips_atomically_to_external_artifact(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Validated receipts use a caller-selected private artifact, never the worktree."""
+    receipt = build_receipt(
+        repository="ll7/robot_sf_ll7",
+        issue=7612,
+        issue_revision="body-sha256:abc",
+        origin_main_sha="a" * 40,
+        blocker_class="dependency",
+        required_transition="merge the prerequisite",
+        evidence=[],
+        safe_work=[],
+        next_owner="goal-autopilot",
+        recommended_state="state:blocked",
+        retryable=True,
+        invalidating_fields=["origin_main_sha"],
+        fingerprint_inputs={"origin_main_sha": "a" * 40},
+        observed_at="2026-08-20T00:00:00Z",
+    )
+    path = tmp_path / "active" / "issue-7612.json"
+
+    assert write_receipt(receipt, path) == path
+    assert load_receipt(path) == receipt
+    assert list(path.parent.glob("*.tmp")) == []
+
+
+def test_default_receipt_path_uses_common_active_artifact_owner(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The default path is resolved through the shared common-Git artifact helper."""
+    monkeypatch.setattr(
+        "scripts.dev.blocker_receipt.resolve_agent_artifact_dir",
+        lambda subdir: tmp_path / subdir,
+    )
+
+    assert receipt_artifact_path(7612) == tmp_path / "goal-blocker-receipts" / "issue-7612.json"
+
+
+def test_receipt_storage_rejects_invalid_payload(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Invalid receipts cannot be persisted as suppression artifacts."""
+    with pytest.raises(ValueError, match="invalid blocker receipt"):
+        write_receipt({"schema": "goal_blocker_receipt.v1"}, tmp_path / "invalid.json")
 
 
 def test_compare_blocker_inputs_suppresses_only_an_unchanged_blocker() -> None:

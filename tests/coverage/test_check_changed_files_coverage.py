@@ -18,6 +18,7 @@ from scripts.coverage.check_changed_files_coverage import (
     _declaration_proofs_from_test_source,
     _has_declaration_only_test_proof,
     _is_doc_or_comment_only_python_change,
+    _no_changed_files_message,
     _resolve_comparison,
     _run_check,
 )
@@ -56,6 +57,11 @@ def _fixture_repo(tmp_path: Path) -> tuple[Path, str, str]:
     _git(repo, "commit", "-q", "-m", "head")
     head_sha = _git(repo, "rev-parse", "HEAD")
     return repo, base_sha, head_sha
+
+
+def test_empty_changed_file_message_names_committed_scope() -> None:
+    """An empty HEAD diff must not hide dirty interim paths from the receipt."""
+    assert _no_changed_files_message("origin/main") == "No committed changed files vs origin/main."
 
 
 def test_doc_or_comment_only_python_change_detection() -> None:

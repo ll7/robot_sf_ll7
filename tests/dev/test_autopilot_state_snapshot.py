@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from scripts.dev import autopilot_state_snapshot as snapshot
 
@@ -185,8 +186,56 @@ def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch, 
         }
     ]
     assert payload["issues"][0]["labels"] == ["enhancement"]
+    assert payload["issues"][0]["admission"]["classification"] == "needs_ready_label"
+    assert payload["issues"][0]["admission"]["claim_outcome"] == "not_checked"
     assert payload["prs"][0]["checks"]["overall"] == "success"
     assert payload["sources"]
+
+
+def test_queue_issue_admission_uses_canonical_wrapper_for_ready_issue() -> None:
+    """The canonical queue must expose the live check-only admission verdict."""
+    result = {
+        "schema": "goal_issue_admission.v1",
+        "ok": True,
+        "outcome": "ready_check_only",
+        "write_attempted": False,
+        "source_ref": "origin/main",
+        "preflight": {
+            "classification": "ready",
+            "reasons": ["issue state and execution contract permit claim admission"],
+            "ready": True,
+            "write_allowed": True,
+            "claim": {
+                "ok": True,
+                "claimed": False,
+                "claim_ref": "agent-claims/issue-2672",
+                "sha": None,
+            },
+        },
+        "claim": None,
+    }
+    issue = {
+        "number": 2672,
+        "title": "ready issue",
+        "state": "OPEN",
+        "labels": [{"name": "state:ready"}],
+    }
+
+    with patch(
+        "scripts.dev.autopilot_state_snapshot.goal_issue_admission.admit_issue",
+        return_value=result,
+    ) as admit:
+        admission = snapshot._queue_issue_admission(issue)
+
+    assert admission["outcome"] == "ready_check_only"
+    assert admission["claim_outcome"] == "unclaimed"
+    admit.assert_called_once_with(
+        2672,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        source_ref="origin/main",
+        check_only=True,
+    )
 
 
 def test_compact_status_omits_untracked_inventory_and_reports_generated_paths(

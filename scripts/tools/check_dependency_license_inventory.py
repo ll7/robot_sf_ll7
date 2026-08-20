@@ -79,6 +79,7 @@ _KNOWN_SPDX_IDS = frozenset(
         "LGPL-2.1-or-later",
         "LGPL-3.0-only",
         "LGPL-3.0-or-later",
+        "LLVM-exception",
         "MIT",
         "MIT-0",
         "MPL-1.1",

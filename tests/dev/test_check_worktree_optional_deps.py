@@ -7,14 +7,31 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "dev" / "check_worktree_optional_deps.py"
+VALIDATOR = REPO_ROOT / "scripts" / "dev" / "validate_worktree_optional_deps.py"
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
         cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _validate(
+    report: dict[str, object], observed_exit_code: int
+) -> subprocess.CompletedProcess[str]:
+    """Run the report validator against one captured probe payload."""
+    return subprocess.run(
+        [sys.executable, str(VALIDATOR), "--observed-exit-code", str(observed_exit_code)],
+        cwd=REPO_ROOT,
+        input=json.dumps(report),
         capture_output=True,
         text=True,
         check=False,
@@ -81,3 +98,74 @@ def test_named_training_profile_matches_training_extra() -> None:
         "wandb",
         "optuna_dashboard",
     }
+
+
+@pytest.mark.parametrize(
+    ("status", "exit_code", "missing_optional", "check_failures", "expected"),
+    [
+        ("ready", 0, [], [], 0),
+        ("missing_optional", 2, ["pandas"], [], 2),
+        ("check_failed", 1, [], ["pandas"], 1),
+    ],
+)
+def test_validator_accepts_matching_status_and_exit_contract(
+    status: str,
+    exit_code: int,
+    missing_optional: list[str],
+    check_failures: list[str],
+    expected: int,
+) -> None:
+    """Only a matching report/exit pair reaches its semantic exit code."""
+    result = _validate(
+        {
+            "schema": "robot_sf.worktree_optional_deps.v1",
+            "profile": "all-extras",
+            "status": status,
+            "exit_code": exit_code,
+            "missing_optional": missing_optional,
+            "check_failures": check_failures,
+            "project_imports_performed": False,
+        },
+        exit_code,
+    )
+    assert result.returncode == expected, result.stderr
+
+
+@pytest.mark.parametrize(
+    ("report", "observed_exit_code"),
+    [
+        (
+            {
+                "schema": "robot_sf.worktree_optional_deps.v1",
+                "profile": "all-extras",
+                "status": "ready",
+                "exit_code": 0,
+                "missing_optional": [],
+                "check_failures": [],
+                "project_imports_performed": False,
+            },
+            1,
+        ),
+        ({"status": "ready"}, 0),
+        (
+            {
+                "schema": "robot_sf.worktree_optional_deps.v1",
+                "profile": "all-extras",
+                "status": "ready",
+                "exit_code": 7,
+                "missing_optional": [],
+                "check_failures": [],
+                "project_imports_performed": False,
+            },
+            7,
+        ),
+    ],
+    ids=["status-exit-disagreement", "malformed-fields", "unknown-exit"],
+)
+def test_validator_rejects_invalid_status_exit_contract(
+    report: dict[str, object], observed_exit_code: int
+) -> None:
+    """Malformed, disagreeing, and unknown probe outcomes fail as tool errors."""
+    result = _validate(report, observed_exit_code)
+    assert result.returncode == 1
+    assert '"status": "invalid"' in result.stderr

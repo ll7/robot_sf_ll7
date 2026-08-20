@@ -83,7 +83,17 @@ def _repo_relative_path(repo_root: Path, value: Any, field: str) -> Path:
     path = Path(value.strip())
     if path.is_absolute() or ".." in path.parts:
         raise AnswerabilityProofError(f"{field} must not be absolute or traverse '..'")
-    return repo_root / path
+    root = repo_root.resolve()
+    candidate = root / path
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise AnswerabilityProofError(
+            f"{field} cannot be resolved safely within the repository"
+        ) from exc
+    if resolved != root and root not in resolved.parents:
+        raise AnswerabilityProofError(f"{field} must resolve within the repository root")
+    return candidate
 
 
 def _argv(value: Any, field: str) -> list[str]:
@@ -317,7 +327,7 @@ def _file_identity_failure(
 
 
 def _validate_registered_command(  # noqa: C901
-    command: list[str], *, spec: Mapping[str, Any], field: str
+    command: list[str], *, spec: Mapping[str, Any], field: str, repo_root: Path
 ) -> tuple[float, str | None]:
     """Validate one bounded command against the registered CPU-only test adapter."""
     validator_id = spec.get("validator_id")
@@ -349,6 +359,7 @@ def _validate_registered_command(  # noqa: C901
             raise AnswerabilityProofError(
                 f"{field}.command test paths must name Python files: {item}"
             )
+        _repo_relative_path(repo_root, item, f"{field}.command test path")
         paths.append(item)
     if not paths:
         raise AnswerabilityProofError(f"{field}.command must name at least one tests/*.py path")
@@ -998,10 +1009,18 @@ def _run_receipt(  # noqa: C901, PLR0912
     if drift is not None:
         return drift
     identity = spec.get("identity")
+    if not isinstance(identity, Mapping):
+        return _result(
+            status="failed",
+            required=required,
+            kind=f"{surface}_receipt",
+            reason=f"{surface} receipt identity must be a mapping",
+            path=str(path.relative_to(repo_root)),
+        )
     expected_common = {
-        "campaign_id": identity.get("campaign_id") if isinstance(identity, Mapping) else None,
-        "question": identity.get("question") if isinstance(identity, Mapping) else None,
-        "estimand": identity.get("estimand") if isinstance(identity, Mapping) else None,
+        "campaign_id": identity.get("campaign_id"),
+        "question": identity.get("question"),
+        "estimand": identity.get("estimand"),
     }
     for field, expected in expected_common.items():
         if payload.get(field) != expected:
@@ -1185,6 +1204,7 @@ def _run_surface(  # noqa: C901, PLR0912
             command,
             spec=spec,
             field=f"validation.answerability_proof.{surface}",
+            repo_root=repo_root,
         )
         return _run_command(
             command,

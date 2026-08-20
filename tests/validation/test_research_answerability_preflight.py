@@ -51,6 +51,37 @@ def test_unexecuted_proof_is_not_promoted() -> None:
     assert report["surfaces"]["result_packet"]["status"] == "unavailable"
 
 
+def test_proof_path_cannot_escape_repo_through_symlink(tmp_path: Path) -> None:
+    """Proof inputs must remain inside the repository after symlink resolution."""
+    outside = tmp_path.parent / "answerability-proof-outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    link = tmp_path / "proof.json"
+    link.symlink_to(outside)
+
+    with pytest.raises(AnswerabilityProofError, match="resolve within the repository"):
+        preflight_module._repo_relative_path(tmp_path, "proof.json", "proof.path")
+
+
+def test_malformed_receipt_identity_returns_structured_failure(tmp_path: Path) -> None:
+    """A receipt without identity is blocked instead of raising during collection."""
+    manifest = _manifest()
+    (tmp_path / "receipt.json").write_text("{}", encoding="utf-8")
+    manifest["validation"]["answerability_proof"] = {
+        "producer": {"kind": "producer_receipt", "path": "receipt.json"}
+    }
+
+    report = collect_answerability_proof(
+        manifest,
+        repo_root=tmp_path,
+        execute=True,
+        build_rows=lambda _: [{"row": 1}],
+    )
+
+    result = report["surfaces"]["producer"]
+    assert result["status"] == "failed"
+    assert "identity must be a mapping" in result["reason"]
+
+
 def test_manifest_row_and_command_checks_execute_without_shell() -> None:
     """The local producer and argv command adapters produce passed results."""
     manifest = _manifest()

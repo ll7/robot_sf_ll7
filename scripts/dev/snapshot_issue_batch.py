@@ -11,7 +11,12 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
-from scripts.dev import gh_issue_rest, goal_issue_admission, issue_implementability
+from scripts.dev import (
+    blocker_transition,
+    gh_issue_rest,
+    goal_issue_admission,
+    issue_implementability,
+)
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.github_quota import (
     DEFAULT_CORE_SAFETY_THRESHOLD,
@@ -508,6 +513,32 @@ def _claim_payload(claim: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _transition_plan(issue: dict[str, Any]) -> dict[str, Any]:
+    """Attach a read-only blocker transition projection to one issue row."""
+    try:
+        return blocker_transition.plan_transition(issue)
+    except (TypeError, ValueError, blocker_transition.TransitionError) as exc:
+        return {
+            "schema": blocker_transition.SCHEMA,
+            "status": "error",
+            "error": str(exc),
+            "no_write": True,
+        }
+
+
+def _transition_counts(issues: list[dict[str, Any]]) -> dict[str, int]:
+    """Count transition classes without collapsing distinct blockers into a score."""
+    counts: dict[str, int] = {}
+    for issue in issues:
+        transition = issue.get("transition")
+        if not isinstance(transition, dict):
+            continue
+        blocker_class = transition.get("blocker_class")
+        if isinstance(blocker_class, str):
+            counts[blocker_class] = counts.get(blocker_class, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _admission_error(*, claim: dict[str, Any], error: str) -> dict[str, Any]:
     """Return a fail-closed admission row when the canonical preflight is unavailable."""
     return {
@@ -779,6 +810,7 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
             repo=repo,
             remote=remote,
         ),
+        "transition": _transition_plan(issue),
         "classification": classification,
         "reason": reason,
         "linked_prs": [],
@@ -845,6 +877,7 @@ def _snapshot_from_issue_list(
             repo=repo,
             remote=remote,
         ),
+        "transition": _transition_plan(issue),
     }
 
 
@@ -933,6 +966,7 @@ def snapshot_claimable_issues(
                 1 for issue in snapshots if issue.get("classification") == "blocked_external"
             ),
         },
+        "transition_counts": _transition_counts(snapshots),
         "issues": issues,
     }
 
@@ -1336,6 +1370,7 @@ def snapshot_issues(
         "schema": "issue_batch_snapshot.v1",
         "repo": repo,
         "body_excerpt_chars": body_limit,
+        "transition_counts": _transition_counts(issues),
         "issues": issues,
     }
 

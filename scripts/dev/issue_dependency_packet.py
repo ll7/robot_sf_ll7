@@ -840,6 +840,12 @@ def _unavailable(message: str, *, source: str = "unavailable") -> dict[str, Any]
     return {"available": False, "reason": message, "source": source}
 
 
+def _is_github_not_found(error: str | None) -> bool:
+    """Return whether a GitHub REST error is a definitive 404 response."""
+    text = (error or "").lower()
+    return "http 404" in text or "not found" in text
+
+
 def _rest_mapping(
     gh_runner: GhRunner, endpoint: str, *, label: str
 ) -> tuple[Mapping[str, Any] | None, str | None]:
@@ -893,6 +899,13 @@ def _resolve_github_commit(row: Mapping[str, Any], gh_runner: GhRunner) -> dict[
         label="commit",
     )
     if error or payload is None:
+        if _is_github_not_found(error):
+            return {
+                "available": True,
+                "present": False,
+                "sha": requirement["sha"],
+                "source": "github_rest",
+            }
         return _unavailable(error or "commit response was unavailable", source="github_rest")
     observed_sha = payload.get("sha")
     return {
@@ -913,6 +926,12 @@ def _resolve_github_path(row: Mapping[str, Any], gh_runner: GhRunner) -> dict[st
         endpoint += f"?ref={ref}"
     payload, error = _api_json(gh_runner, endpoint)
     if error or payload is None:
+        if _is_github_not_found(error):
+            return {
+                "available": True,
+                "exists": False,
+                "source": "github_rest",
+            }
         return _unavailable(error or "contents response was unavailable", source="github_rest")
     if isinstance(payload, list):
         return {

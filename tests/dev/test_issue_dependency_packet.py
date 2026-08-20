@@ -330,6 +330,35 @@ def test_issue_dependency_packet_resolver_uses_rest_and_local_readers(tmp_path: 
     assert any(command[:2] == ["git", "cat-file"] for command in calls)
 
 
+def test_issue_dependency_packet_distinguishes_github_404_from_unavailable() -> None:
+    """A definitive missing path/commit remains false instead of becoming unavailable."""
+    missing_error = "gh: Not Found (HTTP 404)"
+
+    def gh_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 1, "", missing_error)
+
+    built = _packet(
+        _row("missing-path", "path_present", {"path": "missing.txt", "path_type": "file"}),
+        _row("missing-commit", "commit_present", {"sha": SHA}),
+    )
+    result = packet.resolve_packet(built, gh_runner=gh_runner)
+
+    by_id = {row["id"]: row for row in result["rows"]}
+    assert by_id["missing-path"]["observed"] == {
+        "available": True,
+        "exists": False,
+        "source": "github_rest",
+    }
+    assert by_id["missing-path"]["verdict"] == "unsatisfied"
+    assert by_id["missing-commit"]["observed"] == {
+        "available": True,
+        "present": False,
+        "sha": SHA,
+        "source": "github_rest",
+    }
+    assert by_id["missing-commit"]["verdict"] == "unsatisfied"
+
+
 def test_issue_dependency_packet_cli_build_and_verify(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

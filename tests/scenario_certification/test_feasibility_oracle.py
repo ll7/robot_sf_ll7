@@ -246,9 +246,10 @@ def test_oracle_requires_explicit_timeout_evidence_for_ambiguous_terminal_labels
         None,
         termination_reason,
     )
-    assert feasibility_oracle._termination_completion(
-        termination_reason, timeout_event=True
-    ) == (False, termination_reason)
+    assert feasibility_oracle._termination_completion(termination_reason, timeout_event=True) == (
+        False,
+        termination_reason,
+    )
     assert feasibility_oracle._rollout_route_complete(
         {
             "termination_reason": termination_reason,

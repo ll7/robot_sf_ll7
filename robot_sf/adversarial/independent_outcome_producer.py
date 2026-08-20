@@ -65,6 +65,13 @@ def _is_sha1(value: Any) -> bool:
     )
 
 
+def _require_integer(value: Any, *, label: str) -> int:
+    """Require a JSON integer without accepting booleans or numeric lookalikes."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{label} must be an integer")
+    return value
+
+
 def _raw_sha256(path: Path) -> str:
     """Return the SHA-256 of a file's exact bytes."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -425,7 +432,13 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
             f"episode record {manifest_id} candidate_manifest_id does not match selected candidate"
         )
     expected_scenario_seed = binding["scenario_seed_by_manifest_id"][manifest_id]
-    if scenario_params.get("scenario_seed") != expected_scenario_seed:
+    if (
+        _require_integer(
+            scenario_params.get("scenario_seed"),
+            label=f"episode record {manifest_id} scenario_seed",
+        )
+        != expected_scenario_seed
+    ):
         raise ValueError(
             f"episode record {manifest_id} scenario_seed does not match selected scenario"
         )
@@ -486,7 +499,9 @@ def _build_candidate_rows(  # noqa: C901
         raise ValueError("replay candidate ID drifted within the execution envelope")
     if replay_envelope.get("execution_seed") is not None:
         raise ValueError(f"candidate {manifest_id} replay execution_seed must be null")
-    replay_seed = replay_record.get("seed")
+    replay_seed = _require_integer(
+        replay_record.get("seed"), label=f"candidate {manifest_id} replay seed"
+    )
     expected_scenario_seed = binding["scenario_seed_by_manifest_id"][manifest_id]
     if replay_seed != expected_scenario_seed:
         raise ValueError(f"candidate {manifest_id} replay seed does not match scenario seed")
@@ -509,7 +524,10 @@ def _build_candidate_rows(  # noqa: C901
             raise ValueError(f"candidate {manifest_id} has an unbound confirmation seed {seed!r}")
         if seed in by_seed:
             raise ValueError(f"candidate {manifest_id} has duplicate confirmation seed {seed}")
-        if record.get("seed") != seed:
+        if (
+            _require_integer(record.get("seed"), label=f"candidate {manifest_id} confirmation seed")
+            != seed
+        ):
             raise ValueError(f"candidate {manifest_id} record seed does not match execution seed")
         by_seed[int(seed)] = (
             envelope,

@@ -369,6 +369,39 @@ def test_producer_rejects_selected_candidate_scenario_drift(
         )
 
 
+@pytest.mark.parametrize(
+    ("mutation", "expected_fragment"),
+    [
+        ("scenario_seed_float", "scenario_seed must be an integer"),
+        ("scenario_seed_bool", "scenario_seed must be an integer"),
+        ("replay_record_seed_float", "seed must be an integer"),
+        ("confirmation_record_seed_float", "seed must be an integer"),
+    ],
+)
+def test_producer_rejects_non_integer_seed_lineage(
+    tmp_path: Path, mutation: str, expected_fragment: str
+) -> None:
+    """JSON numeric lookalikes cannot bypass integer seed bindings."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    if mutation == "scenario_seed_float":
+        records[0]["episode_record"]["scenario_params"]["scenario_seed"] = 11.0
+    elif mutation == "scenario_seed_bool":
+        records[0]["episode_record"]["scenario_params"]["scenario_seed"] = True
+    elif mutation == "replay_record_seed_float":
+        records[0]["episode_record"]["seed"] = 11.0
+    else:
+        records[1]["episode_record"]["seed"] = 100.0
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
 def test_producer_rejects_legacy_outcome_aliases(tmp_path: Path) -> None:
     """Legacy outcome aliases cannot bypass the canonical episode contract."""
     contract_path, binding_path = _contract_and_binding(tmp_path)

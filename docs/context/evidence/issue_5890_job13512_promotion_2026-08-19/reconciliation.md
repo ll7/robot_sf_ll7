@@ -29,10 +29,9 @@ rankings, rename metrics, or decide which source contract is scientifically auth
 4. The summary's three-planner roster conflicts with its bounded-two-planner limitation. The
    promotion records both statements and does not infer whether ORCA was included in the claimed
    ranking contract.
-5. The honest current disposition is `promotion_complete_pending_metric_scope_reconciliation`.
-   The next analysis step requires a maintainer-selected metric/scope contract and an independent
-   verifier that binds the chosen field to the complete rows. No SNQI ranking or full #3207 result
-   is claimed by this change.
+5. The final disposition is `invalid_provenance_or_scope`. No ranking, identifiability, stability,
+   benchmark, or paper-facing claim is eligible. The preserved bytes remain custody evidence only;
+   no SNQI ranking or full #3207 result is claimed by this change.
 
 ## Maintainer ruling and disposition (2026-08-19)
 
@@ -100,6 +99,16 @@ differs from the reviewed head (review-sidecar `.review.json` files removed, `re
 adjusted), so the review does not cover the merged head byte-for-byte. The evidence bytes are
 unchanged by that difference. This note records the gap; the maintainer ruling above governs
 interpretation regardless.
+
+### Machine-readable ruling
+
+`registration.json` is the machine-readable disposition owner and records:
+
+- `disposition: invalid_provenance_or_scope`;
+- `execution_provenance.status: unresolved_conflict` with both commit/config lineages;
+- all benchmark, claim, paper-facing, planner-ordering, rank-identifiability, rank-stability, and
+  reproduction eligibility fields set to `false`;
+- `source_bytes_unchanged: true` and the merged-versus-reviewed custody head gap.
 
 ## Evidence boundary
 

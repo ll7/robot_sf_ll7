@@ -84,6 +84,13 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
+When readiness dispatches the optional lane, it first runs
+`scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
+reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
+message; they are not reported as changed-code failures. The core lane remains dependency-minimal
+and excludes optional-only test paths listed in `tests/support/optional_test_allowlist.txt`.
+Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
+preflight-tool failures and never receive the missing-extra install guidance.
 
 ### Claim-map validation
 

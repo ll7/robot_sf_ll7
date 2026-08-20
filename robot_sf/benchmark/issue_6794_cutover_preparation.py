@@ -102,6 +102,23 @@ def _digest(value: Any, *, name: str) -> str:
     return digest
 
 
+def _strict_integer(value: Any, *, name: str) -> int:
+    """Return an integer while rejecting boolean coercion."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be an integer")
+    return value
+
+
+def _strict_number(value: Any, *, name: str) -> float:
+    """Return a finite number while rejecting boolean coercion."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{name} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{name} must be a finite number")
+    return number
+
+
 def _dotted_value(row: Mapping[str, Any], path: str) -> Any:
     """Resolve a dotted field path from a JSON mapping.
 
@@ -125,6 +142,17 @@ def _identity_key(row: Mapping[str, Any], fields: Sequence[str]) -> tuple[Any, .
     values = tuple(_dotted_value(row, field) for field in fields)
     if any(value is None for value in values):
         raise ValueError(f"row is missing identity fields {list(fields)!r}: {row!r}")
+    for field, value in zip(fields, values, strict=True):
+        if field in {"planner_key", "scenario_id"} and (
+            not isinstance(value, str) or not value.strip()
+        ):
+            raise ValueError(f"row identity field {field!r} must be a non-empty string")
+        if field == "seed":
+            _strict_integer(value, name="row identity field 'seed'")
+        try:
+            hash(value)
+        except TypeError as exc:
+            raise ValueError(f"row identity field {field!r} must be hashable") from exc
     return values
 
 
@@ -222,6 +250,11 @@ def _verify_release_components(
         frozen_digest = _digest(frozen_per_file.get(name), name=f"frozen per-file digest {name}")
         if digest != registry_digest or digest != frozen_digest:
             raise ValueError(f"checkpoint {checkpoint_name} component digest drift: {name}")
+    expected_names = {Path(path).name for path in observed}
+    if set(per_file) != expected_names or set(frozen_per_file) != expected_names:
+        raise ValueError(
+            f"checkpoint {checkpoint_name} component set does not match the declared source paths"
+        )
 
 
 def _checkpoint_report(
@@ -272,16 +305,30 @@ def _validate_load_paths(repo_root: Path, config: Mapping[str, Any]) -> list[dic
     if not isinstance(raw_inventory, list) or not raw_inventory:
         raise ValueError("load_path_inventory must be a non-empty list")
     seen: set[str] = set()
+    seen_paths: set[str] = set()
+    checkpoint_names = set(
+        _mapping(config.get("checkpoint_snapshots"), name="checkpoint_snapshots")
+    )
     report: list[dict[str, Any]] = []
     for index, raw_item in enumerate(raw_inventory):
         item = _mapping(raw_item, name=f"load_path_inventory[{index}]")
         item_id = _string(item.get("id"), name=f"load_path_inventory[{index}].id")
+        checkpoint_name = _string(
+            item.get("checkpoint"), name=f"load_path_inventory[{index}].checkpoint"
+        )
         path_value = _string(item.get("path"), name=f"load_path_inventory[{index}].path")
         selector = _string(item.get("selector"), name=f"load_path_inventory[{index}].selector")
         if item_id in seen:
             raise ValueError(f"duplicate load-path inventory id: {item_id}")
+        if checkpoint_name not in checkpoint_names:
+            raise ValueError(
+                f"load-path inventory references unknown checkpoint: {checkpoint_name}"
+            )
+        if path_value in seen_paths:
+            raise ValueError(f"duplicate load-path inventory path: {path_value}")
         seen.add(item_id)
-        path = repo_root / path_value
+        seen_paths.add(path_value)
+        path = _repo_declared_path(repo_root, path_value, name=f"load_path_inventory[{index}].path")
         if not path.is_file():
             raise ValueError(f"load-path inventory file is missing: {path_value}")
         content = path.read_text(encoding="utf-8")
@@ -357,6 +404,7 @@ def _validate_protocol(repo_root: Path, protocol: Mapping[str, Any]) -> dict[str
         "scenario_matrix": scenario_path,
         "seeds": list(seeds),
         "planner_arms": protocol.get("planner_arms"),
+        "row_identity": protocol.get("row_identity"),
         "required_status_fields": protocol.get("required_status_fields"),
         "required_metrics": protocol.get("required_metrics"),
         "comparison": dict(comparison),
@@ -396,9 +444,12 @@ def _validate_protocol_shape(protocol: Mapping[str, Any]) -> None:
         "snqi",
     ]:
         raise ValueError("parity metrics are incomplete or reordered")
-    if protocol.get("horizon") != 100 or protocol.get("dt") != 0.1:
+    horizon = _strict_integer(protocol.get("horizon"), name="parity_protocol.horizon")
+    dt = _strict_number(protocol.get("dt"), name="parity_protocol.dt")
+    if horizon != 100 or dt != 0.1:
         raise ValueError("parity protocol must freeze horizon=100 and dt=0.1")
-    if protocol.get("workers") != 1 or protocol.get("kinematics") != "differential_drive":
+    workers = _strict_integer(protocol.get("workers"), name="parity_protocol.workers")
+    if workers != 1 or protocol.get("kinematics") != "differential_drive":
         raise ValueError("parity protocol must freeze single-worker differential-drive execution")
 
 
@@ -409,9 +460,31 @@ def _validate_protocol_arms(protocol: Mapping[str, Any]) -> None:
         not isinstance(planner_arms, list)
         or len(planner_arms) != 2
         or not all(isinstance(arm, Mapping) for arm in planner_arms)
-        or [arm.get("key") for arm in planner_arms] != ["ppo", "sacadrl"]
     ):
         raise ValueError("parity protocol must compare two mapping arms, PPO then SACADRL")
+    expected_arms = [
+        {
+            "key": "ppo",
+            "algo": "ppo",
+            "config": "configs/baselines/ppo.yaml",
+            "checkpoint": "default_ppo",
+            "execution_mode": "native",
+            "fallback_policy": "fail_fast",
+        },
+        {
+            "key": "sacadrl",
+            "algo": "sacadrl",
+            "config": None,
+            "checkpoint": "ga3c_cadrl",
+            "execution_mode": "native",
+            "fallback_policy": "fail_fast",
+        },
+    ]
+    for index, expected in enumerate(expected_arms):
+        arm = planner_arms[index]
+        for field, expected_value in expected.items():
+            if arm.get(field) != expected_value:
+                raise ValueError(f"parity protocol arm {index} has unexpected {field}")
     ppo_overrides = planner_arms[0].get("runtime_overrides")
     sacadrl_overrides = planner_arms[1].get("runtime_overrides")
     if not isinstance(ppo_overrides, Mapping) or not isinstance(sacadrl_overrides, Mapping):
@@ -430,9 +503,9 @@ def _validate_comparison_contract(comparison: Mapping[str, Any]) -> None:
         raise ValueError("parity comparison must fail on missing metrics")
     abs_tolerance = comparison.get("float_abs_tolerance")
     rel_tolerance = comparison.get("float_rel_tolerance")
-    if not isinstance(abs_tolerance, (int, float)) or abs_tolerance != 1e-12:
+    if _strict_number(abs_tolerance, name="parity float_abs_tolerance") != 1e-12:
         raise ValueError("parity float_abs_tolerance must be 1e-12")
-    if not isinstance(rel_tolerance, (int, float)) or rel_tolerance != 0.0:
+    if _strict_number(rel_tolerance, name="parity float_rel_tolerance") != 0.0:
         raise ValueError("parity float_rel_tolerance must be 0.0")
 
 
@@ -553,11 +626,22 @@ def _compare_status_fields(
     blockers: list[str] = []
     if before_row.get("row_status") != "native" or after_row.get("row_status") != "native":
         blockers.append(f"non-native row is not admissible for parity: {key!r}")
+    expected_types: dict[str, type] = {
+        "row_status": str,
+        "benchmark_success": bool,
+        "benchmark_success_basis": str,
+        "termination_reason": str,
+    }
     for field in status_fields:
         before_value = _dotted_value(before_row, field)
         after_value = _dotted_value(after_row, field)
         if before_value is None or after_value is None:
             blockers.append(f"missing status field {field!r} for row {key!r}")
+        elif field in expected_types and (
+            type(before_value) is not expected_types[field]
+            or type(after_value) is not expected_types[field]
+        ):
+            blockers.append(f"invalid status field type {field!r} for row {key!r}")
         elif before_value != after_value:
             blockers.append(
                 f"status drift for {field!r} at {key!r}: {before_value!r} != {after_value!r}"
@@ -592,8 +676,12 @@ def _compare_metric_fields(
         if not numeric:
             blockers.append(f"missing or non-numeric metric {field!r} for row {key!r}")
             continue
-        before_float = float(before_value)
-        after_float = float(after_value)
+        try:
+            before_float = float(before_value)
+            after_float = float(after_value)
+        except (OverflowError, ValueError) as exc:
+            blockers.append(f"non-numeric metric {field!r} for row {key!r}: {exc}")
+            continue
         if not math.isfinite(before_float) or not math.isfinite(after_float):
             blockers.append(f"non-finite metric {field!r} for row {key!r}")
             continue
@@ -695,9 +783,16 @@ def main(argv: list[str] | None = None) -> int:
         if (args.before_episodes is None) != (args.after_episodes is None):
             raise ValueError("--before-episodes and --after-episodes must be supplied together")
         if args.before_episodes is not None and args.after_episodes is not None:
+            protocol = report["parity_protocol"]
+            comparison = protocol["comparison"]
             report["comparison"] = compare_parity_rows(
                 args.before_episodes,
                 args.after_episodes,
+                identity_fields=protocol["row_identity"],
+                status_fields=protocol["required_status_fields"],
+                metric_fields=protocol["required_metrics"],
+                abs_tolerance=comparison["float_abs_tolerance"],
+                rel_tolerance=comparison["float_rel_tolerance"],
             )
             if report["comparison"]["status"] != "passed":
                 report["status"] = "failed"

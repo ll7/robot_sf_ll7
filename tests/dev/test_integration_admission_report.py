@@ -114,6 +114,28 @@ def test_domain_and_external_lanes_remain_distinct() -> None:
     assert "external_action_required:artifact" in report["pr"]["invalidation_codes"]
 
 
+def test_required_blocker_types_remain_distinct() -> None:
+    """The pilot fixture keeps shared, decision, domain, age, and base blockers separate."""
+    payload = _fixture()
+    cases = {
+        76478: ("integration_blocked", "shared_main_failure", "dependency"),
+        76479: ("review_active", "author_decision_required", "decision"),
+        76480: ("integration_blocked", "domain_review_required", "review"),
+        76481: ("preparation_pr", None, None),
+        76482: ("integration_blocked", "base_sha_stale", "dependency"),
+    }
+    for number, (expected_state, blocker_code, blocker_lane) in cases.items():
+        report = build_report(payload, pr_number=number, as_of="2026-08-20T12:00:00Z")
+        classification = report["pr"]
+        assert classification["state"] == expected_state
+        if number == 76481:
+            assert classification["age_freshness"]["freshness"] == "stale"
+            assert "pr_is_draft" in classification["reason_codes"]
+            continue
+        assert blocker_code in classification["reason_codes"]
+        assert blocker_code in classification["blockers"][blocker_lane]["codes"]
+
+
 def test_requested_as_of_drives_queue_age_and_lane_demand() -> None:
     """The fixed evaluation instant applies to queue rows as well as the selected PR."""
     payload = _fixture()

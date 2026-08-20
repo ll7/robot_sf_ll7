@@ -46,6 +46,39 @@ points. Do not delete archived notes unless a maintainer explicitly removes that
 catalog rows as `historical` or `superseded` with `replacement` pointers when a current successor
 exists.
 
+## Context-note Curation Policy
+
+Top-level Markdown notes that are absent from both [INDEX.md](INDEX.md) and
+[catalog.yaml](catalog.yaml) are orphan candidates, not obsolete files. Every candidate receives
+exactly one disposition:
+
+* active_index: current and useful as a retrieval entry point; add both the retrieval and catalog
+  metadata required by this workflow.
+* historical_keep: useful provenance that should remain in place without becoming a startup entry
+  point.
+* superseded: preserved provenance with an exact, repository-resolvable replacement pointer.
+* archive_candidate: eligible for a later path move only after owner approval and link-impact
+  review; the file remains in place until that review completes.
+* needs_owner_decision: ambiguous scientific, legal, release, evidence, or claim significance; do
+  not move or reclassify it automatically.
+
+Finalization is fail-closed. Apply the following precedence:
+
+1. Use superseded only when an explicit supersession marker names an existing replacement.
+2. Use active_index only when explicit current-source evidence and owner confirmation justify adding
+   both required metadata rows.
+3. Use historical_keep when an explicit historical or execution-history marker supports retaining
+   provenance and no higher-precedence replacement applies.
+4. Use archive_candidate only after owner approval confirms no active inbound contract, sensitivity
+   guard, or unresolved link impact.
+5. Otherwise use needs_owner_decision.
+
+Filename, date, closed-issue status, age, or missing index membership may propose a disposition but
+cannot finalize one. Evidence-, release-, legal-, and claim-sensitive notes cannot become
+archive_candidate without explicit owner review. No curation pilot may delete or move a note. The
+deterministic 50-note pilot and its machine-readable inventory are recorded in
+[issue #7600's curation evidence](evidence/issue_7600_context_curation_pilot/README.md).
+
 ## When To Update An Existing Note
 
 Prefer updating an existing note when:

@@ -11,6 +11,7 @@ closed when the required lock or supported-profile proof is unavailable.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -382,6 +383,82 @@ def _active_identity(
     return active
 
 
+def _sha256_json(value: Any) -> str:
+    """Return a deterministic digest for normalized resolution evidence."""
+    payload = _canonical_json(value).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _closure_identity(active: Mapping[str, Sequence[Any]]) -> dict[str, Any]:
+    """Return the dependency-closure portion of active package identities."""
+    closure: dict[str, Any] = {}
+    for name, rows in active.items():
+        closure[name] = [
+            {
+                key: row.get(key)
+                for key in ("dependencies", "optional-dependencies", "dev-dependencies")
+                if isinstance(row, Mapping) and key in row
+            }
+            for row in rows
+            if isinstance(row, Mapping)
+        ]
+    return closure
+
+
+def _profile_resolution_evidence(
+    profile: Mapping[str, Any],
+    *,
+    base_active: Mapping[str, list[Any]],
+    head_active: Mapping[str, list[Any]],
+    changed_names: Sequence[str],
+    material_fields: Sequence[str],
+) -> dict[str, Any]:
+    """Build inspectable before/after evidence for one supported Python profile."""
+    base_digest = _sha256_json(base_active)
+    head_digest = _sha256_json(head_active)
+    base_closure = _closure_identity(base_active)
+    head_closure = _closure_identity(head_active)
+    base_closure_digest = _sha256_json(base_closure)
+    head_closure_digest = _sha256_json(head_closure)
+    selected_names = sorted(
+        name
+        for name in set(base_active) | set(head_active)
+        if base_active.get(name, []) != head_active.get(name, [])
+    )
+    textual_names = sorted(set(changed_names))
+    selected_identities = {
+        name: {
+            "before": base_active.get(name),
+            "after": head_active.get(name),
+        }
+        for name in sorted(set(textual_names) | set(selected_names))
+    }
+    if material_fields or selected_names:
+        state = "material"
+        reason = "supported-profile resolution changed"
+    elif textual_names:
+        state = "lock_normalization"
+        reason = "textual lock rows changed without a supported-profile resolution change"
+    else:
+        state = "unchanged"
+        reason = "no textual or supported-profile resolution change"
+    environment = _python_environment(profile)
+    return {
+        "id": str(profile.get("id", environment["python_version"])),
+        "environment": environment,
+        "before_resolution_digest": base_digest,
+        "after_resolution_digest": head_digest,
+        "before_closure_digest": base_closure_digest,
+        "after_closure_digest": head_closure_digest,
+        "textual_changed_packages": textual_names,
+        "selected_changed_packages": selected_names,
+        "material_fields": list(material_fields),
+        "selected_identities": selected_identities,
+        "state": state,
+        "reason": reason,
+    }
+
+
 def compare_lock_resolution(
     base_text: str,
     head_text: str,
@@ -403,10 +480,20 @@ def compare_lock_resolution(
         for key in set(base_header) | set(head_header)
         if _identity_value(base_header.get(key)) != _identity_value(head_header.get(key))
     )
+    profile_evidence: list[dict[str, Any]] = []
     for profile in python_profiles:
         environment = _python_environment(profile)
         base_active = _active_identity(base_rows, environment)
         head_active = _active_identity(head_rows, environment)
+        profile_evidence.append(
+            _profile_resolution_evidence(
+                profile,
+                base_active=base_active,
+                head_active=head_active,
+                changed_names=changed_names,
+                material_fields=material_fields,
+            )
+        )
         for name in set(base_active) | set(head_active):
             if base_active.get(name, []) != head_active.get(name, []):
                 material_names.add(name)
@@ -416,6 +503,7 @@ def compare_lock_resolution(
         "material_fields": material_fields,
         "material_resolution": bool(material_names or material_fields),
         "normalization_only": bool(changed_names) and not material_names and not material_fields,
+        "profiles": profile_evidence,
     }
 
 

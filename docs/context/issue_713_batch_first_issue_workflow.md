@@ -199,17 +199,20 @@ When two `goal-autopilot` or `goal-issue-implementation` runs may execute on dif
 stable remote Git ref as the implementation mutex before creating a worktree or branch:
 
 ```bash
-uv run python scripts/dev/issue_claim.py acquire <issue-number>
+uv run python scripts/dev/goal_issue_admission.py <issue-number>
 ```
 
-The helper creates `refs/heads/agent-claims/issue-<issue-number>` through GitHub's create-ref API,
-which fails when the ref already exists. That makes acquisition atomic enough for this workflow: the
-first PC succeeds, and later PCs fail instead of doing the same implementation work. A failed
-acquisition means "skip this issue now", not "retry until it wins". Inspect the current claim with:
+The wrapper runs the live implementation-contract and dependency preflight before creating
+`refs/heads/agent-claims/issue-<issue-number>` through GitHub's create-ref API. A failed admission
+or acquisition means "skip this issue now", not "retry until it wins". Inspect the current claim
+with:
 
 ```bash
 uv run python scripts/dev/issue_claim.py status <issue-number>
 ```
+
+Direct low-level acquire is reserved for an explicit maintainer incident/forensic override with a
+reason, actor, and no-scientific-claim acknowledgement.
 
 After acquiring a claim, make it visible to humans and other agents by moving the issue to
 `In progress`/`state:running`, assigning the actor when practical, and adding a short comment with:

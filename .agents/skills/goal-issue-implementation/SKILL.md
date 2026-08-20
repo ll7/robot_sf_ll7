@@ -447,14 +447,15 @@ Route remaining issues by their blocker:
 3. Acquire the cross-machine issue claim before branching:
 
    ```bash
-   uv run python scripts/dev/issue_claim.py acquire <issue-number>
+   uv run python scripts/dev/goal_issue_admission.py <issue-number>
    ```
 
-   The helper creates `agent-claims/issue-<issue-number>` through GitHub's create-ref API, which
-   fails when the ref already exists. If the command fails, treat the issue as already claimed by
-   another PC or agent, run `uv run python scripts/dev/issue_claim.py status <issue-number>` for the
-   handoff, and skip to the next candidate unless the claim is explicitly confirmed stale and
-   released.
+   The wrapper runs the live issue-contract and dependency preflight before calling the atomic
+   owner, and creates `agent-claims/issue-<issue-number>` through GitHub's create-ref API only
+   after a pass. If the command fails, treat the issue as not admitted or already claimed, run
+   `uv run python scripts/dev/issue_claim.py status <issue-number>` for the handoff, and skip to
+   the next candidate unless the claim is explicitly confirmed stale and released. Direct
+   `issue_claim.py acquire` is reserved for an explicit maintainer incident/forensic override.
 4. Make the successful claim visible on the authoritative issue surface: apply `state:running`,
    assign the actor when practical, and add a concise issue comment with the
    claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
@@ -613,7 +614,7 @@ When a delegated worker produces a reusable workflow lesson, include an
 
 - Operate one branch/worktree per issue. Parallel lanes require explicit parent-orchestrator
   authorization and non-overlapping ownership; otherwise operate one implementation lane at a time.
-- Use `uv run python scripts/dev/issue_claim.py acquire <issue-number>` as the first write after
+- Use `uv run python scripts/dev/goal_issue_admission.py <issue-number>` as the first write after
   candidate selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
   cross-machine lease; GitHub labels remain authoritative workflow state, while assignments and
   comments provide supporting visibility.

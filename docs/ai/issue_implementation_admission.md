@@ -51,3 +51,19 @@ uv run python scripts/dev/issue_implementability.py 1 \
 ## Authority boundary
 
 This is a generic implementation gate. Research campaigns still require `research_answerability.v1`. Result and claim interpretation still require their specialized evidence and review contracts. A successful claim does not imply validation, review, merge readiness, evidence admission, compute authorization, release authorization, or issue completion.
+
+## Queue snapshot fields
+
+`snapshot_issue_batch.py` and the compact autopilot issue queue expose an `admission` object for
+route evidence. Its `classification`, `reasons`, `ready`, `write_allowed`, `outcome`, and
+`claim_outcome` fields are projections of the canonical wrapper; snapshot producers must not
+reimplement the admission precedence. A `ready_check_only` result never writes a claim. An
+`error` or `unavailable` result is a fail-closed hold.
+
+For a write-enabled admission, the wrapper performs a complete second live preflight immediately
+before the atomic claim attempt. A changed issue state, body digest, label, title, assignee, or
+claim state fails closed with `not_admitted` and `write_attempted: false`.
+
+The low-level `issue_claim.py acquire` command is rejected by default. Maintainer incident or
+forensic recovery must explicitly provide `--manual-override`, `--override-actor`,
+`--override-reason`, and `--no-scientific-claim`; this path is not ordinary autonomous dispatch.

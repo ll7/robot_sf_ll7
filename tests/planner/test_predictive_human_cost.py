@@ -83,6 +83,7 @@ def test_predictive_cost_configuration_rejects_unknown_keys() -> None:
     ("kwargs", "message"),
     [
         ({"enabled": 1}, "enabled must be boolean"),
+        ({"weight": True}, "weight must be numeric"),
         ({"weight": float("nan")}, "weight must be finite"),
         ({"weight": -1.0}, "weight must be non-negative"),
         ({"longitudinal_sigma_m": 0.0}, "longitudinal_sigma_m must be positive"),
@@ -126,6 +127,13 @@ def test_predictive_cost_configuration_builds_and_serializes() -> None:
         "aggregation": "sum",
     }
     json.dumps(config.to_dict(), allow_nan=False)
+
+
+def test_predictive_cost_builder_rejects_boolean_numeric_values() -> None:
+    """Boolean YAML scalars cannot masquerade as numeric tuning parameters."""
+
+    with pytest.raises(ValueError, match="weight must be numeric"):
+        build_predictive_gaussian_human_cost_config({"weight": True})
 
 
 @pytest.mark.parametrize("payload", ["invalid", {"enabled": 1}])
@@ -263,6 +271,54 @@ def test_mppi_enabled_cost_preserves_scalar_batch_parity() -> None:
         grid_payload=grid_payload,
     )
     np.testing.assert_allclose(scalar, batched, atol=1e-12, rtol=0.0)
+
+
+def test_mppi_enabled_cost_honors_fixed_capacity_pedestrian_count() -> None:
+    """Only active rows in fixed-capacity observations contribute to the cost."""
+
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(
+            predictive_human_cost=PredictiveGaussianHumanCostConfig(enabled=True),
+        )
+    )
+    active_position = np.asarray([0.8, 0.2])
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.2]},
+        "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+        "pedestrians": {
+            "positions": np.asarray([active_position, [0.0, 0.0], [50.0, 50.0]]),
+            "velocities": np.asarray([[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]),
+            "count": np.asarray([1.0]),
+        },
+    }
+
+    *_prefix, positions, velocities = planner._extract_state(observation)
+
+    np.testing.assert_array_equal(positions, active_position.reshape(1, 2))
+    np.testing.assert_array_equal(velocities, np.zeros((1, 2)))
+
+
+@pytest.mark.parametrize("count", [[1.5], [4.0], [float("nan")], [-1.0], [1.0, 1.0]])
+def test_mppi_enabled_cost_rejects_invalid_pedestrian_count(count: list[float]) -> None:
+    """Malformed active counts cannot silently change the enabled cost state."""
+
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(
+            predictive_human_cost=PredictiveGaussianHumanCostConfig(enabled=True),
+        )
+    )
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.2]},
+        "goal": {"current": [2.0, 0.0], "next": [2.0, 0.0]},
+        "pedestrians": {
+            "positions": np.asarray([[0.8, 0.2]]),
+            "velocities": np.asarray([[0.0, 0.0]]),
+            "count": np.asarray(count),
+        },
+    }
+
+    with pytest.raises(ValueError, match="planner-visible pedestrian count"):
+        planner._extract_state(observation)
 
 
 @pytest.mark.parametrize(

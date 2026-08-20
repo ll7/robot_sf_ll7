@@ -47,7 +47,8 @@ _UNAVAILABLE_METRICS = {
 }
 
 _COST_INPUT_VISIBILITY = (
-    "planner-visible observation.pedestrians.positions and .velocities; "
+    "planner-visible observation.pedestrians.positions, .velocities, and .count "
+    "(active rows); "
     "current structured SocNav state only; no simulator truth"
 )
 _COST_FORMULA = (
@@ -60,8 +61,8 @@ _ANISOTROPIC_COST_FORMULA = (
     "per-pedestrian values aggregate by sum, max, or mean"
 )
 _COST_MISSING_INPUT_POLICY = (
-    "missing, malformed, mismatched, or non-finite planner-visible pedestrian state "
-    "fails closed; no zero-cost fallback"
+    "missing, malformed, mismatched, non-finite, or out-of-range planner-visible "
+    "pedestrian state/count fails closed; no zero-cost fallback"
 )
 
 

@@ -38,6 +38,21 @@ PREDICTIVE_GAUSSIAN_HUMAN_COST_SCHEMA = "predictive_gaussian_human_cost.v2"
 _AGGREGATION_MODES = frozenset({"sum", "max", "mean"})
 
 
+def _coerce_numeric(value: Any, name: str) -> float:
+    """Convert one numeric parameter while rejecting boolean masquerades.
+
+    Returns:
+        float: The converted numeric value.
+    """
+
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"predictive human cost {name} must be numeric")
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"predictive human cost {name} must be numeric") from exc
+
+
 def _validate_positive_finite(value: float, name: str) -> None:
     """Reject non-finite or non-positive values."""
 
@@ -90,13 +105,22 @@ class PredictiveGaussianHumanCostConfig:
         if not isinstance(self.enabled, bool):
             raise ValueError("predictive human cost enabled must be boolean")
         for name in ("weight", "longitudinal_sigma_m", "lateral_sigma_m", "forward_speed_gain"):
-            _validate_non_negative_finite(float(getattr(self, name)), name)
-        _validate_positive_finite(float(self.longitudinal_sigma_m), "longitudinal_sigma_m")
-        _validate_positive_finite(float(self.lateral_sigma_m), "lateral_sigma_m")
+            _validate_non_negative_finite(_coerce_numeric(getattr(self, name), name), name)
+        _validate_positive_finite(
+            _coerce_numeric(self.longitudinal_sigma_m, "longitudinal_sigma_m"),
+            "longitudinal_sigma_m",
+        )
+        _validate_positive_finite(
+            _coerce_numeric(self.lateral_sigma_m, "lateral_sigma_m"),
+            "lateral_sigma_m",
+        )
         if self.cutoff_distance_m is not None:
-            _validate_positive_finite(float(self.cutoff_distance_m), "cutoff_distance_m")
-        _validate_non_negative_finite(float(self.weight), "weight")
-        if not np.isfinite(float(self.stationary_heading_rad)):
+            _validate_positive_finite(
+                _coerce_numeric(self.cutoff_distance_m, "cutoff_distance_m"),
+                "cutoff_distance_m",
+            )
+        _validate_non_negative_finite(_coerce_numeric(self.weight, "weight"), "weight")
+        if not np.isfinite(_coerce_numeric(self.stationary_heading_rad, "stationary_heading_rad")):
             raise ValueError("predictive human cost stationary_heading_rad must be finite")
         if not isinstance(self.aggregation, str) or self.aggregation not in _AGGREGATION_MODES:
             raise ValueError(
@@ -139,7 +163,7 @@ def build_predictive_gaussian_human_cost_config(
         "cutoff_distance_m",
     ):
         if name in values and values[name] is not None:
-            values[name] = float(values[name])
+            values[name] = _coerce_numeric(values[name], name)
     if "aggregation" in values and not isinstance(values["aggregation"], str):
         raise ValueError("predictive human cost aggregation must be a string")
     return PredictiveGaussianHumanCostConfig(**values)

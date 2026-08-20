@@ -20,6 +20,31 @@ from robot_sf.planner.predictive_human_cost import (
 from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
+
+def _validate_active_pedestrian_count(count_raw: Any, row_count: int) -> int:
+    """Validate one active-pedestrian count against the available rows.
+
+    Returns:
+        int: The validated number of active pedestrian rows.
+    """
+
+    if isinstance(count_raw, (bool, np.bool_)):
+        raise ValueError("planner-visible pedestrian count must be numeric")
+    try:
+        count_values = np.asarray(count_raw, dtype=float).reshape(-1)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("planner-visible pedestrian count must be numeric") from exc
+    if count_values.size != 1:
+        raise ValueError("planner-visible pedestrian count must be a finite non-negative integer")
+    count_value = count_values[0]
+    if not np.isfinite(count_value) or count_value < 0.0 or count_value != np.floor(count_value):
+        raise ValueError("planner-visible pedestrian count must be a finite non-negative integer")
+    count = int(count_value)
+    if count > row_count:
+        raise ValueError("planner-visible pedestrian count cannot exceed position rows")
+    return count
+
+
 _DEFAULT_GOAL_PROGRESS_WEIGHT = 4.0
 _DEFAULT_MAX_ANGULAR_SPEED = 1.2
 _DEFAULT_MAX_LINEAR_SPEED = 1.2
@@ -92,6 +117,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         self,
         pedestrian_positions_raw: Any,
         pedestrian_velocities_raw: Any,
+        pedestrian_count_raw: Any = None,
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """Validate required planner-visible pedestrian state for the opt-in cost.
 
@@ -128,6 +154,10 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             )
         if not np.all(np.isfinite(positions)) or not np.all(np.isfinite(velocities)):
             raise ValueError("planner-visible pedestrian positions and velocities must be finite")
+        if pedestrian_count_raw is not None:
+            count = _validate_active_pedestrian_count(pedestrian_count_raw, positions.shape[0])
+            positions = positions[:count]
+            velocities = velocities[:count]
         return positions, velocities
 
     def _extract_state(
@@ -150,8 +180,13 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
+        pedestrian_count_raw = (
+            ped_state.get("count")
+            if "robot" in observation
+            else observation.get("pedestrians_count")
+        )
         validated_state = self._validate_predictive_human_cost_state(
-            ped_positions_raw, ped_velocities_raw
+            ped_positions_raw, ped_velocities_raw, pedestrian_count_raw
         )
         if validated_state is not None:
             ped_pos, ped_vel = validated_state

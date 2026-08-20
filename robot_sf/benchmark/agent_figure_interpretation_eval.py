@@ -478,6 +478,46 @@ def _validate_candidate_interpretation(envelope: Mapping[str, Any]) -> None:
     for dimension in DIMENSIONS:
         if not isinstance(interpretation[dimension], Mapping):
             raise AgentFigureEvalError(f"candidate interpretation.{dimension} must be an object")
+    _validate_candidate_evidence_types(interpretation["evidence_tier_availability"])
+
+
+def _validate_candidate_evidence_types(evidence: Mapping[str, Any]) -> None:
+    """Validate typed fields consumed by deterministic evidence-tier detectors.
+
+    The candidate schema intentionally leaves dimension payloads open for packet-specific
+    fields, but the replay evaluator still consumes a small set of fields directly. Validate
+    those fields here so malformed JSON fails with the evaluator's structured error instead of
+    raising a native ``TypeError`` during scoring.
+    """
+
+    for key in ("evidence_tier", "availability_status", "execution_mode"):
+        if key in evidence and not isinstance(evidence[key], str):
+            raise AgentFigureEvalError(f"candidate evidence_tier_availability.{key} must be text")
+
+    row_provenance = evidence.get("row_provenance")
+    if row_provenance is not None and (
+        not isinstance(row_provenance, list)
+        or any(not isinstance(row, str) for row in row_provenance)
+    ):
+        raise AgentFigureEvalError(
+            "candidate evidence_tier_availability.row_provenance must be a list of text"
+        )
+
+    rows_disclosed = evidence.get("rows_disclosed")
+    if rows_disclosed is not None and not isinstance(rows_disclosed, bool):
+        raise AgentFigureEvalError(
+            "candidate evidence_tier_availability.rows_disclosed must be boolean"
+        )
+
+    reported_value = evidence.get("reported_value")
+    if reported_value is not None and (
+        not isinstance(reported_value, (int, float))
+        or isinstance(reported_value, bool)
+        or (isinstance(reported_value, float) and not math.isfinite(reported_value))
+    ):
+        raise AgentFigureEvalError(
+            "candidate evidence_tier_availability.reported_value must be a finite number or null"
+        )
 
 
 def _apply_synthetic_mutation(packet: Mapping[str, Any], mutation_id: str) -> dict[str, Any]:

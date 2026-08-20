@@ -265,6 +265,18 @@ def test_candidate_envelope_is_provider_free_and_exact() -> None:
         validate_candidate_envelope(with_reference)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("evidence_tier", ["diagnostic"]), ("row_provenance", 1), ("rows_disclosed", "yes")],
+)
+def test_candidate_detector_fields_fail_closed_before_scoring(field: str, value: object) -> None:
+    candidate = _candidate("clean")
+    candidate["interpretation"]["evidence_tier_availability"][field] = value  # type: ignore[index]
+
+    with pytest.raises(AgentFigureEvalError, match="candidate evidence_tier_availability"):
+        validate_candidate_envelope(candidate)
+
+
 def test_replay_digest_omission_and_stale_bytes_fail_closed() -> None:
     omitted = _candidate("clean")
     del omitted["provenance"]["source_sha256"]  # type: ignore[index]

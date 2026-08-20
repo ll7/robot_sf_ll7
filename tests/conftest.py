@@ -583,6 +583,9 @@ _FAST_FILES = {
     # Full Classic phase-boundary tests are deterministic scheduler/context/finalizer
     # contracts; keep extracted orchestration coverage in exact-head fast shards.
     "test_orchestration_boundaries.py",
+    # The CALF/LegNav comparator tests exercise deterministic schema, manifest,
+    # materialization, and provenance contracts for the changed benchmark module.
+    "test_calf_legnav_comparator.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

@@ -352,6 +352,21 @@ def test_fallback_degraded_promotion_recognizes_supported_evidence_tiers(
     assert result["critical_errors"]["fallback_degraded_promotion"] is True
 
 
+@pytest.mark.parametrize("row_provenance", [["fallback"], ["degraded"]])
+def test_fallback_degraded_row_provenance_cannot_be_promoted(
+    row_provenance: list[str],
+) -> None:
+    packet = _clean_packet()
+    evidence = packet["interpretation"]["evidence_tier_availability"]  # type: ignore[index]
+    evidence["execution_mode"] = "native"
+    evidence["row_provenance"] = row_provenance
+    evidence["evidence_tier"] = "nominal benchmark evidence"
+
+    result = evaluate_packet(packet).to_dict()
+
+    assert result["critical_errors"]["fallback_degraded_promotion"] is True
+
+
 def test_stale_bytes_digest_drift_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
     packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"

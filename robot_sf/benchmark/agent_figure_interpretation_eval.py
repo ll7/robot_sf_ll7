@@ -122,6 +122,7 @@ _HIGHER_THAN_DIAGNOSTIC = {
     "paper-grade",
     "paper-grade evidence",
 }
+_FALLBACK_DEGRADED_MODES = frozenset({"fallback", "degraded"})
 
 
 class AgentFigureEvalError(ValueError):
@@ -1433,6 +1434,16 @@ def _dimension_scores(reference: dict[str, Any], observed: dict[str, Any]) -> li
     ]
 
 
+def _has_fallback_or_degraded_evidence(evidence: Mapping[str, Any]) -> bool:
+    """Return whether execution or any disclosed row is fallback/degraded."""
+
+    row_provenance = evidence.get("row_provenance", [])
+    return evidence.get("execution_mode") in _FALLBACK_DEGRADED_MODES or (
+        isinstance(row_provenance, list)
+        and any(row in _FALLBACK_DEGRADED_MODES for row in row_provenance)
+    )
+
+
 def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dict[str, bool]:
     ref_evidence = _required_mapping(
         reference, "evidence_tier_availability", label="reference.evidence_tier_availability"
@@ -1485,8 +1496,8 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
         ),
         "fallback_degraded_promotion": (
             (
-                obs_evidence.get("execution_mode") in {"fallback", "degraded"}
-                or ref_evidence.get("execution_mode") in {"fallback", "degraded"}
+                _has_fallback_or_degraded_evidence(obs_evidence)
+                or _has_fallback_or_degraded_evidence(ref_evidence)
             )
             and obs_evidence.get("evidence_tier") in _HIGHER_THAN_DIAGNOSTIC
         ),

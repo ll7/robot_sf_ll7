@@ -88,6 +88,48 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         self.config = config or MPPISocialConfig()
         self._rng = np.random.default_rng(int(self.config.random_seed))
 
+    def _validate_predictive_human_cost_state(
+        self,
+        pedestrian_positions_raw: Any,
+        pedestrian_velocities_raw: Any,
+    ) -> tuple[np.ndarray, np.ndarray] | None:
+        """Validate required planner-visible pedestrian state for the opt-in cost.
+
+        The existing social planner intentionally normalizes absent or malformed
+        pedestrian fields to an empty state for its default objective. An enabled
+        predictive human-cost comparator must not inherit that zero-cost behavior:
+        missing, malformed, mismatched, or non-finite inputs are an explicit
+        fail-closed condition.
+
+        Returns:
+            Validated position/velocity arrays when the opt-in cost is enabled;
+            ``None`` when the default-disabled cost does not impose this contract.
+        """
+
+        if not self.config.predictive_human_cost.enabled:
+            return None
+        if pedestrian_positions_raw is None or pedestrian_velocities_raw is None:
+            raise ValueError(
+                "enabled predictive human cost requires planner-visible pedestrian "
+                "positions and velocities"
+            )
+        try:
+            positions = np.asarray(pedestrian_positions_raw, dtype=float)
+            velocities = np.asarray(pedestrian_velocities_raw, dtype=float)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(
+                "planner-visible pedestrian positions and velocities must be numeric"
+            ) from exc
+        if positions.ndim != 2 or positions.shape[-1] != 2:
+            raise ValueError("planner-visible pedestrian positions must have shape (P, 2)")
+        if velocities.shape != positions.shape:
+            raise ValueError(
+                "planner-visible pedestrian velocities must match positions with shape (P, 2)"
+            )
+        if not np.all(np.isfinite(positions)) or not np.all(np.isfinite(velocities)):
+            raise ValueError("planner-visible pedestrian positions and velocities must be finite")
+        return positions, velocities
+
     def _extract_state(
         self, observation: dict[str, Any]
     ) -> tuple[np.ndarray, float, float, np.ndarray, np.ndarray, np.ndarray]:
@@ -108,12 +150,22 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         ped_positions_raw = ped_state.get("positions")
         ped_velocities_raw = ped_state.get("velocities")
-        ped_pos = np.asarray([] if ped_positions_raw is None else ped_positions_raw, dtype=float)
-        ped_vel = np.asarray([] if ped_velocities_raw is None else ped_velocities_raw, dtype=float)
-        if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
-            ped_pos = np.zeros((0, 2), dtype=float)
-        if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2 or ped_vel.shape[0] != ped_pos.shape[0]:
-            ped_vel = np.zeros_like(ped_pos)
+        validated_state = self._validate_predictive_human_cost_state(
+            ped_positions_raw, ped_velocities_raw
+        )
+        if validated_state is not None:
+            ped_pos, ped_vel = validated_state
+        else:
+            ped_pos = np.asarray(
+                [] if ped_positions_raw is None else ped_positions_raw, dtype=float
+            )
+            ped_vel = np.asarray(
+                [] if ped_velocities_raw is None else ped_velocities_raw, dtype=float
+            )
+            if ped_pos.ndim != 2 or ped_pos.shape[-1] != 2:
+                ped_pos = np.zeros((0, 2), dtype=float)
+            if ped_vel.ndim != 2 or ped_vel.shape[-1] != 2 or ped_vel.shape[0] != ped_pos.shape[0]:
+                ped_vel = np.zeros_like(ped_pos)
 
         return robot_pos, heading, speed, goal, ped_pos, ped_vel
 

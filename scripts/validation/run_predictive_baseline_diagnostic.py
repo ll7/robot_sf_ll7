@@ -27,6 +27,7 @@ from robot_sf.planner.cbf_safety_filter import (
 from robot_sf.planner.mppi_social import MPPISocialConfig, MPPISocialPlannerAdapter
 from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSocialPlannerAdapter
 from robot_sf.planner.predictive_human_cost import (
+    PREDICTIVE_GAUSSIAN_HUMAN_COST_SCHEMA,
     PredictiveGaussianHumanCostConfig,
 )
 
@@ -44,6 +45,50 @@ _UNAVAILABLE_METRICS = {
     "minimum_distance": "no simulator truth",
     "action_smoothness": "one-step smoke only",
 }
+
+_COST_INPUT_VISIBILITY = (
+    "planner-visible observation.pedestrians.positions and .velocities; "
+    "current structured SocNav state only; no simulator truth"
+)
+_COST_FORMULA = (
+    "per-pedestrian unweighted exp(-0.5*((longitudinal/sigma_L)^2 + "
+    "(lateral/sigma_T)^2)); center=position+velocity*t; longitudinal axis follows "
+    "velocity, stationary velocity uses stationary_heading_rad; MPPI multiplies by weight"
+)
+_ANISOTROPIC_COST_FORMULA = (
+    f"{_COST_FORMULA}; contributions beyond cutoff_distance_m are zero; "
+    "per-pedestrian values aggregate by sum, max, or mean"
+)
+_COST_MISSING_INPUT_POLICY = (
+    "missing, malformed, mismatched, or non-finite planner-visible pedestrian state "
+    "fails closed; no zero-cost fallback"
+)
+
+
+def _predictive_human_cost_diagnostics(
+    config: PredictiveGaussianHumanCostConfig,
+) -> dict[str, Any]:
+    """Describe the predictive cost input and unavailable-result policy."""
+
+    return {
+        "schema": PREDICTIVE_GAUSSIAN_HUMAN_COST_SCHEMA,
+        "enabled": bool(config.enabled),
+        "parameters": config.to_dict(),
+        "input_visibility": _COST_INPUT_VISIBILITY if config.enabled else "not_used",
+        "position_source": "observation.pedestrians.positions" if config.enabled else "not_used",
+        "velocity_source": "observation.pedestrians.velocities" if config.enabled else "not_used",
+        "coordinate_frame": "world-frame xy",
+        "units": {"position": "m", "velocity": "m/s", "time": "s"},
+        "time_source": "rollout time t=(step+1)*rollout_dt from current observation",
+        "history": "current observation with declared constant-velocity projection",
+        "stationary_velocity_policy": "use stationary_heading_rad when speed <= 1e-9",
+        "missing_input_policy": _COST_MISSING_INPUT_POLICY if config.enabled else "not_applicable",
+        "unavailable_or_degraded_result": (
+            "smoke record status=failed with failure_reason; no fallback or zero success"
+            if config.enabled
+            else "not_applicable"
+        ),
+    }
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -164,7 +209,11 @@ def _run_smoke(
 
     try:
         commands: list[tuple[float, float]] = []
-        diagnostics: dict[str, Any] = {}
+        diagnostics: dict[str, Any] = {
+            "predictive_human_cost": _predictive_human_cost_diagnostics(
+                human_cost or PredictiveGaussianHumanCostConfig()
+            )
+        }
         started = time.perf_counter()
         for _ in range(2):
             planner = _build_smoke_planner(method_id, config, human_cost)
@@ -173,7 +222,7 @@ def _run_smoke(
             if not np.all(np.isfinite(command_tuple)):
                 raise ValueError("planner emitted non-finite command")
             commands.append(command_tuple)
-            diagnostics = dict(planner.diagnostics())
+            diagnostics.update(planner.diagnostics())
         runtime_ms = (time.perf_counter() - started) * 1000.0
         deterministic = bool(np.allclose(commands[0], commands[1], atol=1e-12, rtol=0.0))
         if not deterministic:
@@ -211,7 +260,7 @@ def _build_method_cards(
 ) -> tuple[PlannerMethodCard, ...]:
     """Build the reference, PGIF-style, anisotropic, and constrained-MPC method cards."""
 
-    common_observation = "structured SocNav robot, goal, and pedestrian position/velocity state"
+    common_observation = _COST_INPUT_VISIBILITY
     common_action = "unicycle command tuple (linear_speed_mps, angular_rate_rps)"
     return (
         PlannerMethodCard(
@@ -228,6 +277,9 @@ def _build_method_cards(
             fallback_policy="No predictor fallback; no simulator metrics in this smoke.",
             claim_boundary="reference smoke only; not a benchmark result",
             config=asdict(mppi_config),
+            formula="Predictive human cost disabled for the reference lane.",
+            input_visibility="Reference lane uses the same structured observation; predictive cost is disabled.",
+            missing_input_policy="Not applicable because the predictive cost is disabled.",
         ),
         PlannerMethodCard(
             method_id=_METHOD_PGIF,
@@ -240,9 +292,18 @@ def _build_method_cards(
             license_status="no external code copied; source method reviewed as inspiration",
             implementation_mode="adapter",
             benchmark_status="diagnostic_only",
-            fallback_policy="Disabled by default; malformed cost configuration fails closed.",
-            claim_boundary="explicit Robot SF cost adaptation; no source-transfer or safety claim",
+            fallback_policy=(
+                "Disabled by default; malformed configuration or planner-visible pedestrian "
+                "state fails closed; no fallback evidence."
+            ),
+            claim_boundary=(
+                "explicit Robot SF cost adaptation; no source-transfer or safety claim; "
+                "cutoff is unbounded and aggregation is sum"
+            ),
             config={"mppi": asdict(mppi_config), "predictive_human_cost": asdict(pgif_config)},
+            formula=_COST_FORMULA,
+            input_visibility=_COST_INPUT_VISIBILITY,
+            missing_input_policy=_COST_MISSING_INPUT_POLICY,
         ),
         PlannerMethodCard(
             method_id=_METHOD_ANISOTROPIC,
@@ -255,7 +316,10 @@ def _build_method_cards(
             license_status="internal implementation; no external code copied",
             implementation_mode="adapter",
             benchmark_status="diagnostic_only",
-            fallback_policy="Disabled by default; malformed cost configuration fails closed.",
+            fallback_policy=(
+                "Disabled by default; malformed configuration or planner-visible pedestrian "
+                "state fails closed; no fallback evidence."
+            ),
             claim_boundary=(
                 "diagnostic-only anisotropic cost smoke; no benchmark, safety, "
                 "ranking, or source-paper reproduction claim"
@@ -264,6 +328,9 @@ def _build_method_cards(
                 "mppi": asdict(mppi_config),
                 "predictive_human_cost": asdict(aniso_config),
             },
+            formula=_ANISOTROPIC_COST_FORMULA,
+            input_visibility=_COST_INPUT_VISIBILITY,
+            missing_input_policy=_COST_MISSING_INPUT_POLICY,
         ),
         PlannerMethodCard(
             method_id=_METHOD_CONSTRAINED,
@@ -279,6 +346,9 @@ def _build_method_cards(
             fallback_policy="NMPC retains explicit stop fallback; CBF projection is recorded in diagnostics.",
             claim_boundary="one-step constrained-planner smoke; no safety certificate",
             config={"nmpc": asdict(nmpc_config), "cbf": asdict(cbf_config)},
+            formula="Predictive human cost is not used by this constrained lane.",
+            input_visibility="Reference/constrained planner observation; predictive cost is disabled.",
+            missing_input_policy="Not applicable because the predictive cost is disabled.",
         ),
     )
 

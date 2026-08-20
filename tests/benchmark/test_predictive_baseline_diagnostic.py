@@ -34,3 +34,21 @@ def test_predictive_baseline_fixture_is_schema_valid_and_fail_closed() -> None:
     assert all(record["deterministic"] for record in report["smoke_records"])
     assert len(report["methods"]) == 4
     assert all(len(card["config_digest"]) == 64 for card in report["methods"])
+    anisotropic = next(
+        card for card in report["methods"] if card["method_id"] == "anisotropic_gaussian_mppi_v1"
+    )
+    assert "cutoff_distance_m" in anisotropic["formula"]
+    assert "observation.pedestrians.positions" in anisotropic["input_visibility"]
+    assert "fails closed" in anisotropic["missing_input_policy"]
+    anisotropic_record = next(
+        record
+        for record in report["smoke_records"]
+        if record["method_id"] == "anisotropic_gaussian_mppi_v1"
+    )
+    cost_diagnostics = anisotropic_record["diagnostics"]["predictive_human_cost"]
+    assert cost_diagnostics["enabled"] is True
+    assert cost_diagnostics["input_visibility"] == anisotropic["input_visibility"]
+    assert cost_diagnostics["missing_input_policy"] == anisotropic["missing_input_policy"]
+    assert cost_diagnostics["unavailable_or_degraded_result"].startswith(
+        "smoke record status=failed"
+    )

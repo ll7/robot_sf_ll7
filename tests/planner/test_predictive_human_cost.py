@@ -265,6 +265,38 @@ def test_mppi_enabled_cost_preserves_scalar_batch_parity() -> None:
     np.testing.assert_allclose(scalar, batched, atol=1e-12, rtol=0.0)
 
 
+@pytest.mark.parametrize(
+    "pedestrians",
+    [
+        {},
+        {"positions": [[0.5, 0.0]], "velocities": []},
+        {"positions": [[float("nan"), 0.0]], "velocities": [[0.0, 0.0]]},
+    ],
+)
+def test_mppi_enabled_cost_rejects_missing_or_invalid_pedestrian_state(
+    pedestrians: dict[str, object],
+) -> None:
+    """Enabled cost cannot silently turn absent or invalid state into zero cost."""
+
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(
+            predictive_human_cost=PredictiveGaussianHumanCostConfig(enabled=True),
+        )
+    )
+    observation = {
+        "robot": {
+            "position": np.asarray([0.0, 0.0]),
+            "heading": np.asarray([0.0]),
+            "speed": np.asarray([0.2]),
+        },
+        "goal": {"current": np.asarray([2.0, 0.0]), "next": np.asarray([2.0, 0.0])},
+        "pedestrians": pedestrians,
+    }
+
+    with pytest.raises(ValueError, match="planner-visible pedestrian"):
+        planner._extract_state(observation)
+
+
 # ---------------------------------------------------------------------------
 # Stationary / near-zero limiting
 # ---------------------------------------------------------------------------

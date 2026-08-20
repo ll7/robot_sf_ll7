@@ -473,6 +473,7 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
 
     monkeypatch.setattr(collector_module.map_runner, "make_robot_env", FakeEnv)
     episode_factory_before = collector_module.map_runner._map_runner_episode_module.make_robot_env
+    execution_mode = "adapter"
 
     def fake_run(scenario: dict[str, Any], seed: int, **_kwargs: Any) -> dict[str, Any]:
         env = collector_module.map_runner.make_robot_env()
@@ -490,7 +491,7 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
                         {"robot": {"position": [0.1, 0.0]}},
                     ]
                 },
-                "planner_kinematics": {"execution_mode": "adapter"},
+                "planner_kinematics": {"execution_mode": execution_mode},
                 "planner_runtime": {"fallback_count": 0},
             },
             "pedestrian_model": {"fallback_degraded_status": "native"},
@@ -523,6 +524,20 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
         collector_module.map_runner._map_runner_episode_module.make_robot_env
         is episode_factory_before
     )
+
+    execution_mode = "mixed"
+    mixed = collector._capture_episode(
+        {"name": "planner_sanity_simple"},
+        seed=1001,
+        split="train",
+        episode_id="train__planner_sanity_simple__seed1001",
+        algo="hybrid_rule_local_planner",
+        algo_config={},
+        scenario_path=Path("configs/policy_search/nominal_sanity_matrix.yaml"),
+        horizon=2,
+        dt=0.1,
+    )
+    assert mixed["fallback"] is False
 
     def fake_degraded_run(scenario: dict[str, Any], seed: int, **kwargs: Any) -> dict[str, Any]:
         record = fake_run(scenario, seed, **kwargs)
@@ -931,6 +946,67 @@ def test_yield_check_deterministic(tmp_path: Path) -> None:
     r1 = check_yield_status(tmp_path)
     r2 = check_yield_status(tmp_path)
     assert r1 == r2
+
+
+def test_yield_check_rejects_malformed_packet_fingerprint(tmp_path: Path) -> None:
+    """A yield check must not trust a non-hash packet fingerprint without config input."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest["packet_fingerprint"] = "not-a-sha256"
+    Path(manifest["manifest_path"]).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "packet fingerprint" in result["reason"].lower()
+
+
+def test_yield_check_rejects_tampered_packet_fingerprint_payload(tmp_path: Path) -> None:
+    """A packet fingerprint must cover the durable payload it claims to identify."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest["packet_fingerprint_payload"]["dataset_id"] = "tampered"
+    Path(manifest["manifest_path"]).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "does not match" in result["reason"].lower()
+
+
+def test_yield_check_rejects_ledger_identity_defects(tmp_path: Path) -> None:
+    """The durable ledger identity-defect field is part of the fail-closed check."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest["identity_defects"] = []
+    manifest["yield_ledger"]["identity_defects"] = [{"kind": "tampered_identity"}]
+    Path(manifest["manifest_path"]).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "identity defect" in result["reason"].lower()
 
 
 def test_yield_check_rejects_inconsistent_pass_gate(tmp_path: Path) -> None:

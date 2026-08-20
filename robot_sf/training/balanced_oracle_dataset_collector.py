@@ -27,6 +27,7 @@ EPISODE_ID_RE = re.compile(r"^(?P<split>[a-z_]+)__(?P<scenario>.+)__seed(?P<seed
 _SCHEMA_VERSION = "balanced-oracle-dataset-manifest.v1"
 _PLAN_SCHEMA_VERSION = "balanced-oracle-collection-plan.v1"
 _SPLITS = ("train", "validation", "evaluation")
+_VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 _PACKET_FINGERPRINT_FIELDS = (
     "dataset_id",
     "source_candidate",
@@ -545,6 +546,20 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
             "manifest_path": str(manifest_path),
         }
 
+    ledger_identity_defects = ledger.get("identity_defects")
+    if not isinstance(ledger_identity_defects, list):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Yield ledger identity_defects must be a list",
+            "manifest_path": str(manifest_path),
+        }
+    if ledger_identity_defects:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": f"Yield ledger identity defects detected: {ledger_identity_defects[:5]}",
+            "manifest_path": str(manifest_path),
+        }
+
     lineage = ledger["lineage"]
     required_lineage = ("source_candidate", "config_path", "source_packet_sha256", "commit")
     missing_lineage = [field for field in required_lineage if not lineage.get(field)]
@@ -592,10 +607,36 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
         }
 
     stored_fingerprint = manifest.get("packet_fingerprint")
-    if not isinstance(stored_fingerprint, str) or not stored_fingerprint:
+    if (
+        not isinstance(stored_fingerprint, str)
+        or re.fullmatch(r"[0-9a-f]{64}", stored_fingerprint) is None
+    ):
         return {
             "check_status": "blocked_integrity_or_lineage",
-            "reason": "Missing packet fingerprint",
+            "reason": "Missing or malformed packet fingerprint",
+            "manifest_path": str(manifest_path),
+        }
+
+    fingerprint_fields = manifest.get("packet_fingerprint_fields")
+    if fingerprint_fields != list(_PACKET_FINGERPRINT_FIELDS):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Packet fingerprint fields are missing or unsupported",
+            "manifest_path": str(manifest_path),
+        }
+    fingerprint_payload = manifest.get("packet_fingerprint_payload")
+    if not isinstance(fingerprint_payload, dict) or any(
+        field not in fingerprint_payload for field in _PACKET_FINGERPRINT_FIELDS
+    ):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Packet fingerprint payload is missing required fields",
+            "manifest_path": str(manifest_path),
+        }
+    if _canonical_sha256(_packet_fingerprint_payload(fingerprint_payload)) != stored_fingerprint:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Packet fingerprint does not match its payload",
             "manifest_path": str(manifest_path),
         }
 
@@ -1217,7 +1258,7 @@ class BalancedOracleCollector:
         fallback_count = int(planner_runtime.get("fallback_count", 0) or 0)
         pedestrian_status = str(pedestrian_model.get("fallback_degraded_status", "unknown"))
         fallback = (
-            execution_mode not in {"native", "adapter"}
+            execution_mode not in _VALID_EXECUTION_MODES
             or fallback_count > 0
             or _contains_degraded_marker(planner_runtime)
         )

@@ -109,6 +109,47 @@ def test_collect_episode_rejects_duplicate_provenance_rows(tmp_path: Path) -> No
         collect_episode(request)
 
 
+@pytest.mark.parametrize("invalid_seed", [True, 7.0, "7"])
+def test_collect_episode_rejects_lossy_identity_seed_types(
+    tmp_path: Path, invalid_seed: object
+) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    record["seed"] = invalid_seed
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="integer"):
+        collect_episode(request)
+
+
+def test_collect_episode_rejects_non_integer_provenance_seed(tmp_path: Path) -> None:
+    result = tmp_path / "existing.jsonl"
+    result.write_text(json.dumps(_record()) + "\n", encoding="utf-8")
+    result.with_name(result.name + ".provenance.json").write_text(
+        json.dumps({"rows": [{"scenario_id": "target", "seed": True}]}),
+        encoding="utf-8",
+    )
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="integer"):
+        collect_episode(request)
+
+
 def test_collect_episode_preserves_map_runner_contract(tmp_path: Path) -> None:
     calls: list[dict[str, object]] = []
     matrix = tmp_path / "matrix.yaml"

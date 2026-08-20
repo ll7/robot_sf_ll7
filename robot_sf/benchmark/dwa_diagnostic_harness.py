@@ -123,6 +123,13 @@ def _resolve_path(value: Path | None, fallback: Path | None, label: str) -> Path
     return path
 
 
+def _require_integer(value: Any, label: str) -> int:
+    """Return a JSON integer without accepting boolean or lossy coercions."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"{label} must be an integer")
+    return value
+
+
 def _validate_identity(
     record: Mapping[str, Any],
     request: DwaDiagnosticRequest,
@@ -133,11 +140,9 @@ def _validate_identity(
         raise ValueError(
             f"episode scenario mismatch: expected {request.scenario!r}, got {scenario_id!r}"
         )
-    try:
-        record_seed = int(record["seed"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("episode record must contain an integer seed") from exc
-    if record_seed != int(request.seed):
+    record_seed = _require_integer(record.get("seed"), "episode record seed")
+    request_seed = _require_integer(request.seed, "request seed")
+    if record_seed != request_seed:
         raise ValueError(f"episode seed mismatch: expected {request.seed}, got {record_seed}")
 
     rows = provenance.get("rows")
@@ -145,13 +150,13 @@ def _validate_identity(
         return
     if not isinstance(rows, list):
         raise ValueError("provenance rows must be a list")
-    matching_rows = [
-        row
-        for row in rows
-        if isinstance(row, Mapping)
-        and str(row.get("scenario_id")) == request.scenario
-        and row.get("seed") == request.seed
-    ]
+    matching_rows: list[Mapping[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("provenance rows must contain objects")
+        row_seed = _require_integer(row.get("seed"), "provenance row seed")
+        if str(row.get("scenario_id")) == request.scenario and row_seed == request_seed:
+            matching_rows.append(row)
     if len(matching_rows) != 1:
         raise ValueError(
             "expected exactly one provenance row for "
@@ -260,11 +265,13 @@ def flatten_trace_step(
         raise ValueError("target_goal must be an object when present")
     window = window_value if isinstance(window_value, Mapping) else {}
     target = target_value if isinstance(target_value, Mapping) else {}
+    normalized_seed = _require_integer(seed, "trace seed")
+    normalized_step = _require_integer(step.get("step", -1), "trace step")
     row = {
         "episode_id": episode_id,
         "scenario_id": scenario_id,
-        "seed": int(seed),
-        "step": int(step.get("step", -1)),
+        "seed": normalized_seed,
+        "step": normalized_step,
         "selected_source": str(step.get("selected_source", "unknown")),
         "selected_v_mps": float(command[0]) if len(command) > 0 else None,
         "selected_w_radps": float(command[1]) if len(command) > 1 else None,

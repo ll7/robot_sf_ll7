@@ -42,3 +42,8 @@ tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py
 tests/unit/test_runner_video.py
 tests/validation/test_publication_preflight.py
+
+# Adversarial sampler/campaign tests that require optimizer extras.
+tests/adversarial/test_adversarial_search.py
+tests/adversarial/test_adversarial_warm_start.py
+tests/adversarial/test_issue_5308_qd_campaign.py

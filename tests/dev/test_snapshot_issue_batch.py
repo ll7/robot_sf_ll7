@@ -393,6 +393,36 @@ def test_malformed_blocker_decision_fails_closed_before_issue_discovery(tmp_path
     assert payload["issues"][0]["status"] == "error"
 
 
+def test_blocked_receipt_without_fingerprint_fails_closed_before_issue_discovery(
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    """An incomplete suppression decision cannot fence a claimable issue."""
+    decision_path = tmp_path / "incomplete.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "issue": 2710,
+                "status": "blocked_unchanged",
+                "reason": "fingerprint decision",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as listing:
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=1,
+            blocker_decision_paths=[str(decision_path)],
+        )
+
+    listing.assert_not_called()
+    assert payload["status"] == "error"
+    assert "current_fingerprint" in payload["errors"][0]
+
+
 def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:
     """Compute-gated issues must not look claimable, even when marked ready."""
     issue_list = [

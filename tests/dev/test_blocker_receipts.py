@@ -121,6 +121,32 @@ def test_invalid_receipt_fails_open_to_re_evaluation() -> None:
     assert decision["reason"] == "invalid_or_stale_receipt"
 
 
+def test_receipt_rejects_noncanonical_sha_lengths() -> None:
+    """Partial SHA values cannot masquerade as exact repository identities."""
+    receipt = build_receipt(
+        repository="ll7/robot_sf_ll7",
+        issue=7612,
+        issue_revision="body-sha256:abc",
+        origin_main_sha="a" * 40,
+        blocker_class="dependency",
+        required_transition="merge prerequisite",
+        evidence=[],
+        safe_work=[],
+        next_owner="goal-autopilot",
+        recommended_state="state:blocked",
+        retryable=True,
+        invalidating_fields=["origin_main_sha"],
+        fingerprint_inputs={"origin_main_sha": "a" * 40},
+        observed_at="2026-08-20T00:00:00Z",
+    )
+    receipt["origin_main_sha"] = "a" * 41
+
+    report = validate_receipt(receipt)
+
+    assert report["valid"] is False
+    assert any("origin_main_sha must be a full SHA" in error for error in report["errors"])
+
+
 def test_summary_exposes_suppressed_redispatch_counts_and_reasons() -> None:
     """The loop-facing summary makes suppression and re-evaluation visible."""
     summary = summarize_decisions(

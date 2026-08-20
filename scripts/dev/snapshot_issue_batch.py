@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -36,6 +37,7 @@ EXTERNAL_RESOURCE_LABEL = "resource:external-data"
 COMPUTE_ROUTING_LABEL = "routing:needs-compute"
 BLOCKED_LABEL_PREFIX = "blocked:"
 BLOCKER_DECISION_STATUSES = frozenset({"blocked_unchanged", "blocker_changed", "re_evaluate"})
+BLOCKER_DECISION_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 EXTERNAL_BLOCKER_LABELS = {
     BLOCKED_EXTERNAL_INPUT_LABEL,
     "blocked",
@@ -742,6 +744,19 @@ def _load_blocker_decisions(  # noqa: C901 - fail-closed artifact parsing.
                     f"{raw_path}: issue {issue} has unsupported blocker decision status {status!r}"
                 )
                 continue
+            reason = row.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                errors.append(f"{raw_path}: issue {issue} blocker decision has no reason")
+                continue
+            if status in {"blocked_unchanged", "blocker_changed"}:
+                fingerprint = row.get("current_fingerprint")
+                if not isinstance(fingerprint, str) or not BLOCKER_DECISION_DIGEST_RE.fullmatch(
+                    fingerprint
+                ):
+                    errors.append(
+                        f"{raw_path}: issue {issue} {status} decision has no valid current_fingerprint"
+                    )
+                    continue
             if issue in decisions:
                 errors.append(f"{raw_path}: duplicate blocker decision for issue {issue}")
                 continue

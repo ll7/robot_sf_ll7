@@ -33,7 +33,7 @@ BLOCKER_CLASSES = frozenset(
         "authority",
     }
 )
-_SHA256_RE = re.compile(r"^[0-9a-f]{40,64}$")
+_SHA256_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _UNAVAILABLE_STATE = "$state"
 _UNAVAILABLE_VALUE = "unavailable"
 _MISSING_VALUE = "missing"

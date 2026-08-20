@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from typing import Any
 
@@ -28,6 +29,7 @@ from scripts.dev._gh_rest import parse_json as _parse_json
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 AUDIT_SCHEMA = "post-merge-audit.v1"
+FULL_SHA_RE = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 def _audit_payload(number: int, *, repo: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -49,11 +51,19 @@ def _audit_payload(number: int, *, repo: str) -> tuple[dict[str, Any] | None, st
             f"PR {number} is not merged (state={state!r}, merged_at={merged_at!r}); "
             "no audit disposition recorded"
         )
-    if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
+    if (
+        not isinstance(head, dict)
+        or not isinstance(head.get("sha"), str)
+        or not FULL_SHA_RE.fullmatch(head["sha"])
+    ):
         return None, "post-merge audit payload has no head SHA"
-    if not isinstance(base, dict) or not isinstance(base.get("sha"), str):
+    if (
+        not isinstance(base, dict)
+        or not isinstance(base.get("sha"), str)
+        or not FULL_SHA_RE.fullmatch(base["sha"])
+    ):
         return None, "post-merge audit payload has no base SHA"
-    if not isinstance(merge_commit_sha, str) or not merge_commit_sha:
+    if not isinstance(merge_commit_sha, str) or not FULL_SHA_RE.fullmatch(merge_commit_sha):
         return None, "post-merge audit payload has no merge commit SHA"
 
     return (

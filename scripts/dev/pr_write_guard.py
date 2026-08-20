@@ -150,6 +150,7 @@ def guard_pr_write(
     )
     if validation_error is not None:
         return validation_error
+    assert isinstance(expected_head_sha, str)
 
     result = _gh_api_get(f"repos/{repo}/pulls/{number}")
     payload, error = _parse_json(result, what=f"PR {number} write-state read")

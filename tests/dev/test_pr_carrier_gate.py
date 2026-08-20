@@ -24,8 +24,14 @@ def _proc(
     return subprocess.CompletedProcess(["gh", "api"], returncode, stdout=stdout, stderr=stderr)
 
 
-def _pr_payload(*, title: str = "fix(benchmark): gate carriers", body: str = "") -> str:
-    return json.dumps({"title": title, "body": body})
+def _pr_payload(
+    *,
+    title: str = "fix(benchmark): gate carriers",
+    body: str = "",
+    head: str = HEAD_SHA,
+    base: str = BASE_SHA,
+) -> str:
+    return json.dumps({"title": title, "body": body, "head": {"sha": head}, "base": {"sha": base}})
 
 
 def _comments_payload(*bodies: str) -> str:
@@ -73,6 +79,14 @@ def test_pure_review_carrier_rejects_foreign_head() -> None:
 def test_pure_review_carrier_rejects_stale_declared_base() -> None:
     """A review declaring an old base is not current-base evidence."""
     comment = _review_comment().replace(BASE_SHA, OTHER_SHA)
+    assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_rejects_stale_reviewed_base() -> None:
+    """Common ``Base reviewed:`` wording remains bound to the live base."""
+    comment = _review_comment().replace(
+        f"Exact base: `{BASE_SHA}`", f"Base reviewed: `{OTHER_SHA}`"
+    )
     assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
 
 
@@ -243,6 +257,26 @@ def test_gate_fails_closed_on_transport_error() -> None:
 
     assert result["status"] == "error"
     assert "HTTP 403" in result["error"]
+
+
+def test_gate_fails_closed_when_pr_head_changes_between_guard_reads() -> None:
+    """The carrier read must re-check head/base to close the guard-to-write race."""
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(body=body, head=OTHER_SHA)),
+            _proc(stdout=_comments_payload(_review_comment())),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "head changed during carrier read" in result["error"]
 
 
 def test_gate_rejects_malformed_shas() -> None:

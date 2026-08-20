@@ -76,7 +76,8 @@ def is_review_carrier_comment(comment: str) -> bool:
 def _declared_base_sha(comment: str) -> str | None:
     """Return the base SHA declared next to a base label in *comment*, if any."""
     match = re.search(
-        r"\b(?:exact\s+)?base\s*[:`\s]{1,3}([0-9a-fA-F]{40})",
+        r"\b(?:exact\s+)?base(?:\s+(?:reviewed|sha|commit))?\s*"
+        r"(?:[:=]\s*`?|\s+`?)([0-9a-fA-F]{40})",
         comment,
         re.IGNORECASE,
     )
@@ -137,6 +138,29 @@ def _body_carrier_error(body: str, *, live_head: str) -> str | None:
         f"PR body carries exact-head SHA carrier(s) that do not match the "
         f"live head {live_head}: {details}"
     )
+
+
+def _live_pr_identity_error(
+    payload: dict[str, Any], *, live_head: str, live_base: str
+) -> str | None:
+    """Return an error if the carrier read observes a different PR head or base."""
+    observed_head = payload.get("head")
+    observed_base = payload.get("base")
+    if not isinstance(observed_head, dict) or not isinstance(observed_head.get("sha"), str):
+        return "PR carrier payload has no head SHA"
+    if not isinstance(observed_base, dict) or not isinstance(observed_base.get("sha"), str):
+        return "PR carrier payload has no base SHA"
+    observed_head_sha = observed_head["sha"]
+    observed_base_sha = observed_base["sha"]
+    if not FULL_SHA_RE.fullmatch(observed_head_sha):
+        return "PR carrier payload has malformed head SHA"
+    if not FULL_SHA_RE.fullmatch(observed_base_sha):
+        return "PR carrier payload has malformed base SHA"
+    if observed_head_sha.lower() != live_head.lower():
+        return "PR head changed during carrier read; merge-ready must be withheld"
+    if observed_base_sha.lower() != live_base.lower():
+        return "PR base changed during carrier read; merge-ready must be withheld"
+    return None
 
 
 def _review_carrier_error(
@@ -244,6 +268,9 @@ def check_merge_ready_carriers(
     body = pr_payload.get("body")
     if not isinstance(body, str):
         return {"status": "error", "error": "PR carrier payload has no body"}
+    identity_error = _live_pr_identity_error(pr_payload, live_head=live_head, live_base=live_base)
+    if identity_error:
+        return {"status": "error", "error": identity_error}
 
     metadata_error = _body_carrier_error(body, live_head=live_head)
     if metadata_error:

@@ -98,6 +98,20 @@ def test_audit_fails_closed_on_transport_error() -> None:
     assert "HTTP 403" in result["error"]
 
 
+def test_audit_rejects_malformed_merge_state_shas() -> None:
+    """A post-merge audit cannot promote abbreviated identities to exact evidence."""
+    payload = json.loads(_merged_payload())
+    payload["merge_commit_sha"] = "short"
+    with patch(
+        "scripts.dev.pr_audit_merged._gh_api_get",
+        return_value=_proc(stdout=json.dumps(payload)),
+    ):
+        result = audit_merged_pr(7547)
+
+    assert result["status"] == "error"
+    assert "merge commit SHA" in result["error"]
+
+
 def test_cli_prints_compact_success_json() -> None:
     """The command-line contract is a single machine-readable success result."""
     with patch(

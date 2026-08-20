@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark import issue_6794_cutover_preparation as preparation_module
 from robot_sf.benchmark.issue_6794_cutover_preparation import (
     compare_parity_rows,
     main,
@@ -26,6 +27,30 @@ def test_preparation_contract_freezes_current_bytes_and_load_paths() -> None:
     assert set(report["checkpoints"]) == {"default_ppo", "ga3c_cadrl"}
     assert len(report["load_paths"]) == 8
     assert report["parity_protocol"]["seeds"] == [111, 112, 113]
+
+
+def test_preparation_contract_accepts_relative_config_path() -> None:
+    """The public validator supports its documented repository-relative default."""
+    report = validate_preparation_contract(REPO_ROOT)
+
+    assert report["status"] == "prepared_not_executed"
+
+
+def test_preparation_contract_rejects_escape_paths_and_malformed_arms(tmp_path: Path) -> None:
+    """Declared inputs and protocol arms fail closed before any file is consumed."""
+    outside = tmp_path.parent / "outside-checkpoint.txt"
+    outside.write_text("not a checkpoint", encoding="utf-8")
+    link = tmp_path / "checkpoint.txt"
+    link.symlink_to(outside)
+
+    with pytest.raises(ValueError, match="resolve within the repository"):
+        preparation_module._repo_declared_path(tmp_path, "checkpoint.txt", name="checkpoint")
+    with pytest.raises(ValueError, match="repository-relative"):
+        preparation_module._repo_declared_path(
+            tmp_path, "../outside-checkpoint.txt", name="checkpoint"
+        )
+    with pytest.raises(ValueError, match="two mapping arms"):
+        preparation_module._validate_protocol_arms({"planner_arms": [{"key": "ppo"}, "malformed"]})
 
 
 def _row(seed: int, *, delta: float = 0.0, status: str = "native") -> dict:

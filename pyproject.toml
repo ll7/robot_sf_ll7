@@ -202,7 +202,7 @@ exclude = [
 allow-direct-references = true
 
 [tool.ruff]
-required-version = "==0.16.2"
+required-version = "==0.16.3"
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",

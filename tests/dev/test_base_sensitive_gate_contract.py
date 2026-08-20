@@ -17,6 +17,8 @@ import sys
 import time
 from pathlib import Path
 
+from scripts.dev.base_sensitive_selector import find_base_sensitive_test_files
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GATE_SCRIPT = REPO_ROOT / "scripts" / "dev" / "check_base_sensitive_gates.py"
 
@@ -32,11 +34,14 @@ class TestBaseSensitiveMarker:
 
     def test_marker_can_select_tests(self) -> None:
         """pytest -m base_sensitive must select at least one test."""
+        marker_files = find_base_sensitive_test_files(REPO_ROOT)
+        assert marker_files, "base_sensitive selector found no candidate test files"
         result = subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "pytest",
+                *marker_files,
                 "-m",
                 "base_sensitive",
                 "--collect-only",

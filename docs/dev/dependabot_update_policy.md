@@ -7,6 +7,8 @@ The repository separates automated dependency updates by compatibility risk so a
 - .github/dependabot.yml defines the root update lanes.
 - scripts/validation/dependabot_update_policy.v1.json maps direct packages to risk, lane, rollback, and existing CI evidence.
 - scripts/dev/check_dependabot_update_policy.py validates the three surfaces together.
+- scripts/validation/dependency_coherence.v1.json maps each declaration to its required lock and supported profile owners.
+- scripts/dev/check_dependency_coherence.py checks that map against the exact pull-request base.
 - .github/workflows/pr-contract-check.yml runs the checker for every pull request.
 - .github/workflows/ci.yml owns the required compatibility evidence; the policy does not create a second dependency test suite.
 
@@ -29,6 +31,37 @@ Security updates remain independently actionable. Every root group explicitly ap
 The checker identifies changed lock rows against the exact pull-request base and reports the direct risk class. A mixed direct update, an unknown direct package, a missing required CI job, or a compatibility command that loses its declared focused paths fails closed in the existing PR contract check.
 
 The checker does not claim a benchmark result, a performance change, or a research result. Passing it means only that the dependency update is routed to the declared existing CI surfaces. Those CI jobs still need to pass before the pull request can be treated as merge-ready.
+
+## Cross-lock coherence
+
+The cross-lock checker answers a narrower question: did every changed dependency declaration receive the lock and profile validation owned by its project? The root `robot_sf` project and the standalone `fast-pysf` project resolve independently, even when they declare a shared package such as NumPy. A shared declaration therefore requires both independently resolved locks only when both declarations change. The map records this ownership instead of assuming that a subtree is a uv workspace member.
+
+The report uses these fail-closed states:
+
+| State | Meaning |
+| --- | --- |
+| `coherent` | Required lock owners are present and the checked supported profiles agree with the declarations. |
+| `missing_lock_update` | A declaration changed without its mapped lockfile changing. |
+| `declaration_lock_mismatch` | The lock root or pinned lock check does not agree with the declaration. |
+| `profile_unavailable` | A required Python profile or the pinned uv resolver could not be evaluated. |
+| `conflict` | Shared requirements or changed owner paths have an incompatible coupling. |
+| `invalid` | The manifest, declaration, lock, or exact-base input is malformed. |
+
+The scope classification is reported separately. It distinguishes root-only, fast-pysf-only, shared declarations with independent locks, workspace/member coupling, transitive-only lock changes, and lock normalization with no material supported-profile resolution change. A normalization report keeps the textual lock delta visible; it is not a dependency approval. The marker-only admission rule remains governed by the maintainer ruling in issue #7654, and cheap workflow admission remains gated by issue #7647.
+
+## Lock-generation contract
+
+When Dependabot or a maintainer changes a project declaration, regenerate only the mapped lock owner with the pinned resolver (`uv 0.11.21`), then run the coherence report and the existing lock checks:
+
+```bash
+# Root owner: uv lock --upgrade-package PACKAGE
+# Standalone owner: uv lock --directory fast-pysf --upgrade-package PACKAGE
+uv lock --check
+uv lock --check --directory fast-pysf
+uv run python scripts/dev/check_dependency_coherence.py --base-ref origin/main --json
+```
+
+The first command is the root-project check; the second is the standalone fast-pysf check. A maintainer update that touches only one declaration should not rewrite the other lock. If both declarations intentionally change a shared package, retain both lock updates and the report's independent-owner classification. The report is dependency-routing and continuous-integration integrity evidence only; it does not approve a package version, license, release, benchmark, or merge.
 
 ## Rollback
 

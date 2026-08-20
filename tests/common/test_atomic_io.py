@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from robot_sf.common.atomic_io import atomic_write_json
+from robot_sf.common.atomic_io import atomic_write_json, atomic_write_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -99,5 +99,78 @@ def test_closes_temp_fd_when_fdopen_raises_non_os_error(
     assert captured_fd is not None
     with pytest.raises(OSError):
         os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_writes_and_overwrites_text_atomically(tmp_path: Path):
+    """Text output is UTF-8, replaces prior content, and cleans its temp file."""
+    target = tmp_path / "nested" / "report.md"
+    atomic_write_text(target, "first\nümlaut\n")
+    atomic_write_text(target, "second\n")
+
+    assert target.read_text(encoding="utf-8") == "second\n"
+    assert [p.name for p in target.parent.iterdir()] == ["report.md"]
+
+
+def test_closes_text_temp_fd_when_fdopen_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The raw temporary descriptor is closed when text fdopen fails."""
+    target = tmp_path / "report.md"
+    captured_fd: int | None = None
+
+    def fail_fdopen(fd: int, *args: object, **kwargs: object):
+        nonlocal captured_fd
+        captured_fd = fd
+        raise OSError("fdopen failed")
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+
+    with pytest.raises(OSError, match="fdopen failed"):
+        atomic_write_text(target, "content")
+
+    assert captured_fd is not None
+    with pytest.raises(OSError):
+        os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("error", [ValueError("bad mode"), RuntimeError("unexpected failure")])
+def test_closes_text_temp_fd_when_fdopen_raises_non_os_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+):
+    """Unexpected fdopen failures still close the raw temporary descriptor."""
+    target = tmp_path / "report.md"
+    captured_fd: int | None = None
+
+    def fail_fdopen(fd: int, *args: object, **kwargs: object):
+        nonlocal captured_fd
+        captured_fd = fd
+        raise error
+
+    monkeypatch.setattr(os, "fdopen", fail_fdopen)
+
+    with pytest.raises(type(error), match=str(error)):
+        atomic_write_text(target, "content")
+
+    assert captured_fd is not None
+    with pytest.raises(OSError):
+        os.fstat(captured_fd)
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_cleans_text_temp_file_when_replace_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A failed replacement removes the fully written temporary file."""
+    target = tmp_path / "report.md"
+
+    def fail_replace(*args: object, **kwargs: object):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        atomic_write_text(target, "content")
+
     assert not target.exists()
     assert list(tmp_path.iterdir()) == []

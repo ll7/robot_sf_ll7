@@ -158,6 +158,8 @@ def test_build_report_counts_classes_modes_and_age_buckets() -> None:
     assert report["source"]["pagination_complete"] is True
     assert report["counts"]["by_blocker_class"]["compute"] == 1
     assert report["counts"]["by_blocker_class"]["upstream_issue"] == 1
+    assert report["counts"]["by_transition_class"]["compute_required"] == 1
+    assert report["counts"]["by_transition_class"]["implementation_defect"] == 1
     assert report["counts"]["by_condition_mode"]["machine_testable"] == 1
     assert report["counts"]["by_progress_age"]["90_days_or_more"] == 1
     assert report["closure_candidates"] == []
@@ -183,6 +185,8 @@ def test_render_comment_has_stable_marker_and_required_fields() -> None:
     assert "Watcher:" in body
     assert "Next check:" in body
     assert "Last meaningful progress:" in body
+    assert "Transition class: `external_input`" in body
+    assert "Transition owner:" in body
     assert "keep open" in body
 
 

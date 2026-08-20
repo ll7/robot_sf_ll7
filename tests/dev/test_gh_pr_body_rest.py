@@ -73,6 +73,22 @@ def test_update_pr_body_fails_closed_for_missing_file(tmp_path: Path) -> None:
     mock_patch.assert_not_called()
 
 
+def test_update_pr_body_rejects_empty_file_before_remote_write(tmp_path: Path) -> None:
+    """An empty transform result must never clear a remote PR body."""
+    body_file = tmp_path / "empty.md"
+    body_file.write_text(" \n", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "empty PR body" in result["error"]
+    mock_get.assert_not_called()
+    mock_patch.assert_not_called()
+
+
 def test_update_pr_body_fails_closed_on_api_error(tmp_path: Path) -> None:
     """Authentication and API failures must be visible to the caller."""
     body_file = tmp_path / "body.md"

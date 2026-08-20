@@ -136,6 +136,17 @@ def _changed_files(base: str, repo_root: Path, *, head: str = "HEAD") -> list[Pa
     return files
 
 
+def _no_changed_files_message(base: str) -> str:
+    """Describe an empty committed-HEAD diff without hiding dirty work.
+
+    The readiness wrapper reports dirty paths separately during interim runs.
+    This gate compares only ``base...HEAD``, so calling the result simply
+    "no changed files" would contradict that receipt and could be mistaken for
+    proof that the dirty implementation tree was checked.
+    """
+    return f"No committed changed files vs {base}."
+
+
 def _file_at_ref(
     base: str,
     path: Path,
@@ -1196,7 +1207,7 @@ def _run_check(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed report sta
             required=False,
         )
         if not args.json:
-            print(f"No changed files vs {args.base}.")
+            print(_no_changed_files_message(args.base))
         return _finish(args, repo_root, report, 0)
 
     selected, skipped = _select_changed_files(

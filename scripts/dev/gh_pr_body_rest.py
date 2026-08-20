@@ -76,9 +76,12 @@ def _metadata_write_lock(repo: str, number: int) -> Iterator[None]:
 def _read_body_file(body_file: Path) -> tuple[str | None, str | None]:
     """Read a UTF-8 PR body file, returning ``(body, error)``."""
     try:
-        return body_file.read_text(encoding="utf-8"), None
+        body = body_file.read_text(encoding="utf-8")
     except OSError as exc:
         return None, f"could not read body file {body_file}: {exc}"
+    if not body.strip():
+        return None, f"refusing to write an empty PR body from {body_file}"
+    return body, None
 
 
 def _decode_object(

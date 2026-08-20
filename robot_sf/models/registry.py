@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -16,12 +19,18 @@ from urllib.request import urlopen
 import yaml
 from loguru import logger
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 try:  # pragma: no cover - optional dependency
     import wandb  # type: ignore
 except ImportError:  # pragma: no cover - optional dependency
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+DEFAULT_GITHUB_DOWNLOAD_MAX_ATTEMPTS = 3
+DEFAULT_GITHUB_DOWNLOAD_BACKOFF_SECONDS = 1.0
+DEFAULT_GITHUB_DOWNLOAD_MAX_BACKOFF_SECONDS = 30.0
 _LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
 BENCHMARK_PROMOTED_CLAIM_BOUNDARIES = {
     "benchmark_promoted",
@@ -339,7 +348,9 @@ def _download_from_github_release(
         _stream_download_url(url, cached_path, expected_sha256=expected_sha256)
     except (HTTPError, URLError, TimeoutError) as exc:
         raise RuntimeError(
-            f"Could not download model '{model_id}' from GitHub release asset: {url}"
+            "external_unavailable: "
+            f"Could not download model '{model_id}' from GitHub release asset after "
+            f"bounded retries: {url} ({type(exc).__name__}: {exc})"
         ) from exc
 
     return cached_path
@@ -405,11 +416,69 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     return True
 
 
+def _utc_now() -> datetime:
+    """Return the current timezone-aware UTC time for retry calculations."""
+    return datetime.now(UTC)
+
+
+def _retry_after_seconds(error: HTTPError, *, now: datetime | None = None) -> float | None:
+    """Parse a non-negative ``Retry-After`` delay from one HTTP error.
+
+    Returns:
+        float | None: Delay in seconds, or ``None`` when the header is absent or malformed.
+    """
+
+    headers = getattr(error, "headers", None)
+    raw_value = headers.get("Retry-After") if headers is not None else None
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    if not value:
+        return None
+    try:
+        delay = float(value)
+    except ValueError:
+        delay = None
+    if delay is not None:
+        return delay if math.isfinite(delay) and delay >= 0 else None
+
+    try:
+        retry_at = parsedate_to_datetime(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=UTC)
+    current = now or datetime.now(UTC)
+    return max(0.0, (retry_at - current).total_seconds())
+
+
+def _is_retryable_github_download_error(error: HTTPError) -> bool:
+    """Return whether a GitHub release response is transient and retryable."""
+
+    return error.code == 429 or 500 <= error.code <= 599
+
+
+def _validate_download_retry_parameters(
+    *, max_attempts: int, backoff_seconds: float, max_backoff_seconds: float
+) -> None:
+    if max_attempts < 1:
+        raise ValueError(f"max_attempts must be >= 1, got {max_attempts}")
+    if not math.isfinite(backoff_seconds) or backoff_seconds < 0:
+        raise ValueError(f"backoff_seconds must be finite and >= 0, got {backoff_seconds}")
+    if not math.isfinite(max_backoff_seconds) or max_backoff_seconds < 0:
+        raise ValueError(f"max_backoff_seconds must be finite and >= 0, got {max_backoff_seconds}")
+
+
 def _stream_download_url(
     url: str,
     target_path: Path,
     *,
     expected_sha256: str = "",
+    max_attempts: int = DEFAULT_GITHUB_DOWNLOAD_MAX_ATTEMPTS,
+    backoff_seconds: float = DEFAULT_GITHUB_DOWNLOAD_BACKOFF_SECONDS,
+    max_backoff_seconds: float = DEFAULT_GITHUB_DOWNLOAD_MAX_BACKOFF_SECONDS,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], datetime] = _utc_now,
 ) -> None:
     """Stream a URL to a local target path atomically.
 
@@ -420,14 +489,42 @@ def _stream_download_url(
     downloads safe even when multiple hosts share the cache directory. On any
     failure the temp file is removed.
     """
+    _validate_download_retry_parameters(
+        max_attempts=max_attempts,
+        backoff_seconds=backoff_seconds,
+        max_backoff_seconds=max_backoff_seconds,
+    )
     tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.{uuid.uuid4().hex}.part")
     try:
-        with urlopen(url, timeout=60) as response, tmp_path.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with urlopen(url, timeout=60) as response, tmp_path.open("wb") as handle:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+            except HTTPError as exc:
+                if not _is_retryable_github_download_error(exc) or attempt >= max_attempts:
+                    raise
+                retry_after = _retry_after_seconds(exc, now=clock())
+                delay = min(
+                    max_backoff_seconds,
+                    retry_after if retry_after is not None else backoff_seconds * attempt,
+                )
+                logger.warning(
+                    "Transient GitHub model download failure ({}) for {} on attempt {}/{}; "
+                    "retrying in {:.3f}s",
+                    exc.code,
+                    url,
+                    attempt,
+                    max_attempts,
+                    delay,
+                )
+                sleep(delay)
+                continue
+
+            break
         if expected_sha256:
             observed = _sha256(tmp_path)
             if observed != expected_sha256:

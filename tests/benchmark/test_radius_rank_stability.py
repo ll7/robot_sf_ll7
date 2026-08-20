@@ -936,6 +936,12 @@ def test_analyze_radius_sensitivity_report_schema() -> None:
     assert report.verdict.verdict == VERDICT_STABLE
 
 
+def test_radius_envelope_schema_versions_identify_current_shape() -> None:
+    """The report and durable bundle versions must expose their current shape."""
+    assert RADIUS_RANK_STABILITY_SCHEMA == "radius_rank_stability.v2"
+    assert RADIUS_EVIDENCE_BUNDLE_SCHEMA == "issue_6643_radius_rank_stability_bundle.v2"
+
+
 def test_radius_report_rejects_historical_v1_without_v2_blocks() -> None:
     """A legacy v1 payload is rejected instead of being upgraded implicitly."""
     report = analyze_radius_sensitivity(_sweep_summary(_stable_tables()))

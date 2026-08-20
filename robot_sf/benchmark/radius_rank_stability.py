@@ -62,6 +62,9 @@ from robot_sf.common.artifact_paths import get_repository_root
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+# The report envelope gained required paired-inference/support blocks in #7139.
+# Bump both the report and durable bundle identifiers before Gate 2 can produce
+# retained artifacts; no prior Gate 2 bundle exists to migrate.
 RADIUS_RANK_STABILITY_SCHEMA_V1 = "radius_rank_stability.v1"
 RADIUS_RANK_STABILITY_SCHEMA = "radius_rank_stability.v2"
 RADIUS_EVIDENCE_BUNDLE_SCHEMA_V1 = "issue_6643_radius_rank_stability_bundle.v1"

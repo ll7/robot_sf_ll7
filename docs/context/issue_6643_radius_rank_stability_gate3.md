@@ -34,6 +34,10 @@ propagated to #3207 only after the Gate 2 input gate is satisfied.
   pre-analysis gate status, not one of the four scientific verdicts. No ranking result is
   promoted, and no verdict is posted to #6600 or propagated to #3207 while the required Gate 2
   input is absent.
+- **Envelope versions:** The current report shape is `radius_rank_stability.v2`, and the
+  durable bundle shape is `issue_6643_radius_rank_stability_bundle.v2`. The v2 bump records the
+  required paired-inference and per-change support blocks added after the original v1 shape.
+  No Gate 2 production bundle exists, so there is no historical artifact migration.
 
 ## Versioned report contract
 

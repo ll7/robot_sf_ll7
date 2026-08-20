@@ -1,6 +1,7 @@
 """Deterministic evaluation fixtures for agent interpretation of figure packets.
 
-This module scores frozen, packet-shaped JSON fixtures only. It does not call
+This module scores ephemeral interpretation projections derived from one
+canonical ``result_interpretation_packet.v1`` fixture. It does not call
 external providers, read generated benchmark packets from other branches, or
 promote fixture outputs as benchmark evidence. Optional workflow variants,
 reviewer accounting, and correction rankings are still fixture metadata and
@@ -17,6 +18,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from robot_sf.benchmark.result_interpretation_packet import (
+    ResultInterpretationPacketError,
+    load_result_interpretation_packet,
+)
 
 EVAL_SCHEMA_VERSION = "agent_figure_interpretation_eval.v1"
 MANIFEST_SCHEMA_VERSION = "agent_figure_interpretation_eval_manifest.v1"
@@ -88,13 +94,8 @@ INTEGRITY_MUTATION_IDS = (
     "digest_omission",
     "stale_post_review_bytes",
 )
-SYNTHETIC_MUTATION_FIXTURE_ID = "issue-7030-frozen-figure-a"
-SYNTHETIC_MUTATION_IDS = (
-    "analysis_unit_mismatch",
-    "effect_direction_desirability",
-    "native_adapter_merge",
-    "multiplicity_language",
-)
+SYNTHETIC_MUTATION_FIXTURE_ID = "ch7_visualization_causal_abstention_fixture"
+SYNTHETIC_MUTATION_IDS = CRITICAL_ERROR_KINDS
 INTERPRETATION_VARIANTS = ("baseline", "packet_constrained")
 SEVERITY_ORDER = {"critical": 0, "major": 1, "minor": 2}
 CRITICAL_ERROR_DIMENSIONS = {
@@ -110,6 +111,8 @@ CRITICAL_ERROR_DIMENSIONS = {
     "native_adapter_merge": "evidence_tier_availability",
     "multiplicity_language": "stats_multiplicity",
 }
+EXPECTED_MUTATION_IDS = ("clean", *CRITICAL_ERROR_KINDS)
+CANONICAL_FIXTURE_ID = "ch7_visualization_causal_abstention_fixture"
 _HIGHER_THAN_DIAGNOSTIC = {
     "smoke",
     "smoke evidence",
@@ -198,18 +201,63 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any]]]:
-    """Load all fixture packets from a digest-pinned manifest.
+    """Load canonical packets and deterministic mutation projections.
 
     The manifest is intentionally small and provider-independent:
     ``expected_packet_schema`` must exactly match
-    :data:`EXPECTED_PACKET_SCHEMA`, and every packet, source, and reference
-    digest must match the bytes currently on disk.
+    :data:`EXPECTED_PACKET_SCHEMA`; the referenced packet is validated by the
+    repository's canonical loader before mutation projections are created.
 
     Returns:
-        Pairs of resolved packet path and parsed packet payload.
+        Pairs of the canonical packet path and ephemeral evaluator projections.
+    """
+
+    manifest = _load_eval_manifest(manifest_path)
+    packet_record = manifest["packet"]
+    packet = _load_canonical_packet(
+        manifest_path=manifest_path,
+        packet_record=packet_record,
+        expected_schema=manifest["expected_packet_schema"],
+    )
+    base = _canonical_evaluation_packet(packet)
+    packets: list[tuple[Path, dict[str, Any]]] = []
+    packet_path = _resolve_manifest_path(
+        manifest_path=manifest_path,
+        rel_path=packet_record["path"],
+        index=0,
+        path_key="path",
+    )
+    for mutation_id in manifest["mutations"]:
+        projected = (
+            json.loads(canonical_json(base))
+            if mutation_id == "clean"
+            else _apply_synthetic_mutation(base, mutation_id)
+        )
+        projected["packet_id"] = mutation_id
+        packets.append((packet_path, projected))
+    return packets
+
+
+def _load_eval_manifest(manifest_path: Path) -> dict[str, Any]:
+    """Validate the small evaluator manifest without duplicating packet schema.
+
+    Returns:
+        The validated manifest mapping.
     """
 
     manifest = load_json(manifest_path)
+    _validate_eval_manifest_header(manifest)
+    packet = manifest.get("packet")
+    if not isinstance(packet, dict):
+        raise AgentFigureEvalError("manifest packet must be an object")
+    _validate_eval_manifest_packet(packet)
+    _validate_eval_manifest_mutations(manifest.get("mutations"))
+    return manifest
+
+
+def _validate_eval_manifest_header(manifest: Mapping[str, Any]) -> None:
+    """Validate fixed manifest identity and claim-boundary fields."""
+
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise AgentFigureEvalError("manifest schema_version mismatch")
     if manifest.get("status") != EXPECTED_MANIFEST_STATUS:
@@ -220,34 +268,239 @@ def load_verified_packets(manifest_path: Path) -> list[tuple[Path, dict[str, Any
             "manifest expected_packet_schema must be "
             f"{EXPECTED_PACKET_SCHEMA!r}, got {expected_schema!r}"
         )
-    artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, list) or not artifacts:
-        raise AgentFigureEvalError("manifest artifacts must be a non-empty list")
-
-    packets: list[tuple[Path, dict[str, Any]]] = []
-    artifact_ids: set[str] = set()
-    for index, artifact in enumerate(artifacts):
-        if not isinstance(artifact, dict):
-            raise AgentFigureEvalError(f"manifest artifact {index}: expected object")
-        artifact_id = artifact.get("id")
-        if not isinstance(artifact_id, str) or not artifact_id:
-            raise AgentFigureEvalError(f"manifest artifact {index}: id must be a non-empty string")
-        if artifact_id in artifact_ids:
-            raise AgentFigureEvalError(f"manifest artifact {index}: duplicate id {artifact_id!r}")
-        artifact_ids.add(artifact_id)
-        packets.append(
-            _load_verified_packet(
-                manifest_path=manifest_path,
-                artifact=artifact,
-                index=index,
-                expected_schema=expected_schema,
-            )
-        )
     if manifest.get("claim_boundary") != EXPECTED_MANIFEST_CLAIM_BOUNDARY:
         raise AgentFigureEvalError(
             "manifest claim_boundary must preserve the evaluation-artifacts-only boundary"
         )
-    return packets
+
+
+def _validate_eval_manifest_packet(packet: Mapping[str, Any]) -> None:
+    """Validate the manifest's one canonical packet record."""
+
+    for key in ("id", "path", "sha256", "source_sha256", "reference_sha256"):
+        if not isinstance(packet.get(key), str) or not packet[key]:
+            raise AgentFigureEvalError(f"manifest packet {key} must be non-empty text")
+    if not DIGEST_RE.fullmatch(packet["sha256"]):
+        raise AgentFigureEvalError("manifest packet sha256 must be a SHA-256 digest")
+    for key in ("source_sha256", "reference_sha256"):
+        if not DIGEST_RE.fullmatch(packet[key]):
+            raise AgentFigureEvalError(f"manifest packet {key} must be a SHA-256 digest")
+    if packet["id"] != CANONICAL_FIXTURE_ID:
+        raise AgentFigureEvalError(
+            f"manifest packet id must be {CANONICAL_FIXTURE_ID!r}; canonical fixture ownership is fixed"
+        )
+
+
+def _validate_eval_manifest_mutations(mutations: Any) -> None:
+    """Require the complete deterministic mutation matrix exactly once."""
+
+    if not isinstance(mutations, list) or any(
+        not isinstance(mutation_id, str) for mutation_id in mutations
+    ):
+        raise AgentFigureEvalError("manifest mutations must be a list of text identifiers")
+    if len(mutations) != len(set(mutations)):
+        raise AgentFigureEvalError("manifest mutations must not contain duplicates")
+    if set(mutations) != set(EXPECTED_MUTATION_IDS):
+        raise AgentFigureEvalError(
+            "manifest mutations must cover exactly clean and every critical detector"
+        )
+
+
+def _load_canonical_packet(
+    *, manifest_path: Path, packet_record: Mapping[str, Any], expected_schema: str
+) -> dict[str, Any]:
+    """Load one source-backed packet through the canonical typed loader.
+
+    Returns:
+        The canonical packet serialized through its typed representation.
+    """
+
+    packet_path = _verified_manifest_file(
+        manifest_path=manifest_path,
+        artifact=packet_record,
+        index=0,
+        path_key="path",
+        sha_key="sha256",
+    )
+    try:
+        typed_packet = load_result_interpretation_packet(packet_path)
+    except (OSError, ValueError, ResultInterpretationPacketError) as exc:
+        raise AgentFigureEvalError(
+            f"{packet_record['path']}: canonical result packet validation failed: {exc}"
+        ) from exc
+    packet = typed_packet.to_dict()
+    if packet.get("schema_version") != expected_schema:
+        raise AgentFigureEvalError(
+            f"{packet_record['path']}: canonical packet schema_version must be {expected_schema!r}"
+        )
+    if packet.get("packet_id") != packet_record["id"]:
+        raise AgentFigureEvalError(
+            f"{packet_record['path']}: canonical packet_id must match manifest packet id"
+        )
+    observed_source_digest = _canonical_digest(packet.get("sources"))
+    if observed_source_digest != packet_record["source_sha256"]:
+        raise AgentFigureEvalError(
+            f"{packet_record['path']}: canonical source binding digest does not match manifest"
+        )
+    if packet_record["reference_sha256"] != packet_record["sha256"]:
+        raise AgentFigureEvalError(
+            "manifest reference_sha256 must equal the canonical packet digest; "
+            "the evaluator does not carry a second reference packet"
+        )
+    return packet
+
+
+def _canonical_evaluation_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
+    """Project canonical packet fields into an ephemeral scoring view.
+
+    The projection is never written as a packet or registered as evidence. It
+    exists only so deterministic mutation operators can compare candidate
+    interpretation fields against the typed canonical packet.
+
+    Returns:
+        An ephemeral evaluator-scoring projection.
+    """
+
+    packet_id = _canonical_text(packet, "packet_id")
+    evidence = _canonical_mapping(packet, "evidence")
+    population = _canonical_mapping(packet, "population")
+    execution_mode = _canonical_mapping(packet, "execution_mode")
+    estimand = _canonical_mapping(packet, "estimand")
+    sources = _canonical_list_of_mappings(packet, "sources")
+    metrics = _canonical_list_of_mappings(packet, "metrics")
+    decisions = _canonical_list_of_mappings(packet, "decisions")
+    figure_links = _canonical_list_of_mappings(packet, "figure_links")
+    caption_assertions = _canonical_list_of_mappings(packet, "caption_assertions")
+    claim_boundary = _canonical_mapping(packet, "claim_boundary")
+    forbidden_claims = packet.get("forbidden_claims")
+    if not isinstance(forbidden_claims, list) or any(
+        not isinstance(claim, str) for claim in forbidden_claims
+    ):
+        raise AgentFigureEvalError("canonical packet forbidden_claims must be a list of text")
+    metric = metrics[0]
+    denominator = metric.get("denominator")
+    if not isinstance(denominator, int) or isinstance(denominator, bool) or denominator < 0:
+        raise AgentFigureEvalError("canonical packet first metric denominator must be non-negative")
+    counts = execution_mode.get("counts")
+    if not isinstance(counts, dict) or any(
+        not isinstance(mode, str)
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count < 0
+        for mode, count in counts.items()
+    ):
+        raise AgentFigureEvalError("canonical packet execution_mode.counts is invalid")
+    active_modes = [mode for mode, count in counts.items() if count > 0]
+    execution_name = active_modes[0] if len(active_modes) == 1 else "mixed"
+    uncertainty = metric.get("uncertainty")
+    multiplicity = metric.get("multiplicity")
+    if not isinstance(uncertainty, dict) or not isinstance(multiplicity, dict):
+        raise AgentFigureEvalError(
+            "canonical packet metric uncertainty/multiplicity must be objects"
+        )
+    comparator = estimand.get("comparator")
+    if comparator is not None and not isinstance(comparator, dict):
+        raise AgentFigureEvalError("canonical packet estimand comparator must be an object or null")
+    visual_contract = figure_links[0].get("visual_contract") if figure_links else None
+    if visual_contract is not None and not isinstance(visual_contract, dict):
+        raise AgentFigureEvalError("canonical packet visual_contract must be an object")
+    admission_state = evidence.get("admission_state")
+    if not isinstance(admission_state, str):
+        raise AgentFigureEvalError("canonical packet evidence admission_state must be text")
+    outcomes = [decision.get("outcome") for decision in decisions]
+    unavailable = admission_state == "unavailable_causal_inference" or all(
+        metric_entry.get("effect") is None for metric_entry in metrics
+    )
+    ranking_supported = not any("ranking" in claim.casefold() for claim in forbidden_claims)
+    causal_allowed = not any("causal" in claim.casefold() for claim in forbidden_claims)
+    null_result_claim = (
+        "supported"
+        if any(outcome in {"supported", "supported_equivalence"} for outcome in outcomes)
+        else "not_supported"
+    )
+    caption = caption_assertions[0] if caption_assertions else {}
+    reference = {
+        "source_denominator": {
+            "source_ids": [source.get("source_id") for source in sources],
+            "denominator_n": denominator,
+            "support": metric.get("support"),
+            "population_total": population.get("total"),
+        },
+        "estimand_unit": {
+            "estimand": estimand.get("estimand_id"),
+            "analysis_unit": estimand.get("analysis_unit"),
+            "resampling_unit": estimand.get("resampling_unit"),
+            "pairing_key": estimand.get("pairing_key"),
+        },
+        "stats_multiplicity": {
+            "statistic": uncertainty.get("method") or "not_declared",
+            "paired": estimand.get("pairing_key") is not None,
+            "resampling": uncertainty.get("method") or "not_declared",
+            "multiplicity": multiplicity.get("method") or "not_declared",
+            "multiplicity_language": multiplicity.get("method") or "not_declared",
+        },
+        "visual_semantics": {
+            "chart_type": visual_contract.get("plot_type") if visual_contract else "not_available",
+            "encoding": visual_contract.get("encodings") if visual_contract else "not_available",
+            "ranking_supported": ranking_supported,
+            "effect_direction": comparator.get("direction") if comparator else "not_declared",
+            "metric_desirability": metric.get("desirability", "not_declared"),
+        },
+        "caption_accuracy": {
+            "caption": caption.get("assertion_text", "not_available"),
+            "status": caption.get("status", "not_available"),
+        },
+        "evidence_tier_availability": {
+            "evidence_tier": evidence.get("tier"),
+            "availability_status": "unavailable" if unavailable else "available",
+            "execution_mode": execution_name,
+            "reported_value": metric.get("effect"),
+            "row_provenance": active_modes,
+            "rows_disclosed": True,
+        },
+        "claim_boundary": {
+            "causal_claim_allowed": causal_allowed,
+            "null_result_claim": null_result_claim,
+            "boundary": evidence.get("admission_state"),
+            "allowed": claim_boundary.get("allowed"),
+            "forbidden": claim_boundary.get("forbidden"),
+        },
+        "correction_usefulness": {"correction": "; ".join(packet.get("fail_closed_changes", []))},
+    }
+    return {
+        "schema_version": EXPECTED_PACKET_SCHEMA,
+        "artifact_kind": "evaluation_artifact",
+        "packet_id": "clean",
+        "claim_boundary": EXPECTED_PACKET_CLAIM_BOUNDARY,
+        "reference": reference,
+        "interpretation": json.loads(canonical_json(reference)),
+        "source": {"source_id": packet_id, "packet_id": packet_id},
+    }
+
+
+def _canonical_mapping(packet: Mapping[str, Any], key: str) -> dict[str, Any]:
+    value = packet.get(key)
+    if not isinstance(value, dict):
+        raise AgentFigureEvalError(f"canonical packet {key} must be an object")
+    return value
+
+
+def _canonical_list_of_mappings(packet: Mapping[str, Any], key: str) -> list[dict[str, Any]]:
+    value = packet.get(key)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, dict) for item in value)
+    ):
+        raise AgentFigureEvalError(f"canonical packet {key} must be a non-empty object list")
+    return value
+
+
+def _canonical_text(packet: Mapping[str, Any], key: str) -> str:
+    value = packet.get(key)
+    if not isinstance(value, str) or not value:
+        raise AgentFigureEvalError(f"canonical packet {key} must be non-empty text")
+    return value
 
 
 def validate_candidate_envelope(envelope: Mapping[str, Any]) -> None:
@@ -554,31 +807,88 @@ def _validate_candidate_evidence_types(evidence: Mapping[str, Any]) -> None:
 
 
 def _apply_synthetic_mutation(packet: Mapping[str, Any], mutation_id: str) -> dict[str, Any]:
-    """Apply one deterministic packet-field mutation without adding source artifacts.
+    """Apply one deterministic mutation to an ephemeral canonical projection.
 
     Returns:
         A canonicalized packet with the requested synthetic mutation applied.
     """
 
-    if mutation_id not in SYNTHETIC_MUTATION_IDS:
+    mutator = _MUTATION_HANDLERS.get(mutation_id)
+    if mutator is None:
         raise AgentFigureEvalError(f"unknown synthetic mutation {mutation_id!r}")
     mutated = json.loads(canonical_json(packet))
-    interpretation = mutated["interpretation"]
-    if mutation_id == "effect_direction_desirability":
-        visual = interpretation["visual_semantics"]
-        visual["effect_direction"] = "reversed"
-        visual["metric_desirability"] = "reversed"
-    elif mutation_id == "native_adapter_merge":
-        evidence = interpretation["evidence_tier_availability"]
-        evidence["row_provenance"] = ["native", "adapter"]
-        evidence["rows_disclosed"] = False
-    elif mutation_id == "multiplicity_language":
-        stats = interpretation["stats_multiplicity"]
-        stats["multiplicity_language"] = "unadjusted comparisons"
-    elif mutation_id == "analysis_unit_mismatch":
-        estimand = interpretation["estimand_unit"]
-        estimand["analysis_unit"] = "unpaired_episode"
+    mutator(mutated["interpretation"])
     return mutated
+
+
+def _mutate_unavailable_to_zero(interpretation: dict[str, Any]) -> None:
+    evidence = interpretation["evidence_tier_availability"]
+    evidence["availability_status"] = "available"
+    evidence["reported_value"] = 0
+
+
+def _mutate_denominator_loss(interpretation: dict[str, Any]) -> None:
+    source = interpretation["source_denominator"]
+    source["denominator_n"] = max(0, source["denominator_n"] - 1)
+
+
+def _mutate_analysis_unit(interpretation: dict[str, Any]) -> None:
+    interpretation["estimand_unit"]["analysis_unit"] = "unpaired_episode"
+
+
+def _mutate_pairing(interpretation: dict[str, Any]) -> None:
+    stats = interpretation["stats_multiplicity"]
+    stats["paired"] = False
+    stats["resampling"] = "unpaired bootstrap"
+
+
+def _mutate_fallback_promotion(interpretation: dict[str, Any]) -> None:
+    evidence = interpretation["evidence_tier_availability"]
+    evidence["execution_mode"] = "fallback"
+    evidence["evidence_tier"] = "nominal benchmark evidence"
+
+
+def _mutate_causal_overclaim(interpretation: dict[str, Any]) -> None:
+    interpretation["claim_boundary"]["causal_claim_allowed"] = True
+
+
+def _mutate_unsupported_ranking(interpretation: dict[str, Any]) -> None:
+    interpretation["visual_semantics"]["ranking_supported"] = True
+
+
+def _mutate_null_overclaim(interpretation: dict[str, Any]) -> None:
+    interpretation["claim_boundary"]["null_result_claim"] = "supported_equivalence"
+
+
+def _mutate_effect_direction(interpretation: dict[str, Any]) -> None:
+    visual = interpretation["visual_semantics"]
+    visual["effect_direction"] = "reversed"
+    visual["metric_desirability"] = "reversed"
+
+
+def _mutate_native_adapter_merge(interpretation: dict[str, Any]) -> None:
+    evidence = interpretation["evidence_tier_availability"]
+    evidence["row_provenance"] = ["native", "adapter"]
+    evidence["rows_disclosed"] = False
+
+
+def _mutate_multiplicity_language(interpretation: dict[str, Any]) -> None:
+    interpretation["stats_multiplicity"]["multiplicity_language"] = "unadjusted comparisons"
+
+
+_MUTATION_HANDLERS = {
+    "unavailable_to_zero": _mutate_unavailable_to_zero,
+    "denominator_loss": _mutate_denominator_loss,
+    "analysis_unit_mismatch": _mutate_analysis_unit,
+    "wrong_pairing_resampling": _mutate_pairing,
+    "fallback_degraded_promotion": _mutate_fallback_promotion,
+    "causal_overclaim": _mutate_causal_overclaim,
+    "unsupported_ranking": _mutate_unsupported_ranking,
+    "null_overclaim": _mutate_null_overclaim,
+    "effect_direction_desirability": _mutate_effect_direction,
+    "native_adapter_merge": _mutate_native_adapter_merge,
+    "multiplicity_language": _mutate_multiplicity_language,
+}
 
 
 def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
@@ -596,21 +906,6 @@ def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
     fixture_mutations, mutation_records, seen_mutations = _inventory_packet_mutations(
         verified_packets
     )
-    clean_packet = next(
-        (
-            packet
-            for _, packet in verified_packets
-            if packet.get("packet_id") == "clean"
-            and _required_mapping(packet, "source").get("source_id")
-            == SYNTHETIC_MUTATION_FIXTURE_ID
-        ),
-        None,
-    )
-    if clean_packet is None:
-        raise AgentFigureEvalError("synthetic mutation base packet is missing")
-    _inventory_synthetic_mutations(
-        clean_packet, fixture_mutations, mutation_records, seen_mutations
-    )
 
     missing = sorted(set(REQUIRED_SCIENTIFIC_ERROR_MUTATIONS) - seen_mutations)
     if missing:
@@ -623,7 +918,7 @@ def list_fixture_mutations(manifest_path: Path) -> dict[str, Any]:
 def _inventory_packet_mutations(
     verified_packets: list[tuple[Path, dict[str, Any]]],
 ) -> tuple[dict[str, set[str]], list[dict[str, Any]], set[str]]:
-    """Validate and inventory packet-backed mutation records.
+    """Validate and inventory canonical-packet mutation projections.
 
     Returns:
         Fixture-to-mutation mapping, public mutation records, and seen IDs.
@@ -664,37 +959,6 @@ def _inventory_packet_mutations(
             }
         )
     return fixture_mutations, mutation_records, seen_mutations
-
-
-def _inventory_synthetic_mutations(
-    clean_packet: Mapping[str, Any],
-    fixture_mutations: dict[str, set[str]],
-    mutation_records: list[dict[str, Any]],
-    seen_mutations: set[str],
-) -> None:
-    """Apply and validate deterministic operators over the clean base packet."""
-
-    for mutation_id in SYNTHETIC_MUTATION_IDS:
-        if mutation_id in seen_mutations:
-            raise AgentFigureEvalError(f"duplicate mutation_id {mutation_id!r}")
-        mutated = _apply_synthetic_mutation(clean_packet, mutation_id)
-        detectors = [
-            kind for kind in CRITICAL_ERROR_KINDS if evaluate_packet(mutated).critical_errors[kind]
-        ]
-        if detectors != [mutation_id]:
-            raise AgentFigureEvalError(
-                f"synthetic mutation {mutation_id!r} must trigger exactly its named detector"
-            )
-        seen_mutations.add(mutation_id)
-        fixture_mutations.setdefault(SYNTHETIC_MUTATION_FIXTURE_ID, set()).add(mutation_id)
-        mutation_records.append(
-            {
-                "fixture_id": SYNTHETIC_MUTATION_FIXTURE_ID,
-                "mutation_id": mutation_id,
-                "expected_detectors": detectors,
-                "mode": "deterministic_operator",
-            }
-        )
 
 
 def _mutation_inventory_result(
@@ -800,16 +1064,12 @@ def replay_fixture_mutation(
 
 
 def _manifest_artifact(manifest_path: Path, artifact_id: str) -> dict[str, Any]:
-    """Return one manifest artifact record for replay provenance checks."""
+    """Return the canonical packet record for replay provenance checks."""
 
-    manifest = load_json(manifest_path)
-    artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, list):
-        raise AgentFigureEvalError("manifest artifacts must be a list")
-    for artifact in artifacts:
-        if isinstance(artifact, dict) and artifact.get("id") == artifact_id:
-            return artifact
-    raise AgentFigureEvalError(f"manifest artifact {artifact_id!r} is missing")
+    manifest = _load_eval_manifest(manifest_path)
+    if artifact_id not in manifest["mutations"]:
+        raise AgentFigureEvalError(f"manifest mutation {artifact_id!r} is missing")
+    return manifest["packet"]
 
 
 def _canonical_digest(value: Any) -> str:
@@ -891,18 +1151,15 @@ def _replay_report_provenance(manifest_path: Path) -> dict[str, str]:
         Stable SHA-256 provenance fields for a replay report.
     """
 
-    manifest = load_json(manifest_path)
-    artifacts = manifest.get("artifacts")
-    if not isinstance(artifacts, list):
-        raise AgentFigureEvalError("manifest artifacts must be a list")
-    fixture_records = [
-        {
-            key: artifact.get(key)
+    manifest = _load_eval_manifest(manifest_path)
+    packet = manifest["packet"]
+    fixture_records = {
+        "packet": {
+            key: packet.get(key)
             for key in ("id", "path", "sha256", "source_sha256", "reference_sha256")
-        }
-        for artifact in artifacts
-        if isinstance(artifact, Mapping)
-    ]
+        },
+        "mutations": manifest["mutations"],
+    }
     return {
         "code_sha256": sha256_file(Path(__file__).resolve()),
         "config_sha256": sha256_file(manifest_path),
@@ -1122,7 +1379,7 @@ def _aggregate_summary(
 
 
 def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
-    """Score one frozen packet-shaped interpretation fixture.
+    """Score one ephemeral interpretation projection.
 
     Returns:
         Per-case evaluation with dimension scores and critical flags.
@@ -1227,7 +1484,10 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
             or ref_stats.get("resampling") != obs_stats.get("resampling")
         ),
         "fallback_degraded_promotion": (
-            ref_evidence.get("execution_mode") in {"fallback", "degraded"}
+            (
+                obs_evidence.get("execution_mode") in {"fallback", "degraded"}
+                or ref_evidence.get("execution_mode") in {"fallback", "degraded"}
+            )
             and obs_evidence.get("evidence_tier") in _HIGHER_THAN_DIAGNOSTIC
         ),
         "causal_overclaim": (
@@ -1481,75 +1741,6 @@ def _correction_priority_ranking(
         {"rank": rank, **payload}
         for rank, (_, payload) in enumerate(sorted(ranked, key=lambda item: item[0]), start=1)
     ]
-
-
-def _load_verified_packet(
-    *,
-    manifest_path: Path,
-    artifact: Any,
-    index: int,
-    expected_schema: str,
-) -> tuple[Path, dict[str, Any]]:
-    """Load one digest-pinned fixture packet and its source/reference contracts.
-
-    Returns:
-        Resolved packet path and parsed packet payload.
-    """
-
-    if not isinstance(artifact, dict):
-        raise AgentFigureEvalError(f"manifest artifact {index}: expected object")
-    path = _verified_manifest_file(
-        manifest_path=manifest_path,
-        artifact=artifact,
-        index=index,
-        path_key="path",
-        sha_key="sha256",
-    )
-    source_path = _verified_manifest_file(
-        manifest_path=manifest_path,
-        artifact=artifact,
-        index=index,
-        path_key="source_path",
-        sha_key="source_sha256",
-    )
-    reference_path = _verified_manifest_file(
-        manifest_path=manifest_path,
-        artifact=artifact,
-        index=index,
-        path_key="reference_path",
-        sha_key="reference_sha256",
-    )
-    packet = load_json(path)
-    packet_schema = packet.get("schema_version")
-    if packet_schema != expected_schema:
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: packet schema_version must be {expected_schema!r}, "
-            f"got {packet_schema!r}"
-        )
-    if packet.get("artifact_kind") != "evaluation_artifact":
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: fixture must be labeled evaluation_artifact"
-        )
-    artifact_id = artifact.get("id")
-    if packet.get("packet_id") != artifact_id:
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: packet_id must match manifest artifact id {artifact_id!r}"
-        )
-    source = load_json(source_path)
-    reference = load_json(reference_path)
-    if packet.get("source") != source:
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: source fixture does not match packet source"
-        )
-    if packet.get("reference") != reference:
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: reference fixture does not match packet reference"
-        )
-    if source.get("packet_id") != artifact_id:
-        raise AgentFigureEvalError(
-            f"{artifact['path']}: source packet_id must match manifest artifact id {artifact_id!r}"
-        )
-    return path, packet
 
 
 def _verified_manifest_file(

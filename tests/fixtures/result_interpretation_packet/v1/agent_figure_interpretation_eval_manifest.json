@@ -1,0 +1,27 @@
+{
+  "schema_version": "agent_figure_interpretation_eval_manifest.v1",
+  "expected_packet_schema": "result_interpretation_packet.v1",
+  "status": "evaluation_artifacts_only",
+  "claim_boundary": "frozen fixture replay only; no external model calls, no benchmark claims, no generated evidence promotion",
+  "packet": {
+    "id": "ch7_visualization_causal_abstention_fixture",
+    "path": "ch7_visualization_causal_abstention.json",
+    "sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca",
+    "source_sha256": "1c14a36202a9ab8146cf577d450ec8899f4d78e0d8246cc3dbe1a019928394d8",
+    "reference_sha256": "af9fb7d8592c0bfdf274532c2d0069b2f27e1215ae77a23d130309b6c3cabfca"
+  },
+  "mutations": [
+    "clean",
+    "unavailable_to_zero",
+    "denominator_loss",
+    "analysis_unit_mismatch",
+    "wrong_pairing_resampling",
+    "fallback_degraded_promotion",
+    "causal_overclaim",
+    "unsupported_ranking",
+    "null_overclaim",
+    "effect_direction_desirability",
+    "native_adapter_merge",
+    "multiplicity_language"
+  ]
+}

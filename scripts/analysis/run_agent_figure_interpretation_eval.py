@@ -23,9 +23,9 @@ DEFAULT_MANIFEST = (
     Path(__file__).resolve().parents[2]
     / "tests"
     / "fixtures"
-    / "agent_figure_interpretation_eval"
+    / "result_interpretation_packet"
     / "v1"
-    / "manifest.json"
+    / "agent_figure_interpretation_eval_manifest.json"
 )
 
 

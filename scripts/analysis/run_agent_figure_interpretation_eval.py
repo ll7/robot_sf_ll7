@@ -24,6 +24,7 @@ DEFAULT_MANIFEST = (
     / "tests"
     / "fixtures"
     / "result_interpretation_packet"
+    / "v1"
     / "agent_figure_interpretation_eval_manifest.json"
 )
 

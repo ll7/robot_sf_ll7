@@ -32,7 +32,7 @@ from robot_sf.benchmark.agent_figure_interpretation_eval import (
 FIXTURE_DIR = (
     Path(__file__).resolve().parents[1] / "fixtures" / "result_interpretation_packet" / "v1"
 )
-MANIFEST = FIXTURE_DIR.parent / "agent_figure_interpretation_eval_manifest.json"
+MANIFEST = FIXTURE_DIR / "agent_figure_interpretation_eval_manifest.json"
 
 
 def _case_by_id(result: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -42,10 +42,9 @@ def _case_by_id(result: dict[str, object]) -> dict[str, dict[str, object]]:
 
 
 def _copy_fixture_tree(tmp_path: Path) -> Path:
-    root = tmp_path / "result_interpretation_packet"
-    fixture_dir = root / "v1"
-    fixture_dir.mkdir(parents=True)
-    shutil.copy(FIXTURE_DIR / "ch7_visualization_causal_abstention.json", fixture_dir)
+    root = tmp_path / "v1"
+    root.mkdir()
+    shutil.copy(FIXTURE_DIR / "ch7_visualization_causal_abstention.json", root)
     shutil.copy(MANIFEST, root)
     return root
 
@@ -354,7 +353,7 @@ def test_fallback_degraded_promotion_recognizes_supported_evidence_tiers(
 
 def test_stale_bytes_digest_drift_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path = root / "ch7_visualization_causal_abstention.json"
     packet_path.write_text(packet_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="sha256 mismatch"):
@@ -369,7 +368,7 @@ def test_missing_manifest_fails_closed(tmp_path: Path) -> None:
 
 def test_changed_fixture_bytes_fail_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path = root / "ch7_visualization_causal_abstention.json"
     payload = json.loads(packet_path.read_text(encoding="utf-8"))
     payload["packet_id"] = "changed-clean"
     packet_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
@@ -427,7 +426,7 @@ def test_manifest_path_escape_fails_closed(tmp_path: Path, path: str) -> None:
 def test_manifest_symlink_escape_fails_closed(tmp_path: Path) -> None:
     """Manifest entries cannot follow a symlink outside the fixture root."""
     root = _copy_fixture_tree(tmp_path)
-    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path = root / "ch7_visualization_causal_abstention.json"
     packet_path.unlink()
     packet_path.symlink_to(FIXTURE_DIR / "ch7_visualization_causal_abstention.json")
 
@@ -483,7 +482,7 @@ def test_packet_claim_boundary_drift_fails_closed() -> None:
 def test_canonical_packet_identity_drift_fails_closed(tmp_path: Path) -> None:
     """A digest-valid packet must still belong to the canonical manifest identity."""
     root = _copy_fixture_tree(tmp_path)
-    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path = root / "ch7_visualization_causal_abstention.json"
     payload = json.loads(packet_path.read_text(encoding="utf-8"))
     payload["packet_id"] = "different_packet"
     packet_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
@@ -522,7 +521,7 @@ def test_packet_schema_mismatch_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
     manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path = root / "ch7_visualization_causal_abstention.json"
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
     packet.pop("schema_version")
     packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")

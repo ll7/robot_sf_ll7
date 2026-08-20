@@ -428,20 +428,46 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
     printf 'Skipping optional dependency preflight because PR_READY_SKIP_PREFLIGHT=1.\n' >&2
   else
     optional_dependency_report=""
+    optional_dependency_rc=0
     if optional_dependency_report="$(
       uv run python "$SCRIPT_DIR/check_worktree_optional_deps.py" \
         --profile all-extras --json 2>&1
     )"; then
-      printf 'Optional dependency preflight passed for the all-extras profile.\n' >&2
+      :
     else
       optional_dependency_rc=$?
-      printf 'Optional dependency preflight blocked the optional lane (exit %d).\n' \
-        "$optional_dependency_rc" >&2
-      printf '%s\n' "$optional_dependency_report" >&2
-      printf 'This is setup evidence, not a changed-code failure.\n' >&2
-      printf 'Install the declared optional extras with `uv sync --all-extras`, then rerun readiness.\n' >&2
-      exit 2
     fi
+    optional_dependency_validation=""
+    optional_dependency_validation_rc=0
+    if optional_dependency_validation="$(
+      printf '%s\n' "$optional_dependency_report" |
+        uv run python "$SCRIPT_DIR/validate_worktree_optional_deps.py" \
+          --observed-exit-code "$optional_dependency_rc" 2>&1
+    )"; then
+      optional_dependency_validation_rc=0
+    else
+      optional_dependency_validation_rc=$?
+    fi
+    case "$optional_dependency_validation_rc" in
+      0)
+        printf 'Optional dependency preflight passed for the all-extras profile.\n' >&2
+        ;;
+      2)
+        printf 'Optional dependency preflight blocked the optional lane (exit %d).\n' \
+          "$optional_dependency_rc" >&2
+        printf '%s\n' "$optional_dependency_validation" >&2
+        printf 'This is setup evidence, not a changed-code failure.\n' >&2
+        printf 'Install the declared optional extras with `uv sync --all-extras`, then rerun readiness.\n' >&2
+        exit 2
+        ;;
+      *)
+        printf 'Optional dependency preflight tool failure (probe exit %d).\n' \
+          "$optional_dependency_rc" >&2
+        printf '%s\n' "$optional_dependency_report" >&2
+        printf '%s\n' "$optional_dependency_validation" >&2
+        exit 1
+        ;;
+    esac
   fi
   optional_pytest_addopts="${PYTEST_ADDOPTS:-}"
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then

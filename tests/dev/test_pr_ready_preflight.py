@@ -208,8 +208,16 @@ def _make_fake_scripts(repo: Path) -> None:
 
     optional_dep_check = scripts_dir / "check_worktree_optional_deps.py"
     optional_dep_check.write_text(
-        "import json\nprint(json.dumps({'status': 'ready', 'profile': 'all-extras'}))\n",
+        "import json\n"
+        "print(json.dumps({'schema': 'robot_sf.worktree_optional_deps.v1', "
+        "'profile': 'all-extras', 'status': 'ready', 'exit_code': 0, "
+        "'missing_optional': [], 'check_failures': [], "
+        "'project_imports_performed': False}))\n",
         encoding="utf-8",
+    )
+    shutil.copy2(
+        SCRIPTS_DEV / "validate_worktree_optional_deps.py",
+        scripts_dir / "validate_worktree_optional_deps.py",
     )
 
 
@@ -370,7 +378,9 @@ def test_optional_lane_preflight_reports_missing_extras_as_setup_evidence(
         "    'schema': 'robot_sf.worktree_optional_deps.v1',\n"
         "    'profile': 'all-extras',\n"
         "    'status': 'missing_optional',\n"
+        "    'exit_code': 2,\n"
         "    'missing_optional': ['pandas'],\n"
+        "    'check_failures': [],\n"
         "    'project_imports_performed': False,\n"
         "}))\n"
         "raise SystemExit(2)\n",
@@ -395,6 +405,61 @@ def test_optional_lane_preflight_reports_missing_extras_as_setup_evidence(
     assert "pandas" in result.stderr
     assert "This is setup evidence, not a changed-code failure." in result.stderr
     assert "uv sync --all-extras" in result.stderr
+    assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
+
+
+@pytest.mark.parametrize(
+    ("probe_output", "probe_exit_code"),
+    [
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"check_failed","exit_code":1,"missing_optional":[],'
+            '"check_failures":["pandas"],"project_imports_performed":false}',
+            1,
+        ),
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"ready","exit_code":0,"missing_optional":[],'
+            '"check_failures":[],"project_imports_performed":false}',
+            1,
+        ),
+        ("not-json", 1),
+        (
+            '{"schema":"robot_sf.worktree_optional_deps.v1","profile":"all-extras",'
+            '"status":"ready","exit_code":7,"missing_optional":[],'
+            '"check_failures":[],"project_imports_performed":false}',
+            7,
+        ),
+    ],
+    ids=["probe-failure", "status-exit-disagreement", "malformed-json", "unknown-exit"],
+)
+def test_optional_lane_preflight_rejects_invalid_probe_contract(
+    preflight_repo: Path,
+    probe_output: str,
+    probe_exit_code: int,
+) -> None:
+    """Probe failures and contract disagreements never receive install guidance."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+    _make_real_python_bin(preflight_repo)
+    optional_dep_check = preflight_repo / "scripts" / "dev" / "check_worktree_optional_deps.py"
+    optional_dep_check.write_text(
+        f"print({probe_output!r})\nraise SystemExit({probe_exit_code})\n",
+        encoding="utf-8",
+    )
+    changed_file = preflight_repo / "tests" / "planner" / "test_invalid_preflight.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_invalid_preflight(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "invalid optional dependency evidence")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "HEAD~1", "PR_READY_MODE": "interim"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "Optional dependency preflight tool failure" in result.stderr
+    assert "uv sync --all-extras" not in result.stderr
     assert lane_log.read_text(encoding="utf-8").splitlines() == ["core --lane core"]
 
 

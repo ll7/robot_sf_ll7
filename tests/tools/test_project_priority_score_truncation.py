@@ -14,7 +14,25 @@ import subprocess
 import pytest
 
 from scripts.dev._gh_pagination import GhListTruncated
-from scripts.tools.project_priority_score import GhProjectClient
+from scripts.dev.github_quota import RateLimitSnapshot
+from scripts.tools import project_priority_score
+from scripts.tools.project_priority_score import GhProjectClient, ProjectQuotaBlockedError
+
+
+@pytest.fixture(autouse=True)
+def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep pagination tests deterministic without live quota calls."""
+    monkeypatch.setattr(
+        project_priority_score,
+        "read_rate_limit",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+    )
 
 
 def _items_payload(count: int) -> str:
@@ -209,6 +227,53 @@ def test_paginated_item_list_rejects_repeated_cursor(
             project_id="project-id",
             limit=1000,
         )
+
+
+def test_paginated_item_list_blocks_before_a_page_when_quota_is_low(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later-page quota failure occurs before another GraphQL request."""
+
+    calls: list[list[str]] = []
+    snapshots = iter(
+        [
+            RateLimitSnapshot(
+                status="ok",
+                graphql_remaining=1_000,
+                graphql_reset_at=1_800_000_000,
+                core_remaining=4_000,
+                core_reset_at=1_800_000_000,
+            ),
+            RateLimitSnapshot(
+                status="ok",
+                graphql_remaining=100,
+                graphql_reset_at=1_800_000_000,
+                core_remaining=4_000,
+                core_reset_at=1_800_000_000,
+            ),
+        ]
+    )
+    monkeypatch.setattr(project_priority_score, "read_rate_limit", lambda: next(snapshots))
+
+    page = _graphql_items_payload([_graphql_item(1)], has_next_page=True, end_cursor="cursor-1")
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=page, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    with pytest.raises(ProjectQuotaBlockedError):
+        GhProjectClient().item_list_paginated(
+            owner="ll7",
+            project_number=5,
+            project_id="project-id",
+            limit=1000,
+        )
+
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize(

@@ -241,6 +241,9 @@ Useful flags:
 
 Successful unscoped sync output includes `item_fetch.pages` and
 `item_fetch.accumulated_items`, which provide a compact read-completeness record for the run.
+The initial quota preflight reserves the first item page; each continuation page is checked against
+the live GraphQL/core safety margins before it is requested, and the complete set of pending score
+updates is reserved before any `item-edit` mutation.
 
 This helper is intentionally `gh`-based even when interactive GitHub work is MCP-first.
 

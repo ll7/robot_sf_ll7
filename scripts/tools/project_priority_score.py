@@ -167,6 +167,23 @@ class MissingProjectScopeError(RuntimeError):
         )
 
 
+class ProjectQuotaBlockedError(RuntimeError):
+    """Raised when a later Project API operation would cross quota safety margins."""
+
+    def __init__(self, decision: dict[str, Any]) -> None:
+        """Store the machine-readable quota decision for resumable callers."""
+        self.decision = decision
+        super().__init__(
+            str(
+                decision.get(
+                    "message",
+                    "Project API operation is blocked until the configured quota safety margin "
+                    "is available.",
+                )
+            )
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class CachedProjectMetadata:
     """Validated local Project #5 identifiers used as read hints."""
@@ -251,10 +268,14 @@ def read_rate_limit() -> RateLimitSnapshot:
 
 
 def estimated_project_graphql_requests(options: SyncOptions) -> int:
-    """Estimate bounded Project #5 GraphQL requests before any project mutation."""
-    item_requests = (
-        1 if options.issue_number is not None else max(1, math.ceil(max(options.limit, 1) / 100))
-    )
+    """Estimate the initial bounded Project API requests before any mutation.
+
+    An unscoped cursor scan has no known page count until its first response;
+    later pages are guarded dynamically by ``item_list_paginated``. The
+    preflight therefore reserves only the first item page, not the caller's
+    per-page bound interpreted as a total-item cap.
+    """
+    item_requests = 1
     schema_requests = len(REQUIRED_NUMBER_FIELDS) + 1 if options.ensure_fields else 0
     return 2 + item_requests + schema_requests
 
@@ -273,6 +294,21 @@ def project_quota_decision(options: SyncOptions) -> dict[str, Any]:
         expected_core_requests=1,
         min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
     )
+
+
+def ensure_project_graphql_budget(
+    *, expected_graphql_requests: int, min_graphql_remaining: int
+) -> None:
+    """Fail closed when a future Project API step would cross quota margins."""
+    decision = graphql_budget_decision(
+        read_rate_limit(),
+        expected_graphql_requests=expected_graphql_requests,
+        min_graphql_remaining=min_graphql_remaining,
+        expected_core_requests=1,
+        min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
+    )
+    if decision["status"] != "ok":
+        raise ProjectQuotaBlockedError(decision)
 
 
 def _read_project_cache(path: Path) -> dict[str, Any] | None:
@@ -601,6 +637,7 @@ class GhProjectClient:
         project_number: int,
         project_id: str | None = None,
         limit: int,
+        min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
     ) -> list[dict[str, Any]]:
         """Return every project item after explicit cursor-pagination completion.
 
@@ -629,6 +666,10 @@ class GhProjectClient:
         page_size = min(limit, PROJECT_ITEM_GRAPHQL_PAGE_SIZE)
 
         while True:
+            ensure_project_graphql_budget(
+                expected_graphql_requests=1,
+                min_graphql_remaining=min_graphql_remaining,
+            )
             payload = self._run_project_item_page(
                 project_id=resolved_project_id,
                 page_size=page_size,
@@ -1026,6 +1067,29 @@ def build_previews(
     return previews
 
 
+def _pending_score_updates(
+    previews: Sequence[SyncPreview],
+    items_by_issue: dict[int, dict[str, Any]],
+    *,
+    dry_run: bool,
+    round_digits: int,
+) -> list[tuple[SyncPreview, dict[str, Any]]]:
+    """Return score mutations that remain after no-op and dry-run filtering."""
+    if dry_run:
+        return []
+    return [
+        (preview, items_by_issue[preview.issue_number])
+        for preview in previews
+        if preview.old_score is None
+        or not math.isclose(
+            preview.old_score,
+            preview.new_score,
+            rel_tol=1e-9,
+            abs_tol=10 ** (-round_digits),
+        )
+    ]
+
+
 def write_summary(path: Path, previews: Sequence[SyncPreview]) -> None:
     """Persist a machine-readable sync summary."""
 
@@ -1109,6 +1173,7 @@ def sync_scores(
             project_number=options.project_number,
             project_id=project_id,
             limit=options.limit,
+            min_graphql_remaining=options.min_graphql_remaining,
         )
     previews = build_previews(
         items,
@@ -1129,17 +1194,19 @@ def sync_scores(
         items_by_issue[issue_number] = item
 
     score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
-    for preview in previews:
-        item = items_by_issue[preview.issue_number]
-        if preview.old_score is not None and math.isclose(
-            preview.old_score,
-            preview.new_score,
-            rel_tol=1e-9,
-            abs_tol=10 ** (-options.round_digits),
-        ):
-            continue
-        if options.dry_run:
-            continue
+    updates = _pending_score_updates(
+        previews,
+        items_by_issue,
+        dry_run=options.dry_run,
+        round_digits=options.round_digits,
+    )
+
+    if updates:
+        ensure_project_graphql_budget(
+            expected_graphql_requests=len(updates),
+            min_graphql_remaining=options.min_graphql_remaining,
+        )
+    for preview, item in updates:
         client.update_number_field(
             item_id=str(item["id"]),
             field_id=score_field_id,
@@ -1318,6 +1385,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                     owner=args.owner,
                     project_number=args.project_number,
                     error=exc,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+    except ProjectQuotaBlockedError as exc:
+        if not args.only_empty:
+            raise
+        print(
+            json.dumps(
+                _blocked_project_quota_payload(
+                    owner=args.owner,
+                    project_number=args.project_number,
+                    decision=exc.decision,
+                    non_fatal=True,
                 ),
                 indent=2,
                 sort_keys=True,

@@ -19,6 +19,7 @@ from scripts.tools.project_priority_score import (
     GhProjectClient,
     MissingProjectScopeError,
     ProjectItemFetchStats,
+    ProjectQuotaBlockedError,
     ScoreInputs,
     SyncOptions,
     build_previews,
@@ -95,6 +96,7 @@ class FakeGhProjectClient:
         project_number: int,
         project_id: str | None = None,
         limit: int,
+        min_graphql_remaining: int = 100,
     ) -> list[dict]:
         """Return the fake's complete cursor-paginated item accumulation."""
 
@@ -350,6 +352,52 @@ def test_sync_scores_does_not_write_when_paginated_read_fails() -> None:
     )
 
     with pytest.raises(RuntimeError, match="second page failed"):
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+            ),
+        )
+
+    assert client.updated_numbers == []
+
+
+def test_sync_scores_reserves_write_budget_before_any_score_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A low post-read quota blocks before the first score mutation."""
+
+    monkeypatch.setattr(
+        project_priority_score,
+        "read_rate_limit",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=100,
+            graphql_reset_at=1_800_000_123,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_456,
+        ),
+    )
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(703, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    with pytest.raises(ProjectQuotaBlockedError):
         sync_scores(
             client,
             SyncOptions(

@@ -215,7 +215,12 @@ def _validate_record(  # noqa: C901, PLR0912
         raise SourceRegistryBlockedError("source record must contain exactly v1 and v2 packages")
     if not all(isinstance(package, Mapping) for package in packages):
         raise SourceRegistryBlockedError("source record contains a malformed package entry")
-    package_ids = {package["package_id"] for package in packages}
+    package_ids: set[str] = set()
+    for package in packages:
+        package_id = package.get("package_id")
+        if not isinstance(package_id, str) or not package_id:
+            raise SourceRegistryBlockedError("source record contains a malformed package ID")
+        package_ids.add(package_id)
     if package_ids != {"ch7-evidence-package-v1", "ch7-evidence-package-v2"}:
         raise SourceRegistryBlockedError("source record must contain the v1 and v2 package IDs")
     return commit, retrieval, list(packages)

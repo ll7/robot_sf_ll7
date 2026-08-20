@@ -9,7 +9,7 @@ From the repository root:
 ```bash
 uv run pytest -q tests/benchmark/test_agent_figure_interpretation_eval.py
 uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
-  --manifest tests/fixtures/result_interpretation_packet/v1/agent_figure_interpretation_eval_manifest.json \
+  --manifest tests/fixtures/result_interpretation_packet/agent_figure_interpretation_eval_manifest.json \
   --pretty
 ```
 
@@ -17,7 +17,7 @@ The bounded replay harness is provider-free and uses the same evaluator owner:
 
 ```bash
 uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
-  --manifest tests/fixtures/result_interpretation_packet/v1/agent_figure_interpretation_eval_manifest.json --list
+  --manifest tests/fixtures/result_interpretation_packet/agent_figure_interpretation_eval_manifest.json --list
 ```
 
 `--list` reports the verified source fixture IDs, mutation IDs, and the
@@ -27,7 +27,7 @@ single candidate envelope is replayed with `--candidate`; `--fixture-id` and
 
 ```bash
 uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
-  --manifest tests/fixtures/result_interpretation_packet/v1/agent_figure_interpretation_eval_manifest.json \
+  --manifest tests/fixtures/result_interpretation_packet/agent_figure_interpretation_eval_manifest.json \
   --candidate candidate.json \
   --fixture-id ch7_visualization_causal_abstention_fixture \
   --mutation-id causal_overclaim
@@ -46,7 +46,7 @@ A replay-all candidate file is a JSON array of these envelopes:
 
 ```bash
 uv run python scripts/analysis/run_agent_figure_interpretation_eval.py \
-  --manifest tests/fixtures/result_interpretation_packet/v1/agent_figure_interpretation_eval_manifest.json \
+  --manifest tests/fixtures/result_interpretation_packet/agent_figure_interpretation_eval_manifest.json \
   --candidate candidates.json --replay-all
 ```
 

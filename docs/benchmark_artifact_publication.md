@@ -3,7 +3,9 @@
 ## Purpose
 
 This guide defines a publication-safe artifact policy for benchmark outputs and
-documents the reproducible export path for camera-ready artifacts.
+documents the reproducible export path for the current S30/H600 benchmark-data
+release. Benchmark-data publication and software/package release are separate
+operations.
 
 For the higher-level benchmark release process, see:
 
@@ -19,11 +21,17 @@ Use this when you need public, stable references for papers based on
 | --- | --- | --- |
 | Git repository (`main`) | Schemas, docs, scripts, compact metadata examples | Reviewable, versioned, lightweight |
 | GitHub Release assets | Export bundles (`*.tar.gz`) with checksums + manifest | Immutable per tag, easy to download |
-| Zenodo (linked to GitHub release) | Final camera-ready bundle snapshot with DOI | Citable long-term DOI endpoint |
+| Zenodo (fresh concept) | Final S30/H600 benchmark-data bundle snapshot with DOI | Citable long-term DOI endpoint |
 
 Rules:
 - Do not require private repository paths for paper evidence.
 - Paper references should point to GitHub release URLs and/or Zenodo DOI links.
+- Reserve a fresh Zenodo concept for each benchmark-data release. Do not reuse
+  historical concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`.
+- Social Navigation Quality Index (SNQI) is advisory/no-ranking for the current
+  S30/H600 release; raw and component metrics remain separately reportable.
+- A one-scenario/one-seed runtime smoke is diagnostic execution evidence, not a
+  full benchmark result or software release.
 - Keep generated large artifacts out of source control unless intentionally tiny
   and review-critical.
 
@@ -199,13 +207,17 @@ uv run python scripts/tools/benchmark_publication_bundle.py export \
 This is the canonical command path required for publication exports. Replace the release tag and DOI
 placeholders before citing the bundle as paper-facing evidence.
 
-## DOI-Capable Release Flow
+## DOI-Capable Benchmark-Data Release Flow
 
-1. Create a Git tag/release for the code state.
-2. Upload the exported `*.tar.gz` bundle as a GitHub release asset.
-3. Ensure Zenodo-GitHub integration is enabled for the repository.
-4. Trigger/archive the release in Zenodo and obtain DOI.
-5. Update paper references to the Zenodo DOI and release asset URL.
+1. Freeze the approved S30/H600 benchmark-data manifest and immutable benchmark-data tag.
+2. Upload the validated `*.tar.gz` bundle as a GitHub release asset in the benchmark-data lane.
+3. Create a fresh Zenodo concept and deposit the exact bundle, manifest, and checksums.
+4. Obtain the version DOI; do not replace the pending placeholder before a real record exists.
+5. Update paper references to the new Zenodo DOI and benchmark-data asset URL.
+
+Software/package tags and their DOI records remain separate. This documentation
+does not authorize publishing, credential use, webhook changes, or reusing an
+existing Zenodo concept.
 
 ## Citation-Ready URL Templates
 

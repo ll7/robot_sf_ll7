@@ -29,8 +29,21 @@ pedestrian-filled environments.
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |
 | Contribute docs, planners, scenarios, or fixes | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Review repository conventions for agents and contributors | [`AGENTS.md`](AGENTS.md) |
-| See the public Zenodo-backed release artifact | [DOI 10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812) |
+| See the historical public Zenodo-backed release artifact | [DOI 10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812) |
 | Trace upstream lineage and citations | [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md) |
+
+### Current benchmark-data release
+
+The approved benchmark-data release is the 14-arm S30/H600 matrix (48
+scenarios, 30 seeds, differential-drive kinematics). Its bounded runtime smoke
+is documented in
+[`docs/benchmark_release_reproducibility.md`](docs/benchmark_release_reproducibility.md)
+and uses
+[`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`](configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml).
+The old DOI above is historical; a fresh Zenodo concept is required for the
+current benchmark-data record. Social Navigation Quality Index (SNQI) is
+advisory/no-ranking, and the benchmark-data release remains separate from the
+software/package release.
 
 ## Why Robot SF?
 
@@ -126,9 +139,9 @@ For host packages, optional capabilities, and a fuller setup walkthrough, see
   advanced features, benchmark runners, and plotting utilities.
 - **Documentation index:** [`docs/README.md`](docs/README.md) is the central map for architecture,
   benchmarking, training, analysis, and context notes.
-- **Benchmark and artifact context:** the public release artifact is published at
-  [10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812). For benchmark-specific
-  semantics and caveats, follow the benchmark docs linked from `docs/README.md`.
+- **Benchmark and artifact context:** the historical release artifact is published at
+  [10.5281/zenodo.19563812](https://doi.org/10.5281/zenodo.19563812). For current S30/H600
+  benchmark semantics and caveats, follow the benchmark docs linked from `docs/README.md`.
 
 ## Dissertation and academic use
 
@@ -146,8 +159,9 @@ safety validation for autonomous micromobility vehicles. If you are:
 - **Building on this work**: use [`CONTRIBUTING.md`](CONTRIBUTING.md) and
   [`docs/contributing_planner.md`](docs/contributing_planner.md) for current extension paths.
 
-- **Citing this work**: use the DOI badge above (`10.5281/zenodo.19563812`) for the release
-  artifact unless the paper or dissertation specifies a newer artifact.
+- **Citing this work**: use the DOI badge above (`10.5281/zenodo.19563812`) only for the
+  historical release artifact. The current S30/H600 benchmark-data DOI is pending a fresh
+  Zenodo concept; use the exact DOI named by the approved release manifest once assigned.
 
 ## Development workflow
 

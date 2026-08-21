@@ -2,8 +2,11 @@
 
 ## Purpose
 
-This runbook publishes the campaign publication bundle as a GitHub release asset
-with checksum and manifest verification.
+This runbook describes publication of a validated benchmark-data campaign bundle
+as a GitHub release asset with checksum and manifest verification. It is not a
+software/package release procedure. The current benchmark-data target is the
+14-arm S30/H600 matrix; the seven-planner/S3 instructions in historical
+artifacts must not be reused.
 
 For the full benchmark release protocol, start with:
 
@@ -12,6 +15,12 @@ For the full benchmark release protocol, start with:
 
 The command in this document is the publication/upload step after a benchmark
 release run has already produced a valid publication bundle.
+
+Before publication, run the bounded smoke manifest
+`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
+and retain its result as runtime evidence. A smoke pass is not full benchmark
+evidence. Social Navigation Quality Index (SNQI) is advisory/no-ranking for
+this release, including when calibration emits a warning.
 
 ## Prerequisites
 
@@ -24,10 +33,20 @@ release run has already produced a valid publication bundle.
 
 ## Recommended Tag Naming
 
-Use immutable paper-facing tags:
+Use an immutable benchmark-data tag that carries the H600/S30 identity:
 
-- `camera-ready-v1.0.0`
-- `paper-matrix-v1-<date>`
+- `paper-matrix-v2-h600-s30-<commit-sha12>`
+
+Keep software/package tags (for example, `0.0.3`) in their separate release
+lane. Do not derive a package version from the benchmark-data tag.
+
+## Zenodo Boundary
+
+The benchmark-data publication requires a fresh Zenodo concept and a new
+version DOI after the final bundle is validated. Do not reuse historical
+concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`, and do not
+assume GitHub-to-Zenodo automation is enabled. Until a real record exists, keep
+the manifest DOI as a pending placeholder.
 
 ## Command Path
 

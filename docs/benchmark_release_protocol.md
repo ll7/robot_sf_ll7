@@ -3,10 +3,20 @@
 This document defines the benchmark release model used for immutable,
 paper-facing benchmark artifacts in `robot_sf_ll7`.
 
+The current approved benchmark-data surface is the S30/H600 release: 14
+planner arms, 48 scenarios, 30 seeds, horizon 600, and differential-drive
+kinematics. The historical seven-planner/S3 manifest remains available for
+reproduction of old artifacts only; it is not the current release contract.
+
 ## Scope
 
 This protocol covers the benchmark release process only. It does not declare the
 repository or Python package to be `1.0`.
+
+Benchmark-data and software releases are separate. A benchmark-data tag freezes
+the campaign config, manifest, assets, and evidence; a software tag freezes the
+installable package. A benchmark-data release must use a fresh Zenodo concept,
+not an existing software or historical benchmark concept.
 
 Three version concepts are intentionally separate:
 
@@ -43,17 +53,22 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Canonical First Release Unit
+## Current Canonical Release Unit
 
-The first formal release unit is the existing paper-facing matrix:
+The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
-  - `configs/benchmarks/paper_experiment_matrix_v1.yaml`
-- release manifest:
-  - `configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml`
+  - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+- source contract:
+  - 14 planner arms, `paper_eval_s30`, `horizon: 600`, and
+    `kinematics_matrix: [differential_drive]`
+- bounded runtime smoke manifest:
+  - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 
-This is the benchmark contract we treat as frozen for release purposes. Broader
-exploratory matrices are not benchmark releases.
+The smoke selects one scenario (`francis2023_blind_corner`) and seed `111` but
+retains all 14 arms and H600. It proves construction and runtime compatibility;
+it is not a substitute for the full 20,160-episode benchmark-data release.
+The historical v1/S3 manifest is a compatibility/reproduction input only.
 
 ## Release Manifest
 
@@ -73,6 +88,16 @@ Canonical fields:
 - required campaign artifacts
 - repository URL and DOI placeholder
 - citation/checklist references
+
+The release claim boundary must also state:
+
+- Social Navigation Quality Index (SNQI) is advisory only; calibration warnings
+  do not authorize planner ranking
+- runtime smoke output is diagnostic execution evidence, not full benchmark
+  evidence
+- software package/version claims are outside the benchmark-data manifest
+- Zenodo uses a fresh concept; `10.5281/zenodo.19482025` and
+  `10.5281/zenodo.19563812` are historical records and must not be reused
 
 ## Benchmark Claim Artifact
 
@@ -112,8 +137,12 @@ Use:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
 ```
+
+This command is the bounded smoke path. Use the separately reviewed
+S30/H600 full-release manifest for publication; do not replace it with the
+historical seven-planner/S3 manifest.
 
 The release entrypoint:
 

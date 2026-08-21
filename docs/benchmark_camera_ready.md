@@ -3,6 +3,21 @@
 This document describes the config-driven campaign workflow for generating
 camera-ready benchmark outputs across multiple planners.
 
+## Current S30/H600 Benchmark-Data Surface
+
+The approved benchmark-data release uses the 14-arm campaign config
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+with 48 scenarios, 30 seeds (`paper_eval_s30`), horizon 600, and
+differential-drive kinematics. Use
+`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
+for the bounded one-scenario/one-seed runtime smoke. The smoke is diagnostic
+execution evidence only, not full benchmark evidence. Social Navigation
+Quality Index (SNQI) is advisory/no-ranking, and a fresh Zenodo concept is
+required for benchmark-data publication.
+
+The `paper_experiment_matrix_v1` seven-planner/S3 material below is historical
+context for earlier runs. It must not be used as the current release contract.
+
 Canonical benchmark fallback policy:
 
 * [Issue #691 Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)
@@ -23,9 +38,9 @@ Preflight-only (validate + preview + matrix summary, no episode execution):
 
 ```bash
 uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config configs/benchmarks/paper_experiment_matrix_v1.yaml \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
   --mode preflight \
-  --label preflight
+  --label s30_h600_runtime_smoke
 ```
 
 Optional:
@@ -45,7 +60,7 @@ LOGURU_LEVEL=INFO uv run python scripts/tools/run_camera_ready_benchmark.py \
   --label full_run
 ```
 
-## Current Baseline (2026-02-20)
+## Historical v1 Baseline (2026-02-20)
 
 Current promoted all-planners baseline run:
 
@@ -60,6 +75,10 @@ Current promoted all-planners baseline run:
   + `success_mean=0.9778`,   `collisions_mean=0.0000`,   `near_misses_mean=0.0296`
 
 ## Config Presets
+
+The v1 presets in this list are retained for historical reproduction and
+diagnostics. The current release smoke is the S30/H600 config listed below;
+use the current release docs for benchmark-data claims.
 
 * `configs/benchmarks/camera_ready_smoke_all_planners.yaml`
   + single scenario smoke for fast validation
@@ -87,8 +106,12 @@ Current promoted all-planners baseline run:
   + `paper_interpretation_profile=baseline-ready-core` means the matrix is paper-facing and
     anchored to the core baseline set, while still allowing experimental challenger rows for
     comparison
+* `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml`
+  + current 14-arm S30/H600 runtime smoke derived from the approved full campaign
+  + one scenario and one seed, differential-drive only, fail-fast planner prerequisite policy
+  + advisory/no-ranking SNQI claim boundary; it is not a full benchmark-data result
 * `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml`
-  + current long-horizon benchmark collection that replaces the fixed campaign `horizon` with
+  + historical long-horizon benchmark collection that replaced the fixed campaign `horizon` with
     `scenario_horizons: configs/policy_search/scenario_horizons_h500.yaml`
   + patches each scenario's `simulation_config.max_episode_steps` before the map runner executes
     and records `metadata.scenario_horizon` for provenance and `planner_blocked` accounting
@@ -117,11 +140,11 @@ Current promoted all-planners baseline run:
   + records supported, degraded, and unsupported rows in
     `configs/benchmarks/cross_kinematics_v1_compatibility.yaml`
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s5.yaml`
-  + stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
+  + historical stage-1 paper-matrix seed extension using `paper_eval_s5=[111..115]`
   + preserves the v1 scenario matrix, planner grouping, differential-drive kinematics, SNQI assets,
     and publication/export contract; only the named seed set changes
 * `configs/benchmarks/paper_experiment_matrix_v1_extended_seeds_s10.yaml`
-  + escalation target using `paper_eval_s10=[111..120]`
+  + historical escalation target using `paper_eval_s10=[111..120]`
   + use when the S5 comparison still shows material interval width, ranking, or scenario-winner
     instability
 * `configs/benchmarks/socnav_bench_reentry_probe.yaml`
@@ -198,9 +221,9 @@ probe to pass without fallback, complete all three probe episodes, show non-zero
 runtime within `3x` the `goal` row on the same slice before any broader paper-compatible subset is
 run. See `docs/context/issue_562_socnav_bench_reentry.md`.
 
-### Paper-Matrix Planner Readiness
+### Historical v1 Paper-Matrix Planner Readiness
 
-The frozen `paper_experiment_matrix_v1` profile has seven planner rows. Interpret them with the
+The historical frozen `paper_experiment_matrix_v1` profile has seven planner rows. Interpret them with the
 fallback policy in `docs/context/issue_691_benchmark_fallback_policy.md`: `native` and declared
 `adapter` rows can be benchmark evidence when the run reports `availability_status=available`;
 `fallback`, `degraded`, `failed`, `partial-failure`, and `not_available` rows are exclusions or
@@ -322,8 +345,12 @@ Benchmark release entrypoint:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
 ```
+
+This is the bounded 14-arm runtime-smoke path. Use the separately reviewed
+S30/H600 full-release manifest for publication; the smoke does not establish
+planner performance, SNQI ranking, or a software release.
 
 ## Post-Run Difficulty Analysis
 
@@ -430,6 +457,11 @@ Primary locations:
   + per-planner timing columns in the summary table
 
 ## Fixed-Scenario Multi-Seed Variability
+
+The S3/S5/S10 examples in this historical section describe earlier v1
+variability work. The current approved full benchmark-data contract is S30
+(`paper_eval_s30`) at H600; use the release manifest and reproducibility guide
+for current claims.
 
 Use the camera-ready campaign stack as the canonical upstream contract for paper-side seed
 variability analysis.

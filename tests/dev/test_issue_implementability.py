@@ -253,3 +253,26 @@ def test_offline_cli_exercises_real_process_boundary(tmp_path: Path) -> None:
     assert json.loads(ready.stdout)["classification"] == "ready"
     assert not_ready.returncode == 2
     assert json.loads(not_ready.stdout)["classification"] == "needs_ready_label"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ["Verification gates", "Validation gates"],
+)
+def test_gate_heading_aliases_satisfy_verification(heading: str) -> None:
+    """Issue #7701: 'Verification Gates' style headings satisfy the verification field."""
+    body = COMPLETE_BODY.replace("## Validation", f"## {heading}")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["fields"]["verification"]["present"] is True
+    assert "verification" not in report["contract"]["missing_fields"]
+
+
+def test_unknown_verification_variant_still_rejected() -> None:
+    """Unlisted variants such as 'Verification gate checklist' must keep failing closed."""
+    body = COMPLETE_BODY.replace("## Validation", "## Verification gate checklist")
+
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["contract"]["missing_fields"] == ["verification"]

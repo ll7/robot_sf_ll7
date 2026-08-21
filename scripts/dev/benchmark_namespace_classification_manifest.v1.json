@@ -113,6 +113,7 @@
     "issue_5409_campaign_identity.py",
     "issue_5578_speed_tier_synthesis.py",
     "issue_6412_real_reexport.py",
+    "issue_6794_cutover_preparation.py",
     "issue_6814_trace_reexport.py",
     "issue_6971_safety_wrapper_preregistration.py",
     "last_avoidable_fixtures.py",

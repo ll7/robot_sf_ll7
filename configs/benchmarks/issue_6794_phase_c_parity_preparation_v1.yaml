@@ -1,0 +1,146 @@
+schema_version: legacy-checkpoint-cutover-preparation.v1
+issue: 6794
+status: preparation_only
+claim_boundary: provenance_and_protocol_only
+execute_campaign: false
+
+# This packet freezes the inputs for Phase C of #6268. It is deliberately not a
+# campaign launch config: rights (#6855), the Phase-B cutover (#6793), and the
+# later Domain-Aware Approval gate remain required before the after arm exists.
+blocking_gates:
+  - issue: 6855
+    condition: explicit redistribution rights and corrective legal bundles for these exact bytes
+  - issue: 6793
+    condition: Phase-B non-benchmark cutover pattern is closed and reviewed
+  - approval: domain_aware
+    condition: explicit approval for the benchmark-facing cutover before merge-ready
+
+registry:
+  path: model/registry.yaml
+  release_tag: artifact/legacy-models-2026-07-registry-v1
+  immutable_version: v1
+
+checkpoint_snapshots:
+  default_ppo:
+    model_id: legacy_ppo_retrained_10m_2025_02_01
+    kind: single_file
+    source_paths:
+      - model/ppo_model_retrained_10m_2025-02-01.zip
+    source_sha256:
+      model/ppo_model_retrained_10m_2025-02-01.zip: 02a31a95720453871aa16af7712dd8ed56a7b4aa11ccb1f405e7837f052d296d
+    registry_release_sha256: 02a31a95720453871aa16af7712dd8ed56a7b4aa11ccb1f405e7837f052d296d
+    registry_local_path: output/model_cache/legacy_ppo_retrained_10m_2025_02_01/legacy_ppo_retrained_10m_2025_02_01.zip
+  ga3c_cadrl:
+    model_id: ga3c_cadrl_iros18
+    kind: multi_file_bundle
+    source_paths:
+      - model/ga3c_cadrl/IROS18/network_01900000.data-00000-of-00001
+      - model/ga3c_cadrl/IROS18/network_01900000.index
+      - model/ga3c_cadrl/IROS18/network_01900000.meta
+    source_sha256:
+      model/ga3c_cadrl/IROS18/network_01900000.data-00000-of-00001: 2fa944a6f206c9b7d801997dae74572b263ed190a0743ac72b822b1e2b23e38a
+      model/ga3c_cadrl/IROS18/network_01900000.index: c662b005f25bdc792b763a2d5a4bb8f4a5c9b786fc8ae564561a037275cb3900
+      model/ga3c_cadrl/IROS18/network_01900000.meta: f21ecfa374c5161ab6d7a9e0f1acb2b20d0409818072a51db8237e835efdd18c
+    registry_release_sha256: 4f09853390f224a34d804bb969062bd9a123e085465f7e18d3c84f42f14291d0
+    registry_per_file_sha256:
+      network_01900000.data-00000-of-00001: 2fa944a6f206c9b7d801997dae74572b263ed190a0743ac72b822b1e2b23e38a
+      network_01900000.index: c662b005f25bdc792b763a2d5a4bb8f4a5c9b786fc8ae564561a037275cb3900
+      network_01900000.meta: f21ecfa374c5161ab6d7a9e0f1acb2b20d0409818072a51db8237e835efdd18c
+    registry_local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
+
+# The inventory is intentionally text-selector based rather than line-number
+# based, so a harmless refactor cannot silently erase a load path from the
+# preparation packet. Each selector must remain present until the cutover is
+# explicitly reviewed.
+load_path_inventory:
+  - id: ppo_adapter_default
+    checkpoint: default_ppo
+    path: robot_sf/baselines/ppo.py
+    selector: 'model_path: str = "model/ppo_model_retrained_10m_2025-02-01.zip"'
+  - id: ppo_baseline_config
+    checkpoint: default_ppo
+    path: configs/baselines/ppo.yaml
+    selector: 'model_path: model/ppo_model_retrained_10m_2025-02-01.zip'
+  - id: ppo_doctor_presence
+    checkpoint: default_ppo
+    path: robot_sf/benchmark/doctor.py
+    selector: 'Path("model/ppo_model_retrained_10m_2025-02-01.zip")'
+  - id: ppo_compatibility_guard
+    checkpoint: default_ppo
+    path: scripts/validation/check_legacy_ppo_snapshot_parity.py
+    selector: 'source_paths=("model/ppo_model_retrained_10m_2025-02-01.zip",)'
+  - id: sacadrl_planner_default
+    checkpoint: ga3c_cadrl
+    path: robot_sf/planner/socnav_base.py
+    selector: '_SACADRL_MODEL_ID = "ga3c_cadrl_iros18"'
+  - id: sacadrl_campaign_preflight_default
+    checkpoint: ga3c_cadrl
+    path: robot_sf/benchmark/campaign/campaign_checkpoint_preflight.py
+    selector: '_DEFAULT_SACADRL_MODEL_ID = "ga3c_cadrl_iros18"'
+  - id: sacadrl_quality_audit_family
+    checkpoint: ga3c_cadrl
+    path: configs/benchmarks/planner_quality_audit_v1.yaml
+    selector: 'family_key: ga3c_cadrl'
+  - id: sacadrl_registry_entry
+    checkpoint: ga3c_cadrl
+    path: model/registry.yaml
+    selector: 'model_id: ga3c_cadrl_iros18'
+
+parity_protocol:
+  before_mode: in_tree_checkpoint
+  after_mode: registry_release_backed_checkpoint
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  included_scenario_manifests:
+    configs/scenarios/classic_interactions.yaml: 5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5
+    configs/scenarios/francis2023.yaml: f60ccf7235d1c965e2d1989ae157024734366d0ed6f4db5acdc83127f0325f56
+  seed_set: eval
+  seed_set_path: configs/benchmarks/seed_sets_v1.yaml
+  seed_set_sha256: 3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6
+  seeds: [111, 112, 113]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  kinematics: differential_drive
+  planner_arms:
+    - key: ppo
+      algo: ppo
+      config: configs/baselines/ppo.yaml
+      checkpoint: default_ppo
+      execution_mode: native
+      fallback_policy: fail_fast
+      runtime_overrides:
+        fallback_to_goal: false
+    - key: sacadrl
+      algo: sacadrl
+      config: null
+      checkpoint: ga3c_cadrl
+      execution_mode: native
+      fallback_policy: fail_fast
+      runtime_overrides:
+        socnav_missing_prereq_policy: fail-fast
+  row_identity: [planner_key, scenario_id, seed]
+  required_status_fields:
+    - row_status
+    - benchmark_success
+    - benchmark_success_basis
+    - termination_reason
+  required_metrics:
+    - success
+    - collisions
+    - near_misses
+    - time_to_goal_norm
+    - snqi
+  comparison:
+    require_identical_row_keys: true
+    require_identical_status_fields: true
+    require_native_rows_only: true
+    missing_metric_policy: fail
+    float_abs_tolerance: 0.000000000001
+    float_rel_tolerance: 0.0
+  output_paths:
+    root: output/benchmarks/issue_6794_phase_c_parity
+    before_episodes: output/benchmarks/issue_6794_phase_c_parity/before/episodes.jsonl
+    after_episodes: output/benchmarks/issue_6794_phase_c_parity/after/episodes.jsonl
+    comparison_report: output/benchmarks/issue_6794_phase_c_parity/comparison.json
+    preparation_report: output/benchmarks/issue_6794_phase_c_parity/preparation.json

@@ -258,6 +258,26 @@ def test_candidate_detector_fields_fail_closed_before_scoring(field: str, value:
         validate_candidate_envelope(candidate)
 
 
+@pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
+def test_candidate_non_finite_nested_values_fail_closed(non_finite: float) -> None:
+    candidate = _candidate("clean")
+    candidate["figure"]["spec"]["score"] = non_finite  # type: ignore[index]
+
+    with pytest.raises(AgentFigureEvalError, match="finite JSON numbers"):
+        validate_candidate_envelope(candidate)
+
+
+def test_manifest_non_finite_json_fails_closed(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["unexpected_metadata"] = {"score": float("nan")}
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8", newline="\n")
+
+    with pytest.raises(AgentFigureEvalError, match="unreadable JSON"):
+        load_verified_packets(manifest_path)
+
+
 def test_replay_digest_omission_and_stale_bytes_fail_closed() -> None:
     omitted = _candidate("clean")
     del omitted["provenance"]["source_sha256"]  # type: ignore[index]

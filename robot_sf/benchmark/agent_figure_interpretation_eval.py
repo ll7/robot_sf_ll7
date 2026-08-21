@@ -182,7 +182,19 @@ def canonical_json(data: Any) -> str:
         Compact JSON with sorted keys.
     """
 
-    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        data,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def _reject_non_finite_json_number(value: str) -> Any:
+    """Reject Python's non-standard JSON constants while parsing artifacts."""
+
+    raise ValueError(f"non-finite JSON number {value!r} is not supported")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -193,8 +205,10 @@ def load_json(path: Path) -> dict[str, Any]:
     """
 
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        data = json.loads(
+            path.read_text(encoding="utf-8"), parse_constant=_reject_non_finite_json_number
+        )
+    except (OSError, ValueError) as exc:
         raise AgentFigureEvalError(f"{path}: unreadable JSON: {exc}") from exc
     if not isinstance(data, dict):
         raise AgentFigureEvalError(f"{path}: expected a JSON object")
@@ -518,12 +532,28 @@ def validate_candidate_envelope(envelope: Mapping[str, Any]) -> None:
 
     if not isinstance(envelope, Mapping):
         raise AgentFigureEvalError("candidate envelope must be an object")
+    _validate_finite_json_values(envelope, path="candidate")
     _validate_candidate_keys(envelope)
     _validate_candidate_identity(envelope)
     _validate_candidate_interpretation(envelope)
     _validate_candidate_context(envelope)
     _validate_candidate_findings(envelope)
     _validate_candidate_provenance(envelope)
+
+
+def _validate_finite_json_values(value: Any, *, path: str) -> None:
+    """Reject non-standard JSON numbers in open candidate fields."""
+
+    if isinstance(value, float) and not math.isfinite(value):
+        raise AgentFigureEvalError(f"{path} must contain only finite JSON numbers")
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if not isinstance(key, str):
+                raise AgentFigureEvalError(f"{path} contains a non-text JSON object key")
+            _validate_finite_json_values(nested, path=f"{path}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for index, nested in enumerate(value):
+            _validate_finite_json_values(nested, path=f"{path}[{index}]")
 
 
 def _validate_candidate_keys(envelope: Mapping[str, Any]) -> None:

@@ -7,8 +7,8 @@ that envelope against the frozen candidate binding, inspects the benchmark
 episode's canonical planner metadata, and emits the row-level
 ``adversarial_independent_outcomes.v2`` packet.
 
-The frozen #6105 contract admits only demonstrated native ``social_force``
-execution.  Adapter, fallback, degraded, mixed, unavailable, or self-reported
+The frozen #6105 contract admits only the canonical ``SocialForcePlannerAdapter``
+identity.  Native, fallback, degraded, mixed, unavailable, or self-reported
 aliases fail closed before a row is emitted.  The historical planner/reference
 commit remains in ``execution_commit`` while the producing code's merged
 commit is carried separately as ``producer_commit``.
@@ -43,6 +43,13 @@ from robot_sf.benchmark.termination_reason import (
 
 EXECUTION_RECORD_SCHEMA_VERSION = "issue_7066_execution_record.v1"
 _ARMS = ("proposal", "random")
+_IDENTITY_FIELDS = (
+    "policy_semantics",
+    "adapter_name",
+    "upstream_command_space",
+    "benchmark_command_space",
+    "projection_policy",
+)
 _SHA1_LENGTH = 40
 _CANONICAL_OUTCOME_FIELDS = frozenset({"route_complete", "collision_event", "timeout_event"})
 
@@ -122,7 +129,7 @@ def load_execution_records(path: Path) -> list[dict[str, Any]]:
 
 
 def _load_contract_identity(contract_path: Path) -> dict[str, Any]:
-    """Load and validate the frozen native-only contract identity."""
+    """Load and validate the frozen canonical-adapter contract identity."""
     contract = load_issue_3275_contract(contract_path)
     planner = contract.get("target_planner")
     if not isinstance(planner, dict):
@@ -134,19 +141,25 @@ def _load_contract_identity(contract_path: Path) -> dict[str, Any]:
     if not _is_sha1(planner.get("execution_commit")):
         raise ValueError("contract historical execution_commit must be a Git SHA-1")
     identity = planner.get("execution_identity")
-    if identity is not None and (
-        not isinstance(identity, dict) or identity.get("execution_mode") != "native"
-    ):
-        raise ValueError("contract execution identity must be native when declared")
+    if not isinstance(identity, dict) or identity.get("execution_mode") != "adapter":
+        raise ValueError("contract must declare adapter execution identity")
+    for key in _IDENTITY_FIELDS:
+        if not isinstance(identity.get(key), str) or not identity[key].strip():
+            raise ValueError(f"contract execution identity is missing {key!r}")
     outcome_contract = contract.get("outcome_contract")
+    required_fields = {"execution_identity", "producer_commit", "episode_record_sha256"}
     if (
         not isinstance(outcome_contract, dict)
         or outcome_contract.get("schema") != OUTCOME_SCHEMA_VERSION
     ):
         raise ValueError("contract must declare adversarial_independent_outcomes.v2")
+    admitted_fields = outcome_contract.get("admitted_row_fields")
+    if not isinstance(admitted_fields, list) or not required_fields.issubset(set(admitted_fields)):
+        raise ValueError("contract outcome fields do not declare producer lineage")
     return {
         "contract": contract,
         "planner": planner,
+        "identity": {key: str(identity[key]) for key in _IDENTITY_FIELDS},
         "contract_sha256": _raw_sha256(contract_path),
     }
 
@@ -233,7 +246,7 @@ def _load_binding(  # noqa: C901, PLR0912
 
 
 def _admission_spec(contract_data: dict[str, Any], binding: dict[str, Any]) -> AdmissionSpec:
-    """Build the strict v2 admission spec for the frozen native contract."""
+    """Build the strict v2 admission spec for the canonical adapter contract."""
     contract = contract_data["contract"]
     planner = contract_data["planner"]
     threshold = "4_of_5" if contract["failure_admission"]["four_of_five_required"] else "3_of_5"
@@ -250,31 +263,83 @@ def _admission_spec(contract_data: dict[str, Any], binding: dict[str, Any]) -> A
         expected_execution_seeds_by_manifest_id=binding["execution_seeds_by_manifest_id"],
         expected_candidate_pool_seed=binding["candidate_pool_seed"],
         expected_execution_commit=planner["execution_commit"],
+        expected_execution_mode=planner["execution_identity"]["execution_mode"],
+        expected_execution_identity=contract_data["identity"],
+        require_producer_commit=True,
+        require_episode_record_sha256=True,
     )
 
 
-def _episode_metadata(record: dict[str, Any]) -> None:
-    """Require explicit native Social Force metadata from one episode record."""
+def _validate_adapter_status(metadata: dict[str, Any]) -> None:
+    """Reject unavailable, degraded, or otherwise ineligible adapter metadata."""
+    if metadata.get("status") != "ok":
+        raise ValueError(
+            "episode record algorithm_metadata status is not ok "
+            "(fallback/degraded/unavailable fail closed)"
+        )
+    for key, label in (
+        ("fallback_or_degraded", "fallback_or_degraded"),
+        ("evidence_eligible", "evidence_eligible"),
+    ):
+        if key not in metadata:
+            continue
+        value = metadata[key]
+        if not isinstance(value, bool):
+            raise ValueError(f"episode record {label} must be boolean when present")
+        if key == "fallback_or_degraded" and value:
+            raise ValueError(f"episode record {label} marks the execution ineligible")
+        if key == "evidence_eligible" and not value:
+            raise ValueError(f"episode record {label} marks the execution ineligible")
+    if "availability_status" in metadata and metadata["availability_status"] != "available":
+        raise ValueError("episode record availability_status is not available")
+    if "readiness_status" in metadata and metadata["readiness_status"] not in {
+        "adapter",
+        "ok",
+    }:
+        raise ValueError("episode record readiness_status is not adapter-ready")
+    if "preflight_status" in metadata and metadata["preflight_status"] not in {
+        "ok",
+        "pass",
+        "passed",
+        "ready",
+    }:
+        raise ValueError("episode record preflight_status is not successful")
+
+
+def _validate_adapter_kinematics(
+    metadata: dict[str, Any], expected: dict[str, str]
+) -> dict[str, str]:
+    """Extract and verify the frozen adapter command-space identity."""
+    kinematics = metadata.get("planner_kinematics")
+    if not isinstance(kinematics, dict):
+        raise ValueError("episode record is missing planner_kinematics diagnostics")
+    observed: dict[str, str] = {}
+    for key in _IDENTITY_FIELDS[1:]:
+        value = kinematics.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"episode planner_kinematics is missing {key!r}")
+        observed[key] = value
+    if kinematics.get("execution_mode") != "adapter":
+        raise ValueError("episode planner_kinematics execution_mode is not adapter")
+    adapter_active = kinematics.get("adapter_active")
+    if adapter_active is not True:
+        raise ValueError("episode planner_kinematics adapter_active must be true for the adapter")
+    if any(observed[key] != expected[key] for key in observed):
+        raise ValueError("episode planner_kinematics canonical adapter identity mismatch")
+    return {"policy_semantics": expected["policy_semantics"], **observed}
+
+
+def _episode_metadata(record: dict[str, Any], expected: dict[str, str]) -> dict[str, str]:
+    """Extract and verify canonical planner identity from one episode record."""
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, dict):
         raise ValueError("episode record is missing algorithm_metadata")
     if metadata.get("canonical_algorithm") != "social_force":
         raise ValueError("episode record canonical_algorithm is not social_force")
-    kinematics = metadata.get("planner_kinematics")
-    if not isinstance(kinematics, dict):
-        raise ValueError("episode record is missing planner_kinematics diagnostics")
-    if kinematics.get("execution_mode") != "native":
-        raise ValueError(
-            "episode planner_kinematics execution_mode is not native "
-            "(adapter/fallback/degraded fail closed)"
-        )
-    adapter_active = kinematics.get("adapter_active")
-    if not isinstance(adapter_active, bool):
-        raise ValueError(
-            "episode planner_kinematics adapter_active must be an explicit boolean false"
-        )
-    if adapter_active:
-        raise ValueError("episode planner_kinematics reports active adapter execution")
+    if metadata.get("policy_semantics") != expected["policy_semantics"]:
+        raise ValueError("episode record policy_semantics does not match the frozen adapter")
+    _validate_adapter_status(metadata)
+    return _validate_adapter_kinematics(metadata, expected)
 
 
 def _record_producer_commit(record: dict[str, Any]) -> str:
@@ -373,7 +438,7 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
     contract_data: dict[str, Any],
     binding: dict[str, Any],
     producer_commit: str,
-) -> tuple[str, dict[str, Any], dict[str, Any], str]:
+) -> tuple[str, dict[str, Any], dict[str, Any], dict[str, str]]:
     """Validate common execution-envelope and raw-record provenance."""
     if envelope.get("schema_version") != EXECUTION_RECORD_SCHEMA_VERSION:
         raise ValueError("execution envelope schema version is unsupported")
@@ -415,7 +480,7 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
         raise ValueError(f"execution envelope {manifest_id} planner reference commit mismatch")
     if config_lineage.get("producer_commit") != producer_commit:
         raise ValueError(f"execution envelope {manifest_id} producer commit mismatch")
-    _episode_metadata(record)
+    expected_identity = _episode_metadata(record, contract_data["identity"])
     observed_producer_commit = _record_producer_commit(record)
     if observed_producer_commit != producer_commit:
         raise ValueError(f"episode record {manifest_id} producer commit mismatch")
@@ -447,7 +512,8 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
         raise ValueError(f"execution envelope {manifest_id} scenario family mismatch")
     if envelope.get("scenario_certification_status") != "passed":
         raise ValueError(f"execution envelope {manifest_id} scenario certification is not passed")
-    return manifest_id, record, config_lineage, "native"
+    identity = {"execution_mode": "adapter", **expected_identity}
+    return manifest_id, record, config_lineage, identity
 
 
 def _selection_info(binding: dict[str, Any], manifest_id: str) -> tuple[str, int, int]:
@@ -592,7 +658,8 @@ def _build_candidate_rows(  # noqa: C901
                 "execution_commit": contract_data["planner"]["execution_commit"],
                 "execution_command": list(envelope["execution_command"]),
                 "execution_config_lineage": config_lineage,
-                "execution_mode": identity,
+                "execution_mode": identity["execution_mode"],
+                "execution_identity": {key: identity[key] for key in _IDENTITY_FIELDS},
                 "producer_commit": producer_commit,
                 "episode_record_sha256": episode_hash,
                 "primary_failure": str(attribution.primary_failure),
@@ -697,13 +764,14 @@ def build_outcome_packet(
     rows.sort(key=lambda row: str(row["row_id"]))
     packet = {
         "schema_version": OUTCOME_SCHEMA_VERSION,
-        "source": "issue_7066_native_outcome_producer",
+        "source": "issue_7066_adapter_outcome_producer",
         "outcome_source": "planner_execution",
         "objective": OUTCOME_OBJECTIVE,
         "target_planner_id": contract_data["planner"]["id"],
         "target_planner_config_sha256": contract_data["planner"]["config_sha256"],
         "execution_commit": contract_data["planner"]["execution_commit"],
         "execution_commit_role": "historical_planner_reference_lineage",
+        "execution_identity": dict(contract_data["identity"]),
         "producer_commit": producer_commit,
         "contract_path": str(contract_path),
         "contract_sha256": contract_data["contract_sha256"],
@@ -766,7 +834,9 @@ def _write_json_atomically(path: Path, payload: dict[str, Any]) -> None:
 def _parse_args() -> argparse.Namespace:
     """Parse the producer CLI arguments."""
     parser = argparse.ArgumentParser(
-        description="Build issue #6105 v2 outcomes from explicit native execution records."
+        description=(
+            "Build issue #6105 v2 outcomes from explicit canonical adapter execution records."
+        )
     )
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--bindings", type=Path, required=True)

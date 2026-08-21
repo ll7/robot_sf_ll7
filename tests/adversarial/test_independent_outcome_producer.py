@@ -1,4 +1,4 @@
-"""Tests for the issue #7066 native execution-to-v2 outcome bridge."""
+"""Tests for the issue #7066 canonical-adapter execution-to-v2 outcome bridge."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _episode_record(
     failure: bool,
     producer_commit: str = PRODUCER_COMMIT,
 ) -> dict[str, Any]:
-    """Build a minimal benchmark-shaped record with explicit native metadata."""
+    """Build a minimal benchmark-shaped record with explicit adapter metadata."""
     return {
         "version": "v1",
         "scenario_id": "classic_cross_trap_medium",
@@ -84,9 +84,19 @@ def _episode_record(
         "algorithm_metadata": {
             "canonical_algorithm": "social_force",
             "policy_semantics": "social_force_adapter",
+            "status": "ok",
+            "fallback_or_degraded": False,
+            "evidence_eligible": True,
+            "availability_status": "available",
+            "readiness_status": "adapter",
+            "preflight_status": "passed",
             "planner_kinematics": {
-                "execution_mode": "native",
-                "adapter_active": False,
+                "execution_mode": "adapter",
+                "adapter_active": True,
+                "adapter_name": "SocialForcePlannerAdapter",
+                "upstream_command_space": "velocity_vector_xy",
+                "benchmark_command_space": "unicycle_vw",
+                "projection_policy": "heading_safe_velocity_to_unicycle_vw",
             },
         },
         "provenance": {"git_hash": producer_commit},
@@ -180,8 +190,8 @@ def _execution_records(contract_path: Path, binding_path: Path) -> list[dict[str
     return records
 
 
-def test_producer_emits_complete_native_packet_with_separate_commits(tmp_path: Path) -> None:
-    """Valid native records pass the shared v2 admission evaluator."""
+def test_producer_emits_complete_adapter_packet_with_separate_commits(tmp_path: Path) -> None:
+    """Valid canonical-adapter records pass the shared v2 admission evaluator."""
     contract_path, binding_path = _contract_and_binding(tmp_path)
     packet = build_outcome_packet(
         _execution_records(contract_path, binding_path),
@@ -194,7 +204,11 @@ def test_producer_emits_complete_native_packet_with_separate_commits(tmp_path: P
     assert len(packet["rows"]) == 10
     assert packet["execution_commit"] == REFERENCE_COMMIT
     assert packet["producer_commit"] == PRODUCER_COMMIT
-    assert all(row["execution_mode"] == "native" for row in packet["rows"])
+    assert all(row["execution_mode"] == "adapter" for row in packet["rows"])
+    assert all(
+        row["execution_identity"]["adapter_name"] == "SocialForcePlannerAdapter"
+        for row in packet["rows"]
+    )
     assert all(row["execution_commit"] != row["producer_commit"] for row in packet["rows"])
 
 
@@ -536,21 +550,56 @@ def test_producer_rejects_replay_and_confirmation_seed_drift(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     ("metadata_change", "expected_fragment"),
     [
-        ({"execution_mode": "adapter"}, "execution_mode is not native"),
-        ({"execution_mode": "fallback"}, "execution_mode is not native"),
-        ({"adapter_active": True}, "active adapter execution"),
-        ({"adapter_active": "false"}, "adapter_active must be an explicit boolean false"),
-        ({"adapter_active": 0}, "adapter_active must be an explicit boolean false"),
+        ({"execution_mode": "native"}, "execution_mode is not adapter"),
+        ({"execution_mode": "fallback"}, "execution_mode is not adapter"),
+        ({"adapter_active": False}, "adapter_active must be true"),
+        ({"adapter_name": "OtherAdapter"}, "canonical adapter identity mismatch"),
+        ({"upstream_command_space": "world_velocity"}, "canonical adapter identity mismatch"),
+        ({"policy_semantics": "social_force_native"}, "policy_semantics does not match"),
     ],
 )
 def test_producer_rejects_noncanonical_execution(
     tmp_path: Path, metadata_change: dict[str, Any], expected_fragment: str
 ) -> None:
-    """Adapter, fallback, and active-adapter rows never enter the native packet."""
+    """Native, fallback, and mismatched adapter rows never enter the packet."""
     contract_path, binding_path = _contract_and_binding(tmp_path)
     records = _execution_records(contract_path, binding_path)
-    kinematics = records[1]["episode_record"]["algorithm_metadata"]["planner_kinematics"]
-    kinematics.update(metadata_change)
+    metadata = records[1]["episode_record"]["algorithm_metadata"]
+    if "policy_semantics" in metadata_change:
+        metadata.update(metadata_change)
+    else:
+        metadata["planner_kinematics"].update(metadata_change)
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
+@pytest.mark.parametrize(
+    ("metadata_field", "metadata_value", "expected_fragment"),
+    [
+        ("status", "fallback", "status is not ok"),
+        ("fallback_or_degraded", True, "fallback_or_degraded"),
+        ("evidence_eligible", False, "evidence_eligible"),
+        ("availability_status", "unavailable", "availability_status is not available"),
+        ("readiness_status", "native", "readiness_status is not adapter-ready"),
+        ("preflight_status", "failed", "preflight_status is not successful"),
+    ],
+)
+def test_producer_rejects_unavailable_or_ineligible_adapter_metadata(
+    tmp_path: Path,
+    metadata_field: str,
+    metadata_value: Any,
+    expected_fragment: str,
+) -> None:
+    """Availability and evidence-eligibility metadata fail closed before admission."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    records[1]["episode_record"]["algorithm_metadata"][metadata_field] = metadata_value
 
     with pytest.raises(ValueError, match=expected_fragment):
         build_outcome_packet(

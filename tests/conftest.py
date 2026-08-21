@@ -394,6 +394,10 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # The anisotropic human-cost adapter is covered by deterministic planner
+    # contract tests; keep that focused file in the fast lane for exact-head
+    # changed-coverage admission.
+    "test_predictive_human_cost.py",
     # Forecast-preparation packet tests are deterministic schema/provenance
     # contracts; keep their changed producer covered by the fast lane.
     "test_forecast_preparation.py",

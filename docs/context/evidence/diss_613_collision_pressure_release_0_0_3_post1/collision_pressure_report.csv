@@ -1,0 +1,2 @@
+schema_version,source_commit,release_id,bundle_id,eligible_episode_count,contact_episode_count,pedestrian_contact_episode_count,obstacle_contact_episode_count,pedestrian_obstacle_overlap_episode_count,excluded_row_count,claim_boundary
+collision_pressure_report.v1,a307ef276d701f8d14dead1aa0513f44ee97c0b0,0.0.3.post1,ded9027d2928512c14bc241397e0ab1d8f586654,2100,1545,520,1026,1,0,"Descriptive exact collision-event counts for the caller-declared typed-ledger slice. This is not a collision probability, causal mechanism, severity, physical-risk, or real-world safety metric."

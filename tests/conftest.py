@@ -394,6 +394,9 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # Forecast-preparation packet tests are deterministic schema/provenance
+    # contracts; keep their changed producer covered by the fast lane.
+    "test_forecast_preparation.py",
     # Figure-interpretation replay tests are provider-free deterministic contracts;
     # keep their exact-head mutation and provenance coverage in fast shards.
     "test_agent_figure_interpretation_eval.py",

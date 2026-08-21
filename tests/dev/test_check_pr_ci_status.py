@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -17,6 +18,7 @@ from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev.check_pr_ci_status import (
     _fetch_ci_status,
     _format_human,
+    _queue_state,
     _rollup_conclusion,
     _rollup_name,
     _rollup_status,
@@ -218,6 +220,84 @@ def test_main_keeps_same_named_runs_from_different_workflows(
     payload = json.loads(capsys.readouterr().out)
     assert payload["checks"]["overall"] == "failure"
     assert payload["checks"]["superseded"] == 0
+
+
+def test_queue_starvation_is_explicit_but_remains_pending() -> None:
+    """A long current queue is an external blocker, never a green or failed CI result."""
+    now = datetime(2026, 8, 17, 10, 0, tzinfo=UTC)
+    checks, superseded = _summarize_check_runs(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-17T09:00:00Z",
+                "detailsUrl": "https://example.test/old",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "queued",
+                "conclusion": "",
+                "startedAt": "2026-08-17T09:05:00Z",
+                "detailsUrl": "https://example.test/current",
+            },
+        ],
+        now=now,
+        starvation_seconds=300,
+    )
+
+    assert checks["overall"] == "pending"
+    assert checks["pending_reason"] == "runner_queue_starvation"
+    assert checks["diagnostic"] == "runner_queue_starvation"
+    assert checks["queue_state"] == {
+        "state": "starved",
+        "queued_count": 1,
+        "queued_names": ["ci"],
+        "queued_checks": [{"name": "ci", "details_url": "https://example.test/current"}],
+        "timestamp_available": True,
+        "starvation_threshold_seconds": 300,
+        "oldest_queued_at": "2026-08-17T09:05:00Z",
+        "oldest_queued_seconds": 3300,
+    }
+    assert superseded == 1
+
+
+def test_queue_without_timestamp_does_not_claim_starvation() -> None:
+    """Unknown queue age stays queued instead of inventing an external-blocker diagnosis."""
+    state = _queue_state(
+        [{"name": "ci", "status": "queued", "detailsUrl": "https://example.test/ci"}],
+        now=datetime(2026, 8, 17, 10, 0, tzinfo=UTC),
+        starvation_seconds=0,
+    )
+
+    assert state["state"] == "queued"
+    assert state["timestamp_available"] is False
+    assert "oldest_queued_seconds" not in state
+
+
+def test_current_cancellation_remains_a_failure() -> None:
+    """A cancellation without a newer same-workflow replacement remains a real failure."""
+    checks, superseded = _summarize_check_runs(
+        [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-08-17T09:00:00Z",
+            }
+        ]
+    )
+
+    assert checks["overall"] == "failure"
+    assert checks["superseded"] == 0
+    assert checks["queue_state"]["state"] == "none"
+    assert superseded == 0
 
 
 def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
@@ -896,6 +976,7 @@ def test_help_includes_worktree_safe_invocation(
     assert "python scripts/dev/check_pr_ci_status.py" in captured.out
     assert "--expected-head-sha" in captured.out
     assert "--max-wall-seconds" in captured.out
+    assert "--queue-starvation-seconds" in captured.out
     assert "no local .venv" in captured.out
     assert "UV_NO_SYNC" in captured.out
 
@@ -1004,6 +1085,7 @@ def test_help_subprocess_invocation_succeeds_without_pythonpath(
     assert "--pr" in result.stdout
     assert "--expected-head-sha" in result.stdout
     assert "--max-wall-seconds" in result.stdout
+    assert "--queue-starvation-seconds" in result.stdout
 
 
 def test_smoke_completed_ci_exits_cleanly_with_monitor_metadata(

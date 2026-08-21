@@ -220,6 +220,33 @@ def test_hinge_gutter_font_size_is_capped_for_short_labels(monkeypatch: pytest.M
     plt.close(fig)
 
 
+def test_contrast_renderer_uses_exposure_label_in_both_layouts() -> None:
+    """Keep the public label accurate while retaining the near-miss metric key."""
+    gutter = {
+        "mode": "contrast",
+        "min_clearance_focal_m": {"episode_a": 1.73, "episode_b": 1.44},
+        "near_miss_steps": {"episode_a": 13, "episode_b": 78},
+        "steps_to_termination": {"episode_a": 88, "episode_b": 235},
+        "first_braking_time_s": {"episode_a": None, "episode_b": None},
+    }
+
+    vertical_fig, vertical_ax = plt.subplots()
+    hinge._draw_delta_gutter(vertical_ax, gutter)
+    vertical_text = [text.get_text() for text in vertical_ax.texts]
+    assert "exposure steps\nA 13 / B 78" in vertical_text
+    assert not any("near-miss steps" in text for text in vertical_text)
+
+    strip_fig, strip_ax = plt.subplots()
+    hinge._draw_contrast_strip(strip_ax, gutter, fontsize=8.0)
+    strip_text = [text.get_text() for text in strip_ax.texts]
+    assert "exposure steps" in strip_text
+    assert "A 13 / B 78" in strip_text
+    assert not any("near-miss steps" in text for text in strip_text)
+    assert gutter["near_miss_steps"] == {"episode_a": 13, "episode_b": 78}
+    plt.close(vertical_fig)
+    plt.close(strip_fig)
+
+
 def test_print_contrast_renderer_uses_final_width_and_role_colors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

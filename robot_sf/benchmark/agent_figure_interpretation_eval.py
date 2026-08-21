@@ -656,7 +656,11 @@ def _validate_candidate_confidence(envelope: Mapping[str, Any]) -> None:
         raise AgentFigureEvalError("candidate confidence must contain status and value")
     status = confidence.get("status")
     value = confidence.get("value")
-    if status not in {"available", "not_available", "not_applicable"}:
+    if not isinstance(status, str) or status not in {
+        "available",
+        "not_available",
+        "not_applicable",
+    }:
         raise AgentFigureEvalError("candidate confidence.status is invalid")
     if status == "available":
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 1:
@@ -677,7 +681,8 @@ def _validate_candidate_findings(envelope: Mapping[str, Any]) -> None:
             raise AgentFigureEvalError(
                 f"candidate findings.{dimension} must contain status and critical"
             )
-        if finding.get("status") not in {
+        status = finding.get("status")
+        if not isinstance(status, str) or status not in {
             "available",
             "not_available",
             "not_applicable",
@@ -756,7 +761,12 @@ def _validate_optional_provenance_digests(provenance: Mapping[str, Any]) -> None
         digest = provenance.get(key)
         if not isinstance(digest, Mapping) or set(digest) != {"status", "sha256"}:
             raise AgentFigureEvalError(f"candidate provenance.{key} must contain status and sha256")
-        if digest.get("status") not in {"available", "not_available", "not_applicable"}:
+        status = digest.get("status")
+        if not isinstance(status, str) or status not in {
+            "available",
+            "not_available",
+            "not_applicable",
+        }:
             raise AgentFigureEvalError(f"candidate provenance.{key}.status is invalid")
         value = digest.get("sha256")
         if digest["status"] == "available":

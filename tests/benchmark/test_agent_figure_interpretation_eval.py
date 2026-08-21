@@ -258,6 +258,37 @@ def test_candidate_detector_fields_fail_closed_before_scoring(field: str, value:
         validate_candidate_envelope(candidate)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("confidence.status", ["not_available"], "candidate confidence.status is invalid"),
+        (
+            "findings.claim_boundary.status",
+            ["not_available"],
+            "candidate findings.claim_boundary.status is invalid",
+        ),
+        (
+            "provenance.figure_sha256.status",
+            ["available"],
+            "candidate provenance.figure_sha256.status is invalid",
+        ),
+    ],
+)
+def test_candidate_status_types_fail_closed_before_set_membership(
+    field: str, value: object, message: str
+) -> None:
+    candidate = _candidate("clean")
+    if field == "confidence.status":
+        candidate["confidence"]["status"] = value  # type: ignore[index]
+    elif field == "findings.claim_boundary.status":
+        candidate["findings"]["claim_boundary"]["status"] = value  # type: ignore[index]
+    else:
+        candidate["provenance"]["figure_sha256"]["status"] = value  # type: ignore[index]
+
+    with pytest.raises(AgentFigureEvalError, match=message):
+        validate_candidate_envelope(candidate)
+
+
 @pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
 def test_candidate_non_finite_nested_values_fail_closed(non_finite: float) -> None:
     candidate = _candidate("clean")

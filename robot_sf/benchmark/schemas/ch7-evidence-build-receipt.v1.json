@@ -227,8 +227,7 @@
         "blocker_codes": {
           "const": [
             "domain_approval_pending",
-            "external_admission_receipt_required",
-            "metric_semantics_excluded_issue_7042"
+            "external_admission_receipt_required"
           ]
         }
       }

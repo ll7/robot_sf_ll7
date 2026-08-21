@@ -22,6 +22,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from generate_skills_readme import render_readme
+from skill_content_contracts import validate_skill_text
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / ".agents" / "skills"
@@ -58,80 +59,6 @@ CRITICAL_DUPLICATE_PATTERNS = (
 BACKTICK_TOKEN_PATTERN = re.compile(r"`([a-z][a-z0-9-]+)`")
 # A trailing ``.ext`` (1-8 alphanumerics) marks a reference as a concrete file path.
 EXTENSION_PATTERN = re.compile(r"\.[A-Za-z0-9]{1,8}$")
-ARTIFACT_FIRST_SKILLS = {"goal-autopilot", "goal-issue-implementation", "goal-pr-review"}
-ARTIFACT_FIRST_REQUIRED_FILES = ("result.json", "RESULT.md", "diffstat.txt", "validation.json")
-ARTIFACT_FIRST_REQUIRED_PHRASES = (
-    "artifact-first",
-    "route evidence",
-    "raw logs",
-    "targeted local",
-)
-WORKER_OUTPUT_REQUIRED_PHRASES = (
-    "rg -l",
-    "rg --files",
-    "sed -n",
-    "200 lines",
-    "private artifacts",
-    "rg -n .",
-    "full file reads",
-)
-GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS = (
-    "snapshot_pr_queue.py",
-    "scripts.dev.snapshot_pr_queue",
-)
-GOAL_PR_REVIEW_REQUIRED_PHRASES = (
-    "watch_pr_ci_status.py",
-    "status,conclusion,jobs",
-    "bounded excerpts",
-    "full logs",
-    "private artifacts",
-)
-GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES = (
-    "loaded context",
-    "skill/doc summaries",
-    "snapshot paths",
-    "freshness keys",
-    "expected pr head sha",
-    "worker artifact paths",
-    "stale-state triggers",
-    "ledger snapshot paths",
-    "repeating broad state polling",
-    "fresh live checks",
-    "issue claim",
-    "push",
-    "pr publication",
-    "label/project mutation",
-    "merge-ready",
-    "compact_worktree_snapshot.py",
-    "compact_ci_snapshot.py",
-)
-GOAL_AUTOPILOT_SHARED_ROUTING_REQUIRED_PHRASES = (
-    "shared model-routing pointer",
-    "phase task class",
-    "current evidence state",
-    "do not select a model locally",
-    "current native tiers",
-    "evidenced escalation rule",
-    "external provider budget alternatives",
-    "must not duplicate a model inventory",
-    "local sidecar route table",
-    "route selection is route evidence only",
-    "controller still reviews artifacts",
-    "the diff",
-    "validation locally",
-    "before accepting work",
-)
-ROUTED_FAILURE_REQUIRED_PHRASES = (
-    "terminal_state",
-    "scope_check",
-    "compact_artifacts",
-    "missing_artifact",
-    "route_not_started",
-    "scope_violation",
-    "status.txt",
-    "validation.txt",
-    "parent acceptance",
-)
 ACTIVE_ROUTING_TEMPLATES = (REPO_ROOT / "docs/templates/token_efficient_thread_profile.md",)
 RETIRED_SPARK_ROUTING_MARKERS = (
     "spark usage-limit",
@@ -357,49 +284,15 @@ def _validate_active_routing_template(path: Path) -> list[str]:
 
 
 def _validate_artifact_first_contract(path: Path, metadata: dict[str, Any], text: str) -> list[str]:
-    """Validate artifact-first delegated route contract text for selected skills."""
-    if metadata.get("name") not in ARTIFACT_FIRST_SKILLS:
+    """Validate the skill's declarative content contract, if one is defined.
+
+    Contracts live under ``.agents/skills/tests/contracts/``; see
+    ``scripts/dev/skill_content_contracts.py`` for the schema.
+    """
+    name = metadata.get("name")
+    if not isinstance(name, str) or not name:
         return []
-
-    rel = path.relative_to(REPO_ROOT)
-    errors: list[str] = []
-
-    for filename in ARTIFACT_FIRST_REQUIRED_FILES:
-        if filename not in text:
-            errors.append(f"{rel}: missing artifact-first requirement {filename!r}")
-
-    lower = text.lower()
-    normalized = " ".join(lower.split())
-    for phrase in ARTIFACT_FIRST_REQUIRED_PHRASES:
-        if phrase not in lower:
-            errors.append(f"{rel}: missing artifact-first phrase requirement {phrase!r}")
-
-    for phrase in WORKER_OUTPUT_REQUIRED_PHRASES:
-        if phrase not in lower:
-            errors.append(f"{rel}: missing worker-output limit requirement {phrase!r}")
-
-    if metadata.get("name") == "goal-autopilot":
-        for phrase in ROUTED_FAILURE_REQUIRED_PHRASES:
-            if phrase not in lower:
-                errors.append(f"{rel}: missing routed-failure requirement {phrase!r}")
-        for phrase in GOAL_AUTOPILOT_LEDGER_REQUIRED_PHRASES:
-            if phrase not in lower:
-                errors.append(f"{rel}: missing active-ledger requirement {phrase!r}")
-        for phrase in GOAL_AUTOPILOT_SHARED_ROUTING_REQUIRED_PHRASES:
-            if phrase not in normalized:
-                errors.append(f"{rel}: missing shared model routing requirement {phrase!r}")
-
-    if metadata.get("name") == "goal-pr-review":
-        if not any(token in lower for token in GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS):
-            errors.append(
-                f"{rel}: missing PR-review compact CI requirement one of "
-                f"{GOAL_PR_REVIEW_SNAPSHOT_QUEUE_TOKENS!r}"
-            )
-        for phrase in GOAL_PR_REVIEW_REQUIRED_PHRASES:
-            if phrase not in lower:
-                errors.append(f"{rel}: missing PR-review compact CI requirement {phrase!r}")
-
-    return errors
+    return validate_skill_text(REPO_ROOT, name, path.relative_to(REPO_ROOT), text)
 
 
 def _validate_backticked_skill_tokens(

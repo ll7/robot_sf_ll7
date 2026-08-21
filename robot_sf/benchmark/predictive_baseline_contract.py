@@ -49,6 +49,9 @@ class PlannerMethodCard:
     fallback_policy: str
     claim_boundary: str
     config: dict[str, Any]
+    formula: str = ""
+    input_visibility: str = ""
+    missing_input_policy: str = ""
 
     def __post_init__(self) -> None:
         """Reject incomplete method identity or unsupported evidence labels."""

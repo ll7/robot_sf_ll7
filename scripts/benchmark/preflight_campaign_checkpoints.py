@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
@@ -42,6 +43,8 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight_from_config,
 )
+from robot_sf.benchmark.checkpoint_staging_receipt import CHECKPOINT_STAGING_RECEIPT_SCHEMA
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 EXIT_OK = 0
 EXIT_CONFIG_ERROR = 2
@@ -153,7 +156,15 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_CONFIG_ERROR
 
     mode = "staged" if args.stage else "resolvable"
-    payload = {"status": "ok", "mode": checkpoint_preflight_mode, **summary}
+    payload = {
+        "schema_version": CHECKPOINT_STAGING_RECEIPT_SCHEMA,
+        "status": "ok",
+        "mode": checkpoint_preflight_mode,
+        "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "campaign_config_path": str(args.config.resolve()),
+        "campaign_config_sha256": sha256_file(args.config.resolve()),
+        **summary,
+    }
     if args.json:
         print(json.dumps(payload, indent=2))
     else:

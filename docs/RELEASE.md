@@ -53,12 +53,23 @@ Verify:
 
 ## Release Execution
 
-Run:
+First stage every referenced checkpoint into durable shared storage and persist
+the exact admission receipt:
+
+```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml \
+  --stage \
+  --report-path output/release/checkpoints/staging_receipt.json
+```
+
+Require `submit_safe=true`. Then run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest <approved-s30-h600-full-release-manifest.yaml> \
-  --label release
+  --label release \
+  --checkpoint-receipt output/release/checkpoints/staging_receipt.json
 ```
 
 Verify:

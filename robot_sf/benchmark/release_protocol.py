@@ -11,11 +11,17 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
+RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
+SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS = frozenset(
+    {RELEASE_MANIFEST_SCHEMA_VERSION, RELEASE_MANIFEST_SCHEMA_VERSION_V0_2}
+)
 BENCHMARK_PROTOCOL_VERSION = "0.1.0"
 DIAGNOSTIC_RELEASE_MATURITY = "diagnostic"
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
@@ -87,6 +93,18 @@ class BenchmarkReleaseManifest:
     doi: str
     citation_path: Path
     release_checklist_path: Path
+    latest_main_base_commit: str | None = None
+    expected_episode_cells: int | None = None
+    publication_channel: str | None = None
+    suite_policy_path: Path | None = None
+    suite_policy_sha256: str | None = None
+    route_certification_path: Path | None = None
+    route_certification_sha256: str | None = None
+    seed_sets_sha256: str | None = None
+    resolved_seeds: tuple[int, ...] = ()
+    snqi_claim_policy: str | None = None
+    concept_doi: str | None = None
+    version_doi: str | None = None
 
 
 def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> Path:
@@ -112,9 +130,10 @@ def _load_manifest_identity(payload: dict[str, Any]) -> dict[str, str]:
         Mapping with validated schema/version/identity values.
     """
     schema_version = str(payload.get("schema_version", "")).strip()
-    if schema_version != RELEASE_MANIFEST_SCHEMA_VERSION:
+    if schema_version not in SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS:
         raise ValueError(
-            f"schema_version must be {RELEASE_MANIFEST_SCHEMA_VERSION}, got {schema_version!r}"
+            "schema_version must be one of "
+            f"{sorted(SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS)}, got {schema_version!r}"
         )
 
     protocol_version = str(payload.get("benchmark_protocol_version", "")).strip()
@@ -315,6 +334,83 @@ def _load_manifest_release_metadata(payload: dict[str, Any]) -> dict[str, str | 
     }
 
 
+def _load_v02_contract(  # noqa: C901
+    manifest_path: Path, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Load the stricter v0.2 release identity and publication contract.
+
+    Returns:
+        Normalized v0.2-only fields, or compatibility defaults for v0.1.
+    """
+    defaults = {
+        "latest_main_base_commit": None,
+        "expected_episode_cells": None,
+        "publication_channel": None,
+        "suite_policy_path": None,
+        "suite_policy_sha256": None,
+        "route_certification_path": None,
+        "route_certification_sha256": None,
+        "seed_sets_sha256": None,
+        "resolved_seeds": (),
+        "snqi_claim_policy": None,
+        "concept_doi": None,
+        "version_doi": None,
+    }
+    if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
+        return defaults
+    latest_main_base_commit = str(payload.get("latest_main_base_commit", "")).strip().lower()
+    if re.fullmatch(r"[0-9a-f]{40}", latest_main_base_commit) is None:
+        raise ValueError("latest_main_base_commit must be an exact 40-character Git SHA")
+    matrix = payload.get("matrix")
+    if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
+        raise ValueError("matrix.expected_episode_cells must be an integer")
+    publication = payload.get("publication")
+    if not isinstance(publication, dict):
+        raise ValueError("publication must be a mapping")
+    if publication.get("channel") != "direct_zenodo_benchmark_dataset":
+        raise ValueError("publication.channel must be direct_zenodo_benchmark_dataset")
+    scenario = payload.get("scenario")
+    if not isinstance(scenario, dict):
+        raise ValueError("scenario must be a mapping")
+    seed_policy = payload.get("seed_policy")
+    if not isinstance(seed_policy, dict):
+        raise ValueError("seed_policy must be a mapping")
+    resolved_seeds = seed_policy.get("resolved_seeds")
+    if not isinstance(resolved_seeds, list) or not resolved_seeds:
+        raise ValueError("seed_policy.resolved_seeds must be a non-empty list")
+    metrics = payload.get("metrics")
+    if not isinstance(metrics, dict) or metrics.get("snqi_claim_policy") != "advisory_no_ranking":
+        raise ValueError("metrics.snqi_claim_policy must be advisory_no_ranking")
+    concept_doi = str(publication.get("concept_doi", "")).strip()
+    version_doi = str(publication.get("version_doi", "")).strip()
+    if not concept_doi.startswith("10.5281/zenodo.") or concept_doi.endswith("19482025"):
+        raise ValueError("publication.concept_doi must name a fresh Zenodo concept")
+    if not version_doi.startswith("10.5281/zenodo."):
+        raise ValueError("publication.version_doi must name the reserved Zenodo version")
+    return {
+        "latest_main_base_commit": latest_main_base_commit,
+        "expected_episode_cells": int(matrix["expected_episode_cells"]),
+        "publication_channel": str(publication["channel"]),
+        "suite_policy_path": _resolve_required_file(
+            manifest_path, scenario.get("suite_policy_path"), "scenario.suite_policy_path"
+        ),
+        "suite_policy_sha256": str(scenario.get("suite_policy_sha256", "")).strip(),
+        "route_certification_path": _resolve_required_file(
+            manifest_path,
+            scenario.get("route_certification_path"),
+            "scenario.route_certification_path",
+        ),
+        "route_certification_sha256": str(
+            scenario.get("route_certification_sha256", "")
+        ).strip(),
+        "seed_sets_sha256": str(seed_policy.get("seed_sets_sha256", "")).strip(),
+        "resolved_seeds": tuple(int(seed) for seed in resolved_seeds),
+        "snqi_claim_policy": "advisory_no_ranking",
+        "concept_doi": concept_doi,
+        "version_doi": version_doi,
+    }
+
+
 def _load_manifest_paths_section(manifest_path: Path, payload: dict[str, Any]) -> dict[str, Path]:
     """Load required manifest-side file paths.
 
@@ -353,6 +449,7 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     identity = _load_manifest_identity(payload)
     release_metadata = _load_manifest_release_metadata(payload)
     path_section = _load_manifest_paths_section(manifest_path, payload)
+    v02_contract = _load_v02_contract(manifest_path, payload)
 
     scenario_matrix_path, scenario_matrix_sha256 = _load_manifest_scenario_section(
         manifest_path,
@@ -403,6 +500,7 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
         doi=doi,
         citation_path=path_section["citation_path"],
         release_checklist_path=path_section["release_checklist_path"],
+        **v02_contract,
     )
 
 
@@ -422,6 +520,7 @@ def validate_release_manifest(
     _validate_release_campaign_contract(manifest, cfg, problems)
     _validate_release_seed_policy(manifest, cfg, problems)
     _validate_release_planners(manifest, cfg, problems)
+    _validate_v02_contract(manifest, cfg, problems)
 
     return {
         "manifest_path": _repo_relative(manifest.path),
@@ -553,6 +652,46 @@ def _validate_release_planners(
         problems.append("planners.groups does not match campaign config")
 
 
+def _validate_v02_contract(
+    manifest: BenchmarkReleaseManifest,
+    cfg: CampaignConfig,
+    problems: list[str],
+) -> None:
+    """Validate stricter hashes, matrix size, seed inventory, and DOI separation for v0.2."""
+    if manifest.schema_version != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
+        return
+    path_hashes = (
+        (manifest.suite_policy_path, manifest.suite_policy_sha256, "scenario.suite_policy_sha256"),
+        (
+            manifest.route_certification_path,
+            manifest.route_certification_sha256,
+            "scenario.route_certification_sha256",
+        ),
+    )
+    for path, expected_sha, field in path_hashes:
+        if path is None or not expected_sha or _sha256_file(path) != expected_sha:
+            problems.append(f"{field} does not match its pinned asset")
+    seed_sets_path = cfg.seed_policy.seed_sets_path
+    if (
+        seed_sets_path is None
+        or not manifest.seed_sets_sha256
+        or _sha256_file(seed_sets_path) != manifest.seed_sets_sha256
+    ):
+        problems.append("seed_policy.seed_sets_sha256 does not match campaign config")
+    scenarios = _load_campaign_scenarios(cfg)
+    resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
+    if resolved_seeds != manifest.resolved_seeds:
+        problems.append("seed_policy.resolved_seeds does not match campaign config")
+    enabled_planners = sum(1 for planner in cfg.planners if planner.enabled)
+    cells = len(scenarios) * len(resolved_seeds) * enabled_planners
+    if cells != manifest.expected_episode_cells:
+        problems.append("matrix.expected_episode_cells does not match resolved matrix")
+    if manifest.doi != manifest.version_doi:
+        problems.append("provenance.doi must match publication.version_doi")
+    if manifest.concept_doi == manifest.version_doi:
+        problems.append("publication concept and version DOI must be distinct")
+
+
 def build_release_provenance(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -565,7 +704,7 @@ def build_release_provenance(
         Release provenance block for campaign artifacts and reports.
     """
     return {
-        "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
+        "schema_version": manifest.schema_version,
         "benchmark_protocol_version": manifest.benchmark_protocol_version,
         "release_id": manifest.release_id,
         "release_tag": manifest.release_tag,
@@ -582,6 +721,10 @@ def build_release_provenance(
         "citation_path": _repo_relative(manifest.citation_path),
         "release_checklist_path": _repo_relative(manifest.release_checklist_path),
         "invoked_release_command": invoked_command,
+        "latest_main_base_commit": manifest.latest_main_base_commit,
+        "publication_channel": manifest.publication_channel,
+        "concept_doi": manifest.concept_doi,
+        "version_doi": manifest.version_doi,
     }
 
 
@@ -649,6 +792,26 @@ def build_resolved_release_manifest(
             "doi": manifest.doi,
             "citation_path": _repo_relative(manifest.citation_path),
             "release_checklist_path": _repo_relative(manifest.release_checklist_path),
+            "latest_main_base_commit": manifest.latest_main_base_commit,
+            "publication_channel": manifest.publication_channel,
+            "concept_doi": manifest.concept_doi,
+            "version_doi": manifest.version_doi,
+        },
+        "matrix": {"expected_episode_cells": manifest.expected_episode_cells},
+        "release_contract": {
+            "suite_policy_path": (
+                _repo_relative(manifest.suite_policy_path) if manifest.suite_policy_path else None
+            ),
+            "suite_policy_sha256": manifest.suite_policy_sha256,
+            "route_certification_path": (
+                _repo_relative(manifest.route_certification_path)
+                if manifest.route_certification_path
+                else None
+            ),
+            "route_certification_sha256": manifest.route_certification_sha256,
+            "seed_sets_sha256": manifest.seed_sets_sha256,
+            "resolved_seeds": list(manifest.resolved_seeds),
+            "snqi_claim_policy": manifest.snqi_claim_policy,
         },
     }
 
@@ -691,12 +854,29 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
             "a fresh timestamped one."
         ),
     )
+    parser.add_argument(
+        "--checkpoint-receipt",
+        type=Path,
+        default=None,
+        help=(
+            "Required for run mode: JSON receipt produced by "
+            "preflight_campaign_checkpoints.py --stage."
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint-receipt-max-age-hours",
+        type=float,
+        default=24.0,
+        help="Maximum accepted staged-checkpoint receipt age (default: 24 hours).",
+    )
     return parser.parse_args(argv)
 
 
 __all__ = [
     "BENCHMARK_PROTOCOL_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
+    "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
+    "SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS",
     "BenchmarkReleaseManifest",
     "build_release_provenance",
     "build_resolved_release_manifest",

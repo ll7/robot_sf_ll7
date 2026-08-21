@@ -42,9 +42,14 @@ uv run python scripts/tools/run_benchmark_release.py \
 4. Run the release:
 
 ```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
+  --stage \
+  --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
-  --label runtime-smoke
+  --label runtime-smoke \
+  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
 For the full benchmark-data release, run the separately reviewed S30/H600

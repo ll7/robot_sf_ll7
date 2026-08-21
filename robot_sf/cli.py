@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_envs, cli_models
+from robot_sf import cli_datasets, cli_envs, cli_models, release_cli
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
 from robot_sf.recipes import cli as recipes_cli
@@ -153,6 +153,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
     recipes_cli.build_subparser(subparsers)
+    release_cli.build_subparser(subparsers)
     return parser
 
 
@@ -609,6 +610,7 @@ _HANDLERS = {
     "envs": _handle_envs,
     "gallery": _handle_gallery,
     "recipe": recipes_cli.handle,
+    "release": release_cli.handle,
 }
 
 

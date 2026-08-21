@@ -11,7 +11,8 @@
 # Usage (from the repo checkout on the cluster, after `uv sync --all-extras` and
 # a passing checkpoint staging preflight):
 #   sbatch SLURM/submit_release_single_node.sbatch \
-#     configs/benchmarks/releases/<release_manifest>.yaml <label> <fixed_campaign_id>
+#     configs/benchmarks/releases/<release_manifest>.yaml <label> <fixed_campaign_id> \
+#     output/release/checkpoints/staging_receipt.json
 #
 # Field-tested: 14-arm x 30-seed x h600 campaign, epyc-gpu partition, LiCCA.
 #SBATCH --job-name=rsf_release_single_node
@@ -26,6 +27,7 @@ set -euo pipefail
 MANIFEST="${1:?release manifest path required}"
 LABEL="${2:?release label required}"
 CAMPAIGN_ID="${3:?fixed campaign id required (enables resume across restarts)}"
+CHECKPOINT_RECEIPT="${4:?staged-checkpoint receipt path required}"
 cd "$SLURM_SUBMIT_DIR"
 # Thread guards: the campaign parallelizes via its own worker pool (config `workers`);
 # per-worker BLAS/OpenMP threading only oversubscribes the node.
@@ -33,4 +35,5 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 exec .venv/bin/python scripts/tools/run_benchmark_release.py \
   --manifest "$MANIFEST" \
   --label "$LABEL" \
-  --campaign-id "$CAMPAIGN_ID"
+  --campaign-id "$CAMPAIGN_ID" \
+  --checkpoint-receipt "$CHECKPOINT_RECEIPT"

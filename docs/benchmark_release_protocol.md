@@ -136,8 +136,13 @@ silently substituted for final benchmark evidence.
 Use:
 
 ```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
+  --stage \
+  --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
 This command is the bounded smoke path. Use the separately reviewed
@@ -147,12 +152,13 @@ historical seven-planner/S3 manifest.
 The release entrypoint:
 
 1. validates the manifest,
-2. runs preflight through the existing camera-ready stack,
-3. runs the canonical campaign,
-4. fails closed if `benchmark_success` is false,
-5. injects benchmark-release provenance into campaign artifacts,
-6. exports a publication bundle only for benchmark-valid runs,
-7. writes archival release metadata under `<campaign_root>/release/`.
+2. rejects a missing, stale, config-mismatched, or non-submit-safe checkpoint receipt,
+3. runs preflight through the existing camera-ready stack,
+4. runs the canonical campaign,
+5. fails closed if `benchmark_success` is false,
+6. injects benchmark-release provenance into campaign artifacts,
+7. exports a publication bundle only for benchmark-valid runs,
+8. writes archival release metadata under `<campaign_root>/release/`.
 
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.

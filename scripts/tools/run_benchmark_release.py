@@ -28,6 +28,11 @@ from robot_sf.benchmark.camera_ready_campaign import (
     run_campaign,
     write_campaign_report,
 )
+from robot_sf.benchmark.checkpoint_staging_receipt import (
+    CheckpointStagingReceiptError,
+    validate_checkpoint_staging_receipt,
+)
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
@@ -181,7 +186,7 @@ def _record_publication_payload(campaign_root: Path, publication_payload: dict[s
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
 
-def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     args = parse_release_args(raw_argv)
@@ -262,6 +267,44 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         print(json.dumps(result, indent=2))
         return 2
 
+    if args.checkpoint_receipt is None:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "checkpoint_receipt_missing",
+                "status_reason": "run mode requires an enforced-staged checkpoint receipt",
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+            }
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    try:
+        checkpoint_receipt = validate_checkpoint_staging_receipt(
+            cfg,
+            args.checkpoint_receipt,
+            campaign_config_path=manifest.canonical_campaign_config_path,
+            max_age_hours=args.checkpoint_receipt_max_age_hours,
+        )
+    except CheckpointStagingReceiptError as exc:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "checkpoint_receipt_rejected",
+                "status_reason": str(exc),
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+            }
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    result["checkpoint_staging_receipt"] = {
+        "path": _repo_relative(args.checkpoint_receipt),
+        "sha256": sha256_file(args.checkpoint_receipt),
+        "generated_at_utc": checkpoint_receipt["generated_at_utc"],
+        "submit_safe": True,
+    }
+
     run_payload = run_campaign(
         cfg,
         output_root=args.output_root,
@@ -290,7 +333,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
 
     release_benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
     result["release_benchmark_success"] = release_benchmark_success
-    if release_benchmark_success:
+    publication_requested = bool(getattr(cfg, "export_publication_bundle", True))
+    result["publication_requested"] = publication_requested
+    if release_benchmark_success and publication_requested:
         publication_payload = _build_publication_payload(
             campaign_root=campaign_root,
             release_tag=manifest.release_tag,
@@ -299,6 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         )
     else:
         result["publication_bundle"] = None
+        result["publication_preflight_status"] = "not_requested" if not publication_requested else None
 
     result["release_status"] = (
         "missing_required_artifacts"
@@ -322,7 +368,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         0 if release_benchmark_success else (2 if missing else int(run_payload.get("exit_code", 2)))
     )
 
-    if release_benchmark_success:
+    if release_benchmark_success and publication_requested:
         try:
             # The first export discovers the deterministic bundle descriptor.  Then write that
             # descriptor and the final release result into the source campaign before exporting

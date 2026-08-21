@@ -65,6 +65,18 @@ def _manifest_fixture() -> SimpleNamespace:
     )
 
 
+def _admit_checkpoint_receipt(monkeypatch, tmp_path: Path) -> Path:
+    """Install a valid receipt stub for runner-focused tests."""
+    receipt = tmp_path / "checkpoint_staging_receipt.json"
+    _write_json(receipt, {"generated_at_utc": "2026-08-21T00:00:00Z"})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: {"generated_at_utc": "2026-08-21T00:00:00Z"},
+    )
+    return receipt
+
+
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
     """Preflight mode should validate the manifest and emit preflight artifact paths."""
     manifest = SimpleNamespace(
@@ -336,8 +348,11 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     monkeypatch.setattr(
         run_benchmark_release, "_run_publication_preflight", _fake_publication_preflight
     )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
 
-    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
 
     assert exit_code == 0
     assert called["orca_preflight"] is True
@@ -439,8 +454,11 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     monkeypatch.setattr(
         run_benchmark_release, "_build_publication_payload", _unexpected_publication
     )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
 
-    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
 
     assert exit_code == 3
     payload = json.loads(capsys.readouterr().out)
@@ -466,6 +484,63 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["exit_code"] == 3
     assert release_result["release_status"] == "accepted_unavailable_only"
     assert release_result["release_exit_code"] == 3
+
+
+def test_runtime_smoke_skips_publication_when_config_disables_export(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A release-protocol runtime smoke must not be forced through publication export."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=False)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "smoke.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "smoke-config.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publication must be skipped")),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["release_benchmark_success"] is True
+    assert payload["publication_requested"] is False
+    assert payload["publication_preflight_status"] == "not_requested"
 
 
 def test_release_preflight_fails_closed_when_orca_rvo2_missing(

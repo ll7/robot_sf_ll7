@@ -17,6 +17,7 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _observation_perturbation_spec,
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
+    _planner_fallback_degraded_status,
     _trace_observation_payload,
     _trace_planner_execution_mode,
     _trace_progress_summary,
@@ -240,6 +241,39 @@ def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
     assert payload["progress_summary"] == {"steps_observed": 1}
 
 
+@pytest.mark.parametrize(
+    ("summary", "expected"),
+    [
+        ({"fallback_or_degraded": False}, False),
+        ({"fallback_degraded_status": "clear"}, False),
+        ({"fallback_count": 1}, True),
+        ({"checkpoint_provenance": {"fallback_triggered": False}}, False),
+        ({"checkpoint_provenance": {"load_status": "fallback"}}, True),
+        (
+            {
+                "fallback_degraded_status": "clear",
+                "foresight_prediction": {"fallback_used": True},
+            },
+            True,
+        ),
+    ],
+)
+def test_planner_fallback_status_uses_structured_verdict(summary, expected) -> None:
+    """Diagnostic key names must not turn a false fallback flag into a failure."""
+    result = _planner_fallback_degraded_status(summary)
+
+    assert result["available"] is True
+    assert result["reported_fallback_or_degraded"] is expected
+
+
+def test_planner_fallback_status_is_unavailable_without_explicit_verdict() -> None:
+    """Missing planner diagnostics remain blocked instead of being treated as clear."""
+    result = _planner_fallback_degraded_status(None)
+
+    assert result["available"] is False
+    assert result["reported_fallback_or_degraded"] is None
+
+
 class _DummySimulator:
     def __init__(self) -> None:
         self.robot_pos = [[0.0, 0.0]]
@@ -356,13 +390,65 @@ def test_policy_obs_uses_observed_pedestrian_payload() -> None:
 
     policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
 
-    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
-    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians_count"].tolist() == [1.0]
     assert original["pedestrians"]["positions"] == [[1.0, 0.0], [5.0, 0.0]]
+
+
+def test_policy_obs_pads_variable_observation_to_fixed_actor_capacity() -> None:
+    """Perception-limited actor counts must preserve fixed learned-policy shapes."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((4, 2), dtype=np.float32),
+            "velocities": np.zeros((4, 2), dtype=np.float32),
+            "count": np.asarray([4.0], dtype=np.float32),
+        },
+        "pedestrians_positions": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_velocities": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_count": np.asarray([4.0], dtype=np.float32),
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[9.0, 9.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    assert policy_obs["pedestrians"]["positions"].shape == (4, 2)
+    assert policy_obs["pedestrians"]["positions"].tolist() == [
+        [9.0, 9.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
+    assert policy_obs["pedestrians_positions"].shape == (4, 2)
+
+
+def test_policy_obs_rejects_observation_overflow() -> None:
+    """Observed actors beyond the learned-policy capacity must fail closed."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((1, 2), dtype=np.float32),
+            "velocities": np.zeros((1, 2), dtype=np.float32),
+        }
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[1.0, 0.0], [2.0, 0.0]],
+            "velocities": [[0.0, 0.0], [0.0, 0.0]],
+        }
+    }
+
+    with pytest.raises(ValueError, match="exceeds policy capacity"):
+        _apply_observed_pedestrians_to_policy_obs(original, perturbation)
 
 
 def test_trace_observation_payload_separates_ground_truth_and_observed() -> None:

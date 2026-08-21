@@ -1,0 +1,488 @@
+version: 1
+commands:
+  __init__:
+    path: scripts/__init__.py
+    domain: import-support
+    status: canonical
+    purpose: Import support making `scripts.*` importable for tests and type-checking.
+    invocation: (no CLI; imported as scripts.*)
+    required_extras: []
+  advise-provider-routing:
+    path: scripts/advise-provider-routing.py
+    domain: agent-workflow
+    status: canonical
+    purpose: Forward provider advice to the canonical shared advisor without local route tables.
+    invocation: uv run python scripts/advise-provider-routing.py
+    required_extras: []
+  analyze_feature_extractors:
+    path: scripts/analyze_feature_extractors.py
+    domain: analysis
+    status: compatibility
+    purpose: Statistical analysis for feature extractor comparison.
+    replacement: scripts/research/generate_extractor_report.py
+    invocation: uv run python scripts/analyze_feature_extractors.py
+    required_extras: []
+  audit_exemplar_bundles:
+    path: scripts/audit_exemplar_bundles.py
+    domain: evidence-export
+    status: canonical
+    purpose: 'Audit exemplar-bundle checksums and provenance (issues #4920/#5005).'
+    invocation: uv run python scripts/audit_exemplar_bundles.py
+    required_extras: []
+  benchmark02:
+    path: scripts/benchmark02.py
+    domain: benchmark
+    status: compatibility
+    purpose: Retired root performance benchmark.
+    replacement: scripts/validation/performance_smoke_test.py
+    invocation: uv run python scripts/benchmark02.py
+    smoke_mode: expected_fail_closed
+    required_extras: []
+  benchmark_ped_apf_models:
+    path: scripts/benchmark_ped_apf_models.py
+    domain: debugging
+    status: debug-only
+    purpose: Narrow APF model comparison helper.
+    invocation: uv run python scripts/benchmark_ped_apf_models.py
+    required_extras: []
+  benchmark_ped_policy_collisions:
+    path: scripts/benchmark_ped_policy_collisions.py
+    domain: debugging
+    status: debug-only
+    purpose: Narrow pedestrian-policy collision analysis helper.
+    invocation: uv run python scripts/benchmark_ped_policy_collisions.py
+    required_extras: []
+  benchmark_planner:
+    path: scripts/benchmark_planner.py
+    domain: debugging
+    status: debug-only
+    purpose: Local planner timing probe.
+    invocation: uv run python scripts/benchmark_planner.py
+    required_extras: []
+  benchmark_repro_check:
+    path: scripts/benchmark_repro_check.py
+    domain: benchmark
+    status: compatibility
+    purpose: Create a minimal reproducibility-test scenario.
+    replacement_rationale: Prefer benchmark release/validation tools under scripts/tools/.
+    invocation: uv run python scripts/benchmark_repro_check.py
+    required_extras: []
+  benchmark_threshold_sensitivity:
+    path: scripts/benchmark_threshold_sensitivity.py
+    domain: analysis
+    status: canonical
+    purpose: Threshold sensitivity analysis for replay-rich benchmark rows.
+    invocation: uv run python scripts/benchmark_threshold_sensitivity.py --in <episodes.jsonl> --out <report.json>
+    required_extras: []
+  benchmark_workers:
+    path: scripts/benchmark_workers.py
+    domain: benchmark
+    status: canonical
+    purpose: Maintained worker-throughput benchmark helper.
+    invocation: uv run python scripts/benchmark_workers.py --out output/benchmarks/bench_workers
+    required_extras: []
+  classic_benchmark_full:
+    path: scripts/classic_benchmark_full.py
+    domain: benchmark
+    status: canonical
+    purpose: Full Classic Interaction Benchmark CLI.
+    invocation: uv run python scripts/classic_benchmark_full.py
+    required_extras: []
+  collect_slow_tests:
+    path: scripts/collect_slow_tests.py
+    domain: test-tooling
+    status: canonical
+    purpose: Parse `pytest --durations=N` output into structured JSON.
+    invocation: pytest --durations=20 | uv run python scripts/collect_slow_tests.py > slow_tests.json
+    required_extras: []
+  compare_slow_tests:
+    path: scripts/compare_slow_tests.py
+    domain: test-tooling
+    status: canonical
+    purpose: Compare before/after slow-test JSON captures.
+    invocation: uv run python scripts/compare_slow_tests.py --before <pre.json> --after <post.json>
+    required_extras: []
+  convert_pickle_to_jsonl:
+    path: scripts/convert_pickle_to_jsonl.py
+    domain: recording
+    status: compatibility
+    purpose: Convert legacy multi-episode pickle files to per-episode JSONL.
+    replacement_rationale: Retained until legacy pickle artifacts retire.
+    invocation: uv run python scripts/convert_pickle_to_jsonl.py
+    required_extras: []
+  debug_ped_apf:
+    path: scripts/debug_ped_apf.py
+    domain: debugging
+    status: debug-only
+    purpose: Interactive APF debugging.
+    invocation: uv run python scripts/debug_ped_apf.py
+    required_extras: []
+  debug_ped_discrete:
+    path: scripts/debug_ped_discrete.py
+    domain: debugging
+    status: debug-only
+    purpose: Pedestrian discrete-action debugging.
+    invocation: uv run python scripts/debug_ped_discrete.py
+    required_extras: []
+  debug_ped_forces:
+    path: scripts/debug_ped_forces.py
+    domain: debugging
+    status: debug-only
+    purpose: Pedestrian force debugging.
+    invocation: uv run python scripts/debug_ped_forces.py
+    required_extras: []
+  debug_ped_policy:
+    path: scripts/debug_ped_policy.py
+    domain: debugging
+    status: debug-only
+    purpose: Pedestrian policy debugging.
+    invocation: uv run python scripts/debug_ped_policy.py
+    required_extras: []
+  debug_ped_policy_differential_drive:
+    path: scripts/debug_ped_policy_differential_drive.py
+    domain: debugging
+    status: debug-only
+    purpose: Differential-drive pedestrian policy debugging.
+    invocation: uv run python scripts/debug_ped_policy_differential_drive.py
+    required_extras: []
+  debug_random_policy:
+    path: scripts/debug_random_policy.py
+    domain: debugging
+    status: debug-only
+    purpose: Manual/random-policy visual debug helper.
+    invocation: uv run python scripts/debug_random_policy.py
+    required_extras: []
+  debug_trained_policy:
+    path: scripts/debug_trained_policy.py
+    domain: debugging
+    status: archive-candidate
+    purpose: Old trained-policy debug helper; prefer examples and factory-based smoke tests.
+    invocation: uv run python scripts/debug_trained_policy.py
+    required_extras: []
+  demo_jsonl_recording:
+    path: scripts/demo_jsonl_recording.py
+    domain: recording
+    status: compatibility
+    purpose: JSONL recording and playback demonstration.
+    replacement_rationale: Prefer examples and render docs for new documentation.
+    invocation: uv run python scripts/demo_jsonl_recording.py
+    required_extras: []
+  evaluate:
+    path: scripts/evaluate.py
+    domain: benchmark
+    status: compatibility
+    purpose: Legacy policy evaluation helper.
+    replacement_rationale: Prefer config-driven benchmark runner tools.
+    invocation: uv run python scripts/evaluate.py
+    required_extras: []
+  example_snqi_workflow:
+    path: scripts/example_snqi_workflow.py
+    domain: snqi
+    status: canonical
+    purpose: Complete SNQI workflow example with generated data.
+    invocation: uv run python scripts/example_snqi_workflow.py
+    required_extras: []
+  export_issue_4268_trace_episode:
+    path: scripts/export_issue_4268_trace_episode.py
+    domain: evidence-export
+    status: canonical
+    purpose: 'Export the issue #4268 single-episode doorway trace bundle via the map-runner trace path.'
+    invocation: uv run python scripts/export_issue_4268_trace_episode.py
+    required_extras: []
+  export_issue_4848_group_crossing_exemplars:
+    path: scripts/export_issue_4848_group_crossing_exemplars.py
+    domain: evidence-export
+    status: canonical
+    purpose: 'Export issue #4848 group-crossing exemplar trace bundles.'
+    invocation: uv run python scripts/export_issue_4848_group_crossing_exemplars.py
+    required_extras: []
+  export_issue_4891_head_on_corridor_exemplars:
+    path: scripts/export_issue_4891_head_on_corridor_exemplars.py
+    domain: evidence-export
+    status: canonical
+    purpose: 'Export issue #4891 head-on-corridor exemplar trace bundles.'
+    invocation: uv run python scripts/export_issue_4891_head_on_corridor_exemplars.py
+    required_extras: []
+  failure_extractor:
+    path: scripts/failure_extractor.py
+    domain: analysis
+    status: canonical
+    purpose: Extract worst episodes by chosen metric from episodes JSONL.
+    invocation: uv run python scripts/failure_extractor.py
+    required_extras: []
+  generate_figures:
+    path: scripts/generate_figures.py
+    domain: analysis
+    status: canonical
+    purpose: Benchmark figure generation from episode JSONL.
+    invocation: uv run python scripts/generate_figures.py
+    required_extras: []
+  generate_video_contact_sheet:
+    path: scripts/generate_video_contact_sheet.py
+    domain: analysis
+    status: canonical
+    purpose: Episode-frame thumbnail contact-sheet generation.
+    invocation: uv run python scripts/generate_video_contact_sheet.py <episodes.jsonl> <out.png>
+    required_extras: []
+  hparam_opt:
+    path: scripts/hparam_opt.py
+    domain: training
+    status: compatibility
+    purpose: Retired root Optuna entrypoint.
+    replacement: scripts/training/launch_optuna_expert_ppo.py
+    invocation: uv run python scripts/hparam_opt.py
+    smoke_mode: expected_fail_closed
+    required_extras: []
+  multi_extractor_training:
+    path: scripts/multi_extractor_training.py
+    domain: training
+    status: compatibility
+    purpose: Orchestrate PPO runs across configured feature extractors.
+    replacement: scripts/research/generate_extractor_report.py
+    invocation: uv run python scripts/multi_extractor_training.py
+    required_extras: []
+  play_recordings:
+    path: scripts/play_recordings.py
+    domain: recording
+    status: compatibility
+    purpose: Playback recorded episodes.
+    replacement_rationale: Prefer robot_sf.render playback modules for new playback workflows.
+    invocation: uv run python scripts/play_recordings.py
+    required_extras: []
+  ranking_table:
+    path: scripts/ranking_table.py
+    domain: analysis
+    status: canonical
+    purpose: Ranking-table generation from benchmark episode JSONL.
+    invocation: uv run python scripts/ranking_table.py
+    required_extras: []
+  read-active-ledger:
+    path: scripts/read-active-ledger.py
+    domain: agent-workflow
+    status: canonical
+    purpose: Read a compact snapshot of active common-Git-dir autopilot ledgers.
+    invocation: uv run python scripts/read-active-ledger.py
+    required_extras: []
+  recompute_snqi_weights:
+    path: scripts/recompute_snqi_weights.py
+    domain: snqi
+    status: canonical
+    purpose: Recompute SNQI weights using different strategies.
+    invocation: uv run python scripts/recompute_snqi_weights.py --episodes <e.jsonl> --baseline <stats.json>
+      --output <w.json>
+    required_extras: []
+  render_multi_planner_trajectory_overlay:
+    path: scripts/render_multi_planner_trajectory_overlay.py
+    domain: analysis
+    status: canonical
+    purpose: Overlay multi-planner trajectories into one provenance-stamped figure.
+    invocation: uv run python scripts/render_multi_planner_trajectory_overlay.py
+    required_extras: []
+  replay_episode_figure:
+    path: scripts/replay_episode_figure.py
+    domain: analysis
+    status: canonical
+    purpose: Generate replay-derived figure artifacts from campaign episode rows.
+    invocation: uv run python scripts/replay_episode_figure.py
+    required_extras: []
+  resolve-route:
+    path: scripts/resolve-route.py
+    domain: agent-workflow
+    status: canonical
+    purpose: Forward route resolution to the canonical shared resolver without copying its policy.
+    invocation: uv run python scripts/resolve-route.py
+    required_extras: []
+  review-agent-run:
+    path: scripts/review-agent-run.sh
+    domain: agent-workflow
+    status: canonical
+    purpose: Private review wrapper for delegated agent-run artifacts.
+    invocation: bash scripts/review-agent-run.sh
+    required_extras: []
+  run_classic_interactions:
+    path: scripts/run_classic_interactions.py
+    domain: benchmark
+    status: canonical
+    purpose: Classic interaction scenario matrix runner.
+    invocation: uv run python scripts/run_classic_interactions.py
+    required_extras: []
+  run_social_navigation_benchmark:
+    path: scripts/run_social_navigation_benchmark.py
+    domain: benchmark
+    status: compatibility
+    purpose: Older all-in-one social navigation benchmark runner.
+    replacement_rationale: Prefer config-driven tools like classic_benchmark_full.py.
+    invocation: uv run python scripts/run_social_navigation_benchmark.py
+    required_extras: []
+  save-codex-token-checkpoint:
+    path: scripts/save-codex-token-checkpoint.py
+    domain: agent-workflow
+    status: canonical
+    purpose: Build a compact token-saving checkpoint without duplicating route policy.
+    invocation: uv run python scripts/save-codex-token-checkpoint.py
+    required_extras: []
+  scale_svgs_to_50m:
+    path: scripts/scale_svgs_to_50m.py
+    domain: tooling
+    status: debug-only
+    purpose: One-off SVG coordinate scaling utility.
+    invocation: uv run python scripts/scale_svgs_to_50m.py
+    required_extras: []
+  seed_variance:
+    path: scripts/seed_variance.py
+    domain: snqi
+    status: canonical
+    purpose: SNQI seed-variance analysis across benchmark episodes.
+    invocation: uv run python scripts/seed_variance.py
+    required_extras: []
+  select_exemplar_episodes:
+    path: scripts/select_exemplar_episodes.py
+    domain: evidence-export
+    status: canonical
+    purpose: Select median/best/worst exemplar episodes from campaign JSONL into a manifest.
+    invocation: uv run python scripts/select_exemplar_episodes.py
+    required_extras: []
+  snqi_sensitivity_analysis:
+    path: scripts/snqi_sensitivity_analysis.py
+    domain: snqi
+    status: canonical
+    purpose: Full SNQI sensitivity analysis with visualizations.
+    invocation: uv run python scripts/snqi_sensitivity_analysis.py --episodes <e.jsonl> --baseline <stats.json>
+      --weights <w.json> --output <dir>
+    required_extras: []
+  snqi_weight_optimization:
+    path: scripts/snqi_weight_optimization.py
+    domain: snqi
+    status: canonical
+    purpose: Advanced SNQI weight optimization with differential evolution.
+    invocation: uv run python scripts/snqi_weight_optimization.py --episodes <e.jsonl> --baseline <stats.json>
+      --output <w.json>
+    required_extras: []
+  summarize-agent-runs:
+    path: scripts/summarize-agent-runs.py
+    domain: agent-workflow
+    status: canonical
+    purpose: Summarize compact delegated-agent artifacts from the common Git directory.
+    invocation: uv run python scripts/summarize-agent-runs.py
+    required_extras: []
+  test_planner_collision:
+    path: scripts/test_planner_collision.py
+    domain: debugging
+    status: debug-only
+    purpose: Planner collision debug probe; not a pytest module.
+    invocation: uv run python scripts/test_planner_collision.py
+    required_extras: []
+  training_a2c:
+    path: scripts/training_a2c.py
+    domain: training
+    status: compatibility
+    purpose: Retired A2C root entrypoint.
+    replacement: scripts/training/train_ppo.py
+    replacement_rationale: No maintained A2C launcher exists; add one under scripts/training/ if needed.
+    invocation: uv run python scripts/training_a2c.py
+    smoke_mode: expected_fail_closed
+    required_extras: []
+  training_ped_ppo:
+    path: scripts/training_ped_ppo.py
+    domain: training
+    status: compatibility
+    purpose: PPO training for pedestrian environments.
+    replacement_rationale: Retained for tests; prefer config-first training under scripts/training/.
+    invocation: uv run python scripts/training_ped_ppo.py
+    required_extras: []
+  training_ped_ppo_differential_drive:
+    path: scripts/training_ped_ppo_differential_drive.py
+    domain: training
+    status: compatibility
+    purpose: Pedestrian PPO variant for differential-drive robots.
+    replacement_rationale: Retained for tests; prefer config-first training under scripts/training/.
+    invocation: uv run python scripts/training_ped_ppo_differential_drive.py
+    required_extras: []
+  training_ppo:
+    path: scripts/training_ppo.py
+    domain: training
+    status: compatibility
+    purpose: Retired root PPO entrypoint.
+    replacement: scripts/training/train_ppo.py
+    invocation: uv run python scripts/training_ppo.py
+    smoke_mode: expected_fail_closed
+    required_extras: []
+  update_deps:
+    path: scripts/update_deps.sh
+    domain: tooling
+    status: canonical
+    purpose: Refresh Python dependencies with uv sync.
+    invocation: bash scripts/update_deps.sh
+    required_extras: []
+  update_svg_viewbox:
+    path: scripts/update_svg_viewbox.py
+    domain: tooling
+    status: debug-only
+    purpose: One-off SVG viewBox utility.
+    invocation: uv run python scripts/update_svg_viewbox.py
+    required_extras: []
+  validate_snqi_scripts:
+    path: scripts/validate_snqi_scripts.py
+    domain: snqi
+    status: canonical
+    purpose: SNQI script smoke validator.
+    invocation: uv run python scripts/validate_snqi_scripts.py
+    required_extras: []
+  wandb_ppo_training:
+    path: scripts/wandb_ppo_training.py
+    domain: training
+    status: compatibility
+    purpose: Retired root W&B PPO entrypoint.
+    replacement: scripts/training/train_ppo.py
+    invocation: uv run python scripts/wandb_ppo_training.py
+    smoke_mode: expected_fail_closed
+    required_extras: []
+directories:
+  adversarial:
+    description: Adversarial scenario tools
+  analysis:
+    description: Trace analyzers and crossing-failure packs
+  benchmark:
+    description: Benchmark reporting and campaign helpers
+    notes: The retired root profiling benchmark remains a fail-closed module command (`uv run python -m
+      scripts.benchmark`); prefer `validation/performance_smoke_test.py`.
+  carla_bridge:
+    description: CARLA bridge diagnostics
+  ci:
+    description: CI helper scripts
+  coverage:
+    description: Coverage reporting tools
+  data:
+    description: Data files
+  demo:
+    description: Demo and smoke scripts
+  dev:
+    description: Development helpers and automation
+    readme: scripts/dev/README.md
+  diagnostics:
+    description: Diagnostic tools
+  manual_control:
+    description: Manual control interface
+  models:
+    description: Model-related helpers
+  PPO_training:
+    description: Legacy PPO training variants
+  perf:
+    description: Performance baselines
+  quality:
+    description: Quality tooling
+  repro:
+    description: Reproducibility helpers
+  research:
+    description: Research report and ablation tools
+  reporting:
+    description: Report generation
+  telemetry:
+    description: Telemetry wrappers for performance tests
+  tools:
+    description: 'Utilities: tracker CLI, comparisons, artifact guards'
+  training:
+    description: Config-first training workflows
+  validation:
+    description: Validation suites and shell checks
+exclusions: []

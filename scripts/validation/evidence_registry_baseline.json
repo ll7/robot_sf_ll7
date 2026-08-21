@@ -1,8 +1,8 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2298,
-    "sha256": "5d85090b17c155879320277c7c797381cffcbddf65b026cfa1df90fcdf85e63b"
+    "count": 2313,
+    "sha256": "94919c9d07edeaa50da43146f7a2d0fcbded08e4aa4eb2e8d02d47733f40b9f0"
   },
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
@@ -350,30 +350,41 @@
     "docs/context/evidence/issue_6412_real_reexport_package/package_report.json": {
       "hash_without_artifact_path": 2
     },
+    "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json": {
+      "artifact_hash_mismatch": 3,
+      "hash_without_artifact_path": 4
+    },
+    "docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json": {
+      "artifact_hash_mismatch": 3,
+      "hash_without_artifact_path": 4
+    },
     "docs/context/evidence/issue_7322_ch7_evidence_package_v2/manifest.json": {
       "hash_without_artifact_path": 1
     },
     "docs/context/evidence/issue_7322_ch7_evidence_package_v2/review/source_verification.json": {
       "hash_without_artifact_path": 1
+    },
+    "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json": {
+      "artifact_hash_mismatch": 1
     }
   },
-  "generated_at": "2026-08-21T03:28:58Z",
+  "generated_at": "2026-08-21T15:24:43Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 15,
+      "artifact_hash_mismatch": 22,
       "config_missing_at_commit": 6,
       "dangling_commit": 20,
       "duplicate_campaign_id": 7,
-      "hash_without_artifact_path": 93,
+      "hash_without_artifact_path": 101,
       "invalid_sha256": 1,
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 93,
-    "total_findings": 421
+    "files_with_findings": 96,
+    "total_findings": 436
   }
 }

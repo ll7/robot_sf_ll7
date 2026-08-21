@@ -488,10 +488,17 @@ def _diff_vs_head(
 def changed_files(
     repo_root: Path, base_ref: str, changed_files_path: Path | None = None
 ) -> list[str]:
-    """Return authoritative changed paths, falling back to an exact git diff."""
+    """Return exact changed paths, falling back to the API list when needed.
+
+    The GitHub files API can retain a pull request's original base while the
+    workflow has already fetched the current base branch. Prefer the exact
+    local comparison whenever that base is available so unrelated dependency
+    updates from the stale API base do not enter this policy lane. The API list
+    remains the fallback for shallow or otherwise incomplete checkouts.
+    """
     if changed_files_path is not None:
         try:
-            return [
+            reported = [
                 line.strip()
                 for line in changed_files_path.read_text(encoding="utf-8").splitlines()
                 if line.strip()
@@ -500,6 +507,10 @@ def changed_files(
             raise PolicyError(
                 f"unable to read authoritative changed-files list {changed_files_path}: {exc}"
             ) from exc
+        exact_output = _diff_vs_head(repo_root, base_ref, ["--name-only"])
+        if exact_output is not None:
+            return [line.strip() for line in exact_output.splitlines() if line.strip()]
+        return reported
     output = _diff_vs_head(repo_root, base_ref, ["--name-only"])
     if output is None:
         raise PolicyError(f"unable to compare HEAD with base ref {base_ref!r}")

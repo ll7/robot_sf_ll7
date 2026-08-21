@@ -45,6 +45,9 @@ def _result(arm: str, repeat: int, offset: float) -> dict:
         "arm": arm,
         "repeat": repeat,
         "dataset_sha256": "fixture-sha256",
+        "split_sha256": "split-sha256",
+        "train_order_sha256": ["order-1", "order-2", "order-3"],
+        "environment_fingerprint": "environment-sha256",
         "history": _history(offset),
         "throughput": {"examples_per_sec": 256.0, "steps_per_sec": 4.0},
         "peak_cuda_memory_allocated_bytes": 123,
@@ -84,14 +87,27 @@ def test_arm_summary_contract_rejects_effective_flag_drift(tmp_path: Path) -> No
         "batch_size": training["batch_size"],
         "learning_rate": str(training["lr"]),
         "weight_decay": str(training["weight_decay"]),
+        "val_split": str(training["val_split"]),
         "seed": training["seed"],
+        "split_sha256": "split-sha256",
+        "history": [{"train_order_sha256": "order-1"}],
         "config": {
             "max_agents": fixture["max_agents"],
             "horizon_steps": fixture["horizon_steps"],
             "input_dim": fixture["input_dim"],
             "hidden_dim": training["hidden_dim"],
             "message_passing_steps": training["message_passing_steps"],
+            "distance_temperature": 2.0,
+            "feature_schema_name": smoke.infer_predictive_feature_schema(fixture["input_dim"])[
+                "name"
+            ],
         },
+        "optimizer": {
+            "class": "torch.optim.AdamW",
+            "learning_rate": training["lr"],
+            "weight_decay": training["weight_decay"],
+        },
+        "objective": {"name": "masked_trajectory_loss"},
     }
 
     smoke._validate_arm_summary(
@@ -161,6 +177,23 @@ def test_compare_rejects_mismatched_update_counts() -> None:
     results[-1]["history"][1]["train_steps"] = 3.0
 
     with pytest.raises(ValueError, match="identical data identities and update counts"):
+        smoke._compare(results=results, config=config)
+
+
+def test_compare_rejects_mismatched_training_order() -> None:
+    """Different materialized sampler orders must not be interpreted as equivalence."""
+    config = _config()
+    results = [
+        _result("fp32_control", 1, 0.0),
+        _result("fp32_control", 2, 0.0001),
+        _result("fp32_loader", 1, 0.0006),
+        _result("fp32_loader", 2, 0.0006),
+        _result("amp_loader", 1, 0.0008),
+        _result("amp_loader", 2, 0.0008),
+    ]
+    results[-1]["train_order_sha256"] = ["different-order"] * 3
+
+    with pytest.raises(ValueError, match="identical training sampler orders"):
         smoke._compare(results=results, config=config)
 
 

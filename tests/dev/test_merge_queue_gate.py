@@ -56,6 +56,45 @@ def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadat
     assert [check["name"] for check in checks] == ["pr-contract-check", "CI"]
 
 
+def test_receipt_check_projection_drops_superseded_duplicate_runs() -> None:
+    """Receipt evidence must use the newest run for a repeated Actions job."""
+    checks = _to_receipt_check_runs(
+        [
+            None,
+            "malformed rollup entry",
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "startedAt": "2026-08-21T13:46:14Z",
+                "status": "COMPLETED",
+                "conclusion": "CANCELLED",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "pr-body-contracts",
+                "workflowName": "PR body contracts",
+                "startedAt": "2026-08-21T13:46:30Z",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "CI",
+                "workflowName": "CI",
+                "startedAt": "2026-08-21T13:46:12Z",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+
+    assert [check["name"] for check in checks] == ["pr-body-contracts", "CI"]
+    assert checks[0]["conclusion"] == "success"
+
+
 def _exact_changed_coverage_response(
     *, head_sha: str = FULL_SHA, status: str = "completed", conclusion: str | None = "success"
 ) -> MagicMock:

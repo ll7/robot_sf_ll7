@@ -847,8 +847,10 @@ def _to_receipt_check_runs(
     """
     if not isinstance(items, list):
         return []
+    mapping_items = [item for item in items if isinstance(item, dict)]
+    effective_items, _superseded_count = _latest_check_runs(mapping_items)
     checks: list[dict[str, Any]] = []
-    for item in items:
+    for item in effective_items:
         if not isinstance(item, dict):
             continue
         app = item.get("app") if isinstance(item.get("app"), dict) else {}

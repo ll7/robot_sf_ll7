@@ -798,6 +798,15 @@ reconciliation does not rerun source CI, but it invalidates prior final-state re
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
 
+If the final verification read observes a concurrent external write, the helper returns
+`status: conflict` with the previous, desired, and observed metadata digests plus any available
+head SHAs. It also returns the stable `next_action`
+`refresh_live_metadata_and_exact_head_review`, `policy_state: pending_pr_metadata`, and
+`policy_action: refresh_snapshot`. Treat `prior_review_reuse: forbidden` as binding: refresh the
+live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
+retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
+successful reconciliation.
+
 ### Exact-head stability snapshot (issue #7523)
 
 Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof
@@ -925,6 +934,11 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+When current Actions checks remain `queued` beyond the monitor's five-minute default threshold,
+the payload instead records `checks.pending_reason: "runner_queue_starvation"`, the oldest queued
+age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
+that diagnostic threshold for a known environment. This is an external queue blocker only:
+`checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job
@@ -1111,6 +1125,36 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
   never fabricates PR entries.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
+
+### Integration admission report (issue #7647)
+
+`scripts/dev/integration_admission_report.py` classifies one PR and a bounded queue snapshot as
+report-only routing evidence. It consumes an existing `pr_queue_snapshot.v2` JSON payload, reuses
+the PR loop policy and trusted metadata/claim readers, and never calls GitHub or authorizes an
+external action. Missing baseline data is `unavailable`; malformed input is `invalid`; blocker and
+invalidation codes remain explicit. Use a fixed `--as-of` instant when age/freshness is required:
+
+```bash
+uv run python scripts/dev/integration_admission_report.py \
+  --snapshot output/pr_queue_snapshot.json --pr 2677 --max-queue-items 20 \
+  --as-of 2026-08-20T12:00:00Z --json
+```
+
+The versioned output contract is [`integration_admission_report.v1.schema.json`](contracts/integration_admission_report.v1.schema.json).
+The report uses the frozen policy dimensions `docs | test_only | tooling | runtime | benchmark |
+evidence | release`, `isolated | component_shared | repository_control_plane`, `low | standard |
+optional_matrix | full`, `ordinary | independent_exact_head | domain | author`, `none | network |
+artifact | compute | release`, and `ordinary | current_base_required`. Unknown and unavailable
+inputs remain explicit. Queue output includes state counts plus separate CI, review, and external
+lane demand; it is an estimate, not a dispatch command.
+
+The #7520 pilot is report-only for 14 days and at least 20 terminal PR dispositions, extending to
+28 days if the sample is smaller. Retain the policy only if useful terminal throughput is not
+materially reduced and CI spent on superseded/unadmitted heads, invalidated exact-head reviews,
+duplicate or competing PRs, stale prepared candidates, post-merge repairs, and maintainer/domain
+decision latency do not worsen. Record a `retain`, `revise`, or `roll_back` disposition with those
+measures; raw open-PR count is diagnostic only. This report remains implementation/workflow
+evidence, not merge authority or scientific evidence.
 
 ```bash
 uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \

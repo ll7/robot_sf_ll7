@@ -1,0 +1,15 @@
+{
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Luttkus, Lennart"
+    },
+    {
+      "name": "Tröster, Marco"
+    }
+  ],
+  "description": "Social navigation simulation and benchmark tooling with a paper-facing, pre-1.0 benchmark release protocol.",
+  "license": "GPL-3.0-only",
+  "title": "robot_sf_ll7",
+  "upload_type": "software"
+}

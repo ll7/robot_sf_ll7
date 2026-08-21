@@ -373,6 +373,9 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # Algorithm metadata facade tests are deterministic contract coverage for
+    # the changed benchmark producer; keep them in the exact-head fast lane.
+    "test_algorithm_metadata.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

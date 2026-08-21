@@ -397,6 +397,19 @@ _FAST_FILES = {
     # The legacy checkpoint cutover preparation contract is read-only and
     # digest-bound; keep its focused provenance tests in fast pull-request shards.
     "test_issue_6794_cutover_preparation.py",
+    # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
+    # keep coverage for the changed producer in pull-request fast shards.
+    "test_mechanism_boundary_atlas.py",
+    # The anisotropic human-cost adapter is covered by deterministic planner
+    # contract tests; keep that focused file in the fast lane for exact-head
+    # changed-coverage admission.
+    "test_predictive_human_cost.py",
+    # Forecast-preparation packet tests are deterministic schema/provenance
+    # contracts; keep their changed producer covered by the fast lane.
+    "test_forecast_preparation.py",
+    # Figure-interpretation replay tests are provider-free deterministic contracts;
+    # keep their exact-head mutation and provenance coverage in fast shards.
+    "test_agent_figure_interpretation_eval.py",
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",

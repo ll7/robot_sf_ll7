@@ -150,13 +150,13 @@ as evidence that the current producer has executed a campaign:
 [evidence/issue_3275_same_planner_held_out/step3_decision_packet.json](evidence/issue_3275_same_planner_held_out/step3_decision_packet.json).
 
 Issue #7066 outcome producer readiness: a resumable, fail-closed bridge from
-explicit native `social_force` execution envelopes to
-`adversarial_independent_outcomes.v2` rows. Adapter, fallback, degraded, mixed,
-and unavailable rows are rejected before admission; the producer preserves the
-historical planner/reference commit separately from its producing commit and
-requires replay, confirmation, configuration, scenario, and episode-record
-lineage. This is a producer and validation path, not a campaign submission or
-empirical result:
+explicit canonical `SocialForcePlannerAdapter` execution envelopes to
+`adversarial_independent_outcomes.v2` rows. Native, fallback, degraded, mixed,
+and unavailable or identity-mismatched rows are rejected before admission; the
+producer preserves the historical planner/reference commit separately from its
+producing commit and requires replay, confirmation, configuration, scenario,
+adapter-identity, timeout, and episode-record lineage. This is a producer and
+validation path, not a campaign submission or empirical result:
 [evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md](evidence/issue_3275_same_planner_held_out/issue_7066_outcome_producer_readiness.md).
 
 

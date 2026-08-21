@@ -8,16 +8,18 @@ historical producer-blocker wording in `step3_decision_packet.json`; that JSON
 still preserves the pre-#7066 decision and must not be treated as a current
 campaign result.
 
-## Native execution gate
+## Canonical adapter execution gate
 
-The frozen #6105 contract admits only explicit native `social_force`
-execution. The producer does not create a native runtime or relabel an adapter
-record as native: `execution_mode` must be `native`, `adapter_active` must not
-be true, and the shared v2 evaluator must accept the resulting row. Adapter,
-fallback, degraded, mixed, unavailable, and identity-mismatched records fail
-closed before admission. The current standard Social Force benchmark metadata
-uses the adapter path, so a normal adapter record is expected to be rejected
-until a separately reviewed native runtime path is available.
+The frozen #6105 contract admits the exact canonical
+`SocialForcePlannerAdapter` identity for `social_force`. The producer does not
+create a runtime or relabel a record: `execution_mode` must be `adapter`,
+`policy_semantics` must be `social_force_adapter`, `adapter_active` must be
+true, and the upstream command space, benchmark command space, and projection
+policy must match the frozen identity exactly. Native, fallback, degraded,
+mixed, unavailable, and identity-mismatched records fail closed before
+admission. Status, availability, readiness, preflight, and evidence-eligibility
+metadata are also checked when present, so an unavailable or degraded adapter
+cannot become evidence by labeling alone.
 
 The historical planner/reference commit remains the `execution_commit` in each
 row. The merged code that produces the packet is recorded separately as
@@ -45,17 +47,22 @@ uv run python scripts/adversarial/materialize_issue_6105_outcomes.py \
 ```
 
 The bridge is resumable and idempotent. It fails closed on missing or
-duplicate selected candidates, seeds, replay signatures, native execution
+duplicate selected candidates, seeds, replay signatures, canonical adapter
 metadata, configuration lineage, episode provenance, or confirmation rows. It
 validates the emitted packet with the shared v2 admission contract before
 writing it atomically.
+
+Timeout labels are not sufficient by themselves: a timeout termination reason
+must agree with the explicit canonical `timeout_event` flag. Missing or
+contradictory timeout evidence is rejected.
 
 ## Evidence boundary
 
 This change establishes a reproducible producer and a fail-closed input
 contract. It does not submit compute, run the 144 planned executions, create
 an outcome packet from fabricated data, or establish a continue/stop result.
-Only a separately authorized native-environment execution that emits the
-required explicit envelopes can produce empirical rows. Until that happens,
-the decision remains diagnostic and inconclusive; fallback, degraded, mixed,
-or unavailable execution is not admissible evidence.
+Only a separately authorized execution that emits the required explicit
+envelopes under the exact canonical adapter identity can produce empirical
+rows. Until that happens, the decision remains diagnostic and inconclusive;
+fallback, degraded, mixed, native-alias, or unavailable execution is not
+admissible evidence.

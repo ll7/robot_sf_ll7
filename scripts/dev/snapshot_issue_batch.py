@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -35,6 +36,8 @@ BLOCKED_EXTERNAL_INPUT_LABEL = "state:blocked-external-input"
 EXTERNAL_RESOURCE_LABEL = "resource:external-data"
 COMPUTE_ROUTING_LABEL = "routing:needs-compute"
 BLOCKED_LABEL_PREFIX = "blocked:"
+BLOCKER_DECISION_STATUSES = frozenset({"blocked_unchanged", "blocker_changed", "re_evaluate"})
+BLOCKER_DECISION_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 EXTERNAL_BLOCKER_LABELS = {
     BLOCKED_EXTERNAL_INPUT_LABEL,
     "blocked",
@@ -705,6 +708,91 @@ def _body_excerpt(body: Any, *, limit: int) -> tuple[str, bool]:
     return text[:limit], len(text) > limit
 
 
+def _load_blocker_decisions(  # noqa: C901 - fail-closed artifact parsing.
+    paths: list[str],
+) -> tuple[dict[int, dict[str, Any]], list[str]]:
+    """Load compact per-issue blocker decisions from external run artifacts."""
+    decisions: dict[int, dict[str, Any]] = {}
+    errors: list[str] = []
+    for raw_path in paths:
+        path = pathlib.Path(raw_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{raw_path}: unavailable or malformed JSON ({exc})")
+            continue
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict) and isinstance(payload.get("decisions"), list):
+            rows = payload["decisions"]
+        elif isinstance(payload, dict):
+            rows = [payload]
+        else:
+            errors.append(f"{raw_path}: expected a decision object or decisions list")
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                errors.append(f"{raw_path}: decision {index} is not an object")
+                continue
+            issue = row.get("issue")
+            if not isinstance(issue, int) or isinstance(issue, bool) or issue <= 0:
+                errors.append(f"{raw_path}: decision {index} has no positive integer issue")
+                continue
+            status = row.get("status")
+            if status not in BLOCKER_DECISION_STATUSES:
+                errors.append(
+                    f"{raw_path}: issue {issue} has unsupported blocker decision status {status!r}"
+                )
+                continue
+            reason = row.get("reason")
+            if not isinstance(reason, str) or not reason.strip():
+                errors.append(f"{raw_path}: issue {issue} blocker decision has no reason")
+                continue
+            if status in {"blocked_unchanged", "blocker_changed"}:
+                fingerprint = row.get("current_fingerprint")
+                if not isinstance(fingerprint, str) or not BLOCKER_DECISION_DIGEST_RE.fullmatch(
+                    fingerprint
+                ):
+                    errors.append(
+                        f"{raw_path}: issue {issue} {status} decision has no valid current_fingerprint"
+                    )
+                    continue
+            if issue in decisions:
+                errors.append(f"{raw_path}: duplicate blocker decision for issue {issue}")
+                continue
+            decisions[issue] = row
+    return decisions, errors
+
+
+def _apply_blocker_decision(
+    issue: dict[str, Any], decisions: dict[int, dict[str, Any]]
+) -> dict[str, Any]:
+    """Fence dispatch when an external blocker decision requires it."""
+    number = issue.get("number")
+    decision = decisions.get(number) if isinstance(number, int) else None
+    if decision is None:
+        return issue
+    status = decision["status"]
+    if status == "blocked_unchanged":
+        classification = "blocked_receipt"
+        reason = "blocker receipt unchanged; skip autonomous claim"
+    else:
+        classification = "needs_re_evaluation"
+        reason = "blocker receipt changed or is invalid; require fresh evaluation before claim"
+    return {
+        **issue,
+        "classification": classification,
+        "reason": reason,
+        "dispatch_allowed": False,
+        "blocker_decision": {
+            "status": status,
+            "reason": decision.get("reason", ""),
+            "receipt_digest": decision.get("receipt_digest"),
+            "current_fingerprint": decision.get("current_fingerprint"),
+        },
+    }
+
+
 def _recommended_context_pack(number: int, labels: list[str], title: str) -> str:
     """Return a conservative context-pack hint for a worker prompt."""
     label_text = " ".join(labels).lower()
@@ -829,7 +917,7 @@ def _snapshot_from_issue_list(
 ) -> dict[str, Any]:
     """Build an issue snapshot using preloaded issue fields."""
     try:
-        number = int(issue.get("number"))
+        number = int(str(issue.get("number")))
     except (TypeError, ValueError):
         return {"status": "error", "error": "invalid issue number in gh list payload"}
 
@@ -890,6 +978,7 @@ def snapshot_claimable_issues(
     include_blocked_external: bool = False,
     min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
     resume_page: int = 1,
+    blocker_decision_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a compact claimable/open issue snapshot.
 
@@ -899,6 +988,19 @@ def snapshot_claimable_issues(
     rows, so a caller cannot mistake a partial discovery for a complete queue.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
+    blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
+    if blocker_errors:
+        return {
+            "schema": "issue_batch_snapshot.v1",
+            "repo": repo,
+            "body_excerpt_chars": body_limit,
+            "mode": "claimable",
+            "status": "error",
+            "data_source": "none",
+            "blocker_decision_paths": blocker_decision_paths or [],
+            "errors": blocker_errors,
+            "issues": [{"status": "error", "error": error} for error in blocker_errors],
+        }
     listing = _list_open_issues(
         repo=repo,
         limit=limit,
@@ -915,6 +1017,7 @@ def snapshot_claimable_issues(
         "rate_limit": listing["rate_limit"],
         "quota": listing["quota"],
         "resume_cursor": listing["resume_cursor"],
+        "blocker_decision_paths": blocker_decision_paths or [],
     }
     if listing["status"] != "ok":
         return {
@@ -938,6 +1041,7 @@ def snapshot_claimable_issues(
         _snapshot_from_issue_list(issue, repo=repo, remote=remote, claim_statuses=claim_statuses)
         for issue in listed
     ]
+    snapshots = [_apply_blocker_decision(issue, blocker_decisions) for issue in snapshots]
     issues = [
         issue
         for issue in snapshots
@@ -1188,7 +1292,7 @@ def _active_portfolio_row(
     issue: dict[str, Any], *, remote: str, claim_statuses: dict[int, dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     """Return one active-portfolio row for an open issue."""
-    number = int(issue.get("number"))
+    number = int(str(issue.get("number")))
     labels = _labels(issue)
     assignees = _assignees(issue)
     claim_value = (
@@ -1358,12 +1462,30 @@ def _write_capsules(issues: list[dict[str, Any]], capsule_dir: pathlib.Path) -> 
 
 
 def snapshot_issues(
-    numbers: list[int], *, repo: str, body_limit: int, remote: str, capsule_dir: str = ""
+    numbers: list[int],
+    *,
+    repo: str,
+    body_limit: int,
+    remote: str,
+    capsule_dir: str = "",
+    blocker_decision_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a compact issue-batch snapshot."""
+    blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
+    if blocker_errors:
+        return {
+            "schema": "issue_batch_snapshot.v1",
+            "repo": repo,
+            "body_excerpt_chars": body_limit,
+            "status": "error",
+            "blocker_decision_paths": blocker_decision_paths or [],
+            "errors": blocker_errors,
+            "issues": [{"status": "error", "error": error} for error in blocker_errors],
+        }
     issues = [
         fetch_issue(number, repo=repo, body_limit=body_limit, remote=remote) for number in numbers
     ]
+    issues = [_apply_blocker_decision(issue, blocker_decisions) for issue in issues]
     if capsule_dir:
         _write_capsules(issues, pathlib.Path(capsule_dir))
     return {
@@ -1371,6 +1493,7 @@ def snapshot_issues(
         "repo": repo,
         "body_excerpt_chars": body_limit,
         "transition_counts": _transition_counts(issues),
+        "blocker_decision_paths": blocker_decision_paths or [],
         "issues": issues,
     }
 
@@ -1432,6 +1555,15 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Optional directory for per-issue context capsule JSON files.",
     )
     parser.add_argument(
+        "--blocker-decision",
+        action="append",
+        default=[],
+        help=(
+            "External per-issue blocker-decision JSON artifact; may be repeated. "
+            "Unchanged or re-evaluation decisions fence autonomous claims."
+        ),
+    )
+    parser.add_argument(
         "--no-expand-range",
         action="store_true",
         help="Treat two issue numbers as exactly two issues instead of an inclusive range.",
@@ -1464,6 +1596,15 @@ def _validate_args(args: argparse.Namespace) -> int:
         print(
             "--active-portfolio cannot be combined with --claimable, "
             "--blocked-external-report, or issue numbers",
+            file=sys.stderr,
+        )
+        return 1
+    if args.blocker_decision and args.active_portfolio:
+        print("--blocker-decision cannot be combined with --active-portfolio", file=sys.stderr)
+        return 1
+    if args.blocker_decision and args.blocked_external_report:
+        print(
+            "--blocker-decision cannot be combined with --blocked-external-report",
             file=sys.stderr,
         )
         return 1
@@ -1507,6 +1648,7 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
             include_blocked_external=args.include_blocked_external,
             min_graphql_remaining=args.min_graphql_remaining,
             resume_page=args.resume_page,
+            blocker_decision_paths=args.blocker_decision,
         )
     return snapshot_issues(
         numbers,
@@ -1514,6 +1656,7 @@ def _build_payload(args: argparse.Namespace, numbers: list[int]) -> dict[str, An
         body_limit=max(args.body_chars, 0),
         remote=args.remote,
         capsule_dir=args.capsule_dir,
+        blocker_decision_paths=args.blocker_decision,
     )
 
 

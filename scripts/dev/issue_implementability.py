@@ -9,9 +9,12 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from scripts.dev import gh_issue_rest, issue_claim
+from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 SCHEMA = "issue_implementability.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -345,14 +348,19 @@ def _classify_issue(
     return "ready", ["issue state and execution contract permit claim admission"]
 
 
-def evaluate_issue(issue: dict[str, Any], claim: dict[str, Any]) -> dict[str, Any]:
+def evaluate_issue(
+    issue: dict[str, Any],
+    claim: dict[str, Any],
+    *,
+    dependency_evaluation: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return a deterministic, fail-closed issue implementability report."""
     normalized = normalize_issue(issue)
     contract = inspect_contract(normalized["body"])
     labels = set(normalized["labels"])
     classification, reasons = _classify_issue(normalized, claim, contract, labels)
 
-    return {
+    report = {
         "schema": SCHEMA,
         "issue": {
             "number": normalized["number"],
@@ -374,6 +382,9 @@ def evaluate_issue(issue: dict[str, Any], claim: dict[str, Any]) -> dict[str, An
         "ready": classification == "ready",
         "write_allowed": classification == "ready",
     }
+    if dependency_evaluation is not None:
+        return issue_dependency_packet.apply_dependency_gate(report, dependency_evaluation)
+    return report
 
 
 def fetch_live_issue(number: int, *, repo: str) -> dict[str, Any]:
@@ -386,11 +397,36 @@ def fetch_live_issue(number: int, *, repo: str) -> dict[str, Any]:
     return payload
 
 
-def live_issue_report(number: int, *, repo: str, remote: str) -> dict[str, Any]:
-    """Read one live issue and its atomic claim state, then evaluate it."""
+def _resolve_issue_dependency_packet(
+    issue: Mapping[str, Any], *, repo: str, repo_root: Path | str | None
+) -> Mapping[str, Any] | None:
+    """Resolve an explicitly embedded or referenced packet for one live issue."""
+    body = issue.get("body", "")
+    packet, extraction_errors = issue_dependency_packet.extract_packet_from_issue_body(
+        body if isinstance(body, str) else "", repo_root=repo_root
+    )
+    if extraction_errors:
+        return issue_dependency_packet.invalid_packet_evaluation(extraction_errors)
+    if packet is None:
+        return None
+    return issue_dependency_packet.resolve_packet(
+        packet,
+        repo_root=repo_root,
+        expected_repository=repo,
+        expected_issue=issue.get("number") if isinstance(issue.get("number"), int) else None,
+    )
+
+
+def live_issue_report(
+    number: int, *, repo: str, remote: str, repo_root: Path | str | None = None
+) -> dict[str, Any]:
+    """Read one live issue and gate claimability on any explicit dependency packet."""
     issue = fetch_live_issue(number, repo=repo)
     claim = issue_claim.status_issue(number, remote=remote)
-    return evaluate_issue(issue, claim)
+    dependency_evaluation = _resolve_issue_dependency_packet(
+        issue, repo=repo, repo_root=repo_root or Path.cwd()
+    )
+    return evaluate_issue(issue, claim, dependency_evaluation=dependency_evaluation)
 
 
 def _parse_claimed(value: str) -> dict[str, Any]:

@@ -142,6 +142,37 @@ esac
     assert "install -y --no-install-recommends libgl1" not in log_text
 
 
+def test_ci_install_headless_packages_probe_failure_is_advisory(tmp_path: Path) -> None:
+    """An unexpected package-probe failure still reaches the requested apt install."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    log_path = tmp_path / "commands.log"
+
+    _write_executable(fake_bin / "dpkg-query", "#!/usr/bin/env bash\nexit 42\n")
+    _write_executable(
+        fake_bin / "sudo",
+        f'#!/usr/bin/env bash\nprintf \'sudo %s\\n\' "$*" >> {_shell_quote(log_path)}\n"$@"\n',
+    )
+    _write_executable(
+        fake_bin / "apt-get",
+        f"#!/usr/bin/env bash\nprintf 'apt-get %s\\n' \"$*\" >> {_shell_quote(log_path)}\n",
+    )
+
+    result = subprocess.run(
+        ["bash", str(_script_path()), "poppler-utils"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_timer_test_environment(fake_bin),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "warning=package_probe_failed package=poppler-utils probe_rc=42" in result.stdout
+    assert "install -y --no-install-recommends poppler-utils" in log_path.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_ci_install_headless_packages_falls_back_to_official_mirror_after_timeout(
     tmp_path: Path,
 ) -> None:

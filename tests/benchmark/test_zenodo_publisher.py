@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from robot_sf.benchmark.zenodo_publisher import (
     ZENODO_STATE_SCHEMA,
     ZenodoPublisherError,
+    _seal_state,
     load_dataset_metadata,
     publish,
     read_token_file,
@@ -72,7 +73,11 @@ def _metadata() -> dict[str, Any]:
     return {
         "title": "Robot SF S30/H600 benchmark dataset",
         "upload_type": "dataset",
-        "description": "Release-bound raw and component benchmark results.",
+        "access_right": "open",
+        "description": (
+            "Release-bound raw and component benchmark results. SNQI is advisory only; "
+            "this release makes no SNQI ranking claim."
+        ),
         "license": "GPL-3.0-only",
         "creators": [{"name": "Luttkus, Lennart"}, {"name": "Tröster, Marco"}],
         "related_identifiers": [
@@ -150,12 +155,35 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
     assert state["files"][0]["name"] == bundle.name
     assert len(state["files"][0]["sha256"]) == 64
 
-    state = publish(session, state)
+    remote_draft = _draft_payload()
+    remote_draft["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+        }
+    ]
+    downloaded = _Response({})
+    downloaded.content = bundle.read_bytes()
+    session.gets = [_Response(remote_draft), downloaded]
+    report = verify(session, state, _metadata())
+    assert report["status"] == "pass"
+    assert report["publication_state"] == "draft"
+    assert "verification_receipt" in state
+
+    tampered = dict(state)
+    tampered["verification_receipt"] = dict(state["verification_receipt"])
+    tampered["verification_receipt"]["metadata_sha256"] = "0" * 64
+    with pytest.raises(ZenodoPublisherError, match="integrity"):
+        publish(session, tampered, _metadata())
+
+    state = publish(session, state, _metadata())
     assert state["submitted"] is True
     remote = _draft_payload(submitted=True)
     remote["files"] = [
         {
             "filename": bundle.name,
+            "size": bundle.stat().st_size,
             "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
         }
     ]
@@ -164,4 +192,25 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
     session.gets = [_Response(remote), downloaded]
     report = verify(session, state, _metadata())
     assert report["status"] == "pass"
+    assert report["publication_state"] == "published"
     assert report["file_count"] == 1
+
+
+def test_publish_requires_prior_verification_receipt(tmp_path: Path) -> None:
+    """An uploaded draft cannot be published without a successful draft receipt."""
+    session = _Session()
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = {
+        "schema_version": ZENODO_STATE_SCHEMA,
+        "deposition_id": 123,
+        "record_id": 123,
+        "concept_record_id": "122",
+        "doi": "10.5281/zenodo.123",
+        "submitted": False,
+        "files": [{"name": bundle.name, "size": 6, "sha256": "0" * 64}],
+    }
+    state = _seal_state(state)
+    with pytest.raises(ZenodoPublisherError, match="verification receipt"):
+        publish(session, state, _metadata())
+    assert session.posts == []

@@ -60,7 +60,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "publish",
-        lambda session, loaded, api_base: calls.append(("publish", api_base)) or state,
+        lambda session, loaded, metadata, api_base: calls.append(("publish", api_base)) or state,
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,

@@ -25,7 +25,7 @@ def build_subparser(subparsers: Any) -> None:
         parser.add_argument("--token-file", type=Path, required=True)
         parser.add_argument("--state", type=Path, required=True)
         parser.add_argument("--api-base", default=zenodo_publisher.ZENODO_API_BASE)
-        if mode in {"reserve", "verify"}:
+        if mode in {"reserve", "publish", "verify"}:
             parser.add_argument("--metadata", type=Path, required=True)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
@@ -87,12 +87,20 @@ def handle(args: argparse.Namespace) -> int:
             _print(state)
             return 0
         if args.zenodo_mode == "publish":
-            state = zenodo_publisher.publish(session, state, api_base=args.api_base)
+            metadata = zenodo_publisher.load_dataset_metadata(args.metadata)
+            state = zenodo_publisher.publish(
+                session,
+                state,
+                metadata,
+                api_base=args.api_base,
+            )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
         metadata = zenodo_publisher.load_dataset_metadata(args.metadata)
         report = zenodo_publisher.verify(session, state, metadata, api_base=args.api_base)
+        if report.get("status") == "pass":
+            zenodo_publisher.write_state(args.state, state)
         _print(report)
         return 0 if report["status"] == "pass" else 2
     except zenodo_publisher.ZenodoPublisherError as exc:

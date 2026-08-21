@@ -6,6 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from robot_sf.benchmark import release_doctor
 from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
@@ -145,3 +147,143 @@ def test_top_level_cli_registers_release_doctor(capsys) -> None:
     output = capsys.readouterr().out
     assert "--expected-release-sha" in output
     assert "--expected-base-sha" in output
+
+
+def _write_final_packet_fixture(
+    tmp_path: Path, *, source_sha: str = "a" * 40, tag: str = "release-tag"
+) -> tuple[Path, Path]:
+    """Write a minimal but complete final packet/queue pair for doctor tests."""
+    digest = "b" * 64
+    campaign = "campaign-1"
+    packet = {
+        "schema": "robot-sf-launch-packet.v1",
+        "packet_version": 1,
+        "queue_id": "queue-1",
+        "campaign_id": campaign,
+        "campaign": campaign,
+        "state": "ready",
+        "dispatchable": True,
+        "admission": {"status": "admitted", "dispatchable": True},
+        "execution_contract": {
+            "cluster": "licca",
+            "partition": "epyc-gpu",
+            "route_id": "licca:epyc-gpu",
+            "cpus": 36,
+            "gpus": 1,
+            "gpu_type": "A100",
+            "mem_gb": 256,
+            "wall_clock": "36:00:00",
+            "resources_exact": True,
+            "release_tag": tag,
+            "startup_sentinel_required": True,
+            "startup_prefix": 'source "$SLURM_STARTUP_SENTINEL"',
+        },
+        "identity": {
+            "public_source_commit": source_sha,
+            **dict.fromkeys(release_doctor._REQUIRED_PACKET_HASH_FIELDS, digest),
+        },
+        "inputs": {
+            name: {"path": f"configs/{name}", "sha256": digest}
+            for name in (
+                "release_manifest",
+                "canonical_campaign_config",
+                "scenario_matrix",
+                "public_single_node_entrypoint",
+                "checkpoint_staging_receipt",
+                "private_wrapper",
+            )
+        }
+        | {
+            "source": {
+                "repository": "https://github.com/ll7/robot_sf_ll7",
+                "public_commit": source_sha,
+            }
+        },
+        "sentinel_traceability": {
+            "required": True,
+            "source": "$SLURM_STARTUP_SENTINEL",
+            "helper": "$SLURM_STARTUP_HELPER",
+            "startup_receipt": "$SLURM_STARTUP_RECEIPT",
+            "admission_trace": "$SLURM_ADMISSION_RECEIPT",
+            "required_identity_fields": sorted(release_doctor._REQUIRED_PACKET_TRACE_FIELDS),
+        },
+    }
+    packet_path = tmp_path / "packet.json"
+    packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
+    packet_hash = release_doctor._sha256(packet_path)
+    queue_path = tmp_path / "queue.yaml"
+    submit_args = ",".join(
+        [
+            f"RELEASE_LAUNCH_PACKET_SHA256={packet_hash}",
+            f"RELEASE_CAMPAIGN_ID={campaign}",
+            "RELEASE_MANIFEST_PATH=configs/release_manifest",
+            "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
+            "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
+            "RELEASE_EXPECTED_CPUS=36",
+            "RELEASE_EXPECTED_GPUS=1",
+            "RELEASE_EXPECTED_MEM_GB=256",
+            "RELEASE_EXPECTED_WALLTIME=36:00:00",
+            *(
+                f"{field}={digest}"
+                for field in (
+                    "RELEASE_MANIFEST_SHA256",
+                    "RELEASE_CONFIG_SHA256",
+                    "RELEASE_SCENARIO_SHA256",
+                    "RELEASE_CHECKPOINT_RECEIPT_SHA256",
+                    "RELEASE_PUBLIC_SCRIPT_SHA256",
+                )
+            ),
+        ]
+    )
+    queue_path.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "queue_id": "queue-1",
+                    "campaign": campaign,
+                    "state": "ready",
+                    "expected_public_commit": source_sha,
+                    "artifact_manifest": "ops/jobs/launch_packets/packet.json",
+                    "submit_args": submit_args,
+                    "cluster": "licca",
+                    "partition": "epyc-gpu",
+                    "route_id": "licca:epyc-gpu",
+                    "cpus": "36",
+                    "gpus": "1",
+                    "mem_gb": "256",
+                    "estimated_elapsed_sec": "129600",
+                }
+            ],
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return packet_path, queue_path
+
+
+def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path: Path) -> None:
+    """Final mode admits only a concrete packet and matching dispatch row."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+    )
+    assert check.status == "pass", check.summary
+
+    payload = json.loads(packet.read_text(encoding="utf-8"))
+    payload["execution_contract"]["partition"] = "wrong"
+    packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+    )
+    assert rejected.status == "fail"
+    assert "resource contract mismatch" in rejected.summary

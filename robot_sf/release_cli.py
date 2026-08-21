@@ -37,11 +37,23 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--tag", required=True)
     doctor.add_argument("--checkpoint-receipt", type=Path)
     doctor.add_argument("--private-launch-packet", type=Path)
+    doctor.add_argument("--private-queue", type=Path)
     doctor.add_argument("--dissertation", type=Path)
     doctor.add_argument("--token-file", type=Path)
     doctor.add_argument("--expected-cells", type=int, default=20160)
     doctor.add_argument("--minimum-free-gib", type=float, default=100.0)
     doctor.add_argument("--require-zenodo-webhook-disabled", action="store_true")
+    doctor.add_argument(
+        "--publication-mode",
+        choices=("pre-publication", "final"),
+        default="pre-publication",
+        help="Use final for fail-closed publication admission.",
+    )
+    doctor.add_argument(
+        "--final",
+        action="store_true",
+        help="Alias for --publication-mode final.",
+    )
 
 
 def _print(payload: dict[str, Any]) -> None:
@@ -64,11 +76,17 @@ def handle(args: argparse.Namespace) -> int:
             tag=args.tag,
             checkpoint_receipt=args.checkpoint_receipt,
             private_launch_packet=args.private_launch_packet,
+            private_queue=getattr(args, "private_queue", None),
             dissertation=args.dissertation,
             token_file=args.token_file,
             expected_cells=args.expected_cells,
             minimum_free_gib=args.minimum_free_gib,
             require_zenodo_webhook_disabled=args.require_zenodo_webhook_disabled,
+            publication_mode=(
+                "final"
+                if getattr(args, "final", False)
+                else getattr(args, "publication_mode", "pre-publication")
+            ),
         )
         _print(report)
         return 0 if report["status"] == "pass" else 2

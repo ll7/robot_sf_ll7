@@ -71,22 +71,48 @@ def test_git_check_fails_when_git_commands_are_unavailable(
     ("result", "expected_status", "summary"),
     [
         (_result([], returncode=1), "fail", "unavailable"),
-        (_result([], stdout="not-json"), "fail", "no green"),
+        (_result([], stdout="not-json"), "fail", "missing"),
         (
             _result(
                 [],
                 stdout=json.dumps(
-                    [{"headSha": "b" * 40, "status": "completed", "conclusion": "success"}]
+                    [
+                        {
+                            "headSha": "b" * 40,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "workflowName": "CI",
+                        },
+                        {
+                            "headSha": "b" * 40,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "workflowName": "CodeQL",
+                        },
+                    ]
                 ),
             ),
             "fail",
-            "no green",
+            "missing",
         ),
         (
             _result(
                 [],
                 stdout=json.dumps(
-                    [{"headSha": "a" * 40, "status": "completed", "conclusion": "success"}]
+                    [
+                        {
+                            "headSha": "a" * 40,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "workflowName": "CI",
+                        },
+                        {
+                            "headSha": "a" * 40,
+                            "status": "completed",
+                            "conclusion": "success",
+                            "workflowName": "CodeQL",
+                        },
+                    ]
                 ),
             ),
             "pass",
@@ -109,21 +135,23 @@ def test_ci_check_requires_completed_success_for_exact_sha(
 
 
 @pytest.mark.parametrize(
-    ("local_code", "remote_code", "expected"),
-    [(0, 1, "fail"), (1, 0, "fail"), (1, 1, "pass")],
+    ("local_code", "remote_ref_code", "release_code", "expected"),
+    [(0, 2, 1, "fail"), (1, 0, 1, "fail"), (1, 2, 0, "fail"), (1, 2, 1, "pass")],
 )
 def test_tag_check_rejects_local_or_remote_collisions(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     local_code: int,
-    remote_code: int,
+    remote_ref_code: int,
+    release_code: int,
     expected: str,
 ) -> None:
     """A planned release tag must be unused in both Git and GitHub."""
     calls = iter(
         [
             _result(["git"], returncode=local_code),
-            _result(["gh"], returncode=remote_code),
+            _result(["git", "ls-remote"], returncode=remote_ref_code),
+            _result(["gh"], returncode=release_code),
         ]
     )
     monkeypatch.setattr(release_doctor, "_run", lambda *args: next(calls))
@@ -381,3 +409,51 @@ def test_dissertation_check_reports_missing_healthy_and_stale_paths(
     rejected = release_doctor._dissertation_check(stale)
     assert rejected.status == "fail"
     assert "hard-coded" in rejected.summary
+
+
+def test_dissertation_check_allows_repository_urls_and_relative_paths(tmp_path: Path) -> None:
+    """The path health check rejects local checkouts, not public URLs or names."""
+    healthy = tmp_path / "healthy"
+    _make_dissertation(healthy)
+    (healthy / "docs" / "links.md").write_text(
+        "See https://github.com/ll7/robot_sf_ll7 and robot_sf_ll7/configs.\n",
+        encoding="utf-8",
+    )
+    assert release_doctor._dissertation_check(healthy).status == "pass"
+
+    stale = tmp_path / "stale"
+    _make_dissertation(stale)
+    (stale / "docs" / "local.md").write_text(
+        "\n\t/scratch/luttkule/projects/robot_sf_ll7/configs\n",
+        encoding="utf-8",
+    )
+    assert release_doctor._dissertation_check(stale).status == "fail"
+
+
+def test_ci_check_rejects_pending_codeql_even_when_ci_is_green(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A pending required workflow cannot be hidden by a green aggregate CI run."""
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CI",
+                },
+                {
+                    "headSha": "a" * 40,
+                    "status": "in_progress",
+                    "conclusion": "",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+    check = release_doctor._ci_check(tmp_path, "a" * 40)
+    assert check.status == "fail"
+    assert "CodeQL" in check.summary

@@ -139,6 +139,26 @@ def test_malformed_outcome_flags_are_unavailable_not_truthy() -> None:
         assert metrics[name]["reason"] == "outcome flags must be booleans when present"
 
 
+def test_missing_outcome_flags_are_unavailable_not_zeroes() -> None:
+    """Missing outcome fields cannot silently become fabricated zero metrics."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    for trace in (perfect, sensor):
+        trace["done_info"].pop("success")
+        for row in trace["steps"]:
+            row.pop("is_success")
+            row.pop("is_pedestrian_collision")
+            row.pop("is_obstacle_collision")
+            row.pop("is_robot_collision")
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+    metrics = report["conditions"]["perfect_perception"]["metrics"]
+
+    for name in ("success_rate", "collision_rate", "timeout_rate"):
+        assert metrics[name]["status"] == "unavailable"
+        assert metrics[name]["value"] is None
+
+
 def test_missing_observation_contract_row_blocks_the_condition() -> None:
     """A partial evidence-class trace cannot become an available paired condition."""
     perfect = _trace("ideal_state", [2.0, 2.0, 2.0])

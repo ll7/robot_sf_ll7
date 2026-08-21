@@ -11,6 +11,7 @@ import pytest
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
     _format_summary,
+    _to_receipt_check_runs,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
     fetch_pr_snapshot,
@@ -20,11 +21,37 @@ from scripts.dev.merge_queue_gate import (
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+METADATA_DIGEST = "b" * 64
 
 
 def _gh_response(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:
     """Create a mock ``subprocess.CompletedProcess`` for GitHub CLI calls."""
     return MagicMock(stdout=stdout, stderr=stderr, returncode=returncode)
+
+
+def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadata() -> None:
+    checks = _to_receipt_check_runs(
+        [
+            {
+                "name": "pr-contract-check",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+            {
+                "name": "CI",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            },
+        ],
+        head_sha=FULL_SHA,
+        expected_metadata_digest=METADATA_DIGEST,
+    )
+
+    assert checks[0]["head_sha"] == FULL_SHA
+    assert checks[0]["approved_source"] is True
+    assert checks[0]["metadata_digest"] == METADATA_DIGEST
+    assert checks[1]["approved_source"] is False
+    assert checks[1]["metadata_digest"] is None
 
 
 def _exact_changed_coverage_response(

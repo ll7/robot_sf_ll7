@@ -92,6 +92,7 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 )
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
+RECEIPT_REVIEW_CHECK_NAMES = frozenset({"pr-contract-check"})
 
 # CI rollup classification constants (mirror scripts/dev/check_pr_ci_status.py
 # so the gate does not couple to that module's private helpers).
@@ -833,7 +834,9 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
     return {"latest": latest}
 
 
-def _to_receipt_check_runs(items: Any, *, head_sha: str) -> list[dict[str, Any]]:
+def _to_receipt_check_runs(
+    items: Any, *, head_sha: str, expected_metadata_digest: str = ""
+) -> list[dict[str, Any]]:
     """Project the live status rollup onto exact-head receipt check evidence.
 
     ``gh pr view`` scopes ``statusCheckRollup`` to the current PR head.  The
@@ -848,9 +851,11 @@ def _to_receipt_check_runs(items: Any, *, head_sha: str) -> list[dict[str, Any]]
         if not isinstance(item, dict):
             continue
         app = item.get("app") if isinstance(item.get("app"), dict) else {}
+        name = str(item.get("name") or item.get("context") or "")
+        is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
         checks.append(
             {
-                "name": str(item.get("name") or item.get("context") or ""),
+                "name": name,
                 "head_sha": str(item.get("head_sha") or item.get("headSha") or head_sha),
                 "status": str(item.get("status") or "").lower(),
                 "conclusion": str(item.get("conclusion") or "").lower(),
@@ -865,6 +870,8 @@ def _to_receipt_check_runs(items: Any, *, head_sha: str) -> list[dict[str, Any]]
                     "name": str(app.get("name") or ""),
                 },
                 "approved_reviewer": item.get("approved_reviewer") is True,
+                "approved_source": is_receipt_review,
+                "metadata_digest": expected_metadata_digest if is_receipt_review else None,
             }
         )
     return checks
@@ -1095,9 +1102,13 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
     if changed_scope_err:
         return {}, changed_scope_err
 
-    requested_reviewers, requested_teams = _requested_review_identities(review_requests)
-    required_checks = _to_receipt_check_runs(payload.get("statusCheckRollup"), head_sha=head_sha)
     current_metadata_digest = metadata_digest(title, body)
+    requested_reviewers, requested_teams = _requested_review_identities(review_requests)
+    required_checks = _to_receipt_check_runs(
+        payload.get("statusCheckRollup"),
+        head_sha=head_sha,
+        expected_metadata_digest=current_metadata_digest,
+    )
     review_evidence = {
         "check_runs": required_checks,
         "reviews": _to_receipt_review_evidence(

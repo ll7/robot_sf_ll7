@@ -228,9 +228,15 @@ def test_create_worktree_scripts_are_shell_valid_and_executable() -> None:
 def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> None:
     """An unregistered branch at the target path is removed before worktree add."""
     branch = "test/orphan-recover"
-    # Create the orphan branch (ref exists, no registered worktree); -f keeps
-    # the test idempotent across partial runs.
-    subprocess.run(["git", "branch", "-f", branch], cwd=REPO_ROOT, check=True, capture_output=True)
+    # Create the orphan branch at origin/main (ref exists, no registered worktree);
+    # -f keeps the test idempotent across partial runs. Pointing at origin/main
+    # guarantees the branch is an ancestor of the default base ref.
+    subprocess.run(
+        ["git", "branch", "-f", branch, "origin/main"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    )
 
     try:
         target = tmp_path / "new-worktree"

@@ -397,6 +397,9 @@ _FAST_FILES = {
     # The legacy checkpoint cutover preparation contract is read-only and
     # digest-bound; keep its focused provenance tests in fast pull-request shards.
     "test_issue_6794_cutover_preparation.py",
+    # The shared DWA diagnostic harness tests are deterministic contract tests;
+    # keep their changed-module coverage in pull-request fast shards.
+    "test_dwa_diagnostic_harness.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

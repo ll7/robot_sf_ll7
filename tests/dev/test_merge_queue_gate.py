@@ -217,6 +217,93 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
 
 
+def _rest_pull_response(*, head_sha: str = FULL_SHA, body: str = "") -> MagicMock:
+    """Build a REST ``pulls/{n}`` response carrying the gate-critical fields."""
+    payload = {
+        "number": 42,
+        "title": "merge queue test PR",
+        "body": body or "final body",
+        "draft": False,
+        "head": {"sha": head_sha},
+        "base": {"sha": "base_sha"},
+        "labels": [{"name": "merge-ready"}],
+    }
+    return _gh_response(stdout=json.dumps(payload))
+
+
+def _rest_comments_response(*bodies: str) -> MagicMock:
+    """Build a REST issue-comments response with owner association."""
+    return _gh_response(
+        stdout=json.dumps([{"body": body, "author_association": "OWNER"} for body in bodies])
+    )
+
+
+def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
+    """Issue #7705: quota-exhausted gh pr view falls back to REST reads.
+
+    The GraphQL-backed ``gh pr view`` is blocked, but the gate must still
+    refresh hosted-check evidence from REST endpoints (PR, comments, reviews,
+    requested reviewers, and head check-runs) rather than reporting a generic
+    unavailable snapshot.
+    """
+    quota_error = _gh_response(
+        stderr="gh: GraphQL: API rate limit already exceeded (403)",
+        returncode=1,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            quota_error,  # gh pr view -> GraphQL quota exhausted
+            _rest_pull_response(head_sha=FULL_SHA),  # REST pulls/42 (core)
+            _rest_comments_response("comment one"),  # issues/42/comments
+            _gh_response(stdout=json.dumps([])),  # pulls/42/reviews
+            _gh_response(  # pulls/42/requested_reviewers
+                stdout=json.dumps(
+                    {
+                        "users": [{"login": "external-reviewer"}],
+                        "teams": [{"slug": "core-reviewers", "name": "Core Reviewers"}],
+                    }
+                )
+            ),
+            _exact_changed_coverage_response(
+                head_sha=FULL_SHA
+            ),  # commits/{sha}/check-runs (rollup)
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),  # base pulls/42
+            _exact_changed_coverage_response(head_sha=FULL_SHA),  # changed-coverage check-runs
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None, error
+    assert snapshot["head_sha"] == FULL_SHA
+    assert snapshot["base_sha"] == "base_sha"
+    assert snapshot["draft"] is False
+    assert snapshot["labels"] == ["merge-ready"]
+    assert snapshot["reviewers_requested"] is True
+    assert snapshot["requested_reviewers"] == ["external-reviewer"]
+    assert snapshot["requested_teams"] == ["Core Reviewers"]
+    assert snapshot["comment_snapshot"]["latest"][0]["body_excerpt"] == "comment one"
+    # The REST fallback must be exercised (pr view hit with quota failure first).
+    first_call = mock_gh.call_args_list[0].args[0]
+    assert first_call[:3] == ["pr", "view", "42"]
+
+
+def test_fetch_pr_snapshot_rest_fallback_fails_closed_on_rest_failure() -> None:
+    """Issue #7705: if REST is also down the snapshot fails closed, never green."""
+    quota_error = _gh_response(
+        stderr="gh: GraphQL: API rate limit already exceeded (403)",
+        returncode=1,
+    )
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            quota_error,  # gh pr view -> GraphQL quota exhausted
+            _gh_response(stderr="gh api failed (HTTP 500)", returncode=1),  # REST pull down
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "HTTP 500" in error
+
+
 def test_fetch_pr_snapshot_rejects_missing_review_request_data() -> None:
     """Missing reviewer-request state cannot bypass the merger preflight."""
     raw_pr = _raw_pr()

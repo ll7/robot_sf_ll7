@@ -23,6 +23,30 @@ DEFAULT_BACKOFF_BASE_SECONDS = 1.0
 _HTTP_STATUS_RE = re.compile(r"\b(?:HTTP\s*)?(429|500|502|503|504)\b", re.IGNORECASE)
 
 
+def is_quota_exhausted(result: subprocess.CompletedProcess[Any]) -> bool:
+    """Return whether a failed gh diagnostic reports GraphQL quota exhaustion.
+
+    GitHub returns ``GraphQL: API rate limit already exceeded`` (or a related
+    rate-limit message) when the authenticated user's GraphQL quota is spent.
+    Unlike a transient 429/5xx this is not retryable within a short backoff
+    window, so callers should distinguish it instead of burning the remaining
+    REST-equivalent budget on identical retries. The classifier is
+    message-based to stay robust across gh versions.
+
+    Returns:
+        bool: True when the diagnostic names a GraphQL or GitHub API rate limit.
+    """
+    text = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
+    if "rate limit" not in text and "rate_limit" not in text:
+        return False
+    return (
+        "graphql" in text
+        or "api rate limit" in text
+        or "too many requests" in text
+        or "secondary rate limit" in text
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class GraphQLRetryOutcome:
     """Result and bounded-retry evidence for one read-only ``gh`` command."""
@@ -32,10 +56,17 @@ class GraphQLRetryOutcome:
     retryable_failure: bool
     exhausted: bool
     http_status: int | None
+    quota_exhausted: bool = False
 
     @property
     def terminal_diagnostic(self) -> str:
         """Return a concise diagnostic suitable for fail-closed queue output."""
+        if self.quota_exhausted:
+            detail = str(self.result.stderr or self.result.stdout or "").strip()
+            if detail:
+                detail = detail.splitlines()[-1][:300]
+            suffix = f": {detail}" if detail else ""
+            return f"GitHub GraphQL quota exhausted{suffix}"
         if not self.exhausted:
             return ""
         status = f"HTTP {self.http_status}" if self.http_status is not None else "transient HTTP"
@@ -85,6 +116,15 @@ def run_with_retry(
         result = runner(list(args), timeout=timeout)
         last_result = result
         last_status = transient_http_status(f"{result.stderr or ''}\n{result.stdout or ''}")
+        if is_quota_exhausted(result):
+            return GraphQLRetryOutcome(
+                result=result,
+                attempts=attempt,
+                retryable_failure=False,
+                exhausted=True,
+                http_status=last_status,
+                quota_exhausted=True,
+            )
         retryable = is_transient_failure(result)
         if not retryable or attempt == attempts_limit:
             return GraphQLRetryOutcome(

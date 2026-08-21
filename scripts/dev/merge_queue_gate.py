@@ -1045,6 +1045,232 @@ def _attach_missing_coverage_scope(
     }, None
 
 
+def _rest_labels(raw: Any) -> list[dict[str, Any]]:
+    """Normalize REST PR label objects into the ``gh pr view`` label shape."""
+    if not isinstance(raw, list):
+        return []
+    return [
+        {"name": str(label.get("name") or "")}
+        for label in raw
+        if isinstance(label, dict) and label.get("name")
+    ]
+
+
+def _rest_json_list(
+    *, owner: str, name: str, path: str, fail_message: str
+) -> tuple[list[Any], str | None]:
+    """Fetch one REST JSON-list endpoint with fail-closed diagnostics."""
+    result = _gh(["api", f"repos/{owner}/{name}/{path}"], timeout=45)
+    if result.returncode != 0:
+        return [], result.stderr.strip() or fail_message
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, list):
+        return [], err or fail_message
+    return payload, None
+
+
+def _rest_comments(
+    *, owner: str, name: str, pr_number: str | int
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch issue comments in the ``gh pr view`` comment shape."""
+    comments, err = _rest_json_list(
+        owner=owner,
+        name=name,
+        path=f"issues/{pr_number}/comments?per_page=100",
+        fail_message="REST comment response is not a JSON list",
+    )
+    if err:
+        return [], err
+    return [
+        {
+            "body": str(comment.get("body") or ""),
+            "authorAssociation": str(comment.get("author_association") or "").upper(),
+        }
+        for comment in comments
+        if isinstance(comment, dict)
+    ], None
+
+
+def _rest_reviews(
+    *, owner: str, name: str, pr_number: str | int
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch PR reviews in the ``gh pr view`` review shape."""
+    reviews, err = _rest_json_list(
+        owner=owner,
+        name=name,
+        path=f"pulls/{pr_number}/reviews?per_page=100",
+        fail_message="REST review response is not a JSON list",
+    )
+    if err:
+        return [], err
+    return [
+        {
+            "id": review.get("id"),
+            "body": str(review.get("body") or ""),
+            "state": str(review.get("state") or ""),
+            "author": {"login": str(review.get("user", {}).get("login") or "")},
+            "authorAssociation": str(review.get("author_association") or "").upper(),
+            "commit_id": review.get("commit_id"),
+            "submitted_at": review.get("submitted_at"),
+            "user": {"login": str(review.get("user", {}).get("login") or "")},
+        }
+        for review in reviews
+        if isinstance(review, dict)
+    ], None
+
+
+def _rest_requested_reviewers(
+    *, owner: str, name: str, pr_number: str | int
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch requested reviewers in the ``gh pr view`` union shape."""
+    requested_result = _gh(
+        ["api", f"repos/{owner}/{name}/pulls/{pr_number}/requested_reviewers"],
+        timeout=45,
+    )
+    if requested_result.returncode != 0:
+        return [], requested_result.stderr.strip() or "REST requested-reviewer fetch failed"
+    requested, err = _parse_json(requested_result.stdout)
+    if err or not isinstance(requested, dict):
+        return [], err or "REST requested-reviewer response is not a JSON object"
+    items: list[dict[str, Any]] = []
+    for user in requested.get("users", []) if isinstance(requested.get("users"), list) else []:
+        if isinstance(user, dict) and user.get("login"):
+            items.append(
+                {
+                    "user": {
+                        "__typename": "User",
+                        "login": str(user["login"]),
+                    }
+                }
+            )
+    for team in requested.get("teams", []) if isinstance(requested.get("teams"), list) else []:
+        if isinstance(team, dict) and team.get("slug"):
+            items.append(
+                {
+                    "team": {
+                        "__typename": "Team",
+                        "slug": str(team["slug"]),
+                        "name": str(team.get("name") or team["slug"]),
+                    }
+                }
+            )
+    return items, None
+
+
+def _rest_check_rollup(
+    *, owner: str, name: str, head_sha: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch check-runs for the exact head in the ``statusCheckRollup`` shape."""
+    checks_result = _gh(
+        ["api", f"repos/{owner}/{name}/commits/{head_sha}/check-runs?per_page=100"],
+        timeout=45,
+    )
+    if checks_result.returncode != 0:
+        return [], checks_result.stderr.strip() or "REST check-run fetch failed"
+    checks, err = _parse_json(checks_result.stdout)
+    if err or not isinstance(checks, dict):
+        return [], err or "REST check-run response is not a JSON object"
+    check_runs = checks.get("check_runs", [])
+    if not isinstance(check_runs, list):
+        return [], "REST check-run response is missing a valid check_runs list"
+    return [
+        {
+            "name": str(check.get("name") or ""),
+            "status": str(check.get("status") or "").upper(),
+            "conclusion": str(check.get("conclusion") or "").upper(),
+            "startedAt": check.get("started_at"),
+            "completedAt": check.get("completed_at"),
+            "detailsUrl": check.get("details_url"),
+            "html_url": check.get("html_url"),
+            "app": check.get("app") if isinstance(check.get("app"), dict) else {},
+            "context": str(check.get("name") or ""),
+        }
+        for check in check_runs
+        if isinstance(check, dict)
+    ], None
+
+
+def _rest_pull_core(
+    *, owner: str, name: str, pr_number: str | int
+) -> tuple[dict[str, Any], str | None]:
+    """Fetch the REST pull payload and validate its gate-critical fields.
+
+    Returns ``(normalized_core, error)`` where ``normalized_core`` carries the
+    pull number, title, body, draft state, exact head SHA, and labels in the
+    ``gh pr view`` shape. Fails closed on any missing gate-critical field.
+    """
+    pull_result = _gh(["api", f"repos/{owner}/{name}/pulls/{pr_number}"], timeout=45)
+    if pull_result.returncode != 0:
+        return {}, pull_result.stderr.strip() or f"REST pull fetch failed for #{pr_number}"
+    pull, err = _parse_json(pull_result.stdout)
+    if err or not isinstance(pull, dict):
+        return {}, err or "REST pull response is not a JSON object"
+
+    head_sha = pull.get("head", {}).get("sha") if isinstance(pull.get("head"), dict) else None
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        return {}, "REST pull head.sha is missing or malformed"
+    draft_value = pull.get("draft")
+    if type(draft_value) is not bool:
+        return {}, "REST pull draft field is missing or malformed"
+    title = pull.get("title")
+    body = pull.get("body")
+    if not isinstance(title, str) or body is None or not isinstance(body, str):
+        return {}, "REST pull title or body is missing or malformed"
+
+    return {
+        "number": pull.get("number"),
+        "title": title,
+        "body": body,
+        "isDraft": draft_value,
+        "headRefOid": head_sha,
+        "labels": _rest_labels(pull.get("labels")),
+    }, None
+
+
+def _rest_pr_view_payload(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any], str | None]:
+    """Reconstruct the ``gh pr view`` payload shape from REST endpoints.
+
+    Used when GraphQL quota is exhausted (issue #7705): REST reads remain
+    available even when the authenticated user's GraphQL budget is spent. Builds
+    exactly the same normalized payload keys that ``fetch_pr_snapshot`` passes to
+    the shared consumers, so no downstream projection changes.
+
+    Returns ``(payload, error)``; fail-closed: any missing REST-required field
+    returns ``({}, error)`` so a partially reconstructed snapshot is never
+    treated as a complete gate snapshot.
+    """
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        return {}, f"invalid repo identifier: {repo!r}"
+
+    core, core_err = _rest_pull_core(owner=owner, name=name, pr_number=pr_number)
+    if core_err:
+        return {}, core_err
+
+    comments, comments_err = _rest_comments(owner=owner, name=name, pr_number=pr_number)
+    if comments_err:
+        return {}, comments_err
+    reviews, reviews_err = _rest_reviews(owner=owner, name=name, pr_number=pr_number)
+    if reviews_err:
+        return {}, reviews_err
+    reviewers, reviewers_err = _rest_requested_reviewers(
+        owner=owner, name=name, pr_number=pr_number
+    )
+    if reviewers_err:
+        return {}, reviewers_err
+    rollup, checks_err = _rest_check_rollup(owner=owner, name=name, head_sha=core["headRefOid"])
+    if checks_err:
+        return {}, checks_err
+
+    return {
+        **core,
+        "comments": comments,
+        "reviews": reviews,
+        "reviewRequests": reviewers,
+        "statusCheckRollup": rollup,
+    }, None
+
+
 def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fields fail-closed.
     pr_number: str | int, *, repo: str
 ) -> tuple[dict[str, Any], str | None]:
@@ -1070,11 +1296,21 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
     )
     result = retry.result
     if result.returncode != 0:
-        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
-        return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
-    payload, err = _parse_json(result.stdout)
-    if err or not isinstance(payload, dict):
-        return {}, err or "gh pr view output is not a JSON object"
+        if retry.quota_exhausted:
+            # GraphQL quota is spent but REST reads remain available; rebuild the
+            # snapshot payload through REST so hosted-check evidence can still be
+            # refreshed (issue #7705). Fail closed when REST is also unavailable.
+            rest_payload, rest_err = _rest_pr_view_payload(pr_number, repo=repo)
+            if rest_err or not isinstance(rest_payload, dict):
+                return {}, rest_err or "REST snapshot fallback returned no payload"
+            payload = rest_payload
+        else:
+            diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+            return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
+    else:
+        payload, err = _parse_json(result.stdout)
+        if err or not isinstance(payload, dict):
+            return {}, err or "gh pr view output is not a JSON object"
 
     draft_value = payload.get("isDraft")
     if type(draft_value) is not bool:

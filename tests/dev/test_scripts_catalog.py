@@ -199,6 +199,18 @@ def test_debug_only_not_presented_as_supported_workflow():
         assert "canonical" not in row.split("|")[3]
 
 
+def test_compatibility_rationales_and_readme_links_render_without_duplication():
+    """Generated guidance uses rationale text and links directories to local READMEs."""
+    table = render_root_status_table(CATALOG)
+    assert "Prefer `Prefer " not in table
+    assert "| `benchmark_repro_check.py` | compatibility |" in table
+    assert "Prefer benchmark release/validation tools under scripts/tools/." in table
+
+    overview = scripts_catalog.render_directory_overview(CATALOG)
+    assert "[`scripts/dev/`](dev/README.md)" in overview
+    assert "[`scripts/dev/`]( dev/ )" not in overview
+
+
 def test_inventory_helper_ignores_nested_and_non_executable_files():
     """Only direct .py/.sh children of scripts/ count as root commands."""
     root = repo_root_stub(

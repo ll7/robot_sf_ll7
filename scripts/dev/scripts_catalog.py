@@ -243,8 +243,10 @@ def render_root_status_table(catalog: Catalog) -> str:
         fname = Path(cmd.path).name
         guidance = cmd.purpose
         if cmd.status == STATUS_COMPATIBILITY:
-            target = cmd.replacement or cmd.replacement_rationale or ""
-            guidance = f"{cmd.purpose} Prefer `{target}`." if target else guidance
+            if cmd.replacement:
+                guidance = f"{cmd.purpose} Prefer `{cmd.replacement}`."
+            elif cmd.replacement_rationale:
+                guidance = f"{cmd.purpose} {cmd.replacement_rationale}"
         if cmd.smoke_mode == SMOKE_EXPECTED_FAIL_CLOSED:
             guidance = f"{guidance} Fails closed."
         lines.append(f"| `{fname}` | {cmd.status} | {guidance} |")
@@ -257,7 +259,16 @@ def render_directory_overview(catalog: Catalog) -> str:
     for dirname in sorted(catalog.directories):
         row = catalog.directories[dirname]
         description = str(row.get("description", "")).strip()
-        link = f"[`scripts/{dirname}/`]( {dirname}/ )" if row.get("readme") else f"`{dirname}/`"
+        readme = row.get("readme")
+        if readme:
+            readme_path = Path(str(readme))
+            try:
+                readme_link = readme_path.relative_to(Path("scripts")).as_posix()
+            except ValueError:
+                readme_link = readme_path.as_posix()
+            link = f"[`scripts/{dirname}/`]({readme_link})"
+        else:
+            link = f"`{dirname}/`"
         lines.append(f"| {link} | {description} |")
     return "\n".join(lines)
 

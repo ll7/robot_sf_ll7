@@ -11,6 +11,8 @@ catalog (or script docstrings/`--help`) rather than this file's generated sectio
 * **Run benchmarks** → `scripts/classic_benchmark_full.py` or `scripts/benchmark_workers.py`
 * **Search policy candidates** → `scripts/validation/run_policy_search_candidate.py` plus comparison/failure tools under `scripts/tools/`
 * **Analyze results** → `scripts/research/generate_report.py`, `scripts/generate_figures.py`, `scripts/ranking_table.py`
+* **Compare training runs** → `scripts/tools/compare_training_runs.py`
+* **Preview scenario trajectories** → `scripts/tools/preview_scenario_trajectories.py`
 * **Validate changes** → `scripts/validation/`
 * **Work with SNQI metrics** → SNQI commands in [Root-Level Entry Points](#root-level-entry-points) and [`README_SNQI_WEIGHTS.md`](README_SNQI_WEIGHTS.md)
 * **Check performance** → `scripts/validation/performance_smoke_test.py`
@@ -48,13 +50,13 @@ compatibility entry has neither replacement nor rationale.
 | `benchmark_ped_apf_models.py` | debug-only | Narrow APF model comparison helper. |
 | `benchmark_ped_policy_collisions.py` | debug-only | Narrow pedestrian-policy collision analysis helper. |
 | `benchmark_planner.py` | debug-only | Local planner timing probe. |
-| `benchmark_repro_check.py` | compatibility | Create a minimal reproducibility-test scenario. Prefer `Prefer benchmark release/validation tools under scripts/tools/.`. |
+| `benchmark_repro_check.py` | compatibility | Create a minimal reproducibility-test scenario. Prefer benchmark release/validation tools under scripts/tools/. |
 | `benchmark_threshold_sensitivity.py` | canonical | Threshold sensitivity analysis for replay-rich benchmark rows. |
 | `benchmark_workers.py` | canonical | Maintained worker-throughput benchmark helper. |
 | `classic_benchmark_full.py` | canonical | Full Classic Interaction Benchmark CLI. |
 | `collect_slow_tests.py` | canonical | Parse `pytest --durations=N` output into structured JSON. |
 | `compare_slow_tests.py` | canonical | Compare before/after slow-test JSON captures. |
-| `convert_pickle_to_jsonl.py` | compatibility | Convert legacy multi-episode pickle files to per-episode JSONL. Prefer `Retained until legacy pickle artifacts retire.`. |
+| `convert_pickle_to_jsonl.py` | compatibility | Convert legacy multi-episode pickle files to per-episode JSONL. Retained until legacy pickle artifacts retire. |
 | `debug_ped_apf.py` | debug-only | Interactive APF debugging. |
 | `debug_ped_discrete.py` | debug-only | Pedestrian discrete-action debugging. |
 | `debug_ped_forces.py` | debug-only | Pedestrian force debugging. |
@@ -62,8 +64,8 @@ compatibility entry has neither replacement nor rationale.
 | `debug_ped_policy_differential_drive.py` | debug-only | Differential-drive pedestrian policy debugging. |
 | `debug_random_policy.py` | debug-only | Manual/random-policy visual debug helper. |
 | `debug_trained_policy.py` | archive-candidate | Old trained-policy debug helper; prefer examples and factory-based smoke tests. |
-| `demo_jsonl_recording.py` | compatibility | JSONL recording and playback demonstration. Prefer `Prefer examples and render docs for new documentation.`. |
-| `evaluate.py` | compatibility | Legacy policy evaluation helper. Prefer `Prefer config-driven benchmark runner tools.`. |
+| `demo_jsonl_recording.py` | compatibility | JSONL recording and playback demonstration. Prefer examples and render docs for new documentation. |
+| `evaluate.py` | compatibility | Legacy policy evaluation helper. Prefer config-driven benchmark runner tools. |
 | `example_snqi_workflow.py` | canonical | Complete SNQI workflow example with generated data. |
 | `export_issue_4268_trace_episode.py` | canonical | Export the issue #4268 single-episode doorway trace bundle via the map-runner trace path. |
 | `export_issue_4848_group_crossing_exemplars.py` | canonical | Export issue #4848 group-crossing exemplar trace bundles. |
@@ -73,7 +75,7 @@ compatibility entry has neither replacement nor rationale.
 | `generate_video_contact_sheet.py` | canonical | Episode-frame thumbnail contact-sheet generation. |
 | `hparam_opt.py` | compatibility | Retired root Optuna entrypoint. Prefer `scripts/training/launch_optuna_expert_ppo.py`. Fails closed. |
 | `multi_extractor_training.py` | compatibility | Orchestrate PPO runs across configured feature extractors. Prefer `scripts/research/generate_extractor_report.py`. |
-| `play_recordings.py` | compatibility | Playback recorded episodes. Prefer `Prefer robot_sf.render playback modules for new playback workflows.`. |
+| `play_recordings.py` | compatibility | Playback recorded episodes. Prefer robot_sf.render playback modules for new playback workflows. |
 | `ranking_table.py` | canonical | Ranking-table generation from benchmark episode JSONL. |
 | `read-active-ledger.py` | canonical | Read a compact snapshot of active common-Git-dir autopilot ledgers. |
 | `recompute_snqi_weights.py` | canonical | Recompute SNQI weights using different strategies. |
@@ -82,7 +84,7 @@ compatibility entry has neither replacement nor rationale.
 | `resolve-route.py` | canonical | Forward route resolution to the canonical shared resolver without copying its policy. |
 | `review-agent-run.sh` | canonical | Private review wrapper for delegated agent-run artifacts. |
 | `run_classic_interactions.py` | canonical | Classic interaction scenario matrix runner. |
-| `run_social_navigation_benchmark.py` | compatibility | Older all-in-one social navigation benchmark runner. Prefer `Prefer config-driven tools like classic_benchmark_full.py.`. |
+| `run_social_navigation_benchmark.py` | compatibility | Older all-in-one social navigation benchmark runner. Prefer config-driven tools like classic_benchmark_full.py. |
 | `save-codex-token-checkpoint.py` | canonical | Build a compact token-saving checkpoint without duplicating route policy. |
 | `scale_svgs_to_50m.py` | debug-only | One-off SVG coordinate scaling utility. |
 | `seed_variance.py` | canonical | SNQI seed-variance analysis across benchmark episodes. |
@@ -92,8 +94,8 @@ compatibility entry has neither replacement nor rationale.
 | `summarize-agent-runs.py` | canonical | Summarize compact delegated-agent artifacts from the common Git directory. |
 | `test_planner_collision.py` | debug-only | Planner collision debug probe; not a pytest module. |
 | `training_a2c.py` | compatibility | Retired A2C root entrypoint. Prefer `scripts/training/train_ppo.py`. Fails closed. |
-| `training_ped_ppo.py` | compatibility | PPO training for pedestrian environments. Prefer `Retained for tests; prefer config-first training under scripts/training/.`. |
-| `training_ped_ppo_differential_drive.py` | compatibility | Pedestrian PPO variant for differential-drive robots. Prefer `Retained for tests; prefer config-first training under scripts/training/.`. |
+| `training_ped_ppo.py` | compatibility | PPO training for pedestrian environments. Retained for tests; prefer config-first training under scripts/training/. |
+| `training_ped_ppo_differential_drive.py` | compatibility | Pedestrian PPO variant for differential-drive robots. Retained for tests; prefer config-first training under scripts/training/. |
 | `training_ppo.py` | compatibility | Retired root PPO entrypoint. Prefer `scripts/training/train_ppo.py`. Fails closed. |
 | `update_deps.sh` | canonical | Refresh Python dependencies with uv sync. |
 | `update_svg_viewbox.py` | debug-only | One-off SVG viewBox utility. |
@@ -120,7 +122,7 @@ prefer `validation/performance_smoke_test.py`.
 | `coverage/` | Coverage reporting tools |
 | `data/` | Data files |
 | `demo/` | Demo and smoke scripts |
-| [`scripts/dev/`]( dev/ ) | Development helpers and automation |
+| [`scripts/dev/`](dev/README.md) | Development helpers and automation |
 | `diagnostics/` | Diagnostic tools |
 | `manual_control/` | Manual control interface |
 | `models/` | Model-related helpers |

@@ -10,6 +10,9 @@ The output remains ``analysis_only``.  It does not admit evidence, alter the
 dissertation, or define collision semantics.
 """
 
+# evidence-writer-exempt: normalized_typed_ledger_slice.jsonl is an exact-byte artifact; its
+# review marker is carried by write_review_sidecar so a marked text writer cannot alter JSONL bytes.
+
 from __future__ import annotations
 
 import argparse

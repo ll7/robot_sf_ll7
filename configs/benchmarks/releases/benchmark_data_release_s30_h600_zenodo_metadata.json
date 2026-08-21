@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "title": "Robot SF 14-planner S30/H600 benchmark dataset",
+    "upload_type": "dataset",
+    "access_right": "open",
+    "license": "GPL-3.0-only",
+    "description": "Benchmark-data snapshot for Robot SF covering 14 planner arms, 48 social-navigation scenarios, and 30 seeds at horizon 600 with differential-drive kinematics (20,160 expected episode identities). The archive preserves raw episode and component-metric evidence with exact source provenance. The Social Navigation Quality Index (SNQI) is advisory only because calibration failed; this release makes no SNQI ranking claim.",
+    "creators": [
+      {
+        "name": "Luttkus, Lennart"
+      },
+      {
+        "name": "Tröster, Marco"
+      }
+    ],
+    "keywords": [
+      "social navigation",
+      "robotics",
+      "benchmark dataset",
+      "motion planning",
+      "simulation"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/paper-matrix-v2-h600-s30-2026-08-43bd25edba11",
+        "relation": "isSupplementTo",
+        "scheme": "url"
+      }
+    ]
+  }
+}

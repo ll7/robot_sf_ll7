@@ -107,6 +107,12 @@ acceptance criterion, a hypothetical stop rule, or an unstructured mention of
 the word "terminal". A live claim, worktree, job, blocker, or unavailable
 SLURM inventory keeps the classifier fail-closed.
 
+`state:working` is a live downstream-work qualifier. It is preserved as a
+qualifier, but the classifier must not promote an issue carrying it to
+`state:ready` until an exact-head completion receipt has been independently
+verified. The receipt is a delivery-integrity prerequisite, not scientific,
+benchmark, release, licensing, or domain approval.
+
 Before the autonomous core adds either dispatch-suppressing blocker label
 (`state:blocked` or `state:blocked-external-input`), the issue body or complete
 comment inventory must contain an explicit `blocked-triage-v1` reason block or
@@ -190,6 +196,39 @@ referenced child remains open. A merged child PR alone never closes a parent.
 
 If merged work exists without a documented completion condition, the issue
 remains open and the plan records a closure review finding.
+
+The documented closure condition is necessary but no longer sufficient for an
+autonomous `close_issue` mutation. The issue-audit inventory may provide an
+issue-number keyed `completion_receipts` map. Each entry must contain an
+`issue_completion_receipt.v1` payload and the JSON result from
+`scripts/dev/issue_completion_receipt.py verify`. The receipt binds the issue
+contract digest, exact base and delivered head, branch, changed paths and
+diffstat, validation commands and exit codes, validation inputs, durable
+artifacts, one disposition per acceptance criterion, residual risks, producer,
+independent verifier, and the post-review drift policy.
+
+The standalone verifier checks that the named base and head exist, the branch
+still points at the reviewed head, the exact base/head diff matches the receipt,
+and any covering PR snapshot has the same head, base, and branch. It also
+checks contract, artifact, and validation-input digests. Validation records
+keep `passed`, `failed`, `skipped`, `unavailable`, and `not_applicable`
+distinct; only a receipt with all validations passed, every criterion `met` or
+`not_applicable`, an independent verifier status of `verified`, and a matching
+Git-backed verification result can authorize autonomous closure or clear the
+receipt prerequisite for downstream promotion. A missing, stale, producer-only,
+failed, skipped, or unavailable receipt remains a fail-closed finding.
+
+Build and verify a receipt with:
+
+    uv run python scripts/dev/issue_completion_receipt.py build \
+      --input receipt-payload.json --output completion-receipt.json
+    uv run python scripts/dev/issue_completion_receipt.py verify \
+      --receipt completion-receipt.json --repo-root .
+
+The receipt does not replace PR review, maintainer decisions, domain or
+scientific interpretation, benchmark admission, release checks, licensing
+review, or specialized evidence packets. Raw logs remain out of the receipt;
+they may be referenced through digested durable artifacts.
 
 ## Shared plan schema
 

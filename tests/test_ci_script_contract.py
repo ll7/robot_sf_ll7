@@ -797,7 +797,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
 
     expected_gates = [
         'uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"',
-        '"$SCRIPT_DIR/ruff_fix_format.sh"',
+        '"$SCRIPT_DIR/ruff_fix_format.sh" "${format_changed_files[@]}"',
         '"$SCRIPT_DIR/run_tests_parallel.sh"',
         '"$SCRIPT_DIR/check_changed_coverage.sh"',
         '"$SCRIPT_DIR/check_docstring_todos_diff.sh"',
@@ -817,6 +817,8 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
     assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
+    assert "format_changed_files=()" in script_text
+    assert '[[ "$changed_file" == *.py && -f "$changed_file" ]]' in script_text
 
     freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
     assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text

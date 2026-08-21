@@ -103,7 +103,9 @@ def test_fully_connected_route_has_no_fragments() -> None:
 def test_missing_zone_kind_flagged() -> None:
     map_def = _FakeMapDef(ped_routes=[_FakeRoute(0, 0, [(0, 0), (1, 1)], None, None)])
     assert _missing_zone_kinds(map_def) == ["ped"]
-    complete = _FakeMapDef(robot_spawn_zones=[RECT], robot_routes=[_FakeRoute(0, 0, [(5, 2)], RECT, RECT)])
+    complete = _FakeMapDef(
+        robot_spawn_zones=[RECT], robot_routes=[_FakeRoute(0, 0, [(5, 2)], RECT, RECT)]
+    )
     assert _missing_zone_kinds(complete) == []
 
 
@@ -117,7 +119,9 @@ def test_report_violation_counting() -> None:
 
 def test_console_table_marks_findings() -> None:
     report = MapGeometryReport(map_path="m.svg")
-    report.endpoints.append(EndpointCheck("robot", "robot_route_0_0", "start", "robot_spawn_zone", 0, False, 15.8))
+    report.endpoints.append(
+        EndpointCheck("robot", "robot_route_0_0", "start", "robot_spawn_zone", 0, False, 15.8)
+    )
     text = format_console_table(report)
     assert "[MISS]" in text
     assert "15.800" in text

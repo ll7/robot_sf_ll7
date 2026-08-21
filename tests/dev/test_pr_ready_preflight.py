@@ -364,6 +364,42 @@ def test_pr_ready_check_escalates_optional_changed_files_to_the_optional_lane(
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
 
 
+def test_pr_ready_scopes_formatting_to_committed_python_changes(preflight_repo: Path) -> None:
+    """A base-only unformatted file must not be mutated by readiness formatting."""
+    base_only = preflight_repo / "base_only.py"
+    base_only.write_text("value= 1\n", encoding="utf-8")
+    _git(preflight_repo, "add", "base_only.py")
+    _git(preflight_repo, "commit", "-q", "-m", "unformatted base-only fixture")
+
+    changed = preflight_repo / "changed.py"
+    changed.write_text("value = 2\n", encoding="utf-8")
+    _git(preflight_repo, "add", "changed.py")
+    _git(preflight_repo, "commit", "-q", "-m", "changed python file")
+
+    formatter = preflight_repo / "scripts" / "dev" / "ruff_fix_format.sh"
+    formatter.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$PWD/format-targets.log"\nexit 0\n',
+        encoding="utf-8",
+    )
+    formatter.chmod(0o755)
+    exclude_file = preflight_repo / ".git" / "info" / "exclude"
+    exclude_file.write_text(
+        exclude_file.read_text(encoding="utf-8") + "format-targets.log\n",
+        encoding="utf-8",
+    )
+
+    result = _run_pr_ready(
+        preflight_repo,
+        env_overrides={"BASE_REF": "HEAD~1", "PR_READY_MODE": "interim"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (preflight_repo / "format-targets.log").read_text(encoding="utf-8").splitlines() == [
+        "changed.py"
+    ]
+    assert base_only.read_text(encoding="utf-8") == "value= 1\n"
+
+
 def test_optional_lane_preflight_reports_missing_extras_as_setup_evidence(
     preflight_repo: Path,
 ) -> None:

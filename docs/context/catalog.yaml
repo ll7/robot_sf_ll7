@@ -946,6 +946,18 @@ entries:
   freshness: evidence
   area: training
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/README.md
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/summary.json
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: training
 - path: docs/context/evidence/issue_4013_learned_model_based_planning/real_trajectory_readiness.v1.json
   status: evidence
   freshness: evidence

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import shutil
 import subprocess
@@ -15,19 +16,23 @@ import pytest
 
 from robot_sf.benchmark import agent_figure_interpretation_eval as eval_mod
 from robot_sf.benchmark.agent_figure_interpretation_eval import (
+    CANDIDATE_SCHEMA_VERSION,
     CRITICAL_ERROR_KINDS,
     DIMENSIONS,
-    EXPECTED_PACKET_SCHEMA,
     AgentFigureEvalError,
     evaluate_manifest,
     evaluate_packet,
+    list_fixture_mutations,
     load_verified_packets,
+    replay_all_fixture_mutations,
+    replay_fixture_mutation,
+    validate_candidate_envelope,
 )
 
 FIXTURE_DIR = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "agent_figure_interpretation_eval" / "v1"
+    Path(__file__).resolve().parents[1] / "fixtures" / "result_interpretation_packet" / "v1"
 )
-MANIFEST = FIXTURE_DIR / "manifest.json"
+MANIFEST = FIXTURE_DIR.parent / "agent_figure_interpretation_eval_manifest.json"
 
 
 def _case_by_id(result: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -37,13 +42,83 @@ def _case_by_id(result: dict[str, object]) -> dict[str, dict[str, object]]:
 
 
 def _copy_fixture_tree(tmp_path: Path) -> Path:
-    root = tmp_path / "v1"
-    shutil.copytree(FIXTURE_DIR, root)
+    root = tmp_path / "result_interpretation_packet"
+    fixture_dir = root / "v1"
+    fixture_dir.mkdir(parents=True)
+    shutil.copy(FIXTURE_DIR / "ch7_visualization_causal_abstention.json", fixture_dir)
+    shutil.copy(MANIFEST, root)
     return root
 
 
 def _clean_packet() -> dict[str, object]:
-    return json.loads((FIXTURE_DIR / "clean.json").read_text(encoding="utf-8"))
+    return next(
+        packet for _, packet in load_verified_packets(MANIFEST) if packet["packet_id"] == "clean"
+    )
+
+
+def _candidate(packet_id: str, mutation_id: str | None = None) -> dict[str, object]:
+    packets = {packet["packet_id"]: packet for _, packet in load_verified_packets(MANIFEST)}
+    packet = packets[packet_id]
+    mutation_id = mutation_id or packet_id
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    artifact = manifest["packet"]
+    figure = {
+        "spec": {"fixture_id": packet["source"]["source_id"], "mutation_id": mutation_id},
+        "caption": "Diagnostic fixture candidate; semantic review is unavailable.",
+    }
+    interpretation = packet["interpretation"]
+    candidate = {
+        "schema_version": CANDIDATE_SCHEMA_VERSION,
+        "artifact_kind": "candidate_interpretation",
+        "provider": "none",
+        "fixture_id": packet["source"]["source_id"],
+        "mutation_id": mutation_id,
+        "workflow": {"id": "fixture-test-candidate", "revision": "test-revision-1"},
+        "figure": figure,
+        "limitations": ["frozen fixture only"],
+        "confidence": {"status": "not_available", "value": None},
+        "unresolved_questions": ["independent semantic review"],
+        "claim_boundary": "fixture replay only; not benchmark evidence",
+        "interpretation": interpretation,
+        "mutation": {
+            "id": mutation_id,
+            "expected_detectors": [] if mutation_id == "clean" else [mutation_id],
+        },
+        "findings": {
+            dimension: {
+                "status": "not_available",
+                "critical": dimension == eval_mod.CRITICAL_ERROR_DIMENSIONS.get(mutation_id),
+            }
+            for dimension in DIMENSIONS
+        },
+        "unavailable": ["independent semantic review"],
+        "not_applicable": ["external provider execution"],
+        "provenance": {
+            "manifest_schema_version": "agent_figure_interpretation_eval_manifest.v1",
+            "source_sha256": artifact["source_sha256"],
+            "packet_sha256": artifact["sha256"],
+            "reference_sha256": artifact["reference_sha256"],
+            "candidate_sha256": "0" * 64,
+            "figure_sha256": {
+                "status": "available",
+                "sha256": eval_mod._canonical_digest(figure["spec"]),
+            },
+            "caption_sha256": {
+                "status": "available",
+                "sha256": hashlib.sha256(figure["caption"].encode("utf-8")).hexdigest(),
+            },
+            "review_sha256": {"status": "not_available", "sha256": None},
+        },
+        "replay_provenance": {
+            "mode": "fixture",
+            "deterministic": True,
+            "external_provider_called": False,
+            "network_access": "none",
+        },
+        "verdict": "pending",
+    }
+    candidate["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(candidate)
+    return candidate
 
 
 def _review_scores(value: float = 1.0) -> dict[str, float]:
@@ -53,6 +128,14 @@ def _review_scores(value: float = 1.0) -> dict[str, float]:
 def _result_schema() -> dict[str, object]:
     return json.loads(
         Path("robot_sf/benchmark/schemas/agent_figure_interpretation_eval.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+def _candidate_schema() -> dict[str, object]:
+    return json.loads(
+        Path("robot_sf/benchmark/schemas/agent_figure_interpretation_candidate.v1.json").read_text(
             encoding="utf-8"
         )
     )
@@ -75,12 +158,12 @@ def test_clean_output_has_all_dimension_scores_and_no_critical_errors() -> None:
 def test_manifest_summary_preserves_dimension_and_failure_evidence() -> None:
     summary = evaluate_manifest(MANIFEST)["aggregate_summary"]
 
-    assert summary["case_status_counts"] == {"clean": 1, "failed": 7}
+    assert summary["case_status_counts"] == {"clean": 1, "failed": 11}
     assert summary["dimension_scores"]["source_denominator"] == {
-        "case_count": 8,
-        "passed_count": 7,
+        "case_count": 12,
+        "passed_count": 11,
         "failed_count": 1,
-        "pass_rate": pytest.approx(7 / 8),
+        "pass_rate": pytest.approx(11 / 12),
     }
     assert summary["critical_failure_examples"]["causal_overclaim"] == ["causal_overclaim"]
     assert summary["critical_failure_examples"]["null_overclaim"] == ["null_overclaim"]
@@ -88,33 +171,11 @@ def test_manifest_summary_preserves_dimension_and_failure_evidence() -> None:
     assert summary["workflow_variants"]["status"] == "not_available"
 
 
-def test_manifest_summary_aggregates_paired_workflow_variants(tmp_path: Path) -> None:
-    root = _copy_fixture_tree(tmp_path)
-    packet_path = root / "clean.json"
-    packet = json.loads(packet_path.read_text(encoding="utf-8"))
-    reference = copy.deepcopy(packet["reference"])
-    baseline = copy.deepcopy(reference)
-    baseline["claim_boundary"]["causal_claim_allowed"] = True
-    packet["interpretation_variants"] = {
-        "baseline": baseline,
-        "packet_constrained": reference,
-    }
-    packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
+def test_manifest_summary_reports_unavailable_workflow_variants() -> None:
+    variants = evaluate_manifest(MANIFEST)["aggregate_summary"]["workflow_variants"]
 
-    manifest_path = root / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["artifacts"][0]["sha256"] = eval_mod.sha256_file(packet_path)
-    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
-
-    summary = evaluate_manifest(manifest_path)["aggregate_summary"]
-    variants = summary["workflow_variants"]
-
-    assert variants["status"] == "partial"
-    assert variants["paired_case_count"] == 1
-    assert variants["mean_aggregate_score_delta"] == pytest.approx(1 / 8)
-    assert variants["critical_error_count_delta"] == -1
-    assert variants["packet_constrained_reduces_critical_errors"] is True
-    assert variants["packet_constrained_preserves_source_fidelity"] is True
+    assert variants["status"] == "not_available"
+    assert variants["paired_case_count"] == 0
 
 
 @pytest.mark.parametrize(
@@ -140,6 +201,133 @@ def test_each_critical_mutation_is_flagged(packet_id: str, critical_kind: str) -
         assert case["critical_errors"][other_kind] is False
 
 
+def test_replay_inventory_lists_source_fixtures_and_required_detectors() -> None:
+    inventory = list_fixture_mutations(MANIFEST)
+    assert inventory["status"] == "evaluation_artifacts_only"
+    assert inventory["claim_boundary"] == eval_mod.EXPECTED_REPORT_CLAIM_BOUNDARY
+    assert {record["mutation_id"] for record in inventory["mutations"]} == {
+        "clean",
+        *CRITICAL_ERROR_KINDS,
+    }
+    mutation_by_id = {record["mutation_id"]: record for record in inventory["mutations"]}
+    assert mutation_by_id["clean"]["expected_detectors"] == []
+    for mutation_id in CRITICAL_ERROR_KINDS:
+        assert mutation_by_id[mutation_id]["expected_detectors"] == [mutation_id]
+    assert {item["mutation_id"] for item in inventory["integrity_mutations"]} == {
+        "digest_omission",
+        "stale_post_review_bytes",
+    }
+    assert {fixture["fixture_id"] for fixture in inventory["fixtures"]} == {
+        "ch7_visualization_causal_abstention_fixture"
+    }
+
+
+def test_candidate_envelope_is_provider_free_and_exact() -> None:
+    candidate = _candidate("clean")
+    validate_candidate_envelope(candidate)
+    jsonschema.Draft202012Validator.check_schema(_candidate_schema())
+    jsonschema.validate(candidate, _candidate_schema())
+
+    semantic_review = copy.deepcopy(candidate)
+    semantic_review["findings"]["caption_accuracy"]["status"] = "requires_semantic_review"
+    validate_candidate_envelope(semantic_review)
+    jsonschema.validate(semantic_review, _candidate_schema())
+
+    invalid_provider = dict(candidate, provider="local-model")
+    with pytest.raises(AgentFigureEvalError, match="provider must be 'none'"):
+        validate_candidate_envelope(invalid_provider)
+
+    invalid_boundary = dict(candidate, claim_boundary="benchmark evidence")
+    with pytest.raises(AgentFigureEvalError, match="claim_boundary"):
+        validate_candidate_envelope(invalid_boundary)
+
+    with_reference = dict(candidate, reference=candidate["interpretation"])
+    with pytest.raises(AgentFigureEvalError, match="unexpected reference"):
+        validate_candidate_envelope(with_reference)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("evidence_tier", ["diagnostic"]), ("row_provenance", 1), ("rows_disclosed", "yes")],
+)
+def test_candidate_detector_fields_fail_closed_before_scoring(field: str, value: object) -> None:
+    candidate = _candidate("clean")
+    candidate["interpretation"]["evidence_tier_availability"][field] = value  # type: ignore[index]
+
+    with pytest.raises(AgentFigureEvalError, match="candidate evidence_tier_availability"):
+        validate_candidate_envelope(candidate)
+
+
+def test_replay_digest_omission_and_stale_bytes_fail_closed() -> None:
+    omitted = _candidate("clean")
+    del omitted["provenance"]["source_sha256"]  # type: ignore[index]
+    with pytest.raises(AgentFigureEvalError, match="complete digest contract"):
+        validate_candidate_envelope(omitted)
+
+    for digest_name in ("figure_sha256", "caption_sha256", "review_sha256"):
+        omitted = _candidate("clean")
+        del omitted["provenance"][digest_name]  # type: ignore[index]
+        with pytest.raises(AgentFigureEvalError, match="complete digest contract"):
+            validate_candidate_envelope(omitted)
+
+    stale = _candidate("clean")
+    stale["provenance"]["packet_sha256"] = "0" * 64  # type: ignore[index]
+    with pytest.raises(AgentFigureEvalError, match="does not match verified bytes"):
+        replay_fixture_mutation(MANIFEST, stale)
+
+    reviewed = _candidate("clean")
+    reviewed["provenance"]["review_sha256"] = {  # type: ignore[index]
+        "status": "available",
+        "sha256": eval_mod._canonical_digest(eval_mod._review_digest_payload(reviewed)),
+    }
+    stale_review = copy.deepcopy(reviewed)
+    stale_review["findings"]["caption_accuracy"]["critical"] = True
+    stale_review["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(
+        stale_review
+    )
+    with pytest.raises(AgentFigureEvalError, match="post-review bytes"):
+        replay_fixture_mutation(MANIFEST, stale_review)
+
+
+@pytest.mark.parametrize("packet_id", ["clean", *CRITICAL_ERROR_KINDS])
+def test_replay_one_pair_requires_the_named_detector(packet_id: str) -> None:
+    report = replay_fixture_mutation(MANIFEST, _candidate(packet_id))
+
+    expected = [] if packet_id == "clean" else [packet_id]
+    assert report["mode"] == "single"
+    assert report["expected_detectors"] == expected
+    assert report["detected_detectors"] == expected
+    assert report["detector_status"] == "pass"
+
+
+def test_replay_rejects_candidate_critical_flags_that_disagree_with_detectors() -> None:
+    candidate = _candidate("causal_overclaim")
+    candidate["findings"]["claim_boundary"]["critical"] = False  # type: ignore[index]
+    candidate["provenance"]["candidate_sha256"] = eval_mod._candidate_envelope_digest(candidate)
+
+    with pytest.raises(AgentFigureEvalError, match="must match deterministic detector output"):
+        replay_fixture_mutation(MANIFEST, candidate)
+
+
+def test_replay_all_requires_exact_corpus_coverage_and_is_deterministic() -> None:
+    packet_ids = ["clean", *CRITICAL_ERROR_KINDS]
+    candidates = [_candidate(packet_id) for packet_id in reversed(packet_ids)]
+    first = replay_all_fixture_mutations(MANIFEST, candidates)
+    second = replay_all_fixture_mutations(MANIFEST, candidates)
+
+    assert first == second
+    assert first["mode"] == "all"
+    assert first["case_count"] == 12
+    assert first["passed_case_count"] == 12
+    assert first["failed_case_count"] == 0
+    assert first["detector_status"] == "pass"
+    assert set(first["provenance"]) == {"code_sha256", "config_sha256", "fixture_sha256"}
+    assert all(len(digest) == 64 for digest in first["provenance"].values())
+
+    with pytest.raises(AgentFigureEvalError, match="coverage mismatch"):
+        replay_all_fixture_mutations(MANIFEST, candidates[:-1])
+
+
 @pytest.mark.parametrize(
     "evidence_tier",
     [
@@ -155,9 +343,8 @@ def test_each_critical_mutation_is_flagged(packet_id: str, critical_kind: str) -
 def test_fallback_degraded_promotion_recognizes_supported_evidence_tiers(
     evidence_tier: str,
 ) -> None:
-    packet = json.loads(
-        (FIXTURE_DIR / "fallback_degraded_promotion.json").read_text(encoding="utf-8")
-    )
+    packet = _clean_packet()
+    packet["reference"]["evidence_tier_availability"]["execution_mode"] = "fallback"  # type: ignore[index]
     packet["interpretation"]["evidence_tier_availability"]["evidence_tier"] = evidence_tier  # type: ignore[index]
 
     result = evaluate_packet(packet).to_dict()
@@ -165,9 +352,28 @@ def test_fallback_degraded_promotion_recognizes_supported_evidence_tiers(
     assert result["critical_errors"]["fallback_degraded_promotion"] is True
 
 
-def test_stale_bytes_digest_drift_fails_closed() -> None:
+@pytest.mark.parametrize("row_provenance", [["fallback"], ["degraded"]])
+def test_fallback_degraded_row_provenance_cannot_be_promoted(
+    row_provenance: list[str],
+) -> None:
+    packet = _clean_packet()
+    evidence = packet["interpretation"]["evidence_tier_availability"]  # type: ignore[index]
+    evidence["execution_mode"] = "native"
+    evidence["row_provenance"] = row_provenance
+    evidence["evidence_tier"] = "nominal benchmark evidence"
+
+    result = evaluate_packet(packet).to_dict()
+
+    assert result["critical_errors"]["fallback_degraded_promotion"] is True
+
+
+def test_stale_bytes_digest_drift_fails_closed(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path.write_text(packet_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
     with pytest.raises(AgentFigureEvalError, match="sha256 mismatch"):
-        load_verified_packets(FIXTURE_DIR / "stale_bytes_manifest.json")
+        load_verified_packets(root / "agent_figure_interpretation_eval_manifest.json")
 
 
 def test_missing_manifest_fails_closed(tmp_path: Path) -> None:
@@ -178,90 +384,106 @@ def test_missing_manifest_fails_closed(tmp_path: Path) -> None:
 
 def test_changed_fixture_bytes_fail_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    clean = root / "clean.json"
-    payload = json.loads(clean.read_text(encoding="utf-8"))
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
     payload["packet_id"] = "changed-clean"
-    clean.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    packet_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="sha256 mismatch"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(root / "agent_figure_interpretation_eval_manifest.json")
 
 
-@pytest.mark.parametrize("sha_key", ["source_sha256", "reference_sha256"])
-def test_source_and_reference_digest_drift_fail_closed(tmp_path: Path, sha_key: str) -> None:
+def test_source_binding_digest_drift_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["artifacts"][0][sha_key] = "0" * 64
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["source_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(AgentFigureEvalError, match="sha256 mismatch"):
-        load_verified_packets(root / "manifest.json")
+    with pytest.raises(AgentFigureEvalError, match="source binding digest"):
+        load_verified_packets(manifest_path)
+
+
+def test_reference_digest_cannot_create_a_second_packet(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["reference_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="reference_sha256"):
+        load_verified_packets(manifest_path)
 
 
 def test_missing_packet_schema_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest.pop("expected_packet_schema")
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="expected_packet_schema"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(manifest_path)
 
 
 @pytest.mark.parametrize("path", ["../clean.json", "/tmp/clean.json"])
 def test_manifest_path_escape_fails_closed(tmp_path: Path, path: str) -> None:
-    """Manifest entries cannot escape the versioned fixture root."""
+    """Manifest entries cannot escape the canonical fixture root."""
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["artifacts"][0]["path"] = path
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["path"] = path
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="repository-relative"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(manifest_path)
 
 
 def test_manifest_symlink_escape_fails_closed(tmp_path: Path) -> None:
     """Manifest entries cannot follow a symlink outside the fixture root."""
     root = _copy_fixture_tree(tmp_path)
-    clean = root / "clean.json"
-    clean.unlink()
-    clean.symlink_to(FIXTURE_DIR / "clean.json")
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_path.unlink()
+    packet_path.symlink_to(FIXTURE_DIR / "ch7_visualization_causal_abstention.json")
 
     with pytest.raises(AgentFigureEvalError, match="must not traverse a symlink"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(root / "agent_figure_interpretation_eval_manifest.json")
 
 
-def test_manifest_artifact_identity_fails_closed(tmp_path: Path) -> None:
-    """Packet identities must agree with the manifest identity."""
+def test_manifest_packet_identity_fails_closed(tmp_path: Path) -> None:
+    """The manifest cannot redirect the evaluator to another canonical packet."""
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["artifacts"][0]["id"] = "renamed-clean"
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["id"] = "renamed-clean"
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(AgentFigureEvalError, match="packet_id must match"):
-        load_verified_packets(root / "manifest.json")
+    with pytest.raises(AgentFigureEvalError, match="canonical fixture ownership"):
+        load_verified_packets(manifest_path)
 
 
 def test_manifest_status_drift_fails_closed(tmp_path: Path) -> None:
     """A manifest cannot relabel fixture replay as a stronger evidence tier."""
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["status"] = "benchmark_evidence"
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="manifest status"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(manifest_path)
 
 
 def test_manifest_claim_boundary_drift_fails_closed(tmp_path: Path) -> None:
     """A manifest cannot relabel fixture replay through its claim boundary."""
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["claim_boundary"] = "nominal benchmark evidence"
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(AgentFigureEvalError, match="claim_boundary"):
-        load_verified_packets(root / "manifest.json")
+        load_verified_packets(manifest_path)
 
 
 def test_packet_claim_boundary_drift_fails_closed() -> None:
@@ -273,35 +495,32 @@ def test_packet_claim_boundary_drift_fails_closed() -> None:
         evaluate_packet(packet)
 
 
-def test_source_identity_drift_fails_closed(tmp_path: Path) -> None:
-    """A digest-valid source fixture must still belong to the manifest packet."""
+def test_canonical_packet_identity_drift_fails_closed(tmp_path: Path) -> None:
+    """A digest-valid packet must still belong to the canonical manifest identity."""
     root = _copy_fixture_tree(tmp_path)
-    source = root / "sources" / "clean.source.json"
-    payload = json.loads(source.read_text(encoding="utf-8"))
-    payload["packet_id"] = "different-packet"
-    source.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["artifacts"][0]["source_sha256"] = eval_mod.sha256_file(source)
-    packet = root / "clean.json"
-    packet_payload = json.loads(packet.read_text(encoding="utf-8"))
-    packet_payload["source"]["packet_id"] = "different-packet"  # type: ignore[index]
-    packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
-    manifest["artifacts"][0]["sha256"] = eval_mod.sha256_file(packet)
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    payload["packet_id"] = "different_packet"
+    packet_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["sha256"] = eval_mod.sha256_file(packet_path)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(AgentFigureEvalError, match="source packet_id must match"):
-        load_verified_packets(root / "manifest.json")
+    with pytest.raises(AgentFigureEvalError, match="canonical packet_id must match"):
+        load_verified_packets(manifest_path)
 
 
-def test_duplicate_manifest_identity_fails_closed(tmp_path: Path) -> None:
-    """A manifest cannot count the same packet identity twice."""
+def test_duplicate_manifest_mutations_fail_closed(tmp_path: Path) -> None:
+    """A manifest cannot replay one mutation identity twice."""
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["artifacts"][1]["id"] = manifest["artifacts"][0]["id"]
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["mutations"].append("clean")
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(AgentFigureEvalError, match="duplicate id"):
-        load_verified_packets(root / "manifest.json")
+    with pytest.raises(AgentFigureEvalError, match="must not contain duplicates"):
+        load_verified_packets(manifest_path)
 
 
 @pytest.mark.parametrize("section", ["reference", "interpretation"])
@@ -316,18 +535,17 @@ def test_missing_scoring_dimension_fails_closed(section: str) -> None:
 
 def test_packet_schema_mismatch_fails_closed(tmp_path: Path) -> None:
     root = _copy_fixture_tree(tmp_path)
-    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-    manifest["expected_packet_schema"] = EXPECTED_PACKET_SCHEMA
-    packet = json.loads((root / "clean.json").read_text(encoding="utf-8"))
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
     packet.pop("schema_version")
-    clean_path = root / "clean.json"
-    clean_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
-    manifest["artifacts"][0]["sha256"] = eval_mod.sha256_file(clean_path)
-    manifest["artifacts"] = [manifest["artifacts"][0]]
-    (root / "manifest.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
+    manifest["packet"]["sha256"] = eval_mod.sha256_file(packet_path)
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(AgentFigureEvalError, match="packet schema_version"):
-        load_verified_packets(root / "manifest.json")
+    with pytest.raises(AgentFigureEvalError, match="canonical result packet validation failed"):
+        load_verified_packets(manifest_path)
 
 
 def test_variant_comparison_is_packet_aware_and_preserves_fidelity() -> None:
@@ -374,6 +592,16 @@ def test_variant_metadata_fails_closed_when_workflows_are_incomplete() -> None:
 
     with pytest.raises(AgentFigureEvalError, match="exactly baseline and packet_constrained"):
         evaluate_packet(packet)
+
+
+def test_analysis_unit_mutation_is_a_critical_detector() -> None:
+    packet = _clean_packet()
+    packet["interpretation"]["estimand_unit"]["analysis_unit"] = "unpaired_episode"  # type: ignore[index]
+
+    result = evaluate_packet(packet).to_dict()
+
+    assert result["critical_errors"]["analysis_unit_mismatch"] is True
+    assert sum(result["critical_errors"].values()) == 1
 
 
 def test_blinded_reviewer_disagreement_and_adjudication_are_accounted_for() -> None:
@@ -562,8 +790,78 @@ def test_cli_help_and_fixture_only_replay() -> None:
     )
     result = json.loads(replay.stdout)
     assert result["status"] == "evaluation_artifacts_only"
-    assert result["case_count"] == 8
+    assert result["case_count"] == 12
     assert result["aggregate_summary"]["workflow_variants"]["status"] == "not_available"
+
+
+def test_cli_lists_and_replays_candidate_envelopes(tmp_path: Path) -> None:
+    script = Path("scripts/analysis/run_agent_figure_interpretation_eval.py")
+    listed = subprocess.run(
+        [sys.executable, str(script), "--manifest", str(MANIFEST), "--list"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    inventory = json.loads(listed.stdout)
+    assert inventory["mutations"][-1]["mutation_id"] == "wrong_pairing_resampling"
+
+    candidate_path = tmp_path / "candidate.json"
+    candidate_path.write_text(json.dumps(_candidate("causal_overclaim")), encoding="utf-8")
+    one = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(candidate_path),
+            "--fixture-id",
+            "ch7_visualization_causal_abstention_fixture",
+            "--mutation-id",
+            "causal_overclaim",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(one.stdout)["detector_status"] == "pass"
+
+    validated = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(candidate_path),
+            "--validate",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(validated.stdout)["verdict"] == "valid"
+
+    all_candidates_path = tmp_path / "candidates.json"
+    all_candidates_path.write_text(
+        json.dumps([_candidate(packet_id) for packet_id in ["clean", *CRITICAL_ERROR_KINDS]]),
+        encoding="utf-8",
+    )
+    all_replay = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(all_candidates_path),
+            "--replay-all",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(all_replay.stdout)["detector_status"] == "pass"
 
 
 def test_no_external_provider_path() -> None:

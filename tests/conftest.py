@@ -394,6 +394,9 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # Figure-interpretation replay tests are provider-free deterministic contracts;
+    # keep their exact-head mutation and provenance coverage in fast shards.
+    "test_agent_figure_interpretation_eval.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

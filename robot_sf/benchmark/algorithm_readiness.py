@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from robot_sf.benchmark.algorithm_contract import (
+    CONTRACT_RECORDS_BY_NAME,
+    MIGRATED_ALGORITHM_RECORDS,
+)
+
 AlgorithmTier = Literal["baseline-ready", "experimental", "placeholder"]
 BenchmarkProfile = Literal["baseline-safe", "paper-baseline", "experimental"]
 
@@ -20,6 +25,26 @@ class AlgorithmReadiness:
     requires_explicit_opt_in: bool = False
 
 
+def _contract_readiness(canonical_name: str) -> AlgorithmReadiness:
+    """Build the readiness facade entry from the canonical contract registry.
+
+    The migrated families (issue #7676 first slice) are owned by
+    :mod:`robot_sf.benchmark.algorithm_contract`; this adapter keeps the public
+    ``AlgorithmReadiness`` surface unchanged.
+
+    Returns:
+        AlgorithmReadiness: The registry-derived readiness entry.
+    """
+    record = CONTRACT_RECORDS_BY_NAME[canonical_name]
+    return AlgorithmReadiness(
+        canonical_name=record.canonical_name,
+        tier=record.tier,
+        aliases=record.aliases,
+        note=record.note,
+        requires_explicit_opt_in=record.requires_explicit_opt_in,
+    )
+
+
 _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
     AlgorithmReadiness(
         canonical_name="goal",
@@ -33,47 +58,12 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         aliases=("social_force", "sf"),
         note="Social-force adapter baseline.",
     ),
-    AlgorithmReadiness(
-        canonical_name="orca",
-        tier="baseline-ready",
-        aliases=("orca",),
-        note="ORCA baseline (requires rvo2 or explicit fallback policy).",
-    ),
-    AlgorithmReadiness(
-        canonical_name="socnav_orca_nonholonomic",
-        tier="experimental",
-        aliases=("socnav_orca_nonholonomic",),
-        note="SocNav ORCA variant tuned for nonholonomic commitment.",
-        requires_explicit_opt_in=True,
-    ),
-    AlgorithmReadiness(
-        canonical_name="socnav_orca_dd",
-        tier="experimental",
-        aliases=("socnav_orca_dd",),
-        note="SocNav ORCA variant tuned for differential-drive compatibility.",
-        requires_explicit_opt_in=True,
-    ),
-    AlgorithmReadiness(
-        canonical_name="socnav_orca_relaxed",
-        tier="experimental",
-        aliases=("socnav_orca_relaxed",),
-        note="SocNav ORCA variant with relaxed safety tuning.",
-        requires_explicit_opt_in=True,
-    ),
-    AlgorithmReadiness(
-        canonical_name="socnav_hrvo",
-        tier="experimental",
-        aliases=("socnav_hrvo",),
-        note="SocNav HRVO variant with hybrid reciprocal velocity obstacles.",
-        requires_explicit_opt_in=True,
-    ),
-    AlgorithmReadiness(
-        canonical_name="hrvo",
-        tier="experimental",
-        aliases=("hrvo",),
-        note="Local hybrid reciprocal velocity obstacles planner.",
-        requires_explicit_opt_in=True,
-    ),
+    _contract_readiness("orca"),
+    _contract_readiness("socnav_orca_nonholonomic"),
+    _contract_readiness("socnav_orca_dd"),
+    _contract_readiness("socnav_orca_relaxed"),
+    _contract_readiness("socnav_hrvo"),
+    _contract_readiness("hrvo"),
     AlgorithmReadiness(
         canonical_name="drl_vo",
         tier="experimental",
@@ -84,39 +74,10 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
         requires_explicit_opt_in=True,
     ),
-    AlgorithmReadiness(
-        canonical_name="social_navigation_pyenvs_orca",
-        tier="experimental",
-        aliases=("social_navigation_pyenvs_orca", "social_nav_pyenvs_orca"),
-        note="Upstream Social-Navigation-PyEnvs non-trainable ORCA wrapper.",
-    ),
-    AlgorithmReadiness(
-        canonical_name="social_navigation_pyenvs_socialforce",
-        tier="experimental",
-        aliases=(
-            "social_navigation_pyenvs_socialforce",
-            "social_nav_pyenvs_socialforce",
-        ),
-        note="Upstream Social-Navigation-PyEnvs non-trainable SocialForce wrapper.",
-    ),
-    AlgorithmReadiness(
-        canonical_name="social_navigation_pyenvs_sfm_helbing",
-        tier="experimental",
-        aliases=(
-            "social_navigation_pyenvs_sfm_helbing",
-            "social_nav_pyenvs_sfm_helbing",
-        ),
-        note="Upstream Social-Navigation-PyEnvs non-trainable SFM-Helbing wrapper.",
-    ),
-    AlgorithmReadiness(
-        canonical_name="social_navigation_pyenvs_hsfm_new_guo",
-        tier="experimental",
-        aliases=(
-            "social_navigation_pyenvs_hsfm_new_guo",
-            "social_nav_pyenvs_hsfm_new_guo",
-        ),
-        note="Upstream Social-Navigation-PyEnvs non-trainable HSFM-New-Guo wrapper.",
-    ),
+    _contract_readiness("social_navigation_pyenvs_orca"),
+    _contract_readiness("social_navigation_pyenvs_socialforce"),
+    _contract_readiness("social_navigation_pyenvs_sfm_helbing"),
+    _contract_readiness("social_navigation_pyenvs_hsfm_new_guo"),
     AlgorithmReadiness(
         canonical_name="crowdnav_height",
         tier="experimental",
@@ -129,46 +90,10 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         aliases=("sonic_crowdnav", "sonic_gst"),
         note="Upstream SoNIC model-only checkpoint wrapper with fail-fast source asset checks.",
     ),
-    AlgorithmReadiness(
-        canonical_name="gensafenav_ours_gst",
-        tier="experimental",
-        aliases=("gensafenav_ours_gst", "gensafe_ours_gst", "ours_gst"),
-        note="Upstream GenSafeNav constrained learned checkpoint wrapper with fail-fast asset checks.",
-    ),
-    AlgorithmReadiness(
-        canonical_name="gensafenav_ours_gst_guarded",
-        tier="experimental",
-        aliases=("gensafenav_ours_gst_guarded", "ours_gst_guarded"),
-        note=(
-            "GenSafeNav Ours_GST wrapper with explicit short-horizon safety guard and goal fallback "
-            "for static-risk-heavy slices."
-        ),
-    ),
-    AlgorithmReadiness(
-        canonical_name="gensafenav_gst_predictor_rand",
-        tier="experimental",
-        aliases=(
-            "gensafenav_gst_predictor_rand",
-            "gensafe_gst_predictor_rand",
-            "gst_predictor_rand",
-        ),
-        note=(
-            "Upstream GenSafeNav CrowdNav++-style learned checkpoint wrapper with fail-fast "
-            "asset checks."
-        ),
-    ),
-    AlgorithmReadiness(
-        canonical_name="gensafenav_gst_predictor_rand_guarded",
-        tier="experimental",
-        aliases=(
-            "gensafenav_gst_predictor_rand_guarded",
-            "gst_predictor_rand_guarded",
-        ),
-        note=(
-            "GenSafeNav GST_predictor_rand wrapper with explicit short-horizon safety guard and "
-            "goal fallback for static-risk-heavy slices."
-        ),
-    ),
+    _contract_readiness("gensafenav_ours_gst"),
+    _contract_readiness("gensafenav_ours_gst_guarded"),
+    _contract_readiness("gensafenav_gst_predictor_rand"),
+    _contract_readiness("gensafenav_gst_predictor_rand_guarded"),
     AlgorithmReadiness(
         canonical_name="ppo",
         tier="experimental",
@@ -578,8 +503,26 @@ def require_algorithm_allowed(
 
 
 def paper_baseline_algorithms() -> tuple[str, ...]:
-    """Return the canonical publication profile algorithm set."""
-    return ("goal", "social_force", "orca", "ppo")
+    """Return the canonical publication profile algorithm set.
+
+    The tuple stays literal until every family migrates to the contract
+    registry (issue #7676). Registry records flagged ``paper_baseline_eligible``
+    must already appear here; the parity gate below fails closed when a newly
+    migrated eligible algorithm is missing from the publication profile.
+    """
+    paper_baselines = ("goal", "social_force", "orca", "ppo")
+    registry_eligible = frozenset(
+        record.canonical_name
+        for record in MIGRATED_ALGORITHM_RECORDS
+        if record.paper_baseline_eligible
+    )
+    missing = sorted(registry_eligible - set(paper_baselines))
+    if missing:
+        raise ValueError(
+            f"Registry marks {missing} as paper-baseline-eligible but they are absent "
+            "from paper_baseline_algorithms(); keep membership exact during migration."
+        )
+    return paper_baselines
 
 
 __all__ = [

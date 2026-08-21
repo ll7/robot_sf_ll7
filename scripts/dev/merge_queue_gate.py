@@ -81,6 +81,7 @@ from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import (  # noqa: E402
+    extract_metadata_digests,
     find_not_ready_body_sentinels,
     metadata_digest,
     metadata_trailer,
@@ -832,6 +833,128 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
     return {"latest": latest}
 
 
+def _to_receipt_check_runs(items: Any, *, head_sha: str) -> list[dict[str, Any]]:
+    """Project the live status rollup onto exact-head receipt check evidence.
+
+    ``gh pr view`` scopes ``statusCheckRollup`` to the current PR head.  The
+    projection records that binding explicitly even when the GraphQL rollup
+    omits a separate ``head_sha`` field, so receipt verification never has to
+    guess which head the snapshot described.
+    """
+    if not isinstance(items, list):
+        return []
+    checks: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        app = item.get("app") if isinstance(item.get("app"), dict) else {}
+        checks.append(
+            {
+                "name": str(item.get("name") or item.get("context") or ""),
+                "head_sha": str(item.get("head_sha") or item.get("headSha") or head_sha),
+                "status": str(item.get("status") or "").lower(),
+                "conclusion": str(item.get("conclusion") or "").lower(),
+                "started_at": item.get("startedAt") or item.get("started_at"),
+                "completed_at": item.get("completedAt") or item.get("completed_at"),
+                "details_url": item.get("detailsUrl")
+                or item.get("targetUrl")
+                or item.get("html_url"),
+                "identity": str(app.get("slug") or app.get("name") or item.get("name") or ""),
+                "app": {
+                    "slug": str(app.get("slug") or ""),
+                    "name": str(app.get("name") or ""),
+                },
+                "approved_reviewer": item.get("approved_reviewer") is True,
+            }
+        )
+    return checks
+
+
+def _to_receipt_review_evidence(
+    items: Any, *, head_sha: str, expected_metadata_digest: str
+) -> list[dict[str, Any]]:
+    """Keep the raw fields needed to classify independent carriers.
+
+    Review comments can carry the canonical metadata trailer and an exact-head
+    marker even though GitHub does not expose either as a typed field.  Preserve
+    those declarations so the receipt classifier can reject stale or missing
+    bindings rather than stamping the current snapshot onto old prose.
+    """
+    if not isinstance(items, list):
+        return []
+    evidence: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        author = item.get("author") if isinstance(item.get("author"), dict) else {}
+        user = item.get("user") if isinstance(item.get("user"), dict) else {}
+        body = str(item.get("body") or "")
+        declared_shas = re.findall(r"(?<![0-9a-fA-F])([0-9a-fA-F]{40})(?![0-9a-fA-F])", body)
+        observed_head = item.get("head_sha") or item.get("commit_id") or item.get("commitId")
+        if not observed_head:
+            observed_head = next(
+                (value for value in declared_shas if value.lower() == head_sha.lower()),
+                declared_shas[-1] if declared_shas else None,
+            )
+        observed_metadata = item.get("metadata_digest")
+        metadata_values = extract_metadata_digests(body)
+        if not observed_metadata:
+            observed_metadata = next(
+                (
+                    value
+                    for value in metadata_values
+                    if value.lower() == expected_metadata_digest.lower()
+                ),
+                metadata_values[-1] if metadata_values else None,
+            )
+        evidence.append(
+            {
+                "id": item.get("id"),
+                "identity": str(
+                    item.get("identity") or author.get("login") or user.get("login") or ""
+                ),
+                "authorAssociation": str(
+                    item.get("authorAssociation") or item.get("author_association") or ""
+                ).upper(),
+                "state": str(item.get("state") or ""),
+                "commit_id": item.get("commit_id") or item.get("commitId"),
+                "head_sha": observed_head,
+                "metadata_digest": observed_metadata,
+                "evidence_digest": item.get("evidence_digest") or item.get("digest"),
+                "approved_reviewer": item.get("approved_reviewer") is True,
+                "approved_source": item.get("approved_source") is True,
+                "dismissed": item.get("dismissed") is True,
+                "withdrawn": item.get("withdrawn") is True,
+                "superseded": item.get("superseded") is True,
+                "body": body,
+            }
+        )
+    return evidence
+
+
+def _requested_review_identities(items: Any) -> tuple[list[str], list[str]]:
+    """Separate requested user and team identities from GitHub's union list."""
+    reviewers: list[str] = []
+    teams: list[str] = []
+    if not isinstance(items, list):
+        return reviewers, teams
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        user = item.get("user") if isinstance(item.get("user"), dict) else {}
+        team = item.get("team") if isinstance(item.get("team"), dict) else {}
+        typename = str(item.get("__typename") or "").lower()
+        if team or "team" in typename:
+            identity = str(team.get("name") or team.get("slug") or item.get("name") or "")
+            if identity:
+                teams.append(identity)
+        else:
+            identity = str(user.get("login") or item.get("login") or item.get("name") or "")
+            if identity:
+                reviewers.append(identity)
+    return sorted(set(reviewers)), sorted(set(teams))
+
+
 def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, str | None]:
     """Return the PR base SHA through the gh-compatible REST pull endpoint."""
     # ``baseRefOid`` is not available in the repository's supported gh 2.45.0
@@ -972,11 +1095,28 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
     if changed_scope_err:
         return {}, changed_scope_err
 
+    requested_reviewers, requested_teams = _requested_review_identities(review_requests)
+    required_checks = _to_receipt_check_runs(payload.get("statusCheckRollup"), head_sha=head_sha)
+    current_metadata_digest = metadata_digest(title, body)
+    review_evidence = {
+        "check_runs": required_checks,
+        "reviews": _to_receipt_review_evidence(
+            payload.get("reviews"),
+            head_sha=head_sha,
+            expected_metadata_digest=current_metadata_digest,
+        ),
+        "comments": _to_receipt_review_evidence(
+            payload.get("comments"),
+            head_sha=head_sha,
+            expected_metadata_digest=current_metadata_digest,
+        ),
+    }
+
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
         "draft": draft_value,
         "head_sha": head_sha,
-        "metadata_digest": metadata_digest(title, body),
+        "metadata_digest": current_metadata_digest,
         "body": body,
         "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
@@ -987,6 +1127,10 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
         "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
+        "required_checks": required_checks,
+        "review_evidence": review_evidence,
+        "requested_reviewers": requested_reviewers,
+        "requested_teams": requested_teams,
         # Each GitHub review request is an explicit request for review. Treat any
         # outstanding request as protective rather than guessing whether a user,
         # team, or bot is "external"; this is conservative parity with the

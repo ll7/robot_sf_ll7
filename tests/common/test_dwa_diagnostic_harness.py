@@ -136,6 +136,20 @@ def test_load_scenario_pins_one_seed_and_rejects_missing_or_lossy_seed(
         load_scenario("missing", 7, matrix, load_scenarios_fn=lambda *_args, **_kwargs: [])
 
 
+def test_load_scenario_rejects_malformed_names_and_undeclared_seeds(tmp_path: Path) -> None:
+    matrix = tmp_path / "matrix.yaml"
+
+    with pytest.raises(ValueError, match="non-empty string names"):
+        load_scenario("1", 7, matrix, load_scenarios_fn=lambda *_args, **_kwargs: [{"name": 1}])
+    with pytest.raises(ValueError, match="does not declare seed"):
+        load_scenario(
+            "target",
+            8,
+            matrix,
+            load_scenarios_fn=lambda *_args, **_kwargs: [{"name": "target", "seeds": [7]}],
+        )
+
+
 @pytest.mark.parametrize(
     ("content", "message"),
     [("\n", "exactly one"), ("{}\n{}\n", "exactly one"), ("[]\n", "JSON object")],
@@ -215,6 +229,16 @@ def test_extract_trace_steps_rejects_index_and_candidate_count_drift() -> None:
     step["candidate_total"] = 3
     with pytest.raises(ValueError, match="conserve"):
         _extract_trace_steps(record)
+
+    record = _record()
+    step = record["algorithm_metadata"]["planner_decision_trace"]["steps"][0]
+    del step["candidate_infeasible"]
+    with pytest.raises(ValueError, match="provided together"):
+        _extract_trace_steps(record)
+
+    record = _record()
+    with pytest.raises(ValueError, match="does not match"):
+        _extract_trace_steps(record, expected_dt=0.2)
 
 
 def test_validate_identity_rejects_mismatches_and_malformed_provenance() -> None:
@@ -304,6 +328,8 @@ def test_collect_episode_supports_existing_result_without_running_map_batch(tmp_
     [
         ("canonical_algorithm", "mpc", "algorithm metadata mismatch"),
         ("status", "degraded", "non-success execution status"),
+        ("status", "error", "non-success execution status"),
+        ("status", "placeholder", "non-success execution status"),
         ("fallback_or_degraded", True, "fallback or degraded"),
     ],
 )
@@ -325,6 +351,50 @@ def test_collect_episode_rejects_relabelled_or_degraded_source(
     )
 
     with pytest.raises(ValueError, match=message):
+        collect_episode(request)
+
+
+def test_collect_episode_rejects_predictive_fallback_metadata(tmp_path: Path) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    record["algorithm_metadata"]["foresight_prediction"] = {
+        "effective_prediction_mode": "constant_velocity",
+        "load_status": "failed",
+        "fallback_used": True,
+        "evidence_eligible": False,
+    }
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="fallback or degraded"):
+        collect_episode(request)
+
+
+@pytest.mark.parametrize("nested_status", ["error", "placeholder"])
+def test_collect_episode_rejects_non_success_nested_status(
+    tmp_path: Path, nested_status: str
+) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    record["algorithm_metadata"]["foresight_prediction"] = {"status": nested_status}
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="DWA diagnostic source foresight_prediction"):
         collect_episode(request)
 
 
@@ -524,6 +594,24 @@ def test_collect_episode_preserves_map_runner_contract(tmp_path: Path) -> None:
     assert call["record_planner_decision_trace"] is True
 
 
+def test_collect_episode_rejects_trace_record_step_count_drift(tmp_path: Path) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    record["steps"] = 2
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="do not match"):
+        collect_episode(request)
+
+
 def test_flatten_trace_step_rejects_malformed_nested_fields() -> None:
     with pytest.raises(ValueError, match="dynamic_window"):
         flatten_trace_step(
@@ -642,6 +730,25 @@ def test_flatten_and_summarize_trace_fields() -> None:
     assert summary["diagnostic_status"] == "diagnostic-only"
 
 
+def test_summarize_episode_rejects_lossy_outcome_flags() -> None:
+    with pytest.raises(ValueError, match="collision_event must be boolean"):
+        summarize_episode(
+            episode_id="episode",
+            record={
+                "scenario_id": "target",
+                "seed": 7,
+                "termination_reason": "max_steps",
+                "steps": 1,
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": "false",
+                    "timeout_event": True,
+                },
+            },
+            rows=[{"step": 0}],
+        )
+
+
 def test_write_steps_and_provenance_helpers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -654,6 +761,8 @@ def test_write_steps_and_provenance_helpers(
     json_path = tmp_path / "plain.json"
     write_json_atomic(json_path, {"value": 2}, review_marker=False)
     assert json.loads(json_path.read_text(encoding="utf-8")) == {"value": 2}
+    with pytest.raises(ValueError, match="Out of range float values"):
+        write_json_atomic(tmp_path / "nonfinite.json", {"value": float("nan")}, review_marker=False)
 
     in_repo = Path(harness.__file__).resolve()
     assert repo_relative_path(in_repo) == "robot_sf/benchmark/dwa_diagnostic_harness.py"

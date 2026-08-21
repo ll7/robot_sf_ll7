@@ -38,7 +38,15 @@ DEFAULT_HORIZON = 100
 DEFAULT_DT = 0.1
 _VALID_EXECUTION_MODES = frozenset({"native", "adapter", "mixed"})
 _NON_SUCCESS_EXECUTION_STATUSES = frozenset(
-    {"fallback", "degraded", "failed", "partial-failure", "not_available"}
+    {
+        "fallback",
+        "degraded",
+        "failed",
+        "partial-failure",
+        "not_available",
+        "error",
+        "placeholder",
+    }
 )
 
 
@@ -90,14 +98,35 @@ def load_scenario(
     Returns:
         A copied scenario mapping with one pinned integer seed.
     """
+    normalized_name = _require_non_empty_string(name, "scenario name")
     scenarios = load_scenarios_fn(matrix_path, base_dir=matrix_path.parent)
-    matches = [row for row in scenarios if str(row.get("name")) == name]
+    matches: list[Mapping[str, Any]] = []
+    for row in scenarios:
+        if not isinstance(row, Mapping):
+            raise ValueError("scenario matrix entries must be objects")
+        row_name = row.get("name")
+        if not isinstance(row_name, str) or not row_name.strip():
+            raise ValueError("scenario matrix entries must have non-empty string names")
+        if row_name == normalized_name:
+            matches.append(row)
     if not matches:
-        raise KeyError(f"scenario {name!r} is absent from matrix {matrix_path}")
+        raise KeyError(f"scenario {normalized_name!r} is absent from matrix {matrix_path}")
     if len(matches) != 1:
-        raise ValueError(f"scenario {name!r} is ambiguous in matrix {matrix_path}")
+        raise ValueError(f"scenario {normalized_name!r} is ambiguous in matrix {matrix_path}")
     scenario = dict(matches[0])
-    scenario["seeds"] = [_require_integer(seed, "scenario seed")]
+    normalized_seed = _require_integer(seed, "scenario seed")
+    declared_seeds = scenario.get("seeds")
+    if declared_seeds is not None:
+        if not isinstance(declared_seeds, list):
+            raise ValueError("scenario seeds must be a list when declared")
+        normalized_declared_seeds = [
+            _require_integer(declared, "declared scenario seed") for declared in declared_seeds
+        ]
+        if normalized_seed not in normalized_declared_seeds:
+            raise ValueError(
+                f"scenario {normalized_name!r} does not declare seed {normalized_seed}"
+            )
+    scenario["seeds"] = [normalized_seed]
     return scenario
 
 
@@ -196,7 +225,9 @@ def _validate_identity(
         )
 
 
-def _extract_trace_steps(record: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+def _extract_trace_steps(
+    record: Mapping[str, Any], *, expected_dt: float | None = None
+) -> tuple[Mapping[str, Any], ...]:
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
         raise ValueError("episode record is missing algorithm_metadata")
@@ -205,7 +236,11 @@ def _extract_trace_steps(record: Mapping[str, Any]) -> tuple[Mapping[str, Any], 
         raise ValueError("episode record is missing planner_decision_trace")
     if trace.get("schema_version") != "planner-decision-trace.v1":
         raise ValueError("planner_decision_trace.schema_version must be planner-decision-trace.v1")
-    _require_finite_number(trace.get("dt"), "planner_decision_trace.dt")
+    trace_dt = _require_finite_number(trace.get("dt"), "planner_decision_trace.dt")
+    if expected_dt is not None:
+        request_dt = _require_finite_number(expected_dt, "request dt")
+        if not math.isclose(trace_dt, request_dt, abs_tol=1e-12):
+            raise ValueError("planner_decision_trace.dt does not match the requested diagnostic dt")
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ValueError("planner_decision_trace.steps must be a non-empty list")
@@ -239,14 +274,20 @@ def _validate_trace_scalars(step: Mapping[str, Any]) -> None:
         "route_progress_from_start_m",
         "robot_x_m",
         "robot_y_m",
+        "feasible_score_min",
+        "feasible_score_max",
     ):
         if key in step and step[key] is not None:
             _require_finite_number(step[key], f"trace {key}")
 
 
 def _validate_candidate_counts(step: Mapping[str, Any]) -> None:
+    keys = ("candidate_total", "candidate_feasible", "candidate_infeasible")
+    present = [key for key in keys if key in step and step[key] is not None]
+    if present and len(present) != len(keys):
+        raise ValueError("trace candidate counts must be provided together")
     counts: dict[str, int] = {}
-    for key in ("candidate_total", "candidate_feasible", "candidate_infeasible"):
+    for key in keys:
         if key in step and step[key] is not None:
             count = _require_integer(step[key], f"trace {key}")
             if count < 0:
@@ -315,12 +356,15 @@ def _validate_metadata_algorithm(metadata: Mapping[str, Any], expected_algorithm
 
 def _validate_metadata_status(metadata: Mapping[str, Any]) -> None:
     status = _normalised_algorithm(metadata.get("status"), "algorithm metadata status")
-    if status in _NON_SUCCESS_EXECUTION_STATUSES:
+    if status != "ok":
         raise ValueError(f"DWA diagnostic source has non-success execution status {status!r}")
     fallback_or_degraded = metadata.get("fallback_or_degraded")
     if fallback_or_degraded is not None and not isinstance(fallback_or_degraded, bool):
         raise ValueError("algorithm metadata fallback_or_degraded must be boolean")
-    if fallback_or_degraded is True or metadata.get("evidence_eligible") is False:
+    evidence_eligible = metadata.get("evidence_eligible")
+    if evidence_eligible is not None and not isinstance(evidence_eligible, bool):
+        raise ValueError("algorithm metadata evidence_eligible must be boolean")
+    if fallback_or_degraded is True or evidence_eligible is False:
         raise ValueError("DWA diagnostic source is marked fallback or degraded")
 
 
@@ -335,17 +379,37 @@ def _validate_kinematics(metadata: Mapping[str, Any]) -> None:
         raise ValueError(f"unsupported DWA diagnostic execution mode {execution_mode!r}")
 
 
+def _validate_foresight_prediction(block: Mapping[str, Any]) -> None:
+    fallback_used = block.get("fallback_used")
+    if fallback_used is not None and not isinstance(fallback_used, bool):
+        raise ValueError("foresight_prediction fallback_used must be boolean")
+    evidence_eligible = block.get("evidence_eligible")
+    if evidence_eligible is not None and not isinstance(evidence_eligible, bool):
+        raise ValueError("foresight_prediction evidence_eligible must be boolean")
+    if fallback_used is True or evidence_eligible is False:
+        raise ValueError("DWA diagnostic source foresight_prediction is fallback or degraded")
+    if block.get("effective_prediction_mode") == "constant_velocity" and block.get(
+        "load_status"
+    ) in {"failed", "not_attempted"}:
+        raise ValueError("DWA diagnostic source foresight_prediction is fallback or degraded")
+
+
 def _validate_nested_execution_statuses(metadata: Mapping[str, Any]) -> None:
     for block_name in ("foresight_prediction", "adapter_impact"):
         block = metadata.get(block_name)
-        if not isinstance(block, Mapping):
+        if block is None:
             continue
+        if not isinstance(block, Mapping):
+            raise ValueError(f"algorithm metadata {block_name} must be an object")
         block_status = block.get("status")
-        if (
-            isinstance(block_status, str)
-            and block_status.strip().lower() in _NON_SUCCESS_EXECUTION_STATUSES
-        ):
-            raise ValueError(f"DWA diagnostic source {block_name} is {block_status!r}")
+        if block_status is not None:
+            normalized_status = _normalised_algorithm(
+                block_status, f"algorithm metadata {block_name} status"
+            )
+            if normalized_status in _NON_SUCCESS_EXECUTION_STATUSES:
+                raise ValueError(f"DWA diagnostic source {block_name} is {block_status!r}")
+        if block_name == "foresight_prediction":
+            _validate_foresight_prediction(block)
 
 
 def _validate_algorithm_and_execution(
@@ -597,7 +661,10 @@ def collect_episode(
             matrix_path=resolved_matrix,
             schema_path=resolved_schema,
         )
-    trace_steps = _extract_trace_steps(record)
+    trace_steps = _extract_trace_steps(record, expected_dt=request.dt)
+    record_steps = _require_integer(record.get("steps"), "episode record steps")
+    if record_steps < 0 or record_steps != len(trace_steps):
+        raise ValueError("episode record steps do not match planner_decision_trace.steps")
     source_artifacts: dict[str, Path] = {"episodes_jsonl": result_path}
     if provenance_path.exists():
         source_artifacts["provenance"] = provenance_path
@@ -751,17 +818,32 @@ def summarize_episode(
     Returns:
         The shared summary fields plus any issue-specific measurements.
     """
-    outcome = record.get("outcome", {})
-    outcome = outcome if isinstance(outcome, Mapping) else {}
+    scenario_id = _require_non_empty_string(record.get("scenario_id"), "episode scenario_id")
+    seed = _require_integer(record.get("seed"), "episode seed")
+    steps = _require_integer(record.get("steps"), "episode steps")
+    if steps < 0:
+        raise ValueError("episode steps must be non-negative")
+    termination_reason = _require_non_empty_string(
+        record.get("termination_reason"), "episode termination_reason"
+    )
+    outcome = record.get("outcome")
+    if not isinstance(outcome, Mapping):
+        raise ValueError("episode outcome must be an object")
+    outcome_flags: dict[str, bool] = {}
+    for key in ("route_complete", "collision_event", "timeout_event"):
+        value = outcome.get(key)
+        if not isinstance(value, bool):
+            raise ValueError(f"episode outcome.{key} must be boolean")
+        outcome_flags[key] = value
     summary = {
         "episode_id": episode_id,
-        "scenario_id": record.get("scenario_id"),
-        "seed": record.get("seed"),
-        "termination_reason": record.get("termination_reason"),
-        "steps": record.get("steps"),
-        "route_complete": bool(outcome.get("route_complete")),
-        "collision_event": bool(outcome.get("collision_event")),
-        "timeout_event": bool(outcome.get("timeout_event")),
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "termination_reason": termination_reason,
+        "steps": steps,
+        "route_complete": outcome_flags["route_complete"],
+        "collision_event": outcome_flags["collision_event"],
+        "timeout_event": outcome_flags["timeout_event"],
         "trace_step_count": len(rows),
         "constraint_reason_counts": constraint_reason_counts(rows),
         "route_progress": route_progress_summary(rows),
@@ -812,7 +894,10 @@ def write_json_atomic(path: Path, payload: Mapping[str, Any], *, review_marker: 
     marked_payload = dict(payload)
     if review_marker:
         marked_payload["review_marker"] = "AI-GENERATED NEEDS-REVIEW"
-    atomic_write_text(path, json.dumps(marked_payload, indent=2, sort_keys=True) + "\n")
+    atomic_write_text(
+        path,
+        json.dumps(marked_payload, allow_nan=False, indent=2, sort_keys=True) + "\n",
+    )
     _register_if_evidence(path)
 
 

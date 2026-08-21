@@ -374,7 +374,6 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     """Check a blocked v2 package without creating or accepting an admission receipt."""
 
     sums_sha, _listed = _verify_package_members_for_diagnostic(package)
-
     package = package.resolve()
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
@@ -416,6 +415,21 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
         "status": "excluded_by_frozen_ruling",
         "metrics": [item["metric"] for item in excluded],
     }
+    exclusion_reasons = [
+        str(item.get("reason", "")).lower()
+        for item in excluded
+        if isinstance(item, Mapping) and item.get("issue") == 7042
+    ]
+    if any(
+        not any(marker in reason for marker in ("closed #7042 ruling", "frozen #7042 ruling"))
+        for reason in exclusion_reasons
+    ):
+        blockers.append(
+            {
+                "code": "metric_semantics_excluded_issue_7042",
+                "reason": "collision-sensitive metrics and SNQI are excluded by the closed #7042 ruling",
+            }
+        )
     return {
         "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
         "issue": 7087,

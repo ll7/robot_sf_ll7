@@ -25,6 +25,56 @@ DEFAULT_CONFIG_PATH = Path("configs/benchmarks/issue_6794_phase_c_parity_prepara
 _HEX_DIGEST_LENGTH = 64
 
 
+class _UniqueKeySafeLoader(yaml.SafeLoader):
+    """Safe YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: yaml.SafeLoader, node: yaml.nodes.MappingNode, deep: bool = False
+) -> dict[Any, Any]:
+    """Construct a YAML mapping while rejecting duplicate keys.
+
+    Returns:
+        The constructed mapping.
+    """
+    mapping: dict[Any, Any] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                "while constructing a mapping",
+                node.start_mark,
+                f"found duplicate key {key!r}",
+                key_node.start_mark,
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeySafeLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
+
+
+def _construct_unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Construct a JSON object while rejecting duplicate member names.
+
+    Returns:
+        The constructed object mapping.
+    """
+    mapping: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in mapping:
+            raise ValueError(f"duplicate JSON object key {key!r}")
+        mapping[key] = value
+    return mapping
+
+
+def _reject_non_finite_json_constant(value: str) -> Any:
+    """Reject JSON extensions that would introduce non-finite numeric values."""
+    raise ValueError(f"non-finite JSON constant {value!r} is not permitted")
+
+
 def _sha256(path: Path) -> str:
     """Return the lowercase SHA-256 digest of a regular file."""
     digest = hashlib.sha256()
@@ -49,8 +99,12 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if not raw_line.strip():
             continue
         try:
-            value = json.loads(raw_line)
-        except json.JSONDecodeError as exc:
+            value = json.loads(
+                raw_line,
+                object_pairs_hook=_construct_unique_json_object,
+                parse_constant=_reject_non_finite_json_constant,
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
             raise ValueError(f"{path}:{line_number}: invalid JSON: {exc}") from exc
         if not isinstance(value, Mapping):
             raise ValueError(f"{path}:{line_number}: expected a JSON object")
@@ -360,7 +414,10 @@ def _load_preparation_config(config_path: Path) -> Mapping[str, Any]:
         Parsed preparation configuration.
     """
     try:
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        config = yaml.load(
+            config_path.read_text(encoding="utf-8"),
+            Loader=_UniqueKeySafeLoader,  # noqa: S506
+        )
     except (OSError, yaml.YAMLError) as exc:
         raise ValueError(f"cannot read preparation config {config_path}: {exc}") from exc
     config = _mapping(config, name="preparation config")
@@ -466,6 +523,31 @@ def _validate_protocol_shape(protocol: Mapping[str, Any]) -> None:
         raise ValueError("parity protocol must freeze single-worker differential-drive execution")
 
 
+def _validate_protocol_arm(
+    arm: Mapping[str, Any],
+    index: int,
+    expected: Mapping[str, Any],
+    expected_override_fields: set[str],
+) -> Mapping[str, Any]:
+    """Validate one frozen planner arm and return its runtime overrides.
+
+    Returns:
+        The validated runtime-overrides mapping.
+    """
+    expected_fields = set(expected) | {"runtime_overrides"}
+    if set(arm) != expected_fields:
+        raise ValueError(f"parity protocol arm {index} has unexpected fields")
+    for field, expected_value in expected.items():
+        if arm.get(field) != expected_value:
+            raise ValueError(f"parity protocol arm {index} has unexpected {field}")
+    overrides = arm.get("runtime_overrides")
+    if not isinstance(overrides, Mapping):
+        raise ValueError("parity protocol arm runtime_overrides must be mappings")
+    if set(overrides) != expected_override_fields:
+        raise ValueError(f"parity protocol arm {index} runtime_overrides has unexpected fields")
+    return overrides
+
+
 def _validate_protocol_arms(protocol: Mapping[str, Any]) -> None:
     """Validate the PPO and SACADRL fail-fast arm declarations."""
     planner_arms = protocol.get("planner_arms")
@@ -493,15 +575,18 @@ def _validate_protocol_arms(protocol: Mapping[str, Any]) -> None:
             "fallback_policy": "fail_fast",
         },
     ]
-    for index, expected in enumerate(expected_arms):
-        arm = planner_arms[index]
-        for field, expected_value in expected.items():
-            if arm.get(field) != expected_value:
-                raise ValueError(f"parity protocol arm {index} has unexpected {field}")
-    ppo_overrides = planner_arms[0].get("runtime_overrides")
-    sacadrl_overrides = planner_arms[1].get("runtime_overrides")
-    if not isinstance(ppo_overrides, Mapping) or not isinstance(sacadrl_overrides, Mapping):
-        raise ValueError("parity protocol arm runtime_overrides must be mappings")
+    ppo_overrides = _validate_protocol_arm(
+        planner_arms[0],
+        0,
+        expected_arms[0],
+        {"fallback_to_goal"},
+    )
+    sacadrl_overrides = _validate_protocol_arm(
+        planner_arms[1],
+        1,
+        expected_arms[1],
+        {"socnav_missing_prereq_policy"},
+    )
     if ppo_overrides.get("fallback_to_goal") is not False:
         raise ValueError("PPO parity arm must disable goal fallback")
     if sacadrl_overrides.get("socnav_missing_prereq_policy") != "fail-fast":
@@ -734,6 +819,10 @@ def compare_parity_rows(
     Returns:
         A fail-closed parity comparison report.
     """
+    abs_tolerance = _strict_number(abs_tolerance, name="parity float_abs_tolerance")
+    rel_tolerance = _strict_number(rel_tolerance, name="parity float_rel_tolerance")
+    if abs_tolerance < 0.0 or rel_tolerance < 0.0:
+        raise ValueError("parity comparison tolerances must be non-negative")
     before = _read_jsonl(before_path)
     after = _read_jsonl(after_path)
     before_by_key = _index_rows(before, "before", identity_fields)
@@ -803,7 +892,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.after_episodes,
                 identity_fields=protocol["row_identity"],
                 status_fields=protocol["required_status_fields"],
-                metric_fields=protocol["required_metrics"],
+                metric_fields=[f"metrics.{metric}" for metric in protocol["required_metrics"]],
                 abs_tolerance=comparison["float_abs_tolerance"],
                 rel_tolerance=comparison["float_rel_tolerance"],
             )

@@ -1,0 +1,88 @@
+version: 1
+skill: goal-autopilot
+requirements:
+  - id: artifact-first-required-files
+    description: artifact-first worker bundles must name these files
+    scope: raw
+    operator: all_of
+    values:
+      - result.json
+      - RESULT.md
+      - diffstat.txt
+      - validation.json
+  - id: artifact-first-review-order
+    description: artifact-first review order and route-evidence boundary must stay explicit
+    scope: lowercase
+    operator: all_of
+    values:
+      - artifact-first
+      - route evidence
+      - raw logs
+      - targeted local
+  - id: worker-output-limits
+    description: delegated discovery must stay bounded (compact search, no broad dumps)
+    scope: lowercase
+    operator: all_of
+    values:
+      - rg -l
+      - rg --files
+      - sed -n
+      - 200 lines
+      - private artifacts
+      - rg -n .
+      - full file reads
+  - id: routed-failure-vocabulary
+    description: routed-worker terminal-state vocabulary must be preserved
+    scope: lowercase
+    operator: all_of
+    values:
+      - terminal_state
+      - scope_check
+      - compact_artifacts
+      - missing_artifact
+      - route_not_started
+      - scope_violation
+      - status.txt
+      - validation.txt
+      - parent acceptance
+  - id: active-ledger-reuse
+    description: active-ledger reuse, freshness keys, and fresh-live-check gates must be documented
+    scope: lowercase
+    operator: all_of
+    values:
+      - loaded context
+      - skill/doc summaries
+      - snapshot paths
+      - freshness keys
+      - expected pr head sha
+      - worker artifact paths
+      - stale-state triggers
+      - ledger snapshot paths
+      - repeating broad state polling
+      - fresh live checks
+      - issue claim
+      - push
+      - pr publication
+      - label/project mutation
+      - merge-ready
+      - compact_worktree_snapshot.py
+      - compact_ci_snapshot.py
+  - id: shared-model-routing
+    description: shared model-routing pointer authority must be stated without local route tables
+    scope: normalized
+    operator: all_of
+    values:
+      - shared model-routing pointer
+      - phase task class
+      - current evidence state
+      - do not select a model locally
+      - current native tiers
+      - evidenced escalation rule
+      - external provider budget alternatives
+      - must not duplicate a model inventory
+      - local sidecar route table
+      - route selection is route evidence only
+      - controller still reviews artifacts
+      - the diff
+      - validation locally
+      - before accepting work

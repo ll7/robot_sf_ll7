@@ -1,0 +1,50 @@
+version: 1
+skill: goal-pr-review
+requirements:
+  - id: artifact-first-required-files
+    description: artifact-first worker bundles must name these files
+    scope: raw
+    operator: all_of
+    values:
+      - result.json
+      - RESULT.md
+      - diffstat.txt
+      - validation.json
+  - id: artifact-first-review-order
+    description: artifact-first review order and route-evidence boundary must stay explicit
+    scope: lowercase
+    operator: all_of
+    values:
+      - artifact-first
+      - route evidence
+      - raw logs
+      - targeted local
+  - id: worker-output-limits
+    description: delegated discovery must stay bounded (compact search, no broad dumps)
+    scope: lowercase
+    operator: all_of
+    values:
+      - rg -l
+      - rg --files
+      - sed -n
+      - 200 lines
+      - private artifacts
+      - rg -n .
+      - full file reads
+  - id: compact-ci-queue-reference
+    description: compact PR-queue snapshots must be referenced via one canonical entry point
+    scope: lowercase
+    operator: any_of
+    values:
+      - snapshot_pr_queue.py
+      - scripts.dev.snapshot_pr_queue
+  - id: compact-ci-guidance
+    description: bounded CI-log review guidance must stay explicit
+    scope: lowercase
+    operator: all_of
+    values:
+      - watch_pr_ci_status.py
+      - status,conclusion,jobs
+      - bounded excerpts
+      - full logs
+      - private artifacts

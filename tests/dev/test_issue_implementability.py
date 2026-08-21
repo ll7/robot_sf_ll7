@@ -7,10 +7,14 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from scripts.dev.issue_implementability import evaluate_issue, inspect_contract
+from scripts.dev import issue_dependency_packet
+from scripts.dev.issue_implementability import evaluate_issue, inspect_contract, live_issue_report
+
+REPOSITORY = "ll7/robot_sf_ll7"
 
 COMPLETE_BODY = """## Objective
 Repair one bounded workflow defect.
@@ -141,6 +145,49 @@ def test_unknown_claim_state_fails_as_error() -> None:
 
     assert report["classification"] == "error"
     assert report["write_allowed"] is False
+
+
+def test_live_issue_report_applies_explicit_dependency_packet_gate(tmp_path: Path) -> None:
+    """A mandatory packet failure reaches the live preflight before claim acquisition."""
+    issue = _issue()
+    issue["body"] = issue["body"] + (
+        "\n```json\n" + json.dumps({"schema": issue_dependency_packet.SCHEMA}) + "\n```\n"
+    )
+    dependency_evaluation = {
+        "schema": issue_dependency_packet.EVALUATION_SCHEMA,
+        "ok": False,
+        "verdict": "blocked",
+        "packet_digest": "d" * 64,
+        "mandatory_failures": [
+            {
+                "id": "required-pr",
+                "reason": "required PR is not merged",
+                "unblock_condition": "merge PR #42",
+            }
+        ],
+        "advisory_failures": [],
+    }
+
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+        patch(
+            "scripts.dev.issue_implementability.issue_dependency_packet.resolve_packet",
+            return_value=dependency_evaluation,
+        ) as resolve_packet,
+    ):
+        report = live_issue_report(7611, repo=REPOSITORY, remote="origin", repo_root=tmp_path)
+
+    assert report["classification"] == "needs_dependency"
+    assert report["ready"] is False
+    assert report["write_allowed"] is False
+    assert report["dependency_gate"]["mandatory_failures"][0]["id"] == "required-pr"
+    resolve_packet.assert_called_once_with(
+        {"schema": issue_dependency_packet.SCHEMA},
+        repo_root=tmp_path,
+        expected_repository=REPOSITORY,
+        expected_issue=7611,
+    )
 
 
 def test_decision_heading_is_ignored_after_ruling() -> None:

@@ -4,6 +4,44 @@
     "start": "2026-07-30T00:00:00Z",
     "end": "2026-08-13T23:59:59Z"
   },
+  "dimensions": {
+    "admitted_result_packets": {
+      "query": "reviewed frozen-snapshot filter: admitted result/figure packet versus no admitted packet evidence",
+      "denominator": 5,
+      "buckets": {
+        "admitted_packet": 1,
+        "no_admitted_packet": 4
+      }
+    },
+    "blocked_age_categories": {
+      "query": "reviewed frozen-snapshot filter: explicit blocked-age bucket; unblocked rows remain not_blocked",
+      "denominator": 5,
+      "buckets": {
+        "blocked_0_7_days": 1,
+        "blocked_8_30_days": 1,
+        "blocked_over_30_days": 0,
+        "not_blocked": 3
+      }
+    },
+    "duplicate_competing_prs": {
+      "query": "reviewed frozen-snapshot filter: duplicate_or_competing_pr classification, not inferred from merge or closure state",
+      "denominator": 5,
+      "buckets": {
+        "competing_pr": 1,
+        "duplicate_and_competing": 0,
+        "duplicate_pr": 1,
+        "no_duplicate_or_competing": 3
+      }
+    },
+    "post_merge_repairs": {
+      "query": "reviewed frozen-snapshot filter: post_merge_repairs > 0 versus all snapshot rows",
+      "denominator": 5,
+      "buckets": {
+        "no_post_merge_repair": 4,
+        "post_merge_repair": 1
+      }
+    }
+  },
   "records": [
     {
       "id": "pr-6952",
@@ -32,7 +70,7 @@
       "id": "pr-7027",
       "kind": "infrastructure",
       "status": "completed",
-      "post_merge_repairs": 0
+      "post_merge_repairs": 1
     },
     {
       "id": "issue-7031",

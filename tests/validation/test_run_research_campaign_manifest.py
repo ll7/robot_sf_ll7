@@ -7,7 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
+
+from scripts.validation.run_research_campaign_manifest import (
+    ManifestError,
+    evaluate_research_manifest_answerability,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPO_ROOT / "scripts" / "validation" / "run_research_campaign_manifest.py"
@@ -73,6 +79,54 @@ def test_run_research_campaign_manifest_writes_packet(tmp_path: Path) -> None:
     }
 
 
+def test_evaluate_research_manifest_answerability_reuses_proof_without_writing_packet(
+    tmp_path: Path,
+) -> None:
+    """The production admission seam evaluates proof without creating campaign output."""
+    manifest_path = _copy_manifest(tmp_path)
+
+    report = evaluate_research_manifest_answerability(manifest_path)
+
+    assert report["answerability"]["state"] == "diagnostic_only"
+    assert report["answerability_proof"]["status"] == "completed"
+    assert not (tmp_path / "packet").exists()
+
+
+def test_evaluate_research_manifest_answerability_requires_proof_surface_declarations(
+    tmp_path: Path,
+) -> None:
+    """Production admission cannot bypass the executable proof-surface contract."""
+    manifest_path = _copy_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["answerability"].pop("proof_surfaces")
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(ManifestError, match=r"answerability\.proof_surfaces is required"):
+        evaluate_research_manifest_answerability(manifest_path)
+
+
+def test_evaluate_research_manifest_answerability_rejects_config_mismatch(
+    tmp_path: Path,
+) -> None:
+    """Strict admission must bind the proof manifest to the requested camera config."""
+    manifest_path = _copy_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["answerability"]["design"]["mode"] = "decision_capable"
+    manifest["answerability"]["artifacts"]["durability_status"] = "ready"
+    manifest["scenario_suite"]["campaign_config"] = (
+        "configs/benchmarks/issue_3425_empirical_vertical_slice_smoke.yaml"
+    )
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    with pytest.raises(ManifestError, match="does not match the camera-ready config"):
+        evaluate_research_manifest_answerability(
+            manifest_path,
+            expected_campaign_config=(
+                REPO_ROOT / "configs/benchmarks/issue_3425_empirical_vertical_slice_manifest.yaml"
+            ),
+        )
+
+
 def test_run_research_campaign_manifest_requires_claim_boundary(tmp_path: Path) -> None:
     """A manifest without a claim boundary must fail before writing evidence."""
     manifest_path = _copy_manifest(tmp_path)
@@ -136,6 +190,36 @@ def test_run_research_campaign_manifest_requires_mapping_sections(tmp_path: Path
 
     assert completed.returncode == 2
     assert "metrics must be a mapping" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "diagnostic_only",
+        "fallback",
+        "degraded",
+        "not_available",
+        "unavailable",
+        "not_run",
+        "failed",
+        "blocked",
+    ],
+)
+def test_run_research_campaign_manifest_rejects_caveated_success_status(
+    tmp_path: Path, status: str
+) -> None:
+    """Caveated or non-executed rows cannot be declared success by manifest authors."""
+    manifest_path = _copy_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if status not in manifest["row_status_policy"]["allowed_values"]:
+        manifest["row_status_policy"]["allowed_values"].append(status)
+    manifest["row_status_policy"]["success_values"] = [status]
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding="utf-8")
+
+    completed = _run_manifest(manifest_path, tmp_path / "packet")
+
+    assert completed.returncode == 2
+    assert "Fail-closed row statuses cannot be success values" in completed.stderr
 
 
 def test_run_research_campaign_manifest_requires_planner_row_mappings(tmp_path: Path) -> None:

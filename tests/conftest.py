@@ -394,6 +394,9 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # Figure-interpretation replay tests are provider-free deterministic contracts;
+    # keep their exact-head mutation and provenance coverage in fast shards.
+    "test_agent_figure_interpretation_eval.py",
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",

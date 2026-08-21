@@ -105,6 +105,19 @@ def test_preparation_contract_rejects_protocol_type_coercion() -> None:
         preparation_module._validate_protocol(REPO_ROOT, config["parity_protocol"])
 
 
+def test_preparation_config_rejects_duplicate_yaml_keys(tmp_path: Path) -> None:
+    """Duplicate YAML members cannot silently replace a preparation gate."""
+    config = tmp_path / "duplicate.yaml"
+    config.write_text(
+        "schema_version: legacy-checkpoint-cutover-preparation.v1\n"
+        "schema_version: legacy-checkpoint-cutover-preparation.v1\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="duplicate key"):
+        preparation_module._load_preparation_config(config)
+
+
 def test_release_component_set_must_match_declared_sources() -> None:
     """A bundle cannot silently omit or add registry components."""
     digest = "a" * 64
@@ -239,6 +252,53 @@ def test_compare_parity_rows_rejects_coerced_identity_and_status_types(tmp_path:
     report = compare_parity_rows(before, after)
     assert report["status"] == "failed"
     assert any("invalid status field type" in blocker for blocker in report["blockers"])
+
+
+def test_compare_parity_rows_rejects_ambiguous_or_nonfinite_jsonl(tmp_path: Path) -> None:
+    """JSONL duplicate keys and non-finite extensions fail before comparison."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    serialized = json.dumps(_row(111)).replace('"seed": 111', '"seed": 111, "seed": 111', 1)
+    before.write_text(serialized + "\n", encoding="utf-8")
+    after.write_text(serialized + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate JSON object key"):
+        compare_parity_rows(before, after)
+
+    malformed = _row(111)
+    malformed["diagnostics"] = float("nan")
+    _write_rows(before, [malformed])
+    _write_rows(after, [malformed])
+    with pytest.raises(ValueError, match="non-finite JSON constant"):
+        compare_parity_rows(before, after)
+
+
+def test_cli_uses_protocol_metric_paths_for_parity_comparison(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI comparisons resolve frozen metric names under the row metrics mapping."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    rows = [_row(111)]
+    _write_rows(before, rows)
+    _write_rows(after, rows)
+
+    exit_code = main(
+        [
+            "--repo-root",
+            str(REPO_ROOT),
+            "--config",
+            str(CONFIG),
+            "--before-episodes",
+            str(before),
+            "--after-episodes",
+            str(after),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["comparison"]["status"] == "passed"
 
 
 def test_cli_rejects_one_sided_comparison_input(

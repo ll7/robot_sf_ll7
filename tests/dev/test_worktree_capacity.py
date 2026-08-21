@@ -223,3 +223,116 @@ def test_create_worktree_scripts_are_shell_valid_and_executable() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> None:
+    """An unregistered branch at the target path is removed before worktree add."""
+    branch = "test/orphan-recover"
+    # Create the orphan branch at origin/main (ref exists, no registered worktree);
+    # -f keeps the test idempotent across partial runs. Pointing at origin/main
+    # guarantees the branch is an ancestor of the default base ref.
+    subprocess.run(
+        ["git", "branch", "-f", branch, "origin/main"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    )
+
+    try:
+        target = tmp_path / "new-worktree"
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert f"removing orphan branch '{branch}'" in result.stderr
+        assert target.is_dir()
+        assert (
+            f"[{branch}]"
+            in subprocess.run(
+                ["git", "worktree", "list"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+        )
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(tmp_path / "new-worktree")],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "worktree", "prune"], cwd=REPO_ROOT, capture_output=True, check=False
+        )
+        subprocess.run(
+            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
+        )
+
+
+def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:
+    """An orphan branch that is not an ancestor of the base gets a recovery hint."""
+    branch = "test/orphan-diverged"
+    # Create a synthetic root commit that cannot be an ancestor of the base ref.
+    tree = subprocess.run(
+        ["git", "mktree"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        input="",
+    ).stdout.strip()
+    commit = subprocess.run(
+        ["git", "commit-tree", tree, "-m", "orphan diverged"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    branch_result = subprocess.run(
+        ["git", "branch", "-f", branch, commit],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert branch_result.returncode == 0, branch_result.stderr
+
+    try:
+        target = tmp_path / "new-worktree"
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 2
+        assert "recover manually with" in result.stderr
+        assert "git branch -D" in result.stderr
+        assert not target.exists()
+    finally:
+        subprocess.run(
+            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
+        )

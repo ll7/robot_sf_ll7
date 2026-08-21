@@ -26,6 +26,17 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
         "completed_historical_review": 14,
         "unowned_residual": 4,
     }
+    assert {
+        (row["path"], row["scope"], row["expression"])
+        for row in payload["assertions"]
+        if row["expression"] == "state is not None"
+    } == {
+        (
+            "robot_sf/benchmark/map_runner/map_runner_episode.py",
+            "_setup_and_run_step_loop",
+            "state is not None",
+        )
+    }
     assert payload["recommendation"]["code"] == "close_parent_residuals_internal_only"
     assert all(
         row["recommended_action"] == "retain_assert_as_internal_invariant"

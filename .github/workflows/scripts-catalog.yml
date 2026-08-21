@@ -1,0 +1,44 @@
+name: Scripts Catalog
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/dev/test_scripts_catalog.py"
+      - ".github/workflows/scripts-catalog.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "tests/dev/test_scripts_catalog.py"
+      - ".github/workflows/scripts-catalog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scripts-catalog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scripts-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Validate scripts catalog
+        run: uv run python scripts/dev/check_scripts_catalog.py
+
+      - name: Check generated scripts README
+        run: uv run python scripts/dev/render_scripts_readme.py --check
+
+      - name: Test scripts catalog tooling
+        run: uv run pytest tests/dev/test_scripts_catalog.py -q

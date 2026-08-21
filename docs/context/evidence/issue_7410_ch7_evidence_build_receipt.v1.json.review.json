@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json",
-  "artifact_sha256": "eb1f273c9688e89d8764289c93d9b93d28077fee693cdfe67bedb1e2324b6dcb",
+  "artifact_sha256": "51e78190e0e724ee0f5eace73c7c250358e83d4a9bf081e29e3207b1bf8fb564",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

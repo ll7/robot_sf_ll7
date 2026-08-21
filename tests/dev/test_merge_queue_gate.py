@@ -60,6 +60,8 @@ def test_receipt_check_projection_drops_superseded_duplicate_runs() -> None:
     """Receipt evidence must use the newest run for a repeated Actions job."""
     checks = _to_receipt_check_runs(
         [
+            None,
+            "malformed rollup entry",
             {
                 "__typename": "CheckRun",
                 "name": "pr-body-contracts",

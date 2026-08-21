@@ -97,7 +97,7 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_references=_PR_6529_REFS,
     ),
     (
-        "robot_sf/benchmark/map_runner_episode.py",
+        "robot_sf/benchmark/map_runner/map_runner_episode.py",
         "_setup_and_run_step_loop",
         "state is not None",
     ): _review(

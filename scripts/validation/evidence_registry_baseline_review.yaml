@@ -335,6 +335,14 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      The Chapter 7 build receipt is a durable provenance record whose artifact hash mismatch is
+      retained as explicitly reviewed historical package debt. The receipt is not admitted as
+      benchmark or paper-facing evidence; any future repair must be made through the maintainer-
+      owned Chapter 7 admission path rather than silently rewriting this baseline companion.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

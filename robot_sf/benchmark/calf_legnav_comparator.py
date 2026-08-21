@@ -391,9 +391,10 @@ def _condition_metrics(
     success_values, malformed_row_success = _boolean_values(rows, "is_success")
     done_info = _mapping(trace.get("done_info"))
     done_success, malformed_done_success = _optional_boolean(done_info, "success")
+    success_present = done_success is not None or bool(success_values)
     success = (
         None
-        if malformed_row_success or malformed_done_success
+        if malformed_row_success or malformed_done_success or not success_present
         else float(bool(done_success) or any(success_values))
     )
     collision_values: list[bool] = []
@@ -402,7 +403,9 @@ def _condition_metrics(
         values, malformed = _boolean_values(rows, key)
         collision_values.extend(values)
         malformed_collision = malformed_collision or malformed
-    collision = None if malformed_collision else float(any(collision_values))
+    collision = (
+        None if malformed_collision or not collision_values else float(any(collision_values))
+    )
     horizon = _finite_number(trace.get("horizon"))
     horizon_reached = horizon is not None and horizon > 0.0 and len(rows) >= int(horizon)
     row_truncated_values, malformed_row_truncated = _boolean_values(rows, "truncated")

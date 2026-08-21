@@ -32,10 +32,21 @@ fi
 
 missing=()
 for package_name in "$@"; do
-  if dpkg-query -W -f='${Status}' "${package_name}" 2>/dev/null | grep -q "install ok installed"; then
-    echo "ci_install_headless_packages present package=${package_name}"
+  probe_output=""
+  probe_rc=0
+  if probe_output="$(dpkg-query -W -f='${Status}' "${package_name}" 2>/dev/null)"; then
+    probe_rc=0
   else
-    echo "ci_install_headless_packages missing package=${package_name}"
+    probe_rc=$?
+  fi
+
+  if [[ "$probe_rc" -eq 0 && "$probe_output" == *"install ok installed"* ]]; then
+    echo "ci_install_headless_packages present package=${package_name}"
+  elif [[ "$probe_rc" -eq 1 ]]; then
+    echo "ci_install_headless_packages missing package=${package_name} probe_rc=${probe_rc}"
+    missing+=("${package_name}")
+  else
+    echo "ci_install_headless_packages warning=package_probe_failed package=${package_name} probe_rc=${probe_rc}; attempting apt install"
     missing+=("${package_name}")
   fi
 done

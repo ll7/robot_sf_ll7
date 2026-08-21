@@ -105,6 +105,22 @@ def _posix_path(value: str, field_name: str) -> PurePosixPath:
     return path
 
 
+def _repo_declared_path(value: str, field_name: str, *, repo_root: Path | None = None) -> Path:
+    """Resolve a declared path and reject symlink escapes from the checkout."""
+    relative = _posix_path(value, field_name)
+    root = (repo_root or _repo_root()).resolve()
+    candidate = root.joinpath(*relative.parts)
+    try:
+        resolved = candidate.resolve()
+    except (OSError, RuntimeError) as exc:
+        raise ManifestError(
+            f"{field_name} cannot be resolved safely within the repository"
+        ) from exc
+    if resolved != root and root not in resolved.parents:
+        raise ManifestError(f"{field_name} must resolve within the repository root: {value}")
+    return candidate
+
+
 def _list_field(
     mapping: dict[str, Any],
     key: str,
@@ -182,14 +198,18 @@ def _validate_outputs(manifest: dict[str, Any], *, require_configured_outputs: b
     outputs = manifest["outputs"]
     if not isinstance(outputs, dict):
         raise ManifestError("outputs must be a mapping")
-    local_root = _posix_path(str(outputs.get("local_root", "")), "outputs.local_root")
+    repo_root = _repo_root()
+    local_root_value = str(outputs.get("local_root", ""))
+    local_root = _posix_path(local_root_value, "outputs.local_root")
     if local_root.parts[:1] != ("output",):
         raise ManifestError("outputs.local_root must stay under output/")
+    local_root_path = _repo_declared_path(
+        local_root_value, "outputs.local_root", repo_root=repo_root
+    )
     if outputs.get("disposable") is not True:
         raise ManifestError("outputs.disposable must be true for local output roots")
 
     if require_configured_outputs:
-        repo_root = _repo_root()
         for required_path in _list_field(
             outputs,
             "required_paths",
@@ -197,7 +217,18 @@ def _validate_outputs(manifest: dict[str, Any], *, require_configured_outputs: b
             required=True,
         ):
             required_posix_path = _posix_path(str(required_path), "outputs.required_paths[]")
-            candidate = repo_root / local_root / required_posix_path
+            candidate = local_root_path.joinpath(*required_posix_path.parts)
+            try:
+                resolved = candidate.resolve()
+            except (OSError, RuntimeError) as exc:
+                raise ManifestError(
+                    "outputs.required_paths[] cannot be resolved safely within the repository"
+                ) from exc
+            if resolved != repo_root.resolve() and repo_root.resolve() not in resolved.parents:
+                raise ManifestError(
+                    "outputs.required_paths[] must resolve within the repository root: "
+                    f"{required_path}"
+                )
             if not candidate.exists():
                 raise ManifestError(f"Configured output path is missing: {candidate}")
 
@@ -425,14 +456,20 @@ def _build_proof_binding(  # noqa: C901
     if not isinstance(declared_config, str) or not declared_config.strip():
         raise ManifestError("scenario_suite.campaign_config is required for decision admission")
     config_rel = _posix_path(declared_config.strip(), "scenario_suite.campaign_config")
-    config_path = root / config_rel
+    config_path = _repo_declared_path(
+        str(config_rel), "scenario_suite.campaign_config", repo_root=root
+    )
     if not config_path.is_file():
         raise ManifestError(f"scenario_suite.campaign_config does not exist: {config_path}")
     if expected_campaign_config is not None:
         expected_path = expected_campaign_config
         if not expected_path.is_absolute():
             expected_path = root / expected_path
-        if expected_path.resolve() != config_path.resolve():
+        try:
+            expected_resolved = expected_path.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ManifestError("expected campaign config cannot be resolved safely") from exc
+        if expected_resolved != config_path.resolve():
             raise ManifestError(
                 "research manifest campaign_config does not match the camera-ready config: "
                 f"{config_rel} != {expected_path}"

@@ -43,7 +43,7 @@ durable-artifact plan. The evaluator reports one explicit state:
 - `diagnostic_only` — a bounded mechanism or manifest check is valid, but it is
   not decision-capable evidence;
 - `blocked_missing_producer`, `blocked_underpowered`,
-  `blocked_analysis_contract`, `blocked_noncomparable_rows`, or
+  `blocked_analysis_contract`, `blocked_noncomparable_rows`,
   `blocked_artifact_plan`, or `blocked_missing_proof` — a named prerequisite
   or executable proof surface is not satisfied;
 - `invalid_contract` — the answerability schema itself is malformed.
@@ -127,28 +127,6 @@ the exact answerability receipt and proof binding in its JSON result. The
 issue #3425 wrapper carries `--research-manifest` and `--require-answerable`
 on both preflight and actual run commands, so the gate is re-evaluated after
 any intervening manifest/config mutation. Readiness-only callers may omit
-`--require-answerable`; the existing packet runner remains the owner of packet
-generation.
-
-The `durable_path` adapter is deliberately not an artifact admission proof:
-path existence alone cannot establish tracked retention or checksum identity.
-A required artifact surface configured with `kind: durable_path` is therefore
-recorded as `unavailable` and blocks `answerable`. Use `kind: artifact_catalog`
-to invoke the public checksum and path-policy validator.
-
-The production camera-ready launcher can enforce the same gate without creating
-a second readiness contract:
-
-```bash
-uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config configs/benchmarks/<camera-ready-config>.yaml \
-  --research-manifest configs/benchmarks/<research-manifest>.yaml \
-  --require-answerable \
-  --mode preflight
-```
-
-The launcher evaluates the manifest before camera-ready preflight or episode
-execution and does not submit compute. Readiness-only callers may omit
 `--require-answerable`; the existing packet runner remains the owner of packet
 generation.
 

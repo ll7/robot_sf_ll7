@@ -12,6 +12,7 @@ import yaml
 
 from scripts.validation.run_research_campaign_manifest import (
     ManifestError,
+    _repo_declared_path,
     evaluate_research_manifest_answerability,
 )
 
@@ -40,6 +41,17 @@ def _run_manifest(manifest_path: Path, output_dir: Path) -> subprocess.Completed
         capture_output=True,
         check=False,
     )
+
+
+def test_declared_path_rejects_symlink_escape(tmp_path: Path) -> None:
+    """Manifest-bound paths cannot resolve outside the repository root."""
+    outside = tmp_path.parent / "answerability-manifest-outside.yaml"
+    outside.write_text("outside: true\n", encoding="utf-8")
+    link = tmp_path / "config.yaml"
+    link.symlink_to(outside)
+
+    with pytest.raises(ManifestError, match="resolve within the repository root"):
+        _repo_declared_path("config.yaml", "scenario_suite.campaign_config", repo_root=tmp_path)
 
 
 def test_run_research_campaign_manifest_writes_packet(tmp_path: Path) -> None:

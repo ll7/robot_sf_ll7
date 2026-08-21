@@ -113,9 +113,7 @@ def _zone_pairs(
     """Group zone rects by kind with stable ordering."""
 
     return {
-        "robot": [
-            ("robot_spawn_zone", r) for r in map_def.robot_spawn_zones
-        ]
+        "robot": [("robot_spawn_zone", r) for r in map_def.robot_spawn_zones]
         + [("robot_goal_zone", r) for r in map_def.robot_goal_zones],
         "ped": [("ped_spawn_zone", r) for r in map_def.ped_spawn_zones]
         + [("ped_goal_zone", r) for r in map_def.ped_goal_zones],
@@ -159,7 +157,8 @@ def _endpoint_checks(
             results.append(
                 EndpointCheck(
                     route_kind=route_kind,
-                    label=route.source_label or f"{route_kind}_route_{route.spawn_id}_{route.goal_id}",
+                    label=route.source_label
+                    or f"{route_kind}_route_{route.spawn_id}_{route.goal_id}",
                     end=end_name,
                     zone_kind=kind,
                     zone_index=zone_index,
@@ -174,9 +173,7 @@ def _fragment_checks(map_def: MapDefinition, route_kind: str, routes) -> list[Fr
     """Detect contiguous route segments that touch no declared zone of any kind."""
 
     all_zones = [
-        _rect_polygon(rect)
-        for rects in _zone_pairs(map_def).values()
-        for _, rect in rects
+        _rect_polygon(rect) for rects in _zone_pairs(map_def).values() for _, rect in rects
     ]
     results: list[FragmentCheck] = []
     for route in routes:
@@ -210,7 +207,9 @@ def _missing_zone_kinds(map_def: MapDefinition) -> list[str]:
     return missing
 
 
-def inspect_map_geometry(svg_path: Path, tolerance_m: float = DEFAULT_TOLERANCE_M) -> MapGeometryReport:
+def inspect_map_geometry(
+    svg_path: Path, tolerance_m: float = DEFAULT_TOLERANCE_M
+) -> MapGeometryReport:
     """Run all read-only geometry consistency checks for one SVG map."""
 
     converter = SvgMapConverter(str(svg_path))

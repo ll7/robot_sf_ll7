@@ -54,6 +54,16 @@ _CHECK_STATUSES = frozenset(
         "inconclusive_missing_input",
     }
 )
+_EXCLUSION_REASONS = frozenset(
+    {
+        "leakage_invalid",
+        "invalid",
+        "failed",
+        "fallback",
+        "provenance_incomplete",
+        "one-step",
+    }
+)
 _YIELD_STAT_FIELDS = (
     "declared",
     "attempted",
@@ -332,6 +342,10 @@ def parse_episode_id(episode_id: str, split: str | None = None) -> tuple[str, st
     Returns:
         Tuple of (split, scenario_id, seed).
     """
+    if not isinstance(episode_id, str):
+        raise BalancedDatasetCollectionError(
+            f"Episode ID must be a string, got {type(episode_id).__name__}"
+        )
     match = EPISODE_ID_RE.match(episode_id)
     if match is None:
         raise BalancedDatasetCollectionError(f"Invalid episode ID format: {episode_id!r}")
@@ -343,54 +357,96 @@ def parse_episode_id(episode_id: str, split: str | None = None) -> tuple[str, st
     return parsed_split, match.group("scenario"), int(match.group("seed"))
 
 
-def validate_split_and_episode_invariants(packet: dict[str, Any]) -> None:  # noqa: C901
+def validate_split_and_episode_invariants(packet: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Validate split seed overlap and duplicate episode ID invariants."""
+    if not isinstance(packet, dict):
+        raise BalancedDatasetCollectionError("Launch packet must be a mapping")
+
     seeds_by_split = packet.get("seeds_by_split", {})
-    if isinstance(seeds_by_split, dict):
-        for i, left in enumerate(_SPLITS):
-            left_seeds = set(seeds_by_split.get(left, []))
-            for right in _SPLITS[i + 1 :]:
-                right_seeds = set(seeds_by_split.get(right, []))
-                overlap = sorted(left_seeds & right_seeds)
-                if overlap:
-                    raise BalancedDatasetCollectionError(
-                        f"Seed overlap detected between {left} and {right}: {overlap}"
-                    )
+    if not isinstance(seeds_by_split, dict):
+        raise BalancedDatasetCollectionError("seeds_by_split must be a mapping")
+    missing_seed_splits = [split for split in _SPLITS if split not in seeds_by_split]
+    unexpected_seed_splits = sorted(set(seeds_by_split) - set(_SPLITS))
+    if missing_seed_splits or unexpected_seed_splits:
+        raise BalancedDatasetCollectionError(
+            "seeds_by_split keys are inconsistent: "
+            f"missing={missing_seed_splits}, unexpected={unexpected_seed_splits}"
+        )
+    for split in _SPLITS:
+        split_seeds = seeds_by_split[split]
+        if not isinstance(split_seeds, list) or not split_seeds:
+            raise BalancedDatasetCollectionError(f"seeds_by_split.{split} must be a non-empty list")
+        if any(not _is_strict_integer(seed) for seed in split_seeds):
+            raise BalancedDatasetCollectionError(
+                f"seeds_by_split.{split} must contain strict integer seeds"
+            )
+        if len(set(split_seeds)) != len(split_seeds):
+            raise BalancedDatasetCollectionError(
+                f"Duplicate seed detected in seeds_by_split.{split}"
+            )
+
+    for i, left in enumerate(_SPLITS):
+        left_seeds = set(seeds_by_split[left])
+        for right in _SPLITS[i + 1 :]:
+            right_seeds = set(seeds_by_split[right])
+            overlap = sorted(left_seeds & right_seeds)
+            if overlap:
+                raise BalancedDatasetCollectionError(
+                    f"Seed overlap detected between {left} and {right}: {overlap}"
+                )
 
     scenario_ids = packet.get("scenario_ids", [])
+    if isinstance(scenario_ids, list):
+        if any(not isinstance(scenario_id, str) for scenario_id in scenario_ids):
+            raise BalancedDatasetCollectionError("scenario_ids entries must be strings")
+        if len(set(scenario_ids)) != len(scenario_ids):
+            raise BalancedDatasetCollectionError("scenario_ids must not contain duplicates")
     allowed_scenarios = set(scenario_ids) if isinstance(scenario_ids, list) else set()
     episodes_by_split = packet.get("episode_ids_by_split", {})
-    if isinstance(episodes_by_split, dict):
-        all_ids: set[str] = set()
-        for split in _SPLITS:
-            split_ids = episodes_by_split.get(split, [])
-            if not isinstance(split_ids, list) or not split_ids:
+    if not isinstance(episodes_by_split, dict):
+        raise BalancedDatasetCollectionError("episode_ids_by_split must be a mapping")
+    missing_episode_splits = [split for split in _SPLITS if split not in episodes_by_split]
+    unexpected_episode_splits = sorted(set(episodes_by_split) - set(_SPLITS))
+    if missing_episode_splits or unexpected_episode_splits:
+        raise BalancedDatasetCollectionError(
+            "episode_ids_by_split keys are inconsistent: "
+            f"missing={missing_episode_splits}, unexpected={unexpected_episode_splits}"
+        )
+
+    all_ids: set[str] = set()
+    for split in _SPLITS:
+        split_ids = episodes_by_split[split]
+        if not isinstance(split_ids, list) or not split_ids:
+            raise BalancedDatasetCollectionError(
+                f"episode_ids_by_split.{split} must be a non-empty list"
+            )
+        for ep_id in split_ids:
+            if not isinstance(ep_id, str):
                 raise BalancedDatasetCollectionError(
-                    f"episode_ids_by_split.{split} must be a non-empty list"
+                    f"episode_ids_by_split.{split} entries must be strings"
                 )
-            for ep_id in split_ids:
-                if ep_id in all_ids:
-                    raise BalancedDatasetCollectionError(
-                        f"Duplicate episode ID detected in launch packet: {ep_id!r}"
-                    )
-                parsed_split, scenario_id, seed = parse_episode_id(str(ep_id), split)
-                if parsed_split != split:
-                    raise BalancedDatasetCollectionError(
-                        f"Episode ID {ep_id!r} does not belong to split {split!r}"
-                    )
-                if allowed_scenarios and scenario_id not in allowed_scenarios:
-                    raise BalancedDatasetCollectionError(
-                        f"Episode ID {ep_id!r} references undeclared scenario {scenario_id!r}"
-                    )
-                split_seeds = set(seeds_by_split.get(split, []))
-                if split_seeds and seed not in split_seeds:
-                    raise BalancedDatasetCollectionError(
-                        f"Episode ID {ep_id!r} uses seed {seed} outside seeds_by_split.{split}"
-                    )
-                all_ids.add(ep_id)
+            if ep_id in all_ids:
+                raise BalancedDatasetCollectionError(
+                    f"Duplicate episode ID detected in launch packet: {ep_id!r}"
+                )
+            parsed_split, scenario_id, seed = parse_episode_id(ep_id, split)
+            if parsed_split != split:
+                raise BalancedDatasetCollectionError(
+                    f"Episode ID {ep_id!r} does not belong to split {split!r}"
+                )
+            if allowed_scenarios and scenario_id not in allowed_scenarios:
+                raise BalancedDatasetCollectionError(
+                    f"Episode ID {ep_id!r} references undeclared scenario {scenario_id!r}"
+                )
+            split_seeds = set(seeds_by_split[split])
+            if seed not in split_seeds:
+                raise BalancedDatasetCollectionError(
+                    f"Episode ID {ep_id!r} uses seed {seed} outside seeds_by_split.{split}"
+                )
+            all_ids.add(ep_id)
 
 
-def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed guards
+def _yield_ledger_integrity_error(  # noqa: C901, PLR0912, PLR0915 - ordered fail-closed guards
     manifest: dict[str, Any],
     ledger: dict[str, Any],
     strata: Any,
@@ -420,6 +476,18 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
         or not all(isinstance(value, str) and value for value in scenario_ids)
     ):
         return "Manifest scenario_ids must be a non-empty list of strings"
+    if len(set(scenario_ids)) != len(scenario_ids):
+        return "Manifest scenario_ids must not contain duplicates"
+    try:
+        validate_split_and_episode_invariants(
+            {
+                "scenario_ids": scenario_ids,
+                "seeds_by_split": manifest.get("seeds_by_split"),
+                "episode_ids_by_split": manifest.get("episode_ids_by_split"),
+            }
+        )
+    except (BalancedDatasetCollectionError, TypeError, ValueError) as exc:
+        return f"Manifest split/episode invariants are invalid: {exc}"
     if not isinstance(strata, dict):
         return "Yield ledger strata must be a mapping"
     expected_splits = set(_SPLITS)
@@ -432,6 +500,43 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
             f" (missing={missing_splits}, unexpected={unexpected_splits})"
         )
     expected_scenarios = set(scenario_ids)
+
+    exclusions = manifest.get("exclusions")
+    if not isinstance(exclusions, list) or any(
+        not isinstance(exclusion, dict) for exclusion in exclusions
+    ):
+        return "Manifest exclusions must be a list of mappings"
+    exclusion_reason_counts: dict[str, dict[str, dict[str, int]]] = {
+        split: {scenario_id: {} for scenario_id in scenario_ids} for split in _SPLITS
+    }
+    declared_episode_ids = manifest["episode_ids_by_split"]
+    seen_exclusion_ids: set[str] = set()
+    for exclusion in exclusions:
+        split = exclusion.get("split")
+        scenario_id = exclusion.get("scenario_id")
+        reason = exclusion.get("reason")
+        if split not in _SPLITS or scenario_id not in expected_scenarios:
+            return "Manifest exclusion references an unknown split or scenario"
+        if reason not in _EXCLUSION_REASONS:
+            return f"Manifest exclusion reason is unsupported: {reason!r}"
+        episode_id = exclusion.get("episode_id")
+        if not isinstance(episode_id, str) or episode_id not in declared_episode_ids[split]:
+            return "Manifest exclusion references an undeclared episode ID"
+        if episode_id in seen_exclusion_ids:
+            return f"Manifest exclusions contain duplicate episode ID: {episode_id!r}"
+        seen_exclusion_ids.add(episode_id)
+        parsed_split, parsed_scenario, parsed_seed = parse_episode_id(episode_id, split)
+        if (
+            parsed_split != split
+            or parsed_scenario != scenario_id
+            or not _is_strict_integer(exclusion.get("seed"))
+            or exclusion["seed"] != parsed_seed
+        ):
+            return f"Manifest exclusion identity is inconsistent for {episode_id!r}"
+        if not _is_strict_integer(exclusion.get("steps")) or exclusion["steps"] < 0:
+            return f"Manifest exclusion steps are invalid for {episode_id!r}"
+        counts = exclusion_reason_counts[split][scenario_id]
+        counts[reason] = counts.get(reason, 0) + 1
 
     totals = ledger.get("totals")
     if not isinstance(totals, dict):
@@ -487,6 +592,13 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
                 return f"Yield ledger {split}/{scenario_id}.failed exceeds excluded"
             if sum(reason_counts.values()) != stats["excluded"]:
                 return f"Yield ledger {split}/{scenario_id}.reason_counts do not sum to excluded"
+            if reason_counts != exclusion_reason_counts[split][scenario_id]:
+                return (
+                    f"Yield ledger {split}/{scenario_id}.reason_counts do not match manifest "
+                    "exclusions"
+                )
+            if stats["failed"] != reason_counts.get("failed", 0):
+                return f"Yield ledger {split}/{scenario_id}.failed is inconsistent"
             if stats["attempted"] + stats["missing"] != stats["declared"]:
                 return f"Yield ledger {split}/{scenario_id} does not account for attempted IDs"
             if stats["usable"] + stats["excluded"] != stats["attempted"]:

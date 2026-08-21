@@ -145,6 +145,26 @@ def test_split_overlap_detection() -> None:
         validate_split_and_episode_invariants(bad_packet)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("seeds_by_split", None), ("episode_ids_by_split", None)],
+)
+def test_split_invariants_reject_missing_contract_mappings(field: str, value: object) -> None:
+    """Malformed packet mappings cannot bypass the public split-invariant helper."""
+    packet: dict[str, Any] = {
+        "seeds_by_split": {"train": [101], "validation": [102], "evaluation": [103]},
+        "episode_ids_by_split": {
+            "train": ["train__sc__seed101"],
+            "validation": ["validation__sc__seed102"],
+            "evaluation": ["evaluation__sc__seed103"],
+        },
+    }
+    packet[field] = value
+
+    with pytest.raises(BalancedDatasetCollectionError, match=field):
+        validate_split_and_episode_invariants(packet)
+
+
 def test_duplicate_episode_id_detection() -> None:
     """Validate that duplicate episode IDs across splits raise BalancedDatasetCollectionError."""
     dup_packet = {
@@ -1109,6 +1129,33 @@ def test_yield_check_rejects_selected_differential_remedy(tmp_path: Path) -> Non
 
     assert result["check_status"] == "blocked_integrity_or_lineage"
     assert "unselected" in result["reason"]
+
+
+def test_yield_check_rejects_unknown_exclusion_reason(tmp_path: Path) -> None:
+    """An unrecognized exclusion cannot be hidden behind valid ledger arithmetic."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    episodes = _all_packet_episodes(collector)
+    episodes[0]["fallback"] = True
+    manifest = collector.collect_dataset(episodes_override=episodes)
+    assert check_yield_status(tmp_path)["check_status"] == "eligible_complete"
+
+    exclusion = next(row for row in manifest["exclusions"] if row["reason"] == "fallback")
+    exclusion["reason"] = "untracked_failure"
+    stats = manifest["yield_ledger"]["strata"][exclusion["split"]][exclusion["scenario_id"]]
+    stats["reason_counts"]["untracked_failure"] = stats["reason_counts"].pop("fallback")
+    Path(manifest["manifest_path"]).write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "unsupported" in result["reason"]
 
 
 def test_yield_check_rejects_unexpected_ledger_keys(tmp_path: Path) -> None:

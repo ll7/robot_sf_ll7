@@ -177,6 +177,11 @@ artifact classification as blockers; the report is read-only and never grants de
   as durable evidence.
 - Prefer `git worktree remove <path>` for clean worktrees and `git worktree prune` only after
   verifying stale administrative entries no longer point at useful local state.
+- Stash safety: `refs/stash` lives in the common Git dir, so all linked worktrees share one stash
+  namespace. Never run a bare `git stash pop` in a linked worktree — it can apply another session's
+  WIP into this checkout (issue #7700). Prefer temp commits (`git commit -m "WIP <branch>"`), or
+  `git stash push -m "<branch> <purpose>"` plus `scripts/dev/safe_stash_pop.sh` or an explicit
+  `git stash pop stash@{n}` after verifying the entry message.
 
 ## Knowledge Capture & Context Notes
 

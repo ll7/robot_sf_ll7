@@ -139,14 +139,49 @@ def read_single_episode_record(jsonl_path: Path) -> dict[str, Any]:
     lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if len(lines) != 1:
         raise ValueError(f"expected exactly one episode record in {jsonl_path}, got {len(lines)}")
-    record = json.loads(lines[0])
+    record = _load_strict_json(lines[0], f"episode record in {jsonl_path}")
     if not isinstance(record, dict):
         raise ValueError(f"episode record in {jsonl_path} must be a JSON object")
     return record
 
 
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON object keys instead of silently keeping the last value.
+
+    Returns:
+        The object mapping when every key is unique.
+    """
+    payload: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        payload[key] = value
+    return payload
+
+
+def _reject_nonstandard_json_constant(value: str) -> None:
+    """Reject JSON extensions such as ``NaN`` and infinities."""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+def _load_strict_json(text: str, label: str) -> Any:
+    """Parse canonical JSON without duplicate keys or non-standard constants.
+
+    Returns:
+        The parsed JSON value.
+    """
+    try:
+        return json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_json_object,
+            parse_constant=_reject_nonstandard_json_constant,
+        )
+    except ValueError as exc:
+        raise ValueError(f"{label} is not canonical JSON: {exc}") from exc
+
+
 def _read_json_object(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _load_strict_json(path.read_text(encoding="utf-8"), f"provenance artifact {path}")
     if not isinstance(payload, dict):
         raise ValueError(f"provenance artifact {path} must be a JSON object")
     try:
@@ -239,7 +274,7 @@ def _extract_trace_steps(
     trace_dt = _require_finite_number(trace.get("dt"), "planner_decision_trace.dt")
     if expected_dt is not None:
         request_dt = _require_finite_number(expected_dt, "request dt")
-        if not math.isclose(trace_dt, request_dt, abs_tol=1e-12):
+        if not math.isclose(trace_dt, request_dt, rel_tol=0.0, abs_tol=1e-12):
             raise ValueError("planner_decision_trace.dt does not match the requested diagnostic dt")
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
@@ -541,7 +576,7 @@ def _validate_provenance_simulator_settings(
         raise ValueError("provenance horizon does not match the request")
     provenance_dt = _require_finite_number(settings.get("dt"), "provenance dt")
     request_dt = _require_finite_number(request.dt, "request dt")
-    if not math.isclose(provenance_dt, request_dt, abs_tol=1e-12):
+    if not math.isclose(provenance_dt, request_dt, rel_tol=0.0, abs_tol=1e-12):
         raise ValueError("provenance dt does not match the request")
 
 
@@ -691,6 +726,8 @@ def flatten_trace_step(
         One flattened trace row suitable for JSON and CSV diagnostics.
     """
     _validate_trace_step(step)
+    normalized_episode_id = _require_non_empty_string(episode_id, "trace episode_id")
+    normalized_scenario_id = _require_non_empty_string(scenario_id, "trace scenario_id")
     command = step["selected_command"]
     window_value = step.get("dynamic_window")
     target_value = step.get("target_goal")
@@ -699,8 +736,8 @@ def flatten_trace_step(
     normalized_seed = _require_integer(seed, "trace seed")
     normalized_step = _require_integer(step.get("step", -1), "trace step")
     row = {
-        "episode_id": episode_id,
-        "scenario_id": scenario_id,
+        "episode_id": normalized_episode_id,
+        "scenario_id": normalized_scenario_id,
         "seed": normalized_seed,
         "step": normalized_step,
         "selected_source": str(step.get("selected_source", "unknown")),
@@ -726,6 +763,9 @@ def flatten_trace_step(
         "robot_y_m": step.get("robot_y_m"),
     }
     if extra_fields:
+        collisions = sorted(set(extra_fields).intersection(row))
+        if collisions:
+            raise ValueError(f"extra trace fields cannot overwrite common fields: {collisions}")
         row.update(extra_fields)
     return row
 
@@ -734,8 +774,13 @@ def first_unrecoverable_step(rows: Sequence[Mapping[str, Any]]) -> int | None:
     """Return the first step where every rollout candidate is infeasible."""
     for row in rows:
         feasible = row.get("candidate_feasible")
-        if feasible is not None and int(feasible) == 0:
-            return int(row["step"])
+        if feasible is None:
+            continue
+        normalized_feasible = _require_integer(feasible, "row candidate_feasible")
+        if normalized_feasible < 0:
+            raise ValueError("row candidate_feasible must be non-negative")
+        if normalized_feasible == 0:
+            return _require_integer(row.get("step"), "row step")
     return None
 
 
@@ -743,8 +788,13 @@ def first_infeasible_candidate_step(rows: Sequence[Mapping[str, Any]]) -> int | 
     """Return the first step with at least one infeasible rollout candidate."""
     for row in rows:
         infeasible = row.get("candidate_infeasible")
-        if infeasible is not None and int(infeasible) > 0:
-            return int(row["step"])
+        if infeasible is None:
+            continue
+        normalized_infeasible = _require_integer(infeasible, "row candidate_infeasible")
+        if normalized_infeasible < 0:
+            raise ValueError("row candidate_infeasible must be non-negative")
+        if normalized_infeasible > 0:
+            return _require_integer(row.get("step"), "row step")
     return None
 
 
@@ -818,6 +868,7 @@ def summarize_episode(
     Returns:
         The shared summary fields plus any issue-specific measurements.
     """
+    normalized_episode_id = _require_non_empty_string(episode_id, "episode_id")
     scenario_id = _require_non_empty_string(record.get("scenario_id"), "episode scenario_id")
     seed = _require_integer(record.get("seed"), "episode seed")
     steps = _require_integer(record.get("steps"), "episode steps")
@@ -836,7 +887,7 @@ def summarize_episode(
             raise ValueError(f"episode outcome.{key} must be boolean")
         outcome_flags[key] = value
     summary = {
-        "episode_id": episode_id,
+        "episode_id": normalized_episode_id,
         "scenario_id": scenario_id,
         "seed": seed,
         "termination_reason": termination_reason,
@@ -856,6 +907,9 @@ def summarize_episode(
         "last_selected_score": rows[-1].get("selected_score") if rows else None,
     }
     if extra_fields:
+        collisions = sorted(set(extra_fields).intersection(summary))
+        if collisions:
+            raise ValueError(f"extra summary fields cannot overwrite common fields: {collisions}")
         summary.update(extra_fields)
     return summary
 

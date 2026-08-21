@@ -164,6 +164,20 @@ def test_read_single_episode_record_rejects_non_single_object(
         read_single_episode_record(path)
 
 
+@pytest.mark.parametrize(
+    "content",
+    ['{"key": 1, "key": 2}\n', '{"key": NaN}\n'],
+    ids=["duplicate-key", "non-standard-constant"],
+)
+def test_read_single_episode_record_rejects_noncanonical_json(tmp_path: Path, content: str) -> None:
+    """Episode JSON must not rely on parser recovery for ambiguous values."""
+    path = tmp_path / "episodes.jsonl"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="canonical JSON"):
+        read_single_episode_record(path)
+
+
 def test_extract_trace_steps_and_json_object_reject_malformed_payloads(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="algorithm_metadata"):
         _extract_trace_steps({})
@@ -195,6 +209,10 @@ def test_extract_trace_steps_and_json_object_reject_malformed_payloads(tmp_path:
         )
 
     provenance = tmp_path / "provenance.json"
+    with pytest.raises(ValueError, match="canonical JSON"):
+        provenance.write_text('{"key": 1, "key": 2}', encoding="utf-8")
+        _read_json_object(provenance)
+
     provenance.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="JSON object"):
         _read_json_object(provenance)
@@ -239,6 +257,11 @@ def test_extract_trace_steps_rejects_index_and_candidate_count_drift() -> None:
     record = _record()
     with pytest.raises(ValueError, match="does not match"):
         _extract_trace_steps(record, expected_dt=0.2)
+
+    record = _record()
+    record["algorithm_metadata"]["planner_decision_trace"]["dt"] = 1_000_000_000.1
+    with pytest.raises(ValueError, match="does not match"):
+        _extract_trace_steps(record, expected_dt=1_000_000_000.0)
 
 
 def test_validate_identity_rejects_mismatches_and_malformed_provenance() -> None:
@@ -655,6 +678,15 @@ def test_flatten_and_summarize_trace_fields() -> None:
     assert row["dynamic_window_v_min"] == 0.0
     assert row["diagnostic_flag"] is True
 
+    with pytest.raises(ValueError, match="cannot overwrite common fields"):
+        flatten_trace_step(
+            {"step": 0, "selected_command": [0.1, 0.0]},
+            episode_id="episode",
+            scenario_id="target",
+            seed=7,
+            extra_fields={"seed": 999},
+        )
+
     rows = [
         {
             "step": 0,
@@ -728,6 +760,27 @@ def test_flatten_and_summarize_trace_fields() -> None:
     assert summary["first_all_infeasible_step"] == 1
     assert summary["last_selected_command"] == {"v_mps": 0.0, "w_radps": 0.0}
     assert summary["diagnostic_status"] == "diagnostic-only"
+
+    with pytest.raises(ValueError, match="cannot overwrite common fields"):
+        summarize_episode(
+            episode_id="episode",
+            record={
+                "scenario_id": "target",
+                "seed": 7,
+                "termination_reason": "max_steps",
+                "steps": 4,
+                "outcome": {
+                    "route_complete": False,
+                    "collision_event": False,
+                    "timeout_event": True,
+                },
+            },
+            rows=rows,
+            extra_fields={"steps": 999},
+        )
+
+    with pytest.raises(ValueError, match="must be an integer"):
+        first_unrecoverable_step([{"step": "1", "candidate_feasible": "0"}])
 
 
 def test_summarize_episode_rejects_lossy_outcome_flags() -> None:

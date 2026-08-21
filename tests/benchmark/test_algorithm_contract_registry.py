@@ -53,12 +53,22 @@ def test_every_migrated_family_has_exactly_one_record() -> None:
     assert len(MIGRATED_ALGORITHM_RECORDS) == len(fixture["families"])
 
 
+def _jsonable(value: object) -> object:
+    """Normalize tuple-backed registry payloads to the JSON fixture shape."""
+    return json.loads(json.dumps(value, sort_keys=True))
+
+
 @pytest.mark.parametrize("surface", sorted(_METADATA_SURFACES))
 def test_snapshot_parity_metadata_facade(surface: str) -> None:
-    """Facade metadata equals the pinned pre-refactor snapshot values."""
+    """Registry and facade metadata equal the pinned pre-refactor values."""
     fixture = _fixture()
     facade = getattr(metadata_module, surface)
     field = _METADATA_SURFACES[surface]
+    registry = {
+        canonical: getattr(CONTRACT_RECORDS_BY_NAME[canonical], field)
+        for canonical in fixture["families"]
+    }
+    assert _jsonable(registry) == fixture[surface]
     for canonical in fixture["families"]:
         assert facade[canonical] == getattr(CONTRACT_RECORDS_BY_NAME[canonical], field), canonical
 

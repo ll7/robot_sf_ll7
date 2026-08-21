@@ -13,6 +13,19 @@ Bounded first slice: ``orca`` plus the SocNav ORCA/HRVO variants, the
 ``social_navigation_pyenvs_*`` adapters, and the ``gensafenav_*`` adapters.
 All other algorithms remain on the legacy path until their family migrates;
 see :func:`audit_contract_ownership` for the migration audit surface.
+
+Later-family migration procedure:
+
+1. Capture the family's current readiness, metadata, builder, and model/provenance
+   surfaces in a fixture before changing code.
+2. Add exactly one validated :class:`AlgorithmContractRecord` and include every
+   existing alias; do not infer or rewrite scientific metadata during the move.
+3. Declare the builder owner and extend :func:`validate_builder_agreement` when
+   the family uses a new registration surface.
+4. Rewire compatibility facades to read the record, then add snapshot, alias,
+   builder, ordering, and emitted-metadata parity tests.
+5. Run :func:`audit_contract_ownership`, the focused benchmark suites, and the
+   relevant provenance/readiness gates before migrating another family.
 """
 
 from __future__ import annotations
@@ -150,7 +163,7 @@ def _validate_record_identity(record: AlgorithmContractRecord) -> None:
         raise ValueError("canonical_name must be a string")
     if not record.canonical_name or record.canonical_name != record.canonical_name.strip().lower():
         raise ValueError(f"canonical_name must be normalized lowercase: {record.canonical_name!r}")
-    if record.tier not in _ALLOWED_TIERS:
+    if not isinstance(record.tier, str) or record.tier not in _ALLOWED_TIERS:
         raise ValueError(f"{record.canonical_name}: unknown readiness tier {record.tier!r}")
     _require_non_empty_text(record.note, field="note", canonical_name=record.canonical_name)
     if not isinstance(record.requires_explicit_opt_in, bool):
@@ -167,7 +180,10 @@ def _validate_record_identity(record: AlgorithmContractRecord) -> None:
     )
     if not isinstance(record.paper_baseline_eligible, bool):
         raise ValueError(f"{record.canonical_name}: paper_baseline_eligible must be boolean")
-    if record.policy_builder_owner not in _ALLOWED_POLICY_BUILDER_OWNERS:
+    if (
+        not isinstance(record.policy_builder_owner, str)
+        or record.policy_builder_owner not in _ALLOWED_POLICY_BUILDER_OWNERS
+    ):
         raise ValueError(
             f"{record.canonical_name}: unknown policy_builder_owner {record.policy_builder_owner!r}"
         )
@@ -189,11 +205,22 @@ def _validate_record_aliases(record: AlgorithmContractRecord) -> None:
 
 
 def _validate_record_payloads(record: AlgorithmContractRecord) -> None:
-    """Validate the non-empty structured metadata payloads."""
-    for payload_name in ("observation_spec", "upstream_reference", "kinematics_profile"):
+    """Validate required fields in observation, provenance, and execution payloads."""
+    required_payload_fields = {
+        "observation_spec": ("default_mode", "supported_modes", "inputs", "notes"),
+        "upstream_reference": ("repo_url", "adapter_boundary"),
+        "kinematics_profile": ("planner_command_space", "default_execution_mode"),
+    }
+    for payload_name, required_fields in required_payload_fields.items():
         payload = getattr(record, payload_name)
         if not isinstance(payload, dict) or not payload:
             raise ValueError(f"{record.canonical_name}: {payload_name} must be a non-empty mapping")
+        missing_fields = [field for field in required_fields if field not in payload]
+        if missing_fields:
+            raise ValueError(
+                f"{record.canonical_name}: {payload_name} is missing required fields "
+                f"{missing_fields}"
+            )
 
 
 def _validate_record(record: AlgorithmContractRecord) -> None:

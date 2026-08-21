@@ -298,6 +298,13 @@ def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> No
     commit = subprocess.run(
         ["git", "commit-tree", tree, "-m", "orphan diverged"],
         cwd=REPO_ROOT,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "Robot SF test",
+            "GIT_AUTHOR_EMAIL": "robot-sf-test@example.invalid",
+            "GIT_COMMITTER_NAME": "Robot SF test",
+            "GIT_COMMITTER_EMAIL": "robot-sf-test@example.invalid",
+        },
         check=True,
         capture_output=True,
         text=True,

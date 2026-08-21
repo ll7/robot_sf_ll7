@@ -133,6 +133,11 @@ manifests or registry entries. Keep raw episode JSONL, videos, large SLURM logs,
 model caches, and checkpoints out of git unless there is a narrow fixture reason. Do not use Git LFS
 as the default answer for generated benchmark artifacts.
 
+All linked worktrees share one `refs/stash` namespace: never run a bare `git stash pop` in a linked
+worktree (issue #7700). Prefer temp commits (`git commit -m "WIP <branch>"`), or
+`git stash push -m "<branch> <purpose>"` with the fail-closed
+`scripts/dev/safe_stash_pop.sh` / an explicit `git stash pop stash@{n}` after verifying the entry.
+
 For compact worktree hygiene and the full teardown procedure, read `docs/dev/agents/relocated-agents-guidance.md`.
 
 ## Project Structure And Ownership

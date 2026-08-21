@@ -127,3 +127,20 @@ preflight_check_fast_pysf() {
     exit 2
   fi
 }
+
+# Classify the usable CUDA runtime so CUDA-gated tests skip consistently behind
+# an explicit gpu_unavailable receipt instead of crashing a final-readiness lane
+# with an unclassified NVML/driver failure (issue #7712). This is a recording
+# preflight: a broken CUDA/NVML path is an environment classification, not a
+# changed-code regression, so it does not fail the lane. The shared classifier
+# (robot_sf/telemetry/gpu.py) is the single source of truth both here and in the
+# pytest skip markers.
+preflight_check_cuda_runtime() {
+  if [ "${PR_READY_SKIP_PREFLIGHT:-0}" = "1" ]; then
+    return 0
+  fi
+  if ! uv run python "$REPO_ROOT/scripts/dev/check_cuda_runtime.py" --receipt-dir "$REPO_ROOT/output/validation/pr_ready"; then
+    printf 'CUDA runtime classification probe failed (setup evidence, not a code regression).\n' >&2
+    exit 1
+  fi
+}

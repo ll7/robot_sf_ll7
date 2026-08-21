@@ -98,7 +98,12 @@ def _load_exhausted_attempts(path: Path | None) -> list[dict[str, object]] | Non
     """Load the bounded exhausted-attempt fingerprint ledger."""
     if path is None:
         return None
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"failed to load exhausted attempts file {path}: {type(exc).__name__}"
+        ) from exc
     attempts = payload.get("attempts") if isinstance(payload, dict) else payload
     if not isinstance(attempts, list) or not all(isinstance(item, dict) for item in attempts):
         raise ValueError(
@@ -111,7 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    exhausted_attempts = _load_exhausted_attempts(args.exhausted_attempts_file)
+    try:
+        exhausted_attempts = _load_exhausted_attempts(args.exhausted_attempts_file)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.yield_check:
         result = check_yield_status(args.output_root, config_path=args.config)

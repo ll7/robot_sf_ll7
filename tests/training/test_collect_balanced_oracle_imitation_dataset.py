@@ -1032,6 +1032,48 @@ def test_yield_check_rejects_inconsistent_pass_gate(tmp_path: Path) -> None:
     assert "Yield ledger" in result["reason"]
 
 
+def test_yield_check_rejects_unaccounted_attempted_rows(tmp_path: Path) -> None:
+    """A forged attempted count cannot exceed the declared packet roster."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_path = tmp_path / "balanced_oracle_dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    stats = manifest["yield_ledger"]["strata"]["train"][collector.scenario_ids[0]]
+    stats["attempted"] += 1
+    manifest["yield_ledger"]["totals"]["attempted"] += 1
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "attempted" in result["reason"]
+
+
+def test_yield_check_rejects_selected_differential_remedy(tmp_path: Path) -> None:
+    """A status check cannot treat a selected remedy as an implementation result."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_path = tmp_path / "balanced_oracle_dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["yield_ledger"]["differential_remedy"]["selected"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = check_yield_status(tmp_path)
+
+    assert result["check_status"] == "blocked_integrity_or_lineage"
+    assert "unselected" in result["reason"]
+
+
 def test_yield_check_rejects_unexpected_ledger_keys(tmp_path: Path) -> None:
     """Unexpected ledger splits or strata cannot crash or bypass exact-key validation."""
     collector = BalancedOracleCollector(
@@ -1209,6 +1251,38 @@ def test_yield_cli_check(tmp_path: Path) -> None:
     assert exit_code == 0
 
 
+@pytest.mark.parametrize(
+    "contents",
+    [None, "{not-json", "[1]", '{"attempts": [1]}'],
+    ids=["missing", "malformed-json", "non-mapping-items", "invalid-attempts"],
+)
+def test_cli_rejects_invalid_exhausted_attempts_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], contents: str | None
+) -> None:
+    """Malformed exhausted-attempt input returns a structured CLI error without a traceback."""
+    attempts_path = tmp_path / "exhausted_attempts.json"
+    if contents is not None:
+        attempts_path.write_text(contents, encoding="utf-8")
+
+    exit_code = cli_main(
+        [
+            "--config",
+            str(TEST_PACKET_PATH),
+            "--output-root",
+            str(tmp_path / "out"),
+            "--preflight",
+            "--exhausted-attempts-file",
+            str(attempts_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert "error:" in captured.err
+    assert "Traceback" not in captured.err
+    assert not (tmp_path / "out" / "balanced_oracle_collection_plan.json").exists()
+
+
 def test_packet_difference_rejects_unchanged_exhausted_attempt(tmp_path: Path) -> None:
     """An unchanged exhausted packet is rejected before a preflight plan is written."""
     collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
@@ -1354,4 +1428,29 @@ def test_malformed_identity_rows_are_preserved_as_defects(tmp_path: Path) -> Non
     defect_kinds = {item["kind"] for item in manifest["identity_defects"]}
     assert {"identity_mismatch", "unexpected_episode_id"} <= defect_kinds
     assert all(item["reason"] == "leakage_invalid" for item in manifest["exclusions"])
+    assert manifest["yield_ledger"]["totals"]["usable"] == 0
+
+
+@pytest.mark.parametrize("seed", [1001.0, "1001"])
+def test_non_integer_identity_seed_is_preserved_as_a_defect(tmp_path: Path, seed: object) -> None:
+    """Numeric coercion cannot turn a non-integer runtime seed into usable evidence."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+    expected_id = collector.episodes_by_split["train"][0]
+    _, scenario, seed_token = expected_id.split("__")
+    episode = _make_episode(
+        expected_id,
+        scenario,
+        int(seed_token.removeprefix("seed")),
+        "train",
+        steps=2,
+    )
+    episode["seed"] = seed
+
+    manifest = collector.collect_dataset(
+        episodes_override=[episode],
+        allow_insufficient_yield=True,
+    )
+
+    assert manifest["identity_defects"][0]["fields"] == ["seed"]
+    assert manifest["exclusions"][0]["reason"] == "leakage_invalid"
     assert manifest["yield_ledger"]["totals"]["usable"] == 0

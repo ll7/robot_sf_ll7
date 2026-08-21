@@ -141,6 +141,11 @@ def _is_explicit_true(value: Any) -> bool:
     return isinstance(value, (bool, np.bool_)) and bool(value)
 
 
+def _is_strict_integer(value: Any) -> bool:
+    """Return whether ``value`` is an integer identity field, excluding booleans."""
+    return isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_))
+
+
 def _has_explicit_invalid_marker(episode: dict[str, Any]) -> bool:
     """Return whether an episode carries an explicit invalid-result marker."""
     if _is_explicit_true(episode.get("invalid")):
@@ -482,8 +487,25 @@ def _yield_ledger_integrity_error(  # noqa: C901, PLR0912 - ordered fail-closed 
                 return f"Yield ledger {split}/{scenario_id}.failed exceeds excluded"
             if sum(reason_counts.values()) != stats["excluded"]:
                 return f"Yield ledger {split}/{scenario_id}.reason_counts do not sum to excluded"
-            if stats["usable"] + stats["excluded"] + stats["missing"] != stats["declared"]:
-                return f"Yield ledger {split}/{scenario_id} does not account for declared IDs"
+            if stats["attempted"] + stats["missing"] != stats["declared"]:
+                return f"Yield ledger {split}/{scenario_id} does not account for attempted IDs"
+            if stats["usable"] + stats["excluded"] != stats["attempted"]:
+                return f"Yield ledger {split}/{scenario_id} does not account for attempted rows"
+
+    differential_remedy = ledger.get("differential_remedy")
+    if not isinstance(differential_remedy, dict):
+        return "Yield ledger differential_remedy must be a mapping"
+    if differential_remedy.get("category") not in _DIFFERENTIAL_REMEDY_CATEGORIES:
+        return "Yield ledger differential_remedy category is unsupported"
+    if differential_remedy.get("selected") is not False:
+        return "Yield ledger differential_remedy must remain unselected"
+    for field in ("selection_status", "rationale"):
+        if not isinstance(differential_remedy.get(field), str) or not differential_remedy[field]:
+            return f"Yield ledger differential_remedy.{field} must be a non-empty string"
+    for field in ("fields_to_change", "evidence_required"):
+        value = differential_remedy.get(field)
+        if not isinstance(value, list) or not all(isinstance(item, str) and item for item in value):
+            return f"Yield ledger differential_remedy.{field} must be a list of strings"
 
     for field in _YIELD_STAT_FIELDS[:-2]:
         if sums[field] != totals[field]:
@@ -582,6 +604,38 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
             "reason": "Missing lineage fields: " + ", ".join(missing_lineage),
             "manifest_path": str(manifest_path),
         }
+    if not isinstance(lineage["source_candidate"], str) or not isinstance(
+        lineage["config_path"], str
+    ):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Lineage source_candidate and config_path must be strings",
+            "manifest_path": str(manifest_path),
+        }
+    if re.fullmatch(r"[0-9a-f]{64}", str(lineage["source_packet_sha256"])) is None:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Lineage source_packet_sha256 is malformed",
+            "manifest_path": str(manifest_path),
+        }
+    if re.fullmatch(r"[0-9a-f]{40}", str(lineage["commit"])) is None:
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Lineage commit is malformed",
+            "manifest_path": str(manifest_path),
+        }
+    if lineage["source_candidate"] != manifest.get("source_candidate"):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Lineage source_candidate does not match manifest metadata",
+            "manifest_path": str(manifest_path),
+        }
+    if lineage["source_packet_sha256"] != manifest.get("source_packet_sha256"):
+        return {
+            "check_status": "blocked_integrity_or_lineage",
+            "reason": "Lineage source_packet_sha256 does not match manifest metadata",
+            "manifest_path": str(manifest_path),
+        }
 
     missing = manifest.get("missing_episode_ids", [])
     if not isinstance(missing, list):
@@ -653,9 +707,28 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
             "manifest_path": str(manifest_path),
         }
 
+    for field in (
+        "dataset_id",
+        "source_candidate",
+        "source_candidate_config",
+        "scenario_ids",
+        "seeds_by_split",
+        "episode_ids_by_split",
+        "hard_slice_assignment",
+        "relabeling_policy",
+        "exclusion_rules",
+    ):
+        if field not in manifest or manifest[field] != fingerprint_payload.get(field):
+            return {
+                "check_status": "blocked_integrity_or_lineage",
+                "reason": f"Manifest {field} does not match packet fingerprint payload",
+                "manifest_path": str(manifest_path),
+            }
+
     if config_path:
         try:
             current_fingerprint = compute_packet_fingerprint(load_launch_packet(config_path))
+            current_source_packet_sha256 = _file_sha256(config_path)
         except (OSError, ValueError) as exc:
             return {
                 "check_status": "inconclusive_missing_input",
@@ -666,6 +739,12 @@ def check_yield_status(  # noqa: C901, PLR0912 - ordered fail-closed verdict gua
             return {
                 "check_status": "blocked_integrity_or_lineage",
                 "reason": "Packet fingerprint mismatch",
+                "manifest_path": str(manifest_path),
+            }
+        if current_source_packet_sha256 != lineage["source_packet_sha256"]:
+            return {
+                "check_status": "blocked_integrity_or_lineage",
+                "reason": "Source packet SHA-256 mismatch",
                 "manifest_path": str(manifest_path),
             }
 
@@ -1436,10 +1515,8 @@ class BalancedOracleCollector:
         for ep in raw_episodes:
             ep_id = str(ep.get("episode_id", ""))
             sc_id = str(ep.get("scenario_id", ""))
-            try:
-                seed = int(ep.get("seed", -1))
-            except (TypeError, ValueError):
-                seed = -1
+            raw_seed = ep.get("seed", -1)
+            seed = int(raw_seed) if _is_strict_integer(raw_seed) else -1
             split = str(ep.get("split", ""))
             reason, steps = _episode_exclusion_reason(ep)
 
@@ -1475,7 +1552,8 @@ class BalancedOracleCollector:
 
         counts: dict[str, int] = {}
         for episode in raw_episodes:
-            episode_id = str(episode.get("episode_id", ""))
+            raw_episode_id = episode.get("episode_id", "")
+            episode_id = raw_episode_id if isinstance(raw_episode_id, str) else ""
             counts[episode_id] = counts.get(episode_id, 0) + 1
 
         seen: set[str] = set()
@@ -1491,7 +1569,8 @@ class BalancedOracleCollector:
             provenance["identity_defect"] = kind
 
         for episode in raw_episodes:
-            episode_id = str(episode.get("episode_id", ""))
+            raw_episode_id = episode.get("episode_id", "")
+            episode_id = raw_episode_id if isinstance(raw_episode_id, str) else ""
             duplicate = counts.get(episode_id, 0) > 1
             seen.add(episode_id)
             identity = expected.get(episode_id)
@@ -1501,14 +1580,15 @@ class BalancedOracleCollector:
                 continue
             split, scenario_id, seed = identity
             mismatches: list[str] = []
-            if str(episode.get("split")) != split:
+            if not isinstance(episode.get("split"), str) or episode["split"] != split:
                 mismatches.append("split")
-            if str(episode.get("scenario_id")) != scenario_id:
+            if (
+                not isinstance(episode.get("scenario_id"), str)
+                or episode["scenario_id"] != scenario_id
+            ):
                 mismatches.append("scenario_id")
-            try:
-                observed_seed = int(episode.get("seed", -1))
-            except (TypeError, ValueError):
-                observed_seed = None
+            raw_seed = episode.get("seed", -1)
+            observed_seed = int(raw_seed) if _is_strict_integer(raw_seed) else None
             if observed_seed != seed:
                 mismatches.append("seed")
             if duplicate:

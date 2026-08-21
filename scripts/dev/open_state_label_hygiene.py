@@ -17,11 +17,13 @@ import re
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev._gh_rest import run_gh_api_or_raise
+from scripts.dev.issue_completion_receipt import admit_completion_receipt
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 PER_PAGE = 100
@@ -71,6 +73,7 @@ class ActiveIssue:
     url: str
     state: str
     active_labels: tuple[str, ...]
+    body: str = ""
 
     def to_payload(self, merged_prs: tuple[MergedPullRequest, ...]) -> dict[str, Any]:
         """Return a candidate row with its verified merged-PR references."""
@@ -221,6 +224,7 @@ def _normalize_issue_row(row: Mapping[str, object]) -> dict[str, object] | None:
         "url": url,
         "state": "open",
         "labels": _label_names(row.get("labels")),
+        "body": str(row.get("body") or ""),
     }
 
 
@@ -322,6 +326,7 @@ def reconcile_active_issues(
                 url=url,
                 state="open",
                 active_labels=tuple(sorted(active_labels)),
+                body=str(row.get("body") or ""),
             )
         )
     return reconciled
@@ -584,13 +589,47 @@ def build_report(
     references_by_issue: Mapping[int, tuple[MergedPullRequest, ...]],
     discovery_metadata: list[PaginationMeta],
     coverage_metadata: Mapping[str, Any],
+    completion_receipts: Mapping[object, object] | None = None,
 ) -> dict[str, Any]:
     """Build a report that distinguishes findings from incomplete coverage."""
-    candidates = [
-        issue.to_payload(references_by_issue[issue.number])
-        for issue in issues
-        if references_by_issue.get(issue.number)
-    ]
+    candidates: list[dict[str, Any]] = []
+    for issue in issues:
+        if not references_by_issue.get(issue.number):
+            continue
+        entry = None
+        if isinstance(completion_receipts, Mapping):
+            for key in (issue.number, str(issue.number), f"#{issue.number}"):
+                if isinstance(completion_receipts.get(key), Mapping):
+                    entry = completion_receipts[key]
+                    break
+        receipt = (
+            admit_completion_receipt(
+                entry,
+                expected_repository=repo,
+                expected_issue=issue.number,
+                issue_contract=issue.body,
+            )
+            if entry is not None
+            else {
+                "eligible": False,
+                "reason": "exact-head completion receipt is required",
+                "errors": ["exact-head completion receipt is required"],
+            }
+        )
+        candidate = issue.to_payload(references_by_issue[issue.number])
+        candidate["completion_receipt"] = receipt
+        candidate["downstream_promotion_gate"] = {
+            "receipt_required": True,
+            "receipt_satisfied": receipt["eligible"],
+            "promotion_authorized": False,
+            "reason": (
+                "receipt is a delivery-integrity prerequisite; domain/scientific review remains "
+                "separate"
+                if receipt["eligible"]
+                else receipt["reason"]
+            ),
+        }
+        candidates.append(candidate)
     truncations = [meta.to_payload() for meta in discovery_metadata]
     truncated_any = bool(
         any(meta.truncated for meta in discovery_metadata) or coverage_metadata.get("truncated")
@@ -655,12 +694,27 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_PR_LOOKUPS,
         help=f"Maximum verified merged-PR detail reads (default {DEFAULT_MAX_PR_LOOKUPS}).",
     )
+    parser.add_argument(
+        "--completion-receipts",
+        type=Path,
+        help="Optional JSON map of issue number to receipt plus Git verification result.",
+    )
     return parser
 
 
 def _dump_json(payload: Mapping[str, Any]) -> None:
     """Print stable machine-readable JSON."""
     print(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _load_completion_receipts(path: Path | None) -> Mapping[object, object]:
+    """Load an optional issue-number keyed receipt inventory."""
+    if path is None:
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError("--completion-receipts must contain a JSON object")
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -685,6 +739,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
+        completion_receipts = _load_completion_receipts(args.completion_receipts)
         rows_by_label, discovery_metadata = fetch_open_issues_by_label(
             repo=args.repo,
             labels=labels,
@@ -709,6 +764,7 @@ def main(argv: list[str] | None = None) -> int:
             references_by_issue=references,
             discovery_metadata=discovery_metadata,
             coverage_metadata=coverage_metadata,
+            completion_receipts=completion_receipts,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         _dump_json(

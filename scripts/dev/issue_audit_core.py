@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from scripts.dev.issue_completion_receipt import admit_completion_receipt
 from scripts.tools.issue_archetype_sync import SAFE_ARCHETYPE_LABEL_MAP
 from scripts.tools.issue_template_audit import audit_archetype_metadata
 
@@ -1313,6 +1314,20 @@ def _available(label: str, available_labels: set[str] | None) -> bool:
     return available_labels is not None and label in available_labels
 
 
+def _completion_receipt_for_issue(
+    completion_receipts: Mapping[object, object] | None,
+    issue_number: int,
+) -> Mapping[str, Any] | None:
+    """Read a receipt entry from number, string-number, or ``#number`` keys."""
+    if not isinstance(completion_receipts, Mapping):
+        return None
+    for key in (issue_number, str(issue_number), f"#{issue_number}"):
+        value = completion_receipts.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
 def _mutation(
     operation: str,
     issue_number: int,
@@ -1415,6 +1430,8 @@ def classify_issue(
     job_inventory_available: bool = True,
     open_issue_numbers: set[int] | None = None,
     available_labels: set[str] | None = None,
+    completion_receipt: Mapping[str, Any] | None = None,
+    repository: str = DEFAULT_REPO,
 ) -> Classification:
     """Classify one issue and plan only evidence-supported autonomous repairs."""
     number = int(issue.get("number", 0))
@@ -1480,12 +1497,33 @@ def classify_issue(
         merged_prs=list(merged_prs),
         open_issue_numbers=open_issue_numbers,
     )
+    if completion_receipt is None:
+        receipt_admission = {
+            "eligible": False,
+            "reason": "exact-head completion receipt is required",
+            "errors": ["exact-head completion receipt is required"],
+        }
+    else:
+        receipt_admission = admit_completion_receipt(
+            completion_receipt,
+            expected_repository=repository,
+            expected_issue=number,
+            issue_contract=body,
+        )
+    closure["completion_receipt"] = receipt_admission
+    working_state = "state:working" in state_labels
+    if working_state and not receipt_admission["eligible"]:
+        findings.append(
+            "state:working downstream promotion withheld: " + str(receipt_admission["reason"])
+        )
     execution_state_set = set(execution_state_labels)
     stale_running = "state:running" in execution_state_set and not active_now
     if stale_running:
         findings.append("state:running has no currently observed active record; preserved")
     state_set = execution_state_set
     ready = ready and not stale_running
+    if working_state and not receipt_admission["eligible"]:
+        ready = False
     external_blocker = any(item["kind"] == "external-input" for item in blocker_evidence)
     execution_records_active = any(active.get(kind) for kind in ("claims", "worktrees", "jobs"))
     terminal_review_override = bool(terminal_review_evidence) and not (
@@ -1505,7 +1543,23 @@ def classify_issue(
     )
     if terminal_review_override:
         winner = None
+    if working_state and not receipt_admission["eligible"] and "state:ready" in state_set:
+        winner = None
     mutations: list[dict[str, Any]] = []
+
+    if working_state and not receipt_admission["eligible"] and "state:ready" in state_set:
+        if _available("state:ready", available_labels):
+            mutations.append(
+                _mutation(
+                    "remove_label",
+                    number,
+                    value="state:ready",
+                    reason="withhold downstream readiness until exact-head receipt verification",
+                    evidence=[str(receipt_admission["reason"])],
+                )
+            )
+        else:
+            findings.append("cannot remove unavailable label state:ready")
 
     if terminal_review_override:
         for label in sorted(state_set.intersection({"state:ready", "state:running"})):
@@ -1717,19 +1771,24 @@ def classify_issue(
     )
     if closure.get("eligible") and str(issue.get("state") or "").lower() == "open":
         if not decision_required and not gate_blocked and not active["open_prs"]:
-            mutations.append(
-                _mutation(
-                    "close_issue",
-                    number,
-                    value=None,
-                    reason="documented closure condition is proven by merged work",
-                    evidence=[
-                        closure.get("reason", ""),
-                        *(f"merged PR #{pr}" for pr in closure.get("merged_prs", [])),
-                    ],
+            if receipt_admission["eligible"]:
+                mutations.append(
+                    _mutation(
+                        "close_issue",
+                        number,
+                        value=None,
+                        reason="documented closure condition and verified completion receipt are proven",
+                        evidence=[
+                            closure.get("reason", ""),
+                            *(f"merged PR #{pr}" for pr in closure.get("merged_prs", [])),
+                            f"completion receipt {receipt_admission['receipt_digest']}",
+                            f"delivered head {receipt_admission['head_sha']}",
+                        ],
+                    )
                 )
-            )
-            classification = "complete"
+                classification = "complete"
+            else:
+                findings.append("autonomous close withheld: " + str(receipt_admission["reason"]))
 
     # Preserve a pre-existing running state when discovery has no active
     # evidence: stale state is uncertain, not permission to promote to ready.
@@ -1788,6 +1847,12 @@ def build_audit_plan(
     open_prs = [item for item in inventory.get("open_prs", []) if isinstance(item, Mapping)]
     merged_prs = [item for item in inventory.get("merged_prs", []) if isinstance(item, Mapping)]
     claims = inventory.get("claims") if isinstance(inventory.get("claims"), Mapping) else {}
+    completion_receipts = (
+        inventory.get("completion_receipts")
+        if isinstance(inventory.get("completion_receipts"), Mapping)
+        else {}
+    )
+    repository = str(inventory.get("repo") or DEFAULT_REPO)
     worktrees = [item for item in inventory.get("worktrees", []) if isinstance(item, Mapping)]
     jobs = [item for item in inventory.get("jobs", []) if isinstance(item, Mapping)]
     available_labels = set(_label_names(inventory.get("labels")))
@@ -1809,6 +1874,10 @@ def build_audit_plan(
             job_inventory_available=job_available,
             open_issue_numbers=open_numbers,
             available_labels=available_labels,
+            completion_receipt=_completion_receipt_for_issue(
+                completion_receipts, int(issue["number"])
+            ),
+            repository=repository,
         )
         issue_labels = _label_names(issue.get("labels"))
         decision_sources = _decision_source_rows(issue)

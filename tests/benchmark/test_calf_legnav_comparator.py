@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -174,12 +175,50 @@ def test_missing_observation_contract_row_blocks_the_condition() -> None:
     assert report["status"] == "blocked"
 
 
+@pytest.mark.parametrize("bad_count", [1.5, "1", "1.5", -1, True, math.nan])
+def test_malformed_observed_actor_count_blocks_the_condition(bad_count: Any) -> None:
+    """Actor-count provenance cannot be coerced or crash the comparator."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
+    perfect["steps"][1]["observation_perturbation"]["observed_actor_count"] = bad_count
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert condition["observation_contract"]["status"] == "unavailable"
+    assert (
+        "non-negative integer observed_actor_count" in condition["observation_contract"]["reason"]
+    )
+
+
+def test_incomplete_trace_blocks_the_condition() -> None:
+    """A partial trace cannot become an available fixed-horizon episode."""
+    perfect = _trace("ideal_state", [2.0])
+    sensor = _trace("perception_limited", [2.0])
+    for trace in (perfect, sensor):
+        trace["horizon"] = 12
+        trace["done_info"] = {}
+    config = _config()
+    config["horizon"] = 12
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=config)
+
+    condition = report["conditions"]["perfect_perception"]
+    assert condition["status"] == "blocked"
+    assert condition["execution"]["reason"] == (
+        "trace ended before its horizon without a terminal done_info verdict"
+    )
+    assert condition["metrics"]["timeout_rate"]["status"] == "blocked"
+    assert report["status"] == "blocked"
+
+
 def test_malformed_metric_fields_do_not_produce_partial_values() -> None:
     """A malformed distance or action row invalidates the affected metric."""
     perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
     sensor = _trace("perception_limited", [2.0, 2.0, 2.0])
-    perfect["steps"][1]["min_robot_ped_distance"] = "not-a-distance"
-    sensor["steps"][1]["env_action"] = ["not-an-action", 0.2]
+    perfect["steps"][1]["min_robot_ped_distance"] = "2.0"
+    sensor["steps"][1]["env_action"] = ["0.1", 0.2]
 
     report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
 
@@ -189,7 +228,7 @@ def test_malformed_metric_fields_do_not_produce_partial_values() -> None:
         assert perfect_metrics[name]["status"] == "unavailable"
         assert perfect_metrics[name]["value"] is None
         assert perfect_metrics[name]["reason"] == (
-            "distance fields must be finite numbers when present"
+            "distance fields must be finite non-negative numbers when present"
         )
     for name in ("angular_jerk_rad_s3", "action_smoothness_l2"):
         assert sensor_metrics[name]["status"] == "unavailable"
@@ -225,6 +264,65 @@ def test_runner_materializes_blocked_report_for_malformed_trace(
     report = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
     assert report["status"] == "blocked"
     assert report["runner_errors"][0]["condition"] == "paired"
+
+
+def test_runner_materializes_blocked_report_for_schema_invalid_trace(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A trace with invalid output metadata becomes a blocked schema-valid handoff."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    malformed = {
+        "candidate": config["candidate"],
+        "scenario_id": config["scenario_name"],
+        "seed": config["seed"],
+        "horizon": config["horizon"],
+        "algo": None,
+        "planner_execution_mode": "command_adapter",
+        "fallback_degraded_status": {"reported_fallback_or_degraded": False},
+        "done_info": {},
+        "steps": [],
+    }
+    monkeypatch.setattr(
+        comparator_runner,
+        "_run_condition",
+        lambda *args, **kwargs: (dict(malformed), None),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_calf_legnav_comparator_issue_7318.py",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert comparator_runner.main() == 2
+    report = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert report["status"] == "blocked"
+    assert "schema validation" in report["runner_errors"][0]["reason"]
+
+
+def test_non_finite_config_is_rejected_before_execution(tmp_path: Path) -> None:
+    """YAML NaN values cannot enter config provenance or generated commands."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    malformed_path = tmp_path / "config.yaml"
+    malformed_path.write_text(
+        config_path.read_text(encoding="utf-8").replace("dt_s: 0.1", "dt_s: .nan"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="finite JSON-compatible"):
+        comparator_runner._load_config(malformed_path)
+
+
+def test_config_digest_rejects_non_finite_values() -> None:
+    """The provenance digest cannot normalize non-standard JSON numbers."""
+    with pytest.raises(ValueError, match="Out of range float values"):
+        canonical_config_digest({"dt_s": math.nan})
 
 
 def test_durable_smoke_config_matches_config_schema() -> None:

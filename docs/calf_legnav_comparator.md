@@ -40,7 +40,7 @@ then validates `summary.json` against
 `robot_sf/benchmark/schemas/calf_legnav_comparator.v1.json`.
 The YAML itself is checked against
 `robot_sf/benchmark/schemas/calf_legnav_comparator_config.v1.json` before either
-condition starts.
+condition starts, including a strict finite-JSON check for numeric values.
 
 Use `--dry-run` to inspect the two generated commands without executing the policy.
 Generated traces and summaries belong under ignored `output/` or a disposable temporary
@@ -62,7 +62,11 @@ For each executed action, the distance metrics use the conservative minimum of
 the available pre-step and post-step ground-truth distances. This keeps the
 shared state between adjacent rows from being counted twice while preserving
 within-step clearance violations. Outcome flags must be JSON booleans; malformed
-flags are reported as unavailable rather than coerced into results.
+flags are reported as unavailable rather than coerced into results. Trace rows
+must also have contiguous step identities, a complete fixed horizon or explicit
+terminal `done_info`, recognized execution-mode provenance, non-negative integer
+observed-actor counts, and finite non-negative distance values. Violations block
+the condition or materialize a schema-valid blocked handoff.
 
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`

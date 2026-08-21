@@ -65,6 +65,7 @@ def test_run_trace_uses_current_map_runner_contract(
                 {
                     "scenario_id": scenarios_or_path[0]["name"],
                     "seed": seed,
+                    "algo": "dwa",
                     "termination_reason": "max_steps",
                     "steps": 1,
                     "outcome": {
@@ -73,7 +74,13 @@ def test_run_trace_uses_current_map_runner_contract(
                         "timeout_event": True,
                     },
                     "algorithm_metadata": {
+                        "algorithm": "dwa",
+                        "canonical_algorithm": "dwa",
+                        "status": "ok",
+                        "planner_kinematics": {"execution_mode": "adapter"},
                         "planner_decision_trace": {
+                            "schema_version": "planner-decision-trace.v1",
+                            "dt": 0.1,
                             "steps": [
                                 {
                                     "step": 0,
@@ -89,8 +96,8 @@ def test_run_trace_uses_current_map_runner_contract(
                                     "route_progress_from_start_m": 0.0,
                                     "global_route_probe_activated": True,
                                 }
-                            ]
-                        }
+                            ],
+                        },
                     },
                 }
             )

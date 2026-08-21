@@ -313,17 +313,13 @@ def run_trace(
     _write_steps_csv(steps_csv, all_rows)
 
     summary_json = out_dir / "dwa_global_route_probe_summary.json"
-    write_json_atomic(
-        summary_json,
-        {
-            "issue": FOLLOW_UP_ISSUE,
-            "config": repo_relative_path(algo_config),
-            "schema_version": "dwa-global-route-probe-trace.v1",
-            "review_marker": "AI-GENERATED NEEDS-REVIEW",
-            "episodes": summaries,
-        },
-        review_marker=True,
-    )
+    summary_payload = {
+        "issue": FOLLOW_UP_ISSUE,
+        "config": repo_relative_path(algo_config),
+        "schema_version": "dwa-global-route-probe-trace.v1",
+        "episodes": summaries,
+    }
+    write_json_atomic(summary_json, summary_payload, review_marker=True)
 
     if evidence_dir:
         evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -333,10 +329,12 @@ def run_trace(
             summaries=summaries,
             trace_commit=current_commit,
         )
-        import shutil
-
-        shutil.copy2(steps_csv, evidence_dir / steps_csv.name)
-        shutil.copy2(summary_json, evidence_dir / summary_json.name)
+        _write_steps_csv(evidence_dir / steps_csv.name, all_rows)
+        write_json_atomic(
+            evidence_dir / summary_json.name,
+            summary_payload,
+            review_marker=True,
+        )
         print(f"Evidence packet written to {evidence_dir}")
 
     print(f"Steps CSV: {steps_csv}")

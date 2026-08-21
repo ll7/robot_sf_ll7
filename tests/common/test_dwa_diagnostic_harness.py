@@ -30,17 +30,28 @@ from robot_sf.benchmark.dwa_diagnostic_harness import (
     write_markdown_atomic,
     write_steps_csv,
 )
+from robot_sf.benchmark.result_provenance import build_result_provenance_manifest
 
 
 def _record(*, scenario: str = "target", seed: int = 7) -> dict[str, object]:
     return {
+        "episode_id": f"{scenario}--{seed}--fixture",
         "scenario_id": scenario,
         "seed": seed,
+        "algo": "dwa",
+        "config_hash": "0123456789abcdef",
+        "git_hash": "a" * 40,
         "termination_reason": "max_steps",
         "steps": 1,
         "outcome": {"route_complete": False, "collision_event": False, "timeout_event": True},
         "algorithm_metadata": {
+            "algorithm": "dwa",
+            "canonical_algorithm": "dwa",
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "adapter"},
             "planner_decision_trace": {
+                "schema_version": "planner-decision-trace.v1",
+                "dt": 0.1,
                 "steps": [
                     {
                         "step": 0,
@@ -55,10 +66,42 @@ def _record(*, scenario: str = "target", seed: int = 7) -> dict[str, object]:
                         "distance_to_goal_m": 2.0,
                         "route_progress_from_start_m": 0.0,
                     }
-                ]
-            }
+                ],
+            },
         },
     }
+
+
+def _write_valid_provenance(
+    result: Path,
+    record: dict[str, object],
+    *,
+    config: Path,
+    matrix: Path,
+    schema: Path,
+) -> Path:
+    """Write a complete result manifest bound to the fixture inputs."""
+    payload = build_result_provenance_manifest(
+        out_path=result,
+        episode_records=[record],
+        schema_path=schema,
+        scenario_path=matrix,
+        scenarios=[{"name": record["scenario_id"], "seeds": [record["seed"]]}],
+        algo="dwa",
+        algo_config_path=config,
+        benchmark_profile="experimental",
+        suite_key="classic_interactions",
+        total_jobs=1,
+        written=1,
+        horizon=100,
+        dt=0.1,
+        record_forces=False,
+        active_observation_mode="socnav_state",
+        active_observation_level="tracked_agents_no_noise",
+    )
+    path = result.with_name(result.name + ".provenance.json")
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
 
 
 def test_load_scenario_rejects_ambiguous_names(tmp_path: Path) -> None:
@@ -113,14 +156,65 @@ def test_extract_trace_steps_and_json_object_reject_malformed_payloads(tmp_path:
     with pytest.raises(ValueError, match="planner_decision_trace"):
         _extract_trace_steps({"algorithm_metadata": {}})
     with pytest.raises(ValueError, match="non-empty"):
-        _extract_trace_steps({"algorithm_metadata": {"planner_decision_trace": {"steps": []}}})
+        _extract_trace_steps(
+            {
+                "algorithm_metadata": {
+                    "planner_decision_trace": {
+                        "schema_version": "planner-decision-trace.v1",
+                        "dt": 0.1,
+                        "steps": [],
+                    }
+                }
+            }
+        )
     with pytest.raises(ValueError, match="contain objects"):
-        _extract_trace_steps({"algorithm_metadata": {"planner_decision_trace": {"steps": [None]}}})
+        _extract_trace_steps(
+            {
+                "algorithm_metadata": {
+                    "planner_decision_trace": {
+                        "schema_version": "planner-decision-trace.v1",
+                        "dt": 0.1,
+                        "steps": [None],
+                    }
+                }
+            }
+        )
 
     provenance = tmp_path / "provenance.json"
     provenance.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError, match="JSON object"):
         _read_json_object(provenance)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("selected_command", ["0.5", 0.1]),
+        ("selected_score", float("nan")),
+        ("distance_to_goal_m", float("inf")),
+    ],
+)
+def test_extract_trace_steps_rejects_lossy_or_non_finite_numbers(field: str, value: object) -> None:
+    record = _record()
+    step = record["algorithm_metadata"]["planner_decision_trace"]["steps"][0]
+    step[field] = value
+
+    with pytest.raises(ValueError, match="finite number"):
+        _extract_trace_steps(record)
+
+
+def test_extract_trace_steps_rejects_index_and_candidate_count_drift() -> None:
+    record = _record()
+    step = record["algorithm_metadata"]["planner_decision_trace"]["steps"][0]
+    step["step"] = 1
+    with pytest.raises(ValueError, match="contiguous"):
+        _extract_trace_steps(record)
+
+    record = _record()
+    step = record["algorithm_metadata"]["planner_decision_trace"]["steps"][0]
+    step["candidate_total"] = 3
+    with pytest.raises(ValueError, match="conserve"):
+        _extract_trace_steps(record)
 
 
 def test_validate_identity_rejects_mismatches_and_malformed_provenance() -> None:
@@ -143,17 +237,24 @@ def test_validate_identity_rejects_mismatches_and_malformed_provenance() -> None
 
 def test_collect_episode_includes_valid_provenance_and_steps_property(tmp_path: Path) -> None:
     result = tmp_path / "existing.jsonl"
-    result.write_text(json.dumps(_record()) + "\n", encoding="utf-8")
-    provenance = result.with_name(result.name + ".provenance.json")
-    provenance.write_text(
-        json.dumps({"rows": [{"scenario_id": "target", "seed": 7}]}), encoding="utf-8"
+    record = _record()
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    config = tmp_path / "algo.yaml"
+    matrix = tmp_path / "matrix.yaml"
+    schema = tmp_path / "schema.json"
+    for path in (config, matrix, schema):
+        path.write_text(path.name, encoding="utf-8")
+    provenance = _write_valid_provenance(
+        result, record, config=config, matrix=matrix, schema=schema
     )
     request = DwaDiagnosticRequest(
-        config_path=tmp_path / "algo.yaml",
+        config_path=config,
         scenario="target",
         seed=7,
         algorithm="dwa",
         output_dir=tmp_path / "out",
+        matrix_path=matrix,
+        schema_path=schema,
         existing_result=result,
     )
 
@@ -198,20 +299,22 @@ def test_collect_episode_supports_existing_result_without_running_map_batch(tmp_
     assert episode.source_artifacts == {"episodes_jsonl": result}
 
 
-def test_collect_episode_rejects_duplicate_provenance_rows(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("canonical_algorithm", "mpc", "algorithm metadata mismatch"),
+        ("status", "degraded", "non-success execution status"),
+        ("fallback_or_degraded", True, "fallback or degraded"),
+    ],
+)
+def test_collect_episode_rejects_relabelled_or_degraded_source(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
     result = tmp_path / "existing.jsonl"
-    result.write_text(json.dumps(_record()) + "\n", encoding="utf-8")
-    result.with_name(result.name + ".provenance.json").write_text(
-        json.dumps(
-            {
-                "rows": [
-                    {"scenario_id": "target", "seed": 7},
-                    {"scenario_id": "target", "seed": 7},
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
+    record = _record()
+    metadata = record["algorithm_metadata"]
+    metadata[field] = value
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
     request = DwaDiagnosticRequest(
         config_path=tmp_path / "algo.yaml",
         scenario="target",
@@ -221,7 +324,111 @@ def test_collect_episode_rejects_duplicate_provenance_rows(tmp_path: Path) -> No
         existing_result=result,
     )
 
+    with pytest.raises(ValueError, match=message):
+        collect_episode(request)
+
+
+def test_collect_episode_rejects_runner_fallback_and_removes_stale_sidecar(
+    tmp_path: Path,
+) -> None:
+    matrix = tmp_path / "matrix.yaml"
+    schema = tmp_path / "schema.json"
+    matrix.write_text("matrix", encoding="utf-8")
+    schema.write_text("schema", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    result = output_dir / "episodes_target.jsonl"
+    stale_sidecar = Path(f"{result}.provenance.json")
+    stale_sidecar.parent.mkdir(parents=True)
+    stale_sidecar.write_text("stale", encoding="utf-8")
+
+    def fake_run(
+        _scenarios: list[dict[str, object]], out_path: Path, **_kwargs: object
+    ) -> dict[str, object]:
+        assert not stale_sidecar.exists()
+        out_path.write_text(json.dumps(_record()) + "\n", encoding="utf-8")
+        return {
+            "benchmark_availability": {
+                "readiness_status": "fallback",
+                "availability_status": "not_available",
+            }
+        }
+
+    request = DwaDiagnosticRequest(
+        config_path=tmp_path / "algo.yaml",
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=output_dir,
+        matrix_path=matrix,
+        schema_path=schema,
+    )
+
+    with pytest.raises(ValueError, match="usable execution"):
+        collect_episode(
+            request,
+            run_map_batch_fn=fake_run,
+            load_scenario_fn=lambda *_args, **_kwargs: {"name": "target", "seeds": [7]},
+        )
+    assert not stale_sidecar.exists()
+
+
+def test_collect_episode_rejects_duplicate_provenance_rows(tmp_path: Path) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    config = tmp_path / "algo.yaml"
+    matrix = tmp_path / "matrix.yaml"
+    schema = tmp_path / "schema.json"
+    for path in (config, matrix, schema):
+        path.write_text(path.name, encoding="utf-8")
+    provenance = _write_valid_provenance(
+        result, record, config=config, matrix=matrix, schema=schema
+    )
+    payload = json.loads(provenance.read_text(encoding="utf-8"))
+    payload["rows"].append(dict(payload["rows"][0]))
+    provenance.write_text(json.dumps(payload), encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=config,
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        matrix_path=matrix,
+        schema_path=schema,
+        existing_result=result,
+    )
+
     with pytest.raises(ValueError, match="exactly one provenance row"):
+        collect_episode(request)
+
+
+def test_collect_episode_rejects_raw_artifact_digest_drift(tmp_path: Path) -> None:
+    result = tmp_path / "existing.jsonl"
+    record = _record()
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    config = tmp_path / "algo.yaml"
+    matrix = tmp_path / "matrix.yaml"
+    schema = tmp_path / "schema.json"
+    for path in (config, matrix, schema):
+        path.write_text(path.name, encoding="utf-8")
+    provenance = _write_valid_provenance(
+        result, record, config=config, matrix=matrix, schema=schema
+    )
+    payload = json.loads(provenance.read_text(encoding="utf-8"))
+    payload["raw_artifacts"][0]["sha256"] = "0" * 64
+    provenance.write_text(json.dumps(payload), encoding="utf-8")
+    request = DwaDiagnosticRequest(
+        config_path=config,
+        scenario="target",
+        seed=7,
+        algorithm="dwa",
+        output_dir=tmp_path / "out",
+        matrix_path=matrix,
+        schema_path=schema,
+        existing_result=result,
+    )
+
+    with pytest.raises(ValueError, match="digest does not match"):
         collect_episode(request)
 
 
@@ -248,17 +455,27 @@ def test_collect_episode_rejects_lossy_identity_seed_types(
 
 def test_collect_episode_rejects_non_integer_provenance_seed(tmp_path: Path) -> None:
     result = tmp_path / "existing.jsonl"
-    result.write_text(json.dumps(_record()) + "\n", encoding="utf-8")
-    result.with_name(result.name + ".provenance.json").write_text(
-        json.dumps({"rows": [{"scenario_id": "target", "seed": True}]}),
-        encoding="utf-8",
+    record = _record()
+    result.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    config = tmp_path / "algo.yaml"
+    matrix = tmp_path / "matrix.yaml"
+    schema = tmp_path / "schema.json"
+    for path in (config, matrix, schema):
+        path.write_text(path.name, encoding="utf-8")
+    provenance = _write_valid_provenance(
+        result, record, config=config, matrix=matrix, schema=schema
     )
+    payload = json.loads(provenance.read_text(encoding="utf-8"))
+    payload["rows"][0]["seed"] = True
+    provenance.write_text(json.dumps(payload), encoding="utf-8")
     request = DwaDiagnosticRequest(
-        config_path=tmp_path / "algo.yaml",
+        config_path=config,
         scenario="target",
         seed=7,
         algorithm="dwa",
         output_dir=tmp_path / "out",
+        matrix_path=matrix,
+        schema_path=schema,
         existing_result=result,
     )
 
@@ -310,21 +527,21 @@ def test_collect_episode_preserves_map_runner_contract(tmp_path: Path) -> None:
 def test_flatten_trace_step_rejects_malformed_nested_fields() -> None:
     with pytest.raises(ValueError, match="dynamic_window"):
         flatten_trace_step(
-            {"selected_command": [0.1, 0.0], "dynamic_window": "invalid"},
+            {"step": 0, "selected_command": [0.1, 0.0], "dynamic_window": "invalid"},
             episode_id="episode",
             scenario_id="target",
             seed=7,
         )
     with pytest.raises(ValueError, match="selected_command"):
         flatten_trace_step(
-            {"selected_command": "invalid"},
+            {"step": 0, "selected_command": "invalid"},
             episode_id="episode",
             scenario_id="target",
             seed=7,
         )
     with pytest.raises(ValueError, match="target_goal"):
         flatten_trace_step(
-            {"selected_command": [0.1, 0.0], "target_goal": "invalid"},
+            {"step": 0, "selected_command": [0.1, 0.0], "target_goal": "invalid"},
             episode_id="episode",
             scenario_id="target",
             seed=7,

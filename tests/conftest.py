@@ -376,6 +376,10 @@ _FAST_FILES = {
     # Algorithm metadata facade tests are deterministic contract coverage for
     # the changed benchmark producer; keep them in the exact-head fast lane.
     "test_algorithm_metadata.py",
+    # The declarative algorithm-contract and readiness tests are deterministic
+    # schema/compatibility coverage for changed benchmark producers.
+    "test_algorithm_contract_registry.py",
+    "test_algorithm_readiness_contract.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

@@ -1,0 +1,666 @@
+{
+  "atlas_id": "issue_7032_negative_result_mechanism_boundary_atlas",
+  "cards": [
+    {
+      "case_id": "brne_candidate_transition_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "BRNE native corridor diagnostics narrow the failure to candidate-transition and controller-parity leads.",
+          "Goal-reaching remained zero in the cited BRNE diagnostic rows."
+        ],
+        "forbidden_wording": [
+          "BRNE benchmark evidence",
+          "BRNE safety evidence",
+          "BRNE paper evidence",
+          "source admission approved"
+        ],
+        "smallest_next_proof_or_stop": "Run one frozen-matrix parity intervention at a time, or stop same-scope reruns until such an intervention is defined."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "benchmark configuration",
+          "path": "configs/benchmarks/issue_6464_brne_corridor_diagnostic.yaml",
+          "sha256": "ea23800a353fd5e42662a46c612c216aff35d6208ebbb7fa974aa4aa9889bcc1"
+        },
+        {
+          "commit": "f1b15fe7cc1234cc583cf612d916dfd1f75a7f0d",
+          "kind": "commit",
+          "label": "run implementation",
+          "repository": "this_repository"
+        },
+        {
+          "commit": "633a5cdcb39ab27f18b596cb8cb1968644f82391",
+          "kind": "commit",
+          "label": "upstream BRNE source",
+          "repository": "upstream_brne"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering deferred",
+        "packet-backed captions deferred",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "Uniform weighting or normalization alone explains the observed transition.",
+        "The corridor diagnostic is not a general BRNE ranking or safety result."
+      ],
+      "hypotheses_still_viable": [
+        "Candidate generation, planner state, control horizon, or activation-gate parity is binding.",
+        "A frozen-matrix parity intervention could change progress without changing source pins."
+      ],
+      "linked_issues": [
+        6944,
+        6949
+      ],
+      "mechanism_activation_evidence": "Candidate-transition telemetry is present in all three native rows; weights remain uniform, the upstream activation gate is false, and applied environment actions are recorded separately.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "candidate_or_action_distribution_collapse",
+          "mechanism_not_activated"
+        ],
+        "condition_that_would_change": "A frozen-matrix intervention that changes progress while preserving source pin, native mode, and trace fields.",
+        "confidence": 0.9,
+        "evidence_boundary": "Trace summaries and review markers are tracked; raw episode archives remain ignored output and are not used.",
+        "mechanism_dimension": "candidate distribution transition, uniform weights, nominal-command construction, and upstream activation-gate parity",
+        "status": "narrowed_diagnostic_lead"
+      },
+      "observed_result": "The first-to-second candidate and weighted mean velocity shifts from about 0.40 to 0.04 m/s while goal reaching remains 0/3.",
+      "question_and_hypothesis": "Does the native BRNE corridor failure arise from weighting or normalization, or from candidate and controller parity?",
+      "result_state": {
+        "controlled_state": "supported_negative",
+        "evidence_tier": "smoke_diagnostic",
+        "state_reason": "The source-backed BRNE rows are native and exact-pair covered, but they are corridor diagnostics with no ranking or paper-facing claim."
+      },
+      "scope_boundary": {
+        "estimand": "First-to-second planner-observation velocity transition and selected/applied action trace status.",
+        "exclusions": [
+          "benchmark ranking",
+          "safety or realism claim",
+          "source redistribution or admission",
+          "matched-compute planner comparison"
+        ],
+        "scope": "classic_head_on_corridor_low, seeds 111-113, diagnostic BRNE corridor matrix only.",
+        "uncertainty": "Mechanism lead is narrowed, but the causal intervention that restores progress is unresolved."
+      },
+      "source_refs": [
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6944_brne_candidate_transition_summary.json",
+          "role": "candidate transition diagnostic summary",
+          "sha256": "38318cea403fb564854c49940da3d5df559029317e79fe5f089b974a3eee06f8",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6944_brne_candidate_transition_summary.json.review.json",
+          "role": "review marker preserving summary digest",
+          "sha256": "49b77879bd5e44aa0211f570d3f2f051146b6da5e115135df5e676cb8fc2b0cf",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6934_brne_action_scaling_summary.json",
+          "role": "source-aligned action aggregation predecessor",
+          "sha256": "2aa311b2308a0e0a314d5168e2a024fa5207fcfeed88d7ce2b98513d25686a4b",
+          "status": "available",
+          "tracked": true
+        }
+      ],
+      "title": "BRNE candidate-transition and controller-parity boundary"
+    },
+    {
+      "case_id": "progress_weighted_bc_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "Progress weighting moved diagnostic route-length reduction in a smoke protocol but did not produce route completion.",
+          "The promotion condition for the progress-weighted behavior-cloning arm was not met."
+        ],
+        "forbidden_wording": [
+          "stronger learned policy",
+          "benchmark evidence",
+          "paper evidence",
+          "policy improvement established"
+        ],
+        "smallest_next_proof_or_stop": "Require a provenance-pinned paired campaign with nonzero completion before any broader policy claim; otherwise stop smoke-only promotion."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "uniform behavior-cloning configuration",
+          "path": "configs/training/orca_residual/issue_6951_arm_a_progress_weighted_bc.yaml",
+          "sha256": "f3ea13574cc6a232dd20a7dbe882d40847a58fdbcd7ee452833b27b9fd419672"
+        },
+        {
+          "kind": "path",
+          "label": "progress-weighted behavior-cloning configuration",
+          "path": "configs/training/orca_residual/issue_6951_arm_b_progress_weighted_bc.yaml",
+          "sha256": "675caa9a547b027b866e7ff297137c578b7ae574a5e3ff7e9779eff384ff5e73"
+        },
+        {
+          "commit": "1d6778617002cc168f03e58f32ea58fa93354e03",
+          "kind": "commit",
+          "label": "implementation",
+          "repository": "this_repository"
+        },
+        {
+          "kind": "digest",
+          "label": "diagnostic dataset",
+          "repository": "worktree-local-output",
+          "sha256": "aa70b611875be2b6b67001e063bcf558ff00eff4ef398a4da498f33df8a07a09"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering deferred",
+        "packet-backed captions deferred",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "Scalar progress weighting is sufficient to repair the endpoint failure in this smoke protocol.",
+        "The smoke result satisfies the promotion condition for a learned policy claim."
+      ],
+      "hypotheses_still_viable": [
+        "Observation-history or data-coverage limitations bind the policy outcome.",
+        "A properly sized paired campaign with durable artifacts could distinguish a small route-progress effect from endpoint improvement."
+      ],
+      "linked_issues": [
+        6951,
+        7019
+      ],
+      "mechanism_activation_evidence": "Arm B uses progress lambda 0.5 with weight bounds [0.5, 2.0]; both arms use the same smoke dataset and cover nine evaluation cells.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "mechanism_active_no_endpoint_benefit",
+          "design_underpowered"
+        ],
+        "condition_that_would_change": "A sized paired campaign with durable raw dataset/checkpoints and non-collision-dominated completion.",
+        "confidence": 0.99,
+        "evidence_boundary": "Tracked compact summary only; raw dataset, checkpoints, and logs are ignored local output with no durable retrieval pointer.",
+        "mechanism_dimension": "progress-weighted expert-action negative log likelihood versus uniform behavior-cloning objective",
+        "status": "stop_same_scope"
+      },
+      "observed_result": "Both arms achieve 0/9 successes and 9/9 collisions; Arm B changes route-length reduction by +0.235 m with a cell-level 95% interval of [+0.191, +0.283] m.",
+      "question_and_hypothesis": "Does a progress-weighted expert-action negative log-likelihood improve route completion over uniform behavior cloning?",
+      "result_state": {
+        "controlled_state": "not_supported",
+        "evidence_tier": "diagnostic_only",
+        "state_reason": "Both arms had zero successes across nine smoke evaluation cells per arm."
+      },
+      "scope_boundary": {
+        "estimand": "Paired Arm B minus Arm A route-length reduction under a three-episode smoke dataset.",
+        "exclusions": [
+          "nominal benchmark matrix",
+          "paper-facing policy claim",
+          "checkpoint durability claim",
+          "generalization beyond planner_sanity_simple"
+        ],
+        "scope": "CPU smoke training/evaluation on planner_sanity_simple, seeds 111-113.",
+        "uncertainty": "Route-length reduction interval is narrow in the smoke table, but the outcome is collision dominated and underpowered for policy claims."
+      },
+      "source_refs": [
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6951_progress_shaped_ablation/summary.json",
+          "role": "progress-weighted BC diagnostic summary",
+          "sha256": "3a42cc16f220f50cf6a3e5ad8f64e44cea532774c76b1f6af8014e42f175ab13",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6951_progress_shaped_ablation/artifact_provenance.json",
+          "role": "ignored-output provenance boundary",
+          "sha256": "eb5f85f0148e5f82919c3c1cbe65e8079129342ca5db4634e1bc2dfd08fe5406",
+          "status": "available",
+          "tracked": true
+        }
+      ],
+      "title": "Progress-weighted behavior-cloning smoke boundary"
+    },
+    {
+      "case_id": "emergent_phenomena_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "The tracked diagnostics separate robust high-density-exit arching from weak or absent lane-formation and doorway signals.",
+          "The lane-formation sensitivity screen did not identify a reproducible clear-lane regime."
+        ],
+        "forbidden_wording": [
+          "emergence validated for all phenomena",
+          "benchmark evidence",
+          "paper evidence",
+          "reference implementation parity"
+        ],
+        "smallest_next_proof_or_stop": "Either add a threshold-calibrated reference configuration with warm-up and inflow controls, or stop using lane formation as a broad emergent-phenomena success example."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "emergent-phenomena campaign builder",
+          "path": "scripts/validation/build_issue_5149_emergent_phenomena_campaign.py",
+          "sha256": "db3a45256f7267a595b2cd4d59996f7cebdb8533bbda90af92d18c05eab27268"
+        },
+        {
+          "kind": "path",
+          "label": "lane-formation sensitivity runner",
+          "path": "scripts/validation/run_issue_6962_lane_formation_sensitivity.py",
+          "sha256": "45bb23b80614e9ee0ee6160f567dd66877f8f9dcbed338f969047beedf6ce3b6"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering deferred",
+        "packet-backed captions deferred",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "Lane formation is a robust emergent result across the tested calibrations.",
+        "One aggregate emergent-phenomena label is sufficient to characterize all tested behaviors."
+      ],
+      "hypotheses_still_viable": [
+        "Threshold, calibration, warm-up, or inflow regime explains the lane-formation boundary.",
+        "Independent reference parity could change the interpretation of the lane-formation screen."
+      ],
+      "linked_issues": [
+        5149,
+        6952,
+        6962,
+        6969
+      ],
+      "mechanism_activation_evidence": "The tracked #5149 bundle covers ten seeds per calibration and records order parameters; the #6962 screen records a declared lane-formation calibration sensitivity matrix.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "scenario_or_threshold_dependence"
+        ],
+        "condition_that_would_change": "Stable clear segregation under calibrated thresholds or independent reference parity for the lane-formation configuration.",
+        "confidence": 0.9,
+        "evidence_boundary": "Historical #5149 artifacts and #6962 compact summaries are tracked; raw #6962 rows are ignored output.",
+        "mechanism_dimension": "emergent arching, lane segregation, lane purity, doorway oscillation, and calibration sensitivity",
+        "status": "not_distinguished"
+      },
+      "observed_result": "High-density-exit arching is clearly present in the tracked summaries, while lane formation is absent or negligible for most tested cells and doorway behavior depends on calibration.",
+      "question_and_hypothesis": "Which tested emergent pedestrian phenomena are robust across calibrations, and which remain threshold- or scenario-dependent?",
+      "result_state": {
+        "controlled_state": "inconclusive",
+        "evidence_tier": "diagnostic_only",
+        "state_reason": "The evidence is a diagnostic screen and historical comparator, not a full parameter-identification campaign."
+      },
+      "scope_boundary": {
+        "estimand": "Order-parameter summaries and same-seed lane-segregation sensitivity across configured cells.",
+        "exclusions": [
+          "full emergent-phenomena validation",
+          "cross-platform numeric identity",
+          "visual adjudication claim",
+          "paper-facing figure claim"
+        ],
+        "scope": "Tracked #5149 multiseed bundle plus #6962 2x2x2x2 lane-formation sensitivity screen.",
+        "uncertainty": "Arching is stable in the tracked summaries; lane formation remains sensitive and not mechanistically distinguished."
+      },
+      "source_refs": [
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/summary.json",
+          "role": "historical multiseed emergent-phenomena summary",
+          "sha256": "f3ef44f702cc5ed13ff172438a8ecc9ce87e477278b1784f78188291ce5826ed",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_5149_emergent_phenomena_multiseed_2026-08/SHA256SUMS",
+          "role": "historical bundle checksum sidecar",
+          "sha256": "501bda22abee7062424e3562cd80a5be61caea0ae4d04b1ba78f389b00b9dd90",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/summary.json",
+          "role": "lane-formation sensitivity summary",
+          "sha256": "c1b1eb14cc85e971a65c9498669f9316e0b938623da2fb4114b0289820752ba5",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/artifact_provenance.json",
+          "role": "lane-formation ignored-output provenance boundary",
+          "sha256": "f3abce3c42354c20f7a812a0c6e1d6912fca1ed5330f446cc5213072c27f1beb",
+          "status": "available",
+          "tracked": true
+        }
+      ],
+      "title": "Emergent-phenomena diagnostic boundary"
+    },
+    {
+      "case_id": "orca_projection_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "The ORCA projection case is blocked for atlas admission because no tracked durable digest surface was found in this worktree.",
+          "No mechanism inference is made from issue prose, filenames, plots, or ignored output."
+        ],
+        "forbidden_wording": [
+          "ORCA projection result established",
+          "benchmark evidence",
+          "paper evidence",
+          "projection mechanism validated"
+        ],
+        "smallest_next_proof_or_stop": "Add a tracked ORCA projection evidence packet with source paths and SHA-256 digests, then rebuild; otherwise keep this case blocked."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "ORCA adapter preregistration checker",
+          "path": "scripts/validation/check_issue_6942_orca_adapter_preregistration.py",
+          "sha256": "738f1b2f4c30d0e8a18ee8b37769916e3b608047793607b22918d33bd7e5bf1a"
+        },
+        {
+          "kind": "path",
+          "label": "ORCA adapter preregistration",
+          "path": "docs/context/issue_6942_orca_adapter_hedge_preregistration.md",
+          "sha256": "6faa54d45c326cebd632cea1a68e9d66fea5a39101e74809c2783d784759d628"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering blocked",
+        "packet-backed captions blocked",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "No scientific hypothesis is contradicted because the required source contract is unavailable."
+      ],
+      "hypotheses_still_viable": [
+        "The synthetic projection mismatch may remain a diagnostic lead.",
+        "A native approval-gated campaign could change the mechanism interpretation after durable source review."
+      ],
+      "linked_issues": [
+        6942,
+        6943,
+        6966
+      ],
+      "mechanism_activation_evidence": "No durable source packet is available in this slice, so synthetic projection behavior cannot be linked to an admitted native outcome.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "missing_required_producer",
+          "artifact_not_durable"
+        ],
+        "condition_that_would_change": "Tracked projection packet with durable digests and explicit source-linkage review.",
+        "confidence": 1.0,
+        "evidence_boundary": "No tracked source file matching issues #6942, #6943, or #6966 was found under docs/context/evidence in this worktree.",
+        "mechanism_dimension": "ORCA projection mechanism and evidence boundary",
+        "status": "blocked_by_missing_source"
+      },
+      "observed_result": "No source-backed ORCA projection outcome is available for atlas admission.",
+      "question_and_hypothesis": "Can the synthetic ORCA projection mismatch be connected to native planner outcomes under the registered adapter contract?",
+      "result_state": {
+        "controlled_state": "unavailable",
+        "evidence_tier": "analysis_only",
+        "state_reason": "The atlas preserves the case slot but cannot admit source-backed claims without durable source references."
+      },
+      "scope_boundary": {
+        "estimand": "Unavailable until a tracked ORCA projection source packet defines the measured quantity.",
+        "exclusions": [
+          "issue-prose inference",
+          "plot-only inference",
+          "ignored-output inference",
+          "visual or dissertation use"
+        ],
+        "scope": "Issue references #6942/#6943/#6966 only; no durable source packet available in this slice.",
+        "uncertainty": "Blocked status is certain for this worktree; scientific interpretation is unavailable."
+      },
+      "source_refs": [
+        {
+          "digest_verified": false,
+          "path": "docs/context/evidence/issue_6942_orca_projection",
+          "role": "expected ORCA projection durable source packet",
+          "status": "blocked",
+          "tracked": false,
+          "unavailable_reason": "no tracked durable digest source found for issues #6942/#6943/#6966 in this worktree"
+        }
+      ],
+      "title": "ORCA projection missing-provenance boundary"
+    },
+    {
+      "case_id": "held_out_proposal_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "The held-out proposal path is preflight-only or fail-closed blocked depending on source surface.",
+          "Independent planner-execution outcomes are unavailable, so continue/stop remains inconclusive."
+        ],
+        "forbidden_wording": [
+          "held-out yield claim",
+          "adversarial improvement claim",
+          "benchmark evidence",
+          "paper evidence"
+        ],
+        "smallest_next_proof_or_stop": "Provide disjoint native independent outcomes with matching bindings and no overlap blockers, or keep the held-out claim blocked."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "same-planner held-out contract",
+          "path": "docs/context/issue_3275_same_planner_contract.md",
+          "sha256": "f4deb9fb1eda2e609fdb6234498b6af0fc6ba304417d66f6fa1f0064786edcac"
+        },
+        {
+          "kind": "path",
+          "label": "held-out step-three run plan",
+          "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
+          "sha256": "d4fb43f5986c4ad1c142251a9bd1380a0d3173954737885aa3f2740ba22841e7"
+        },
+        {
+          "kind": "path",
+          "label": "rerun closure packet",
+          "path": "docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json",
+          "sha256": "02178686db4736637d54c48c4bccf260bf8d5eb254a01a40e3a2bf5bd57fa626"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering deferred",
+        "packet-backed captions deferred",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "Preflight readiness is equivalent to an observed held-out planner effect.",
+        "The available surfaces decide the thesis-level held-out proposal question."
+      ],
+      "hypotheses_still_viable": [
+        "A genuinely disjoint native rerun could produce an interpretable held-out outcome.",
+        "The proposal mechanism may remain useful after an authoritative outcome producer is available."
+      ],
+      "linked_issues": [
+        3275,
+        6849
+      ],
+      "mechanism_activation_evidence": "Tracked preflight manifests record disjoint candidate assignment and binding checks, but no authoritative independent-outcome producer is present.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "design_underpowered",
+          "missing_required_producer"
+        ],
+        "condition_that_would_change": "A genuinely disjoint rerun archive and native independent outcomes matching the predeclared bindings.",
+        "confidence": 1.0,
+        "evidence_boundary": "Preflight manifests are tracked; closure packet records overlap and missing certification blockers.",
+        "mechanism_dimension": "same-planner held-out proposal selection versus independent outcome admission",
+        "status": "blocked_by_missing_outcomes"
+      },
+      "observed_result": "The tracked surfaces establish preflight and fail-closed blockers only; no held-out planner outcome or yield effect is admitted.",
+      "question_and_hypothesis": "Does held-out proposal selection improve planner outcomes under disjoint native evaluation?",
+      "result_state": {
+        "controlled_state": "inconclusive",
+        "evidence_tier": "preflight_only",
+        "state_reason": "Independent outcomes are unavailable and the frozen contract defines this disposition as inconclusive; the missing producer remains a mechanism boundary."
+      },
+      "scope_boundary": {
+        "estimand": "Readiness, leakage, binding, and independent-outcome availability for the held-out proposal test.",
+        "exclusions": [
+          "proposal-model inference",
+          "planner execution outcome claim",
+          "adversarial improvement claim",
+          "generalization claim"
+        ],
+        "scope": "#3275 same-planner held-out preflight and real archive closure surfaces.",
+        "uncertainty": "Blocked disposition is deterministic from the tracked packets; outcome effect remains unavailable."
+      },
+      "source_refs": [
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_3275_same_planner_held_out/SHA256SUMS",
+          "role": "same-planner held-out preflight checksum sidecar",
+          "sha256": "5103636d19891520ce3d50620914acfa78f892316fc488c809fb38d7b90f1b89",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_decision_packet.json",
+          "role": "step-3 decision packet with missing independent outcomes",
+          "sha256": "a703162b4214d29ac202063aa7309d65353b6d37883412ab226d88a88537f0d0",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_3275_rerun_closure_2026-07-03/real_archive_closure_packet.json",
+          "role": "fail-closed archive-readiness closure packet",
+          "sha256": "02178686db4736637d54c48c4bccf260bf8d5eb254a01a40e3a2bf5bd57fa626",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": false,
+          "path": "docs/context/evidence/issue_6849_held_out_outcomes",
+          "role": "expected independent outcome packet",
+          "status": "blocked",
+          "tracked": false,
+          "unavailable_reason": "no tracked independent outcome packet found for issue #6849 in this worktree"
+        }
+      ],
+      "title": "Held-out proposal fail-closed boundary"
+    },
+    {
+      "case_id": "trace_overhead_boundary",
+      "claim_boundary": {
+        "bounded_claims": [
+          "Trace-overhead evidence is a local software-fixture diagnostic about opt-in analysis traces.",
+          "Stable-run receipts preserve runtime and digest checks but do not authorize source admission."
+        ],
+        "forbidden_wording": [
+          "benchmark evidence",
+          "paper evidence",
+          "hardware-general overhead claim",
+          "source admission authorized"
+        ],
+        "smallest_next_proof_or_stop": "For publication use, add a preregistered hardware/runtime matrix with retained trace artifacts; otherwise keep as a software-fixture diagnostic."
+      },
+      "code_or_config_identity": [
+        {
+          "kind": "path",
+          "label": "trace-overhead v1 receipt",
+          "path": "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
+          "sha256": "fce625b30f16c056c1d7fdde6568c011046f02c654172a82131074819fb6f309"
+        },
+        {
+          "kind": "path",
+          "label": "trace-overhead v2 stable-run receipt",
+          "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json",
+          "sha256": "6a403daf23cdd7a6dcf135b99ad18175c66583343176bdee33048a78354674ab"
+        }
+      ],
+      "deferred_or_blocked_outputs": [
+        "visual rendering deferred",
+        "packet-backed captions deferred",
+        "dissertation admission blocked"
+      ],
+      "dissertation_admission_status": "blocked",
+      "hypotheses_contradicted": [
+        "A single local receipt is not a hardware-general trace-overhead result.",
+        "The current runtime effect is stable enough for a broad performance claim."
+      ],
+      "hypotheses_still_viable": [
+        "A preregistered multi-hardware matrix could identify a stable overhead effect.",
+        "The trace path remains a bounded software-fixture diagnostic with stable provenance fields."
+      ],
+      "linked_issues": [
+        6967,
+        6977,
+        6979,
+        6987,
+        6990
+      ],
+      "mechanism_activation_evidence": "The v1 and v2 receipts record trace-on versus trace-off runtime, payload, and stable metric or outcome digest fields.",
+      "mechanism_boundary": {
+        "boundary_labels": [
+          "measurement_instability"
+        ],
+        "condition_that_would_change": "A retained, preregistered multi-hardware matrix with explicit trace artifacts and source-admission review.",
+        "confidence": 0.95,
+        "evidence_boundary": "Receipts and review markers are tracked; trace artifacts are fixture diagnostics and not benchmark campaign payloads.",
+        "mechanism_dimension": "analysis-trace runtime overhead, payload size, and stable metric/outcome digest preservation",
+        "status": "bounded_software_fixture"
+      },
+      "observed_result": "Sequential receipts vary materially across host or run conditions while stable digest fields are preserved; the timing effect is therefore measurement-unstable.",
+      "question_and_hypothesis": "Is the trace-on runtime or payload effect stable enough for a broader performance interpretation?",
+      "result_state": {
+        "controlled_state": "inconclusive",
+        "evidence_tier": "smoke_diagnostic",
+        "state_reason": "The trace-overhead rows are local synthetic/software-fixture measurements, not benchmark or source-admission evidence."
+      },
+      "scope_boundary": {
+        "estimand": "Trace-on versus trace-off runtime and compressed payload deltas with stable metric/outcome digests.",
+        "exclusions": [
+          "real-world runtime claim",
+          "all-scenario overhead claim",
+          "benchmark campaign claim",
+          "source-admission authorization"
+        ],
+        "scope": "Tracked issue #6972 v1 receipt and issue #6987 v2 stable-run receipt.",
+        "uncertainty": "Runtime estimates are local and fixture-bound; digest stability is stronger than hardware-general timing."
+      },
+      "source_refs": [
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json",
+          "role": "stable-run trace-overhead receipt",
+          "sha256": "6a403daf23cdd7a6dcf135b99ad18175c66583343176bdee33048a78354674ab",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6987_analysis_trace_overhead_2026-08-12/analysis_trace_overhead_receipt.v2.stable-run.json.review.json",
+          "role": "review marker preserving v2 stable-run digest",
+          "sha256": "54c5b5edd50eb117f314171bd44fbf7bed2639933db40f70108676dd2cc9ef91",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json",
+          "role": "v1 trace-overhead receipt",
+          "sha256": "fce625b30f16c056c1d7fdde6568c011046f02c654172a82131074819fb6f309",
+          "status": "available",
+          "tracked": true
+        },
+        {
+          "digest_verified": true,
+          "path": "docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json.review.json",
+          "role": "review marker preserving v1 receipt digest",
+          "sha256": "bd56b19a0525deb133ab45d636dcdd7d30825bec189187bdc77c6b5556d41d62",
+          "status": "available",
+          "tracked": true
+        }
+      ],
+      "title": "Analysis-trace overhead software-fixture boundary"
+    }
+  ],
+  "claim_boundary": "Diagnostic planning atlas only; not benchmark evidence, no visual rendering, no dissertation admission, and no mechanism inference from issue prose, filenames, plots, or ignored output.",
+  "generated_by": "scripts/analysis/build_negative_result_mechanism_atlas.py",
+  "issue": 7032,
+  "schema_version": "mechanism_boundary_atlas.v1"
+}

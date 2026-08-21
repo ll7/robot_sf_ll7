@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 7322
-latest_reviewed_date: 2026-08-17
+latest_reconciliation_issue: 7046
+latest_reviewed_date: 2026-08-20
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 423
-refreshed_baseline_files_with_findings: 94
+refreshed_baseline_total_findings: 429
+refreshed_baseline_files_with_findings: 95
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -111,6 +111,13 @@ decision_summary: >-
   heuristic; both findings are explicitly dispositioned below and the refreshed baseline grows
   from 419 findings across 91 files to 421 findings across 93 files. The package remains
   blocked_pending_domain_approval / not_admitted and is not paper-facing evidence.
+  Mechanism-atlas addendum (issue #7046): the repaired #7032 atlas replaces free-form identity
+  strings with structured path, full-commit, and digest records. The generic evidence linter
+  intentionally does not treat `configs/...` paths as artifact bindings, and the diagnostic
+  dataset digest refers to worktree-local output with no durable artifact path. The atlas validator
+  independently verifies config bytes, local commits, and source-manifest binding, so these four
+  per-file `hash_without_artifact_path` findings are retained as explicit, diagnostic-only
+  baseline debt for both the checked-in input and deterministic generated atlas.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -295,6 +302,24 @@ reviewed_files:
       (evidence_status: launch packet, not benchmark evidence). Same historical-provenance-debt
       class as the other dangling_commit entries; recorded here rather than rewriting the
       producer SHA. Merged via #6106 under the #6095 Domain-Aware Approval.
+  - path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      The repaired diagnostic atlas input carries exact SHA-256 records for repository config
+      identities and a worktree-local dataset digest. The generic linter excludes configs/... from
+      adjacent artifact-path binding and cannot bind the non-durable dataset output; the atlas
+      validator verifies the config bytes and requires the dataset digest to occur in a verified
+      source manifest. Keep the four findings explicitly baselined until a future schema-aware
+      registry binding can represent these identity semantics without promoting local output.
+  - path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Deterministic generated mirror of the repaired diagnostic atlas input. Its structured config
+      and worktree-local dataset identities have the same four generic-linter findings; the atlas
+      validator and review-marker sidecar provide the stronger path/digest checks. This remains
+      diagnostic-only and is not benchmark, paper, or dissertation evidence.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

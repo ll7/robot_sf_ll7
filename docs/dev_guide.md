@@ -138,6 +138,16 @@ because `.git` is a file that points into
 `<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to
 the main checkout's `.git` directory instead of the worktree-local Git dir.
 
+### Stash safety in linked worktrees
+
+All linked worktrees share one stash namespace: `refs/stash` lives in the common Git dir, so a
+bare `git stash pop` inside any worktree can apply another session's WIP into the wrong checkout.
+Never use a bare `git stash pop` in a linked worktree. Prefer temp commits
+(`git commit -m "WIP <branch>"`) for long-lived lanes; when stashing is required, use
+`git stash push -m "<branch> <purpose>"` and restore with the fail-closed wrapper
+`scripts/dev/safe_stash_pop.sh` (pops only when the top stash entry names the current branch) or
+an explicit `git stash pop stash@{n}` after verifying the entry message (issue #7700).
+
 Treat the worktree as fresh only if both `local.machine.md` and `.venv` are absent. If either
 already exists, assume the worktree has already been bootstrapped and reuse the existing setup.
 

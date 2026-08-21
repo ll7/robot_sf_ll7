@@ -47,7 +47,7 @@
       "blessed": true,
       "note": "Blessed broad catch: registry/compiled-backend boundary.",
       "samples": [
-        "robot_sf/gym_env/snqi_proxy.py:150"
+        "robot_sf/gym_env/snqi_proxy.py:151"
       ]
     },
     "AttributeError+ImportError+ModuleNotFoundError+OSError+RuntimeError+SyntaxError+TypeError+ValueError": {
@@ -131,7 +131,7 @@
         "robot_sf/benchmark/figures/export.py:155",
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/encode.py:86",
-        "robot_sf/benchmark/full_classic/orchestrator.py:72",
+        "robot_sf/benchmark/full_classic/orchestrator.py:87",
         "robot_sf/benchmark/full_classic/plots.py:19",
         "robot_sf/benchmark/full_classic/plots.py:51",
         "robot_sf/benchmark/full_classic/plots.py:90",
@@ -148,13 +148,13 @@
         "robot_sf/benchmark/helper_catalog.py:73",
         "robot_sf/benchmark/latency/latency_stress.py:660",
         "robot_sf/benchmark/latency/latency_stress.py:672",
-        "robot_sf/benchmark/live_forecast_replay_gate.py:965",
+        "robot_sf/benchmark/live_forecast_replay_gate.py:964",
         "robot_sf/benchmark/near_miss_determinism.py:402",
         "robot_sf/benchmark/plots.py:28",
         "robot_sf/benchmark/runner.py:47",
         "robot_sf/benchmark/runner.py:53",
-        "robot_sf/benchmark/scenario_generator.py:48",
         "robot_sf/benchmark/scenario/scenario_schema.py:25",
+        "robot_sf/benchmark/scenario_generator.py:48",
         "robot_sf/benchmark/schema_validator.py:20",
         "robot_sf/benchmark/visualization.py:1191",
         "robot_sf/common/matplotlib_utils.py:62",
@@ -163,12 +163,12 @@
         "robot_sf/common/seed.py:50",
         "robot_sf/common/seed.py:80",
         "robot_sf/feature_extractors/mamba_extractor.py:102",
-        "robot_sf/gym_env/crowd_sim_env.py:354",
+        "robot_sf/gym_env/crowd_sim_env.py:365",
         "robot_sf/gym_env/env_config.py:289",
-        "robot_sf/gym_env/environment_factory.py:56",
-        "robot_sf/gym_env/environment_factory.py:187",
+        "robot_sf/gym_env/environment_factory.py:55",
+        "robot_sf/gym_env/environment_factory.py:186",
         "robot_sf/maps/osm_zones_editor.py:72",
-        "robot_sf/models/registry.py:21",
+        "robot_sf/models/registry.py:27",
         "robot_sf/nav/occupancy_grid.py:109",
         "robot_sf/nav/osm_map_builder.py:31",
         "robot_sf/nav/osm_map_builder.py:37",
@@ -186,7 +186,7 @@
         "robot_sf/render/sim_view.py:18",
         "robot_sf/render/sim_view.py:39",
         "robot_sf/sim/registry.py:145",
-        "robot_sf/telemetry/gpu.py:11",
+        "robot_sf/telemetry/gpu.py:12",
         "robot_sf/telemetry/visualization.py:100",
         "robot_sf/training/diffusion_policy.py:33"
       ]

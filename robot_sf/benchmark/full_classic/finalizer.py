@@ -14,15 +14,12 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-try:
-    from robot_sf.benchmark.visualization import VisualizationError
-except ImportError:
 
-    class VisualizationError(Exception):
-        """Fallback exception type when optional visualization support is absent."""
+class VisualizationError(Exception):
+    """Fallback exception type supplied by the facade when optional viz is unavailable."""
 
 
-def update_scaling_efficiency(manifest, cfg):
+def update_scaling_efficiency(manifest, cfg) -> dict[str, Any]:
     """Update runtime, throughput, and explicitly diagnostic scaling fields.
 
     Returns:
@@ -74,7 +71,7 @@ def write_json(path: Path, obj) -> None:
         logger.warning("Failed writing JSON artifact {}: {}", path, exc)
 
 
-def serialize_groups(groups):
+def serialize_groups(groups) -> list[dict[str, Any]]:
     """Serialize aggregation group objects into the established JSON schema.
 
     Returns:
@@ -100,7 +97,7 @@ def serialize_groups(groups):
     ]
 
 
-def serialize_effects(effects):
+def serialize_effects(effects) -> list[dict[str, Any]]:
     """Serialize effect-size reports into the established JSON schema.
 
     Returns:
@@ -124,7 +121,7 @@ def serialize_effects(effects):
     ]
 
 
-def serialize_precision(report):
+def serialize_precision(report) -> dict[str, Any]:
     """Serialize a precision report into a JSON-friendly dictionary.
 
     Returns:
@@ -164,7 +161,7 @@ def write_iteration_artifacts(root: Path, groups, effects, precision_report) -> 
     )
 
 
-def publish_visual_artifacts(
+def publish_visual_artifacts(  # noqa: PLR0913
     root: Path,
     cfg,
     groups,
@@ -174,6 +171,7 @@ def publish_visual_artifacts(
     visualization_available: bool,
     plot_generator: Callable[..., Any] | None = None,
     validation_fn: Callable[..., Any] | None = None,
+    visualization_error: type[Exception] = VisualizationError,
 ) -> None:
     """Run the post-loop visual publication pass with optional dependencies injected."""
     try:
@@ -202,7 +200,7 @@ def publish_visual_artifacts(
                             "Some visualizations failed validation: {} failed artifacts",
                             len(validation.failed_artifacts),
                         )
-            except (VisualizationError, FileNotFoundError) as vis_exc:
+            except (visualization_error, FileNotFoundError) as vis_exc:
                 logger.warning("Real visualization generation failed (non-fatal): {}", vis_exc)
     except (VisualizationError, FileNotFoundError) as exc:
         logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
@@ -220,6 +218,7 @@ def finalize_run(  # noqa: PLR0913
     visualization_available: bool,
     plot_generator: Callable[..., Any] | None = None,
     validation_fn: Callable[..., Any] | None = None,
+    visualization_error: type[Exception] = VisualizationError,
 ) -> None:
     """Close the run, persist manifest metadata, and publish final artifacts."""
     update_scaling_efficiency(manifest, cfg)
@@ -235,6 +234,7 @@ def finalize_run(  # noqa: PLR0913
         visualization_available=visualization_available,
         plot_generator=plot_generator,
         validation_fn=validation_fn,
+        visualization_error=visualization_error,
     )
 
 

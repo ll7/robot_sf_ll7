@@ -1337,6 +1337,7 @@ def run_full_benchmark(  # noqa: C901
         visualization_available=_VISUALIZATION_AVAILABLE,
         plot_generator=globals().get("generate_benchmark_plots"),
         validation_fn=globals().get("validate_visual_artifacts"),
+        visualization_error=globals().get("VisualizationError", _finalizer.VisualizationError),
     )
 
     return manifest

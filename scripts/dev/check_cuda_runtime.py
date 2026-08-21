@@ -11,7 +11,7 @@ regression.
 Exit codes:
 - 0: probe ran; classification written (any of usable/unavailable/unusable_nvml)
 - 1: probe itself failed (module import error unrelated to classification)
-- 2: receipt directory could not be created
+- 2: receipt directory or receipt file could not be written
 """
 
 from __future__ import annotations
@@ -76,8 +76,25 @@ def main(argv: list[str] | None = None) -> int:
         "head_sha": _run_git(["rev-parse", "HEAD"]),
     }
 
+    try:
+        args.receipt_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: cannot create receipt directory {args.receipt_dir}: {exc}", file=sys.stderr)
+        return 2
+    receipt_path = _receipt_path(args.receipt_dir)
+    try:
+        receipt_path.write_text(
+            json.dumps(receipt, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"ERROR: cannot write receipt {receipt_path}: {exc}", file=sys.stderr)
+        return 2
+
     if args.json:
+        # Keep stdout a single JSON document for automation; diagnostics go to stderr.
         print(json.dumps(receipt, sort_keys=True))
+        print(f"Receipt written: {receipt_path}", file=sys.stderr)
     else:
         print(f"CUDA runtime classification: {classification.status}")
         print(f"Reason: {classification.reason}")
@@ -86,15 +103,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Readiness note: CUDA-gated tests will skip with a gpu_unavailable "
                 "receipt; this is an environment classification, not GPU evidence."
             )
-
-    try:
-        args.receipt_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        print(f"ERROR: cannot create receipt directory {args.receipt_dir}: {exc}", file=sys.stderr)
-        return 2
-    receipt_path = _receipt_path(args.receipt_dir)
-    receipt_path.write_text(json.dumps(receipt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    print(f"Receipt written: {receipt_path}")
+        print(f"Receipt written: {receipt_path}")
 
     return 0
 

@@ -355,12 +355,9 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert duration_merge["continue-on-error"] is True
     assert "always()" in duration_merge["if"]
     assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
-    assert (
-        "Expected exactly one pytest duration store from each of four shards"
-        in duration_merge["run"]
-    )
-    assert "Overlapping pytest duration stores" in duration_merge["run"]
-    assert "merged.update(durations)" in duration_merge["run"]
+    # Issue #7666: shard-set, overlap, and validation semantics live in the
+    # tested helper scripts/dev/ci_logic.py; the workflow only invokes it.
+    assert "ci_logic.py merge-durations" in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
     assert "always()" in duration_save["if"]
     assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
@@ -386,7 +383,7 @@ def test_determinism_gate_reuses_the_model_preflight_cache() -> None:
         if step.get("name") == "Derive model-cache key from registry-pinned digests"
     )
     assert key_step["id"] == "model-cache-key"
-    assert "required_model_ids_for_config" in key_step["run"]
+    assert "ci_logic.py model-cache-key" in key_step["run"]
     restore_step = next(
         step
         for step in determinism_gate["steps"]
@@ -3174,3 +3171,59 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     assert "changed-coverage-gate" in dev_guide_text
     assert "changed-coverage.v1" in dev_guide_text
     assert "85.0%" in dev_guide_text or "85.0" in dev_guide_text
+
+
+def test_ci_workflow_job_contract_matches_required_manifest() -> None:
+    """Issue #7666: job IDs, needs edges, and check names must not drift.
+
+    Branch protection requires these exact check names; removal, renaming, or
+    accidental de-blocking of any required job must fail this contract test.
+    """
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+
+    best_effort_jobs = {"reproducibility-check", "reproducibility-check-reconciliation"}
+    required_jobs = {
+        "fast-feedback",
+        "changed-coverage-gate",
+        "coverage-gate",
+        "compat-matrix",
+        "fast-pysf-compat",
+        "smoke-artifacts",
+        "xdist-scratch-isolation",
+        "wheel-smoke-install",
+        "examples-smoke",
+        "notebooks-smoke",
+        "determinism-gate",
+        "exact-repeat-model-preflight",
+        "ci",
+    }
+    assert required_jobs | best_effort_jobs == set(jobs), (
+        "CI job set drifted from the required manifest"
+    )
+
+    aggregate = jobs["ci"]
+    assert set(aggregate["needs"]) == required_jobs - {"ci"}
+    assert aggregate["if"] == "always()"
+
+    # The aggregate step must keep evaluating every needed job through the
+    # tested helper (issue #7666) rather than handwritten per-job if blocks.
+    check_step = next(
+        step for step in aggregate["steps"] if step.get("name") == "Check split job results"
+    )
+    run = check_step["run"]
+    assert "ci_logic.py aggregate-result" in run
+    for job_id in sorted(required_jobs - {"ci"}):
+        assert f"--result \"{job_id}=" in run, f"aggregate result missing for {job_id}"
+
+    # Model-cache keys come from the shared helper in both exact-repeat jobs.
+    for job_id in ("determinism-gate", "exact-repeat-model-preflight"):
+        steps = jobs[job_id]["steps"]
+        key_step = next(step for step in steps if step.get("id") == "model-cache-key")
+        assert "ci_logic.py model-cache-key" in key_step["run"]
+
+    # Duration merging goes through the tested helper.
+    merge_step = next(
+        step for step in aggregate["steps"] if step.get("name") == "Merge test durations"
+    )
+    assert "ci_logic.py merge-durations" in merge_step["run"]

@@ -633,16 +633,10 @@ jobs:
       - name: Derive model-cache key from registry-pinned digests
         if: steps.check-changes.outputs.changed == 'true'
         id: model-cache-key
+        # Issue #7666: key derivation lives in scripts/dev/ci_logic.py so digest
+        # ordering, truncation, and fail-closed behavior are unit-tested.
         run: |
-          KEY=$(uv run python -c "
-          import hashlib, yaml
-          from robot_sf.models.registry import get_registry_entry
-          from robot_sf.models.preflight import required_model_ids_for_config
-          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
-          ids = required_model_ids_for_config(cfg)
-          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
-          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
-          ")
+          KEY=$(uv run python scripts/dev/ci_logic.py model-cache-key --config "${PPO_ALGO_CONFIG}")
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore exact-repeat model cache
@@ -678,16 +672,9 @@ jobs:
 
       - name: Derive model-cache key from registry-pinned digests
         id: model-cache-key
+        # Issue #7666: shared tested helper; see scripts/dev/ci_logic.py.
         run: |
-          KEY=$(uv run python -c "
-          import hashlib, yaml
-          from robot_sf.models.registry import get_registry_entry
-          from robot_sf.models.preflight import required_model_ids_for_config
-          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
-          ids = required_model_ids_for_config(cfg)
-          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
-          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
-          ")
+          KEY=$(uv run python scripts/dev/ci_logic.py model-cache-key --config "${PPO_ALGO_CONFIG}")
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore model cache
@@ -724,57 +711,37 @@ jobs:
     if: always()
     steps:
       - name: Check split job results
+        # Issue #7666: required-needs evaluation lives in scripts/dev/ci_logic.py;
+        # event-specific coverage rules and fail-closed unknown results are
+        # unit-tested there. Any non-success (or missing) required job fails the run.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FAST_FEEDBACK_RESULT: ${{ needs.fast-feedback.result }}
+          COVERAGE_GATE_RESULT: ${{ needs.coverage-gate.result }}
+          CHANGED_COVERAGE_GATE_RESULT: ${{ needs.changed-coverage-gate.result }}
+          COMPAT_MATRIX_RESULT: ${{ needs.compat-matrix.result }}
+          FAST_PYSF_COMPAT_RESULT: ${{ needs.fast-pysf-compat.result }}
+          SMOKE_ARTIFACTS_RESULT: ${{ needs.smoke-artifacts.result }}
+          XDIST_SCRATCH_ISOLATION_RESULT: ${{ needs.xdist-scratch-isolation.result }}
+          WHEEL_SMOKE_INSTALL_RESULT: ${{ needs.wheel-smoke-install.result }}
+          EXAMPLES_SMOKE_RESULT: ${{ needs.examples-smoke.result }}
+          NOTEBOOKS_SMOKE_RESULT: ${{ needs.notebooks-smoke.result }}
+          DETERMINISM_GATE_RESULT: ${{ needs.determinism-gate.result }}
+          EXACT_REPEAT_MODEL_PREFLIGHT_RESULT: ${{ needs.exact-repeat-model-preflight.result }}
         run: |
-          if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
-            echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ github.event_name }}" != "pull_request" && "${{ needs.coverage-gate.result }}" != "success" ]]; then
-            echo "coverage-gate finished with ${{ needs.coverage-gate.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group" ]]; then
-            if [[ "${{ needs.changed-coverage-gate.result }}" != "success" ]]; then
-              echo "changed-coverage-gate finished with ${{ needs.changed-coverage-gate.result }}" >&2
-              exit 1
-            fi
-          fi
-          if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
-            echo "compat-matrix finished with ${{ needs.compat-matrix.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.fast-pysf-compat.result }}" != "success" ]]; then
-            echo "fast-pysf-compat finished with ${{ needs.fast-pysf-compat.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.wheel-smoke-install.result }}" != "success" ]]; then
-            echo "wheel-smoke-install finished with ${{ needs.wheel-smoke-install.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then
-            echo "smoke-artifacts finished with ${{ needs.smoke-artifacts.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.xdist-scratch-isolation.result }}" != "success" ]]; then
-            echo "xdist-scratch-isolation finished with ${{ needs.xdist-scratch-isolation.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.examples-smoke.result }}" != "success" ]]; then
-            echo "examples-smoke finished with ${{ needs.examples-smoke.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
-            echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
-            echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
-            echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
-            exit 1
-          fi
+          uv run python scripts/dev/ci_logic.py aggregate-result --event "$EVENT_NAME" \
+            --result "fast-feedback=$FAST_FEEDBACK_RESULT" \
+            --result "coverage-gate=$COVERAGE_GATE_RESULT" \
+            --result "changed-coverage-gate=$CHANGED_COVERAGE_GATE_RESULT" \
+            --result "compat-matrix=$COMPAT_MATRIX_RESULT" \
+            --result "fast-pysf-compat=$FAST_PYSF_COMPAT_RESULT" \
+            --result "smoke-artifacts=$SMOKE_ARTIFACTS_RESULT" \
+            --result "xdist-scratch-isolation=$XDIST_SCRATCH_ISOLATION_RESULT" \
+            --result "wheel-smoke-install=$WHEEL_SMOKE_INSTALL_RESULT" \
+            --result "examples-smoke=$EXAMPLES_SMOKE_RESULT" \
+            --result "notebooks-smoke=$NOTEBOOKS_SMOKE_RESULT" \
+            --result "determinism-gate=$DETERMINISM_GATE_RESULT" \
+            --result "exact-repeat-model-preflight=$EXACT_REPEAT_MODEL_PREFLIGHT_RESULT"
 
       - name: Checkout for duration-cache update
         id: checkout_duration_cache
@@ -794,46 +761,12 @@ jobs:
         id: merge-test-durations
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
         continue-on-error: true
+        # Issue #7666: shard validation and merging live in scripts/dev/ci_logic.py
+        # (expected shard set, finite/non-negative values, overlap rejection,
+        # deterministic sorted output) so they are unit-tested.
         run: |
-          python - <<'PY'
-          import json
-          import math
-          from pathlib import Path
-
-          expected_names = {f"pytest-durations-{index}" for index in range(1, 5)}
-          files = sorted(Path(".duration-artifacts").glob("*/.test_durations"))
-          actual_names = {path.parent.name for path in files}
-          if actual_names != expected_names:
-              missing = sorted(expected_names - actual_names)
-              unexpected = sorted(actual_names - expected_names)
-              raise SystemExit(
-                  "Expected exactly one pytest duration store from each of four shards; "
-                  f"missing={missing or 'none'} unexpected={unexpected or 'none'}."
-              )
-
-          merged = {}
-          for path in files:
-              durations = json.loads(path.read_text(encoding="utf-8"))
-              if not isinstance(durations, dict) or any(
-                  not isinstance(nodeid, str)
-                  or not isinstance(duration, (int, float))
-                  or isinstance(duration, bool)
-                  or not math.isfinite(duration)
-                  or duration < 0
-                  for nodeid, duration in durations.items()
-              ):
-                  raise SystemExit(f"Invalid pytest duration store: {path}")
-              overlap = set(merged).intersection(durations)
-              if overlap:
-                  raise SystemExit(f"Overlapping pytest duration stores: {path}")
-              merged.update(durations)
-
-          Path(".test_durations").write_text(
-              json.dumps(merged, indent=4, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          print(f"Merged {len(files)} shard stores with {len(merged)} test durations.")
-          PY
+          uv run python scripts/dev/ci_logic.py merge-durations \
+            --artifacts-dir .duration-artifacts --output .test_durations
 
       - name: Save merged test durations
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}

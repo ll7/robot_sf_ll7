@@ -7,9 +7,11 @@ planner-kinematics metadata so benchmark writers emit a consistent contract.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 from robot_sf.baselines.interface import ActionContract, ObservationContract, PlannerMetadata
+from robot_sf.benchmark.algorithm_contract import CONTRACT_RECORDS_BY_NAME
 from robot_sf.benchmark.algorithm_readiness import get_algorithm_readiness
 from robot_sf.benchmark.observation_levels import (
     OBSERVATION_LEVEL_KEYS,
@@ -35,23 +37,39 @@ _FORESIGHT_CONSTANT_VELOCITY_MODE = "constant_velocity"
 _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "goal": "classical",
     "social_force": "classical",
-    "orca": "classical",
+    "orca": CONTRACT_RECORDS_BY_NAME["orca"].baseline_category,
     "brne": "diagnostic",
-    "hrvo": "classical",
-    "social_navigation_pyenvs_orca": "classical",
-    "social_navigation_pyenvs_socialforce": "classical",
-    "social_navigation_pyenvs_sfm_helbing": "classical",
-    "social_navigation_pyenvs_hsfm_new_guo": "classical",
-    "socnav_orca_nonholonomic": "classical",
-    "socnav_orca_dd": "classical",
-    "socnav_orca_relaxed": "classical",
-    "socnav_hrvo": "classical",
+    "hrvo": CONTRACT_RECORDS_BY_NAME["hrvo"].baseline_category,
+    "social_navigation_pyenvs_orca": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_orca"
+    ].baseline_category,
+    "social_navigation_pyenvs_socialforce": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_socialforce"
+    ].baseline_category,
+    "social_navigation_pyenvs_sfm_helbing": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_sfm_helbing"
+    ].baseline_category,
+    "social_navigation_pyenvs_hsfm_new_guo": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_hsfm_new_guo"
+    ].baseline_category,
+    "socnav_orca_nonholonomic": CONTRACT_RECORDS_BY_NAME[
+        "socnav_orca_nonholonomic"
+    ].baseline_category,
+    "socnav_orca_dd": CONTRACT_RECORDS_BY_NAME["socnav_orca_dd"].baseline_category,
+    "socnav_orca_relaxed": CONTRACT_RECORDS_BY_NAME["socnav_orca_relaxed"].baseline_category,
+    "socnav_hrvo": CONTRACT_RECORDS_BY_NAME["socnav_hrvo"].baseline_category,
     "crowdnav_height": "learning",
     "sonic_crowdnav": "learning",
-    "gensafenav_ours_gst": "learning",
-    "gensafenav_ours_gst_guarded": "learning",
-    "gensafenav_gst_predictor_rand": "learning",
-    "gensafenav_gst_predictor_rand_guarded": "learning",
+    "gensafenav_ours_gst": CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst"].baseline_category,
+    "gensafenav_ours_gst_guarded": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_ours_gst_guarded"
+    ].baseline_category,
+    "gensafenav_gst_predictor_rand": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_gst_predictor_rand"
+    ].baseline_category,
+    "gensafenav_gst_predictor_rand_guarded": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_gst_predictor_rand_guarded"
+    ].baseline_category,
     "ppo": "learning",
     "sac": "learning",
     "distributional_rl": "learning",
@@ -101,23 +119,39 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "goal": "deterministic_goal_seeking",
     "social_force": "social_force_adapter",
-    "orca": "orca_adapter",
+    "orca": CONTRACT_RECORDS_BY_NAME["orca"].policy_semantics,
     "brne": "bounded_bayesian_recursive_nash_equilibrium_diagnostic",
-    "socnav_orca_nonholonomic": "orca_adapter",
-    "socnav_orca_dd": "orca_adapter",
-    "socnav_orca_relaxed": "orca_adapter",
-    "hrvo": "hybrid_reciprocal_velocity_obstacle",
-    "socnav_hrvo": "hybrid_reciprocal_velocity_obstacle",
-    "social_navigation_pyenvs_orca": "upstream_social_navigation_pyenvs_orca_wrapper",
-    "social_navigation_pyenvs_socialforce": "upstream_social_navigation_pyenvs_socialforce_wrapper",
-    "social_navigation_pyenvs_sfm_helbing": "upstream_social_navigation_pyenvs_sfm_helbing_wrapper",
-    "social_navigation_pyenvs_hsfm_new_guo": "upstream_social_navigation_pyenvs_hsfm_wrapper",
+    "socnav_orca_nonholonomic": CONTRACT_RECORDS_BY_NAME[
+        "socnav_orca_nonholonomic"
+    ].policy_semantics,
+    "socnav_orca_dd": CONTRACT_RECORDS_BY_NAME["socnav_orca_dd"].policy_semantics,
+    "socnav_orca_relaxed": CONTRACT_RECORDS_BY_NAME["socnav_orca_relaxed"].policy_semantics,
+    "hrvo": CONTRACT_RECORDS_BY_NAME["hrvo"].policy_semantics,
+    "socnav_hrvo": CONTRACT_RECORDS_BY_NAME["socnav_hrvo"].policy_semantics,
+    "social_navigation_pyenvs_orca": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_orca"
+    ].policy_semantics,
+    "social_navigation_pyenvs_socialforce": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_socialforce"
+    ].policy_semantics,
+    "social_navigation_pyenvs_sfm_helbing": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_sfm_helbing"
+    ].policy_semantics,
+    "social_navigation_pyenvs_hsfm_new_guo": CONTRACT_RECORDS_BY_NAME[
+        "social_navigation_pyenvs_hsfm_new_guo"
+    ].policy_semantics,
     "crowdnav_height": "upstream_crowdnav_height_checkpoint_wrapper",
     "sonic_crowdnav": "upstream_sonic_checkpoint_wrapper",
-    "gensafenav_ours_gst": "upstream_gensafenav_checkpoint_wrapper",
-    "gensafenav_ours_gst_guarded": "guarded_upstream_gensafenav_checkpoint_wrapper",
-    "gensafenav_gst_predictor_rand": "upstream_gensafenav_checkpoint_wrapper",
-    "gensafenav_gst_predictor_rand_guarded": "guarded_upstream_gensafenav_checkpoint_wrapper",
+    "gensafenav_ours_gst": CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst"].policy_semantics,
+    "gensafenav_ours_gst_guarded": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_ours_gst_guarded"
+    ].policy_semantics,
+    "gensafenav_gst_predictor_rand": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_gst_predictor_rand"
+    ].policy_semantics,
+    "gensafenav_gst_predictor_rand_guarded": CONTRACT_RECORDS_BY_NAME[
+        "gensafenav_gst_predictor_rand_guarded"
+    ].policy_semantics,
     "sicnav": "upstream_sicnav_checkpoint_or_policy_wrapper",
     "dr_mpc": "upstream_dr_mpc_residual_mpc_wrapper",
     "ppo": "policy_network_inference",
@@ -187,7 +221,7 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         ),
     },
     "social_force": _DEFAULT_OBSERVATION_SPEC,
-    "orca": _DEFAULT_OBSERVATION_SPEC,
+    "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].observation_spec),
     "brne": {
         "default_mode": "socnav_state",
         "supported_modes": ("socnav_state",),
@@ -197,20 +231,27 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "state; the bounded upstream core is restricted to corridor bounds."
         ),
     },
-    "hrvo": _DEFAULT_OBSERVATION_SPEC,
-    "socnav_orca_nonholonomic": _DEFAULT_OBSERVATION_SPEC,
-    "socnav_orca_dd": _DEFAULT_OBSERVATION_SPEC,
-    "socnav_orca_relaxed": _DEFAULT_OBSERVATION_SPEC,
-    "socnav_hrvo": _DEFAULT_OBSERVATION_SPEC,
-    "social_navigation_pyenvs_orca": _DEFAULT_OBSERVATION_SPEC,
-    "social_navigation_pyenvs_socialforce": _DEFAULT_OBSERVATION_SPEC,
-    "social_navigation_pyenvs_sfm_helbing": _DEFAULT_OBSERVATION_SPEC,
-    "social_navigation_pyenvs_hsfm_new_guo": {
-        "default_mode": "headed_socnav_state",
-        "supported_modes": ("headed_socnav_state",),
-        "inputs": ("robot_state", "robot_heading", "goal", "pedestrians"),
-        "notes": "Structured headed social-navigation state for HSFM-style adapters.",
-    },
+    "hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["hrvo"].observation_spec),
+    "socnav_orca_nonholonomic": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_nonholonomic"].observation_spec
+    ),
+    "socnav_orca_dd": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_orca_dd"].observation_spec),
+    "socnav_orca_relaxed": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_relaxed"].observation_spec
+    ),
+    "socnav_hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_hrvo"].observation_spec),
+    "social_navigation_pyenvs_orca": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_orca"].observation_spec
+    ),
+    "social_navigation_pyenvs_socialforce": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_socialforce"].observation_spec
+    ),
+    "social_navigation_pyenvs_sfm_helbing": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_sfm_helbing"].observation_spec
+    ),
+    "social_navigation_pyenvs_hsfm_new_guo": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_hsfm_new_guo"].observation_spec
+    ),
     "stream_gap": _DEFAULT_OBSERVATION_SPEC,
     "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
     "dwa": _DEFAULT_OBSERVATION_SPEC,
@@ -353,30 +394,18 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "inputs": ("robot_state", "goal", "humans"),
         "notes": "SoNIC/GenSafeNav-style GST checkpoint input contract.",
     },
-    "gensafenav_ours_gst": {
-        "default_mode": "gst_human_state",
-        "supported_modes": ("gst_human_state",),
-        "inputs": ("robot_state", "goal", "humans"),
-        "notes": "GenSafeNav Ours_GST checkpoint input contract.",
-    },
-    "gensafenav_ours_gst_guarded": {
-        "default_mode": "gst_human_state",
-        "supported_modes": ("gst_human_state",),
-        "inputs": ("robot_state", "goal", "humans", "safety_guard"),
-        "notes": "Guarded GenSafeNav Ours_GST checkpoint input contract.",
-    },
-    "gensafenav_gst_predictor_rand": {
-        "default_mode": "gst_human_state",
-        "supported_modes": ("gst_human_state",),
-        "inputs": ("robot_state", "goal", "humans"),
-        "notes": "GenSafeNav GST_predictor_rand checkpoint input contract.",
-    },
-    "gensafenav_gst_predictor_rand_guarded": {
-        "default_mode": "gst_human_state",
-        "supported_modes": ("gst_human_state",),
-        "inputs": ("robot_state", "goal", "humans", "safety_guard"),
-        "notes": "Guarded GenSafeNav GST_predictor_rand checkpoint input contract.",
-    },
+    "gensafenav_ours_gst": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst"].observation_spec
+    ),
+    "gensafenav_ours_gst_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst_guarded"].observation_spec
+    ),
+    "gensafenav_gst_predictor_rand": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand"].observation_spec
+    ),
+    "gensafenav_gst_predictor_rand_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand_guarded"].observation_spec
+    ),
 }
 
 _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
@@ -390,76 +419,16 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "core and retain its native unicycle command; this bounded path is diagnostic-only."
         ),
     },
-    "orca": {
-        "repo_url": "https://github.com/mit-acl/Python-RVO2",
-        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
-        "vendored_path": "third_party/python-rvo2",
-        "adapter_boundary": (
-            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
-            "then project the selected velocity into Robot SF unicycle_vw commands."
-        ),
-    },
-    "socnav_orca_nonholonomic": {
-        "repo_url": "https://github.com/mit-acl/Python-RVO2",
-        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
-        "vendored_path": "third_party/python-rvo2",
-        "adapter_boundary": (
-            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
-            "apply nonholonomic commitment heuristics, and project the selected velocity into "
-            "Robot SF unicycle_vw commands."
-        ),
-    },
-    "socnav_orca_dd": {
-        "repo_url": "https://github.com/mit-acl/Python-RVO2",
-        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
-        "vendored_path": "third_party/python-rvo2",
-        "adapter_boundary": (
-            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
-            "tune the result for differential-drive compatibility, and project it into Robot SF "
-            "unicycle_vw commands."
-        ),
-    },
-    "socnav_orca_relaxed": {
-        "repo_url": "https://github.com/mit-acl/Python-RVO2",
-        "commit": "56b245132ea104ee8a621ddf65b8a3dd85028ed2",
-        "vendored_path": "third_party/python-rvo2",
-        "adapter_boundary": (
-            "Use upstream Python-RVO2 to solve reciprocal-avoidance velocity in world coordinates, "
-            "apply relaxed safety tuning, and project the selected velocity into Robot SF "
-            "unicycle_vw commands."
-        ),
-    },
-    "socnav_hrvo": {
-        "repo_url": "https://github.com/snape/HRVO",
-        "license": "Apache-2.0",
-        "reference_repo_url": (
-            "https://github.com/atb033/multi_agent_path_planning/blob/master/"
-            "decentralized/velocity_obstacle/velocity_obstacle.py"
-        ),
-        "adapter_boundary": (
-            "Run the local Robot SF HRVO geometry solver inspired by the upstream HRVO library, "
-            "then project the selected world-frame velocity into Robot SF unicycle_vw commands."
-        ),
-        "provenance_note": (
-            "Local implementation informed by upstream references; not a wrapped upstream runtime."
-        ),
-    },
-    "hrvo": {
-        "repo_url": "https://github.com/snape/HRVO",
-        "license": "Apache-2.0",
-        "reference_repo_url": (
-            "https://github.com/atb033/multi_agent_path_planning/blob/master/"
-            "decentralized/velocity_obstacle/velocity_obstacle.py"
-        ),
-        "adapter_boundary": (
-            "Run the local Robot SF HRVO geometry solver inspired by the upstream HRVO library "
-            "and VO reference, then project the selected world-frame velocity into "
-            "Robot SF unicycle_vw commands."
-        ),
-        "provenance_note": (
-            "Local implementation informed by upstream references; not a wrapped upstream runtime."
-        ),
-    },
+    "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].upstream_reference),
+    "socnav_orca_nonholonomic": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_nonholonomic"].upstream_reference
+    ),
+    "socnav_orca_dd": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_orca_dd"].upstream_reference),
+    "socnav_orca_relaxed": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_relaxed"].upstream_reference
+    ),
+    "socnav_hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_hrvo"].upstream_reference),
+    "hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["hrvo"].upstream_reference),
     "drl_vo": {
         "repo_url": "https://github.com/TempleRAIL/drl_vo_nav",
         "commit": "6d734b6e0df77fd4c4faa4649ca0fcb3e69cf835",
@@ -468,53 +437,18 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "For benchmark contract, map policy output to Robot SF unicycle_vw commands."
         ),
     },
-    "social_navigation_pyenvs_orca": {
-        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
-        "commit": "checked_out_local_probe_2026_03_20",
-        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
-        "upstream_policy": "crowd_nav.policy_no_train.orca.ORCA",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "JointState contract, run upstream ORCA predict(), then project ActionXY into "
-            "Robot SF unicycle_vw commands."
-        ),
-    },
-    "social_navigation_pyenvs_socialforce": {
-        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
-        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
-        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
-        "upstream_policy": "crowd_nav.policy_no_train.socialforce.SocialForce",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "JointState contract, run upstream SocialForce predict() through an explicit "
-            "CrowdNav-style compatibility runtime for socialforce==0.2.3, then project "
-            "ActionXY into Robot SF unicycle_vw commands."
-        ),
-        "runtime_dependency": "socialforce==0.2.3",
-        "runtime_strategy": "crowdnav_socialforce_compat_shim",
-    },
-    "social_navigation_pyenvs_sfm_helbing": {
-        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
-        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
-        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
-        "upstream_policy": "crowd_nav.policy_no_train.sfm_helbing.SFMHelbing",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "JointState contract, run upstream SFM-Helbing predict(), then project ActionXY "
-            "into Robot SF unicycle_vw commands."
-        ),
-    },
-    "social_navigation_pyenvs_hsfm_new_guo": {
-        "repo_url": "https://github.com/TommasoVandermeer/Social-Navigation-PyEnvs",
-        "commit": "f9cd244d3e529247ca1031364de22954717b9493",
-        "checkout_path": "output/repos/Social-Navigation-PyEnvs",
-        "upstream_policy": "crowd_nav.policy_no_train.hsfm_new_guo.HSFMNewGuo",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the upstream Social-Navigation-PyEnvs "
-            "headed JointState contract, run upstream HSFM-New-Guo predict(), then project "
-            "body-frame ActionXYW or NewHeadedState outputs into Robot SF unicycle_vw commands."
-        ),
-    },
+    "social_navigation_pyenvs_orca": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_orca"].upstream_reference
+    ),
+    "social_navigation_pyenvs_socialforce": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_socialforce"].upstream_reference
+    ),
+    "social_navigation_pyenvs_sfm_helbing": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_sfm_helbing"].upstream_reference
+    ),
+    "social_navigation_pyenvs_hsfm_new_guo": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_hsfm_new_guo"].upstream_reference
+    ),
     "crowdnav_height": {
         "repo_url": "https://github.com/Shuijing725/CrowdNav_HEIGHT",
         "commit": "65451bcdd1f3fbebaf6e96a0de73aaa56d74ca05",
@@ -544,63 +478,18 @@ _UPSTREAM_REFERENCE_BY_CANONICAL: dict[str, dict[str, Any]] = {
             "upstream ActionXY velocities into Robot SF unicycle_vw commands."
         ),
     },
-    "gensafenav_ours_gst": {
-        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
-        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
-        "commit": "01baf92",
-        "checkout_path": "output/repos/GenSafeNav",
-        "default_model_name": "Ours_GST",
-        "default_checkpoint": "trained_models/Ours_GST/checkpoints/05207.pt",
-        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the GenSafeNav model-only dict contract, run "
-            "the upstream constrained selfAttn_merge_srnn checkpoint with explicit import/runtime "
-            "shims, and project upstream ActionXY velocities into Robot SF unicycle_vw commands."
-        ),
-    },
-    "gensafenav_ours_gst_guarded": {
-        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
-        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
-        "commit": "01baf92",
-        "checkout_path": "output/repos/GenSafeNav",
-        "default_model_name": "Ours_GST",
-        "default_checkpoint": "trained_models/Ours_GST/checkpoints/05207.pt",
-        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
-        "adapter_boundary": (
-            "Run the GenSafeNav model-only Ours_GST checkpoint through the SoNIC-compatible "
-            "adapter contract, then apply an explicit short-horizon safety guard with goal-policy "
-            "fallback before emitting Robot SF unicycle_vw commands."
-        ),
-    },
-    "gensafenav_gst_predictor_rand": {
-        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
-        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
-        "commit": "01baf92",
-        "checkout_path": "output/repos/GenSafeNav",
-        "default_model_name": "GST_predictor_rand",
-        "default_checkpoint": "trained_models/GST_predictor_rand/checkpoints/05207.pt",
-        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
-        "adapter_boundary": (
-            "Map Robot SF SocNav observations into the GenSafeNav CrowdNav++-style model-only "
-            "dict contract, run the upstream selfAttn_merge_srnn checkpoint with explicit "
-            "import/runtime shims, and project upstream ActionXY velocities into Robot SF "
-            "unicycle_vw commands."
-        ),
-    },
-    "gensafenav_gst_predictor_rand_guarded": {
-        "repo_url": "https://github.com/tasl-lab/GenSafeNav",
-        "reference_repo_url": "https://github.com/tasl-lab/SoNIC-Social-Nav",
-        "commit": "01baf92",
-        "checkout_path": "output/repos/GenSafeNav",
-        "default_model_name": "GST_predictor_rand",
-        "default_checkpoint": "trained_models/GST_predictor_rand/checkpoints/05207.pt",
-        "upstream_policy": "rl.networks.model.Policy[selfAttn_merge_srnn]",
-        "adapter_boundary": (
-            "Run the GenSafeNav model-only GST_predictor_rand checkpoint through the "
-            "SoNIC-compatible adapter contract, then apply an explicit short-horizon safety "
-            "guard with goal-policy fallback before emitting Robot SF unicycle_vw commands."
-        ),
-    },
+    "gensafenav_ours_gst": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst"].upstream_reference
+    ),
+    "gensafenav_ours_gst_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst_guarded"].upstream_reference
+    ),
+    "gensafenav_gst_predictor_rand": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand"].upstream_reference
+    ),
+    "gensafenav_gst_predictor_rand_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand_guarded"].upstream_reference
+    ),
     "sicnav": {
         "repo_url": "https://github.com/sepsamavi/safe-interactive-crowdnav",
         "commit": "c702fb8ac9ba6439ca61da7dde68b8524bbc6a1f",
@@ -646,17 +535,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
-    "orca": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "ORCAPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
+    "orca": deepcopy(CONTRACT_RECORDS_BY_NAME["orca"].kinematics_profile),
     "brne": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": True,
@@ -670,61 +549,15 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "testing_only_adapter": True,
         "prototype_only": True,
     },
-    "socnav_orca_nonholonomic": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "ORCAPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "socnav_orca_dd": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "ORCAPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "socnav_orca_relaxed": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "ORCAPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "socnav_hrvo": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "HRVOPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "hrvo": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "HRVOPlannerAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
+    "socnav_orca_nonholonomic": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_nonholonomic"].kinematics_profile
+    ),
+    "socnav_orca_dd": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_orca_dd"].kinematics_profile),
+    "socnav_orca_relaxed": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["socnav_orca_relaxed"].kinematics_profile
+    ),
+    "socnav_hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["socnav_hrvo"].kinematics_profile),
+    "hrvo": deepcopy(CONTRACT_RECORDS_BY_NAME["hrvo"].kinematics_profile),
     "drl_vo": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": False,
@@ -736,52 +569,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
-    "social_navigation_pyenvs_orca": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SocialNavigationPyEnvsORCAAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "social_navigation_pyenvs_socialforce": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-        "runtime_dependency": "socialforce==0.2.3",
-        "runtime_strategy": "crowdnav_socialforce_compat_shim",
-    },
-    "social_navigation_pyenvs_sfm_helbing": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SocialNavigationPyEnvsForceModelAdapter",
-        "upstream_command_space": "velocity_vector_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "social_navigation_pyenvs_hsfm_new_guo": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SocialNavigationPyEnvsHSFMAdapter",
-        "upstream_command_space": "body_velocity_xy_plus_omega",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "body_velocity_heading_safe_to_unicycle_vw",
-        "projection_documented": True,
-    },
+    "social_navigation_pyenvs_orca": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_orca"].kinematics_profile
+    ),
+    "social_navigation_pyenvs_socialforce": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_socialforce"].kinematics_profile
+    ),
+    "social_navigation_pyenvs_sfm_helbing": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_sfm_helbing"].kinematics_profile
+    ),
+    "social_navigation_pyenvs_hsfm_new_guo": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["social_navigation_pyenvs_hsfm_new_guo"].kinematics_profile
+    ),
     "crowdnav_height": {
         "planner_command_space": "unicycle_vw",
         "supports_native_commands": False,
@@ -804,50 +603,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "heading_safe_velocity_to_unicycle_vw",
         "projection_documented": True,
     },
-    "gensafenav_ours_gst": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SonicCrowdNavAdapter",
-        "upstream_command_space": "holonomic_velocity_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "gensafenav_ours_gst_guarded": {
-        "planner_command_space": "mixed_vw_or_unicycle",
-        "supports_native_commands": True,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "mixed",
-        "default_adapter_name": "sonic_guarded_goal_fallback",
-        "upstream_command_space": "holonomic_velocity_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "gensafenav_gst_predictor_rand": {
-        "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "adapter",
-        "default_adapter_name": "SonicCrowdNavAdapter",
-        "upstream_command_space": "holonomic_velocity_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
-    "gensafenav_gst_predictor_rand_guarded": {
-        "planner_command_space": "mixed_vw_or_unicycle",
-        "supports_native_commands": True,
-        "supports_adapter_commands": True,
-        "default_execution_mode": "mixed",
-        "default_adapter_name": "sonic_guarded_goal_fallback",
-        "upstream_command_space": "holonomic_velocity_xy",
-        "benchmark_command_space": "unicycle_vw",
-        "projection_policy": "heading_safe_velocity_to_unicycle_vw",
-        "projection_documented": True,
-    },
+    "gensafenav_ours_gst": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst"].kinematics_profile
+    ),
+    "gensafenav_ours_gst_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_ours_gst_guarded"].kinematics_profile
+    ),
+    "gensafenav_gst_predictor_rand": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand"].kinematics_profile
+    ),
+    "gensafenav_gst_predictor_rand_guarded": deepcopy(
+        CONTRACT_RECORDS_BY_NAME["gensafenav_gst_predictor_rand_guarded"].kinematics_profile
+    ),
     "sicnav": {
         "planner_command_space": "mixed_vw_or_unicycle",
         "supports_native_commands": False,

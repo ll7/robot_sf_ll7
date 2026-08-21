@@ -320,6 +320,18 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      Build-provenance receipt for the Chapter 7 v2 evidence package (schema
+      ch7-evidence-build-receipt.v1, admission_status not_admitted, status verified). It pins the
+      SHA-256 of scripts/analysis/verify_ch7_evidence_admission_v2.py as recorded at its build
+      commit f0c57f2e; the later #4b5a1b9f5 verifier-hardening commit changed that tracked file,
+      so the build-time pin now mismatches by design. Refreshing the pin requires regenerating
+      the receipt via its recorded receipt_generate command, which is blocked pending domain
+      approval (package_status blocked_pending_domain_approval), so the drift is explicitly
+      dispositioned as baseline rather than rewritten inside a CI unbreak repair.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]

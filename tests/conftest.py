@@ -388,6 +388,9 @@ _FAST_FILES = {
     # Collision-pressure report tests are deterministic schema and materialization
     # contracts for the changed benchmark producer.
     "test_collision_pressure_report.py",
+    # Goal-marker pixels require the optional pygame extra, but the focused
+    # regression is deterministic and covers the renderer in PR fast shards.
+    "test_sim_view_goal_marker.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

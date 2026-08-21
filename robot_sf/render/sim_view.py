@@ -1011,11 +1011,15 @@ class SimulationView:
         Args:
             robot_goal: Goal position as ``(x, y)`` world coordinates.
         """
+        radius_px = self.goal_radius * self.scaling
+        # Keep the ring visible at minimum zoom without letting it dominate large goals.
+        outline_width_px = max(1, min(3, round(radius_px * 0.1)))
         pygame.draw.circle(
             self.screen,
             ROBOT_GOAL_COLOR,
             self._scale_tuple(robot_goal),
-            self.goal_radius * self.scaling,
+            radius_px,
+            width=outline_width_px,
         )
 
     def _augment_lidar(self, ray_vecs: np.ndarray):

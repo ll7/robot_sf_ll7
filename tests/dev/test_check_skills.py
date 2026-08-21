@@ -349,7 +349,7 @@ def _stage_content_contracts(tmp_path: Path, *skills: str) -> None:
 def test_artifact_first_contract_passes_for_goal_autopilot(tmp_path: Path) -> None:
     """Artifact-first phrase and file requirements should pass for goal-autopilot style skills."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-autopilot')
+    _stage_content_contracts(tmp_path, "goal-autopilot")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
     skill_path.parent.mkdir()
@@ -389,7 +389,7 @@ before accepting work.
 def test_artifact_first_contract_fails_when_missing_required_artifacts(tmp_path: Path) -> None:
     """Contracts should fail when required artifact filenames or evidence phrases are missing."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-autopilot')
+    _stage_content_contracts(tmp_path, "goal-autopilot")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
     skill_path.parent.mkdir()
@@ -411,7 +411,7 @@ def test_artifact_first_contract_requires_canonical_result_markdown_case(
 ) -> None:
     """The compact artifact contract should preserve RESULT.md casing exactly."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-autopilot')
+    _stage_content_contracts(tmp_path, "goal-autopilot")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
     skill_path.parent.mkdir()
@@ -435,7 +435,7 @@ no broad rg -n ., and no full file reads.
 def test_goal_autopilot_contract_requires_active_ledger_reuse_terms(tmp_path: Path) -> None:
     """Goal autopilot should keep explicit ledger reuse and freshness-key guidance."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-autopilot')
+    _stage_content_contracts(tmp_path, "goal-autopilot")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-autopilot" / "SKILL.md"
     skill_path.parent.mkdir()
@@ -475,7 +475,7 @@ def test_active_routing_template_rejects_retired_spark_route(tmp_path: Path) -> 
 def test_goal_pr_review_contract_requires_compact_ci_snapshot_terms(tmp_path: Path) -> None:
     """Goal PR review should preserve compact PR/CI entry-point guidance."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-pr-review')
+    _stage_content_contracts(tmp_path, "goal-pr-review")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
     skill_path.parent.mkdir()
@@ -552,7 +552,7 @@ full logs in private artifacts.
 def test_goal_pr_review_contract_requires_snapshot_queue_reference(tmp_path: Path) -> None:
     """Goal PR review should still require explicit snapshot queue command guidance."""
     check_skills = _load_check_skills_module()
-    _stage_content_contracts(tmp_path, 'goal-pr-review')
+    _stage_content_contracts(tmp_path, "goal-pr-review")
     check_skills.REPO_ROOT = tmp_path
     skill_path = tmp_path / "goal-pr-review" / "SKILL.md"
     skill_path.parent.mkdir()

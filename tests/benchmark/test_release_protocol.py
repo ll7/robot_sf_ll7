@@ -278,8 +278,7 @@ def test_load_release_manifest_rejects_empty_required_artifact_path(tmp_path: Pa
 def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path) -> None:
     """v0.2 binds base, matrix, suite/certification, seeds, SNQI policy, and fresh DOI."""
     source_path = Path(
-        "configs/benchmarks/releases/"
-        "paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
     )
     payload = yaml.safe_load(source_path.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
@@ -301,7 +300,9 @@ def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path)
     suite_policy = Path(
         "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"
     ).resolve()
-    route_certification = Path("configs/benchmarks/route_clearance_certifications_v1.yaml").resolve()
+    route_certification = Path(
+        "configs/benchmarks/route_clearance_certifications_v1.yaml"
+    ).resolve()
     payload["scenario"].update(
         {
             "suite_policy_path": str(suite_policy),

@@ -344,7 +344,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         )
     else:
         result["publication_bundle"] = None
-        result["publication_preflight_status"] = "not_requested" if not publication_requested else None
+        result["publication_preflight_status"] = (
+            "not_requested" if not publication_requested else None
+        )
 
     result["release_status"] = (
         "missing_required_artifacts"

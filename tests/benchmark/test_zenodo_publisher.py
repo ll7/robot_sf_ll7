@@ -133,7 +133,10 @@ def test_metadata_requires_dataset_license_creators_and_exact_tag(tmp_path: Path
 def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path: Path) -> None:
     """All publisher modes preserve identity and a credential-free state contract."""
     session = _Session()
-    session.posts = [_Response(_draft_payload(), 201), _Response(_draft_payload(submitted=True), 202)]
+    session.posts = [
+        _Response(_draft_payload(), 201),
+        _Response(_draft_payload(submitted=True), 202),
+    ]
     state = reserve(session, _metadata())
     assert state["schema_version"] == ZENODO_STATE_SCHEMA
     assert state["doi"] == "10.5281/zenodo.123"

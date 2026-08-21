@@ -400,9 +400,7 @@ def _load_v02_contract(  # noqa: C901
             scenario.get("route_certification_path"),
             "scenario.route_certification_path",
         ),
-        "route_certification_sha256": str(
-            scenario.get("route_certification_sha256", "")
-        ).strip(),
+        "route_certification_sha256": str(scenario.get("route_certification_sha256", "")).strip(),
         "seed_sets_sha256": str(seed_policy.get("seed_sets_sha256", "")).strip(),
         "resolved_seeds": tuple(int(seed) for seed in resolved_seeds),
         "snqi_claim_policy": "advisory_no_ranking",

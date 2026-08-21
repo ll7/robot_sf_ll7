@@ -69,7 +69,9 @@ def test_cluster_check_rejects_preparation_only_packet(tmp_path: Path) -> None:
 def test_doctor_report_is_credential_free(monkeypatch, tmp_path: Path) -> None:
     """Collected output exposes only sanitized check summaries."""
     passed = ReleaseDoctorCheck("fixture", "pass", "safe")
-    monkeypatch.setattr(release_doctor, "_manifest_check", lambda *args: (passed, object(), object()))
+    monkeypatch.setattr(
+        release_doctor, "_manifest_check", lambda *args: (passed, object(), object())
+    )
     monkeypatch.setattr(release_doctor, "_git_check", lambda *args: passed)
     monkeypatch.setattr(release_doctor, "_ci_check", lambda *args: passed)
     monkeypatch.setattr(release_doctor, "_tag_check", lambda *args: passed)

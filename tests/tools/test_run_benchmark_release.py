@@ -503,7 +503,9 @@ def test_runtime_smoke_skips_publication_when_config_disables_export(
         "validate_release_manifest",
         lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
     )
-    monkeypatch.setattr(run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {})
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
     monkeypatch.setattr(
         run_benchmark_release,
         "run_campaign",

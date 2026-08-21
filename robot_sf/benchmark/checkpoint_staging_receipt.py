@@ -84,7 +84,9 @@ def _validate_receipt_header(
     if payload.get("status") != "ok":
         raise CheckpointStagingReceiptError("checkpoint staging receipt status is not ok")
     if payload.get("mode") != "enforced_staged" or payload.get("stage") is not True:
-        raise CheckpointStagingReceiptError("checkpoint receipt was not produced in enforced-staged mode")
+        raise CheckpointStagingReceiptError(
+            "checkpoint receipt was not produced in enforced-staged mode"
+        )
     if payload.get("submit_safe") is not True:
         raise CheckpointStagingReceiptError("checkpoint staging receipt has submit_safe=false")
 
@@ -97,7 +99,9 @@ def _validate_receipt_header(
             f"checkpoint staging receipt is stale (older than {max_age_hours:g} hours)"
         )
     if payload.get("campaign_config_sha256") != sha256_file(config_path):
-        raise CheckpointStagingReceiptError("checkpoint receipt campaign config hash does not match")
+        raise CheckpointStagingReceiptError(
+            "checkpoint receipt campaign config hash does not match"
+        )
 
 
 def _validate_receipt_arms(cfg: CampaignConfig, payload: dict[str, Any]) -> None:
@@ -107,10 +111,14 @@ def _validate_receipt_arms(cfg: CampaignConfig, payload: dict[str, Any]) -> None
         raise CheckpointStagingReceiptError("checkpoint staging receipt has no covered arms")
     if not all(isinstance(arm, dict) for arm in arms):
         raise CheckpointStagingReceiptError("checkpoint staging receipt arms must be JSON objects")
-    expected = sorted(_reference_identity(ref) for ref in iter_campaign_arm_checkpoint_references(cfg))
+    expected = sorted(
+        _reference_identity(ref) for ref in iter_campaign_arm_checkpoint_references(cfg)
+    )
     observed = sorted(_receipt_arm_identity(arm) for arm in arms)
     if observed != expected:
-        raise CheckpointStagingReceiptError("checkpoint staging receipt arm/config identities do not match")
+        raise CheckpointStagingReceiptError(
+            "checkpoint staging receipt arm/config identities do not match"
+        )
 
     for arm in arms:
         planner_key = str(arm.get("planner_key", "<unknown>"))
@@ -156,7 +164,9 @@ def validate_checkpoint_staging_receipt(
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise CheckpointStagingReceiptError(f"checkpoint staging receipt is unreadable: {path}") from exc
+        raise CheckpointStagingReceiptError(
+            f"checkpoint staging receipt is unreadable: {path}"
+        ) from exc
     if not isinstance(payload, dict):
         raise CheckpointStagingReceiptError("checkpoint staging receipt must be a JSON object")
     config_path = Path(campaign_config_path).resolve()

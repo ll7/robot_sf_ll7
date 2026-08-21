@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
 
+from robot_sf.common.optional_import import try_import
+
 ZENODO_API_BASE = "https://zenodo.org/api"
 ZENODO_STATE_SCHEMA = "robot-sf-zenodo-deposition.v1"
 
@@ -81,10 +83,9 @@ def build_session(token_file: str | Path) -> _Session:
     Returns:
         An authenticated session. The token is never placed in URLs.
     """
-    try:
-        import requests  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover - all-extras environment owns requests
-        raise ZenodoPublisherError("requests is required; run `uv sync --all-extras`") from exc
+    requests = try_import("requests")
+    if requests is None:  # pragma: no cover - all-extras environment owns requests
+        raise ZenodoPublisherError("requests is required; run `uv sync --all-extras`")
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {read_token_file(token_file)}"})
     return session
@@ -115,7 +116,9 @@ def load_dataset_metadata(path: str | Path) -> dict[str, Any]:
         and "/releases/tag/" in str(item.get("identifier", ""))
         for item in related
     ):
-        raise ZenodoPublisherError("Zenodo metadata must relate the dataset to the exact source tag")
+        raise ZenodoPublisherError(
+            "Zenodo metadata must relate the dataset to the exact source tag"
+        )
     metadata["prereserve_doi"] = True
     return metadata
 
@@ -144,9 +147,7 @@ def _public_state(payload: dict[str, Any]) -> dict[str, Any]:
     """
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     preregistered = (
-        metadata.get("prereserve_doi")
-        if isinstance(metadata.get("prereserve_doi"), dict)
-        else {}
+        metadata.get("prereserve_doi") if isinstance(metadata.get("prereserve_doi"), dict) else {}
     )
     return {
         "schema_version": ZENODO_STATE_SCHEMA,
@@ -179,7 +180,9 @@ def reserve(
     payload = _json_object(response, "reserve")
     state = _public_state(payload)
     if not state["deposition_id"] or not state["doi"] or not state["concept_record_id"]:
-        raise ZenodoPublisherError("Zenodo reserve response omitted deposition/concept/DOI identity")
+        raise ZenodoPublisherError(
+            "Zenodo reserve response omitted deposition/concept/DOI identity"
+        )
     return state
 
 

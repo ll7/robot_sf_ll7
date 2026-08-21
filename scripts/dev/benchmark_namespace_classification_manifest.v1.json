@@ -41,6 +41,7 @@
     "case_publication_figure.py",
     "case_workbench.py",
     "certification_transfer.py",
+    "checkpoint_staging_receipt.py",
     "circuit_breaker.py",
     "classic_interactions_loader.py",
     "clearance_semantics.py",
@@ -218,6 +219,7 @@
     "reactivity_ablation.py",
     "reactivity_replay_preflight.py",
     "release_assurance_case.py",
+    "release_doctor.py",
     "release_gates.py",
     "release_preflight.py",
     "release_protocol.py",
@@ -300,6 +302,7 @@
     "validation",
     "validation_utils.py",
     "version_utils.py",
-    "visualization.py"
+    "visualization.py",
+    "zenodo_publisher.py"
   ]
 }

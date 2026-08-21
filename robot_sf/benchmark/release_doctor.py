@@ -99,7 +99,9 @@ def _ci_check(repo: Path, expected_sha: str) -> ReleaseDoctorCheck:
         run.get("status") == "completed" and run.get("conclusion") == "success" for run in exact
     )
     return ReleaseDoctorCheck(
-        "ci", "pass" if green else "fail", "exact-source CI is green" if green else "no green exact-source CI run"
+        "ci",
+        "pass" if green else "fail",
+        "exact-source CI is green" if green else "no green exact-source CI run",
     )
 
 
@@ -119,7 +121,9 @@ def _tag_check(repo: Path, tag: str) -> ReleaseDoctorCheck:
     )
 
 
-def _manifest_check(manifest_path: Path, expected_cells: int) -> tuple[ReleaseDoctorCheck, Any, Any]:
+def _manifest_check(
+    manifest_path: Path, expected_cells: int
+) -> tuple[ReleaseDoctorCheck, Any, Any]:
     """Validate pinned hashes and exact matrix cardinality.
 
     Returns:
@@ -181,14 +185,19 @@ def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> 
         Sanitized check result.
     """
     problems = []
-    if manifest is None or getattr(manifest, "schema_version", None) != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
+    if (
+        manifest is None
+        or getattr(manifest, "schema_version", None) != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2
+    ):
         problems.append("final manifest is not v0.2")
     if manifest is None or getattr(manifest, "latest_main_base_commit", None) != expected_base_sha:
         problems.append("manifest latest-main base commit does not match")
     if manifest is None or getattr(manifest, "release_tag", None) != tag:
         problems.append("manifest release tag does not match")
     return ReleaseDoctorCheck(
-        "release_identity", "pass" if not problems else "fail", "; ".join(problems) or "v0.2 source/tag identity frozen"
+        "release_identity",
+        "pass" if not problems else "fail",
+        "; ".join(problems) or "v0.2 source/tag identity frozen",
     )
 
 
@@ -198,7 +207,9 @@ def _load_mapping(path: Path) -> dict[str, Any]:
     Returns:
         Parsed mapping.
     """
-    payload = json.loads(path.read_text()) if path.suffix == ".json" else yaml.safe_load(path.read_text())
+    payload = (
+        json.loads(path.read_text()) if path.suffix == ".json" else yaml.safe_load(path.read_text())
+    )
     if not isinstance(payload, dict):
         raise ValueError("expected mapping")
     return payload
@@ -222,7 +233,9 @@ def _cluster_check(packet_path: Path | None, expected_sha: str) -> ReleaseDoctor
         not isinstance(admission, dict) or bool(admission.get("dispatchable", True))
     )
     identity = packet.get("identity")
-    identity_source_sha = identity.get("public_source_commit") if isinstance(identity, dict) else None
+    identity_source_sha = (
+        identity.get("public_source_commit") if isinstance(identity, dict) else None
+    )
     source_sha = packet.get("public_source_sha") or packet.get("release_sha") or identity_source_sha
     problems = []
     if not admitted:
@@ -232,7 +245,9 @@ def _cluster_check(packet_path: Path | None, expected_sha: str) -> ReleaseDoctor
     if source_sha != expected_sha:
         problems.append("launch packet source SHA does not match")
     return ReleaseDoctorCheck(
-        "cluster_admission", "pass" if not problems else "fail", "; ".join(problems) or "launch packet admitted"
+        "cluster_admission",
+        "pass" if not problems else "fail",
+        "; ".join(problems) or "launch packet admitted",
     )
 
 
@@ -292,7 +307,9 @@ def _zenodo_check(
     summary = (
         "Zenodo webhook is disabled"
         if zenodo_hooks and not active
-        else "Zenodo webhook remains active" if active else "Zenodo webhook was not found"
+        else "Zenodo webhook remains active"
+        if active
+        else "Zenodo webhook was not found"
     )
     checks.append(ReleaseDoctorCheck("zenodo_hook", "pass" if passed else "fail", summary))
     return checks
@@ -319,7 +336,9 @@ def _dissertation_check(path: Path | None) -> ReleaseDoctorCheck:
     if stale.returncode == 0 and stale.stdout.strip():
         problems.append("hard-coded Robot SF checkout paths remain")
     return ReleaseDoctorCheck(
-        "dissertation_paths", "pass" if not problems else "fail", "; ".join(problems) or "release paths healthy"
+        "dissertation_paths",
+        "pass" if not problems else "fail",
+        "; ".join(problems) or "release paths healthy",
     )
 
 

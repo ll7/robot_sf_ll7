@@ -68,7 +68,16 @@ def _repo_relative(path: Path) -> str:
     try:
         return resolved.relative_to(repo_root).as_posix()
     except ValueError:
-        return str(resolved)
+        return f"<external>/{resolved.name}"
+
+
+def _required_repo_relative(path: Path) -> str:
+    """Return a repository-relative release input path or fail without exposing its location."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(get_repository_root().resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError("release input must be inside the repository worktree") from exc
 
 
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
@@ -280,6 +289,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         print(json.dumps(result, indent=2))
         return 2
     try:
+        checkpoint_receipt_path = _required_repo_relative(args.checkpoint_receipt)
+    except ValueError as exc:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "checkpoint_receipt_rejected",
+                "status_reason": str(exc),
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+            }
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    try:
         checkpoint_receipt = validate_checkpoint_staging_receipt(
             cfg,
             args.checkpoint_receipt,
@@ -299,7 +322,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         print(json.dumps(result, indent=2))
         return 2
     result["checkpoint_staging_receipt"] = {
-        "path": _repo_relative(args.checkpoint_receipt),
+        "path": checkpoint_receipt_path,
         "sha256": sha256_file(args.checkpoint_receipt),
         "generated_at_utc": checkpoint_receipt["generated_at_utc"],
         "submit_safe": True,

@@ -74,7 +74,28 @@ def _admit_checkpoint_receipt(monkeypatch, tmp_path: Path) -> Path:
         "validate_checkpoint_staging_receipt",
         lambda *args, **kwargs: {"generated_at_utc": "2026-08-21T00:00:00Z"},
     )
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
     return receipt
+
+
+def test_release_input_path_rejects_external_location_without_leaking_it(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Publication provenance cannot contain an absolute path outside the release worktree."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    external = tmp_path / "private" / "receipt.json"
+    external.parent.mkdir()
+    external.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+
+    try:
+        run_benchmark_release._required_repo_relative(external)
+    except ValueError as exc:
+        assert str(external) not in str(exc)
+        assert "inside the repository worktree" in str(exc)
+    else:
+        raise AssertionError("external release input was not rejected")
 
 
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:

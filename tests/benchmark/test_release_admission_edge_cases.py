@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
+import yaml
 
 from robot_sf.benchmark import checkpoint_staging_receipt as staging
 from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -16,12 +17,27 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _receipt_fixture(tmp_path: Path) -> tuple[SimpleNamespace, Path, Path, dict]:
+def _receipt_fixture(tmp_path: Path) -> tuple[SimpleNamespace, Path, Path, Path, dict]:
     """Build a minimal valid receipt fixture for edge-case tests."""
     config = tmp_path / "campaign.yaml"
     config.write_text("name: release\n", encoding="utf-8")
     checkpoint = tmp_path / "model.zip"
     checkpoint.write_bytes(b"checkpoint")
+    registry = tmp_path / "registry.yaml"
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {
+                        "model_id": "ppo_release",
+                        "github_release": {"sha256": sha256_file(checkpoint)},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     reference = SimpleNamespace(
         planner_key="ppo",
         algo="ppo",
@@ -38,6 +54,7 @@ def _receipt_fixture(tmp_path: Path) -> tuple[SimpleNamespace, Path, Path, dict]
         "submit_safe": True,
         "generated_at_utc": "2026-08-21T12:00:00Z",
         "campaign_config_sha256": sha256_file(config),
+        "checkpoint_registry_sha256": sha256_file(registry),
         "arms": [
             {
                 "planner_key": "ppo",
@@ -48,11 +65,12 @@ def _receipt_fixture(tmp_path: Path) -> tuple[SimpleNamespace, Path, Path, dict]
                 "status": "staged",
                 "resolved_path": str(checkpoint),
                 "checkpoint_sha256": sha256_file(checkpoint),
+                "hash_source": "computed_file",
             }
         ],
     }
     receipt = tmp_path / "receipt.json"
-    return cfg, config, receipt, payload
+    return cfg, config, registry, receipt, payload
 
 
 def _write(path: Path, payload: object) -> None:
@@ -99,7 +117,7 @@ def test_checkpoint_receipt_rejects_invalid_header_fields(
     match: str,
 ) -> None:
     """Schema, status, and staging-mode drift cannot pass admission."""
-    cfg, config, receipt, payload = _receipt_fixture(tmp_path)
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
     payload[field] = value
     _write(receipt, payload)
     _patch_references(monkeypatch)
@@ -108,6 +126,7 @@ def test_checkpoint_receipt_rejects_invalid_header_fields(
             cfg,
             receipt,
             campaign_config_path=config,
+            registry_path=registry,
             now=datetime(2026, 8, 21, 12, tzinfo=UTC),
         )
 
@@ -116,7 +135,7 @@ def test_checkpoint_receipt_rejects_future_timestamp(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A receipt generated materially in the future is not trusted."""
-    cfg, config, receipt, payload = _receipt_fixture(tmp_path)
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
     payload["generated_at_utc"] = "2026-08-21T13:00:00Z"
     _write(receipt, payload)
     _patch_references(monkeypatch)
@@ -125,6 +144,7 @@ def test_checkpoint_receipt_rejects_future_timestamp(
             cfg,
             receipt,
             campaign_config_path=config,
+            registry_path=registry,
             now=datetime(2026, 8, 21, 12, tzinfo=UTC),
         )
 
@@ -143,7 +163,7 @@ def test_checkpoint_receipt_rejects_missing_or_malformed_arm_rows(
     match: str,
 ) -> None:
     """A receipt must enumerate at least one JSON arm object."""
-    cfg, config, receipt, payload = _receipt_fixture(tmp_path)
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
     payload["arms"] = arms
     _write(receipt, payload)
     _patch_references(monkeypatch)
@@ -152,6 +172,7 @@ def test_checkpoint_receipt_rejects_missing_or_malformed_arm_rows(
             cfg,
             receipt,
             campaign_config_path=config,
+            registry_path=registry,
             now=datetime(2026, 8, 21, 13, tzinfo=UTC),
         )
 
@@ -170,7 +191,7 @@ def test_checkpoint_receipt_rejects_unmaterialized_arm_files(
     match: str,
 ) -> None:
     """Every receipt arm must still point to a checksum-verifiable file."""
-    cfg, config, receipt, payload = _receipt_fixture(tmp_path)
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
     mutation(payload["arms"][0])
     _write(receipt, payload)
     _patch_references(monkeypatch)
@@ -179,6 +200,7 @@ def test_checkpoint_receipt_rejects_unmaterialized_arm_files(
             cfg,
             receipt,
             campaign_config_path=config,
+            registry_path=registry,
             now=datetime(2026, 8, 21, 13, tzinfo=UTC),
         )
 

@@ -8,6 +8,7 @@ trusting a cheaper, network-free resolvability check.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -17,6 +18,7 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
+from robot_sf.models.registry import DEFAULT_REGISTRY_PATH, get_registry_entry
 
 if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready_campaign import CampaignConfig
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 
 CHECKPOINT_STAGING_RECEIPT_SCHEMA = "campaign-checkpoint-staging-receipt.v1"
 _ACCEPTED_ARM_STATUSES = frozenset({"present_local", "staged"})
+_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 class CheckpointStagingReceiptError(RobotSfError, RuntimeError):
@@ -104,7 +107,109 @@ def _validate_receipt_header(
         )
 
 
-def _validate_receipt_arms(cfg: CampaignConfig, payload: dict[str, Any]) -> None:
+def _registry_checkpoint_sha256(entry: dict[str, Any], resolved_path: Path) -> str | None:
+    """Return the registry-pinned digest for one materialized model checkpoint."""
+    release = entry.get("github_release")
+    if isinstance(release, dict):
+        per_file = release.get("per_file_sha256")
+        if isinstance(per_file, dict):
+            value = per_file.get(resolved_path.name)
+            if isinstance(value, str) and _SHA256_PATTERN.fullmatch(value.strip().lower()):
+                return value.strip().lower()
+        value = release.get("sha256")
+        if isinstance(value, str) and _SHA256_PATTERN.fullmatch(value.strip().lower()):
+            return value.strip().lower()
+    value = entry.get("sha256")
+    if isinstance(value, str) and _SHA256_PATTERN.fullmatch(value.strip().lower()):
+        return value.strip().lower()
+    return None
+
+
+def _validate_receipt_registry(payload: dict[str, Any], registry_path: Path) -> None:
+    """Bind a staging receipt to the exact tracked model-registry bytes."""
+    if not registry_path.is_file():
+        raise CheckpointStagingReceiptError("checkpoint model registry is unavailable")
+    if payload.get("checkpoint_registry_sha256") != sha256_file(registry_path):
+        raise CheckpointStagingReceiptError("checkpoint receipt model registry hash does not match")
+
+
+def _validated_arm_file(arm: dict[str, Any]) -> tuple[str, Path, str]:
+    """Validate one materialized receipt arm.
+
+    Returns:
+        Planner key, resolved checkpoint path, and independently observed SHA-256.
+    """
+    planner_key = str(arm.get("planner_key", "<unknown>"))
+    if arm.get("status") not in _ACCEPTED_ARM_STATUSES:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} has non-staged status {arm.get('status')!r}"
+        )
+    resolved_path = arm.get("resolved_path")
+    expected_sha = arm.get("checkpoint_sha256")
+    if not isinstance(resolved_path, str) or not Path(resolved_path).is_file():
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} no longer resolves to a file"
+        )
+    if not isinstance(expected_sha, str) or _SHA256_PATTERN.fullmatch(expected_sha.lower()) is None:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} has no valid SHA-256"
+        )
+    resolved = Path(resolved_path).resolve()
+    observed_sha = sha256_file(resolved)
+    if observed_sha != expected_sha.lower():
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} file checksum changed"
+        )
+    if arm.get("hash_source") != "computed_file":
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} hash was not computed from the staged file"
+        )
+    return planner_key, resolved, observed_sha
+
+
+def _validate_model_id_digest(
+    reference: Any,
+    *,
+    planner_key: str,
+    resolved: Path,
+    observed_sha: str,
+    registry_path: Path,
+) -> None:
+    """Require a materialized model-id checkpoint to match its registry pin."""
+    try:
+        entry = get_registry_entry(reference.value, registry_path)
+    except KeyError as exc:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} model_id is absent from the registry"
+        ) from exc
+    registry_sha = _registry_checkpoint_sha256(entry, resolved)
+    if registry_sha is None:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} has no registry-pinned SHA-256"
+        )
+    if observed_sha != registry_sha:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} does not match the registry-pinned SHA-256"
+        )
+
+
+def _validate_direct_checkpoint_path(reference: Any, *, planner_key: str, resolved: Path) -> None:
+    """Require a direct model-path receipt to resolve the path bound by the campaign config."""
+    configured_path = Path(reference.value)
+    if not configured_path.is_absolute():
+        configured_path = (Path.cwd() / configured_path).resolve()
+    if resolved != configured_path:
+        raise CheckpointStagingReceiptError(
+            f"checkpoint receipt arm {planner_key} resolved a different configured path"
+        )
+
+
+def _validate_receipt_arms(
+    cfg: CampaignConfig,
+    payload: dict[str, Any],
+    *,
+    registry_path: Path,
+) -> None:
     """Validate arm coverage, statuses, materialized files, and checksums."""
     arms = payload.get("arms")
     if not isinstance(arms, list) or not arms:
@@ -120,25 +225,25 @@ def _validate_receipt_arms(cfg: CampaignConfig, payload: dict[str, Any]) -> None
             "checkpoint staging receipt arm/config identities do not match"
         )
 
-    for arm in arms:
-        planner_key = str(arm.get("planner_key", "<unknown>"))
-        if arm.get("status") not in _ACCEPTED_ARM_STATUSES:
-            raise CheckpointStagingReceiptError(
-                f"checkpoint receipt arm {planner_key} has non-staged status {arm.get('status')!r}"
+    for reference, arm in zip(
+        sorted(iter_campaign_arm_checkpoint_references(cfg), key=_reference_identity),
+        sorted(arms, key=_receipt_arm_identity),
+        strict=True,
+    ):
+        planner_key, resolved, observed_sha = _validated_arm_file(arm)
+        if reference.kind == "model_id":
+            _validate_model_id_digest(
+                reference,
+                planner_key=planner_key,
+                resolved=resolved,
+                observed_sha=observed_sha,
+                registry_path=registry_path,
             )
-        resolved_path = arm.get("resolved_path")
-        expected_sha = arm.get("checkpoint_sha256")
-        if not isinstance(resolved_path, str) or not Path(resolved_path).is_file():
-            raise CheckpointStagingReceiptError(
-                f"checkpoint receipt arm {planner_key} no longer resolves to a file"
-            )
-        if not isinstance(expected_sha, str) or len(expected_sha) != 64:
-            raise CheckpointStagingReceiptError(
-                f"checkpoint receipt arm {planner_key} has no valid SHA-256"
-            )
-        if sha256_file(Path(resolved_path)) != expected_sha.lower():
-            raise CheckpointStagingReceiptError(
-                f"checkpoint receipt arm {planner_key} file checksum changed"
+        else:
+            _validate_direct_checkpoint_path(
+                reference,
+                planner_key=planner_key,
+                resolved=resolved,
             )
 
 
@@ -149,6 +254,7 @@ def validate_checkpoint_staging_receipt(
     campaign_config_path: str | Path,
     max_age_hours: float = 24.0,
     now: datetime | None = None,
+    registry_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Validate a staged-checkpoint receipt against current config and files.
 
@@ -176,7 +282,12 @@ def validate_checkpoint_staging_receipt(
         max_age_hours=max_age_hours,
         now=now,
     )
-    _validate_receipt_arms(cfg, payload)
+    resolved_registry_path = Path(registry_path or DEFAULT_REGISTRY_PATH).resolve()
+    if any(
+        reference.kind == "model_id" for reference in iter_campaign_arm_checkpoint_references(cfg)
+    ):
+        _validate_receipt_registry(payload, resolved_registry_path)
+    _validate_receipt_arms(cfg, payload, registry_path=resolved_registry_path)
     return payload
 
 

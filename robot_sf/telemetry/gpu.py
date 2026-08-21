@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -178,3 +179,66 @@ def with_gpu_support(func: Callable[..., Any]) -> Callable[..., Any]:
         return func(*args, **kwargs)
 
     return wrapper
+
+
+@dataclass(frozen=True, slots=True)
+class CudaRuntimeClass:
+    """Classification of the usable CUDA runtime on this host (issue #7712).
+
+    ``torch.cuda.is_available()`` returns True for CUDA-enabled builds even when
+    the driver/NVML path is unusable; a later real device operation then crashes
+    with an internal NVML assertion. This classification probes with a minimal
+    real CUDA operation so readiness and CUDA-gated tests share one decision
+    instead of misreporting an environment failure as a code regression.
+    """
+
+    status: str
+    reason: str
+
+    @property
+    def usable(self) -> bool:
+        """True only when a real CUDA device operation succeeded."""
+        return self.status == "usable"
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a JSON-ready representation."""
+        return {"status": self.status, "reason": self.reason}
+
+
+def classify_cuda_runtime() -> CudaRuntimeClass:
+    """Classify whether Torch CUDA is actually usable on this host.
+
+    Performs a minimal real CUDA operation (allocation plus synchronize) so a
+    broken NVML/driver path — which ``torch.cuda.is_available()`` reports as
+    available — is recorded as its own failure class instead of surfacing later
+    as an unclassified runtime crash. Uses only stdlib modules when Torch is
+    absent so CPU/provider-free hosts stay independently classifiable.
+
+    Returns:
+        CudaRuntimeClass with status one of ``usable``, ``unavailable``, or
+        ``unusable_nvml``.
+    """
+    try:
+        torch = importlib.import_module("torch")
+    except Exception as exc:  # noqa: BLE001 - optional dependency; classify, don't propagate
+        return CudaRuntimeClass("unavailable", f"torch unavailable: {exc}")
+
+    try:
+        available = bool(torch.cuda.is_available())
+    except Exception as exc:  # noqa: BLE001 - import-side failure; classify as unavailable
+        return CudaRuntimeClass("unavailable", f"torch.cuda probe failed: {exc}")
+    if not available:
+        return CudaRuntimeClass("unavailable", "torch.cuda.is_available() is False")
+
+    try:
+        tensor = torch.zeros((1,), device="cuda")
+        torch.cuda.synchronize()
+        del tensor
+    except Exception as exc:  # noqa: BLE001 - real device op failing is the environment signature
+        message = str(exc)
+        if "NVML" in message or "nvml" in message:
+            return CudaRuntimeClass(
+                "unusable_nvml", f"CUDA device unusable (NVML/driver): {message}"
+            )
+        return CudaRuntimeClass("unusable_nvml", f"CUDA device unusable (runtime error): {message}")
+    return CudaRuntimeClass("usable", "real CUDA device operation succeeded")

@@ -380,6 +380,11 @@ _FAST_FILES = {
     # schema/compatibility coverage for changed benchmark producers.
     "test_algorithm_contract_registry.py",
     "test_algorithm_readiness_contract.py",
+    # CUDA/NVML runtime classification tests are deterministic unit contracts
+    # (importlib stubs, no real GPU) that cover the changed telemetry producer
+    # in the exact-head changed-coverage gate.
+    "test_check_cuda_runtime.py",
+    "test_gpu_telemetry.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

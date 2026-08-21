@@ -18,6 +18,7 @@ see :func:`audit_contract_ownership` for the migration audit surface.
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -37,6 +38,10 @@ _RECORD_FIELDS: tuple[str, ...] = (
     "kinematics_profile",
     "paper_baseline_eligible",
     "policy_builder_owner",
+)
+_ALLOWED_TIERS = frozenset({"baseline-ready", "experimental", "placeholder"})
+_ALLOWED_POLICY_BUILDER_OWNERS = frozenset(
+    {"legacy_map_runner", "map_runner_policies.socnav_family"}
 )
 
 
@@ -61,8 +66,12 @@ class AlgorithmContractRecord:
     paper_baseline_eligible: bool = False
     policy_builder_owner: PolicyBuilderOwner = "legacy_map_runner"
 
+    def __post_init__(self) -> None:
+        """Validate direct construction as well as mapping-based construction."""
+        _validate_record(self)
+
     @classmethod
-    def from_mapping(cls, mapping: dict[str, Any]) -> AlgorithmContractRecord:
+    def from_mapping(cls, mapping: Mapping[str, Any]) -> AlgorithmContractRecord:
         """Build a record from a mapping, rejecting unknown or missing fields.
 
         Returns:
@@ -73,6 +82,8 @@ class AlgorithmContractRecord:
                 missing, when alias/canonical invariants are violated, or when
                 required metadata payloads are not non-empty mappings.
         """
+        if not isinstance(mapping, Mapping):
+            raise ValueError("algorithm contract must be provided as a mapping")
         unknown = sorted(set(mapping) - set(_RECORD_FIELDS))
         if unknown:
             raise ValueError(f"Unknown algorithm-contract fields: {unknown}")
@@ -83,21 +94,30 @@ class AlgorithmContractRecord:
         ]
         if missing:
             raise ValueError(f"Missing required algorithm-contract fields: {missing}")
+        aliases = mapping["aliases"]
+        if not isinstance(aliases, (list, tuple)):
+            raise ValueError("aliases must be a list or tuple of normalized strings")
+        payloads = {
+            name: mapping[name]
+            for name in ("observation_spec", "upstream_reference", "kinematics_profile")
+        }
+        for name, payload in payloads.items():
+            if not isinstance(payload, Mapping):
+                raise ValueError(f"{name} must be a mapping")
         record = cls(
             canonical_name=mapping["canonical_name"],
-            aliases=tuple(mapping["aliases"]),
+            aliases=tuple(aliases),
             tier=mapping["tier"],
             note=mapping["note"],
             requires_explicit_opt_in=mapping["requires_explicit_opt_in"],
             baseline_category=mapping["baseline_category"],
             policy_semantics=mapping["policy_semantics"],
-            observation_spec=copy.deepcopy(dict(mapping["observation_spec"])),
-            upstream_reference=copy.deepcopy(dict(mapping["upstream_reference"])),
-            kinematics_profile=copy.deepcopy(dict(mapping["kinematics_profile"])),
-            paper_baseline_eligible=bool(mapping.get("paper_baseline_eligible", False)),
+            observation_spec=copy.deepcopy(dict(payloads["observation_spec"])),
+            upstream_reference=copy.deepcopy(dict(payloads["upstream_reference"])),
+            kinematics_profile=copy.deepcopy(dict(payloads["kinematics_profile"])),
+            paper_baseline_eligible=mapping.get("paper_baseline_eligible", False),
             policy_builder_owner=mapping.get("policy_builder_owner", "legacy_map_runner"),
         )
-        _validate_record(record)
         return record
 
     def snapshot(self) -> dict[str, Any]:
@@ -118,18 +138,69 @@ class AlgorithmContractRecord:
         }
 
 
-def _validate_record(record: AlgorithmContractRecord) -> None:
-    """Validate one record's internal invariants; raise on violation."""
+def _require_non_empty_text(value: Any, *, field: str, canonical_name: str) -> None:
+    """Require one contract scalar to be a non-empty string."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{canonical_name}: {field} must be a non-empty string")
+
+
+def _validate_record_identity(record: AlgorithmContractRecord) -> None:
+    """Validate names, readiness fields, and builder ownership."""
+    if not isinstance(record.canonical_name, str):
+        raise ValueError("canonical_name must be a string")
     if not record.canonical_name or record.canonical_name != record.canonical_name.strip().lower():
         raise ValueError(f"canonical_name must be normalized lowercase: {record.canonical_name!r}")
-    if not record.aliases:
-        raise ValueError(f"{record.canonical_name}: at least one alias is required")
+    if record.tier not in _ALLOWED_TIERS:
+        raise ValueError(f"{record.canonical_name}: unknown readiness tier {record.tier!r}")
+    _require_non_empty_text(record.note, field="note", canonical_name=record.canonical_name)
+    if not isinstance(record.requires_explicit_opt_in, bool):
+        raise ValueError(f"{record.canonical_name}: requires_explicit_opt_in must be boolean")
+    _require_non_empty_text(
+        record.baseline_category,
+        field="baseline_category",
+        canonical_name=record.canonical_name,
+    )
+    _require_non_empty_text(
+        record.policy_semantics,
+        field="policy_semantics",
+        canonical_name=record.canonical_name,
+    )
+    if not isinstance(record.paper_baseline_eligible, bool):
+        raise ValueError(f"{record.canonical_name}: paper_baseline_eligible must be boolean")
+    if record.policy_builder_owner not in _ALLOWED_POLICY_BUILDER_OWNERS:
+        raise ValueError(
+            f"{record.canonical_name}: unknown policy_builder_owner {record.policy_builder_owner!r}"
+        )
+
+
+def _validate_record_aliases(record: AlgorithmContractRecord) -> None:
+    """Validate normalized, unique aliases for one canonical record."""
+    if not isinstance(record.aliases, tuple) or not record.aliases:
+        raise ValueError(f"{record.canonical_name}: aliases must be a non-empty tuple")
+    if any(
+        not isinstance(alias, str) or not alias or alias != alias.strip().lower()
+        for alias in record.aliases
+    ):
+        raise ValueError(f"{record.canonical_name}: aliases must be normalized lowercase strings")
+    if len(set(record.aliases)) != len(record.aliases):
+        raise ValueError(f"{record.canonical_name}: aliases must be unique")
     if record.canonical_name not in record.aliases:
         raise ValueError(f"{record.canonical_name}: aliases must include the canonical name")
+
+
+def _validate_record_payloads(record: AlgorithmContractRecord) -> None:
+    """Validate the non-empty structured metadata payloads."""
     for payload_name in ("observation_spec", "upstream_reference", "kinematics_profile"):
         payload = getattr(record, payload_name)
         if not isinstance(payload, dict) or not payload:
             raise ValueError(f"{record.canonical_name}: {payload_name} must be a non-empty mapping")
+
+
+def _validate_record(record: AlgorithmContractRecord) -> None:
+    """Validate one record's internal invariants; raise on violation."""
+    _validate_record_identity(record)
+    _validate_record_aliases(record)
+    _validate_record_payloads(record)
 
 
 def build_alias_index(

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -110,6 +111,34 @@ def test_from_mapping_rejects_empty_provenance_payloads() -> None:
         mapping[payload] = {}
         with pytest.raises(ValueError, match="must be a non-empty mapping"):
             AlgorithmContractRecord.from_mapping(mapping)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("aliases", "orca", "aliases must be a list or tuple"),
+        ("aliases", ("orca", "ORCA"), "aliases must be normalized lowercase"),
+        ("tier", "ready", "unknown readiness tier"),
+        ("requires_explicit_opt_in", 1, "requires_explicit_opt_in must be boolean"),
+        ("paper_baseline_eligible", "false", "paper_baseline_eligible must be boolean"),
+        ("policy_builder_owner", "unknown", "unknown policy_builder_owner"),
+        ("observation_spec", [], "observation_spec must be a mapping"),
+    ],
+)
+def test_from_mapping_rejects_invalid_schema_values(
+    field: str, value: object, message: str
+) -> None:
+    """Strict construction rejects malformed values instead of coercing them."""
+    mapping = CONTRACT_RECORDS_BY_NAME["orca"].snapshot()
+    mapping[field] = value
+    with pytest.raises(ValueError, match=message):
+        AlgorithmContractRecord.from_mapping(mapping)
+
+
+def test_direct_record_construction_is_strict() -> None:
+    """The frozen record cannot bypass schema validation through its constructor."""
+    with pytest.raises(ValueError, match="unknown readiness tier"):
+        replace(CONTRACT_RECORDS_BY_NAME["orca"], tier="ready")
 
 
 def test_build_alias_index_rejects_duplicate_aliases() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import sys
@@ -207,6 +208,27 @@ def load_schema() -> dict[str, Any]:
     return json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
 
 
+def _reject_duplicate_json_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object keys instead of silently choosing the last value.
+
+    Returns:
+        Object mapping when all keys are unique.
+    """
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _reject_non_finite_json_constant(value: str) -> Any:
+    """Reject JavaScript-style non-finite values accepted by Python's JSON parser."""
+
+    raise ValueError(f"non-finite JSON constant is not allowed: {value}")
+
+
 def _read_json(path: Path) -> Any:
     """Read JSON input and turn filesystem/parser failures into validation errors.
 
@@ -215,13 +237,17 @@ def _read_json(path: Path) -> Any:
     """
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_pairs,
+            parse_constant=_reject_non_finite_json_constant,
+        )
     except OSError as exc:
         raise MechanismBoundaryAtlasError(
             [AtlasValidationIssue("/", f"cannot read JSON input: {exc}")],
             source=path,
         ) from exc
-    except (UnicodeError, json.JSONDecodeError) as exc:
+    except (UnicodeError, ValueError) as exc:
         raise MechanismBoundaryAtlasError(
             [AtlasValidationIssue("/", f"invalid JSON input: {exc}")],
             source=path,
@@ -338,7 +364,7 @@ def build_atlas(
         try:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(
-                json.dumps(atlas.to_dict(), indent=2, sort_keys=True) + "\n",
+                json.dumps(atlas.to_dict(), allow_nan=False, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
         except OSError as exc:
@@ -356,7 +382,7 @@ def _payload_with_verified_sources(
 ) -> dict[str, Any]:
     """Return a copy with digest_verified/tracked filled for available sources."""
 
-    result = json.loads(json.dumps(payload, sort_keys=True))
+    result = json.loads(json.dumps(payload, allow_nan=False, sort_keys=True))
     for card in result.get("cards", []):
         for source in card.get("source_refs", []):
             if source.get("status") != "available":
@@ -387,10 +413,37 @@ def _drop_none(value: Any) -> Any:
 
 def _schema_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]:
     validator = Draft202012Validator(load_schema())
-    return [
+    issues = _non_finite_json_issues(payload)
+    issues.extend(
         AtlasValidationIssue(json_pointer(error.absolute_path), error.message)
         for error in sorted(validator.iter_errors(payload), key=lambda err: list(err.absolute_path))
-    ]
+    )
+    return issues
+
+
+def _non_finite_json_issues(
+    value: object,
+    path: tuple[object, ...] = (),
+) -> list[AtlasValidationIssue]:
+    """Reject non-finite in-memory numbers before JSON Schema validation.
+
+    Returns:
+        Validation issues for non-finite values, if any.
+    """
+
+    if isinstance(value, float) and not math.isfinite(value):
+        return [AtlasValidationIssue(json_pointer(path), "JSON numbers must be finite")]
+    if isinstance(value, Mapping):
+        issues: list[AtlasValidationIssue] = []
+        for key, nested in value.items():
+            issues.extend(_non_finite_json_issues(nested, (*path, key)))
+        return issues
+    if isinstance(value, list):
+        issues = []
+        for index, nested in enumerate(value):
+            issues.extend(_non_finite_json_issues(nested, (*path, index)))
+        return issues
+    return []
 
 
 def _semantic_issues(payload: Mapping[str, Any]) -> list[AtlasValidationIssue]:  # noqa: C901
@@ -661,27 +714,39 @@ def _commit_identity_issues(
     prefix: str,
     repo_root: Path,
 ) -> list[AtlasValidationIssue]:
-    """Validate a local commit identity when it claims this repository.
+    """Validate a reachable local commit identity when it claims this repository.
 
     Returns:
-        Validation issues for an unknown local commit.
+        Validation issues for an unknown or unreachable local commit.
     """
 
     commit = identity.get("commit")
     if identity.get("repository") != "this_repository" or not isinstance(commit, str):
         return []
-    completed = subprocess.run(
-        ["git", "-C", str(repo_root), "cat-file", "-e", f"{commit}^{{commit}}"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if completed.returncode == 0:
+    try:
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "for-each-ref",
+                "--contains",
+                commit,
+                "--format=%(refname)",
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except OSError:
+        completed = None
+    if completed is not None and completed.returncode == 0 and completed.stdout.strip():
         return []
     return [
         AtlasValidationIssue(
             f"{prefix}/commit",
-            "this_repository commit identity is not present in the repository",
+            "this_repository commit identity is not present on a reachable repository ref",
         )
     ]
 

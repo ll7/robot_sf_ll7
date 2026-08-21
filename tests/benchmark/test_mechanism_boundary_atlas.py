@@ -18,6 +18,7 @@ from robot_sf.benchmark.mechanism_boundary_atlas import (
     BOUNDARY_LABELS,
     CONTROLLED_STATES,
     MechanismBoundaryAtlasError,
+    _commit_identity_issues,
     build_atlas,
     load_atlas,
     validate_atlas_payload,
@@ -212,9 +213,54 @@ def test_code_config_identity_rejects_unknown_local_commit() -> None:
     issues = validate_atlas_payload(payload, repo_root=REPO_ROOT)
 
     assert any(
-        issue.path.endswith("/commit") and "not present in the repository" in issue.message
+        issue.path.endswith("/commit") and "reachable repository ref" in issue.message
         for issue in issues
     )
+
+
+def test_code_config_identity_requires_reachable_local_commit(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repo_root)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.email", "atlas-test@example.com"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.name", "Atlas Test"],
+        check=True,
+    )
+    (repo_root / "source.txt").write_text("source\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo_root), "add", "source.txt"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "commit", "--quiet", "-m", "reachable"],
+        check=True,
+    )
+    reachable = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    tree = subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", "HEAD^{tree}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    dangling = subprocess.run(
+        ["git", "-C", str(repo_root), "commit-tree", tree, "-m", "dangling"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    identity = {"commit": reachable, "repository": "this_repository"}
+    assert not _commit_identity_issues(identity, "/identity", repo_root)
+    identity["commit"] = dangling
+    issues = _commit_identity_issues(identity, "/identity", repo_root)
+
+    assert any("reachable repository ref" in issue.message for issue in issues)
 
 
 def test_code_config_identity_rejects_digest_drift() -> None:
@@ -400,6 +446,39 @@ def test_deterministic_output(tmp_path: Path) -> None:
     build_atlas(INPUT, repo_root=REPO_ROOT, output_path=second)
 
     assert first.read_bytes() == second.read_bytes()
+
+
+def test_non_finite_numbers_fail_closed() -> None:
+    payload = _payload()
+    payload["cards"][0]["mechanism_boundary"]["confidence"] = float("nan")
+
+    issues = validate_atlas_payload(payload, repo_root=REPO_ROOT, verify_sources=False)
+
+    assert any(
+        issue.path.endswith("/confidence") and "JSON numbers must be finite" in issue.message
+        for issue in issues
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ('{"cards": [], "cards": []}', "duplicate JSON object key"),
+        ('{"confidence": NaN}', "non-finite JSON constant is not allowed"),
+    ],
+)
+def test_json_loader_rejects_ambiguous_or_non_finite_input(
+    tmp_path: Path,
+    content: str,
+    message: str,
+) -> None:
+    path = tmp_path / "invalid.json"
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(MechanismBoundaryAtlasError) as error:
+        load_atlas(path, repo_root=REPO_ROOT)
+
+    assert message in str(error.value)
 
 
 def test_no_claim_promotion_in_bounded_claims() -> None:

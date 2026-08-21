@@ -1,0 +1,33 @@
+version: 1
+skill: goal-issue-implementation
+requirements:
+  - id: artifact-first-required-files
+    description: artifact-first worker bundles must name these files
+    scope: raw
+    operator: all_of
+    values:
+      - result.json
+      - RESULT.md
+      - diffstat.txt
+      - validation.json
+  - id: artifact-first-review-order
+    description: artifact-first review order and route-evidence boundary must stay explicit
+    scope: lowercase
+    operator: all_of
+    values:
+      - artifact-first
+      - route evidence
+      - raw logs
+      - targeted local
+  - id: worker-output-limits
+    description: delegated discovery must stay bounded (compact search, no broad dumps)
+    scope: lowercase
+    operator: all_of
+    values:
+      - rg -l
+      - rg --files
+      - sed -n
+      - 200 lines
+      - private artifacts
+      - rg -n .
+      - full file reads

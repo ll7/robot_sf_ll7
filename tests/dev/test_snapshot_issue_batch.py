@@ -311,6 +311,119 @@ def test_snapshot_claimable_issues_uses_live_admission_for_ready_candidates() ->
     )
 
 
+@pytest.mark.parametrize(
+    ("status", "classification", "reason_fragment"),
+    [
+        (
+            "blocked_unchanged",
+            "blocked_receipt",
+            "blocker receipt unchanged",
+        ),
+        (
+            "blocker_changed",
+            "needs_re_evaluation",
+            "require fresh evaluation",
+        ),
+    ],
+)
+def test_blocker_decision_fences_claimable_snapshot_dispatch(
+    tmp_path, status: str, classification: str, reason_fragment: str
+) -> None:  # type: ignore[no-untyped-def]
+    """External blocker decisions prevent direct worker admission in queue snapshots."""
+    decision_path = tmp_path / "decisions.json"
+    decision_path.write_text(
+        json.dumps(
+            [
+                {
+                    "issue": 2710,
+                    "status": status,
+                    "reason": "fingerprint decision",
+                    "receipt_digest": "a" * 64,
+                    "current_fingerprint": "b" * 64,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    issue_list = [
+        {
+            "number": 2710,
+            "title": "claimable issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2710",
+            "labels": [],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2710: _claim_status(2710)}
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=1,
+                blocker_decision_paths=[str(decision_path)],
+            )
+
+    row = payload["issues"][0]
+    assert row["classification"] == classification
+    assert reason_fragment in row["reason"]
+    assert row["blocker_decision"]["status"] == status
+    assert row["dispatch_allowed"] is False
+
+
+def test_malformed_blocker_decision_fails_closed_before_issue_discovery(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A malformed decision artifact cannot silently leave the queue claimable."""
+    decision_path = tmp_path / "malformed.json"
+    decision_path.write_text(json.dumps({"issue": 2710, "status": "unknown"}), encoding="utf-8")
+
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as listing:
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=1,
+            blocker_decision_paths=[str(decision_path)],
+        )
+
+    listing.assert_not_called()
+    assert payload["status"] == "error"
+    assert payload["issues"][0]["status"] == "error"
+
+
+def test_blocked_receipt_without_fingerprint_fails_closed_before_issue_discovery(
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    """An incomplete suppression decision cannot fence a claimable issue."""
+    decision_path = tmp_path / "incomplete.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "issue": 2710,
+                "status": "blocked_unchanged",
+                "reason": "fingerprint decision",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as listing:
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=1,
+            blocker_decision_paths=[str(decision_path)],
+        )
+
+    listing.assert_not_called()
+    assert payload["status"] == "error"
+    assert "current_fingerprint" in payload["errors"][0]
+
+
 def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:
     """Compute-gated issues must not look claimable, even when marked ready."""
     issue_list = [

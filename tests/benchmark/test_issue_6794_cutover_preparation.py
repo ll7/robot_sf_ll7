@@ -129,6 +129,40 @@ def test_release_component_set_must_match_declared_sources() -> None:
         )
 
 
+def test_source_digest_keys_and_paths_must_match_exactly(tmp_path: Path) -> None:
+    """A checkpoint cannot hide duplicate paths or unverified digest entries."""
+    source = tmp_path / "checkpoint.bin"
+    source.write_bytes(b"checkpoint")
+    digest = preparation_module._sha256(source)
+
+    with pytest.raises(ValueError, match="duplicate source path"):
+        preparation_module._verify_source_files(
+            tmp_path,
+            "checkpoint",
+            ["checkpoint.bin", "checkpoint.bin"],
+            {"checkpoint.bin": digest},
+        )
+    with pytest.raises(ValueError, match="source_sha256 keys"):
+        preparation_module._verify_source_files(
+            tmp_path,
+            "checkpoint",
+            ["checkpoint.bin"],
+            {"checkpoint.bin": digest, "unlisted.bin": digest},
+        )
+
+
+def test_bundle_source_basenames_must_be_unique() -> None:
+    """Basename-keyed registry bundles cannot represent ambiguous source paths."""
+    digest = "a" * 64
+    with pytest.raises(ValueError, match="basenames must be unique"):
+        preparation_module._verify_release_components(
+            "bundle",
+            {"registry_per_file_sha256": {"checkpoint.data": digest}},
+            {"per_file_sha256": {"checkpoint.data": digest}},
+            {"left/checkpoint.data": digest, "right/checkpoint.data": digest},
+        )
+
+
 def _row(seed: int, *, delta: float = 0.0, status: str = "native") -> dict:
     """Return one complete synthetic parity row."""
     return {

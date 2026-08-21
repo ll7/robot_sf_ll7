@@ -168,8 +168,14 @@ def _verify_source_files(
         Observed source digests keyed by repository-relative path.
     """
     observed: dict[str, str] = {}
+    declared_paths: set[str] = set()
     for raw_path in paths:
         rel_path = _string(raw_path, name=f"checkpoint {checkpoint_name}.source_paths[]")
+        if rel_path in declared_paths:
+            raise ValueError(
+                f"checkpoint {checkpoint_name} declares duplicate source path: {rel_path}"
+            )
+        declared_paths.add(rel_path)
         path = _repo_declared_path(
             repo_root,
             rel_path,
@@ -185,6 +191,10 @@ def _verify_source_files(
                 f"observed {digest} != frozen {expected}"
             )
         observed[rel_path] = digest
+    if set(source_digests) != declared_paths:
+        raise ValueError(
+            f"checkpoint {checkpoint_name} source_sha256 keys must exactly match source_paths"
+        )
     return observed
 
 
@@ -239,6 +249,9 @@ def _verify_release_components(
                 f"checkpoint {checkpoint_name} source digest does not match registry release"
             )
         return
+    source_names = [Path(path).name for path in observed]
+    if len(source_names) != len(set(source_names)):
+        raise ValueError(f"checkpoint {checkpoint_name} bundle source basenames must be unique")
     per_file = _mapping(release.get("per_file_sha256"), name="registry release per_file_sha256")
     frozen_per_file = _mapping(
         checkpoint.get("registry_per_file_sha256"),

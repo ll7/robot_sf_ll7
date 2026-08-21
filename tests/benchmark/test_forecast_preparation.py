@@ -10,6 +10,8 @@ import pytest
 
 from robot_sf.benchmark.forecast.forecast_preparation import (
     ForecastPreparationSourceSpec,
+    _actor_for_frame,
+    _load_json_object,
     _validate_split_policy,
     build_forecast_preparation_packet,
     validate_forecast_preparation_packet,
@@ -177,6 +179,54 @@ def test_packet_top_level_contract_is_bound(field: str, value: object, match: st
 
     with pytest.raises(ValueError, match=match):
         _validate(payload)
+
+
+def test_packet_rejects_unknown_top_level_claim_fields() -> None:
+    """Unvalidated result or claim fields cannot travel in a preparation packet."""
+    payload = _packet()
+    payload["unsupported_claim"] = {"status": "benchmark_success", "score": 1.0}
+
+    with pytest.raises(ValueError, match="packet top-level fields are not canonical"):
+        _validate(payload)
+
+
+@pytest.mark.parametrize("container", ("coverage", "field_leakage_ledger", "split_policy"))
+def test_packet_rejects_unknown_declaration_fields(container: str) -> None:
+    """Declaration maps reject fields that the validator does not interpret."""
+    payload = _packet()
+    payload[container]["unsupported_claim"] = "not validated"
+
+    with pytest.raises(ValueError, match="not canonical"):
+        _validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("contents", "match"),
+    (
+        ('{"key": 1, "key": 2}', "duplicate JSON object key"),
+        ('{"key": NaN}', "non-standard JSON constant"),
+    ),
+)
+def test_source_json_parser_rejects_noncanonical_values(
+    tmp_path: Path, contents: str, match: str
+) -> None:
+    """Source input rejects parser recovery that can hide ambiguous values."""
+    path = tmp_path / "source.json"
+    path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=match):
+        _load_json_object(path)
+
+
+def test_duplicate_actor_ids_are_not_selected_implicitly() -> None:
+    """An ambiguous actor identity cannot determine a forecast target."""
+    actors = [
+        {"id": "pedestrian-1", "position": [0.0, 0.0], "velocity": [0.0, 0.0]},
+        {"id": "pedestrian-1", "position": [1.0, 1.0], "velocity": [0.0, 0.0]},
+    ]
+
+    with pytest.raises(ValueError, match="actor ids must be unique"):
+        _actor_for_frame(actors, None)
 
 
 @pytest.mark.parametrize("field", ("trace_id", "episode_id", "scenario_id", "seed", "planner_id"))

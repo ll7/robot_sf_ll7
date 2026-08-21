@@ -126,6 +126,94 @@ _ROW_FIELDS = frozenset(
         "field_leakage_ledger",
     }
 )
+_PACKET_FIELDS = frozenset(
+    {
+        "schema_version",
+        "issue",
+        "claim_boundary",
+        "evidence_status",
+        "observation_contract_changed",
+        "source_owner",
+        "source_schema",
+        "ego_observation_source_key",
+        "row_schema_version",
+        "horizons_s",
+        "pair_count",
+        "row_count",
+        "review_marker",
+        "source_artifacts",
+        "evidence_references",
+        "coverage",
+        "pair_identity_fields",
+        "field_leakage_ledger",
+        "split_policy",
+        "runtime_memory_estimates",
+        "dependency_license_comparison",
+        "ade_fde_false_reassurance_case",
+        "rows",
+        "sha256_coverage",
+    }
+)
+_COVERAGE_FIELDS = frozenset(
+    {
+        "scenario_families",
+        "planners",
+        "observation_tiers",
+        "ego_observation_status",
+        "unavailable_strata",
+    }
+)
+_FIELD_LEAKAGE_LEDGER = {
+    "time_roles": {
+        "cutoff": "input state at or before the declared frame time",
+        "target": "supervision-only future label at cutoff_time_s + horizon_s",
+    },
+    "robot_available": (
+        "true means the field is part of the robot/ego context at cutoff; false means "
+        "privileged or future-only data unavailable to the robot"
+    ),
+    "future_target": (
+        "true only for supervision labels; any true field under row.input fails validation"
+    ),
+}
+_SPLIT_POLICY_FIELDS = frozenset(
+    {
+        "strategy",
+        "split_names",
+        "group_fields",
+        "group_id_definition",
+        "near_duplicate_policy",
+        "assignments",
+    }
+)
+_LEDGER_ENTRY_REQUIRED_FIELDS = frozenset(
+    {"field", "owner", "unit", "time_role", "robot_available", "future_target", "status"}
+)
+_UNAVAILABLE_STRATUM_FIELDS = frozenset({"dimension", "value", "status", "reason"})
+_FALSE_REASSURANCE_FIELDS = frozenset(
+    {
+        "case_id",
+        "status",
+        "source_path",
+        "source_sha256",
+        "predicate_reference",
+        "predicate_reference_sha256",
+        "cutoff_frame_step",
+        "cutoff_time_s",
+        "target_frame_step",
+        "target_time_s",
+        "actor_id",
+        "horizon_s",
+        "stationary_prediction_m",
+        "target_position_m",
+        "ade_m",
+        "fde_m",
+        "robot_position_m",
+        "robot_pedestrian_clearance_m",
+        "risk_reference_m",
+        "interpretation",
+    }
+)
 
 _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
@@ -476,6 +564,7 @@ def build_forecast_preparation_packet(
         "horizons_s": horizons,
         "pair_count": len(rows) // len(OBSERVATION_TIERS),
         "row_count": len(rows),
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "source_artifacts": source_artifacts,
         "evidence_references": evidence_references,
         "coverage": {
@@ -494,19 +583,7 @@ def build_forecast_preparation_packet(
             "actor_id",
             "horizon_s",
         ],
-        "field_leakage_ledger": {
-            "time_roles": {
-                "cutoff": "input state at or before the declared frame time",
-                "target": "supervision-only future label at cutoff_time_s + horizon_s",
-            },
-            "robot_available": (
-                "true means the field is part of the robot/ego context at cutoff; false means "
-                "privileged or future-only data unavailable to the robot"
-            ),
-            "future_target": (
-                "true only for supervision labels; any true field under row.input fails validation"
-            ),
-        },
+        "field_leakage_ledger": deepcopy(_FIELD_LEAKAGE_LEDGER),
         "split_policy": {
             "strategy": "deterministic_grouped_split",
             "split_names": list(SPLIT_NAMES),
@@ -529,7 +606,7 @@ def build_forecast_preparation_packet(
     return packet
 
 
-def validate_forecast_preparation_packet(  # noqa: C901
+def validate_forecast_preparation_packet(  # noqa: C901, PLR0912
     payload: Mapping[str, Any],
     *,
     repo_root: Path | str | None = None,
@@ -542,10 +619,18 @@ def validate_forecast_preparation_packet(  # noqa: C901
     """
     if not isinstance(payload, Mapping):
         raise ValueError("packet must be a mapping")
+    if set(payload) != _PACKET_FIELDS:
+        missing = sorted(_PACKET_FIELDS - set(payload))
+        extra = sorted(set(payload) - _PACKET_FIELDS)
+        raise ValueError(
+            f"packet top-level fields are not canonical; missing={missing}, extra={extra}"
+        )
     if payload.get("schema_version") != FORECAST_PREPARATION_SCHEMA_VERSION:
         raise ValueError("schema_version must be forecast_preparation.v1")
     if payload.get("issue") != 7602:
         raise ValueError("issue must be 7602")
+    if payload.get("review_marker") != "AI-GENERATED NEEDS-REVIEW":
+        raise ValueError("review_marker must be AI-GENERATED NEEDS-REVIEW")
     if payload.get("claim_boundary") != _CLAIM_BOUNDARY:
         raise ValueError("claim_boundary must preserve the preparation-only boundary")
     if payload.get("evidence_status") != "diagnostic-only":
@@ -580,6 +665,7 @@ def validate_forecast_preparation_packet(  # noqa: C901
         source_artifacts, root, ego_source_key=ego_source_key
     )
     _validate_coverage_from_packet(payload, source_artifacts)
+    _validate_field_leakage_ledger(payload.get("field_leakage_ledger"))
     _validate_rows(payload, rows, source_by_path, root)
     _validate_horizon_rows(rows, horizons)
     _validate_split_policy(payload, source_artifacts)
@@ -1021,6 +1107,11 @@ def _validate_row_ledger(row: dict[str, Any], index: int) -> None:  # noqa: C901
     for entry in ledger:
         if not isinstance(entry, dict):
             raise ValueError(f"rows[{index}] ledger entries must be mappings")
+        if set(entry) not in {
+            _LEDGER_ENTRY_REQUIRED_FIELDS,
+            _LEDGER_ENTRY_REQUIRED_FIELDS | {"reason"},
+        }:
+            raise ValueError(f"rows[{index}] ledger fields are not canonical")
         field = _require_text(entry.get("field"), f"rows[{index}].ledger.field")
         actual_fields.add(field)
         for key in ("owner", "unit", "time_role", "status"):
@@ -1071,6 +1162,8 @@ def _validate_split_policy(  # noqa: C901
     policy = payload.get("split_policy")
     if not isinstance(policy, dict):
         raise ValueError("split_policy must be a mapping")
+    if set(policy) != _SPLIT_POLICY_FIELDS:
+        raise ValueError("split_policy fields are not canonical")
     if policy.get("strategy") != "deterministic_grouped_split":
         raise ValueError("split_policy strategy must be deterministic_grouped_split")
     if policy.get("split_names") != list(SPLIT_NAMES):
@@ -1209,13 +1302,15 @@ def _validate_source_artifact_metadata(  # noqa: C901
         raise ValueError(f"source metadata drift for {relative_path}: ego_observation_reason")
 
 
-def _validate_coverage_from_packet(
+def _validate_coverage_from_packet(  # noqa: C901
     payload: Mapping[str, Any],
     source_artifacts: list[dict[str, Any]],
 ) -> None:
     coverage = payload.get("coverage")
     if not isinstance(coverage, dict):
         raise ValueError("coverage must be a mapping")
+    if set(coverage) != _COVERAGE_FIELDS:
+        raise ValueError("coverage fields are not canonical")
     families = sorted({artifact.get("scenario_family") for artifact in source_artifacts})
     planners = sorted({artifact.get("planner_id") for artifact in source_artifacts})
     if coverage.get("scenario_families") != families:
@@ -1236,6 +1331,11 @@ def _validate_coverage_from_packet(
         raise ValueError("fewer than two planners without an unavailable stratum")
     if not _has_unavailable_dimension(unavailable, "observation_tier"):
         raise ValueError("ego observation unavailable stratum is missing")
+
+
+def _validate_field_leakage_ledger(ledger: Any) -> None:
+    if ledger != _FIELD_LEAKAGE_LEDGER:
+        raise ValueError("field_leakage_ledger is not canonical")
 
 
 def _validate_estimates(estimates: Any) -> None:
@@ -1293,6 +1393,8 @@ def _validate_false_reassurance_case(  # noqa: C901, PLR0912
 ) -> None:
     if not isinstance(case, dict):
         raise ValueError("ade_fde_false_reassurance_case is required")
+    if set(case) != _FALSE_REASSURANCE_FIELDS:
+        raise ValueError("false-reassurance case fields are not canonical")
     if case.get("status") != "analytic_trace_backed_diagnostic_only":
         raise ValueError("false-reassurance case status is not diagnostic-only")
     if case.get("case_id") != _FALSE_REASSURANCE_CASE_ID:
@@ -1581,6 +1683,9 @@ def _actor_for_frame(
     normalized = [dict(actor) for actor in pedestrians]
     if not normalized:
         raise ValueError("frame has no pedestrian actors")
+    normalized_ids = [str(actor.get("id")) for actor in normalized]
+    if len(set(normalized_ids)) != len(normalized_ids):
+        raise ValueError("frame pedestrian actor ids must be unique")
     if actor_id is None:
         selected = sorted(normalized, key=lambda actor: str(actor.get("id", "")))[0]
     else:
@@ -1653,6 +1758,8 @@ def _validate_unavailable_strata(
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
             raise ValueError(f"unavailable_strata[{index}] must be a mapping")
+        if set(row) != _UNAVAILABLE_STRATUM_FIELDS:
+            raise ValueError(f"unavailable_strata[{index}] fields are not canonical")
         for field in ("dimension", "value", "status", "reason"):
             _require_text(row.get(field), f"unavailable_strata[{index}].{field}")
         if row["status"] != "not_available":
@@ -1730,10 +1837,27 @@ def _resolve_repo_path(value: Path | str, root: Path) -> Path:
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(
+        path.read_text(encoding="utf-8"),
+        object_pairs_hook=_reject_duplicate_json_object,
+        parse_constant=_reject_nonstandard_json_constant,
+    )
     if not isinstance(payload, dict):
         raise ValueError(f"JSON payload must be an object: {path}")
     return payload
+
+
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON constant is not allowed: {value}")
 
 
 def _repository_root() -> Path:

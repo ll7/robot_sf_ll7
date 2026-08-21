@@ -394,6 +394,12 @@ _FAST_FILES = {
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",
+    # Native issue-6105 outcome and termination contracts use deterministic
+    # fixtures; keep their changed-producer coverage in pull-request fast shards.
+    "test_held_out_preflight.py",
+    "test_independent_outcome_producer.py",
+    "test_independent_outcomes.py",
+    "test_termination_reason.py",
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.
     "test_mechanism_boundary_atlas.py",

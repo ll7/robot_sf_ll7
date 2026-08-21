@@ -213,11 +213,14 @@ def test_oracle_reports_infeasible_by_construction_when_no_inflated_path() -> No
     assert verdict.completion.blocker == "route_geometrically_infeasible_no_traversal_path"
 
 
-def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out() -> None:
-    """A geometrically feasible route that times out is time-truncated."""
+@pytest.mark.parametrize("termination_reason", ["max_steps", "terminated", "truncated", "timeout"])
+def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out(
+    termination_reason: str,
+) -> None:
+    """All shared timeout labels produce the time-truncated diagnostic verdict."""
 
     def runner(_s, _seed, _horizon, _algo):
-        return {"steps": 500, "horizon": 500, "termination_reason": "max_steps"}
+        return {"steps": 500, "horizon": 500, "termination_reason": termination_reason}
 
     verdict = run_feasibility_oracle(
         _scenario(),
@@ -232,6 +235,68 @@ def test_oracle_reports_time_truncated_when_geometric_ok_but_rollout_times_out()
     assert verdict.geometric.route_geometrically_feasible is True
     assert verdict.completion.route_completion_feasible is False
     assert verdict.completion.min_completion_steps is None
+
+
+@pytest.mark.parametrize("termination_reason", ["horizon", "terminated"])
+def test_oracle_requires_explicit_timeout_evidence_for_ambiguous_terminal_labels(
+    termination_reason: str,
+) -> None:
+    """Ambiguous terminal labels alone do not establish horizon exhaustion."""
+    assert feasibility_oracle._termination_completion(termination_reason) == (
+        None,
+        termination_reason,
+    )
+    assert feasibility_oracle._termination_completion(termination_reason, timeout_event=True) == (
+        False,
+        termination_reason,
+    )
+    assert feasibility_oracle._rollout_route_complete(
+        {
+            "termination_reason": termination_reason,
+            "outcome": {"route_complete": False},
+        }
+    ) == (None, termination_reason)
+    assert feasibility_oracle._rollout_route_complete(
+        {"termination_reason": termination_reason, "route_complete": False}
+    ) == (None, termination_reason)
+
+    def runner(_s, _seed, _horizon, _algo):
+        return {
+            "steps": 500,
+            "horizon": 500,
+            "termination_reason": termination_reason,
+            "outcome": {"route_complete": False, "timeout_event": True},
+        }
+
+    verdict = run_feasibility_oracle(
+        _scenario(),
+        config=_oracle_config(),
+        envelope_radius_m=1.0,
+        episode_runner=runner,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert verdict.status == TIME_TRUNCATED
+    assert verdict.completion.route_completion_feasible is False
+
+
+def test_oracle_blocks_contradictory_route_and_timeout_flags() -> None:
+    """A route-complete and timeout outcome cannot support a completion verdict."""
+    assert feasibility_oracle._rollout_route_complete(
+        {
+            "termination_reason": "terminated",
+            "outcome": {"route_complete": True, "timeout_event": True},
+        }
+    ) == (None, "terminated")
+
+
+def test_termination_completion_preserves_non_timeout_terminal_reasons() -> None:
+    """Collision and runtime-failure labels remain distinct from timeout labels."""
+    for termination_reason in ("collision", "failure", "failed", "error"):
+        assert feasibility_oracle._termination_completion(termination_reason) == (
+            False,
+            termination_reason,
+        )
 
 
 def test_oracle_corridor_margin_is_none_when_no_static_obstacles() -> None:

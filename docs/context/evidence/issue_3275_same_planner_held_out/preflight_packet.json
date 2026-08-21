@@ -24,7 +24,7 @@
   },
   "certified_archive_issue": 5305,
   "claim_boundary": "preflight_evidence_only: this packet proves deterministic manifest construction, equal frozen arm budgets, seed/lineage separation, duplicate handling, reproducible hashes, and readiness to run. It produces no planner execution, no outcome read, and no proposal-yield, benchmark, or generalization claim.",
-  "code_revision": "1c38efb99124d052e5169bc7ed16585f23e9cbeb",
+  "code_revision": "49bc2bc619c33ac8372d0167068e5273d4cc88fe",
   "contract_issue": 6103,
   "duplicate_accounting": {
     "duplicate_count": 0,
@@ -62,19 +62,19 @@
       "excluded_from_nominal_fit_entry_ids_sha256": "63df8ecaba9a996fdf7cc49c554e3f6cb9f63b9f0c8966d1a3aa7e29efdd88ea"
     },
     "path": "configs/adversarial/issue_3275_same_planner_contract.json",
-    "raw_sha256": "2f57c1d155752bc04556cbeef4df41b98fcd9fcb0ae92605ad87f725b39e6ae8"
+    "raw_sha256": "46fd57a985debdf918954ca993ca7d7ea2f0b9e5a5b5cde1d8320cd02dddf974"
   },
   "generated_files": [
     {
-      "file_sha256": "3de02fc5647149165dd9081a608d89e0b84506a9e169ba0e887ddb34f3c36875",
+      "file_sha256": "37513ce476998bf80e2227369ccac6150705f6959d6247c492659ec32c85b33e",
       "path": "candidate_pool_manifest.json"
     },
     {
-      "file_sha256": "5569fbcf68cb6f9a33c4e511148f55a8188837552e1dc074865b149612bf5466",
+      "file_sha256": "48fdf2878839c5b8cf2357ac60f3f31565b8f031d13e670260371e56c40e9fd4",
       "path": "proposal_arm_manifest.json"
     },
     {
-      "file_sha256": "55c5d92ed6f7dbdd3e8c50aa8fffcf3eb0418d7a2cf9eb161130803a53bbe48e",
+      "file_sha256": "8c621866b21bf22e197a90b00d31c0f99a7905a822cc5133bcf69f98e84c641f",
       "path": "random_arm_manifest.json"
     },
     {
@@ -82,11 +82,11 @@
       "path": "candidate_manifest_bindings.v2.json"
     },
     {
-      "file_sha256": "d4fb43f5986c4ad1c142251a9bd1380a0d3173954737885aa3f2740ba22841e7",
+      "file_sha256": "8df2f62d2f318bfe5460157c9f38389ac3d319d004611f75d049ad27b680518e",
       "path": "step3_run_plan.json"
     },
     {
-      "file_sha256": "4b7e79b4030b2e973306b6fcadf7fb1b2533b27bba1116d8651fb883eb2ba5b2",
+      "file_sha256": "0254000f7807b7e585bf5857d3e9ad4576bd41b108ae09172a96f3354834c891",
       "path": "README.md"
     }
   ],
@@ -362,6 +362,14 @@
   "target_planner": {
     "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
     "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "execution_identity": {
+      "adapter_name": "SocialForcePlannerAdapter",
+      "benchmark_command_space": "unicycle_vw",
+      "execution_mode": "adapter",
+      "policy_semantics": "social_force_adapter",
+      "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+      "upstream_command_space": "velocity_vector_xy"
+    },
     "id": "social_force"
   },
   "this_issue": 6104,

@@ -3,10 +3,10 @@
 This module owns the frozen ``adversarial_independent_outcomes.v2`` contract: one
 row per candidate x execution seed, binding every outcome to its candidate
 manifest, selection arm, target planner/config, scenario family/seed, execution
-commit/command/config lineage, native/fallback/degraded status, termination
-reason and independent failure outcome, scenario and candidate certification
-status, replay/confirmation lineage and record hash, and an exclusion reason
-when inadmissible.
+commit/command/config lineage, configured execution identity, termination reason
+and independent failure outcome, scenario and candidate certification status,
+replay/confirmation lineage and record hash, and an exclusion reason when
+inadmissible.
 
 The v2 contract replaces the deprecated flat-array v1 contract. Aggregate
 arrays (proposal/random/ranked outcomes) are DERIVED from admitted rows only and
@@ -19,7 +19,7 @@ lineage. A candidate manifest ID may appear in one arm only.
 
 When valid v2 rows are available, the top-level proposal/random metrics, the
 comparison, and the issue #2921 stop rule are computed EXCLUSIVELY from those
-independent native execution outcomes. Archive-nearness is intentionally absent
+independent contract-admitted planner-execution outcomes. Archive-nearness is intentionally absent
 from this module: it lives in a diagnostic-only namespace in the runner and can
 never drive a verdict.
 
@@ -118,6 +118,13 @@ class AdmissionSpec:
     expected_execution_seeds_by_manifest_id: dict[str, tuple[int, ...]] | None = None
     expected_candidate_pool_seed: int | None = None
     expected_execution_commit: str | None = None
+    # ``native`` remains the backwards-compatible default for older packets.
+    # Frozen contracts that use the canonical Social Force adapter supply the
+    # exact identity below and require the producer/episode hashes as well.
+    expected_execution_mode: str = "native"
+    expected_execution_identity: dict[str, str] | None = None
+    require_producer_commit: bool = False
+    require_episode_record_sha256: bool = False
 
 
 def payload_sha256(payload: dict[str, Any]) -> str:
@@ -318,6 +325,28 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
         not isinstance(spec.expected_execution_commit, str) or not spec.expected_execution_commit
     ):
         return "expected execution_commit must be a non-empty string when supplied"
+    if spec.expected_execution_mode not in {"native", "adapter"}:
+        return (
+            "expected execution mode must be 'native' or 'adapter'; "
+            f"got {spec.expected_execution_mode!r}"
+        )
+    if spec.expected_execution_identity is not None:
+        if spec.expected_execution_mode != "adapter":
+            return "execution identity is only supported for the adapter execution mode"
+        if (
+            not isinstance(spec.expected_execution_identity, dict)
+            or not spec.expected_execution_identity
+        ):
+            return "expected execution identity must be a non-empty object"
+        if any(
+            not isinstance(key, str) or not key or not isinstance(value, str) or not value
+            for key, value in spec.expected_execution_identity.items()
+        ):
+            return "expected execution identity keys and values must be non-empty strings"
+    if spec.expected_execution_mode == "adapter" and not spec.require_producer_commit:
+        return "adapter execution admission must require a producer commit"
+    if spec.expected_execution_mode == "adapter" and not spec.require_episode_record_sha256:
+        return "adapter execution admission must require an episode record SHA-256"
     return None
 
 
@@ -440,13 +469,56 @@ def _row_planner_family_drift(row: dict[str, Any], _row_id: Any, spec: Admission
     return None
 
 
-def _row_execution_drift(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec) -> str | None:
-    """Reject non-native (fallback/degraded) execution rows."""
-    if row.get("execution_mode") != "native":
+def _row_execution_drift(  # noqa: C901
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require the frozen execution mode and, when configured, exact identity."""
+    execution_mode = row.get("execution_mode")
+    if execution_mode != spec.expected_execution_mode:
         return (
-            f"execution_mode {row.get('execution_mode')!r} is not native "
-            "(fallback/degraded fail closed)"
+            f"execution_mode {execution_mode!r} does not match expected "
+            f"{spec.expected_execution_mode!r} (fallback/degraded fail closed)"
         )
+    if spec.expected_execution_identity is None:
+        return None
+
+    identity = row.get("execution_identity")
+    if not isinstance(identity, dict):
+        return "execution_identity must be an object for adapter admission"
+    for key, expected in spec.expected_execution_identity.items():
+        if identity.get(key) != expected:
+            return (
+                f"execution_identity.{key} mismatch: observed={identity.get(key)!r} "
+                f"expected={expected!r}"
+            )
+
+    if spec.require_producer_commit:
+        producer_commit = row.get("producer_commit")
+        if (
+            not isinstance(producer_commit, str)
+            or len(producer_commit) != 40
+            or any(character not in "0123456789abcdefABCDEF" for character in producer_commit)
+        ):
+            return "producer_commit must be a 40-character Git commit SHA-1"
+    if spec.require_episode_record_sha256 and not _is_sha256_hex(row.get("episode_record_sha256")):
+        return "episode_record_sha256 must be a SHA-256 hex digest"
+
+    lineage = row.get("execution_config_lineage")
+    if not isinstance(lineage, dict):
+        return "execution_config_lineage must be an object for adapter admission"
+    if (
+        spec.expected_target_planner_config_sha256 is not None
+        and lineage.get("target_planner_config_sha256")
+        != spec.expected_target_planner_config_sha256
+    ):
+        return "execution_config_lineage target planner config SHA-256 mismatch"
+    if (
+        spec.expected_execution_commit is not None
+        and lineage.get("planner_reference_commit") != spec.expected_execution_commit
+    ):
+        return "execution_config_lineage planner reference commit mismatch"
+    if lineage.get("producer_commit") != row.get("producer_commit"):
+        return "execution_config_lineage producer commit mismatch"
     return None
 
 

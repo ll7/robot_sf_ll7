@@ -16,6 +16,8 @@ import pytest
 from robot_sf.adversarial.independent_outcomes import (
     OUTCOME_SCHEMA_VERSION,
     AdmissionSpec,
+    _row_execution_drift,
+    _validate_frozen_admission_spec,
     build_independent_outcome_evaluation,
     load_independent_outcomes,
     payload_sha256,
@@ -25,6 +27,14 @@ _PLANNER = "social_force"
 _PLANNER_CFG = "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
 _EVAL_FAMILY = "classic_cross_trap_medium"
 _EXECUTION_COMMIT = "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+_PRODUCER_COMMIT = "a" * 40
+_ADAPTER_IDENTITY = {
+    "policy_semantics": "social_force_adapter",
+    "adapter_name": "SocialForcePlannerAdapter",
+    "upstream_command_space": "velocity_vector_xy",
+    "benchmark_command_space": "unicycle_vw",
+    "projection_policy": "heading_safe_velocity_to_unicycle_vw",
+}
 
 
 def _sha256(label: str) -> str:
@@ -69,10 +79,12 @@ def _row(  # noqa: PLR0913
     candidate_cert: str = "passed",
     replay: dict[str, Any] | None = None,
     confirmation: dict[str, Any] | None = None,
+    execution_identity: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build one v2 outcome row with overridable admission-relevant fields."""
     default_pool_index = rank - 1 if arm == "proposal" else 10_000 + rank - 1
-    return {
+    execution_config_lineage = {"config": "eval.yaml", "sha256": "cfg-hash"}
+    row = {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
         "candidate_manifest_sha256": _sha256(f"manifest-{manifest_id}"),
@@ -89,7 +101,7 @@ def _row(  # noqa: PLR0913
         "execution_seed": execution_seed,
         "execution_commit": _EXECUTION_COMMIT,
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
-        "execution_config_lineage": {"config": "eval.yaml", "sha256": "cfg-hash"},
+        "execution_config_lineage": execution_config_lineage,
         "execution_mode": execution_mode,
         "primary_failure": "collision" if failure else "none",
         "termination_reason": "collision" if failure else "goal_reached",
@@ -102,6 +114,18 @@ def _row(  # noqa: PLR0913
         "admission_status": admission_status,
         "exclusion_reason": exclusion_reason,
     }
+    if execution_mode == "adapter":
+        row["execution_identity"] = execution_identity or dict(_ADAPTER_IDENTITY)
+        row["producer_commit"] = _PRODUCER_COMMIT
+        row["episode_record_sha256"] = _sha256(f"episode-{row_id}")
+        execution_config_lineage.update(
+            {
+                "target_planner_config_sha256": _PLANNER_CFG,
+                "planner_reference_commit": _EXECUTION_COMMIT,
+                "producer_commit": _PRODUCER_COMMIT,
+            }
+        )
+    return row
 
 
 def _packet(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
@@ -275,6 +299,17 @@ def _evaluate(
     )
 
 
+def _adapter_spec(packet: dict[str, Any], *, budget_per_arm: int) -> AdmissionSpec:
+    """Build an adapter-aware spec for direct identity and lineage checks."""
+    return replace(
+        _spec_for_packet(packet, budget_per_arm=budget_per_arm),
+        expected_execution_mode="adapter",
+        expected_execution_identity=dict(_ADAPTER_IDENTITY),
+        require_producer_commit=True,
+        require_episode_record_sha256=True,
+    )
+
+
 def test_load_independent_outcomes_missing_is_not_available() -> None:
     """Absence of a packet is a fail-closed not-available state."""
     state, reason, payload = load_independent_outcomes(None)
@@ -364,6 +399,96 @@ def test_fallback_execution_mode_row_fails_closed() -> None:
     assert result["status"] == "blocked"
     assert "execution_mode" in result["reason"]
     assert "native" in result["reason"]
+
+
+@pytest.mark.parametrize(
+    ("spec_change", "expected_fragment"),
+    [
+        ({"expected_execution_mode": "unsupported"}, "expected execution mode"),
+        (
+            {"expected_execution_identity": dict(_ADAPTER_IDENTITY)},
+            "only supported for the adapter",
+        ),
+        ({"expected_execution_mode": "adapter", "expected_execution_identity": {}}, "non-empty"),
+        (
+            {
+                "expected_execution_mode": "adapter",
+                "expected_execution_identity": {"": "value"},
+            },
+            "keys and values",
+        ),
+        ({"expected_execution_mode": "adapter"}, "producer commit"),
+        (
+            {"expected_execution_mode": "adapter", "require_producer_commit": True},
+            "episode record SHA-256",
+        ),
+    ],
+)
+def test_adapter_admission_spec_requires_explicit_identity_and_lineage(
+    spec_change: dict[str, Any], expected_fragment: str
+) -> None:
+    """Adapter admission cannot be weakened or described ambiguously."""
+    packet = _packet([])
+    spec = replace(_spec_for_packet(packet, budget_per_arm=1), **spec_change)
+    reason = _validate_frozen_admission_spec(spec, budget_per_arm=1)
+    assert reason is not None
+    assert expected_fragment in reason
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_fragment"),
+    [
+        ("execution_identity", None, "execution_identity must be an object"),
+        ("execution_identity", {**_ADAPTER_IDENTITY, "adapter_name": "other"}, "identity"),
+        ("producer_commit", "bad", "producer_commit must"),
+        ("episode_record_sha256", "bad", "episode_record_sha256"),
+        ("execution_config_lineage", None, "execution_config_lineage must"),
+    ],
+)
+def test_adapter_row_identity_and_lineage_fail_closed(
+    field: str, value: Any, expected_fragment: str
+) -> None:
+    """Adapter rows require exact identity and independent producer lineage."""
+    row = _row(
+        row_id="r0",
+        manifest_id="c0",
+        arm="proposal",
+        rank=1,
+        failure=True,
+        execution_mode="adapter",
+    )
+    spec = _adapter_spec(_packet([row]), budget_per_arm=1)
+    row[field] = value
+    reason = _row_execution_drift(row, "r0", spec)
+    assert reason is not None
+    assert expected_fragment in reason
+
+
+@pytest.mark.parametrize(
+    ("lineage_field", "value", "expected_fragment"),
+    [
+        ("target_planner_config_sha256", "wrong", "target planner config"),
+        ("planner_reference_commit", "wrong", "planner reference commit"),
+        ("producer_commit", "wrong", "producer commit mismatch"),
+    ],
+)
+def test_adapter_row_config_lineage_must_match_contract(
+    lineage_field: str, value: str, expected_fragment: str
+) -> None:
+    """Adapter config lineage binds both the historical and producer commits."""
+    row = _row(
+        row_id="r0",
+        manifest_id="c0",
+        arm="proposal",
+        rank=1,
+        failure=True,
+        execution_mode="adapter",
+    )
+    spec = _adapter_spec(_packet([row]), budget_per_arm=1)
+    row["execution_config_lineage"][lineage_field] = value
+    reason = _row_execution_drift(row, "r0", spec)
+    assert reason is not None
+    assert expected_fragment in reason
 
 
 def test_missing_required_field_fails_closed() -> None:

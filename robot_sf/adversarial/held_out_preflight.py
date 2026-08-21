@@ -380,6 +380,7 @@ def _step3_run_plan(
     contract_raw_sha: str,
     target_planner_id: str,
     execution_commit: str,
+    execution_identity: dict[str, str],
     budget_per_arm: int,
 ) -> dict[str, Any]:
     """Return the frozen step-3 execution plan (declaration only, no execution)."""
@@ -398,7 +399,8 @@ def _step3_run_plan(
             "--evaluation-outcomes <step3 independent-outcomes packet path>"
         ),
         "resource_class": (
-            "local single-CPU worker; native execution mode only (no fallback/degraded); "
+            "local single-CPU worker; canonical SocialForcePlannerAdapter execution only "
+            "(no native, fallback, or degraded aliases); "
             "no GPU/SLURM requirement declared for the social_force planner."
         ),
         "estimated_run_count": 2 * budget_per_arm * 6,
@@ -416,7 +418,7 @@ def _step3_run_plan(
             "adversarial_independent_outcomes.v2 row contract; every admitted row must "
             "match the external v2 binding (exact arm membership, candidate manifest "
             "SHA-256, pool index, scenario seed, execution seeds, pool seed, record "
-            "SHA-256) and native-only execution mode."
+            "SHA-256), the declared adapter identity, and complete execution diagnostics."
         ),
         "decision_rule": {
             "vocabulary": ["continue", "stop", "inconclusive"],
@@ -433,6 +435,16 @@ def _step3_run_plan(
         "frozen_contract_sha256": contract_raw_sha,
         "target_planner_id": target_planner_id,
         "execution_commit": execution_commit,
+        "execution_commit_role": "historical_planner_reference_lineage",
+        "execution_identity": execution_identity,
+        "producer_commit": "recorded_by_producer_after_merge",
+        "producer_command": (
+            "uv run python scripts/adversarial/materialize_issue_6105_outcomes.py "
+            "--contract configs/adversarial/issue_3275_same_planner_contract.json "
+            "--bindings docs/context/evidence/issue_3275_same_planner_held_out/"
+            "candidate_manifest_bindings.v2.json --execution-records <raw execution JSONL> "
+            "--output <step3 output>/independent_outcomes.json"
+        ),
         "budget_per_arm": budget_per_arm,
         "authorization": "compute is outside the scope of issue #6104; this plan is declared only.",
     }
@@ -463,6 +475,9 @@ def _build_readme(packet: dict[str, Any], pool_manifest: dict[str, Any]) -> str:
         f"(pre-correction SHA-256 `{packet['certified_archive']['pre_correction_archive_sha256']}`).\n"
         f"- Target planner: `{packet['target_planner']['id']}` "
         f"(config SHA-256 `{packet['target_planner']['config_sha256']}`).\n"
+        "- Execution identity: canonical `SocialForcePlannerAdapter` with "
+        "`social_force_adapter` policy semantics, projecting `velocity_vector_xy` "
+        "to `unicycle_vw` using `heading_safe_velocity_to_unicycle_vw`.\n"
         f"- Candidate pool seed `{packet['candidate_pool']['seed']}`, pool size "
         f"{packet['candidate_pool']['size']}, budget {packet['candidate_pool']['budget_per_arm']} per arm.\n"
         f"- Execution-seed domain base {seed_prov['execution_seed_domain']['base']}, "
@@ -669,6 +684,7 @@ def build_held_out_preflight(
             "id": target_planner_id,
             "config_sha256": target_planner_config_sha256,
             "execution_commit": execution_commit,
+            "execution_identity": dict(planner_cfg["execution_identity"]),
         },
         "candidate_pool_seed": pool_seed,
         "candidate_pool_size": pool_size,
@@ -732,6 +748,7 @@ def build_held_out_preflight(
             "id": target_planner_id,
             "config_sha256": target_planner_config_sha256,
             "execution_commit": execution_commit,
+            "execution_identity": dict(planner_cfg["execution_identity"]),
         },
         "candidate_pool": {
             "size": pool_size,
@@ -902,6 +919,7 @@ def compose_preflight_packet_files(
         contract_raw_sha=raw_sha256(contract_path),
         target_planner_id=pool_manifest["target_planner"]["id"],
         execution_commit=pool_manifest["target_planner"]["execution_commit"],
+        execution_identity=pool_manifest["target_planner"]["execution_identity"],
         budget_per_arm=pool_manifest["budget_per_arm"],
     )
     bindings = _bindings_payload(

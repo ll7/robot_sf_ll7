@@ -44,6 +44,7 @@ def test_dependency_review_covers_vendored_build_and_license_surfaces() -> None:
     allowed = {item.strip() for item in allow_licenses.split(",")}
     assert allowed == {
         "Apache-2.0",
+        "Apache-2.0 WITH LLVM-exception",
         "BSD-2-Clause",
         "BSD-3-Clause",
         "ISC",

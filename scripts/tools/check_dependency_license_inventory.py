@@ -79,6 +79,7 @@ _KNOWN_SPDX_IDS = frozenset(
         "LGPL-2.1-or-later",
         "LGPL-3.0-only",
         "LGPL-3.0-or-later",
+        "LLVM-exception",
         "MIT",
         "MIT-0",
         "MPL-1.1",
@@ -1126,11 +1127,17 @@ def _resolve_profile(  # noqa: C901
     return result
 
 
-def _policy_records(  # noqa: C901
+def _policy_records(  # noqa: C901, PLR0912, PLR0915
     policy: dict[str, Any],
     repo_root: Path,
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """Validate policy rules and capture component evidence digests."""
+) -> tuple[
+    dict[str, dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, list[dict[str, Any]]],
+    list[dict[str, Any]],
+    list[str],
+]:
+    """Validate policy rules and capture component/package evidence digests."""
     issues: list[str] = []
     if policy.get("schema_version") != POLICY_SCHEMA_VERSION:
         issues.append("dependency policy has an unsupported schema_version")
@@ -1179,7 +1186,289 @@ def _policy_records(  # noqa: C901
             "disposition": component.get("disposition"),
         }
         components_out.append(record)
-    return by_mode, sorted(components_out, key=lambda item: item["id"]), issues
+    package_dispositions = policy.get("package_dispositions")
+    if not isinstance(package_dispositions, list):
+        issues.append("dependency policy has no package_dispositions list")
+        package_dispositions = []
+    package_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    package_out: list[dict[str, Any]] = []
+    package_ids: set[str] = set()
+    valid_modes = {"user_installed", "bundled_source", "built_companion", "not_distributed"}
+    valid_conditions = {
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting",
+    }
+    for package in package_dispositions:
+        if not isinstance(package, dict):
+            issues.append("dependency policy contains a non-object package disposition")
+            continue
+        package_id = package.get("id")
+        package_name = package.get("package")
+        if not isinstance(package_id, str) or not package_id:
+            issues.append("package disposition has no id")
+            continue
+        if package_id in package_ids:
+            issues.append(f"duplicate package disposition id: {package_id}")
+        package_ids.add(package_id)
+        if not isinstance(package_name, str) or not package_name:
+            issues.append(f"package disposition {package_id} has no package name")
+            continue
+        normalized_name = _canonicalize_name(package_name)
+        required_strings = (
+            "version",
+            "license_expression",
+            "python_requires",
+            "ruling",
+            "rationale",
+            "disposition",
+        )
+        for field in required_strings:
+            if not isinstance(package.get(field), str) or not package[field].strip():
+                issues.append(f"package disposition {package_id} has no {field}")
+        source = package.get("source")
+        if not isinstance(source, dict) or not source:
+            issues.append(f"package disposition {package_id} has no source")
+            source = {}
+        target = package.get("target")
+        if not isinstance(target, dict) or not target:
+            issues.append(f"package disposition {package_id} has no target")
+            target = {}
+        upstream = package.get("upstream")
+        if not isinstance(upstream, dict) or not upstream:
+            issues.append(f"package disposition {package_id} has no upstream provenance")
+            upstream = {}
+        notice_paths = upstream.get("notice_paths")
+        if (
+            not isinstance(notice_paths, list)
+            or len(notice_paths) < 2
+            or not all(isinstance(value, str) and value for value in notice_paths)
+        ):
+            issues.append(f"package disposition {package_id} has incomplete notice references")
+        artifacts = package.get("artifacts")
+        if not isinstance(artifacts, list) or not artifacts:
+            issues.append(f"package disposition {package_id} has no artifacts")
+            artifacts = []
+        artifact_keys: set[tuple[str, str, str]] = set()
+        for artifact in artifacts:
+            if not isinstance(artifact, dict):
+                issues.append(f"package disposition {package_id} has a non-object artifact")
+                continue
+            kind = artifact.get("kind")
+            filename = artifact.get("filename")
+            sha256 = artifact.get("sha256")
+            if not all(isinstance(value, str) and value for value in (kind, filename, sha256)):
+                issues.append(f"package disposition {package_id} has an incomplete artifact")
+                continue
+            key = (kind, filename, sha256)
+            if key in artifact_keys:
+                issues.append(f"package disposition {package_id} has a duplicate artifact")
+            artifact_keys.add(key)
+        evidence_paths = package.get("evidence_paths")
+        if not isinstance(evidence_paths, list) or not evidence_paths:
+            issues.append(f"package disposition {package_id} has no evidence_paths")
+            evidence_paths = []
+        evidence_digests: list[dict[str, str]] = []
+        for value in evidence_paths:
+            if not isinstance(value, str):
+                issues.append(f"package disposition {package_id} has a non-string evidence path")
+                continue
+            path = _resolve_path(repo_root, value)
+            if not path.is_file():
+                issues.append(f"package disposition {package_id} evidence is missing: {value}")
+                continue
+            evidence_digests.append({"path": value, "sha256": _sha256_file(path)})
+        profiles = package.get("profiles")
+        if (
+            not isinstance(profiles, list)
+            or not profiles
+            or not all(isinstance(value, str) and value for value in profiles)
+        ):
+            issues.append(f"package disposition {package_id} has no valid profiles")
+            profiles = []
+        allowed_modes = package.get("allowed_distribution_modes")
+        blocked_modes = package.get("blocked_distribution_modes")
+        if not isinstance(allowed_modes, list) or not allowed_modes:
+            issues.append(f"package disposition {package_id} has no allowed modes")
+            allowed_modes = []
+        if not isinstance(blocked_modes, list):
+            issues.append(f"package disposition {package_id} has no blocked modes")
+            blocked_modes = []
+        invalid_modes = {
+            str(value) for value in [*allowed_modes, *blocked_modes] if value not in valid_modes
+        }
+        issues.extend(
+            f"package disposition {package_id} has invalid distribution mode: {mode}"
+            for mode in sorted(invalid_modes)
+        )
+        overlap = set(allowed_modes) & set(blocked_modes)
+        if overlap:
+            issues.append(f"package disposition {package_id} allows and blocks: {sorted(overlap)}")
+        blocked_conditions = package.get("blocked_surface_conditions")
+        if not isinstance(blocked_conditions, list):
+            issues.append(f"package disposition {package_id} has no blocked surface conditions")
+            blocked_conditions = []
+        invalid_conditions = {
+            str(value) for value in blocked_conditions if value not in valid_conditions
+        }
+        issues.extend(
+            f"package disposition {package_id} has invalid blocked surface condition: {condition}"
+            for condition in sorted(invalid_conditions)
+        )
+        record = {
+            "id": package_id,
+            "package": package_name,
+            "version": package.get("version"),
+            "license_expression": package.get("license_expression"),
+            "python_requires": package.get("python_requires"),
+            "target": _normalise_json(target),
+            "source": _normalise_json(source),
+            "artifacts": _normalise_json(artifacts),
+            "upstream": _normalise_json(upstream),
+            "profiles": sorted(set(profiles)),
+            "allowed_distribution_modes": sorted(set(allowed_modes)),
+            "blocked_distribution_modes": sorted(set(blocked_modes)),
+            "blocked_surface_conditions": sorted(set(blocked_conditions)),
+            "status": package.get("status"),
+            "disposition": package.get("disposition"),
+            "ruling": package.get("ruling"),
+            "rationale": package.get("rationale"),
+            "evidence_paths": sorted(set(evidence_paths)),
+            "evidence": evidence_digests,
+        }
+        package_by_name[normalized_name].append(record)
+        package_out.append(record)
+    return (
+        by_mode,
+        sorted(components_out, key=lambda item: item["id"]),
+        {
+            name: sorted(rows, key=lambda item: item["id"])
+            for name, rows in sorted(package_by_name.items())
+        },
+        sorted(package_out, key=lambda item: item["id"]),
+        issues,
+    )
+
+
+def _exact_artifact_failures(
+    package: dict[str, Any],
+    expected_artifacts: list[dict[str, Any]],
+) -> list[str]:
+    """Require every reviewed artifact identity to occur in the selected lock row."""
+    actual = {
+        (artifact.get("kind"), artifact.get("filename"), artifact.get("sha256")): artifact
+        for artifact in package.get("artifacts", [])
+        if isinstance(artifact, dict)
+    }
+    failures: list[str] = []
+    for expected in expected_artifacts:
+        if not isinstance(expected, dict):
+            failures.append("exact policy contains a non-object artifact")
+            continue
+        key = (expected.get("kind"), expected.get("filename"), expected.get("sha256"))
+        observed = actual.get(key)
+        if observed is None:
+            failures.append(
+                f"missing exact artifact {expected.get('filename')} with SHA-256 "
+                f"{expected.get('sha256')}"
+            )
+            continue
+        for field in ("size", "platform_tags"):
+            if field in expected and observed.get(field) != expected.get(field):
+                failures.append(
+                    f"artifact {expected.get('filename')} {field} differs from exact policy"
+                )
+    return failures
+
+
+def _match_package_disposition(
+    package: dict[str, Any],
+    observation: dict[str, Any],
+    mode: str,
+    profiles: set[str],
+    target: dict[str, Any],
+    candidates: dict[str, list[dict[str, Any]]],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Match a package row against its exact reviewed disposition, fail-closed."""
+    rows = candidates.get(package["normalized_name"], [])
+    if not rows:
+        return None, []
+    policy = rows[0]
+    failures: list[str] = []
+    if package.get("version") != policy.get("version"):
+        failures.append(
+            f"lock version {package.get('version')} does not match exact policy "
+            f"{policy.get('version')}"
+        )
+    if package.get("source") != policy.get("source"):
+        failures.append("lock source/index does not match exact policy")
+    expected_target = policy.get("target")
+    if isinstance(expected_target, dict) and _normalise_json(expected_target) != _normalise_json(
+        {
+            "os": target.get("os"),
+            "architecture": target.get("architecture"),
+            "python": {
+                "implementation": target.get("python", {}).get("implementation")
+                if isinstance(target.get("python"), dict)
+                else None,
+                "version": target.get("python", {}).get("version")
+                if isinstance(target.get("python"), dict)
+                else None,
+            },
+        }
+    ):
+        failures.append("profile target does not match exact policy")
+    if mode not in policy.get("allowed_distribution_modes", []):
+        failures.append(f"distribution mode {mode} is not allowed by exact policy")
+    if policy.get("status") != "reviewed":
+        failures.append(f"exact policy status is {policy.get('status')}")
+    if observation.get("license_expression") != policy.get("license_expression"):
+        failures.append("observed license expression does not match exact policy")
+    expected_profiles = set(policy.get("profiles", []))
+    if not profiles <= expected_profiles:
+        failures.append(
+            "package profile membership exceeds exact policy: "
+            f"{sorted(profiles - expected_profiles)}"
+        )
+    failures.extend(_exact_artifact_failures(package, policy.get("artifacts", [])))
+    return policy, sorted(set(failures))
+
+
+def _exact_policy_coverage_failures(
+    package_dispositions: list[dict[str, Any]],
+    package_records: list[dict[str, Any]],
+    profile_ids: set[str],
+) -> list[str]:
+    """Ensure each exact disposition covers exactly its declared profile set."""
+    failures: list[str] = []
+    for policy in package_dispositions:
+        policy_id = policy["id"]
+        expected_profiles = set(policy.get("profiles", []))
+        unknown_profiles = expected_profiles - profile_ids
+        if unknown_profiles:
+            failures.append(
+                f"package disposition {policy_id} references unknown profiles: "
+                f"{sorted(unknown_profiles)}"
+            )
+        matches = [
+            record
+            for record in package_records
+            if record.get("normalized_name") == _canonicalize_name(policy["package"])
+            and record.get("version") == policy.get("version")
+            and record.get("source") == policy.get("source")
+        ]
+        actual_profiles = {profile for record in matches for profile in record.get("profiles", [])}
+        if not matches:
+            failures.append(f"package disposition {policy_id} has no matching lock row")
+        elif actual_profiles != expected_profiles:
+            failures.append(
+                f"package disposition {policy_id} profile coverage differs: "
+                f"expected={sorted(expected_profiles)} actual={sorted(actual_profiles)}"
+            )
+    return sorted(set(failures))
 
 
 def _distribution_mode(package: dict[str, Any]) -> str:
@@ -1245,7 +1534,7 @@ def _package_observation(
     return record, failures
 
 
-def _input_paths(  # noqa: C901
+def _input_paths(  # noqa: C901, PLR0912
     repo_root: Path,
     manifest: dict[str, Any],
     policy: dict[str, Any],
@@ -1273,6 +1562,11 @@ def _input_paths(  # noqa: C901
         if isinstance(component, dict):
             values.update(
                 value for value in component.get("evidence_paths", []) if isinstance(value, str)
+            )
+    for package in policy.get("package_dispositions", []):
+        if isinstance(package, dict):
+            values.update(
+                value for value in package.get("evidence_paths", []) if isinstance(value, str)
             )
     for source in (manifest.get("$schema"), policy.get("$schema")):
         if isinstance(source, str) and not source.startswith(("http://", "https://")):
@@ -1322,7 +1616,13 @@ def build_inventory(  # noqa: C901, PLR0915
         _validate_unrepresented_policy(manifest)
     )
     structural_issues.extend(unrepresented_policy_issues)
-    policy_rules, components, policy_issues = _policy_records(policy, repo_root)
+    (
+        policy_rules,
+        components,
+        package_disposition_by_name,
+        package_dispositions,
+        policy_issues,
+    ) = _policy_records(policy, repo_root)
     structural_issues.extend(policy_issues)
 
     all_packages: dict[str, dict[str, Any]] = {}
@@ -1375,6 +1675,7 @@ def build_inventory(  # noqa: C901, PLR0915
     package_failures: list[str] = []
     policy_failures: list[str] = []
     status_counts: Counter[str] = Counter()
+    exact_policy_match_count = 0
     for package_id in sorted(all_packages):
         package = all_packages[package_id]
         mode = _distribution_mode(package)
@@ -1384,30 +1685,64 @@ def build_inventory(  # noqa: C901, PLR0915
             rule = {"id": "missing-policy-rule", "disposition": "review_required"}
         observation, failures = _package_observation(package, observed)
         package_failures.extend(failure for failure in failures if package_id in package_profiles)
+        package_profile_ids = package_profiles.get(package_id, set())
+        exact_policy, exact_failures = _match_package_disposition(
+            package,
+            observation,
+            mode,
+            package_profile_ids,
+            manifest.get("target", {}) if isinstance(manifest.get("target"), dict) else {},
+            package_disposition_by_name,
+        )
         record = {
             **package,
             **observation,
             "distribution_mode": mode,
             "policy_rule_id": rule.get("id"),
             "policy_disposition": rule.get("disposition"),
-            "profiles": sorted(package_profiles.get(package_id, set())),
+            "profiles": sorted(package_profile_ids),
             "originating_extras": sorted(
                 {
                     extra
                     for profile_result in profile_results
-                    if profile_result["id"] in package_profiles.get(package_id, set())
+                    if profile_result["id"] in package_profile_ids
                     for extra in profile_result.get("extras", [])
                 }
             ),
         }
+        if exact_policy is not None:
+            record["exact_policy_id"] = exact_policy["id"]
+            record["exact_policy_status"] = "accepted" if not exact_failures else "blocked"
+            record["exact_policy_disposition"] = exact_policy.get("disposition")
+            record["exact_policy_evidence"] = exact_policy.get("evidence", [])
+            record["policy_disposition"] = exact_policy.get("disposition")
+            if exact_failures:
+                policy_failures.extend(
+                    f"{package['name']}: exact policy {exact_policy['id']}: {failure}"
+                    for failure in exact_failures
+                )
+            elif package_profile_ids:
+                exact_policy_match_count += 1
         if package_id in unrepresented_by_id:
             record["unrepresented_disposition"] = unrepresented_by_id[package_id]
         status_counts[record["license_status"]] += 1
-        if package_id in package_profiles and rule.get("disposition") == "review_required":
+        if (
+            package_profile_ids
+            and exact_policy is None
+            and rule.get("disposition") == "review_required"
+        ):
             policy_failures.append(
                 f"{package['name']}: {mode} requires an explicit reviewed disposition"
             )
         package_records.append(record)
+
+    policy_failures.extend(
+        _exact_policy_coverage_failures(
+            package_dispositions,
+            package_records,
+            {profile["id"] for profile in profiles},
+        )
+    )
 
     component_failures = [
         f"component {component['id']}: disposition is {component['disposition']}"
@@ -1467,6 +1802,7 @@ def build_inventory(  # noqa: C901, PLR0915
             "claim_boundary": policy.get("claim_boundary"),
             "rules": _normalise_json(policy.get("rules", [])),
             "components": components,
+            "package_dispositions": package_dispositions,
         },
         "project": {
             "name": root_project.get("name"),
@@ -1519,6 +1855,8 @@ def build_inventory(  # noqa: C901, PLR0915
             "license_status_counts": dict(sorted(status_counts.items())),
             "policy_pending_package_count": len(policy_failures),
             "policy_pending_component_count": len(component_failures),
+            "policy_exact_disposition_count": len(package_dispositions),
+            "policy_exact_match_count": exact_policy_match_count,
             "structural_issue_count": len(set(structural_issues)),
             "unresolved_count": len(failures),
             "status": "blocked" if failures else "complete",

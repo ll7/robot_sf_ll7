@@ -84,6 +84,13 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
+When readiness dispatches the optional lane, it first runs
+`scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
+reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
+message; they are not reported as changed-code failures. The core lane remains dependency-minimal
+and excludes optional-only test paths listed in `tests/support/optional_test_allowlist.txt`.
+Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
+preflight-tool failures and never receive the missing-extra install guidance.
 
 ### Claim-map validation
 
@@ -692,6 +699,44 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+### Single-account merge receipt (issue #7669)
+
+**Plain-language contract.** A merge may proceed with one account only when a versioned receipt
+proves that every ordinary implementation-integrity condition was observed on the exact PR head.
+The receipt does not turn a missing approval into a general bypass: domain, scientific/evidence,
+legal/release, security, dependency, draft, thread, requested-reviewer, metadata, and hosted-check
+conditions remain independent fail-closed holds.
+
+The canonical owner is
+`scripts/dev/single_account_merge_receipt.py`, with the contract recorded in
+`scripts/dev/single_account_merge_receipt.v1.schema.json`. A receipt binds the repository and PR,
+head/base/current-main SHAs, final PR metadata digest, terminal exact-head required checks,
+independent implementation-review carrier and evidence digest, review-thread disposition,
+requested reviewers and teams, all separate hold dimensions, optional waiver actor/reason/time,
+and the expected-head compare-and-swap (CAS) request. The receipt digest covers the pre-merge
+observation and is preserved when GitHub returns the merge commit SHA.
+
+Use the three explicit modes as follows:
+
+- `--mode report-only` reads the canonical merge-gate snapshot and writes an inspectable receipt;
+  it performs no remote mutation.
+- `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
+  receipt; a changed head, base, metadata, check, review, thread, requested reviewer, or hold
+  blocks.
+- `--mode apply --receipt-file <path>` repeats validation and then lets the receipt owner issue
+  exactly one expected-head squash merge, rereading the closed/merged PR and recording the
+  returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack coordinator and
+  delegates its root merge to the same owner.
+
+The only permitted waiver is the bounded absence of a distinct human implementation reviewer,
+and it requires an actor, reason, and timestamp. It cannot waive a required hosted check,
+scientific or evidence review, domain approval, legal/release or security gate, dependency hold,
+draft state, unresolved thread, requested reviewer, stale base, or metadata mismatch. If the
+post-merge readback is invalid, preserve the receipt and route an incident; do not reconstruct the
+pre-merge evidence or reuse the waiver. The repository policy fixture
+`scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the callers and prevents
+new direct merge endpoints from bypassing this contract.
+
 **Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
 the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
 fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
@@ -752,6 +797,15 @@ or stale trailer blocks both `gh-pr-merger` and native merge-queue admission. Me
 reconciliation does not rerun source CI, but it invalidates prior final-state review evidence until
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
+
+If the final verification read observes a concurrent external write, the helper returns
+`status: conflict` with the previous, desired, and observed metadata digests plus any available
+head SHAs. It also returns the stable `next_action`
+`refresh_live_metadata_and_exact_head_review`, `policy_state: pending_pr_metadata`, and
+`policy_action: refresh_snapshot`. Treat `prior_review_reuse: forbidden` as binding: refresh the
+live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
+retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
+successful reconciliation.
 
 ### Exact-head stability snapshot (issue #7523)
 
@@ -880,6 +934,11 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+When current Actions checks remain `queued` beyond the monitor's five-minute default threshold,
+the payload instead records `checks.pending_reason: "runner_queue_starvation"`, the oldest queued
+age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
+that diagnostic threshold for a known environment. This is an external queue blocker only:
+`checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job
@@ -1066,6 +1125,36 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
   never fabricates PR entries.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
+
+### Integration admission report (issue #7647)
+
+`scripts/dev/integration_admission_report.py` classifies one PR and a bounded queue snapshot as
+report-only routing evidence. It consumes an existing `pr_queue_snapshot.v2` JSON payload, reuses
+the PR loop policy and trusted metadata/claim readers, and never calls GitHub or authorizes an
+external action. Missing baseline data is `unavailable`; malformed input is `invalid`; blocker and
+invalidation codes remain explicit. Use a fixed `--as-of` instant when age/freshness is required:
+
+```bash
+uv run python scripts/dev/integration_admission_report.py \
+  --snapshot output/pr_queue_snapshot.json --pr 2677 --max-queue-items 20 \
+  --as-of 2026-08-20T12:00:00Z --json
+```
+
+The versioned output contract is [`integration_admission_report.v1.schema.json`](contracts/integration_admission_report.v1.schema.json).
+The report uses the frozen policy dimensions `docs | test_only | tooling | runtime | benchmark |
+evidence | release`, `isolated | component_shared | repository_control_plane`, `low | standard |
+optional_matrix | full`, `ordinary | independent_exact_head | domain | author`, `none | network |
+artifact | compute | release`, and `ordinary | current_base_required`. Unknown and unavailable
+inputs remain explicit. Queue output includes state counts plus separate CI, review, and external
+lane demand; it is an estimate, not a dispatch command.
+
+The #7520 pilot is report-only for 14 days and at least 20 terminal PR dispositions, extending to
+28 days if the sample is smaller. Retain the policy only if useful terminal throughput is not
+materially reduced and CI spent on superseded/unadmitted heads, invalidated exact-head reviews,
+duplicate or competing PRs, stale prepared candidates, post-merge repairs, and maintainer/domain
+decision latency do not worsen. Record a `retain`, `revise`, or `roll_back` disposition with those
+measures; raw open-PR count is diagnostic only. This report remains implementation/workflow
+evidence, not merge authority or scientific evidence.
 
 ```bash
 uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
@@ -1305,6 +1394,12 @@ Any explicit `blocked:*` label is likewise retained for audit but classifies as 
 including the exact blocker label in its reason, and is excluded from autonomous implementation
 dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
 and remain outside autonomous implementation dispatch until the review gate is cleared.
+Before any autonomous claim write, route the candidate through
+`scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
+and claim preflight before calling the atomic claim writer. Snapshot consumers should use the
+canonical `admission` projection; direct `issue_claim.py acquire` calls are reserved for an
+explicit maintainer override with an actor, reason, and declaration that no scientific claim is
+being made.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only
@@ -1470,8 +1565,11 @@ gh api repos/$OWNER/$REPO/issues/$ISSUE/labels/needs-publication -X DELETE --sil
 ```
 
 ```bash
-gh api repos/$OWNER/$REPO/pulls/$PR/merge -X PUT \
-  -f merge_method="squash" -f commit_title="Merge PR #$PR" -f sha="$PR_SHA"
+RECEIPT_FILE=/tmp/pr-$PR-single-account-receipt.json
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode report-only --output "$RECEIPT_FILE"
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode apply --receipt-file "$RECEIPT_FILE"
 ```
 
 ```bash

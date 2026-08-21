@@ -7,9 +7,11 @@ groups and the existing CI aggregate still provide the focused compatibility
 surfaces required by the policy manifest.
 
 When a pull request changes a lockfile or project dependency declaration, the
-checker compares the exact base and head lock rows, classifies direct packages
-from the canonical policy, and rejects mixed direct-risk lanes. Unknown direct
-packages are rejected until the policy is deliberately extended.
+checker compares the exact base and head lock rows through the canonical
+profile-aware coherence contract, retains deterministic resolution evidence,
+classifies direct packages from the canonical policy, and rejects mixed
+material direct-risk lanes. Unknown direct packages are rejected until the
+policy is deliberately extended.
 """
 
 from __future__ import annotations
@@ -21,16 +23,23 @@ import re
 import subprocess
 import sys
 import tomllib
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from scripts.dev.check_dependency_coherence import (
+    CoherenceError,
+    compare_lock_resolution,
+    load_manifest,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POLICY = REPO_ROOT / "scripts/validation/dependabot_update_policy.v1.json"
 DEFAULT_DEPENDABOT_CONFIG = REPO_ROOT / ".github/dependabot.yml"
 DEFAULT_CI_WORKFLOW = REPO_ROOT / ".github/workflows/ci.yml"
+DEFAULT_COHERENCE_MANIFEST = REPO_ROOT / "scripts/validation/dependency_coherence.v1.json"
 
 DEPENDENCY_FILES = (
     "pyproject.toml",
@@ -455,6 +464,27 @@ def git_file_at_ref(repo_root: Path, ref: str, relative_path: str) -> str | None
     return _git_text(repo_root, ["show", f"{ref}:{relative_path}"])
 
 
+def _diff_vs_head(
+    repo_root: Path,
+    base_ref: str,
+    options: list[str],
+    pathspec: str | None = None,
+) -> str | None:
+    """Return a base-vs-HEAD diff, tolerating shallow checkouts.
+
+    The three-dot form ``<base>...HEAD`` requires a merge base, which is absent
+    on GitHub's shallow ``pull_request`` checkout (issue #7524). When it fails,
+    fall back to the two-dot form ``<base> HEAD`` which compares the two trees
+    directly and works without a merge base.
+    """
+    suffix = [f"{base_ref}...HEAD"] if pathspec is None else [f"{base_ref}...HEAD", "--", pathspec]
+    output = _git_text(repo_root, ["diff", *options, *suffix])
+    if output is not None:
+        return output
+    suffix = [base_ref, "HEAD"] if pathspec is None else [base_ref, "HEAD", "--", pathspec]
+    return _git_text(repo_root, ["diff", *options, *suffix])
+
+
 def changed_files(
     repo_root: Path, base_ref: str, changed_files_path: Path | None = None
 ) -> list[str]:
@@ -470,7 +500,7 @@ def changed_files(
             raise PolicyError(
                 f"unable to read authoritative changed-files list {changed_files_path}: {exc}"
             ) from exc
-    output = _git_text(repo_root, ["diff", "--name-only", f"{base_ref}...HEAD"])
+    output = _diff_vs_head(repo_root, base_ref, ["--name-only"])
     if output is None:
         raise PolicyError(f"unable to compare HEAD with base ref {base_ref!r}")
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -482,10 +512,7 @@ def _changed_project_names(
     relative_path: str,
     direct_names: set[str],
 ) -> set[str]:
-    diff = _git_text(
-        repo_root,
-        ["diff", "--unified=0", f"{base_ref}...HEAD", "--", relative_path],
-    )
+    diff = _diff_vs_head(repo_root, base_ref, ["--unified=0"], pathspec=relative_path)
     if diff is None:
         raise PolicyError(f"unable to inspect dependency declaration diff {relative_path}")
     changed: set[str] = set()
@@ -519,6 +546,152 @@ def changed_dependency_packages(
         if relative_path in file_set:
             changed.update(_changed_project_names(repo_root, base_ref, relative_path, direct_names))
     return changed
+
+
+def changed_project_dependency_names(
+    repo_root: Path,
+    base_ref: str,
+    files: Iterable[str],
+    direct_names: set[str],
+) -> set[str]:
+    """Return direct names whose declaration rows changed in the exact diff."""
+    file_set = set(files)
+    return {
+        name
+        for relative_path in PROJECT_FILES
+        if relative_path in file_set
+        for name in _changed_project_names(repo_root, base_ref, relative_path, direct_names)
+    }
+
+
+def supported_python_profiles(
+    manifest_path: Path = DEFAULT_COHERENCE_MANIFEST,
+) -> list[dict[str, Any]]:
+    """Load the validated Python/profile matrix owned by the coherence contract."""
+    _manifest, profiles = _load_coherence_contract(manifest_path)
+    return profiles
+
+
+def _load_coherence_contract(
+    manifest_path: Path = DEFAULT_COHERENCE_MANIFEST,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Load the coherence manifest and its required Python profile records."""
+    try:
+        manifest = load_manifest(manifest_path)
+    except CoherenceError as exc:
+        raise PolicyError(f"dependency coherence manifest is unavailable: {exc}") from exc
+    profiles = manifest.get("python_profiles")
+    if not isinstance(profiles, list) or not profiles:
+        raise PolicyError("dependency coherence manifest has no supported Python profiles")
+    owners = manifest.get("owners")
+    if not isinstance(owners, list) or not owners:
+        raise PolicyError("dependency coherence manifest has no lock/profile owners")
+    return dict(manifest), [dict(profile) for profile in profiles]
+
+
+def build_resolution_evidence(
+    repo_root: Path,
+    base_ref: str,
+    files: Iterable[str],
+    *,
+    manifest_path: Path = DEFAULT_COHERENCE_MANIFEST,
+) -> dict[str, Any]:
+    """Compare changed locks through the canonical profile-aware coherence helper."""
+    file_set = set(files)
+    manifest, profiles = _load_coherence_contract(manifest_path)
+    owners = [dict(owner) for owner in manifest["owners"]]
+    locks: dict[str, dict[str, Any]] = {}
+    try:
+        for relative_path in LOCK_FILES:
+            if relative_path not in file_set:
+                continue
+            base_text = git_file_at_ref(repo_root, base_ref, relative_path) or ""
+            head_path = repo_root / relative_path
+            head_text = head_path.read_text(encoding="utf-8") if head_path.is_file() else ""
+            resolution = compare_lock_resolution(base_text, head_text, profiles)
+            resolution["owners"] = [
+                owner for owner in owners if owner.get("lockfile") == relative_path
+            ]
+            resolution["profile_ids"] = sorted(
+                {
+                    str(profile_id)
+                    for owner in resolution["owners"]
+                    for profile_id in owner.get("profile_ids", [])
+                }
+            )
+            locks[relative_path] = resolution
+    except (CoherenceError, OSError) as exc:
+        raise PolicyError(f"supported-profile resolution comparison unavailable: {exc}") from exc
+
+    changed_packages = sorted(
+        {name for report in locks.values() for name in report["changed_packages"]}
+    )
+    material_packages = sorted(
+        {name for report in locks.values() for name in report["material_packages"]}
+    )
+    material_fields = sorted(
+        {name for report in locks.values() for name in report["material_fields"]}
+    )
+    normalization_only_packages = sorted(
+        set(changed_packages) - set(material_packages) if locks else set()
+    )
+    return {
+        "schema_version": "robot-sf.dependency-resolution-evidence.v1",
+        "base_ref": base_ref,
+        "profiles": profiles,
+        "owners": owners,
+        "locks": locks,
+        "changed_packages": changed_packages,
+        "material_packages": material_packages,
+        "material_fields": material_fields,
+        "normalization_only_packages": normalization_only_packages,
+        "material_resolution": bool(material_packages or material_fields),
+    }
+
+
+def filter_normalization_only_classifications(
+    classifications: Iterable[Mapping[str, Any]],
+    resolution_evidence: Mapping[str, Any],
+    *,
+    changed_direct_names: set[str],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Keep normalization rows visible while excluding them from direct-risk lanes."""
+    raw = [dict(item) for item in classifications]
+    normalized = {
+        str(name)
+        for name in resolution_evidence.get("normalization_only_packages", [])
+        if str(name) not in changed_direct_names
+    }
+    effective = [item for item in raw if str(item.get("name")) not in normalized]
+    return effective, sorted(normalized)
+
+
+def annotate_resolution_evidence(
+    evidence: dict[str, Any],
+    classifications: Sequence[Mapping[str, Any]],
+    *,
+    changed_direct_names: set[str],
+) -> dict[str, Any]:
+    """Attach direct rows and configured risk classes to every profile record."""
+    by_name = {str(item["name"]): dict(item) for item in classifications}
+    evidence["changed_package_classifications"] = [by_name[name] for name in sorted(by_name)]
+    evidence["changed_direct_declarations"] = [
+        by_name[name] for name in sorted(changed_direct_names) if name in by_name
+    ]
+    for lock_report in evidence.get("locks", {}).values():
+        for profile in lock_report.get("profiles", []):
+            names = set(profile.get("textual_changed_packages", []))
+            profile["changed_package_classifications"] = [
+                by_name[name] for name in sorted(names) if name in by_name
+            ]
+            profile["direct_risk_classes"] = sorted(
+                {
+                    str(item["class"])
+                    for item in profile["changed_package_classifications"]
+                    if item.get("direct") is True
+                }
+            )
+    return evidence
 
 
 def validate_repository_structure(
@@ -563,17 +736,39 @@ def evaluate_update(
         base_direct.update(dependency_names_from_text(base_text or ""))
     all_direct = current_direct | base_direct
     changed_names = changed_dependency_packages(repo_root, base_ref, dependency_files, all_direct)
-    if not changed_names:
+    changed_direct_names = changed_project_dependency_names(
+        repo_root, base_ref, dependency_files, all_direct
+    )
+    resolution_evidence = build_resolution_evidence(repo_root, base_ref, dependency_files)
+    changed_names.update(resolution_evidence["changed_packages"])
+    if not changed_names and not resolution_evidence["material_fields"]:
         raise PolicyError(
             "dependency files changed but no package rows or direct declarations could be identified"
         )
     classifications = classify_package_names(changed_names, all_direct, policy)
-    direct_class_ids = validate_direct_update_lanes(classifications)
-    required_jobs = sorted({job for item in classifications for job in item["required_jobs"]})
+    resolution_evidence = annotate_resolution_evidence(
+        resolution_evidence,
+        classifications,
+        changed_direct_names=changed_direct_names,
+    )
+    effective_classifications, normalization_only_packages = (
+        filter_normalization_only_classifications(
+            classifications,
+            resolution_evidence,
+            changed_direct_names=changed_direct_names,
+        )
+    )
+    direct_class_ids = validate_direct_update_lanes(effective_classifications)
+    required_jobs = sorted(
+        {job for item in effective_classifications for job in item["required_jobs"]}
+    )
     report.update(
         {
             "status": "pass",
             "changed_packages": classifications,
+            "effective_changed_packages": effective_classifications,
+            "normalization_only_packages": normalization_only_packages,
+            "resolution_evidence": resolution_evidence,
             "required_jobs": required_jobs,
             "direct_risk_classes": sorted(direct_class_ids),
         }

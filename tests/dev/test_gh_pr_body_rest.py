@@ -73,6 +73,22 @@ def test_update_pr_body_fails_closed_for_missing_file(tmp_path: Path) -> None:
     mock_patch.assert_not_called()
 
 
+def test_update_pr_body_rejects_empty_file_before_remote_write(tmp_path: Path) -> None:
+    """An empty transform result must never clear a remote PR body."""
+    body_file = tmp_path / "empty.md"
+    body_file.write_text(" \n", encoding="utf-8")
+    with (
+        patch("scripts.dev.gh_pr_body_rest._gh_api_get") as mock_get,
+        patch("scripts.dev.gh_pr_body_rest._gh_api_patch") as mock_patch,
+    ):
+        result = update_pr_body(5220, body_file)
+
+    assert result["status"] == "error"
+    assert "empty PR body" in result["error"]
+    mock_get.assert_not_called()
+    mock_patch.assert_not_called()
+
+
 def test_update_pr_body_fails_closed_on_api_error(tmp_path: Path) -> None:
     """Authentication and API failures must be visible to the caller."""
     body_file = tmp_path / "body.md"
@@ -178,6 +194,13 @@ def test_reconcile_pr_metadata_fails_closed_when_remote_changes_after_patch(
     assert result["status"] == "conflict"
     assert "changed during reconciliation" in result["error"]
     assert result["observed_metadata_digest"] == metadata_digest("newer title", "newer body")
+    assert result["next_action"] == "refresh_live_metadata_and_exact_head_review"
+    assert result["policy_state"] == "pending_pr_metadata"
+    assert result["policy_action"] == "refresh_snapshot"
+    assert result["prior_review_reuse"] == "forbidden"
+    assert result["requires_exact_head_review"] is True
+    assert result["previous_head_sha"] is None
+    assert result["observed_head_sha"] is None
 
 
 def test_reconcile_pr_metadata_is_an_explicit_noop_when_current_state_matches(

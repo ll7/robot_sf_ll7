@@ -69,6 +69,7 @@ from scripts.dev.route_efficiency_report import (
 )
 
 DEFAULT_MAX_ACTIONS = 5
+METADATA_CONFLICT_NEXT_ACTION = "refresh_live_metadata_and_exact_head_review"
 
 VALID_ACTIONS = frozenset(
     {
@@ -377,12 +378,13 @@ def has_author_decision_packet(pr: dict[str, Any], head_sha: str) -> bool:
         return any(_sha_matches_head(carrier.sha, head_sha) for carrier in carriers)
     return True
 
-# Only repository-trusted authors can provide merge-control trailers.  Review
+
+# Only repository-trusted authors can provide merge-control trailers. Review
 # states that were withdrawn or are asking for changes must not keep an older
 # acceptance alive merely because the body still contains its trailer.
 TRUSTED_REVIEW_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
 NON_AUTHORITATIVE_REVIEW_STATES = frozenset({"CHANGES_REQUESTED", "DISMISSED", "PENDING"})
-
+_TRUSTED_GATE_VERDICT_ASSOCIATIONS = TRUSTED_REVIEW_ASSOCIATIONS
 _EXPLICIT_MERGE_HOLD_RE = re.compile(
     r"(?im)^\s*(?:[-*]\s*)?(merge-ready|domain-approval)\s*:\s*(no|pending)\s*$"
 )
@@ -402,6 +404,26 @@ class PolicyDecision:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the decision as a plain dict."""
         return asdict(self)
+
+
+def metadata_conflict_handoff(result: dict[str, Any]) -> dict[str, Any]:
+    """Route a concurrent metadata conflict back through the PR loop.
+
+    The REST writer cannot safely retry after an external write.  This compact
+    handoff gives callers a stable policy state/action and makes it explicit
+    that the previous metadata digest and exact-head review must not be reused.
+    Non-conflict results return an empty mapping so existing callers remain
+    compatible.
+    """
+    if not isinstance(result, dict) or result.get("status") != "conflict":
+        return {}
+    return {
+        "next_action": METADATA_CONFLICT_NEXT_ACTION,
+        "policy_state": "pending_pr_metadata",
+        "policy_action": "refresh_snapshot",
+        "prior_review_reuse": "forbidden",
+        "requires_exact_head_review": True,
+    }
 
 
 def _extract_manifest_compact_artifacts(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -496,13 +518,7 @@ def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
 
 
 def authoritative_body_text(item: Any) -> str | None:
-    """Return a trusted current review/comment body, or ``None``.
-
-    Conversation comments have no review state and remain eligible when their
-    author association is trusted.  Review carriers are accepted only while
-    their current state is not withdrawn, pending, or changes-requested; an
-    unknown non-empty state is also rejected so malformed evidence fails closed.
-    """
+    """Return a trusted current review/comment body, or ``None``."""
     if not isinstance(item, dict):
         return None
     association = str(item.get("author_association") or item.get("authorAssociation") or "").upper()
@@ -518,13 +534,7 @@ def authoritative_body_text(item: Any) -> str | None:
 
 
 def current_explicit_merge_hold_reasons(pr: dict[str, Any]) -> list[str]:
-    """Return current trusted merge/domain holds in stable order.
-
-    Labels are live repository state.  Textual holds are read only from the
-    same trusted current review/comment carriers used by the gate-verdict
-    parser; stale or malformed carriers therefore cannot create or clear an
-    acceptance.
-    """
+    """Return current trusted merge/domain holds in stable order."""
     reasons: set[str] = set()
     labels = pr.get("labels")
     if isinstance(labels, list):
@@ -533,7 +543,6 @@ def current_explicit_merge_hold_reasons(pr: dict[str, Any]) -> list[str]:
             normalized = str(name or "").strip().lower()
             if normalized in {"merge-ready: no", "domain-approval: pending"}:
                 reasons.add(normalized.replace(" ", ""))
-
     for key in ("reviews", "comments"):
         entries = pr.get(key)
         if not isinstance(entries, list):

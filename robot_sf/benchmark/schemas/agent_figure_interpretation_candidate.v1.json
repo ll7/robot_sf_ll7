@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/agent_figure_interpretation_candidate.v1.json",
+  "title": "Provider-Free Agent Figure Interpretation Candidate (v1)",
+  "description": "A candidate interpretation envelope for diagnostic fixture replay. It contains no reference answer and is not benchmark evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "artifact_kind", "provider", "fixture_id", "mutation_id",
+    "workflow", "figure", "limitations", "confidence", "unresolved_questions",
+    "claim_boundary", "interpretation", "mutation", "findings", "unavailable",
+    "not_applicable", "provenance", "replay_provenance", "verdict"
+  ],
+  "properties": {
+    "schema_version": {"const": "agent_figure_interpretation_candidate.v1"},
+    "artifact_kind": {"const": "candidate_interpretation"},
+    "provider": {"const": "none"},
+    "fixture_id": {"type": "string", "minLength": 1},
+    "mutation_id": {"type": "string", "minLength": 1},
+    "workflow": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "revision"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "revision": {"type": "string", "minLength": 1}}
+    },
+    "figure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["spec", "caption"],
+      "properties": {"spec": {"type": "object"}, "caption": {"type": "string"}}
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "confidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "value"],
+      "properties": {
+        "status": {"enum": ["available", "not_available", "not_applicable"]},
+        "value": {"type": ["number", "null"]}
+      }
+    },
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "claim_boundary": {"const": "fixture replay only; not benchmark evidence"},
+    "interpretation": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "source_denominator", "estimand_unit", "stats_multiplicity", "visual_semantics",
+        "caption_accuracy", "evidence_tier_availability", "claim_boundary", "correction_usefulness"
+      ],
+      "properties": {
+        "source_denominator": {"type": "object"},
+        "estimand_unit": {"type": "object"},
+        "stats_multiplicity": {"type": "object"},
+        "visual_semantics": {"type": "object"},
+        "caption_accuracy": {"type": "object"},
+        "evidence_tier_availability": {"type": "object"},
+        "claim_boundary": {"type": "object"},
+        "correction_usefulness": {"type": "object"}
+      }
+    },
+    "mutation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "expected_detectors"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "expected_detectors": {
+          "type": "array",
+          "items": {"enum": [
+            "unavailable_to_zero", "denominator_loss", "analysis_unit_mismatch", "wrong_pairing_resampling",
+            "fallback_degraded_promotion", "causal_overclaim", "unsupported_ranking",
+            "null_overclaim", "effect_direction_desirability", "native_adapter_merge",
+            "multiplicity_language"
+          ]}
+        }
+      }
+    },
+    "findings": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "source_denominator", "estimand_unit", "stats_multiplicity", "visual_semantics",
+        "caption_accuracy", "evidence_tier_availability", "claim_boundary", "correction_usefulness"
+      ],
+      "patternProperties": {
+        ".*": {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "critical"],
+          "properties": {
+            "status": {"enum": ["available", "not_available", "not_applicable", "requires_semantic_review"]},
+            "critical": {"type": "boolean"}
+          }
+        }
+      }
+    },
+    "unavailable": {"type": "array", "items": {"type": "string"}},
+    "not_applicable": {"type": "array", "items": {"type": "string"}},
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "manifest_schema_version", "source_sha256", "packet_sha256", "reference_sha256",
+        "candidate_sha256", "figure_sha256", "caption_sha256", "review_sha256"
+      ],
+      "properties": {
+        "manifest_schema_version": {"const": "agent_figure_interpretation_eval_manifest.v1"},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "packet_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reference_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "candidate_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "figure_sha256": {"$ref": "#/$defs/optionalDigest"},
+        "caption_sha256": {"$ref": "#/$defs/optionalDigest"},
+        "review_sha256": {"$ref": "#/$defs/optionalDigest"}
+      }
+    },
+    "replay_provenance": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"const": "fixture"},
+        "deterministic": {"const": true},
+        "external_provider_called": {"const": false},
+        "network_access": {"const": "none"}
+      },
+      "required": ["mode", "deterministic", "external_provider_called", "network_access"]
+    },
+    "verdict": {"const": "pending"}
+  },
+  "$defs": {
+    "optionalDigest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "sha256"],
+      "properties": {
+        "status": {"enum": ["available", "not_available", "not_applicable"]},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

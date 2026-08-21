@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-19
+updated_at: 2026-08-21
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,30 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/README.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/inventory.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7600_context_curation_pilot/inventory.json.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
 - path: docs/context/evidence/issue_5890_job13512_promotion_2026-08-19
   status: evidence
   freshness: dated
@@ -28,6 +52,18 @@ entries:
   status: current
   freshness: policy
   area: workflow_policy
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
   status: evidence
   freshness: evidence
@@ -5228,6 +5264,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence
@@ -5244,3 +5284,19 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/checksums.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

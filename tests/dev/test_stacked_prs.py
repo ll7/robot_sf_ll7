@@ -61,15 +61,66 @@ def _pr_payload(
 
 def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) -> dict[str, Any]:
     """Build a compact already-validated stack entry for cascade tests."""
+    metadata = "e" * 64
+    clear_holds = {
+        key: {"status": "clear", "reason_codes": [], "source": "fixture"}
+        for key in (
+            "merge",
+            "dependency",
+            "draft",
+            "domain",
+            "scientific_evidence",
+            "legal_release",
+            "security",
+        )
+    }
     return {
         "pr": number,
         "head_ref": head_ref,
         "head_sha": head_sha,
         "base_ref": base_ref,
         "base_sha": "b" * 40,
+        "metadata_digest": metadata,
         "merge_ready": True,
         "reasons": [],
         "checks": {"overall": "success"},
+        "required_checks": {
+            "status": "success",
+            "head_sha": head_sha,
+            "checks": [
+                {
+                    "name": "CI",
+                    "head_sha": head_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "state": "success",
+                }
+            ],
+            "reason_codes": [],
+        },
+        "implementation_review": {
+            "status": "accepted",
+            "carrier": {
+                "identity": "independent-fixture",
+                "kind": "static_report",
+                "head_sha": head_sha,
+                "metadata_digest": metadata,
+                "evidence_digest": "f" * 64,
+                "verdict": "accepted",
+            },
+            "reason_codes": [],
+            "precedence": 2,
+        },
+        "review_threads": {"status": "resolved", "unresolved": 0},
+        "requested_reviewer_count": 0,
+        "requested_team_count": 0,
+        "holds": clear_holds,
+        "merge_queue_gate": {
+            "status": "success",
+            "name": "merge-queue-gate",
+            "head_sha": head_sha,
+            "exact_head": True,
+        },
     }
 
 
@@ -579,6 +630,7 @@ def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch)
     snapshot = {
         "schema": "stacked_prs.v1",
         "status": "ok",
+        "main": {"sha": "1" * 40},
         "entries": [
             _ready_entry(1, head_ref=parent_ref, head_sha=root_sha, base_ref="main"),
             _ready_entry(2, head_ref="child-branch", head_sha=next_sha, base_ref=parent_ref),

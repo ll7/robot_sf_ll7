@@ -241,6 +241,7 @@ def test_preflight_fails_loudly_after_bounded_retries(monkeypatch, tmp_path: Pat
     # Backoff slept between attempts only (N-1 times), with linear growth.
     assert slept == [0.5, 1.0]
     assert "after 3 attempt(s)" in str(excinfo.value)
+    assert "external_unavailable" in str(excinfo.value)
 
 
 def test_preflight_rejects_non_positive_max_attempts(tmp_path: Path) -> None:

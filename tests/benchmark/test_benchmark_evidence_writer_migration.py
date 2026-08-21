@@ -301,6 +301,7 @@ def test_trace_dwa_production_trace_path_uses_shared_json_writer(
         {
             "scenario_id": scenario_id,
             "seed": seed,
+            "algo": "dwa",
             "termination_reason": "max_steps",
             "steps": 1,
             "outcome": {
@@ -309,7 +310,13 @@ def test_trace_dwa_production_trace_path_uses_shared_json_writer(
                 "timeout_event": True,
             },
             "algorithm_metadata": {
+                "algorithm": "dwa",
+                "canonical_algorithm": "dwa",
+                "status": "ok",
+                "planner_kinematics": {"execution_mode": "adapter"},
                 "planner_decision_trace": {
+                    "schema_version": "planner-decision-trace.v1",
+                    "dt": 0.1,
                     "steps": [
                         {
                             "step": 0,
@@ -335,8 +342,8 @@ def test_trace_dwa_production_trace_path_uses_shared_json_writer(
                             "route_rescue_type": None,
                             "feasibility_slowdown_active": False,
                         }
-                    ]
-                }
+                    ],
+                },
             },
         }
         for scenario_id, seed, _ in _TRACE.TARGET_EPISODES

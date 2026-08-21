@@ -26,6 +26,7 @@ on:
       - "scripts/tools/check_dependency_license_inventory.py"
       - "tests/tools/test_check_dependency_license_inventory.py"
       - "docs/context/dependency_license_inventory.md"
+      - "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
       - "scripts/validation/release_legal_inputs.v1.json"
@@ -60,6 +61,7 @@ jobs:
           # locked-environment inventory remains a release-time evidence gate.
           allow-licenses: >-
             Apache-2.0,
+            Apache-2.0 WITH LLVM-exception,
             BSD-2-Clause,
             BSD-3-Clause,
             ISC,

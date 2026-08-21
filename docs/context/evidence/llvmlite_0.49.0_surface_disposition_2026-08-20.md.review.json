@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md",
+  "artifact_sha256": "cedd2a1bf66a9aabfd219514671c88a61dc6d26128a17baebb823b8a41e69ed0",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

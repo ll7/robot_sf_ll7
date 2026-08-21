@@ -10,9 +10,12 @@ import pytest
 
 from scripts.dev.check_dependabot_update_policy import (
     PolicyError,
+    _diff_vs_head,
     changed_files,
     changed_lock_package_names,
     classify_package_names,
+    evaluate_update,
+    filter_normalization_only_classifications,
     load_policy,
     validate_ci_workflow,
     validate_dependabot_config,
@@ -119,6 +122,38 @@ def test_authoritative_changed_file_list_avoids_unneeded_base_lookup(tmp_path: P
     ]
 
 
+def test_diff_vs_head_falls_back_to_two_dot_when_three_dot_lacks_merge_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shallow CI checkouts lack a merge base; the diff must fall back to two-dot."""
+
+    def fake_git_text(repo_root, args):
+        if args[:2] == ["diff", "--name-only"] and args[-1].endswith("...HEAD"):
+            return None
+        return "pyproject.toml\nuv.lock\n"
+
+    monkeypatch.setattr("scripts.dev.check_dependabot_update_policy._git_text", fake_git_text)
+    assert _diff_vs_head(tmp_path, "origin/main", ["--name-only"]) == "pyproject.toml\nuv.lock\n"
+
+
+def test_diff_vs_head_three_dot_preferred_when_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full clone keeps the three-dot diff as the primary path."""
+    calls: list[list[str]] = []
+
+    def fake_git_text(repo_root, args):
+        calls.append(args)
+        if args[:2] == ["diff", "--name-only"]:
+            return "README.md\n"
+        return None
+
+    monkeypatch.setattr("scripts.dev.check_dependabot_update_policy._git_text", fake_git_text)
+    assert _diff_vs_head(tmp_path, "origin/main", ["--name-only"]) == "README.md\n"
+    assert len(calls) == 1
+    assert calls[0][-1] == "origin/main...HEAD"
+
+
 def test_workflow_step_uses_the_policy_checker() -> None:
     """The existing PR contract workflow must execute the policy checker."""
     workflow = (REPO_ROOT / ".github/workflows/pr-contract-check.yml").read_text(encoding="utf-8")
@@ -131,3 +166,69 @@ def test_direct_dependency_coverage_rejects_unreviewed_name() -> None:
     policy = load_policy()
     with pytest.raises(PolicyError, match="missing from the canonical policy"):
         validate_direct_dependency_coverage({"unreviewed-package"}, policy)
+
+
+def test_marker_only_direct_row_does_not_add_a_second_risk_class() -> None:
+    policy = load_policy()
+    classifications = classify_package_names({"numpy", "pylint"}, {"numpy", "pylint"}, policy)
+
+    effective, normalized = filter_normalization_only_classifications(
+        classifications,
+        {"normalization_only_packages": ["numpy"]},
+        changed_direct_names=set(),
+    )
+
+    assert normalized == ["numpy"]
+    assert [item["name"] for item in effective] == ["pylint"]
+    assert validate_direct_update_lanes(effective) == ["developer-tooling"]
+
+
+def test_evaluate_update_exposes_resolution_evidence_and_filters_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_lock = """
+version = 1
+
+[[package]]
+name = "numpy"
+version = "2.0.0"
+
+[[package]]
+name = "pylint"
+version = "3.3.7"
+"""
+    head_lock = base_lock.replace(
+        'name = "numpy"\nversion = "2.0.0"',
+        'name = "numpy"\nversion = "2.0.0"\nresolution-markers = ["python_version >= \'3.11\'"]',
+    ).replace('name = "pylint"\nversion = "3.3.7"', 'name = "pylint"\nversion = "4.0.7"')
+    (tmp_path / "uv.lock").write_text(head_lock, encoding="utf-8")
+    policy = load_policy()
+
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.direct_dependency_names",
+        lambda _repo_root: {"numpy", "pylint"},
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.changed_files",
+        lambda *_args, **_kwargs: ["uv.lock"],
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.git_file_at_ref",
+        lambda _repo_root, _base_ref, relative_path: (
+            base_lock if relative_path == "uv.lock" else ""
+        ),
+    )
+
+    report = evaluate_update(repo_root=tmp_path, base_ref="origin/main", policy=policy)
+
+    assert report["status"] == "pass"
+    assert report["normalization_only_packages"] == ["numpy"]
+    assert [item["name"] for item in report["effective_changed_packages"]] == ["pylint"]
+    assert report["direct_risk_classes"] == ["developer-tooling"]
+    evidence = report["resolution_evidence"]
+    assert evidence["schema_version"] == "robot-sf.dependency-resolution-evidence.v1"
+    assert evidence["material_packages"] == ["pylint"]
+    assert evidence["locks"]["uv.lock"]["profiles"]
+    assert evidence["locks"]["uv.lock"]["profile_ids"]
+    assert evidence["locks"]["uv.lock"]["owners"][0]["id"] == "root"
+    assert evidence["changed_package_classifications"][0]["name"] == "numpy"

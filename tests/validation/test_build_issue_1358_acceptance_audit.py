@@ -81,3 +81,29 @@ def test_issue_1358_tracked_audit_artifact_matches_builder() -> None:
     tracked_payload = json.loads((REPO_ROOT / DEFAULT_OUTPUT).read_text(encoding="utf-8"))
 
     assert tracked_payload == build_audit(repo_root=REPO_ROOT)
+
+
+def test_issue_1358_cli_check_contract_does_not_write_evidence(tmp_path: Path) -> None:
+    """Contract-only validation works with an unrelated/missing repository root."""
+
+    output = tmp_path / "should-not-exist.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/build_issue_1358_acceptance_audit.py",
+            "--repo-root",
+            str(tmp_path / "missing-repo"),
+            "--output",
+            str(output),
+            "--write",
+            "--check-contract",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "contract valid" in result.stdout
+    assert not output.exists()

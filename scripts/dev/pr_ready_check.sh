@@ -391,7 +391,17 @@ else
 fi
 uv run python "$SCRIPT_DIR/check_perf_evidence.py" "${perf_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
-"$SCRIPT_DIR/ruff_fix_format.sh"
+format_changed_files=()
+for changed_file in "${changed_files[@]}"; do
+  if [[ "$changed_file" == *.py && -f "$changed_file" ]]; then
+    format_changed_files+=("$changed_file")
+  fi
+done
+if [[ ${#format_changed_files[@]} -gt 0 ]]; then
+  "$SCRIPT_DIR/ruff_fix_format.sh" "${format_changed_files[@]}"
+else
+  printf 'No changed Python files require scoped Ruff formatting.\n' >&2
+fi
 
 # Keep coverage.py's SQLite database outside pytest's managed temporary roots.
 # The readiness wrapper owns this absolute path and removes it only when every

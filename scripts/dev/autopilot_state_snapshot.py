@@ -18,6 +18,7 @@ from typing import Any
 
 from scripts.dev import goal_issue_admission
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.blocker_receipt import summarize_decisions
 from scripts.dev.check_pr_ci_status import _latest_check_runs
 from scripts.dev.routed_worker_manifest import SCHEMA_VERSION as ROUTE_MANIFEST_SCHEMA
 from scripts.dev.routed_worker_manifest import classify_worker_output
@@ -148,17 +149,18 @@ def _route_attempt_snapshot(attempt: Any) -> dict[str, Any]:
         }
 
     compact = attempt.get("compact_artifacts")
+    compact_artifacts = compact if isinstance(compact, dict) else {}
     compact_artifacts_available = isinstance(compact, dict)
     missing_artifacts: list[str] = []
     if compact_artifacts_available:
-        for key, value in sorted(compact.items()):
+        for key, value in sorted(compact_artifacts.items()):
             if not isinstance(value, dict) or value.get("present") is not True:
                 missing_artifacts.append(str(key))
     terminal_state = attempt.get("terminal_state")
     output_contract = classify_worker_output(
         attempt,
         terminal_state=terminal_state,
-        compact_artifacts=compact if isinstance(compact, dict) else {},
+        compact_artifacts=compact_artifacts,
     )
     return {
         "attempt_index": attempt.get("attempt_index"),
@@ -879,6 +881,41 @@ def pr_snapshot(
     return rows, sources, errors
 
 
+def blocker_receipt_snapshot(paths: list[str | Path]) -> dict[str, Any]:
+    """Summarize external blocker-decision artifacts for loop orientation."""
+    decisions: list[dict[str, Any]] = []
+    errors: list[str] = []
+    normalized_paths = [str(Path(path)) for path in paths]
+    for raw_path in normalized_paths:
+        path = Path(raw_path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{raw_path}: unavailable or malformed JSON ({exc})")
+            continue
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict) and isinstance(payload.get("decisions"), list):
+            rows = payload["decisions"]
+        elif isinstance(payload, dict) and "status" in payload:
+            rows = [payload]
+        else:
+            errors.append(f"{raw_path}: expected a decision object or decisions list")
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                errors.append(f"{raw_path}: decision {index} is not an object")
+                continue
+            decisions.append(row)
+    return {
+        "schema": "goal_blocker_snapshot.v1",
+        "status": "ok" if not errors else "error",
+        "paths": normalized_paths,
+        "summary": summarize_decisions(decisions),
+        "errors": errors,
+    }
+
+
 def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     """Build the full snapshot payload."""
     git, sources, errors = git_snapshot(
@@ -911,6 +948,9 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         if route_row.get("error"):
             errors.append(f"route manifest {manifest_path}: {route_row['error']}")
 
+    blocker_receipts = blocker_receipt_snapshot(getattr(args, "blocker_decision", []))
+    errors.extend(f"blocker decision artifact: {error}" for error in blocker_receipts["errors"])
+
     checkpoint = controller_checkpoint(
         git=git,
         claims=claims,
@@ -938,6 +978,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "issues_truncated": issue_truncations,
         "prs": prs,
         "route_failures": route_failures,
+        "blocker_receipts": blocker_receipts,
         "controller_checkpoint": checkpoint,
         "errors": errors,
         "sources": sources,
@@ -975,6 +1016,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="route manifest path to summarize as compact failure evidence; may be repeated",
+    )
+    parser.add_argument(
+        "--blocker-decision",
+        action="append",
+        default=[],
+        help="external blocker-decision JSON artifact to summarize; may be repeated",
     )
     parser.add_argument("--remote", default="origin", help="git remote used for claim refs")
     parser.add_argument(

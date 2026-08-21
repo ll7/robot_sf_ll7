@@ -64,6 +64,19 @@ REQUIRED_CANDIDATE_KEYS = frozenset(
         "verdict",
     }
 )
+REQUIRED_MANIFEST_KEYS = frozenset(
+    {
+        "schema_version",
+        "expected_packet_schema",
+        "status",
+        "claim_boundary",
+        "packet",
+        "mutations",
+    }
+)
+REQUIRED_MANIFEST_PACKET_KEYS = frozenset(
+    {"id", "path", "sha256", "source_sha256", "reference_sha256"}
+)
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 LOCAL_ONLY_MANIFEST_PARTS = frozenset({".git", ".venv", ".worktrees", "output", "results"})
 DIMENSIONS = (
@@ -191,10 +204,39 @@ def canonical_json(data: Any) -> str:
     )
 
 
+def _reject_duplicate_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate object keys instead of silently applying last-write-wins.
+
+    Returns:
+        The parsed object after confirming that every key occurs once.
+    """
+
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key {key!r}")
+        result[key] = value
+    return result
+
+
 def _reject_non_finite_json_number(value: str) -> Any:
     """Reject Python's non-standard JSON constants while parsing artifacts."""
 
     raise ValueError(f"non-finite JSON number {value!r} is not supported")
+
+
+def parse_json_text(text: str) -> Any:
+    """Parse JSON with strict duplicate-key and finite-number handling.
+
+    Returns:
+        The parsed JSON value.
+    """
+
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_json_object,
+        parse_constant=_reject_non_finite_json_number,
+    )
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -205,9 +247,7 @@ def load_json(path: Path) -> dict[str, Any]:
     """
 
     try:
-        data = json.loads(
-            path.read_text(encoding="utf-8"), parse_constant=_reject_non_finite_json_number
-        )
+        data = parse_json_text(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise AgentFigureEvalError(f"{path}: unreadable JSON: {exc}") from exc
     if not isinstance(data, dict):
@@ -261,6 +301,12 @@ def _load_eval_manifest(manifest_path: Path) -> dict[str, Any]:
     """
 
     manifest = load_json(manifest_path)
+    if set(manifest) != REQUIRED_MANIFEST_KEYS:
+        missing = sorted(REQUIRED_MANIFEST_KEYS - set(manifest))
+        extra = sorted(set(manifest) - REQUIRED_MANIFEST_KEYS)
+        raise AgentFigureEvalError(
+            f"manifest keys invalid: missing {missing!r}; unexpected {extra!r}"
+        )
     _validate_eval_manifest_header(manifest)
     packet = manifest.get("packet")
     if not isinstance(packet, dict):
@@ -292,6 +338,12 @@ def _validate_eval_manifest_header(manifest: Mapping[str, Any]) -> None:
 def _validate_eval_manifest_packet(packet: Mapping[str, Any]) -> None:
     """Validate the manifest's one canonical packet record."""
 
+    if set(packet) != REQUIRED_MANIFEST_PACKET_KEYS:
+        missing = sorted(REQUIRED_MANIFEST_PACKET_KEYS - set(packet))
+        extra = sorted(set(packet) - REQUIRED_MANIFEST_PACKET_KEYS)
+        raise AgentFigureEvalError(
+            f"manifest packet keys invalid: missing {missing!r}; unexpected {extra!r}"
+        )
     for key in ("id", "path", "sha256", "source_sha256", "reference_sha256"):
         if not isinstance(packet.get(key), str) or not packet[key]:
             raise AgentFigureEvalError(f"manifest packet {key} must be non-empty text")
@@ -338,6 +390,7 @@ def _load_canonical_packet(
         sha_key="sha256",
     )
     try:
+        parse_json_text(packet_path.read_text(encoding="utf-8"))
         typed_packet = load_result_interpretation_packet(packet_path)
     except (OSError, ValueError, ResultInterpretationPacketError) as exc:
         raise AgentFigureEvalError(
@@ -1459,14 +1512,43 @@ def evaluate_packet(packet: dict[str, Any]) -> CaseEvaluation:
     )
 
 
+def _strict_json_equal(left: Any, right: Any) -> bool:
+    """Compare JSON values without Python's bool/int equality coercion.
+
+    Returns:
+        Whether the two JSON values match with type-sensitive recursive equality.
+    """
+
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return set(left) == set(right) and all(
+            _strict_json_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            _strict_json_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right, strict=True)
+        )
+    return left == right
+
+
 def _dimension_scores(reference: dict[str, Any], observed: dict[str, Any]) -> list[DimensionScore]:
     reference_dimensions = _required_dimension_mappings(reference, "reference")
     observed_dimensions = _required_dimension_mappings(observed, "interpretation")
     return [
         DimensionScore(
             dimension=dimension,
-            score=1.0 if reference_dimensions[dimension] == observed_dimensions[dimension] else 0.0,
-            passed=reference_dimensions[dimension] == observed_dimensions[dimension],
+            score=(
+                1.0
+                if _strict_json_equal(
+                    reference_dimensions[dimension], observed_dimensions[dimension]
+                )
+                else 0.0
+            ),
+            passed=_strict_json_equal(
+                reference_dimensions[dimension], observed_dimensions[dimension]
+            ),
             expected=reference_dimensions[dimension],
             observed=observed_dimensions[dimension],
         )
@@ -1526,13 +1608,17 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
                 or obs_evidence.get("reported_value") == 0
             )
         ),
-        "denominator_loss": ref_source.get("denominator_n") != obs_source.get("denominator_n"),
+        "denominator_loss": not _strict_json_equal(
+            ref_source.get("denominator_n"), obs_source.get("denominator_n")
+        ),
         "analysis_unit_mismatch": (
-            ref_estimand.get("analysis_unit") != obs_estimand.get("analysis_unit")
+            not _strict_json_equal(
+                ref_estimand.get("analysis_unit"), obs_estimand.get("analysis_unit")
+            )
         ),
         "wrong_pairing_resampling": (
-            ref_stats.get("paired") != obs_stats.get("paired")
-            or ref_stats.get("resampling") != obs_stats.get("resampling")
+            not _strict_json_equal(ref_stats.get("paired"), obs_stats.get("paired"))
+            or not _strict_json_equal(ref_stats.get("resampling"), obs_stats.get("resampling"))
         ),
         "fallback_degraded_promotion": (
             (
@@ -1554,18 +1640,24 @@ def _critical_errors(reference: dict[str, Any], observed: dict[str, Any]) -> dic
             and obs_boundary.get("null_result_claim") != "not_supported"
         ),
         "effect_direction_desirability": (
-            ref_visual.get("effect_direction", "not_declared")
-            != obs_visual.get("effect_direction", "not_declared")
-            or ref_visual.get("metric_desirability", "not_declared")
-            != obs_visual.get("metric_desirability", "not_declared")
+            not _strict_json_equal(
+                ref_visual.get("effect_direction", "not_declared"),
+                obs_visual.get("effect_direction", "not_declared"),
+            )
+            or not _strict_json_equal(
+                ref_visual.get("metric_desirability", "not_declared"),
+                obs_visual.get("metric_desirability", "not_declared"),
+            )
         ),
         "native_adapter_merge": (
             len(obs_evidence.get("row_provenance", [])) > 1
             and obs_evidence.get("rows_disclosed") is False
         ),
         "multiplicity_language": (
-            ref_stats.get("multiplicity_language", "not_declared")
-            != obs_stats.get("multiplicity_language", "not_declared")
+            not _strict_json_equal(
+                ref_stats.get("multiplicity_language", "not_declared"),
+                obs_stats.get("multiplicity_language", "not_declared"),
+            )
         ),
     }
 
@@ -1922,6 +2014,7 @@ __all__ = [
     "evaluate_packet",
     "list_fixture_mutations",
     "load_verified_packets",
+    "parse_json_text",
     "replay_all_fixture_mutations",
     "replay_fixture_mutation",
     "sha256_file",

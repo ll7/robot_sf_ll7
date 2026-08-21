@@ -14,6 +14,7 @@ from robot_sf.benchmark.agent_figure_interpretation_eval import (
     canonical_json,
     evaluate_manifest,
     list_fixture_mutations,
+    parse_json_text,
     replay_all_fixture_mutations,
     replay_fixture_mutation,
     validate_candidate_envelope,
@@ -69,8 +70,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def _load_candidate_payload(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        return parse_json_text(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
         raise AgentFigureEvalError(f"{path}: unreadable candidate JSON: {exc}") from exc
 
 

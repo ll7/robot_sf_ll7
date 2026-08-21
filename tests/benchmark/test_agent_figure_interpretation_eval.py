@@ -309,6 +309,59 @@ def test_manifest_non_finite_json_fails_closed(tmp_path: Path) -> None:
         load_verified_packets(manifest_path)
 
 
+def test_duplicate_manifest_json_keys_fail_closed(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest_text = manifest_path.read_text(encoding="utf-8")
+    manifest_path.write_text(
+        manifest_text.replace(
+            '"status": "evaluation_artifacts_only",',
+            '"status": "evaluation_artifacts_only", "status": "evaluation_artifacts_only",',
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AgentFigureEvalError, match="unreadable JSON"):
+        load_verified_packets(manifest_path)
+
+
+def test_duplicate_canonical_packet_json_keys_fail_closed(tmp_path: Path) -> None:
+    root = _copy_fixture_tree(tmp_path)
+    packet_path = root / "v1" / "ch7_visualization_causal_abstention.json"
+    packet_text = packet_path.read_text(encoding="utf-8")
+    packet_path.write_text(
+        packet_text.replace(
+            '"packet_id": "ch7_visualization_causal_abstention_fixture",',
+            '"packet_id": "ch7_visualization_causal_abstention_fixture", '
+            '"packet_id": "ch7_visualization_causal_abstention_fixture",',
+        ),
+        encoding="utf-8",
+    )
+    packet_digest = eval_mod.sha256_file(packet_path)
+    manifest_path = root / "agent_figure_interpretation_eval_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["packet"]["sha256"] = packet_digest
+    manifest["packet"]["reference_sha256"] = packet_digest
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(AgentFigureEvalError, match="canonical result packet validation failed"):
+        load_verified_packets(manifest_path)
+
+
+def test_dimension_comparison_is_json_type_sensitive() -> None:
+    packet = _clean_packet()
+    packet["interpretation"]["stats_multiplicity"]["paired"] = 1  # type: ignore[index]
+
+    result = evaluate_packet(packet).to_dict()
+
+    stats_score = next(
+        score for score in result["scores"] if score["dimension"] == "stats_multiplicity"
+    )
+    assert stats_score["passed"] is False
+    assert result["critical_errors"]["wrong_pairing_resampling"] is True
+    assert result["status"] == "failed"
+
+
 def test_replay_digest_omission_and_stale_bytes_fail_closed() -> None:
     omitted = _candidate("clean")
     del omitted["provenance"]["source_sha256"]  # type: ignore[index]
@@ -892,6 +945,28 @@ def test_cli_lists_and_replays_candidate_envelopes(tmp_path: Path) -> None:
         text=True,
     )
     assert json.loads(validated.stdout)["verdict"] == "valid"
+
+    duplicate_candidate_path = tmp_path / "duplicate_candidate.json"
+    duplicate_candidate_text = json.dumps(_candidate("clean"))
+    duplicate_candidate_path.write_text(
+        duplicate_candidate_text[:-1] + ', "verdict": "pending"}', encoding="utf-8"
+    )
+    duplicate = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--manifest",
+            str(MANIFEST),
+            "--candidate",
+            str(duplicate_candidate_path),
+            "--validate",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert duplicate.returncode == 2
+    assert "duplicate JSON object key" in duplicate.stderr
 
     all_candidates_path = tmp_path / "candidates.json"
     all_candidates_path.write_text(

@@ -107,9 +107,11 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "proof",
         "testing",
         "validation",
+        "validation gates",
         "validation proof",
         "validation testing",
         "verification",
+        "verification gates",
     ),
 }
 

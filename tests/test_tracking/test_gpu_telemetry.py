@@ -130,3 +130,96 @@ def test_sampler_serializes_per_device_gpu_metrics(monkeypatch: pytest.MonkeyPat
             "memory_total_mb": 12.0,
         },
     ]
+
+
+class _FakeCudaUsable:
+    """Torch stand-in whose real CUDA operation succeeds."""
+
+    class cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        @staticmethod
+        def synchronize() -> None:
+            return None
+
+    @staticmethod
+    def zeros(*_args, **_kwargs) -> None:
+        return None
+
+
+class _FakeCudaNvmlBroken:
+    """Torch stand-in reproducing the issue #7712 NVML/driver failure."""
+
+    class cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        @staticmethod
+        def synchronize() -> None:
+            return None
+
+    @staticmethod
+    def zeros(*_args, **_kwargs):
+        raise RuntimeError(
+            "NVML_SUCCESS == DriverAPI::get()->nvmlInit_v2_() INTERNAL ASSERT FAILED"
+        )
+
+
+class _FakeCudaUnavailable:
+    """Torch stand-in with no usable CUDA device."""
+
+    class cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+        @staticmethod
+        def synchronize() -> None:
+            return None
+
+    @staticmethod
+    def zeros(*_args, **_kwargs) -> None:
+        return None
+
+
+def test_classify_cuda_runtime_usable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real CUDA operation that succeeds classifies as usable."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "torch", _FakeCudaUsable())
+    classification = gpu_module.classify_cuda_runtime()
+    assert classification.usable is True
+    assert classification.status == "usable"
+    assert classification.to_dict() == {
+        "status": "usable",
+        "reason": classification.reason,
+    }
+
+
+def test_classify_cuda_runtime_nvml_broken_classifies_as_unusable_nvml(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #7712: CUDA-enabled build with broken NVML is its own failure class."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "torch", _FakeCudaNvmlBroken())
+    classification = gpu_module.classify_cuda_runtime()
+    assert classification.usable is False
+    assert classification.status == "unusable_nvml"
+    assert "NVML" in classification.reason
+
+
+def test_classify_cuda_runtime_unavailable_when_no_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CPU-only hosts remain independently classifiable."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "torch", _FakeCudaUnavailable())
+    classification = gpu_module.classify_cuda_runtime()
+    assert classification.usable is False
+    assert classification.status == "unavailable"
+    assert "is_available" in classification.reason

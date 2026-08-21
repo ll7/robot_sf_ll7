@@ -268,6 +268,7 @@ fi
 if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
   preflight_check_fast_pysf
+  preflight_check_cuda_runtime
 fi
 
 resolve_base_ref

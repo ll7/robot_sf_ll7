@@ -52,6 +52,18 @@ entries:
   status: current
   freshness: policy
   area: workflow_policy
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
   status: evidence
   freshness: evidence
@@ -5249,6 +5261,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6972_trace_overhead_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas
   status: evidence
   freshness: evidence
   area: benchmark_evidence

@@ -385,6 +385,9 @@ _FAST_FILES = {
     # in the exact-head changed-coverage gate.
     "test_check_cuda_runtime.py",
     "test_gpu_telemetry.py",
+    # Collision-pressure report tests are deterministic schema and materialization
+    # contracts for the changed benchmark producer.
+    "test_collision_pressure_report.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

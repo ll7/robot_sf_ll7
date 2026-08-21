@@ -278,7 +278,7 @@ def write_collision_pressure_report(
     json_target.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     row = build_compact_report_row(report)
     with csv_target.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=tuple(row))
+        writer = csv.DictWriter(handle, fieldnames=tuple(row), lineterminator="\n")
         writer.writeheader()
         writer.writerow(row)
     return {"json": json_target, "csv": csv_target}
@@ -487,3 +487,7 @@ __all__ = [
     "main",
     "write_collision_pressure_report",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,157 @@
+{
+  "adapter": {
+    "episode_key": {
+      "format": "<release-arm>::<episode_id>",
+      "operation": "format_exact",
+      "source_locators": {
+        "episode_id": "episode_id",
+        "release_arm": "archive path payload/runs/<release-arm>__differential_drive/episodes.jsonl; the fixed kinematics suffix maps to the manifest planner key"
+      },
+      "target_field": "episode_key"
+    },
+    "scenario_family": {
+      "operation": "copy_exact",
+      "source_locator": "scenario_params.metadata.archetype",
+      "target_field": "scenario_family"
+    },
+    "scientific_category_inference": "none"
+  },
+  "analysis_only": true,
+  "benchmark_promotion": false,
+  "breakdown_reconciliation": {
+    "eligible_episode_count": {
+      "collision_event_count": 1546,
+      "contact_episode_count": 1545,
+      "eligible_episode_count": 2100,
+      "obstacle_contact_episode_count": 1026,
+      "pedestrian_contact_episode_count": 520
+    },
+    "family_counts": {
+      "doorway": {
+        "collision_event_count": 949,
+        "contact_episode_count": 948,
+        "eligible_episode_count": 1260,
+        "obstacle_contact_episode_count": 640,
+        "pedestrian_contact_episode_count": 309
+      },
+      "narrow_doorway": {
+        "collision_event_count": 353,
+        "contact_episode_count": 353,
+        "eligible_episode_count": 420,
+        "obstacle_contact_episode_count": 353,
+        "pedestrian_contact_episode_count": 0
+      },
+      "robot_crowding": {
+        "collision_event_count": 244,
+        "contact_episode_count": 244,
+        "eligible_episode_count": 420,
+        "obstacle_contact_episode_count": 33,
+        "pedestrian_contact_episode_count": 211
+      }
+    }
+  },
+  "claim_boundary": "Analysis-only materialization of descriptive exact collision-event counts from immutable release rows. This packet does not admit evidence, restore a withdrawn dissertation row, or establish probability, causality, severity, physical risk, or real-world safety.",
+  "evidence_grade": "diagnostic-only",
+  "evidence_status": "analysis_only",
+  "generated_outputs": [
+    "README.md",
+    "source_manifest.json",
+    "normalized_typed_ledger_slice.jsonl",
+    "normalized_typed_ledger_slice.jsonl.review.json",
+    "collision_pressure_report.json",
+    "collision_pressure_report.json.review.json",
+    "collision_pressure_report.csv",
+    "collision_pressure_report.csv.review.json",
+    "SHA256SUMS"
+  ],
+  "missing_collision_partner_id_by_type": {
+    "static_geometry": 1026
+  },
+  "missing_optional_fields": {
+    "collision_partner_id": 1026,
+    "relative_speed_at_contact": 0
+  },
+  "paper_facing": false,
+  "report_summary": {
+    "collision_event_count": 1546,
+    "contact_episode_count": 1545,
+    "eligible_episode_count": 2100,
+    "eligible_episode_key_sha256": "32821e179f55f5876fa25753ffa0a04a071fc76c84815372581a3a9d710365d5",
+    "excluded_row_count": 0,
+    "schema_version": "collision_pressure_report.v1"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "row_summary": {
+    "eligible_family_counts": {
+      "doorway": 1260,
+      "narrow_doorway": 420,
+      "robot_crowding": 420
+    },
+    "eligible_rows": 2100,
+    "rows_per_run": {
+      "goal": 1440,
+      "guarded_ppo": 1440,
+      "hybrid_rule_v3_fast_progress_static_escape": 1440,
+      "hybrid_rule_v3_fast_progress_static_escape_continuous": 1440,
+      "orca": 1440,
+      "ppo": 1440,
+      "prediction_planner": 1440,
+      "predictive_mppi": 1440,
+      "risk_dwa": 1440,
+      "sacadrl": 1440,
+      "scenario_adaptive_hybrid_orca_v1": 1440,
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": 1440,
+      "social_force": 1440,
+      "socnav_sampling": 1440
+    },
+    "run_count": 14,
+    "source_member_count": 14,
+    "total_release_rows": 20160
+  },
+  "schema_version": "diss_613_collision_pressure_release_0_0_3_post1.v1",
+  "source": {
+    "bundle_asset_name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "bundle_sha256": "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1",
+    "payload_checksum_manifest_entries": 85,
+    "publication_commit": "ded9027d2928512c14bc241397e0ab1d8f586654",
+    "release_id": "paper_experiment_matrix_v2_h600_s30_v0_0_3_post1",
+    "release_tag": "0.0.3.post1",
+    "row_production_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+    "source_checksums": {
+      "payload/reports/scenario_family_breakdown.csv": "cb42338453db251024711660d8d664da930dcfa3cca06527feb151dd31bbed6f",
+      "payload/runs/goal__differential_drive/episodes.jsonl": "21702588cd197890fe2317f7214c71fc656a03009da7d2279df36ff1c21459e2",
+      "payload/runs/guarded_ppo__differential_drive/episodes.jsonl": "2b0857701f367ff6c9832bf13463725c379ba6088f2739a68a56bd7c2bd312b2",
+      "payload/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl": "1e25645d2290a2dbe7d055397637c7e2c16e8ebacc6960e54e00cadcbbe12f7b",
+      "payload/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl": "207af042bb9d05771ad7b11df7fba388764c6ea1220a7d8f23f75fc2aed6e369",
+      "payload/runs/orca__differential_drive/episodes.jsonl": "7b09a77f18a0b27107fbb277f4f842f09fda20430e842fa01552f645c5f82a42",
+      "payload/runs/ppo__differential_drive/episodes.jsonl": "c7b776a236254365eb71174070b4299af959423135707229e1af90dbe6e5fec1",
+      "payload/runs/prediction_planner__differential_drive/episodes.jsonl": "3d6b88e000b07f45943a6257c63f607bdb76f3b384e9a5d06678779929a82cb0",
+      "payload/runs/predictive_mppi__differential_drive/episodes.jsonl": "998dee2fdb844e609305a835e7e33ca9b87817d787b9a804b3f6965732a54096",
+      "payload/runs/risk_dwa__differential_drive/episodes.jsonl": "16587c82a72e117536729d19d87d628a925dc215700b6e82ea134c3843bee8d9",
+      "payload/runs/sacadrl__differential_drive/episodes.jsonl": "a5091a5c4b03b850d75b322e9c32fafc73355b2c40b169ab654532fd84186b67",
+      "payload/runs/scenario_adaptive_hybrid_orca_v1__differential_drive/episodes.jsonl": "9647247ca444901858c77f38dd1aa359922e0d4e9f6787dbef52f60bde601875",
+      "payload/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl": "e79418c5fcef14a91cb78bc81f5390fc9c61cd61a2f2329c74d9e8869a799e65",
+      "payload/runs/social_force__differential_drive/episodes.jsonl": "a201196ffca6fa10bd1131b85226879f557a9868722bfb7de67021c33a7f3f25",
+      "payload/runs/socnav_sampling__differential_drive/episodes.jsonl": "4df8f2926581be95a0abaaafbc56d4d23079bec1f84e849d5733098811c221e8",
+      "release_archive": "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1"
+    },
+    "source_members": [
+      "payload/runs/goal__differential_drive/episodes.jsonl",
+      "payload/runs/guarded_ppo__differential_drive/episodes.jsonl",
+      "payload/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+      "payload/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+      "payload/runs/orca__differential_drive/episodes.jsonl",
+      "payload/runs/ppo__differential_drive/episodes.jsonl",
+      "payload/runs/prediction_planner__differential_drive/episodes.jsonl",
+      "payload/runs/predictive_mppi__differential_drive/episodes.jsonl",
+      "payload/runs/risk_dwa__differential_drive/episodes.jsonl",
+      "payload/runs/sacadrl__differential_drive/episodes.jsonl",
+      "payload/runs/scenario_adaptive_hybrid_orca_v1__differential_drive/episodes.jsonl",
+      "payload/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+      "payload/runs/social_force__differential_drive/episodes.jsonl",
+      "payload/runs/socnav_sampling__differential_drive/episodes.jsonl",
+      "payload/reports/scenario_family_breakdown.csv"
+    ]
+  },
+  "status": "complete"
+}

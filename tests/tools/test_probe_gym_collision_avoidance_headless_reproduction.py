@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from scripts.tools import probe_gym_collision_avoidance_headless_reproduction as probe
+from tests.support.command_results import command_result_factory
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -96,21 +97,14 @@ def test_run_probe_preserves_venv_symlink_path(
 
     seen_commands: list[list[str]] = []
 
-    def fake_run(
-        name: str, command: list[str], cwd: Path, timeout_seconds: int
-    ) -> probe.CommandResult:
-        """Record staged commands while returning successful probe results."""
-        seen_commands.append(command)
-        return probe.CommandResult(
-            name=name,
-            command=command,
-            returncode=0,
-            failure_summary=None,
-            stdout_tail="ok",
-            stderr_tail="",
-        )
-
-    monkeypatch.setattr(probe, "_run_command", fake_run)
+    monkeypatch.setattr(
+        probe,
+        "_run_command",
+        command_result_factory(
+            probe.CommandResult,
+            on_call=lambda _name, command, _cwd, _timeout: seen_commands.append(command),
+        ),
+    )
     probe.run_probe(repo_root, side_env_python, timeout_seconds=10)
 
     assert seen_commands

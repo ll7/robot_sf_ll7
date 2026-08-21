@@ -249,11 +249,179 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
 
     assert payload["mode"] == "claimable"
     assert payload["issues"][0]["classification"] == "claimable"
+    assert payload["issues"][0]["admission"]["classification"] == "needs_ready_label"
+    assert payload["issues"][0]["admission"]["claim_outcome"] == "unclaimed"
     assert payload["issues"][0]["body_excerpt"] == ""
     assert payload["issues"][0]["body_truncated"] is False
     assert payload["issues"][1]["classification"] == "blocked_label"
     assert "reason" in payload["issues"][1]
     claim.assert_called_once_with([2667, 2668], remote="origin")
+
+
+def test_snapshot_claimable_issues_uses_live_admission_for_ready_candidates() -> None:
+    """Ready candidates must use the canonical check-only wrapper, including future gates."""
+    issue_list = [
+        {
+            "number": 2669,
+            "title": "ready issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2669",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        }
+    ]
+    preflight = {
+        "schema": "issue_implementability.v1",
+        "classification": "needs_dependency",
+        "reasons": ["mandatory dependency is unsatisfied"],
+        "ready": False,
+        "write_allowed": False,
+        "claim": _claim_status(2669),
+    }
+    with (
+        patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh,
+        patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim,
+        patch("scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue") as admit,
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        claim.return_value = {2669: _claim_status(2669)}
+        admit.return_value = {
+            "schema": "goal_issue_admission.v1",
+            "ok": False,
+            "outcome": "not_admitted",
+            "write_attempted": False,
+            "source_ref": "origin/main",
+            "preflight": preflight,
+            "claim": preflight["claim"],
+        }
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7", remote="origin", body_limit=150, limit=1
+        )
+
+    admission = payload["issues"][0]["admission"]
+    assert admission["classification"] == "needs_dependency"
+    assert admission["outcome"] == "not_admitted"
+    assert admission["claim_outcome"] == "unclaimed"
+    admit.assert_called_once_with(
+        2669,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        source_ref="origin/main",
+        check_only=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "classification", "reason_fragment"),
+    [
+        (
+            "blocked_unchanged",
+            "blocked_receipt",
+            "blocker receipt unchanged",
+        ),
+        (
+            "blocker_changed",
+            "needs_re_evaluation",
+            "require fresh evaluation",
+        ),
+    ],
+)
+def test_blocker_decision_fences_claimable_snapshot_dispatch(
+    tmp_path, status: str, classification: str, reason_fragment: str
+) -> None:  # type: ignore[no-untyped-def]
+    """External blocker decisions prevent direct worker admission in queue snapshots."""
+    decision_path = tmp_path / "decisions.json"
+    decision_path.write_text(
+        json.dumps(
+            [
+                {
+                    "issue": 2710,
+                    "status": status,
+                    "reason": "fingerprint decision",
+                    "receipt_digest": "a" * 64,
+                    "current_fingerprint": "b" * 64,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    issue_list = [
+        {
+            "number": 2710,
+            "title": "claimable issue",
+            "state": "OPEN",
+            "url": "https://github.test/issues/2710",
+            "labels": [],
+            "assignees": [],
+        }
+    ]
+
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {2710: _claim_status(2710)}
+            payload = snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=1,
+                blocker_decision_paths=[str(decision_path)],
+            )
+
+    row = payload["issues"][0]
+    assert row["classification"] == classification
+    assert reason_fragment in row["reason"]
+    assert row["blocker_decision"]["status"] == status
+    assert row["dispatch_allowed"] is False
+
+
+def test_malformed_blocker_decision_fails_closed_before_issue_discovery(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A malformed decision artifact cannot silently leave the queue claimable."""
+    decision_path = tmp_path / "malformed.json"
+    decision_path.write_text(json.dumps({"issue": 2710, "status": "unknown"}), encoding="utf-8")
+
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as listing:
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=1,
+            blocker_decision_paths=[str(decision_path)],
+        )
+
+    listing.assert_not_called()
+    assert payload["status"] == "error"
+    assert payload["issues"][0]["status"] == "error"
+
+
+def test_blocked_receipt_without_fingerprint_fails_closed_before_issue_discovery(
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    """An incomplete suppression decision cannot fence a claimable issue."""
+    decision_path = tmp_path / "incomplete.json"
+    decision_path.write_text(
+        json.dumps(
+            {
+                "issue": 2710,
+                "status": "blocked_unchanged",
+                "reason": "fingerprint decision",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as listing:
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=1,
+            blocker_decision_paths=[str(decision_path)],
+        )
+
+    listing.assert_not_called()
+    assert payload["status"] == "error"
+    assert "current_fingerprint" in payload["errors"][0]
 
 
 def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:

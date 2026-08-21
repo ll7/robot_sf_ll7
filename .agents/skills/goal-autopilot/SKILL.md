@@ -208,9 +208,9 @@ Record at start:
   saturated, or user stop.
 - Exclusions: blocked/decision-required issues, draft PRs, benchmark-heavy PRs that
   need manual review.
-- Coordination: implementation selection must use the `goal-issue-implementation` issue claim
-  protocol (`uv run python scripts/dev/issue_claim.py acquire <issue-number>`) before branching so
-  concurrent runs on different PCs do not implement the same issue.
+- Coordination: implementation selection must use the canonical `goal_issue_admission.py`
+  check-then-claim protocol before branching so concurrent runs on different PCs do not implement
+  the same issue.
 
 Do not ask for extra confirmation after this preflight.
 
@@ -330,6 +330,7 @@ use targeted compact snapshots for specific needs:
 # Full orientation snapshot (worktrees, claims, issues, PRs)
 uv run python -m scripts.dev.autopilot_state_snapshot \
   --include-worktrees \
+  --json \
   --claim-issue <issue-number> \
   --issue-search "is:issue is:open <queue-filter>" \
   --pr <pr-number>

@@ -157,9 +157,12 @@ Add `--filter <branch-or-path-substring>` for a single branch cleanup, and read 
 `git worktree list --porcelain` only when the compact payload is insufficient or reports a stale
 administrative entry that needs manual inspection.
 
-Use `--retirement-plan --include-all-worktrees --json` when a bounded report must decide whether a
-worktree is `preserve`, `review`, or `removeable`. Treat every unknown claim, PR, status, or ignored
-artifact classification as a blocker; the report is read-only and never grants deletion authority.
+Use `--retirement-plan --include-all-worktrees --worktree-budget 256 --time-budget-seconds 60 --json`
+when a bounded report must decide whether a worktree is `preserve`, `review`, or `removeable`.
+The budgets cover local inventory construction and remote-enrichment work. Rows that do not fit are
+retained as review-only; require `progress.terminal_status == "complete"` before treating the report
+as complete. Treat `incomplete`, `needs_review`, and every unknown claim, PR, status, or ignored
+artifact classification as blockers; the report is read-only and never grants deletion authority.
 
 - Preserve every relevant tracked, untracked, and ignored-but-important local change before removal
   by committing it, stashing it, saving a patch, promoting a durable artifact, or recording an

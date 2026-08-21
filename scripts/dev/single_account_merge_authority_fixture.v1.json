@@ -1,0 +1,24 @@
+{
+  "schema": "single_account_merge_authority_fixture.v1",
+  "receipt_owner": "scripts/dev/single_account_merge_receipt.py",
+  "receipt_schema": "single_account_merge_receipt.v1",
+  "merge_callers": [
+    {
+      "path": "scripts/dev/stacked_prs.py",
+      "entrypoint": "merge_cascade",
+      "mode": "guarded_apply",
+      "requires_receipt": true
+    },
+    {
+      "path": ".agents/skills/gh-pr-merger/SKILL.md",
+      "entrypoint": "guarded merge workflow",
+      "mode": "documented_apply",
+      "requires_receipt": true
+    }
+  ],
+  "forbidden_direct_merge_patterns": [
+    "pulls/<pr>/merge",
+    "gh pr merge"
+  ],
+  "claim_boundary": "merge-governance integrity only"
+}

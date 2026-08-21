@@ -6,8 +6,10 @@
 # template (configs/adversarial/issue_5303_classic_group_crossing_medium.yaml): the generic
 # adversarial bundle writer materializes the first template scenario, so pointing it at the
 # three-row archetype file would silently run the ``low`` row instead of the frozen held-out
-# ``medium`` family member. The scenario family, map, simulation config, and seed list are
-# unchanged.
+# ``medium`` family member. The scenario family, group-crossing geometry, simulation config, and
+# seed list are unchanged. The v2 template uses an issue-scoped map projection so the required
+# single-pedestrian markers do not alter the shared canonical map used by route-only scenarios
+# and recertification fixtures.
 #
 # What is new is the merged PR #6586 pedestrian binding: the template exposes a
 # ``single_pedestrians`` entry whose id matches the search-space ``pedestrian.id``
@@ -18,7 +20,7 @@
 # expose this binding (``blocked_no_pedestrian``).
 scenarios:
   - name: classic_group_crossing_medium
-    map_id: classic_group_crossing
+    map_id: issue_5303_classic_group_crossing_medium_v2
     simulation_config:
       max_episode_steps: 500
       ped_density: 0.08

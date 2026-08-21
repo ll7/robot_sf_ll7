@@ -71,6 +71,14 @@ Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
 
+The command applies an aggregate REST wall-time budget (`--max-wall-seconds`,
+default 120 seconds) in addition to the 60-second timeout on each individual
+`gh` subprocess. When the aggregate budget expires, the core records a
+structured inventory error, writes the partial plan when an output path was
+requested, returns a non-zero status, and the apply path refuses all
+mutations. A partial plan is never a complete audit; callers may increase the
+budget only when the bounded inventory scope justifies it.
+
 ## Label rules
 
 Canonical execution-state labels are mutually exclusive. The repository also
@@ -98,6 +106,12 @@ surfaces `decision-required`. It does not infer terminality from a future
 acceptance criterion, a hypothetical stop rule, or an unstructured mention of
 the word "terminal". A live claim, worktree, job, blocker, or unavailable
 SLURM inventory keeps the classifier fail-closed.
+
+`state:working` is a live downstream-work qualifier. It is preserved as a
+qualifier, but the classifier must not promote an issue carrying it to
+`state:ready` until an exact-head completion receipt has been independently
+verified. The receipt is a delivery-integrity prerequisite, not scientific,
+benchmark, release, licensing, or domain approval.
 
 Before the autonomous core adds either dispatch-suppressing blocker label
 (`state:blocked` or `state:blocked-external-input`), the issue body or complete
@@ -153,6 +167,13 @@ The following are fail-closed gates:
 - maintainer decision: explicit decision-required label or issue text asking a
   maintainer to choose, approve, confirm, or set policy.
 
+Canonical ruling comments use the exact unquoted form
+`ll7/robot_sf_ll7#<issue>: <token>`. The classifier orders timestamped comments
+chronologically before deciding whether a ruling follows an older prompt. If
+any comment timestamp is missing or invalid, the ruling cannot suppress the
+decision gate. Exact lines under an example, copied, quoted, historical, or
+"do not apply" context are not treated as live rulings.
+
 When a gate is proven, the autonomous path makes the blocker visible only with
 existing labels. It does not answer the gate. Optional research remains open
 unless it is duplicate, invalid, superseded, or complete.
@@ -176,7 +197,46 @@ referenced child remains open. A merged child PR alone never closes a parent.
 If merged work exists without a documented completion condition, the issue
 remains open and the plan records a closure review finding.
 
+The documented closure condition is necessary but no longer sufficient for an
+autonomous `close_issue` mutation. The issue-audit inventory may provide an
+issue-number keyed `completion_receipts` map. Each entry must contain an
+`issue_completion_receipt.v1` payload and the JSON result from
+`scripts/dev/issue_completion_receipt.py verify`. The receipt binds the issue
+contract digest, exact base and delivered head, branch, changed paths and
+diffstat, validation commands and exit codes, validation inputs, durable
+artifacts, one disposition per acceptance criterion, residual risks, producer,
+independent verifier, and the post-review drift policy.
+
+The standalone verifier checks that the named base and head exist, the branch
+still points at the reviewed head, the exact base/head diff matches the receipt,
+and any covering PR snapshot has the same head, base, and branch. It also
+checks contract, artifact, and validation-input digests. Validation records
+keep `passed`, `failed`, `skipped`, `unavailable`, and `not_applicable`
+distinct; only a receipt with all validations passed, every criterion `met` or
+`not_applicable`, an independent verifier status of `verified`, and a matching
+Git-backed verification result can authorize autonomous closure or clear the
+receipt prerequisite for downstream promotion. A missing, stale, producer-only,
+failed, skipped, or unavailable receipt remains a fail-closed finding.
+
+Build and verify a receipt with:
+
+    uv run python scripts/dev/issue_completion_receipt.py build \
+      --input receipt-payload.json --output completion-receipt.json
+    uv run python scripts/dev/issue_completion_receipt.py verify \
+      --receipt completion-receipt.json --repo-root .
+
+The receipt does not replace PR review, maintainer decisions, domain or
+scientific interpretation, benchmark admission, release checks, licensing
+review, or specialized evidence packets. Raw logs remain out of the receipt;
+they may be referenced through digested durable artifacts.
+
 ## Shared plan schema
+
+Implementation admission may consume one canonical `issue_dependency_packet.v1` for exact
+prerequisites. The packet is a predicate record attached to the issue contract, not a second issue
+graph; mandatory unsatisfied, unavailable, conflicting, or invalid rows keep admission blocked.
+See [Typed Issue Dependency Packets](../ai/issue_dependency_packets.md) for the row contract and
+read-only resolver.
 
 Every plan has schema issue_audit_plan.v1 and contains:
 
@@ -214,7 +274,12 @@ interactive skill without guessing:
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,
 enforces a mutation budget, uses REST for issue/label writes, and reads every
-touched issue back. Project changes are intentionally absent.
+touched issue back. A repeated `remove_label` for a label that is already
+absent is recorded in the additive `already_applied` result bucket with
+`skipped_reason: already_absent`; it is not a failure, but the issue still
+goes through readback. The apply result also exposes `counts` for planned,
+applied, already-applied, and failed operations. Other 404s remain failures.
+Project changes are intentionally absent.
 
 ## Decision envelope
 

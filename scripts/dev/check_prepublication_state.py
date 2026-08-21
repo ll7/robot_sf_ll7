@@ -6,6 +6,17 @@ expensive readiness run.  A later check detects a newly opened covering PR, a
 merged PR that superseded the issue, movement of the base or remote branch, and
 local HEAD changes.  The ``sync`` command can safely integrate changed remote
 refs with ordinary Git merges; it never resets or deletes a worktree.
+
+Issue #7515: the gate also rejects publication when the branch carries
+non-``main`` ancestry that is undeclared, mismatched, or whose declared parent
+is invalid.  ``evaluate_state`` incorporates the snapshot's recorded
+``ancestry`` block (populated by ``collect_live_state`` via
+``scripts.dev.stack_ancestry``): a blocking ancestry state
+(``undeclared_stack`` / ``mismatched_declaration`` / ``parent_invalidated``)
+produces the new ``undeclared_stack_ancestry`` reason and blocks before PR
+creation, while a declared stack (``stacked``) is permitted to proceed to
+publication but is never independently merge-ready (see
+``scripts.dev.pr_loop_policy``).
 """
 
 from __future__ import annotations
@@ -22,6 +33,12 @@ from urllib.parse import urlparse
 
 from scripts.dev.open_issue_closure_audit import DEFAULT_MAX_PR_PAGES as DEFAULT_MAX_REST_PR_PAGES
 from scripts.dev.open_issue_closure_audit import fetch_closed_pr_rows, fetch_open_pr_rows
+from scripts.dev.stack_ancestry import (
+    BLOCKING_STATES,
+    ancestry_state,
+    collect_ancestry_facts,
+    parse_stack_declaration,
+)
 
 SCHEMA = "prepublication_state.v1"
 DECISION_SCHEMA = "prepublication_decision.v1"
@@ -37,6 +54,16 @@ _CLOSING_REFERENCE_RE = re.compile(
     r"(?:(?P<repo>[\w.-]+/[\w.-]+)?#))?(?P<number>\d+)\b",
     re.IGNORECASE,
 )
+_REFERENCE_VERB_RE = re.compile(
+    r"(?i)\b(?P<verb>close[sd]?|fix(?:e[sd])?|resolve[sd]?|"
+    r"implement[sd]?|addresses?)\s*:?[ \t]*`?"
+    r"(?:(?:https?://github\.com/(?P<url_repo>[\w.-]+/[\w.-]+)/issues/)|"
+    r"(?:(?P<repo>[\w.-]+/[\w.-]+)?#))?(?P<number>\d+)\b`?",
+)
+_TITLE_ISSUE_RE = re.compile(
+    r"(?i)(?:\((?:#|issue-)(?P<paren_num>\d+)\)|(?:^|\s)(?:#|issue-)(?P<bare_num>\d+)\b)"
+)
+_BRANCH_ISSUE_RE = re.compile(r"(?i)(?:^|[/._-])issue-(?P<number>\d+)(?:[/._-]|$|\b)")
 _SAFE_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 _REPO_COMPONENT_RE = re.compile(r"^[^/\s]+$")
 DEFAULT_TIMEOUT_SECONDS = 120
@@ -304,6 +331,61 @@ def _closing_issue_numbers(searchable: str, *, repo: str) -> set[int]:
     return closes
 
 
+def _covering_issue_numbers(
+    *,
+    title: str = "",
+    body: str = "",
+    head_ref: str | None = None,
+    repo: str,
+) -> set[int]:
+    """Extract issue numbers owned by explicit PR, title, or branch signals."""
+    numbers: set[int] = set()
+    searchable = f"{title}\n{body}"
+    for match in _REFERENCE_VERB_RE.finditer(searchable):
+        qualifier = match.group("url_repo") or match.group("repo")
+        if qualifier and qualifier.casefold() != repo.casefold():
+            continue
+        num_str = match.group("number")
+        if num_str:
+            numbers.add(int(num_str))
+
+    for match in _TITLE_ISSUE_RE.finditer(title):
+        num_str = match.group("paren_num") or match.group("bare_num")
+        if num_str:
+            numbers.add(int(num_str))
+
+    if head_ref:
+        for match in _BRANCH_ISSUE_RE.finditer(head_ref):
+            num_str = match.group("number")
+            if num_str:
+                numbers.add(int(num_str))
+
+    return numbers
+
+
+def _fetch_claim_ref(*, remote: str, issue: int) -> dict[str, Any]:
+    """Query the remote issue claim ref if present."""
+    ref_name = f"refs/heads/agent-claims/issue-{issue}"
+    result = _run(["git", "ls-remote", "--heads", remote, ref_name], check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "remote claim lookup failed"
+        raise GateError(f"git ls-remote claim ref {ref_name} failed: {detail}")
+    lines = [line.split() for line in result.stdout.splitlines() if line.split()]
+    if lines and len(lines[0]) >= 1:
+        return {
+            "exists": True,
+            "ref": f"agent-claims/issue-{issue}",
+            "full_ref": ref_name,
+            "sha": lines[0][0],
+        }
+    return {
+        "exists": False,
+        "ref": f"agent-claims/issue-{issue}",
+        "full_ref": ref_name,
+        "sha": None,
+    }
+
+
 def _normalize_closing_pr_row(row: dict[str, Any]) -> dict[str, Any]:
     """Normalize one REST pull row to the native closing-PR snapshot shape."""
     head = row.get("head") if isinstance(row.get("head"), dict) else {}
@@ -380,7 +462,7 @@ def _closing_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
 
 
 def _open_covering_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
-    """Return open PRs whose body or title explicitly closes *issue*."""
+    """Return open PRs whose body, title, or branch explicitly references or closes *issue*."""
     payload = _json_command(
         [
             "gh",
@@ -405,8 +487,13 @@ def _open_covering_prs(*, repo: str, issue: int) -> list[dict[str, Any]]:
     for pull_request in payload:
         if not isinstance(pull_request, dict):
             continue
-        searchable = "\n".join(str(pull_request.get(field) or "") for field in ("title", "body"))
-        if issue not in _closing_issue_numbers(searchable, repo=repo):
+        ref_numbers = _covering_issue_numbers(
+            title=str(pull_request.get("title") or ""),
+            body=str(pull_request.get("body") or ""),
+            head_ref=str(pull_request.get("headRefName") or ""),
+            repo=repo,
+        )
+        if issue not in ref_numbers:
             continue
         matches.append(
             {
@@ -510,8 +597,14 @@ def _open_covering_prs_rest(
     for row in rows:
         if not isinstance(row, dict):
             continue
-        searchable = "\n".join(str(row.get(field) or "") for field in ("title", "body"))
-        if issue in _closing_issue_numbers(searchable, repo=repo):
+        head = row.get("head") if isinstance(row.get("head"), dict) else {}
+        ref_numbers = _covering_issue_numbers(
+            title=str(row.get("title") or ""),
+            body=str(row.get("body") or ""),
+            head_ref=str(head.get("ref") or ""),
+            repo=repo,
+        )
+        if issue in ref_numbers:
             matches.append(_normalize_open_pr_row(row))
     return sorted(matches, key=lambda item: str(item.get("created_at") or ""))
 
@@ -524,8 +617,14 @@ def collect_live_state(
     base_ref: str = "main",
     remote: str = "origin",
     max_pr_pages: int = DEFAULT_MAX_REST_PR_PAGES,
+    declaration_text: str = "",
 ) -> dict[str, Any]:
-    """Fetch and assemble the live issue, ref, and local worktree state."""
+    """Fetch and assemble the live issue, ref, and local worktree state.
+
+    ``declaration_text`` optionally carries the canonical ``## Stack
+    Declaration`` text (issue #7515) so the recorded snapshot's ``ancestry``
+    block can validate it against the live local git refs.
+    """
     max_pr_pages = _effective_page_budget(max_pr_pages)
     base_ref = _normalize_base_ref(base_ref, remote=remote)
     remote_state_sources = {
@@ -565,6 +664,7 @@ def collect_live_state(
         base_ref=base_ref,
         branch=branch,
     )
+    claim_ref_state = _fetch_claim_ref(remote=remote, issue=issue)
     try:
         closing_prs = _closing_prs(repo=repo, issue=issue)
     except GateError as exc:
@@ -582,7 +682,7 @@ def collect_live_state(
         remote_state_sources["open_covering_prs"] = "rest"
         remote_state_fallbacks["open_covering_prs"] = str(exc)
 
-    return {
+    snapshot = {
         "schema": SCHEMA,
         "kind": "snapshot",
         "captured_at_utc": _utc_now(),
@@ -591,6 +691,7 @@ def collect_live_state(
         "issue_state": issue_state,
         "issue_updated_at": issue_payload.get("updatedAt"),
         "issue_closed_at": issue_payload.get("closedAt"),
+        "claim_ref": claim_ref_state,
         "closing_prs": closing_prs,
         "open_covering_prs": open_covering_prs,
         "remote_state_sources": remote_state_sources,
@@ -604,6 +705,9 @@ def collect_live_state(
         "local_head_sha": _git_output("rev-parse", "HEAD"),
         "tree_state": _tree_state(),
     }
+    if declaration_text:
+        snapshot["stack_declaration"] = declaration_text
+    return _record_ancestry(snapshot)
 
 
 def _sha_fields(snapshot: dict[str, Any]) -> dict[str, str | None]:
@@ -666,6 +770,75 @@ def _sha_drift(
     return drift
 
 
+def _ancestry_blocking_state(current: dict[str, Any]) -> str | None:
+    """Return a blocking ancestry state recorded in a live snapshot, or None.
+
+    The snapshot's ``ancestry`` block is written by ``collect_live_state`` and
+    carries the deterministic ``state`` from ``ancestry_state``.  Only the
+    fail-closed states (``undeclared_stack``, ``mismatched_declaration``,
+    ``parent_invalidated``) block pre-PR publication; a declared stack is
+    permitted to be published but is never independently merge-ready.
+    """
+    ancestry = current.get("ancestry")
+    if not isinstance(ancestry, dict):
+        return None
+    state = str(ancestry.get("state") or "")
+    if state in BLOCKING_STATES:
+        return state
+    return None
+
+
+def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Populate (or refresh) the snapshot's ``ancestry`` block from local git.
+
+    Runs the deterministic ancestry classifier (issue #7515) against the live
+    local git refs of the publication worktree.  The declaration is parsed from
+    the snapshot's recorded ``stack_declaration`` text (the PR body that will be
+    published, if any).  When the classifier cannot run (missing SHA/ref), the
+    snapshot records the failure fail-closed under ``ancestry.error``.
+    """
+    head_sha = str(snapshot.get("local_head_sha") or "")
+    base_ref = str(snapshot.get("base_ref") or "")
+    remote = str(snapshot.get("remote") or "origin")
+    if not head_sha or not base_ref:
+        snapshot["ancestry"] = {"state": "unknown", "error": "snapshot lacks head/base ref"}
+        return snapshot
+    facts, error = collect_ancestry_facts(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        worktree=Path.cwd(),
+        remote=remote,
+    )
+    if error or facts is None:
+        snapshot["ancestry"] = {"state": "unknown", "error": error}
+        return snapshot
+    declaration_text = str(snapshot.get("stack_declaration") or "")
+    declaration, parse_error = parse_stack_declaration(declaration_text)
+    if parse_error:
+        snapshot["ancestry"] = {"state": "unknown", "error": parse_error}
+        return snapshot
+    state = ancestry_state(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        main_tip_sha=facts["main_tip_sha"],
+        merge_base_sha=facts["merge_base_sha"],
+        commits=facts["commits"],
+        declaration=declaration,
+    )
+    state["unexpected_paths"] = facts["changed_paths"]
+    snapshot["ancestry"] = state
+    return snapshot
+
+
+def _drift_reason(drift: dict[str, dict[str, str | None]]) -> str:
+    """Map changed SHA fields to the canonical publication-freshness reason."""
+    if "remote_branch_sha" in drift:
+        return "remote_branch_changed"
+    if "base_sha" in drift:
+        return "base_changed"
+    return "local_head_changed"
+
+
 def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
     """Classify a baseline/current pair without performing external I/O."""
     _validate_snapshot_pair(baseline, current)
@@ -688,41 +861,61 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
             reason="issue_state_unknown",
         )
 
-    new_open_covering_prs = _new_open_covering_prs(baseline, current)
-    if new_open_covering_prs:
+    current_branch = str(current.get("branch") or "")
+    competing_open_prs = [
+        pr
+        for pr in current.get("open_covering_prs", [])
+        if isinstance(pr, dict) and pr.get("head_ref") != current_branch
+    ]
+    new_open_covering_prs = [
+        pr
+        for pr in _new_open_covering_prs(baseline, current)
+        if isinstance(pr, dict) and pr.get("head_ref") != current_branch
+    ]
+    if competing_open_prs:
         return _decision(
             baseline,
             current,
             decision="superseded",
-            reason="open_pr_closes_issue",
-            extra={"new_open_covering_prs": new_open_covering_prs},
+            reason="open_pr_covers_issue",
+            extra={
+                "open_covering_prs": competing_open_prs,
+                "new_open_covering_prs": new_open_covering_prs,
+            },
         )
 
     new_closing_prs = _new_closing_prs(baseline, current)
-    if new_closing_prs:
+    if current.get("closing_prs") or new_closing_prs:
         return _decision(
             baseline,
             current,
             decision="superseded",
             reason="merged_pr_closes_issue",
-            extra={"new_closing_prs": new_closing_prs},
+            extra={
+                "closing_prs": current.get("closing_prs", []),
+                "new_closing_prs": new_closing_prs,
+            },
         )
     if current.get("tree_state") != "clean":
         return _decision(baseline, current, decision="blocked", reason="dirty_worktree")
 
+    ancestry_state_value = _ancestry_blocking_state(current)
+    if ancestry_state_value is not None:
+        return _decision(
+            baseline,
+            current,
+            decision="blocked",
+            reason="undeclared_stack_ancestry",
+            extra={"ancestry": current.get("ancestry")},
+        )
+
     drift = _sha_drift(baseline, current)
     if drift:
-        if "remote_branch_sha" in drift:
-            reason = "remote_branch_changed"
-        elif "base_sha" in drift:
-            reason = "base_changed"
-        else:
-            reason = "local_head_changed"
         return _decision(
             baseline,
             current,
             decision="refresh-required",
-            reason=reason,
+            reason=_drift_reason(drift),
             extra={"drift": drift},
         )
     return _decision(baseline, current, decision="ready", reason="remote_state_unchanged")
@@ -866,6 +1059,13 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     capture.add_argument("--snapshot-path")
+    capture.add_argument(
+        "--declaration-text",
+        help=(
+            "canonical ## Stack Declaration text (parent_pr + parent_head) used to "
+            "validate non-main ancestry before publication (issue #7515)"
+        ),
+    )
 
     for name, help_text in (
         ("check", "check a baseline against refreshed remote state"),
@@ -897,106 +1097,137 @@ def _exit_code(decision: str) -> int:
     return EXIT_CODES.get(decision, EXIT_CODES["blocked"])
 
 
+def _handle_capture(args: argparse.Namespace) -> int:
+    """Handle the capture command."""
+    repo = _normalize_repo_argument(args.repo, remote=args.remote)
+    issue = _issue_number(args.issue)
+    branch = args.branch or _git_branch()
+    snapshot_path = (
+        Path(args.snapshot_path) if args.snapshot_path else _default_snapshot_path(branch)
+    )
+    snapshot = collect_live_state(
+        repo=repo,
+        issue=issue,
+        branch=branch,
+        base_ref=args.base_ref,
+        remote=args.remote,
+        max_pr_pages=args.max_pr_pages,
+        declaration_text=args.declaration_text or "",
+    )
+    _write_json(snapshot_path, snapshot)
+    competing_open_prs = [
+        pr
+        for pr in snapshot.get("open_covering_prs", [])
+        if isinstance(pr, dict) and pr.get("head_ref") != branch
+    ]
+    if snapshot.get("closing_prs"):
+        decision = "superseded"
+        reason = "merged_pr_closes_issue"
+    elif competing_open_prs:
+        decision = "superseded"
+        reason = "open_pr_covers_issue"
+    elif snapshot["issue_state"] != "OPEN":
+        decision = "superseded" if snapshot["issue_state"] == "CLOSED" else "blocked"
+        reason = "issue_closed" if decision == "superseded" else "issue_state_unknown"
+    else:
+        decision = "ready"
+        reason = "baseline_captured"
+
+    payload = {
+        "schema": DECISION_SCHEMA,
+        "kind": "capture",
+        "recorded_at_utc": _utc_now(),
+        "decision": decision,
+        "reason": reason,
+        "snapshot_path": str(snapshot_path),
+        "snapshot": snapshot,
+    }
+    if competing_open_prs:
+        payload["open_covering_prs"] = competing_open_prs
+    if snapshot.get("closing_prs"):
+        payload["closing_prs"] = snapshot.get("closing_prs")
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return _exit_code(decision)
+
+
+def _handle_check_or_sync(args: argparse.Namespace) -> int:
+    """Handle the check and sync commands."""
+    snapshot_path = Path(args.snapshot_path)
+    baseline = _load_snapshot(snapshot_path)
+    baseline["base_ref"] = _normalize_base_ref(
+        str(baseline["base_ref"]), remote=str(baseline["remote"])
+    )
+    repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
+    max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
+    decision_path = _decision_path(snapshot_path, args.decision_path)
+    current = collect_live_state(
+        repo=repo,
+        issue=_issue_number(baseline["issue"]),
+        branch=str(baseline["branch"]),
+        base_ref=str(baseline["base_ref"]),
+        remote=str(baseline["remote"]),
+        max_pr_pages=max_pr_pages,
+    )
+    decision = evaluate_state(baseline, current)
+    if (
+        args.command == "check"
+        or decision["decision"] != "refresh-required"
+        or not getattr(args, "integrate", False)
+    ):
+        decision["decision_path"] = str(decision_path)
+        _write_json(decision_path, decision)
+        print(json.dumps(decision, indent=2, sort_keys=True))
+        return _exit_code(str(decision["decision"]))
+
+    drift = decision.get("drift", {})
+    targets: list[str] = []
+    if "base_sha" in drift:
+        targets.append(f"refs/remotes/{baseline['remote']}/{baseline['base_ref']}")
+    if "remote_branch_sha" in drift and current.get("remote_branch_sha"):
+        targets.append(f"refs/remotes/{baseline['remote']}/{baseline['branch']}")
+    integration = _integrate_targets(
+        remote=str(baseline["remote"]),
+        branch=str(baseline["branch"]),
+        targets=targets,
+    )
+    if not integration.get("ok"):
+        decision["integration"] = integration
+        decision["decision_path"] = str(decision_path)
+        _write_json(decision_path, decision)
+        print(json.dumps(decision, indent=2, sort_keys=True))
+        return EXIT_CODES["refresh-required"]
+
+    refreshed = collect_live_state(
+        repo=repo,
+        issue=_issue_number(baseline["issue"]),
+        branch=str(baseline["branch"]),
+        base_ref=str(baseline["base_ref"]),
+        remote=str(baseline["remote"]),
+        max_pr_pages=max_pr_pages,
+    )
+    _write_json(snapshot_path, refreshed)
+    refreshed_decision = evaluate_state(refreshed, refreshed)
+    refreshed_decision.update(
+        {
+            "reason": "remote_state_integrated",
+            "comparison": "self_snapshot_after_integration",
+            "integrated": integration.get("merged", []),
+            "snapshot_path": str(snapshot_path),
+            "decision_path": str(decision_path),
+        }
+    )
+    _write_json(decision_path, refreshed_decision)
+    print(json.dumps(refreshed_decision, indent=2, sort_keys=True))
+    return _exit_code(str(refreshed_decision["decision"]))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the capture, check, or sync command."""
     args = _parser().parse_args(argv)
     try:
         if args.command == "capture":
-            repo = _normalize_repo_argument(args.repo, remote=args.remote)
-            issue = _issue_number(args.issue)
-            branch = args.branch or _git_branch()
-            snapshot_path = (
-                Path(args.snapshot_path) if args.snapshot_path else _default_snapshot_path(branch)
-            )
-            snapshot = collect_live_state(
-                repo=repo,
-                issue=issue,
-                branch=branch,
-                base_ref=args.base_ref,
-                remote=args.remote,
-                max_pr_pages=args.max_pr_pages,
-            )
-            _write_json(snapshot_path, snapshot)
-            decision = "ready" if snapshot["issue_state"] == "OPEN" else "superseded"
-            payload = {
-                "schema": DECISION_SCHEMA,
-                "kind": "capture",
-                "recorded_at_utc": _utc_now(),
-                "decision": decision,
-                "reason": "baseline_captured" if decision == "ready" else "issue_not_open",
-                "snapshot_path": str(snapshot_path),
-                "snapshot": snapshot,
-            }
-            print(json.dumps(payload, indent=2, sort_keys=True))
-            return _exit_code(decision)
-
-        snapshot_path = Path(args.snapshot_path)
-        baseline = _load_snapshot(snapshot_path)
-        baseline["base_ref"] = _normalize_base_ref(
-            str(baseline["base_ref"]), remote=str(baseline["remote"])
-        )
-        repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
-        max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
-        decision_path = _decision_path(snapshot_path, args.decision_path)
-        current = collect_live_state(
-            repo=repo,
-            issue=_issue_number(baseline["issue"]),
-            branch=str(baseline["branch"]),
-            base_ref=str(baseline["base_ref"]),
-            remote=str(baseline["remote"]),
-            max_pr_pages=max_pr_pages,
-        )
-        decision = evaluate_state(baseline, current)
-        if (
-            args.command == "check"
-            or decision["decision"] != "refresh-required"
-            or not getattr(args, "integrate", False)
-        ):
-            decision["decision_path"] = str(decision_path)
-            _write_json(decision_path, decision)
-            print(json.dumps(decision, indent=2, sort_keys=True))
-            return _exit_code(str(decision["decision"]))
-
-        drift = decision.get("drift", {})
-        targets: list[str] = []
-        if "base_sha" in drift:
-            targets.append(f"refs/remotes/{baseline['remote']}/{baseline['base_ref']}")
-        if "remote_branch_sha" in drift and current.get("remote_branch_sha"):
-            targets.append(f"refs/remotes/{baseline['remote']}/{baseline['branch']}")
-        integration = _integrate_targets(
-            remote=str(baseline["remote"]),
-            branch=str(baseline["branch"]),
-            targets=targets,
-        )
-        if not integration.get("ok"):
-            decision["integration"] = integration
-            decision["decision_path"] = str(decision_path)
-            _write_json(decision_path, decision)
-            print(json.dumps(decision, indent=2, sort_keys=True))
-            return EXIT_CODES["refresh-required"]
-
-        refreshed = collect_live_state(
-            repo=repo,
-            issue=_issue_number(baseline["issue"]),
-            branch=str(baseline["branch"]),
-            base_ref=str(baseline["base_ref"]),
-            remote=str(baseline["remote"]),
-            max_pr_pages=max_pr_pages,
-        )
-        _write_json(snapshot_path, refreshed)
-        refreshed_decision = evaluate_state(refreshed, refreshed)
-        refreshed_decision.update(
-            {
-                "reason": "remote_state_integrated",
-                "comparison": "self_snapshot_after_integration",
-                "integrated": integration.get("merged", []),
-                "snapshot_path": str(snapshot_path),
-                "decision_path": str(decision_path),
-            }
-        )
-        _write_json(decision_path, refreshed_decision)
-        print(json.dumps(refreshed_decision, indent=2, sort_keys=True))
-        return _exit_code(str(refreshed_decision["decision"]))
+            return _handle_capture(args)
+        return _handle_check_or_sync(args)
     except GateError as exc:
         decision_path: Path | None = None
         if args.command in {"check", "sync"}:

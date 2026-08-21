@@ -16,11 +16,12 @@ import pytest
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark import map_runner, map_runner_episode
+from robot_sf.benchmark import map_runner_episode
 from robot_sf.benchmark.aggregate import compute_aggregates
 from robot_sf.benchmark.algorithm_metadata import PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS
 from robot_sf.benchmark.exact_repeat_campaign import _record_is_degraded
-from robot_sf.benchmark.map_runner import (
+from robot_sf.benchmark.map_runner import map_runner
+from robot_sf.benchmark.map_runner.map_runner import (
     _accumulate_batch_metadata,
     _apply_planner_selector_v2_context,
     _attach_planner_reset,
@@ -55,12 +56,12 @@ from robot_sf.benchmark.map_runner import (
     _vel_and_acc,
     run_map_batch,
 )
-from robot_sf.benchmark.map_runner_batch_plan import (
+from robot_sf.benchmark.map_runner.map_runner_batch_plan import (
     build_seed_jobs,
     build_worker_fixed_params,
     resolve_batch_kinematics_tag,
 )
-from robot_sf.benchmark.map_runner_episode import (
+from robot_sf.benchmark.map_runner.map_runner_episode import (
     _CollisionEventContext,
     _finite_positive_float,
     _initial_ped_velocities,
@@ -70,13 +71,13 @@ from robot_sf.benchmark.map_runner_episode import (
     _step_collision_events,
     _topology_guided_episode_diagnostics,
 )
-from robot_sf.benchmark.map_runner_metrics import (
+from robot_sf.benchmark.map_runner.map_runner_metrics import (
     _episode_collision_value,
     summarize_collision_metrics,
 )
+from robot_sf.benchmark.map_runner.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
-from robot_sf.benchmark.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
@@ -292,11 +293,17 @@ def test_map_runner_execution_boundaries_stay_extracted() -> None:
     wrapper_source = inspect.getsource(map_runner._run_map_episode)
 
     assert map_runner._execute_map_episode is map_runner_episode.run_map_episode
-    assert map_runner._execute_map_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_runner"
-    assert map_runner._build_seed_jobs.__module__ == "robot_sf.benchmark.map_runner_batch_plan"
+    assert (
+        map_runner._execute_map_jobs.__module__
+        == "robot_sf.benchmark.map_runner.map_runner_batch_runner"
+    )
+    assert (
+        map_runner._build_seed_jobs.__module__
+        == "robot_sf.benchmark.map_runner.map_runner_batch_plan"
+    )
     assert (
         map_runner._build_completed_batch_summary.__module__
-        == "robot_sf.benchmark.map_runner_batch_summary"
+        == "robot_sf.benchmark.map_runner.map_runner_batch_summary"
     )
     assert "_execute_map_episode(" in wrapper_source
     assert "for step_idx in range" not in wrapper_source
@@ -888,7 +895,9 @@ def test_build_policy_nmpc_social_wires_nmpc_adapter(
             """Return a deterministic planner command for the wiring test."""
             return (0.3, -0.1)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.NMPCSocialPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.NMPCSocialPlannerAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy("nmpc_social", {"horizon_steps": 4})
     linear, angular = policy(
         {"robot": {"position": [0.0, 0.0], "heading": [0.0]}, "goal": {"current": [1.0, 0.0]}}
@@ -1028,7 +1037,9 @@ def test_build_policy_socnav_bench_forwards_allow_fallback(
             """Return a deterministic planner command for the wiring test."""
             return (0.0, 0.0)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SocNavBenchSamplingAdapter", _DummyAdapter
+    )
     _, meta = _build_policy("socnav_bench", {"allow_fallback": True})
     assert captured["allow_fallback"] is True
     assert meta["status"] == "ok"
@@ -1064,9 +1075,11 @@ def test_build_policy_socnav_sampling_uses_local_adapter(
             """Return a deterministic planner command for the wiring test."""
             return (0.0, 0.0)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SamplingPlannerAdapter", _DummyLocalAdapter)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocNavBenchSamplingAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SamplingPlannerAdapter", _DummyLocalAdapter
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SocNavBenchSamplingAdapter",
         _DummyUpstreamAdapter,
     )
 
@@ -1168,9 +1181,11 @@ def test_build_policy_hrvo_holonomic_vx_vy_uses_world_velocity_command(
 
         simulator = _DummySim()
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner.HRVOPlannerAdapter", _DummyAdapter
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points",
         lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
     )
     policy, meta = _build_policy(
@@ -1216,7 +1231,9 @@ def test_build_policy_hrvo_reset_hook_tolerates_adapters_without_seed(
             """Record or accept reset propagation from map-runner code."""
             reset_calls.append("reset")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.HRVOPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.HRVOPlannerAdapter", _DummyAdapter
+    )
     policy, _ = _build_policy(
         "hrvo",
         {"allow_testing_algorithms": True},
@@ -1289,7 +1306,9 @@ def test_build_policy_orca_holonomic_vx_vy_uses_world_velocity_command(
             """Return a deterministic world-frame velocity command."""
             return np.array([0.6, -0.2], dtype=float)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.ORCAPlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.ORCAPlannerAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy(
         "orca",
         {"allow_fallback": False},
@@ -1324,7 +1343,7 @@ def test_build_policy_social_navigation_pyenvs_orca_preserves_provenance_metadat
             return (0.2, 0.1)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsORCAAdapter",
         _DummyAdapter,
     )
     _, meta = _build_policy(
@@ -1367,7 +1386,9 @@ def test_build_policy_crowdnav_height_preserves_checkpoint_provenance(
             """Return a deterministic planner command for the wiring test."""
             return (0.15, 0.05)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.CrowdNavHeightAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.CrowdNavHeightAdapter", _DummyAdapter
+    )
     _, meta = _build_policy(
         "crowdnav_height",
         {
@@ -1410,7 +1431,9 @@ def test_build_policy_sonic_crowdnav_wires_external_checkpoint_adapter(
             """Record or accept reset propagation from map-runner code."""
             del seed
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy(
         "sonic_gst",
         {
@@ -1460,7 +1483,9 @@ def test_build_policy_gensafenav_ours_wires_external_checkpoint_adapter(
             """Record or accept reset propagation from map-runner code."""
             del seed
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy(
         "ours_gst",
         {},
@@ -1506,7 +1531,9 @@ def test_build_policy_gensafenav_gst_predictor_rand_wires_external_checkpoint_ad
             """Record or accept reset propagation from map-runner code."""
             del seed
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy(
         "gst_predictor_rand",
         {},
@@ -1578,8 +1605,10 @@ def test_build_policy_gensafenav_ours_guarded_uses_guard_and_goal_fallback(
                 selected_evaluation={"safe": True},
             )
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.GuardedPPOAdapter", _DummyGuard)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.GuardedPPOAdapter", _DummyGuard)
 
     policy, meta = _build_policy(
         "ours_gst_guarded",
@@ -1645,8 +1674,10 @@ def test_build_policy_gensafenav_gst_predictor_rand_guarded_defaults_checkpoint(
             del observation
             return ppo_command, "ppo_safe"
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.GuardedPPOAdapter", _DummyGuard)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.GuardedPPOAdapter", _DummyGuard)
 
     policy, meta = _build_policy(
         "gst_predictor_rand_guarded",
@@ -1696,7 +1727,9 @@ def test_build_policy_sonic_gst_holonomic_vx_vy_uses_direct_world_velocity(
             """Record or accept reset propagation from map-runner code."""
             del seed
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SonicCrowdNavAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SonicCrowdNavAdapter", _DummyAdapter
+    )
 
     policy, meta = _build_policy(
         "sonic_gst",
@@ -1764,7 +1797,7 @@ def test_build_policy_sicnav_wires_external_mpc_adapter(
             """Record or accept cleanup from map-runner code."""
             return None
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SICNavPlanner", _DummyPlanner)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.SICNavPlanner", _DummyPlanner)
     policy, meta = _build_policy(
         "sicnav",
         {"repo_root": "third_party/external_repos/sicnav"},
@@ -1810,7 +1843,7 @@ def test_build_policy_dr_mpc_wires_external_mpc_adapter(
             """Record or accept reset propagation from map-runner code."""
             pass
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.DRMPCPlanner", _DummyPlanner)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.DRMPCPlanner", _DummyPlanner)
     policy, meta = _build_policy(
         "dr_mpc",
         {"repo_root": "third_party/external_mpc_repos/dr_mpc"},
@@ -1850,7 +1883,7 @@ def test_build_policy_social_navigation_pyenvs_orca_holonomic_vx_vy_uses_world_v
             return np.array([0.3, 0.7], dtype=float)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsORCAAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsORCAAdapter",
         _DummyAdapter,
     )
     policy, meta = _build_policy(
@@ -1893,7 +1926,9 @@ def test_build_policy_social_force_holonomic_vx_vy_uses_world_velocity_command(
             """Return a deterministic world-frame velocity command."""
             return np.array([0.15, 0.45], dtype=float)
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.SocialForcePlannerAdapter", _DummyAdapter)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SocialForcePlannerAdapter", _DummyAdapter
+    )
     policy, meta = _build_policy(
         "social_force",
         {},
@@ -1929,7 +1964,7 @@ def test_build_policy_social_navigation_pyenvs_force_models_preserve_provenance_
             return (0.2, 0.1)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsForceModelAdapter",
         _DummyAdapter,
     )
     _, socialforce = _build_policy(
@@ -1993,7 +2028,7 @@ def test_build_policy_social_navigation_pyenvs_force_models_holonomic_vx_vy_use_
             return np.array([0.25, -0.4], dtype=float)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsForceModelAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsForceModelAdapter",
         _DummyAdapter,
     )
     policy, meta = _build_policy(
@@ -2031,7 +2066,7 @@ def test_build_policy_social_navigation_pyenvs_hsfm_preserves_provenance_metadat
             return (0.2, 0.1)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SocialNavigationPyEnvsHSFMAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.SocialNavigationPyEnvsHSFMAdapter",
         _DummyAdapter,
     )
     _, meta = _build_policy(
@@ -2064,7 +2099,9 @@ def test_preflight_policy_treats_social_navigation_pyenvs_force_models_as_socnav
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
     for algo, policy_name in (
         ("social_navigation_pyenvs_socialforce", "socialforce"),
         ("social_navigation_pyenvs_sfm_helbing", "sfm_helbing"),
@@ -2095,7 +2132,9 @@ def test_preflight_policy_treats_social_navigation_pyenvs_hsfm_as_socnav(
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
     cfg, preflight = _preflight_policy(
         algo="social_navigation_pyenvs_hsfm_new_guo",
         algo_config={
@@ -2454,21 +2493,25 @@ def test_build_policy_for_portfolio_adapters_tracks_feasibility(
             return 0.2, 0.0
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.GapAwarePredictionAdapter",
-        _GapPredictionStub,
-    )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.RiskDWAPlannerAdapter", _GapPredictionStub)
-    monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.SafetyBarrierPlannerAdapter",
-        _GapPredictionStub,
-    )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.GridRoutePlannerAdapter", _GapPredictionStub)
-    monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.StreamGapPlannerAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.GapAwarePredictionAdapter",
         _GapPredictionStub,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.MPPISocialPlannerAdapter",
+        "robot_sf.benchmark.map_runner.map_runner.RiskDWAPlannerAdapter", _GapPredictionStub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.SafetyBarrierPlannerAdapter",
+        _GapPredictionStub,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.GridRoutePlannerAdapter", _GapPredictionStub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.StreamGapPlannerAdapter",
+        _GapPredictionStub,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.MPPISocialPlannerAdapter",
         _GapPredictionStub,
     )
 
@@ -2512,7 +2555,7 @@ def test_ppo_action_to_unicycle_uses_kinematics_contract(
         return model
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        "robot_sf.benchmark.map_runner.map_runner.resolve_benchmark_kinematics_model",
         _resolver,
     )
 
@@ -2566,7 +2609,7 @@ def test_ppo_action_to_unicycle_adapter_converts_heading_error_to_angular_veloci
     """Adapter path should project speed with gain-scaled angular velocity."""
     model = _KinematicsStub((0.0, 0.0))
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.resolve_benchmark_kinematics_model",
+        "robot_sf.benchmark.map_runner.map_runner.resolve_benchmark_kinematics_model",
         lambda **kwargs: model,
     )
     _ppo_action_to_unicycle(
@@ -2615,7 +2658,9 @@ def test_preflight_policy_passes_robot_kinematics_to_build_policy(
 
         return _policy, {}
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
     cfg, preflight = _preflight_policy(
         algo="goal",
         algo_config={"max_speed": 1.0},
@@ -2654,7 +2699,9 @@ def test_preflight_policy_skips_non_socnav_planner_when_metadata_reports_fallbac
             "fallback_reason": "model_missing",
         }
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
 
     cfg, preflight = _preflight_policy(
         algo="ppo",
@@ -2681,7 +2728,9 @@ def test_preflight_policy_treats_social_navigation_pyenvs_orca_as_socnav(
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
     cfg, preflight = _preflight_policy(
         algo="social_navigation_pyenvs_orca",
         algo_config={"repo_root": "output/repos/Social-Navigation-PyEnvs"},
@@ -2705,7 +2754,9 @@ def test_preflight_policy_treats_crowdnav_height_as_socnav(
         del cfg, robot_kinematics, adapter_impact_eval
         raise RuntimeError(f"missing upstream prereq for {algo}")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _fake_build_policy)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _fake_build_policy
+    )
     cfg, preflight = _preflight_policy(
         algo="crowdnav_height",
         algo_config={"repo_root": "output/repos/CrowdNav_HEIGHT"},
@@ -2816,24 +2867,26 @@ def test_run_map_episode_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(map_def),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -2950,25 +3003,29 @@ def test_run_map_episode_excludes_live_foresight_fallback_from_evidence(
 
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _build_policy_stub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3074,31 +3131,31 @@ def test_run_map_episode_tracking_precision_clamps_and_records(
         robot_config=DifferentialDriveSettings(max_linear_speed=2.0),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner_episode._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner_episode.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner_episode.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner_episode.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner_episode.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner_episode.sample_obstacle_points",
         lambda *args: None,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner_episode._policy_command_to_env_action",
+        "robot_sf.benchmark.map_runner.map_runner_episode._policy_command_to_env_action",
         lambda env, config, command: np.asarray(command, dtype=np.float32),
     )
 
@@ -3157,11 +3214,11 @@ def test_run_map_episode_closes_env_when_reset_fails(monkeypatch: pytest.MonkeyP
     dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: env,
     )
 
@@ -3225,7 +3282,7 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
         return (3.0, 2.0)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_policy",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy",
         lambda *args, **kwargs: (_policy, {"algorithm": "goal", "status": "ok"}),
     )
     map_def = _minimal_map_def()
@@ -3234,28 +3291,30 @@ def test_run_map_episode_records_synthetic_actuation_metrics(
         robot_config=DifferentialDriveSettings(max_linear_speed=1.0),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(map_def),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._policy_command_to_env_action",
+        "robot_sf.benchmark.map_runner.map_runner._policy_command_to_env_action",
         lambda env, config, command: np.asarray(command, dtype=np.float32),
     )
 
@@ -3379,25 +3438,29 @@ def test_run_map_episode_calls_planner_reset_hook(monkeypatch: pytest.MonkeyPatc
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _build_policy_stub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3488,25 +3551,29 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _build_policy_stub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3601,25 +3668,29 @@ def test_run_map_episode_snapshots_planner_runtime_before_close(
         return _policy, {"status": "ok", "planner_kinematics": {"robot_kinematics": "unknown"}}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._build_policy", _build_policy_stub)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner._build_policy", _build_policy_stub
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3692,24 +3763,26 @@ def test_run_map_episode_does_not_stop_on_waypoint_only_success(
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: dummy_env,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3798,24 +3871,26 @@ def test_run_map_episode_stops_immediately_on_route_complete(
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: dummy_env,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3892,24 +3967,26 @@ def test_run_map_episode_collision_wins_over_route_complete(
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: dummy_env,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 1.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -3980,20 +4057,22 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
     dummy_env = _DummyEnv(map_def)
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: dummy_env,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {
             "success": 0.0,
             "collisions": 0.0,
@@ -4005,7 +4084,7 @@ def test_run_map_episode_floors_exact_obstacle_collision_metrics(
         },
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
 
@@ -4102,9 +4181,9 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
     out_path.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
     captured_params: list[dict[str, object]] = []
 
     def _fake_run_map_job_worker(job):
@@ -4114,11 +4193,11 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
         return {"episode_id": "ep1"}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker",
         _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4150,9 +4229,11 @@ def test_run_map_batch_serial_and_resume(tmp_path: Path, monkeypatch: pytest.Mon
     }
 
     # Resume path skips existing episode
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.index_existing", lambda path: {"ep1"})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._compute_map_episode_id",
+        "robot_sf.benchmark.map_runner.map_runner.index_existing", lambda path: {"ep1"}
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._compute_map_episode_id",
         lambda sc, seed: "ep1",
     )
     result = run_map_batch(
@@ -4175,9 +4256,9 @@ def test_run_map_batch_summary_populates_collision_metric(
     ]
     out_path = tmp_path / "episodes.jsonl"
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     def _fake_run_map_job_worker(job):
         """Emit one clear and one colliding episode record."""
@@ -4193,11 +4274,11 @@ def test_run_map_batch_summary_populates_collision_metric(
         }
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker",
         _fake_run_map_job_worker,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4291,7 +4372,7 @@ def test_run_map_batch_rejects_unsupported_observation_override(
     scenario = {"name": "s1", "metadata": {"supported": True}}
     out_path = tmp_path / "episodes.jsonl"
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
 
     with pytest.raises(ValueError, match="Observation mode 'goal_state' is not supported"):
@@ -4322,10 +4403,10 @@ def test_run_map_batch_list_input_uses_explicit_scenario_path(
         raise RuntimeError("stop after scenario_path capture")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._representative_metric_affecting_config",
+        "robot_sf.benchmark.map_runner.map_runner._representative_metric_affecting_config",
         representative_config,
     )
 
@@ -4352,9 +4433,9 @@ def test_run_map_batch_fail_closed_when_synthetic_actuation_profile_is_not_diff_
     }
     out_path = tmp_path / "episodes.jsonl"
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     result = run_map_batch(
         [scenario],
@@ -4393,9 +4474,9 @@ def test_run_map_batch_fail_closed_when_latency_action_delay_is_not_diff_drive(
     }
     out_path = tmp_path / "episodes.jsonl"
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     result = run_map_batch(
         [scenario],
@@ -4435,9 +4516,9 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
     out_path = tmp_path / "episodes.jsonl"
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     def fake_run(job):
         """Capture batch execution order for the parallel test."""
@@ -4452,11 +4533,13 @@ def test_run_map_batch_parallel_writes_results_in_job_order(
         handle.write(json.dumps(record, sort_keys=True) + "\n")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        "robot_sf.benchmark.map_runner.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle", fake_write
+    )
 
     result = run_map_batch(
         [scenario_one, scenario_two],
@@ -4486,10 +4569,12 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
     ]
     out_path = tmp_path / "episodes.jsonl"
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda _: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
 
@@ -4506,8 +4591,10 @@ def test_run_map_batch_parallel_write_failure_prefers_top_level_scenario_id(
         """Capture JSONL writes for the parallel test."""
         raise RuntimeError("forced write failure")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._write_validated_to_handle", fake_write)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle", fake_write
+    )
 
     result = run_map_batch(
         scenarios,
@@ -4535,10 +4622,12 @@ def test_run_map_batch_worker_failure_logs_warning(
     ]
     out_path = tmp_path / "episodes.jsonl"
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda _: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda _: []
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda _: {})
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
 
@@ -4547,7 +4636,7 @@ def test_run_map_batch_worker_failure_logs_warning(
         scenario, _seed, _ = job
         raise RuntimeError(f"forced map failure: {scenario['name']}")
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", fake_run)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner._run_map_job_worker", fake_run)
 
     captured: list = []
 
@@ -4580,7 +4669,7 @@ def test_run_map_batch_filters_and_validation(
     """Cover validation failures and unsupported scenario filtering."""
     bad_scenarios = [{"name": "bad"}]
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list",
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list",
         lambda scenarios: ["error"],
     )
     with pytest.raises(ValueError):
@@ -4591,15 +4680,15 @@ def test_run_map_batch_filters_and_validation(
         {"name": "ok", "metadata": {"supported": True}},
     ]
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker",
         lambda job: {"episode_id": "ep1"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
     result = run_map_batch(
@@ -4649,11 +4738,11 @@ def test_run_map_batch_skips_incompatible_kinematics(
         "robot_config": {"type": "holonomic"},
     }
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._planner_kinematics_compatibility",
+        "robot_sf.benchmark.map_runner.map_runner._planner_kinematics_compatibility",
         lambda **kwargs: (False, "mock incompatible combo"),
     )
     result = run_map_batch(
@@ -4688,9 +4777,9 @@ def test_run_map_batch_filters_per_scenario_kinematics_preflight(
         },
     ]
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     from robot_sf.benchmark.planner_command_contract import (
         PlannerContractValidationError,
@@ -4703,15 +4792,15 @@ def test_run_map_batch_filters_per_scenario_kinematics_preflight(
         return {"action_contract": {"command_space": "unicycle_vw"}}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._validate_planner_contract",
+        "robot_sf.benchmark.map_runner.map_runner._validate_planner_contract",
         fake_validate_contract,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker",
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4769,9 +4858,9 @@ def test_run_map_batch_validates_effective_scenario_algo_overrides(
     seen_markers: list[str] = []
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
 
     def fake_validate_contract(**kwargs):
         """Record the effective scenario config used during preflight validation."""
@@ -4779,15 +4868,15 @@ def test_run_map_batch_validates_effective_scenario_algo_overrides(
         return {"action_contract": {"command_space": "unicycle_vw"}}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._validate_planner_contract",
+        "robot_sf.benchmark.map_runner.map_runner._validate_planner_contract",
         fake_validate_contract,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_job_worker",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker",
         lambda job: {"episode_id": f"{job[0]['name']}-{job[1]}"},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4818,11 +4907,11 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
     out_path.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4846,7 +4935,9 @@ def test_run_map_batch_preserves_runtime_planner_contract_in_summary(
             },
         }
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker", _fake_worker
+    )
 
     result = run_map_batch(
         [scenario],
@@ -4888,15 +4979,15 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
     out_path.write_text("", encoding="utf-8")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.validate_scenario_list", lambda scenarios: []
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda scenarios: []
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.load_schema", lambda path: {})
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.load_schema", lambda path: {})
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.ProcessPoolExecutor",
+        "robot_sf.benchmark.map_runner.map_runner.ProcessPoolExecutor",
         ThreadPoolExecutor,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._write_validated_to_handle",
+        "robot_sf.benchmark.map_runner.map_runner._write_validated_to_handle",
         lambda *args, **kwargs: None,
     )
 
@@ -4936,7 +5027,9 @@ def test_run_map_batch_parallel_preserves_runtime_metadata_bridge(
             },
         }
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_job_worker", _fake_worker)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._run_map_job_worker", _fake_worker
+    )
 
     result = run_map_batch(
         scenarios,
@@ -5032,7 +5125,9 @@ def test_run_map_job_worker_forwards_metadata_params(monkeypatch: pytest.MonkeyP
             },
         }
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._run_map_episode", _fake_run_map_episode
+    )
 
     record = _run_map_job_worker(
         (
@@ -5278,7 +5373,9 @@ def test_run_map_job_worker_normalizes_optional_defaults(
         captured.append(dict(kwargs))
         return {"episode_id": f"captured-{len(captured)}"}
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner._run_map_episode", _fake_run_map_episode)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner._run_map_episode", _fake_run_map_episode
+    )
 
     _run_map_job_worker(
         (
@@ -5322,7 +5419,7 @@ def test_run_map_job_worker_requires_scenario_path(
 ) -> None:
     """Missing serialized scenario paths should fail with an actionable error."""
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._run_map_episode",
+        "robot_sf.benchmark.map_runner.map_runner._run_map_episode",
         lambda *_args, **_kwargs: {"episode_id": "unused"},
     )
 
@@ -5335,7 +5432,9 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
 ) -> None:
     """HRVO should run through the batch runner and emit an episodes.jsonl record."""
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda _: []
+    )
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
@@ -5417,27 +5516,27 @@ def test_run_map_batch_hrvo_smoke_writes_episode_jsonl(
     schema_path.write_text('{"type":"object"}', encoding="utf-8")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points",
         lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
     )
 
@@ -5545,26 +5644,26 @@ def test_run_map_episode_skips_force_buffer_reads_when_not_recording(
         return {"success": 1.0, "collisions": 0.0}
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics", fake_compute_all_metrics
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics", fake_compute_all_metrics
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points",
         lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
     )
 
@@ -5599,7 +5698,9 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
 ) -> None:
     """Repeat a minimal map-run batch and assert stable episode contents ignoring runtime metadata."""
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda _: []
+    )
 
     class _DummySim:
         """Simulator stub for map-runner episode tests."""
@@ -5682,27 +5783,27 @@ def test_run_map_batch_repeated_runs_produce_stable_metrics(
     schema_path.write_text('{"type":"object"}', encoding="utf-8")
 
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _DummyEnv(_minimal_map_def()),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points",
         lambda segments, spacing: np.array([[0.5, 0.0], [0.5, 0.25]], dtype=float),
     )
 
@@ -5763,7 +5864,9 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
 ) -> None:
     """The opt-in analysis profile adds data only; legacy actions/outcomes stay identical."""
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.validate_scenario_list", lambda _: [])
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.validate_scenario_list", lambda _: []
+    )
 
     class _DummySim:
         """Minimal deterministic simulator state for the profile regression."""
@@ -5836,7 +5939,7 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     schema_path = tmp_path / "episode.schema.json"
     schema_path.write_text('{"type":"object"}', encoding="utf-8")
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     action_sequences = [[], []]
@@ -5852,19 +5955,20 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
         created_envs.append(env)
         return env
 
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.make_robot_env", _make_env)
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.map_runner.make_robot_env", _make_env)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length", lambda *args: 1.0
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length", lambda *args: 1.0
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 1.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics", lambda metrics, **kwargs: metrics
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.sample_obstacle_points",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points",
         lambda segments, spacing: np.array([[0.5, 0.0]], dtype=float),
     )
     off_path = tmp_path / "off.jsonl"
@@ -6099,28 +6203,30 @@ def test_map_episode_visibility_trace_feeds_occlusion_near_miss_predicate(monkey
         observation_visibility=ObservationVisibilitySettings(enabled=True),
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._build_env_config",
+        "robot_sf.benchmark.map_runner.map_runner._build_env_config",
         lambda scenario, scenario_path: dummy_config,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.make_robot_env",
+        "robot_sf.benchmark.map_runner.map_runner.make_robot_env",
         lambda config, seed, debug: _OcclusionVisibilityEnv(_minimal_map_def()),
     )
-    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        "robot_sf.benchmark.map_runner.map_runner.sample_obstacle_points", lambda *args: None
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.map_runner.compute_shortest_path_length",
         lambda *args: 1.0,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.compute_all_metrics",
         lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner.post_process_metrics",
+        "robot_sf.benchmark.map_runner.map_runner.post_process_metrics",
         lambda metrics, **kwargs: metrics,
     )
     monkeypatch.setattr(
-        "robot_sf.benchmark.map_runner._policy_command_to_env_action",
+        "robot_sf.benchmark.map_runner.map_runner._policy_command_to_env_action",
         lambda env, config, command: np.asarray(command, dtype=np.float32),
     )
 

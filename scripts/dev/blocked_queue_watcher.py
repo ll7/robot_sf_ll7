@@ -26,6 +26,8 @@ from typing import Any, Literal
 
 import yaml
 
+from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev._gh_rest import run_gh_command as _run_gh_command
 from scripts.dev.gh_issue_rest import fetch_issue_with_comments
 from scripts.dev.gh_pr_label_rest import add_label
 
@@ -153,28 +155,7 @@ class GraphQLResolution:
 
 def _run_gh(args: list[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
     """Run a GitHub CLI command without masking failures."""
-    try:
-        return subprocess.run(
-            ["gh", *args],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except FileNotFoundError:
-        return subprocess.CompletedProcess(
-            ["gh", *args],
-            127,
-            "",
-            "gh CLI not found on PATH; install GitHub CLI and authenticate it",
-        )
-    except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(
-            ["gh", *args],
-            124,
-            "",
-            f"gh command timed out after {timeout} seconds",
-        )
+    return _run_gh_command(args, timeout=timeout)
 
 
 def _split_repo(repo: str) -> tuple[str, str]:
@@ -187,13 +168,10 @@ def _split_repo(repo: str) -> tuple[str, str]:
 
 def _json_result(result: subprocess.CompletedProcess[str], *, what: str) -> Any:
     """Decode one CLI JSON response or raise a bounded diagnostic."""
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"{what} failed: {detail or f'exit code {result.returncode}'}")
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"{what} returned invalid JSON: {exc}") from exc
+    payload, error = _parse_json(result, what=what)
+    if error:
+        raise RuntimeError(error)
+    return payload
 
 
 def _as_text(value: Any) -> str:

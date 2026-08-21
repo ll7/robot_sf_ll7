@@ -125,7 +125,7 @@ uv run python scripts/analysis/build_ch7_evidence_package_v2.py \
 The v2 package emits only success fraction, near-miss mean, normalized
 time-to-goal mean, and path-efficiency mean. Collision counts, collision
 fractions, collision-derived composites, and SNQI (which is collision-derived
-for this boundary) are excluded until issue #7042 is resolved. The categorical
+for this boundary) remain excluded under the issue #7042 ruling. The categorical
 `collision_event` terminal label remains allowed in the retained terminal
 panel and is not a collision-rate metric.
 
@@ -147,10 +147,39 @@ uv run python scripts/analysis/verify_ch7_evidence_admission_v2.py \
 ```
 
 The command verifies the blocked manifest schema and payload checksums, reports
-the unresolved domain, receipt, and #7042 metric gates, and prints a
+the unresolved domain and receipt gates plus the frozen #7042 exclusion
+boundary, and prints a
 receipt-shaped template with unresolved approval, source-registry, and
 retrieval fields. The template is explicitly `not_a_receipt` and is rejected
 by the admission schema; no `admission/receipt.json`, empirical outcome, or
 promotion decision is written. Run the command with `--receipt <receipt>` only
 after a maintainer-owned receipt exists and the package has independently
-crossed the domain and metric gates.
+crossed the domain-approval and durable-receipt gates.
+
+The diagnostic accepts either fresh builder output without review sidecars or
+a durable package with a complete, byte-preserving review-sidecar set. Partial
+or unbound sidecars fail closed. The #7042 exclusion remains a frozen metric
+boundary; it does not itself admit the package or authorize paper-facing use.
+
+### Deterministic build receipt (#7410)
+
+The durable build receipt
+[`issue_7410_ch7_evidence_build_receipt.v1.json`](context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json)
+records the exact v2 source bindings, build commit/tree, builder and verifier hashes, Python/uv
+and lockfile identity, two independent output-tree hashes, package manifest/checksum hashes, and
+the successful outcome-free `--check-only` result. It is adjacent to the v2 package because the
+package and its `SHA256SUMS` are immutable; review-only `.review.json` sidecars are excluded from
+the recorded payload-tree hash.
+
+Generate it only after the canonical builder code and schema are committed, then verify it from a
+clean checkout with:
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_build_receipt_v1.py \
+  --receipt docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json \
+  --check-only
+```
+
+The receipt's self-hash covers canonical JSON with only `#/integrity` excluded. This is build
+provenance, not an admission receipt, domain approval, publication authorization, benchmark result,
+or paper-facing evidence. The separate `ch7-evidence-admission.v2` receipt remains required.

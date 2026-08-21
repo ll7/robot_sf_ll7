@@ -15,7 +15,7 @@ import numpy as np
 import yaml
 from loguru import logger
 
-from robot_sf.benchmark.map_runner import run_map_batch
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.observation_noise import load_observation_noise_spec
 from robot_sf.benchmark.predictive.predictive_planner_config import (
     build_predictive_planner_algo_config,

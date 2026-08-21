@@ -28,15 +28,29 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
-import subprocess
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.map_runner import run_map_batch
-from robot_sf.evidence.distance_convention import DistanceConvention
-from robot_sf.evidence.writers import write_distance_series_csv, write_json, write_text
+from robot_sf.benchmark.dwa_diagnostic_harness import (
+    DwaDiagnosticRequest,
+    collect_episode,
+    constraint_reason_counts,
+    first_infeasible_candidate_step,
+    first_unrecoverable_step,
+    flatten_trace_step,
+    load_scenario,
+    read_single_episode_record,
+    repo_relative_path,
+    route_progress_summary,
+    sha256_file,
+    summarize_episode,
+    trace_commit,
+    write_json_atomic,
+    write_markdown_atomic,
+    write_steps_csv,
+)
+from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.training.scenario_loader import load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -91,25 +105,11 @@ STEP_TRACE_FIELDS: tuple[str, ...] = (
 
 
 def _load_scenario(name: str, seed: int, matrix_path: Path) -> dict[str, Any]:
-    """Return one scenario from the source matrix with a single pinned seed."""
-    scenarios = load_scenarios(matrix_path, base_dir=matrix_path.parent)
-    by_name = {str(row.get("name")): dict(row) for row in scenarios}
-    if name not in by_name:
-        raise KeyError(f"scenario {name!r} is absent from matrix {matrix_path}")
-    scenario = dict(by_name[name])
-    scenario["seeds"] = [int(seed)]
-    return scenario
+    """Compatibility adapter for the shared deterministic scenario loader."""
+    return load_scenario(name, seed, matrix_path, load_scenarios_fn=load_scenarios)
 
 
-def _read_record(jsonl_path: Path) -> dict[str, Any]:
-    """Return the single episode record from a one-row JSONL file."""
-    lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    if len(lines) != 1:
-        raise ValueError(f"expected exactly one episode record in {jsonl_path}, got {len(lines)}")
-    record = json.loads(lines[0])
-    if not isinstance(record, dict):
-        raise ValueError(f"episode record in {jsonl_path} must be a JSON object")
-    return record
+_read_record = read_single_episode_record
 
 
 def _flatten_step(
@@ -120,59 +120,21 @@ def _flatten_step(
     seed: int,
 ) -> dict[str, Any]:
     """Normalize one planner-decision-trace step into a flat CSV/JSON row."""
-    command = step.get("selected_command") or []
-    selected_v = float(command[0]) if len(command) > 0 else None
-    selected_w = float(command[1]) if len(command) > 1 else None
-    window = step.get("dynamic_window") if isinstance(step.get("dynamic_window"), dict) else {}
-    target = step.get("target_goal") if isinstance(step.get("target_goal"), dict) else {}
-    return {
-        "episode_id": episode_id,
-        "scenario_id": scenario_id,
-        "seed": int(seed),
-        "step": int(step.get("step", -1)),
-        "selected_source": str(step.get("selected_source", "unknown")),
-        "selected_v_mps": selected_v,
-        "selected_w_radps": selected_w,
-        "selected_score": step.get("selected_score"),
-        "constraint_reason": str(step.get("constraint_reason", "unknown")),
-        "candidate_total": step.get("candidate_total"),
-        "candidate_feasible": step.get("candidate_feasible"),
-        "candidate_infeasible": step.get("candidate_infeasible"),
-        "feasible_score_min": step.get("feasible_score_min"),
-        "feasible_score_max": step.get("feasible_score_max"),
-        "dynamic_window_v_min": window.get("v_min"),
-        "dynamic_window_v_max": window.get("v_max"),
-        "dynamic_window_w_min": window.get("w_min"),
-        "dynamic_window_w_max": window.get("w_max"),
-        "target_goal_kind": target.get("kind"),
-        "target_goal_x": target.get("x"),
-        "target_goal_y": target.get("y"),
-        "distance_to_goal_m": step.get("distance_to_goal_m"),
-        "route_progress_from_start_m": step.get("route_progress_from_start_m"),
-        "robot_x_m": step.get("robot_x_m"),
-        "robot_y_m": step.get("robot_y_m"),
-        "route_rescue_active": step.get("route_rescue_active", False),
-        "route_rescue_type": step.get("route_rescue_type"),
-        "feasibility_slowdown_active": step.get("feasibility_slowdown_active", False),
-    }
+    return flatten_trace_step(
+        step,
+        episode_id=episode_id,
+        scenario_id=scenario_id,
+        seed=seed,
+        extra_fields={
+            "route_rescue_active": step.get("route_rescue_active", False),
+            "route_rescue_type": step.get("route_rescue_type"),
+            "feasibility_slowdown_active": step.get("feasibility_slowdown_active", False),
+        },
+    )
 
 
-def _first_unrecoverable_step(rows: list[dict[str, Any]]) -> int | None:
-    """Return the first step where all rollout candidates become infeasible."""
-    for row in rows:
-        feasible = row.get("candidate_feasible")
-        if feasible is not None and int(feasible) == 0:
-            return int(row["step"])
-    return None
-
-
-def _first_infeasible_candidate_step(rows: list[dict[str, Any]]) -> int | None:
-    """Return the first step where at least one rollout candidate is infeasible."""
-    for row in rows:
-        infeasible = row.get("candidate_infeasible")
-        if infeasible is not None and int(infeasible) > 0:
-            return int(row["step"])
-    return None
+_first_unrecoverable_step = first_unrecoverable_step
+_first_infeasible_candidate_step = first_infeasible_candidate_step
 
 
 def _route_rescue_activation_steps(rows: list[dict[str, Any]]) -> list[int]:
@@ -185,62 +147,8 @@ def _feasibility_slowdown_steps(rows: list[dict[str, Any]]) -> list[int]:
     return [int(row["step"]) for row in rows if row.get("feasibility_slowdown_active")]
 
 
-def _route_progress_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return compact route-progress statistics for one episode's trace."""
-    if not rows:
-        return {"status": "no_steps"}
-    distances: list[float] = []
-    progresses: list[float] = []
-    skipped_non_finite_rows = 0
-    skipped_non_finite_cells = 0
-    for row in rows:
-        row_has_non_finite_value = False
-        for key, values in (
-            ("distance_to_goal_m", distances),
-            ("route_progress_from_start_m", progresses),
-        ):
-            raw_value = row.get(key)
-            if raw_value in (None, ""):
-                continue
-            try:
-                value = float(raw_value)
-            except (TypeError, ValueError):
-                value = float("nan")
-            if math.isfinite(value):
-                values.append(value)
-            else:
-                row_has_non_finite_value = True
-                skipped_non_finite_cells += 1
-        if row_has_non_finite_value:
-            skipped_non_finite_rows += 1
-    initial = distances[0] if distances else None
-    final = distances[-1] if distances else None
-    return {
-        "initial_distance_to_goal_m": initial,
-        "final_distance_to_goal_m": final,
-        "min_distance_to_goal_m": min(distances) if distances else None,
-        "max_route_progress_from_start_m": max(progresses) if progresses else None,
-        "final_route_progress_from_start_m": progresses[-1] if progresses else None,
-        "net_progress_m": (float(initial) - float(final))
-        if initial is not None and final is not None
-        else None,
-        "progress_ratio_of_initial": (
-            (float(initial) - float(final)) / float(initial)
-            if initial not in (None, 0.0) and final is not None
-            else None
-        ),
-        "skipped_non_finite_rows": skipped_non_finite_rows,
-        "skipped_non_finite_cells": skipped_non_finite_cells,
-    }
-
-
-def _constraint_reason_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
-    """Return per-constraint-reason step counts for one episode's trace."""
-    counts: dict[str, int] = {}
-    for row in rows:
-        reason = str(row.get("constraint_reason", "unknown"))
-        counts[reason] = counts.get(reason, 0) + 1
-    return dict(sorted(counts.items()))
+_route_progress_summary = route_progress_summary
+_constraint_reason_counts = constraint_reason_counts
 
 
 def _summarize_episode(
@@ -259,45 +167,26 @@ def _summarize_episode(
         )
         for step in steps
     ]
-    outcome = record.get("outcome", {}) if isinstance(record.get("outcome"), dict) else {}
     rescue_steps = _route_rescue_activation_steps(rows)
     slowdown_steps = _feasibility_slowdown_steps(rows)
-    summary = {
-        "episode_id": episode_id,
-        "scenario_id": record.get("scenario_id"),
-        "seed": record.get("seed"),
-        "termination_reason": record.get("termination_reason"),
-        "steps": record.get("steps"),
-        "route_complete": bool(outcome.get("route_complete")),
-        "collision_event": bool(outcome.get("collision_event")),
-        "timeout_event": bool(outcome.get("timeout_event")),
-        "trace_step_count": len(rows),
-        "constraint_reason_counts": _constraint_reason_counts(rows),
-        "route_progress": _route_progress_summary(rows),
-        "first_infeasible_candidate_step": _first_infeasible_candidate_step(rows),
-        "first_all_infeasible_step": _first_unrecoverable_step(rows),
-        "last_selected_command": {
-            "v_mps": rows[-1].get("selected_v_mps") if rows else None,
-            "w_radps": rows[-1].get("selected_w_radps") if rows else None,
+    return summarize_episode(
+        episode_id=episode_id,
+        record=record,
+        rows=rows,
+        extra_fields={
+            "route_rescue_active_step_count": len(rescue_steps),
+            "route_rescue_first_active_step": rescue_steps[0] if rescue_steps else None,
+            "feasibility_slowdown_active_step_count": len(slowdown_steps),
+            "feasibility_slowdown_first_active_step": slowdown_steps[0] if slowdown_steps else None,
         },
-        "last_selected_score": rows[-1].get("selected_score") if rows else None,
-        "route_rescue_active_step_count": len(rescue_steps),
-        "route_rescue_first_active_step": rescue_steps[0] if rescue_steps else None,
-        "feasibility_slowdown_active_step_count": len(slowdown_steps),
-        "feasibility_slowdown_first_active_step": slowdown_steps[0] if slowdown_steps else None,
-    }
-    return summary
+    )
 
 
 def _write_steps_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     """Write flat per-step rows as a deterministic CSV artifact."""
     if not rows:
         raise ValueError(f"cannot write empty steps CSV: {path}")
-    write_distance_series_csv(
-        path,
-        [{field: row.get(field) for field in STEP_TRACE_FIELDS} for row in rows],
-        convention=DistanceConvention.CENTER_CENTER,
-    )
+    write_steps_csv(path, rows, STEP_TRACE_FIELDS)
 
 
 def _write_evidence_readme(  # noqa: PLR0915
@@ -501,7 +390,7 @@ def _write_evidence_readme(  # noqa: PLR0915
     lines.append("")
     lines.append(f"Executed at repo commit `{trace_commit}`.")
     lines.append("")
-    write_text(path, "\n".join(lines) + "\n")
+    write_markdown_atomic(path, "\n".join(lines) + "\n")
 
 
 def _fmt(value: Any) -> str:
@@ -514,29 +403,9 @@ def _fmt(value: Any) -> str:
         return str(value)
 
 
-def _trace_commit() -> str:
-    """Return the current git commit hash for provenance, or 'unknown'."""
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
-
-
-def _sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest for a committed config artifact."""
-    import hashlib
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _repo_relative_path(path: Path) -> str:
-    """Return a stable repository-relative path when the artifact is in this checkout."""
-    try:
-        return path.resolve().relative_to(REPO_ROOT).as_posix()
-    except ValueError:
-        return str(path)
+_trace_commit = trace_commit
+_sha256_file = sha256_file
+_repo_relative_path = repo_relative_path
 
 
 def trace_episodes(
@@ -552,37 +421,24 @@ def trace_episodes(
     all_step_rows: list[dict[str, Any]] = []
     episodes_payload: list[dict[str, Any]] = []
     for scenario_id, seed, episode_id in TARGET_EPISODES:
-        scenario = _load_scenario(scenario_id, seed, matrix_path)
-        episodes_path = out_dir / f"episodes_{episode_id}.jsonl"
-        if episodes_path.exists():
-            episodes_path.unlink()
-        run_map_batch(
-            [scenario],
-            episodes_path,
-            schema_path=SCHEMA_PATH,
-            scenario_path=matrix_path,
-            horizon=HORIZON,
-            dt=DT,
-            record_forces=False,
-            algo="dwa",
-            algo_config_path=str(algo_config_path),
-            benchmark_profile="experimental",
-            workers=1,
-            resume=False,
-            record_planner_decision_trace=True,
+        episode = collect_episode(
+            DwaDiagnosticRequest(
+                config_path=algo_config_path,
+                scenario=scenario_id,
+                seed=seed,
+                algorithm="dwa",
+                output_dir=out_dir,
+                episode_id=episode_id,
+                matrix_path=matrix_path,
+                schema_path=SCHEMA_PATH,
+                horizon=HORIZON,
+                dt=DT,
+            ),
+            run_map_batch_fn=run_map_batch,
+            load_scenario_fn=_load_scenario,
         )
-        record = _read_record(episodes_path)
-        algo_meta = (
-            record.get("algorithm_metadata", {})
-            if isinstance(record.get("algorithm_metadata"), dict)
-            else {}
-        )
-        trace = (
-            algo_meta.get("planner_decision_trace", {})
-            if isinstance(algo_meta.get("planner_decision_trace"), dict)
-            else {}
-        )
-        steps = trace.get("steps", []) if isinstance(trace.get("steps"), list) else []
+        record = dict(episode.episode_row)
+        steps = list(episode.steps)
         summary = _summarize_episode(episode_id=episode_id, record=record, steps=steps)
         summaries.append(summary)
         episode_rows = [
@@ -600,7 +456,7 @@ def trace_episodes(
         )
 
     all_step_rows.sort(key=lambda row: (row["episode_id"], row["step"]))
-    write_json(
+    write_json_atomic(
         out_dir / "dwa_route_rescue_trace.json",
         {
             "schema_version": "dwa-route-rescue-trace.v1",
@@ -609,6 +465,7 @@ def trace_episodes(
             "config": _repo_relative_path(algo_config_path),
             "episodes": episodes_payload,
         },
+        review_marker=True,
     )
     _write_steps_csv(out_dir / "dwa_route_rescue_steps.csv", all_step_rows)
     summary_payload = {
@@ -617,7 +474,9 @@ def trace_episodes(
         "config": _repo_relative_path(algo_config_path),
         "episodes": summaries,
     }
-    write_json(out_dir / "dwa_route_rescue_summary.json", summary_payload)
+    write_json_atomic(
+        out_dir / "dwa_route_rescue_summary.json", summary_payload, review_marker=True
+    )
 
     baseline_path = BASELINE_SUMMARY
     if not baseline_path.exists():
@@ -631,7 +490,11 @@ def trace_episodes(
     if evidence_dir is not None:
         evidence_dir.mkdir(parents=True, exist_ok=True)
         _write_steps_csv(evidence_dir / "dwa_route_rescue_steps.csv", all_step_rows)
-        write_json(evidence_dir / "dwa_route_rescue_summary.json", summary_payload)
+        write_json_atomic(
+            evidence_dir / "dwa_route_rescue_summary.json",
+            summary_payload,
+            review_marker=True,
+        )
         _write_evidence_readme(
             evidence_dir / "README.md",
             summaries=summaries,

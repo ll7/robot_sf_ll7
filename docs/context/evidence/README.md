@@ -127,6 +127,10 @@ Policy caveats:
   checksum-covered, but remains `blocked_pending_domain_approval` / `not_admitted`; see the
   [custody note](issue_7322_ch7_custody_note.md) for retrieval, provenance, and blockers.
 
+- `issue_7410_ch7_evidence_build_receipt.v1.json`: adjacent, durable build provenance for the v2
+  package. It binds the canonical source/tool/environment inputs and two independent output-tree
+  hashes; it is explicitly not an admission receipt or benchmark/paper evidence.
+
 - `issue_6102_robot_speed_tier_recovery/`: compact recovery receipt for the
   structurally complete local copy of job 13828 (2,160 native cells). The recorded
   independent result root is missing, so this packet remains `durable-required`,

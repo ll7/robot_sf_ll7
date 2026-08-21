@@ -2,7 +2,7 @@
 """Plan and execute guarded stacked pull-request workflows.
 
 The helper treats a stack as an ordered list from root to tip.  It supports
-four deliberately small operations:
+five deliberately small operations:
 
 ``status``
     Read the live PRs, current check runs, review evidence, and stack-base
@@ -17,6 +17,18 @@ four deliberately small operations:
     Squash-merge one green root at a time.  After a merge it verifies whether
     GitHub retargeted the next PR; otherwise it explicitly retargets that PR
     and stops until fresh CI is available.
+``check-ancestry``
+    Fail-closed ancestry gate for issue #7515.  Computes the live
+    ``origin/main`` merge base for a branch or PR head, enumerates the commits
+    and changed paths introduced through non-``main`` ancestry, and classifies
+    the branch as ``clean``, ``stacked``, ``undeclared_stack``,
+    ``mismatched_declaration``, ``parent_invalidated``, or ``parent_merged``
+    against one machine-readable ``## Stack Declaration`` (``parent_pr`` +
+    ``parent_head``).  Blocking states exit non-zero with the full diagnostic
+    block (actual base, merge base, unexpected commits/paths, declared parent,
+    remediation).  This is the same check the pre-PR gate
+    (``check_prepublication_state.py``) and the readiness classifier
+    (``pr_loop_policy.py``) run before ``merge-ready``.
 
 This is a workflow coordinator, not a replacement for the repository's merge
 gate.  All mutating operations are dry-run by default and require ``--apply``.
@@ -34,7 +46,7 @@ import re
 import subprocess
 import sys
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -45,18 +57,36 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.dev.merge_queue_gate import fetch_threads_resolved  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    current_explicit_merge_hold_reasons,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
 )
 from scripts.dev.pr_metadata import metadata_digest  # noqa: E402
+from scripts.dev.single_account_merge_receipt import (  # noqa: E402
+    apply_guarded_merge,
+    build_receipt_from_stack_entry,
+    classify_implementation_review,
+    derive_holds,
+    normalize_required_checks,
+    verify_receipt,
+)
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
     _extract_gate_verdicts,
     _extract_metadata_verdicts,
+)
+from scripts.dev.stack_ancestry import (  # noqa: E402
+    StackDeclaration,
+    ancestry_state,
+    collect_ancestry_facts,
+    parse_stack_declaration,
+    remediation_command,
+    render_diagnostics,
 )
 
 SCHEMA = "stacked_prs.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 SUCCESS_CONCLUSIONS = frozenset({"neutral", "skipped", "success"})
+MERGE_QUEUE_GATE_CHECK_NAME = "merge-queue-gate"
 REST_PAGE_SIZE = 100
 REST_PAGE_BUDGET = 100
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
@@ -356,6 +386,57 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def summarize_merge_queue_gate(
+    check_runs: list[dict[str, Any]], *, head_sha: str
+) -> dict[str, Any]:
+    """Require the newest exact-head Merge Queue Gate check context."""
+    candidates = [
+        item
+        for item in check_runs
+        if str(item.get("name") or "").strip().lower() == MERGE_QUEUE_GATE_CHECK_NAME
+    ]
+    if not candidates:
+        return {
+            "status": "missing",
+            "name": MERGE_QUEUE_GATE_CHECK_NAME,
+            "head_sha": head_sha,
+            "exact_head": False,
+        }
+
+    def sort_key(item: dict[str, Any]) -> tuple[str, int]:
+        timestamp = str(item.get("completed_at") or item.get("started_at") or "")
+        try:
+            identifier = int(item.get("id", 0) or 0)
+        except (TypeError, ValueError):
+            identifier = 0
+        return timestamp, identifier
+
+    latest = max(candidates, key=sort_key)
+    reported_head = str(latest.get("head_sha") or "")
+    exact_head = bool(reported_head) and reported_head.lower() == head_sha.lower()
+    if not reported_head:
+        status = "malformed"
+    elif not exact_head:
+        status = "mismatch"
+    elif str(latest.get("status") or "").lower() != "completed":
+        status = "pending"
+    elif str(latest.get("conclusion") or "").lower() != "success":
+        status = "failure"
+    else:
+        status = "success"
+    return {
+        "status": status,
+        "name": str(latest.get("name") or MERGE_QUEUE_GATE_CHECK_NAME),
+        "head_sha": reported_head or head_sha,
+        "exact_head": exact_head,
+        "check_run_id": latest.get("id"),
+        "started_at": latest.get("started_at"),
+        "completed_at": latest.get("completed_at"),
+        "conclusion": latest.get("conclusion"),
+        "html_url": latest.get("html_url"),
+    }
+
+
 def _fetch_pr(
     repo: str, number: int, *, api: GhApi = _run_gh_api
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -474,19 +555,27 @@ def _gate_status(
     }
 
 
-def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
-    """Return deterministic fail-closed readiness reasons for one stack entry."""
+def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return fail-closed reasons for exact-head merge-queue evidence."""
+    merge_queue_gate = entry.get("merge_queue_gate", {})
+    gate_status = merge_queue_gate.get("status")
+    if gate_status == "missing":
+        return ["missing_merge_queue_gate"]
+    if gate_status == "malformed":
+        return ["malformed_merge_queue_gate"]
+    if gate_status == "mismatch":
+        return ["merge_queue_gate_head_mismatch"]
+    if gate_status != "success":
+        return [f"merge_queue_gate_not_green:{gate_status or 'unknown'}"]
+    return []
+
+
+def _review_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return fail-closed reasons for current review and metadata evidence."""
     reasons: list[str] = []
-    if entry.get("state") != "open":
-        reasons.append("pull_request_not_open")
-    if entry.get("draft") is True:
-        reasons.append("pull_request_is_draft")
-    if entry.get("mergeable") is not True:
-        reasons.append("mergeable_state_unknown_or_false")
-    if entry.get("mergeable_state") != "clean":
-        reasons.append("mergeable_state_not_clean")
-    if entry.get("checks", {}).get("overall") != "success":
-        reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
+    for state in ("CHANGES_REQUESTED", "PENDING", "DISMISSED"):
+        if entry.get("review_states", {}).get(state, 0):
+            reasons.append(f"non_authoritative_review_state:{state.lower()}")
     if entry.get("requested_reviewer_count", 0) or entry.get("requested_team_count", 0):
         reasons.append("outstanding_requested_reviewers")
     if entry.get("review_threads", {}).get("status") != "resolved":
@@ -501,6 +590,26 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:  # noqa: C901
         reasons.append("missing_exact_head_gate_verdict")
     if entry.get("metadata_verdict") != "accepted":
         reasons.append("missing_current_pr_metadata_verdict")
+    return reasons
+
+
+def _entry_reasons(entry: dict[str, Any]) -> list[str]:
+    """Return deterministic fail-closed readiness reasons for one stack entry."""
+    reasons: list[str] = []
+    if entry.get("state") != "open":
+        reasons.append("pull_request_not_open")
+    if entry.get("draft") is True:
+        reasons.append("pull_request_is_draft")
+    if entry.get("mergeable") is not True:
+        reasons.append("mergeable_state_unknown_or_false")
+    if entry.get("mergeable_state") != "clean":
+        reasons.append("mergeable_state_not_clean")
+    if entry.get("checks", {}).get("overall") != "success":
+        reasons.append(f"ci_not_green:{entry.get('checks', {}).get('overall', 'unknown')}")
+    for hold in entry.get("explicit_holds", []):
+        reasons.append(f"explicit_hold:{hold}")
+    reasons.extend(_merge_queue_gate_reasons(entry))
+    reasons.extend(_review_reasons(entry))
     if entry.get("base_alignment") != "aligned":
         reasons.append("stack_base_not_aligned")
     return reasons
@@ -512,6 +621,7 @@ def build_stack_status(
     *,
     api: GhApi = _run_gh_api,
     thread_fetcher: Callable[[int], tuple[bool | None, str | None]] | None = None,
+    waiver_actor: str = "",
 ) -> dict[str, Any]:
     """Collect a complete stack status snapshot from live GitHub state."""
     valid_prs, error = _positive_prs(prs)
@@ -565,6 +675,11 @@ def build_stack_status(
         )
         metadata = metadata_digest(pr["title"], pr["body"])
         gate = _gate_status(pr, review_data, metadata=metadata)
+        hold_source = {
+            **pr,
+            "reviews": review_data["reviews"],
+            "comments": review_data["conversation_comments"],
+        }
         entry: dict[str, Any] = {
             "position": index,
             "pr": pr["number"],
@@ -583,6 +698,8 @@ def build_stack_status(
             "requested_reviewer_count": len(pr["requested_reviewers"]),
             "requested_team_count": len(pr["requested_teams"]),
             "checks": summarize_check_runs(check_runs),
+            "required_checks": normalize_required_checks(check_runs, head_sha=pr["head_sha"]),
+            "merge_queue_gate": summarize_merge_queue_gate(check_runs, head_sha=pr["head_sha"]),
             "pagination": {
                 **review_data["pagination"],
                 "check_runs": check_runs_pagination,
@@ -607,6 +724,34 @@ def build_stack_status(
             "metadata_digest": metadata,
             **gate,
         }
+        review_evidence = {
+            "head_sha": pr["head_sha"],
+            "metadata_digest": metadata,
+            "check_runs": check_runs,
+            "reviews": review_data["reviews"],
+            "comments": review_data["conversation_comments"],
+            "waiver_actor": waiver_actor,
+        }
+        entry["implementation_review"] = classify_implementation_review(review_evidence)
+        hold_source = {
+            **pr,
+            "reviews": review_data["reviews"],
+            "comments": review_data["conversation_comments"],
+            "explicit_holds": current_explicit_merge_hold_reasons(
+                {
+                    **pr,
+                    "reviews": review_data["reviews"],
+                    "comments": review_data["conversation_comments"],
+                }
+            ),
+        }
+        entry["holds"] = derive_holds(hold_source)
+        entry["explicit_holds"] = sorted(
+            reason
+            for disposition in entry["holds"].values()
+            if isinstance(disposition, dict) and disposition.get("status") != "clear"
+            for reason in disposition.get("reason_codes", [])
+        )
         entry["reasons"] = _entry_reasons(entry)
         entry["merge_ready"] = not entry["reasons"]
         entries.append(entry)
@@ -858,31 +1003,12 @@ def _merge_pr(
     *,
     expected_head: str,
     api: GhApi,
+    receipt: Mapping[str, Any],
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Squash-merge one exact PR head and verify remote merged state."""
+    """Delegate one exact-head squash merge to the canonical receipt owner."""
     if entry.get("head_sha", "").lower() != expected_head.lower():
         return None, f"PR #{entry.get('pr')} head changed before merge"
-    response, error = api(
-        "PUT",
-        f"repos/{repo}/pulls/{entry['pr']}/merge",
-        {"sha": expected_head, "merge_method": "squash"},
-    )
-    if error:
-        return None, error
-    merged, error = _object(response, operation="merge")
-    if error or merged is None:
-        return None, error or "merge response was empty"
-    if merged.get("merged") is not True:
-        return None, str(merged.get("message") or "GitHub did not report a merged PR")
-    verified, error = _fetch_pr(repo, int(entry["pr"]), api=api)
-    if error or verified is None:
-        return None, f"remote merge verification failed: {error}"
-    if verified.get("state") != "closed" or not verified.get("raw", {}).get("merged"):
-        return None, "remote merge response is not closed/merged"
-    return {
-        "pr": entry["pr"],
-        "merge_commit_sha": merged.get("sha") or merged.get("merge_commit_sha"),
-    }, None
+    return apply_guarded_merge(receipt, repository=repo, api=api)
 
 
 def merge_cascade(  # noqa: C901, PLR0912
@@ -893,9 +1019,17 @@ def merge_cascade(  # noqa: C901, PLR0912
     apply: bool = False,
     api: GhApi = _run_gh_api,
     thread_fetcher: Callable[[int], tuple[bool | None, str | None]] | None = None,
+    waiver_actor: str = "",
+    waiver_reason: str = "",
 ) -> dict[str, Any]:
     """Merge only the current green root and advance the next PR safely."""
-    status = build_stack_status(repo, prs, api=api, thread_fetcher=thread_fetcher)
+    status = build_stack_status(
+        repo,
+        prs,
+        api=api,
+        thread_fetcher=thread_fetcher,
+        waiver_actor=waiver_actor,
+    )
     if status.get("status") != "ok":
         return {**status, "operation": "merge-cascade"}
     entries = status["entries"]
@@ -910,7 +1044,13 @@ def merge_cascade(  # noqa: C901, PLR0912
                 "error": f"--apply requires expected heads for every PR; missing {missing}",
                 "stack": status,
             }
-        fresh_status = build_stack_status(repo, prs, api=api, thread_fetcher=thread_fetcher)
+        fresh_status = build_stack_status(
+            repo,
+            prs,
+            api=api,
+            thread_fetcher=thread_fetcher,
+            waiver_actor=waiver_actor,
+        )
         if fresh_status.get("status") != "ok":
             return {
                 **fresh_status,
@@ -959,20 +1099,42 @@ def merge_cascade(  # noqa: C901, PLR0912
             "actions": actions,
             "stack": status,
         }
+    receipt = build_receipt_from_stack_entry(
+        repo,
+        root,
+        current_base_sha=str(status.get("main", {}).get("sha") or ""),
+        waiver_actor=waiver_actor,
+        waiver_reason=waiver_reason,
+    )
+    receipt_verification = verify_receipt(receipt)
+    if receipt_verification.get("passed") is not True:
+        return {
+            "schema": SCHEMA,
+            "status": "blocked",
+            "operation": "merge-cascade",
+            "error": "single-account merge receipt blocked",
+            "receipt": receipt,
+            "receipt_verification": receipt_verification,
+            "stack": status,
+        }
     merged, error = _merge_pr(
         repo,
         root,
         expected_head=expected_heads[root["pr"]],
         api=api,
+        receipt=receipt,
     )
     if error or merged is None:
-        return {
+        failure_result: dict[str, Any] = {
             "schema": SCHEMA,
             "status": "error",
             "operation": "merge-cascade",
             "error": error,
             "merged": False,
         }
+        if isinstance(merged, Mapping) and "receipt_digest" in merged:
+            failure_result["receipt"] = merged
+        return failure_result
     result: dict[str, Any] = {
         "schema": SCHEMA,
         "operation": "merge-cascade",
@@ -1074,6 +1236,256 @@ def merge_cascade(  # noqa: C901, PLR0912
     return result
 
 
+def _parent_pr_lookup(
+    repo: str, parent_pr: int, *, api: GhApi = _run_gh_api
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Fetch the declared parent PR's lifecycle state, or ``(None, None)`` when absent.
+
+    A missing/unreadable parent PR is returned as ``(None, None)`` so the
+    ancestry classifier can fail closed with ``parent_invalidated`` (the parent
+    cannot be verified) instead of crashing the gate.
+    """
+    if parent_pr is None or parent_pr < 1:
+        return None, None
+    payload, error = _get_object(f"repos/{repo}/pulls/{parent_pr}", api=api)
+    if error or payload is None:
+        return None, None
+    state = str(payload.get("state") or "").lower()
+    merged = bool(payload.get("merged"))
+    head = payload.get("head") if isinstance(payload.get("head"), dict) else {}
+    return {
+        "state": state,
+        "merged": merged,
+        "head_sha": str(head.get("sha") or ""),
+    }, None
+
+
+def _parent_lifecycle_facts(
+    repo: str,
+    declaration: StackDeclaration,
+    *,
+    api: GhApi = _run_gh_api,
+) -> tuple[str, bool, bool]:
+    """Resolve a declared parent PR's live lifecycle facts (issue #7515).
+
+    Returns ``(parent_state, parent_merged, parent_head_changed)``.  A
+    missing/unreadable parent PR yields ``parent_state="unknown"`` so the
+    ancestry classifier fails closed with ``parent_invalidated`` instead of
+    crashing the gate.
+    """
+    parent, _ = _parent_pr_lookup(repo, declaration.parent_pr, api=api)
+    if parent is None:
+        return "unknown", False, False
+    parent_state = str(parent.get("state") or "unknown")
+    parent_merged = bool(parent.get("merged"))
+    parent_head_changed = bool(
+        parent.get("head_sha")
+        and declaration.parent_head
+        and str(parent.get("head_sha")).lower() != declaration.parent_head.lower()
+    )
+    return parent_state, parent_merged, parent_head_changed
+
+
+def _finalize_ancestry_result(state: dict[str, Any], *, target: str, branch: str) -> dict[str, Any]:
+    """Attach the deterministic status/classification envelope to an ancestry state."""
+    state["schema"] = SCHEMA
+    state["operation"] = "check-ancestry"
+    state["status"] = "ok"
+    state["target"] = target
+    state["branch"] = branch or target
+    if state["state"] == "clean":
+        state["status"] = "ok"
+    elif state["state"] == "stacked":
+        state["status"] = "ok"
+        state["mergeable"] = False
+        state["classification"] = "stacked_not_independently_mergeable"
+    elif state["state"] == "parent_merged":
+        state["status"] = "refresh_required"
+    else:
+        state["status"] = "blocked"
+    if state["state"] != "clean":
+        state["remediation_command"] = remediation_command(
+            parent_head=state.get("declared_parent_head") or state.get("merge_base_sha"),
+            branch=branch or target,
+        )
+    return state
+
+
+def _resolve_ancestry_target(
+    *,
+    target_text: str,
+    pr_number: int | None,
+    branch: str | None,
+    repo: str,
+    worktree: Path,
+    git_runner: GitRunner,
+    api: GhApi,
+) -> tuple[dict[str, Any], None] | tuple[None, dict[str, Any]]:
+    """Resolve a PR number or remote branch into ``(head_sha, base_ref, body, branch)``.
+
+    Returns ``(target, None)`` on success or ``(None, error_result)`` fail-closed.
+    """
+    if pr_number is not None:
+        pr, error = _fetch_pr(repo, pr_number, api=api)
+        if error or pr is None:
+            return None, {"error": f"PR #{pr_number}: {error or 'unreadable'}"}
+        return (
+            {
+                "head_sha": pr["head_sha"],
+                "base_ref": pr["base_ref"],
+                "body": pr["body"],
+                "branch": branch or pr["head_ref"],
+            },
+            None,
+        )
+    if not branch:
+        return None, {"error": "branch target requires --branch"}
+    branch_result = git_runner(
+        ["rev-parse", "--verify", f"refs/remotes/origin/{target_text}"], worktree
+    )
+    if branch_result.returncode != 0:
+        return None, {
+            "error": (
+                branch_result.stderr.strip() or f"cannot resolve refs/remotes/origin/{target_text}"
+            )
+        }
+    return (
+        {
+            "head_sha": branch_result.stdout.strip(),
+            "base_ref": "main",
+            "body": "",
+            "branch": branch,
+        },
+        None,
+    )
+
+
+def _ancestry_invocation(
+    *,
+    target: str,
+    worktree: Path,
+    git_runner: GitRunner,
+) -> tuple[str, int | None, Path] | tuple[None, None, dict[str, Any]]:
+    """Validate the check-ancestry invocation and fetch live remote refs.
+
+    Returns ``(target_text, pr_number, worktree)`` on success or
+    ``(None, None, error_result)`` fail-closed.
+    """
+    target_text = str(target or "").strip()
+    if not target_text:
+        return None, None, {"error": "target must be a PR number or branch name"}
+    try:
+        pr_number = int(target_text)
+    except ValueError:
+        pr_number = None
+    if pr_number is not None and pr_number < 1:
+        return None, None, {"error": "PR number must be positive"}
+    fetch = git_runner(["fetch", "--no-tags", "origin", "main"], worktree)
+    if fetch.returncode != 0:
+        return (
+            None,
+            None,
+            {
+                "error": fetch.stderr.strip() or "git fetch origin main failed",
+            },
+        )
+    return target_text, pr_number, worktree
+
+
+def check_ancestry(
+    repo: str,
+    *,
+    target: str,
+    worktree: Path | None = None,
+    branch: str | None = None,
+    declaration_text: str | None = None,
+    api: GhApi = _run_gh_api,
+    git_runner: GitRunner = _git,
+) -> dict[str, Any]:
+    """Run the fail-closed ancestry gate for one branch or PR (issue #7515).
+
+    ``target`` is either a PR number (fetched via ``gh api``) or a branch name
+    resolved against the remote.  For a PR target the base ref, head SHA, and PR
+    body come from GitHub; for a branch target the caller supplies ``branch``
+    (local branch name) and the base ref defaults to ``main``.
+
+    The check always fetches the live remote refs first, then computes the
+    merge base, the non-``main`` ancestry commits and paths, and classifies
+    against the parsed ``## Stack Declaration`` (from the PR body or
+    ``declaration_text``).  Blocking states carry a non-zero CLI exit.
+    """
+    error_result: dict[str, Any] = {
+        "schema": SCHEMA,
+        "operation": "check-ancestry",
+        "status": "error",
+    }
+    worktree = worktree or Path.cwd()
+    if not isinstance(worktree, Path):
+        return {**error_result, "error": "worktree must be a path"}
+    if not worktree.is_dir():
+        return {**error_result, "error": f"worktree does not exist: {worktree}"}
+
+    invocation = _ancestry_invocation(target=target, worktree=worktree, git_runner=git_runner)
+    if invocation[0] is None:
+        return {**error_result, **invocation[2]}
+    target_text, pr_number, worktree = invocation
+
+    resolved, resolve_error = _resolve_ancestry_target(
+        target_text=target_text,
+        pr_number=pr_number,
+        branch=branch,
+        repo=repo,
+        worktree=worktree,
+        git_runner=git_runner,
+        api=api,
+    )
+    if resolve_error is not None or resolved is None:
+        return {**error_result, **resolve_error}
+    head_sha = resolved["head_sha"]
+    base_ref = resolved["base_ref"]
+    body = resolved["body"]
+    branch = resolved["branch"]
+
+    if not head_sha or not base_ref:
+        return {**error_result, "error": f"{target_text} has no usable head/base ref"}
+
+    declaration, parse_error = parse_stack_declaration(declaration_text or body or "")
+    if parse_error:
+        return {**error_result, "error": parse_error}
+
+    facts, fact_error = collect_ancestry_facts(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        worktree=worktree,
+        remote="origin",
+        git_runner=git_runner,
+    )
+    if fact_error:
+        return {**error_result, "error": fact_error}
+
+    parent_state = ""
+    parent_merged = False
+    parent_head_changed = False
+    if declaration is not None:
+        parent_state, parent_merged, parent_head_changed = _parent_lifecycle_facts(
+            repo, declaration, api=api
+        )
+
+    state = ancestry_state(
+        head_sha=head_sha,
+        base_ref=base_ref,
+        main_tip_sha=facts["main_tip_sha"],
+        merge_base_sha=facts["merge_base_sha"],
+        commits=facts["commits"],
+        declaration=declaration,
+        parent_state=parent_state,
+        parent_merged=parent_merged,
+        parent_head_changed=parent_head_changed,
+    )
+    state["unexpected_paths"] = facts["changed_paths"]
+    return _finalize_ancestry_result(state, target=target_text, branch=branch or target_text)
+
+
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repository OWNER/REPO")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
@@ -1100,6 +1512,16 @@ def _add_expected_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _print_result(result: dict[str, Any], *, as_json: bool) -> None:
     """Print stable JSON or a compact human summary."""
+    if result.get("operation") == "check-ancestry":
+        if as_json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+        print(f"check-ancestry: {result.get('state')} ({result.get('status')})")
+        for line in render_diagnostics(result):
+            print(f"  {line}")
+        if result.get("remediation_command"):
+            print(f"  remediation command: {result['remediation_command']}")
+        return
     if as_json or result.get("status") not in {"ok", "dry_run", "applied", "merged"}:
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -1139,6 +1561,40 @@ def main(argv: list[str] | None = None) -> int:
     _add_common_arguments(cascade_parser)
     _add_stack_arguments(cascade_parser)
     _add_expected_arguments(cascade_parser)
+    cascade_parser.add_argument(
+        "--waiver-actor",
+        default="",
+        help="actor recorded when the bounded single-account waiver is used",
+    )
+    cascade_parser.add_argument(
+        "--waiver-reason",
+        default="",
+        help="explicit reason a distinct human implementation reviewer was unavailable",
+    )
+
+    ancestry_parser = subparsers.add_parser(
+        "check-ancestry",
+        help="fail-closed non-main ancestry gate for one branch or PR (issue #7515)",
+    )
+    _add_common_arguments(ancestry_parser)
+    ancestry_parser.add_argument(
+        "target",
+        help="PR number or remote branch name to classify (e.g. 7389 or fix/issue-7283-shared-pysf-slices)",
+    )
+    ancestry_parser.add_argument(
+        "--worktree",
+        type=Path,
+        default=Path.cwd(),
+        help="repository worktree for local git reads (default: current directory)",
+    )
+    ancestry_parser.add_argument(
+        "--branch",
+        help="local branch name for a branch target and for the remediation command",
+    )
+    ancestry_parser.add_argument(
+        "--declaration-text",
+        help="stack declaration text override (default: PR body for PR targets)",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -1158,12 +1614,27 @@ def main(argv: list[str] | None = None) -> int:
             worktree=args.worktree,
             apply=args.apply,
         )
+    elif args.command == "check-ancestry":
+        result = check_ancestry(
+            args.repo,
+            target=args.target,
+            worktree=args.worktree,
+            branch=args.branch,
+            declaration_text=args.declaration_text,
+        )
     else:
         expected, error = _parse_expected_heads(args.expected_head)
         result = (
             {"schema": SCHEMA, "status": "error", "error": error}
             if error
-            else merge_cascade(args.repo, args.prs, expected_heads=expected, apply=args.apply)
+            else merge_cascade(
+                args.repo,
+                args.prs,
+                expected_heads=expected,
+                apply=args.apply,
+                waiver_actor=args.waiver_actor,
+                waiver_reason=args.waiver_reason,
+            )
         )
     _print_result(result, as_json=args.json)
     return 0 if result.get("status") in {"ok", "dry_run", "applied", "merged"} else 1

@@ -124,6 +124,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
 * **[Security Triage Guidance](./security_triage.md)** - Vulnerability reporting, dependency scanning, static-analysis triage, and accepted-risk handling for research code
+* **[Dependency License Inventory](./context/dependency_license_inventory.md)** - Frozen profile/source identity, raw license metadata, vendored provenance, freshness checks, and fail-closed release disposition boundaries
 * **[External Data Setup Assistant](./external_data_setup.md)** - License-safe local staging and compact provenance manifests for external datasets including Stanford Drone Dataset, SocNavBench, ETH/UCY, and AMV calibration-source assets
 * **[ETH/UCY External Trajectory Data](./datasets/eth-ucy.md)** - Public acquisition, citation, and expected layout notes for locally staged ETH BIWI and UCY Crowds-by-Example trajectories
 * **[Context Retrieval Index](./context/INDEX.md)** - Retrieval-first catalog for current context-note entry points, status rules, optional context tools, and curated context-pack scopes
@@ -140,6 +141,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[GitHub Workflow Batching](./context/issue_713_batch_first_issue_workflow.md)** - Batch issue cleanup first, defer Project #5 routing, and run derived score sync last
 * **[Goal-Driven Agent Loops](./context/goal_driven_agent_loops_2026-05-13.md)** - Shared contract for autonomous issue discovery, issue implementation, PR review, and user-in-the-loop issue audit skills
 * **[Artifact Evidence Vocabulary](./context/artifact_evidence_vocabulary.md)** - Shared issue/PR vocabulary for exploratory outputs, durable evidence, release artifacts, benchmark claims, and paper-facing claims
+* **[Issue #7030 Agent Figure Interpretation Evaluation](./context/issue_7030_agent_figure_interpretation_eval.md)** - Digest-pinned fixture replay, aggregate scoring, critical-error examples, and explicit boundaries before independent workflow review
 * **[Question-First Experiment Registry](../experiments/README.md)** - Register experiment intent, canonical configs, expected artifacts, and validation gates before launching runs
 * **[Policy Search Portfolio Overview](./context/policy_search/portfolio_overview_2026-05-05.md)** - Current non-training policy-search portfolio ranking, promotion status, and h500 horizon evidence pointers
 * **[Agent Index](./AGENT_INDEX.md)** - Agent-oriented index of training, benchmarking, observations, and artifacts
@@ -161,6 +163,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #1457 Adversarial Map And Start-State Generation Protocol (2026-05-23)](./context/issue_1457_adversarial_generation_protocol.md)** - Conservative route/start-state-first protocol for adversarial stress-test generation, with fail-closed case validity rules and a compact seeded smoke summary on `classic_head_on_corridor_low`
 * **[Issue #1237 Adversarial Failure Archive](./context/issue_1237_adversarial_failure_archive.md)** - Compact `adversarial_failure_archive.v1` manifests for deterministic adversarial failure grouping and replay pointers without copying raw bundles
 * **[Issue #4360 Adversarial Dispatchable Inventory](./context/issue_4360_adversarial_dispatchable_inventory.md)** - Current adversarial pedestrian hooks, repeatable seeds/configs, runner assumptions, and how-to-run boundary for the dispatchable half only
+* **[Issue #4360 Bounded Search Harness](./context/issue_4360_search_harness.md)** - Typed finite search-space preparation, equal-budget random/quasi-random baselines, immutable overlays, and pre-simulation rejection accounting without campaign execution
 * **[Issue #1500 Adversarial Campaign Manifest Freeze](./context/issue_1500_adversarial_manifest.md)** - Frozen scenario/search/budget manifest contract for the bounded adversarial comparison campaign, with non-evidence row classification and tracked checksum evidence
 * **[Issue #1432 Adaptive Test Strategy Claim Audit](./context/adaptive_test_claim_audit_2026-05.md)** - Docs-only claim hygiene audit: method inventory, Bayesian/Optuna tooling classification, and conservative verdict on "adaptive test strategy" versus "bounded adversarial/scenario exploration"
 * **[AI Coding Workflow](./ai/ai-workflow.md)** - End-to-end AI issue-to-PR workflow, validation gates, review loop, and traceability conventions
@@ -176,6 +179,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable environment, policy, episode, rendering, and docs helpers extracted from examples and benchmark scripts
+* **[Dependency update and lock coherence](./dev/dependabot_update_policy.md)** - Risk lanes, cross-project lock ownership, and pinned profile checks
 * **[Training Protocol Template](./dev/training_protocol_template.md)** - Fill-in template for documenting training/evaluation runs
 * **[Canonical PPO Training Workflow](./training/ppo_training_workflow.md)** - Config-driven PPO entrypoint, evaluation cadence semantics, and startup provenance logging.
 * **[Robot SF Environment Contract And Training Provenance](./training/environment_contract.md)** - Factory entrypoints, rollout ownership, reward-versus-benchmark boundary, and PPO run-record checklist.
@@ -309,6 +313,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Camera-Ready All-Planners SLURM Check (2026-05-04)](./context/camera_ready_all_planners_slurm_2026-05-04.md)** - Failed `rsf-allbench` job, partial all-planners evidence, asset blocker, and rerun boundary
 * **[SocNav Asset Setup (License-Safe)](./socnav_assets_setup.md)** - Official-source download/staging instructions for SocNav third-party datasets with validation commands
 * **[Benchmark Runner & Metrics](./benchmark.md)** - Episode schema, aggregation, metrics suite (collisions, comfort exposure, SNQI), and validation hooks
+* **[Prediction, Planning, and Runtime-Safety Diagnostic](./prediction_planning_safety_diagnostic.md)** - Fixture-only `prediction_planning_safety.v1` trace contract, split coverage, runtime event accounting, and claim boundary for issue #7317
 * **[Issue #1434 Stress/Uncertainty Coverage Schema v1](./context/issue_1434_stress_uncertainty_coverage_schema.md)** - `stress_uncertainty_coverage.v1` field contract, statistical summary tiers, coverage axes, interpretation boundaries, and fail-closed consumer rules for benchmark reports
 * **[Full Classic Interaction Benchmark](./benchmark_full_classic.md)** - Complete guide: episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics
 * **[Benchmark Artifact Publication](./benchmark_artifact_publication.md)** - Public artifact policy, DOI-ready export bundles, release/Zenodo workflow

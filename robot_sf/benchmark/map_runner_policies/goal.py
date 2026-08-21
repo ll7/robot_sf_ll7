@@ -2,7 +2,7 @@
 
 First slice of the ``_build_policy`` decomposition (#3384 / #3400). Behavior is a
 faithful move of the original ``if algo_key in {"goal", "simple", ...}`` branch from
-``robot_sf.benchmark.map_runner`` — no semantic change.
+``robot_sf.benchmark.map_runner.map_runner`` — no semantic change.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def build(
     # Local import avoids a map_runner <-> map_runner_policies import cycle. _goal_policy
     # stays defined in map_runner (also used by other call sites there and imported
     # directly by tests/benchmark/test_map_runner_utils.py).
-    from robot_sf.benchmark.map_runner import _goal_policy  # noqa: PLC0415
+    from robot_sf.benchmark.map_runner.map_runner import _goal_policy  # noqa: PLC0415
 
     normalized_robot_command_mode = (
         str(robot_command_mode).strip().lower() if robot_command_mode is not None else None

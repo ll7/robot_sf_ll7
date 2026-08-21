@@ -69,6 +69,14 @@ These are composable state qualifiers rather than replacement execution states:
 An issue with no `state:*` label is undispatchable, not implicitly ready. A
 `resource:*` label never promotes an issue to ready.
 
+`state:working` is a live downstream-work qualifier. It is not a positive
+dispatch signal and must remain visible while downstream work is in progress.
+The shared issue-audit classifier requires a verified
+`issue_completion_receipt.v1` exact-head receipt before it can promote an issue
+from this qualifier to `state:ready`. That receipt proves implementation
+delivery integrity only; it never authorizes scientific, benchmark, release,
+licensing, or domain promotion.
+
 ## Resource
 
 Resource labels identify the lane or dependency needed by the work. They never

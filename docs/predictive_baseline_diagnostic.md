@@ -35,6 +35,12 @@ not a claim of exact parameter or implementation parity. The default MPPI
 configuration keeps the cost disabled, and malformed nested configuration fails
 closed.
 
+The enabled adapter consumes planner-visible pedestrian positions and velocities
+plus the declared active `pedestrians.count`. This count is applied to
+fixed-capacity observation arrays before cost evaluation; malformed, non-finite,
+non-integral, negative, string/boolean, or out-of-range counts fail closed rather
+than treating padded rows as real pedestrians.
+
 The constrained lane composes the existing `NMPCSocialPlannerAdapter` with the
 existing collision-cone `CbfSafetyFilterPlannerWrapper`. It copies no external
 code. The cited multi-room MPC paper uses a sensor and map stack that is not

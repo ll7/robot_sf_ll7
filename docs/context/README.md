@@ -9,11 +9,22 @@ maintenance workflow and full discoverability surface.
 
 The trace dossier cell-binding metadata contract is documented in
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md); it remains
-metadata-only until trace export and renderer provenance are reviewed.
+metadata-only even though the retained-trace export and renderer provenance path is now
+covered by diagnostic checks.
 
 The deterministic representative selector is documented in
 [issue_7086_trace_dossiers.md](issue_7086_trace_dossiers.md); it selects a future
-trace-dossier representative only and does not establish benchmark evidence.
+trace-dossier representative, with a diagnostic h600 pin for retained exemplars, and does not
+establish benchmark evidence.
+
+The fixture-only agent figure interpretation evaluator is documented in
+[issue_7030_agent_figure_interpretation_eval.md](issue_7030_agent_figure_interpretation_eval.md);
+it reports aggregate scoring and workflow-variant availability without establishing model or
+scientific results.
+
+Exact-repeat execution-context provenance is documented in
+[issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md);
+it binds cross-host verdicts to numerical context without establishing a determinism result.
 
 The post-rollout stale-base observation contract is documented in
 [issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
@@ -34,6 +45,39 @@ mechanism-level interpretation vocabulary and confidence classes.
 points. Do not delete archived notes unless a maintainer explicitly removes that provenance; keep
 catalog rows as `historical` or `superseded` with `replacement` pointers when a current successor
 exists.
+
+## Context-note Curation Policy
+
+Top-level Markdown notes that are absent from both [INDEX.md](INDEX.md) and
+[catalog.yaml](catalog.yaml) are orphan candidates, not obsolete files. Every candidate receives
+exactly one disposition:
+
+* active_index: current and useful as a retrieval entry point; add both the retrieval and catalog
+  metadata required by this workflow.
+* historical_keep: useful provenance that should remain in place without becoming a startup entry
+  point.
+* superseded: preserved provenance with an exact, repository-resolvable replacement pointer.
+* archive_candidate: eligible for a later path move only after owner approval and link-impact
+  review; the file remains in place until that review completes.
+* needs_owner_decision: ambiguous scientific, legal, release, evidence, or claim significance; do
+  not move or reclassify it automatically.
+
+Finalization is fail-closed. Apply the following precedence:
+
+1. Use superseded only when an explicit supersession marker names an existing replacement.
+2. Use active_index only when explicit current-source evidence and owner confirmation justify adding
+   both required metadata rows.
+3. Use historical_keep when an explicit historical or execution-history marker supports retaining
+   provenance and no higher-precedence replacement applies.
+4. Use archive_candidate only after owner approval confirms no active inbound contract, sensitivity
+   guard, or unresolved link impact.
+5. Otherwise use needs_owner_decision.
+
+Filename, date, closed-issue status, age, or missing index membership may propose a disposition but
+cannot finalize one. Evidence-, release-, legal-, and claim-sensitive notes cannot become
+archive_candidate without explicit owner review. No curation pilot may delete or move a note. The
+deterministic 50-note pilot and its machine-readable inventory are recorded in
+[issue #7600's curation evidence](evidence/issue_7600_context_curation_pilot/README.md).
 
 ## When To Update An Existing Note
 
@@ -126,6 +170,8 @@ knowledge, not every transient iteration detail.
 * Issue #3279 Social Mini-Game scenario families (v0): [issue_3279_social_mini_game_families.md](issue_3279_social_mini_game_families.md)
 * Issue #6103 / Issue #3275 same-planner held-out contract:
   [issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md)
+* Issue #6318 Open Dreamer model-quality gate:
+  [issue_6318_open_dreamer_model_quality.md](issue_6318_open_dreamer_model_quality.md)
 * Issue #4932 data-driven scenario generation:
   [issue_4932_data_driven_scenario_generation.md](issue_4932_data_driven_scenario_generation.md)
 * Issue #6054 regulation-to-scenario compilation prototype:
@@ -1588,6 +1634,10 @@ why a change was made rather than a full issue execution transcript.
   any public planner leaderboard work.
 
 ## Execution Workflow Notes
+
+* [Issue #7340 Real-Manifest Feasibility-First Diagnostic](issue_7340_real_manifest_feasibility_first.md) -
+  native diagnostic over a fixed station-platform candidate pool, including route-binding
+  provenance, observed event counts, and the pending budget-matched/domain-approval boundary.
 
 * [SLURM Multi-Worktree Branch Workflow](slurm_multi_worktree_branch_workflow.md) - branch-isolated
   SLURM submissions from a shared login node, including `local.machine.md` symlink guidance and

@@ -4,7 +4,7 @@
 
 Plain-language summary: a native Social Force Model diagnostic varied corridor geometry,
 population, run duration, and speed calibration across the same ten seeds used by the existing
-#5149 evidence bundle. No tested cell produced clear lane formation reproducibly, while weak
+Issue #5149 evidence bundle. No tested cell produced clear lane formation reproducibly, while weak
 signals varied with seed and cell. This narrows the interpretation of the original non-result but
 does not establish a model-wide absence of lane formation.
 
@@ -17,7 +17,7 @@ lane-segregation and lane-purity metric semantics and released simulator default
 ## Protocol and provenance
 
 - Code: `a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35` on base `080536c8ef12269753a4c3bc4a48f5bc006d68c1`.
-- Command: `uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z`.
+- Command: `uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir <scratch-output> --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z`.
 - Native execution: 320/320 rows `native:computed`; no fallback, degraded, adapter, unavailable,
   or failed rows.
 - Surface: lengths 16/24 m; corridor widths 3.5/5 m; populations 16/24; 200/400 steps;
@@ -49,11 +49,30 @@ The complete compact cell surface is in [`summary.json`](summary.json). Raw rows
 ignored local output; their hashes and classifications are in
 [`artifact_provenance.json`](artifact_provenance.json).
 
+## Reference-control follow-up and closeout
+
+The requested threshold-calibration and sustained-flow check is now retained in the [#6969
+reference package](../issue_6969_lane_formation_reference/README.md). It contains 12 native rows
+covering mixed sustained flow and an initialized separated-lane control, with 100 warm-up steps,
+200 observation steps, deterministic boundary recycling, and sampling strides 1/2/4. The mixed
+condition produced no clear-threshold hits in either calibration (0/3 in each); the separated
+control produced 3/3 in each calibration. This shows that the metric distinguishes the retained
+known controls under that protocol. The separated condition is initialized, so it is not evidence
+of spontaneous lane emergence.
+
+The reference package narrows the original interpretation boundary: the tested mixed sustained
+flow still did not produce a robust clear profile, but the result remains diagnostic-only and does
+not distinguish a scenario limitation from a model property. The #6962 result-interpretation
+fixture now binds the #6969 compact summary alongside the #6962 summary, context, and provenance;
+the packet remains `diagnostic_only` with `inconclusive` decisions for downstream use by #7029 and
+Issue #7032.
+
 ## Next research direction
 
-Do not promote or retune the released configuration from this result. The smallest discriminating
-next step is a threshold-calibration/reference case with an explicit warm-up or sustained-flow
-control. If that reference still fails to produce stable separation, then #6969's Social Force
-Model parameter sweep becomes the next bounded diagnostic; if it produces separation, revisit the
-measurement cell and threshold before tuning force parameters. Keep #6962 and #6969 open until
-that distinction is independently reviewed.
+Do not promote or retune the released configuration from these diagnostics. The immediate
+measurement-control gate is complete for the retained reference conditions, but #6969 Stage B
+parameter search remains stopped until a candidate-selection rule, fidelity/cost contract, and
+domain review are separately approved. Any further spontaneous-emergence campaign must preserve
+the same claim boundary and be authorized as a new research decision. This issue needs no additional
+sensitivity run; after this packet/context closeout is reviewed, close #6962 and keep any tuning or
+released-default decision in #6969.

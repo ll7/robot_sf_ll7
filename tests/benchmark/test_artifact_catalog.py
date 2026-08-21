@@ -44,6 +44,11 @@ def test_load_valid_catalog_as_typed_metadata() -> None:
         "tab_planner_execution_modes",
     ]
     assert catalog.artifacts[0].outputs["png"].path == "fig_benchmark_outcome_matrix.png"
+    assert all(artifact.source_kind == "fixture_construction" for artifact in catalog.artifacts)
+    assert all(
+        artifact.generation_command.startswith("fixture-construction:")
+        for artifact in catalog.artifacts
+    )
 
 
 def test_v2_schema_requires_figure_semantics_and_loads_typed_metadata(tmp_path: Path) -> None:

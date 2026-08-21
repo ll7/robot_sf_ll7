@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/ch7-evidence-build-receipt.v1.json",
+  "title": "Chapter 7 v2 evidence build receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "status",
+    "claim_boundary",
+    "package",
+    "source",
+    "build",
+    "verification",
+    "integrity"
+  ],
+  "properties": {
+    "schema_version": {"const": "ch7-evidence-build-receipt.v1"},
+    "issue": {"const": 7410},
+    "status": {"const": "verified"},
+    "claim_boundary": {
+      "const": "Build provenance only; this receipt is not an admission receipt, domain approval, publication authorization, benchmark result, or paper-facing evidence."
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status",
+        "admission_status",
+        "manifest_sha256",
+        "sha256sums_sha256",
+        "payload_tree_sha256",
+        "payload_tree_scope"
+      ],
+      "properties": {
+        "path": {
+          "const": "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
+        },
+        "status": {"const": "blocked_pending_domain_approval"},
+        "admission_status": {"const": "not_admitted"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "payload_tree_sha256": {"$ref": "#/$defs/sha256"},
+        "payload_tree_scope": {
+          "const": "SHA256SUMS-listed payload files plus SHA256SUMS; *.review.json sidecars excluded"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v1_package_path",
+        "v1_package_sha256sums_sha256",
+        "v1_manifest_sha256",
+        "v1_audit_member_path",
+        "v1_audit_member_sha256",
+        "v1_reduced_atlas_member_path",
+        "v1_reduced_atlas_member_sha256",
+        "v2_config_path",
+        "v2_config_sha256",
+        "v2_portfolio_config_path",
+        "v2_portfolio_config_sha256"
+      ],
+      "properties": {
+        "v1_package_path": {
+          "const": "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
+        },
+        "v1_package_sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "v1_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "v1_audit_member_path": {"const": "audit/campaign_atlas.csv"},
+        "v1_audit_member_sha256": {"$ref": "#/$defs/sha256"},
+        "v1_reduced_atlas_member_path": {"const": "publication/reduced_atlas.json"},
+        "v1_reduced_atlas_member_sha256": {"$ref": "#/$defs/sha256"},
+        "v2_config_path": {"const": "configs/analysis/ch7_evidence_package.v2.yaml"},
+        "v2_config_sha256": {"$ref": "#/$defs/sha256"},
+        "v2_portfolio_config_path": {
+          "const": "configs/analysis/ch7_worked_example_portfolio.v2.yaml"
+        },
+        "v2_portfolio_config_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tool_sources",
+        "commands",
+        "environment",
+        "determinism",
+        "independent_builds"
+      ],
+      "properties": {
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "tree", "tree_scope"],
+          "properties": {
+            "commit": {"$ref": "#/$defs/commit"},
+            "tree": {"$ref": "#/$defs/commit"},
+            "tree_scope": {
+              "const": "source checkout tree at the build commit, before the receipt commit"
+            }
+          }
+        },
+        "tool_sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "receipt_tool",
+            "builder",
+            "verifier",
+            "package_schema",
+            "atlas_schema",
+            "admission_schema",
+            "receipt_schema"
+          ],
+          "properties": {
+            "receipt_tool": {"$ref": "#/$defs/source_file"},
+            "builder": {"$ref": "#/$defs/source_file"},
+            "verifier": {"$ref": "#/$defs/source_file"},
+            "package_schema": {"$ref": "#/$defs/source_file"},
+            "atlas_schema": {"$ref": "#/$defs/source_file"},
+            "admission_schema": {"$ref": "#/$defs/source_file"},
+            "receipt_schema": {"$ref": "#/$defs/source_file"}
+          }
+        },
+        "commands": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["build", "verify", "receipt_generate", "receipt_check"],
+          "properties": {
+            "build": {"const": "uv run python scripts/analysis/build_ch7_evidence_package_v2.py --source-package docs/context/evidence/issue_6792_ch7_evidence_package_v1 --output <fresh-output> --config configs/analysis/ch7_evidence_package.v2.yaml --check-determinism"},
+            "verify": {"const": "uv run python scripts/analysis/verify_ch7_evidence_admission_v2.py --package <fresh-output> --check-only"},
+            "receipt_generate": {"const": "uv run python scripts/analysis/build_ch7_evidence_build_receipt_v1.py --receipt docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json --generate"},
+            "receipt_check": {"const": "uv run python scripts/analysis/build_ch7_evidence_build_receipt_v1.py --receipt docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json --check-only"}
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["python_version", "python_implementation", "uv_version", "dependency_identity"],
+          "properties": {
+            "python_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "python_implementation": {"const": "CPython"},
+            "uv_version": {"type": "string", "minLength": 1},
+            "dependency_identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract",
+                "project_name",
+                "requires_python",
+                "pyproject_path",
+                "pyproject_sha256",
+                "lockfile_path",
+                "lockfile_sha256",
+                "uv_lock_check"
+              ],
+              "properties": {
+                "contract": {"const": "pyproject-and-uv-lock-digests.v1"},
+                "project_name": {"const": "robot_sf"},
+                "requires_python": {"const": ">=3.11"},
+                "pyproject_path": {"const": "pyproject.toml"},
+                "pyproject_sha256": {"$ref": "#/$defs/sha256"},
+                "lockfile_path": {"const": "uv.lock"},
+                "lockfile_sha256": {"$ref": "#/$defs/sha256"},
+                "uv_lock_check": {"const": "passed"}
+              }
+            }
+          }
+        },
+        "determinism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verified", "tree_hash_algorithm", "serialization"],
+          "properties": {
+            "verified": {"const": true},
+            "tree_hash_algorithm": {"const": "relative-path-bytes-then-SHA256SUMS.v1"},
+            "serialization": {"const": "strict-json-sort-keys-utf8-newline.v1"}
+          }
+        },
+        "independent_builds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ordinal", "output_tree_sha256", "manifest_sha256", "sha256sums_sha256"],
+            "properties": {
+              "ordinal": {"enum": [1, 2]},
+              "output_tree_sha256": {"$ref": "#/$defs/sha256"},
+              "manifest_sha256": {"$ref": "#/$defs/sha256"},
+              "sha256sums_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "exit_code",
+        "diagnostic_schema_version",
+        "package_status",
+        "admission_status",
+        "admission_authorized",
+        "empirical_outcomes_admitted",
+        "receipt_created",
+        "blocker_codes"
+      ],
+      "properties": {
+        "command": {"const": "uv run python scripts/analysis/verify_ch7_evidence_admission_v2.py --package <fresh-output> --check-only"},
+        "exit_code": {"const": 0},
+        "diagnostic_schema_version": {"const": "ch7-evidence-admission-diagnostic.v1"},
+        "package_status": {"const": "blocked_pending_domain_approval"},
+        "admission_status": {"const": "not_admitted"},
+        "admission_authorized": {"const": false},
+        "empirical_outcomes_admitted": {"const": false},
+        "receipt_created": {"const": false},
+        "blocker_codes": {
+          "const": [
+            "domain_approval_pending",
+            "external_admission_receipt_required",
+            "metric_semantics_excluded_issue_7042"
+          ]
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "canonicalization", "excluded_json_pointer", "receipt_sha256"],
+      "properties": {
+        "algorithm": {"const": "sha256"},
+        "canonicalization": {"const": "strict-json-sort-keys-utf8-newline.v1"},
+        "excluded_json_pointer": {"const": "#/integrity"},
+        "receipt_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "source_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

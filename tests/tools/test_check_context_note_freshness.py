@@ -396,3 +396,113 @@ def test_orphan_context_note_not_in_catalog_replacement(tmp_path: Path, monkeypa
 
     findings = checker.check_freshness(repo_root=repo)
     assert [f for f in findings if f.rule == "orphan_context_note"] == []
+
+
+def test_absolute_paths_normalize_inside_repo_and_preserve_custom_context(tmp_path: Path) -> None:
+    """Absolute CLI and catalog paths normalize to one safe repo-relative view."""
+
+    repo = _repo(tmp_path)
+    context_dir = repo / "custom/ctx"
+    _write(repo, "custom/ctx/old.md", "# Old\n")
+    _write(repo, "custom/ctx/new.md", "# New\n")
+    _write(repo, "custom/ctx/INDEX.md", "[old](./old.md)\n")
+    _write(
+        repo,
+        "custom/ctx/catalog.yaml",
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "entries": [
+                    {
+                        "path": str(repo / "custom/ctx/old.md"),
+                        "status": "superseded",
+                        "freshness": "dated",
+                        "replacement": str(repo / "custom/ctx/new.md"),
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+    )
+    _commit(repo, "custom context normalized paths", iso_date="2026-01-02T00:00:00+00:00")
+
+    findings = checker.check_freshness(
+        repo_root=repo,
+        catalog_path=repo / "custom/ctx/catalog.yaml",
+        context_dir=context_dir,
+        index_path=repo / "custom/ctx/INDEX.md",
+    )
+
+    assert findings == []
+
+
+def test_missing_index_fails_closed_without_orphan_noise(tmp_path: Path) -> None:
+    """A missing configured index is an error and suppresses misleading orphan findings."""
+
+    repo = _repo(tmp_path)
+    (repo / "docs/context/INDEX.md").unlink()
+    _write(repo, "docs/context/orphan.md", "# Orphan\n")
+    _commit(repo, "remove context index", iso_date="2026-01-02T00:00:00+00:00")
+
+    findings = checker.check_freshness(repo_root=repo)
+
+    assert [finding.rule for finding in findings] == ["missing_context_index"]
+    assert findings[0].severity == "error"
+    assert findings[0].path == "docs/context/INDEX.md"
+    assert "fail closed" in findings[0].message
+
+
+def test_inbound_markdown_refs_are_built_once_per_check(tmp_path: Path, monkeypatch) -> None:
+    """Multiple stale notes reuse one inbound Markdown reference map."""
+
+    repo = _repo(tmp_path)
+    _write(repo, "docs/context/dated_a.md", "# Dated A\n")
+    _write(repo, "docs/context/dated_b.md", "# Dated B\n")
+    _write(repo, "docs/context/topic.md", "[dated a](dated_a.md)\n[dated b](dated_b.md)\n")
+    _write_catalog(
+        repo,
+        [
+            {"path": "docs/context/dated_a.md", "status": "current", "freshness": "dated"},
+            {"path": "docs/context/dated_b.md", "status": "current", "freshness": "dated"},
+            {"path": "docs/context/topic.md", "status": "current", "freshness": "maintained"},
+        ],
+    )
+    _commit(repo, "two dated notes markdown references", iso_date="2025-01-01T00:00:00+00:00")
+    original_run = checker._run
+    ls_files_calls = 0
+
+    def counted_run(cmd: list[str], *, cwd: Path) -> str:
+        nonlocal ls_files_calls
+        if cmd[:2] == ["git", "ls-files"] and cmd[-1] == "docs/context":
+            ls_files_calls += 1
+        return original_run(cmd, cwd=cwd)
+
+    monkeypatch.setattr(checker, "_run", counted_run)
+
+    findings = checker.check_freshness(
+        repo_root=repo,
+        max_age_days=180,
+        now=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    assert findings == []
+    assert ls_files_calls == 2
+
+
+def test_repository_escape_paths_are_rejected(tmp_path: Path) -> None:
+    """Configured and Markdown paths that escape the repository are ignored or rejected."""
+
+    repo = _repo(tmp_path)
+    context_dir = Path("docs/context")
+
+    assert checker._normalize_repo_path("../outside.md", repo_root=repo) is None
+    assert checker._normalize_repo_path(repo.parent / "outside.md", repo_root=repo) is None
+    assert (
+        checker._resolve_markdown_target(
+            "../../../outside.md",
+            source_dir=context_dir,
+            context_dir=context_dir,
+            repo_root=repo,
+        )
+        is None
+    )

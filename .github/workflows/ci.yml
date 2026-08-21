@@ -30,17 +30,19 @@ env:
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg
   PYGAME_HIDE_SUPPORT_PROMPT: "1"
-  # Use CPython 3.12+ sys.monitoring backend for coverage: dramatically lower
-  # instrumentation overhead than the default trace-based core.
-  COVERAGE_CORE: sysmon
+  # The sys.monitoring backend is faster for full non-PR coverage, but its
+  # hosted pytest-xdist worker data is not reliable on PR/merge-group runs.
+  # Keep the trace backend for exact-head changed coverage so the shard union
+  # represents executed tests rather than collection-only lines.
+  COVERAGE_CORE: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ctrace' || 'sysmon' }}
 
 jobs:
   fast-feedback:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Split every event across four runners. Pull requests retain their fast-only
-    # shards; main/manual/merge-queue events run the complete suite and publish
-    # unique coverage data for the downstream combine gate.
+    # shards; all events publish unique coverage data so the exact-head changed-
+    # coverage gate can prove the final PR head before merge admission.
     strategy:
       fail-fast: false
       matrix:
@@ -49,12 +51,15 @@ jobs:
       PYTEST_SHARD_COUNT: 4
       PYTEST_SHARD_INDEX: ${{ matrix.shard }}
       ROBOT_SF_SHARD_INCLUDE_SLOW: ${{ github.event_name != 'pull_request' && '1' || '0' }}
-      ROBOT_SF_PYTEST_COVERAGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}
+      ROBOT_SF_PYTEST_COVERAGE: "1"
       COVERAGE_FILE: ${{ format('output/coverage/.coverage.{0}', matrix.shard) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Coverage must be collected from the same immutable head that the
+          # changed-line gate evaluates, not an implicit merge ref.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           # The evidence-registry ratchet resolves historical producing commits.
           # A shallow checkout turns reachable provenance into false
           # ``dangling_commit`` findings and makes main CI environment-dependent.
@@ -63,6 +68,9 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+
+      - name: Hydrate result-interpretation provenance
+        run: uv run python scripts/dev/ensure_result_interpretation_provenance.py
 
       - name: Cache test results
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -105,7 +113,6 @@ jobs:
           include-hidden-files: true
 
       - name: Upload coverage shard
-        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-shard-${{ matrix.shard }}
@@ -113,9 +120,89 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
 
+  changed-coverage-gate:
+    runs-on: ubuntu-latest
+    # This lane performs a complete exact-head checkout and the shared all-extras
+    # setup before it can combine shards and emit merge-admission proof.
+    timeout-minutes: 30
+    needs: fast-feedback
+    if: >-
+      (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
+      needs.fast-feedback.result == 'success'
+    steps:
+      - name: Checkout exact evaluated head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Audit changed fast-lane routing
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          uv run python scripts/dev/check_fast_lane_routing.py \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA"
+
+      - name: Download coverage shards
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-shard-*
+          path: output/coverage
+          merge-multiple: true
+
+      - name: Combine coverage shards
+        run: |
+          set -euo pipefail
+          uv run coverage combine output/coverage
+          uv run coverage json
+
+      - name: Enforce exact-head changed-line coverage
+        id: changed-coverage
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          actual_head="$(git rev-parse HEAD)"
+          if [[ "$actual_head" != "$HEAD_SHA" ]]; then
+            echo "Checked-out head drifted: expected $HEAD_SHA, got $actual_head" >&2
+            exit 2
+          fi
+
+          set +e
+          uv run python scripts/coverage/check_changed_files_coverage.py \
+            --base-sha "$BASE_SHA" \
+            --head-sha "$HEAD_SHA" \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --coverage output/coverage/coverage.json \
+            --json-output output/coverage/changed-coverage-result.json \
+            --show-skipped \
+            >output/coverage/changed-coverage.log 2>&1
+          coverage_status=$?
+          set -e
+          cat output/coverage/changed-coverage.log
+          exit "$coverage_status"
+
+      - name: Upload changed-coverage proof
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: changed-coverage-proof
+          path: |
+            output/coverage/changed-coverage-result.json
+            output/coverage/changed-coverage.log
+          if-no-files-found: error
+
   coverage-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     needs: fast-feedback
     if: ${{ github.event_name != 'pull_request' && needs.fast-feedback.result == 'success' }}
     steps:
@@ -308,7 +395,7 @@ jobs:
     # than skipped; retain manual dispatch for standalone diagnostics.
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -623,6 +710,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - fast-feedback
+      - changed-coverage-gate
       - coverage-gate
       - compat-matrix
       - fast-pysf-compat
@@ -644,6 +732,12 @@ jobs:
           if [[ "${{ github.event_name }}" != "pull_request" && "${{ needs.coverage-gate.result }}" != "success" ]]; then
             echo "coverage-gate finished with ${{ needs.coverage-gate.result }}" >&2
             exit 1
+          fi
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group" ]]; then
+            if [[ "${{ needs.changed-coverage-gate.result }}" != "success" ]]; then
+              echo "changed-coverage-gate finished with ${{ needs.changed-coverage-gate.result }}" >&2
+              exit 1
+            fi
           fi
           if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
             echo "compat-matrix finished with ${{ needs.compat-matrix.result }}" >&2

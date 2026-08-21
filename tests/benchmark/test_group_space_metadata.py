@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from robot_sf.benchmark.group_space_metrics import group_specs_from_map
-from robot_sf.benchmark.map_runner_episode import _episode_metadata_for_benchmark_metrics
+from robot_sf.benchmark.map_runner.map_runner_episode import _episode_metadata_for_benchmark_metrics
 from robot_sf.benchmark.metrics import (
     EpisodeData,
     compute_all_metrics,

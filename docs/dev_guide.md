@@ -84,6 +84,13 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
+When readiness dispatches the optional lane, it first runs
+`scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
+reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
+message; they are not reported as changed-code failures. The core lane remains dependency-minimal
+and excludes optional-only test paths listed in `tests/support/optional_test_allowlist.txt`.
+Probe failures, malformed JSON, unknown exit codes, and status/exit-code disagreements are
+preflight-tool failures and never receive the missing-extra install guidance.
 
 ### Claim-map validation
 
@@ -106,18 +113,25 @@ than a directory inside the repository. For this checkout, use
 chooses another location. Keep issue work readable with names such as
 `issue-123-short-description`.
 
-Example manual creation from the main checkout:
+Create the worktree through the capacity-guarded helper from the main checkout:
 
 ```bash
 MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKTREE_PARENT="$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"
 mkdir -p "$WORKTREE_PARENT"
 git fetch origin main
-git worktree add -b issue-123-short-description \
-  "$WORKTREE_PARENT/issue-123-short-description" \
-  origin/main
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main
 cd "$WORKTREE_PARENT/issue-123-short-description"
 ```
+
+The helper checks the target filesystem before invoking Git. A low-space or
+non-writable target fails before checkout, so it cannot leave a partially
+populated worktree. The default threshold is 2 GiB and can be overridden for
+a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
+`--minimum-free-bytes`.
 
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
@@ -135,18 +149,18 @@ A cheap fresh-worktree check is:
   && [ ! -d .venv ]
 ```
 
-Use this order for a fresh worktree:
+Use the shared main-checkout environment by default for a fresh worktree:
 
 ```bash
-scripts/dev/bootstrap_worktree.sh
-source .venv/bin/activate
-python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+scripts/dev/run_worktree_shared_venv.sh -- \
+  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
 
-`bootstrap_worktree.sh` explicitly creates and targets the worktree-local `.venv`, then adds
-`UV_NO_SYNC=1` to `.venv/bin/activate`. This keeps the selected extras in place when later
-commands use `uv run`; the shared-venv wrapper provides the same guard for targeted checks. To
-intentionally resync the local environment, unset the guard for that command:
+The shared-venv wrapper pins imports to the current worktree, sets `UV_NO_SYNC=1`, and checks
+scratch capacity before starting the command. This avoids materializing one full `.venv` per
+parallel worktree. Use `bootstrap_worktree.sh` only when a worktree-local environment is explicitly
+required; it creates and targets the local `.venv`, then adds `UV_NO_SYNC=1` to its activation
+script. To intentionally resync a local environment, unset the guard for that command:
 
 ```bash
 env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
@@ -154,7 +168,59 @@ env -u UV_NO_SYNC UV_PROJECT_ENVIRONMENT="$PWD/.venv" uv sync --all-extras
 
 The optional-dependency preflight uses import-spec probes without importing project code. A
 `missing_optional` result is setup evidence and should not be confused with a changed-code
-collection or runtime failure. Core-only or shared-venv lanes can omit the all-extras preflight.
+collection or runtime failure. The docs-proof wrapper checks the `core` profile before invoking
+`uv run`; the shared-venv wrapper checks that profile by default and accepts an explicit profile
+when the command needs optional packages:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
+```
+
+If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
+`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
+lightweight Python-only environment from being reused as if it were a synchronized dependency
+profile. `--standalone` remains available only for commands whose no-project-import boundary is
+verified.
+
+When the host is under pressure, inspect reclaim candidates without deleting anything:
+
+```bash
+scripts/dev/check_worktree_capacity.py --inventory --json
+```
+
+The inventory covers ignored generated `output/`, the uv cache, repository worktree containers,
+and recognizable agent worktrees under `/dev/shm`. It is a review aid only. Preserve durable
+evidence before pruning `output/`; remove only clean, pushed Git worktrees with
+`git worktree remove`; and remove only task-owned, no-longer-running `/dev/shm` scratch. No
+automated cleanup is performed. Each existing candidate is sized with a five-second per-path
+timeout by default. Override it with `--size-timeout-seconds N` for a deliberately bounded local
+diagnostic. A timeout or unavailable `du` result is reported as `size_status` with a
+machine-readable `size_reason`; it never becomes a zero-size or cleanup recommendation and does
+not change the separate capacity verdict.
+
+### Local CI scratch capacity
+
+The local continuous-integration (CI) runner checks temporary-directory capacity before it starts
+dependency setup or a CI phase, so a nearly full temporary filesystem fails early with a usable
+remediation. The default guard requires 1 GiB free at `${TMPDIR:-/tmp}`:
+
+```bash
+scripts/dev/run_ci_local.sh --no-setup lint test
+```
+
+When `/tmp` is a small or nearly full temporary filesystem, point the run at a writable,
+disk-backed directory instead:
+
+```bash
+scripts/dev/run_ci_local.sh --scratch-dir /path/on/disk
+scripts/dev/run_worktree_shared_venv.sh --scratch-dir /path/on/disk -- \
+  pytest tests/dev/test_ci_script_contract.py -q
+```
+
+`--scratch-dir` places temporary files plus the default `uv`, XDG, and Matplotlib caches below
+that directory. The wrappers retain an explicitly supplied `ROBOT_SF_CI_MIN_FREE_BYTES` override;
+use it only for a deliberately bounded run when the default 1 GiB guard is not appropriate. A
+capacity failure means no CI phase or wrapped command was started; it is not a test-suite result.
 
 Notes:
 
@@ -558,8 +624,10 @@ SHA-pinned normal-throughput window after rollout; a live queue snapshot is not 
 causality measurement. Use `scripts/dev/measure_stale_base_policy.py` with an explicit
 `stale_base_observation_window.v1` input. The helper keeps ordinary compare-and-swap waits and
 base-sensitive refresh waits separate, requires exact-head/base evidence for stale-base attribution,
-and reports missing source data as `not_available`. Its output is workflow evidence only and does
-not authorize a policy change, merge, campaign, or publication.
+and reports missing source data as `not_available`. Source kinds, input SHA-256, the deterministic
+record audit, red-main coverage, and independent pre-rollout baseline evidence are preserved in the
+report; fixture sources cannot be promoted by editing the top-level evidence status. Its output is
+workflow evidence only and does not authorize a policy change, merge, campaign, or publication.
 
 ### Merge queue gate (issue #6274)
 
@@ -631,6 +699,74 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+### Single-account merge receipt (issue #7669)
+
+**Plain-language contract.** A merge may proceed with one account only when a versioned receipt
+proves that every ordinary implementation-integrity condition was observed on the exact PR head.
+The receipt does not turn a missing approval into a general bypass: domain, scientific/evidence,
+legal/release, security, dependency, draft, thread, requested-reviewer, metadata, and hosted-check
+conditions remain independent fail-closed holds.
+
+The canonical owner is
+`scripts/dev/single_account_merge_receipt.py`, with the contract recorded in
+`scripts/dev/single_account_merge_receipt.v1.schema.json`. A receipt binds the repository and PR,
+head/base/current-main SHAs, final PR metadata digest, terminal exact-head required checks,
+independent implementation-review carrier and evidence digest, review-thread disposition,
+requested reviewers and teams, all separate hold dimensions, optional waiver actor/reason/time,
+and the expected-head compare-and-swap (CAS) request. The receipt digest covers the pre-merge
+observation and is preserved when GitHub returns the merge commit SHA.
+
+Use the three explicit modes as follows:
+
+- `--mode report-only` reads the canonical merge-gate snapshot and writes an inspectable receipt;
+  it performs no remote mutation.
+- `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
+  receipt; a changed head, base, metadata, check, review, thread, requested reviewer, or hold
+  blocks.
+- `--mode apply --receipt-file <path>` repeats validation and then lets the receipt owner issue
+  exactly one expected-head squash merge, rereading the closed/merged PR and recording the
+  returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack coordinator and
+  delegates its root merge to the same owner.
+
+The only permitted waiver is the bounded absence of a distinct human implementation reviewer,
+and it requires an actor, reason, and timestamp. It cannot waive a required hosted check,
+scientific or evidence review, domain approval, legal/release or security gate, dependency hold,
+draft state, unresolved thread, requested reviewer, stale base, or metadata mismatch. If the
+post-merge readback is invalid, preserve the receipt and route an incident; do not reconstruct the
+pre-merge evidence or reuse the waiver. The repository policy fixture
+`scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the callers and prevents
+new direct merge endpoints from bypassing this contract.
+
+**Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
+the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
+fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
+and runs `scripts/coverage/check_changed_files_coverage.py` with explicit `--base-sha` and
+`--head-sha` values. Because this lane performs the complete exact-head checkout and shared
+all-extras setup before combining shards, its hosted job has a bounded 30-minute timeout. The
+same checker used by local readiness emits a `changed-coverage.v1`
+artifact containing the base/head binding, event, coverage-artifact SHA-256, thresholds, selected
+and skipped paths, changed executable/covered/missing lines, declaration-only proofs, a `passed` or
+`not_required` verdict, and `no_merge: true`; missing coverage data, below-minimum coverage, a
+changed-head mismatch, malformed diff/artifact evidence, or an incomplete check-run query is a
+blocker. A pure-deletion file with a valid coverage row and no new-file line numbers is reported as
+`100.0` with scope `changed executable lines 0/0`; there are no new executable lines to cover. A
+`not_required` verdict is only for a head with no executable Python changes in the configured
+coverage scope, and remains observable in the artifact rather than being inferred from a skipped
+job. Hosted fast feedback runs the complete non-slow `all` lane, so an optional-extra change cannot
+be proven by a core-only shard.
+
+The local `pr_ready_check.sh` coverage lane remains useful for fast feedback, but its disposable
+output is not merge authority. The hosted `changed-coverage-gate` is the merge-admission proof;
+`scripts/dev/merge_queue_gate.py` queries check runs on the exact live PR head and rejects a
+missing, pending, failed, malformed, or stale result for source-changing PRs. The CI workflow
+intentionally skips a PR whose complete changed-file set matches `**/*.md` or `docs/**`; in that
+case the gate fetches and validates the complete GitHub changed-file set and records
+`changed_coverage_status: not_required`. An API failure, incomplete file listing, or any mixed/non-
+ignored path remains a blocker. The existing `coverage-gate` absolute-floor and baseline checks
+continue to run on main/manual/merge-group full-suite events; they do not substitute for the
+changed-line proof. Direct merge dispatchers must consume the same exact-head check before their
+CAS step (tracked separately by #7407).
+
 **Relationship to the gate-side staleness check.** The staleness preflight (step 7 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
 non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
@@ -661,6 +797,52 @@ or stale trailer blocks both `gh-pr-merger` and native merge-queue admission. Me
 reconciliation does not rerun source CI, but it invalidates prior final-state review evidence until
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
+
+If the final verification read observes a concurrent external write, the helper returns
+`status: conflict` with the previous, desired, and observed metadata digests plus any available
+head SHAs. It also returns the stable `next_action`
+`refresh_live_metadata_and_exact_head_review`, `policy_state: pending_pr_metadata`, and
+`policy_action: refresh_snapshot`. Treat `prior_review_reuse: forbidden` as binding: refresh the
+live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
+retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
+successful reconciliation.
+
+### Exact-head stability snapshot (issue #7523)
+
+Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof
+or GitHub reports completed-success workflow jobs while check-runs remain pending. Run the
+deterministic stability snapshot once after local proof and again immediately before any handoff
+step; it is route-evidence-only, never retries automatically, and never authorizes a merge:
+
+```bash
+uv run python scripts/dev/check_pr_ci_status.py <pr-number> --stability-snapshot --json \
+  --expected-head-sha <head-sha> --expected-main-sha <current-main-sha> \
+  --expected-metadata-digest <64-hex> --repo ll7/robot_sf_ll7
+```
+
+The `pr_stability_snapshot.v1` result reports the observed PR head SHA, the current `main` SHA,
+the base ref/SHA, the exact title/body SHA-256 metadata digest (the same `metadata_digest` as the
+`pr-metadata: reconciled @ <digest>` trailer), the CI rollup, and REST/GraphQL quota state.
+`status` is one of `stable`, `changed`, `failure`, `pending`, `status_propagation_lag`,
+`quota_blocked`, or `error`:
+
+- `changed` (with `invalidated_reasons` and the observed values) when the head, current `main`, or
+  metadata digest moved since the snapshot. The smallest safe resume command re-runs the snapshot
+  against the observed values; nothing is retried automatically and no merge is authorized.
+- `status_propagation_lag` is distinct from ordinary `pending` work and from terminal `failure`;
+  the checks payload carries the `check_run_stale_job_success` diagnostic and the resume command is
+  the bounded CI monitor (exit code 2 until the lag resolves).
+- `quota_blocked` surfaces the `gh api rate_limit` core/GraphQL reset (or a `Retry-After` value)
+  as `resume.min_delay_seconds` and `resume.resume_epoch_seconds`; re-run the snapshot only after
+  that delay, never in a spin loop.
+- Exit codes: `0` stable, `1` changed/failure/error, `2` inconclusive (pending,
+  status-propagation-lag, or quota-blocked; resume later).
+
+Optional `--metadata-title` + `--metadata-body-file` compare the desired final title/body pair;
+metadata drift then resumes with `scripts/dev/gh_pr_body_rest.py <pr> --reconcile` before
+re-snapshotting. The snapshot does not apply `merge-ready`, bypass reviews, or relax any
+fail-closed gate; `scripts/dev/check_pr_current_base_cas.py` and the monitor's exact-head guard
+remain the binding final preflights.
 
 ### Reusable dev scripts
 
@@ -752,6 +934,11 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+When current Actions checks remain `queued` beyond the monitor's five-minute default threshold,
+the payload instead records `checks.pending_reason: "runner_queue_starvation"`, the oldest queued
+age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
+that diagnostic threshold for a known environment. This is an external queue blocker only:
+`checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job
@@ -759,6 +946,29 @@ is completed successfully and the check-run is still pending, then reads the che
 `completed/success`. Identity mismatches, terminal failures, missing jobs, and API errors remain
 fail-closed with a JSON report; the reconciliation job is diagnostic-only and outside the `ci`
 aggregate.
+
+For a pending Actions check with a job URL, the monitor performs bounded REST enrichment of the
+workflow run and job records to report the current phase separately from test conclusions. The
+default stale warning threshold is 900 seconds; set it explicitly when a different operational
+window is appropriate:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status.py \
+  <pr-number> \
+  --expected-head-sha <head-sha> \
+  --actions-stale-after-seconds 900 \
+  --poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200 --json
+```
+
+`checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
+timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
+exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
+result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
+replacement rather than hiding the replacement relationship behind a count. When a stale run has
+an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
+and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
+mutation commands and leaves the route evidence incomplete.
 
 Each JSON payload includes `monitor` metadata for the active delegation ledger: expected head SHA,
 SHA-match result, poll attempt, wait budget, optional wall-clock cap, deadline, and
@@ -856,15 +1066,19 @@ For a read-only preservation-aware retirement projection, use the bounded report
 
 ```bash
 uv run python scripts/dev/worktree_hygiene_snapshot.py \
-  --retirement-plan --include-all-worktrees --json
+  --retirement-plan --include-all-worktrees \
+  --worktree-budget 256 --time-budget-seconds 60 --json
 ```
 
 The retirement projection classifies each row as `preserve`, `review`, or `removeable`. It joins
 bounded PR coverage and remote issue-claim state, reports dirty/ahead/detached/missing-upstream
 reasons, and classifies ignored roots as cache, documented disposable output, durable-required, or
-handoff-needed. Unknown PR, claim, status, or artifact evidence is a blocker. The command never
-removes worktrees; any later removal still requires human approval and the preservation procedure
-above.
+handoff-needed. `--worktree-budget` and `--time-budget-seconds` bound the all-worktree scan itself,
+including local inventory construction. Rows that do not fit are retained as review-only, and the
+JSON `progress.terminal_status` is `incomplete`; `needs_review` also reports unavailable evidence.
+Treat any non-zero exit from an incomplete or needs-review report as a stop signal. Unknown PR,
+claim, status, or artifact evidence is a blocker. The command never removes worktrees; any later
+removal still requires human approval and the preservation procedure above.
 
 For delegation routing and PR-review polling, treat `snapshot_pr_queue` as the entry point:
 
@@ -911,6 +1125,36 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
   never fabricates PR entries.
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
+
+### Integration admission report (issue #7647)
+
+`scripts/dev/integration_admission_report.py` classifies one PR and a bounded queue snapshot as
+report-only routing evidence. It consumes an existing `pr_queue_snapshot.v2` JSON payload, reuses
+the PR loop policy and trusted metadata/claim readers, and never calls GitHub or authorizes an
+external action. Missing baseline data is `unavailable`; malformed input is `invalid`; blocker and
+invalidation codes remain explicit. Use a fixed `--as-of` instant when age/freshness is required:
+
+```bash
+uv run python scripts/dev/integration_admission_report.py \
+  --snapshot output/pr_queue_snapshot.json --pr 2677 --max-queue-items 20 \
+  --as-of 2026-08-20T12:00:00Z --json
+```
+
+The versioned output contract is [`integration_admission_report.v1.schema.json`](contracts/integration_admission_report.v1.schema.json).
+The report uses the frozen policy dimensions `docs | test_only | tooling | runtime | benchmark |
+evidence | release`, `isolated | component_shared | repository_control_plane`, `low | standard |
+optional_matrix | full`, `ordinary | independent_exact_head | domain | author`, `none | network |
+artifact | compute | release`, and `ordinary | current_base_required`. Unknown and unavailable
+inputs remain explicit. Queue output includes state counts plus separate CI, review, and external
+lane demand; it is an estimate, not a dispatch command.
+
+The #7520 pilot is report-only for 14 days and at least 20 terminal PR dispositions, extending to
+28 days if the sample is smaller. Retain the policy only if useful terminal throughput is not
+materially reduced and CI spent on superseded/unadmitted heads, invalidated exact-head reviews,
+duplicate or competing PRs, stale prepared candidates, post-merge repairs, and maintainer/domain
+decision latency do not worsen. Record a `retain`, `revise`, or `roll_back` disposition with those
+measures; raw open-PR count is diagnostic only. This report remains implementation/workflow
+evidence, not merge authority or scientific evidence.
 
 ```bash
 uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
@@ -1150,6 +1394,12 @@ Any explicit `blocked:*` label is likewise retained for audit but classifies as 
 including the exact blocker label in its reason, and is excluded from autonomous implementation
 dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
 and remain outside autonomous implementation dispatch until the review gate is cleared.
+Before any autonomous claim write, route the candidate through
+`scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
+and claim preflight before calling the atomic claim writer. Snapshot consumers should use the
+canonical `admission` projection; direct `issue_claim.py acquire` calls are reserved for an
+explicit maintainer override with an actor, reason, and declaration that no scientific claim is
+being made.
 
 Use the snapshot JSON to seed worker prompts and active ledgers. Redirect broad
 search output or raw GitHub bodies to private agent-run artifacts; return only
@@ -1315,8 +1565,11 @@ gh api repos/$OWNER/$REPO/issues/$ISSUE/labels/needs-publication -X DELETE --sil
 ```
 
 ```bash
-gh api repos/$OWNER/$REPO/pulls/$PR/merge -X PUT \
-  -f merge_method="squash" -f commit_title="Merge PR #$PR" -f sha="$PR_SHA"
+RECEIPT_FILE=/tmp/pr-$PR-single-account-receipt.json
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode report-only --output "$RECEIPT_FILE"
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode apply --receipt-file "$RECEIPT_FILE"
 ```
 
 ```bash
@@ -1346,6 +1599,33 @@ handoff context in Markdown instead of leaving them trapped in chat or PR histor
   The wrapper auto-detects context-only PRs and includes README/INDEX/catalog in that gate. State
   explicitly when benchmark, simulator, or full PR readiness gates were not run because the branch only
   changes discoverability or workflow text.
+
+#### Canonical context-note integrity checks
+
+Use the following sequence when adding or changing a context note. Run it from the repository root
+so the commands resolve the active worktree and its `origin/main` base:
+
+```bash
+# Changed-document proof, including README/INDEX anchors for context-only diffs.
+BASE_REF=origin/main scripts/dev/check_docs_proof_consistency_diff.sh
+
+# Repository-wide Markdown link integrity (the full-link pass).
+uv run python scripts/dev/check_docs_evidence_integrity.py --full
+
+# Context-note index/catalog coverage and freshness.
+uv run python scripts/tools/check_context_note_freshness.py \
+  --index docs/context/INDEX.md \
+  --context-dir docs/context \
+  --catalog docs/context/catalog.yaml
+```
+
+The changed-document wrapper is the normal PR gate. To include freshness checks for only notes
+changed on the branch, set `DOCS_PROOF_CHECK_FRESHNESS=1`; use `DOCS_PROOF_FRESHNESS_STRICT=1` only
+when the pre-existing warning backlog is intentionally part of the review. The default freshness
+run is non-strict: repository-wide orphan-note findings are warning-only and may remain as an
+existing backlog, while malformed or superseded notes without a valid replacement remain blocking.
+This boundary keeps a new note fail-closed without making an unrelated historical orphan warning
+look like a failure in the changed-document proof.
 
 ### Agent memory conventions
 
@@ -2159,8 +2439,9 @@ All figures must be **reproducible from code** and directly **integratable into 
 
 CI mapping to local tasks and CLI:
 - `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
-  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
-  run the complete suite and upload one coverage database per shard.
+  also runs lint and advisory type checking. Pull requests exclude slow tests and upload one
+  trace-based coverage database per shard for exact-head changed coverage, while non-PR events
+  run the complete suite and upload one coverage database per shard using the faster sysmon backend.
 - `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
@@ -2211,8 +2492,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
-  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker and
+  trace-based per-shard coverage for exact-head changed coverage, while main, manual, and merge-queue
+  events run the complete suite with per-shard coverage data. Merge-queue coverage also uses the
+  trace backend because it feeds the exact-head changed-coverage gate.
 - `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
   and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
@@ -2616,6 +2899,13 @@ See `docs/training/dreamerv3_rllib_drive_state_rays.md` for the Auxme launch/mon
 
 Use the following templates for specific tasks.
 
+Every issue template collects the canonical `archetype` and `evidence_tier` metadata defined in
+the [issue #1512 convention](context/issue_1512_issue_archetypes.md). Markdown templates provide
+the metadata block near the top of the issue body; YAML issue forms expose both fields as required
+dropdowns. Use exactly one value from each enum and add repository-relative paths under
+`linked_policy` when a policy governs the issue. This keeps newly filed issues machine-checkable
+without rewriting existing issue bodies or changing labels and project fields.
+
 - [issue template](../.github/ISSUE_TEMPLATE/issue_default.md) - Agent-ready fallback for small executable tasks
 - YAML issue forms for common backlog lanes:
   [research validation](../.github/ISSUE_TEMPLATE/research-validation.yml),
@@ -2715,6 +3005,16 @@ evidence, benchmark/reporting gates, generated artifacts, CI/release policy, or 
 paths, and recommended for multi-agent or multi-run tasks.
 
 - [ ] If this PR used a nontrivial agent run, attach or link an agent_run_manifest.yaml and confirm trace/log redaction was checked.
+
+### Issue #5303 checker authority
+
+The only current entry point for the promotion-capable search contract is the powered,
+side-effect-free v2 checker:
+`uv run python scripts/tools/check_issue_5303_search_promotion_contract_v2.py` (and its pure
+`--identities` mode). The historical three-seed v1 contract and timing-control paths remain
+available only to reproduce their pinned diagnostic artifacts; they cannot authorize promotion,
+execution, or transfer work. Current operational code and documentation must not invoke either
+v1 checker path.
 
 ### Final-readiness checklist for scripted tooling work
 - Run `uv run ruff check <touched_files>` and `uv run ruff format <touched_files>` before finalizing.

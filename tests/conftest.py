@@ -351,15 +351,19 @@ _FAST_PATH_FRAGMENTS = (
     "tests/contract/",
     "tests/factories/",
     "tests/guard/",
+    "tests/scenario_certification/",
     "tests/sensor/",
     "tests/sim/",
+    "tests/training/",
     "tests/unit/",
 )
 _FAST_FILE_PREFIXES = (
     "test_action_adapters",
+    "test_campaign_arm_admission",
     "test_config_validation",
     "test_environment_factory_signatures",
     "test_error_policy",
+    "test_map_runner",
     "test_planner",
     "test_range_sensor",
     "test_seed_utils",
@@ -369,6 +373,51 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    # The real-manifest contract tests use mocked candidate evaluation only;
+    # keep their coverage available to pull-request shards without promoting
+    # the broader adversarial-search suite into the fast lane.
+    "test_feasibility_first_real.py",
+    # The preparation-only adversarial search harness uses deterministic data
+    # fixtures only; keep its contract coverage in pull-request fast shards.
+    "test_search_harness.py",
+    # Occupancy-grid rasterization helpers are pure unit contracts with
+    # numpy fixtures; keep their coverage in fast pull-request shards for the
+    # exact-head changed-coverage gate (see #7282).
+    "test_occupancy_grid.py",
+    "test_occupancy_grid_helpers.py",
+    # The trace-dossier contract tests exercise lightweight, diagnostic-only
+    # export/render paths required by the exact-head changed-coverage gate.
+    "test_export_trace_dossier.py",
+    "test_release_protocol.py",
+    "test_trace_dossier_package.py",
+    "test_trace_dossier_renderer.py",
+    # Radius rank-stability schema tests exercise the changed benchmark producer;
+    # keep their deterministic contract coverage in pull-request fast shards.
+    "test_radius_rank_stability.py",
+    # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
+    # keep coverage for the changed producer in pull-request fast shards.
+    "test_mechanism_boundary_atlas.py",
+    # The anisotropic human-cost adapter is covered by deterministic planner
+    # contract tests; keep that focused file in the fast lane for exact-head
+    # changed-coverage admission.
+    "test_predictive_human_cost.py",
+    # Forecast-preparation packet tests are deterministic schema/provenance
+    # contracts; keep their changed producer covered by the fast lane.
+    "test_forecast_preparation.py",
+    # Figure-interpretation replay tests are provider-free deterministic contracts;
+    # keep their exact-head mutation and provenance coverage in fast shards.
+    "test_agent_figure_interpretation_eval.py",
+    # The shared DWA diagnostic harness tests are deterministic contract tests;
+    # keep their changed-module coverage in pull-request fast shards.
+    "test_dwa_diagnostic_harness.py",
+    # These smoke/fixture scenario tests run short deterministic simulation
+    # episodes through the map-runner trace recorder; they are the only
+    # fast-lane coverage for changed trace paths in the exact-head
+    # changed-coverage gate (see #7578). Each file runs in ~30s locally.
+    "test_issue_2526_cyclist_vru_smoke.py",
+    "test_issue_2527_waiting_crossing_fixture.py",
+    "test_issue_2727_fast_bicycle_actor.py",
+    "test_issue_3977_public_requirement_smoke.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

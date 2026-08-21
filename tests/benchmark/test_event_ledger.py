@@ -13,7 +13,7 @@ from robot_sf.benchmark.event_ledger import (
     reconcile_event_ledger,
     validate_record_event_ledger,
 )
-from robot_sf.benchmark.map_runner_jsonl import write_validated_to_handle
+from robot_sf.benchmark.map_runner.map_runner_jsonl import write_validated_to_handle
 from robot_sf.benchmark.runner import validate_and_write
 
 if TYPE_CHECKING:

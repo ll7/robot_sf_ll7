@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pathlib import Path
 
+from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
     _get_paginated_list,
     _parse_expected_heads,
@@ -18,6 +19,7 @@ from scripts.dev.stacked_prs import (
     merge_cascade,
     retarget_stack,
     summarize_check_runs,
+    summarize_merge_queue_gate,
     sync_stack,
 )
 
@@ -59,15 +61,66 @@ def _pr_payload(
 
 def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) -> dict[str, Any]:
     """Build a compact already-validated stack entry for cascade tests."""
+    metadata = "e" * 64
+    clear_holds = {
+        key: {"status": "clear", "reason_codes": [], "source": "fixture"}
+        for key in (
+            "merge",
+            "dependency",
+            "draft",
+            "domain",
+            "scientific_evidence",
+            "legal_release",
+            "security",
+        )
+    }
     return {
         "pr": number,
         "head_ref": head_ref,
         "head_sha": head_sha,
         "base_ref": base_ref,
         "base_sha": "b" * 40,
+        "metadata_digest": metadata,
         "merge_ready": True,
         "reasons": [],
         "checks": {"overall": "success"},
+        "required_checks": {
+            "status": "success",
+            "head_sha": head_sha,
+            "checks": [
+                {
+                    "name": "CI",
+                    "head_sha": head_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "state": "success",
+                }
+            ],
+            "reason_codes": [],
+        },
+        "implementation_review": {
+            "status": "accepted",
+            "carrier": {
+                "identity": "independent-fixture",
+                "kind": "static_report",
+                "head_sha": head_sha,
+                "metadata_digest": metadata,
+                "evidence_digest": "f" * 64,
+                "verdict": "accepted",
+            },
+            "reason_codes": [],
+            "precedence": 2,
+        },
+        "review_threads": {"status": "resolved", "unresolved": 0},
+        "requested_reviewer_count": 0,
+        "requested_team_count": 0,
+        "holds": clear_holds,
+        "merge_queue_gate": {
+            "status": "success",
+            "name": "merge-queue-gate",
+            "head_sha": head_sha,
+            "exact_head": True,
+        },
     }
 
 
@@ -142,6 +195,161 @@ def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> Non
     assert pending["overall"] == "pending"
     assert failed["overall"] == "failure"
     assert missing["overall"] == "unknown"
+
+
+def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
+    head_sha = "a" * 40
+    older = {
+        "id": 1,
+        "name": "merge-queue-gate",
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-08-17T10:00:00Z",
+        "head_sha": head_sha,
+    }
+    newer_pending = {
+        **older,
+        "id": 2,
+        "status": "in_progress",
+        "conclusion": None,
+        "completed_at": None,
+        "started_at": "2026-08-17T11:00:00Z",
+    }
+
+    assert summarize_merge_queue_gate([], head_sha=head_sha)["status"] == "missing"
+    assert (
+        summarize_merge_queue_gate([older, newer_pending], head_sha=head_sha)["status"] == "pending"
+    )
+    assert (
+        summarize_merge_queue_gate([{**older, "head_sha": "b" * 40}], head_sha=head_sha)["status"]
+        == "mismatch"
+    )
+    assert (
+        summarize_merge_queue_gate(
+            [{key: value for key, value in older.items() if key != "head_sha"}],
+            head_sha=head_sha,
+        )["status"]
+        == "malformed"
+    )
+    assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
+
+
+def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
+    from scripts.dev.pr_loop_policy import (
+        current_explicit_merge_hold_reasons,
+        has_current_accepted_gate_verdict,
+    )
+
+    head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+    trailer = f"gate-verdict: accepted @ {head_sha}"
+    assert current_explicit_merge_hold_reasons(
+        {
+            "labels": ["merge-ready: no"],
+            "reviews": [
+                {
+                    "authorAssociation": "OWNER",
+                    "state": "APPROVED",
+                    "body": "domain-approval: pending",
+                }
+            ],
+        }
+    ) == ["domain-approval:pending", "merge-ready:no"]
+
+    for state in ("DISMISSED", "CHANGES_REQUESTED", "PENDING"):
+        assert not has_current_accepted_gate_verdict(
+            {
+                "reviews": [
+                    {
+                        "authorAssociation": "OWNER",
+                        "state": state,
+                        "body": trailer,
+                    }
+                ]
+            },
+            head_sha,
+        )
+    assert has_current_accepted_gate_verdict(
+        {
+            "reviews": [
+                {
+                    "authorAssociation": "OWNER",
+                    "state": "APPROVED",
+                    "body": trailer,
+                }
+            ]
+        },
+        head_sha,
+    )
+
+
+def test_status_positive_control_requires_current_merge_queue_gate() -> None:
+    main_sha = "m" * 40
+    head_sha = "a" * 40
+    title = "feat: stack 1"
+    body = "body"
+    review_body = (
+        f"gate-verdict: accepted @ {head_sha}\n{metadata_trailer(metadata_digest(title, body))}"
+    )
+    payloads = {
+        "repos/owner/repo/git/ref/heads/main": {"object": {"sha": main_sha}},
+        "repos/owner/repo/pulls/1": {
+            **_pr_payload(
+                1,
+                head_ref="root",
+                head_sha=head_sha,
+                base_ref="main",
+                base_sha=main_sha,
+            ),
+            "title": title,
+            "body": body,
+        },
+        "repos/owner/repo/pulls/1/reviews?per_page=100": [
+            {
+                "author_association": "OWNER",
+                "state": "APPROVED",
+                "body": review_body,
+            }
+        ],
+        "repos/owner/repo/pulls/1/comments?per_page=100": [],
+        "repos/owner/repo/issues/1/comments?per_page=100": [],
+        f"repos/owner/repo/commits/{head_sha}/check-runs?per_page=100": {
+            "total_count": 2,
+            "check_runs": [
+                {
+                    "id": 1,
+                    "name": "CI",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": head_sha,
+                },
+                {
+                    "id": 2,
+                    "name": "merge-queue-gate",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": head_sha,
+                    "completed_at": "2026-08-17T11:00:00Z",
+                },
+            ],
+        },
+    }
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        assert method == "GET"
+        assert payload is None
+        return payloads[path], None
+
+    result = build_stack_status(
+        "owner/repo",
+        [1],
+        api=fake_api,
+        thread_fetcher=lambda number: (True, None),
+    )
+
+    entry = result["entries"][0]
+    assert entry["merge_queue_gate"]["status"] == "success"
+    assert entry["explicit_holds"] == []
+    assert entry["merge_ready"] is True
 
 
 def test_review_digest_changes_when_review_content_changes() -> None:
@@ -422,6 +630,7 @@ def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch)
     snapshot = {
         "schema": "stacked_prs.v1",
         "status": "ok",
+        "main": {"sha": "1" * 40},
         "entries": [
             _ready_entry(1, head_ref=parent_ref, head_sha=root_sha, base_ref="main"),
             _ready_entry(2, head_ref="child-branch", head_sha=next_sha, base_ref=parent_ref),
@@ -489,3 +698,210 @@ def test_cli_json_status_error_is_machine_readable(monkeypatch, capsys) -> None:
 
     assert main(["status", "--repo", "owner/repo", "--prs", "1", "--json"]) == 1
     assert json.loads(capsys.readouterr().out)["error"] == "fixture"
+
+
+# ---------------------------------------------------------------------------
+# Issue #7515: check-ancestry gate
+# ---------------------------------------------------------------------------
+
+
+def _ancestry_payload(
+    pr_number: int,
+    *,
+    head_ref: str,
+    head_sha: str,
+    base_ref: str,
+    body: str = "",
+) -> dict[str, Any]:
+    """Build a REST pull payload for check-ancestry fixture tests."""
+    return {
+        "number": pr_number,
+        "title": f"feat: ancestry {pr_number}",
+        "body": body,
+        "state": "open",
+        "merged": False,
+        "draft": False,
+        "head": {"ref": head_ref, "sha": head_sha},
+        "base": {"ref": base_ref, "sha": "b" * 40},
+    }
+
+
+def _ancestry_git_runner(tmp_path: Path) -> Any:
+    """Build a fake git runner with a synthetic contaminated-history layout.
+
+    ``origin/main`` sits at ``b*40``; the child head ``c*40`` has a non-main
+    ancestry whose merge base is ``a*40`` and whose commits include a foreign
+    commit plus the branch's own commit.
+    """
+
+    def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["fetch", "--no-tags", "origin", "main"]:
+            return _completed(args)
+        if args == ["rev-parse", "refs/remotes/origin/main"]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["merge-base", "refs/remotes/origin/main", "c" * 40]:
+            return _completed(args, stdout="a" * 40 + "\n")
+        if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
+            return _completed(
+                args, stdout=f"{'f' * 7} foreign work (#7308)\n{'e' * 7} intended work\n"
+            )
+        if args[:2] == ["diff", "--name-only"]:
+            return _completed(args, stdout="robot_sf/foreign.py\nrobot_sf/own.py\n")
+        raise AssertionError(f"unexpected git call: {args}")
+
+    return fake_git
+
+
+def test_check_ancestry_classifies_undeclared_contamination_blocked(
+    monkeypatch, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A PR with undeclared non-main ancestry fails closed (issue #7515)."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/1"):
+            return _ancestry_payload(
+                1,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body="no declaration",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="1",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "undeclared_stack"
+    assert result["status"] == "blocked"
+    assert result["unexpected_commits"] == [
+        f"{'f' * 7} foreign work (#7308)",
+        f"{'e' * 7} intended work",
+    ]
+    assert result["unexpected_paths"] == ["robot_sf/foreign.py", "robot_sf/own.py"]
+    assert "remediation_command" in result
+
+
+def test_check_ancestry_classifies_clean_pr_ok(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A PR created from current main with only intended commits passes."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    def fake_git(args: list[str], worktree: Path) -> subprocess.CompletedProcess[str]:
+        if args == ["fetch", "--no-tags", "origin", "main"]:
+            return _completed(args)
+        if args == ["rev-parse", "refs/remotes/origin/main"]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["merge-base", "refs/remotes/origin/main", "c" * 40]:
+            return _completed(args, stdout="b" * 40 + "\n")
+        if args == ["log", "--oneline", f"refs/remotes/origin/main..{'c' * 40}"]:
+            return _completed(args, stdout=f"{'e' * 7} intended work\n")
+        if args[:2] == ["diff", "--name-only"]:
+            return _completed(args, stdout="robot_sf/own.py\n")
+        raise AssertionError(f"unexpected git call: {args}")
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/2"):
+            return _ancestry_payload(
+                2,
+                head_ref="fix/clean",
+                head_sha="c" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="2",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=fake_git,
+    )
+
+    assert result["state"] == "clean"
+    assert result["status"] == "ok"
+
+
+def test_check_ancestry_classifies_declared_stack(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A declared stack is stacked (never independently mergeable), not blocked."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    declaration = f"## Stack Declaration\nparent_pr: #7308\nparent_head: {'a' * 40}\n"
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        if path.endswith("/pulls/3"):
+            return _ancestry_payload(
+                3,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body=declaration,
+            ), None
+        if path.endswith("/pulls/7308"):
+            return _ancestry_payload(
+                7308,
+                head_ref="fix/parent",
+                head_sha="a" * 40,
+                base_ref="main",
+            ), None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="3",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "stacked"
+    assert result["status"] == "ok"
+    assert result["classification"] == "stacked_not_independently_mergeable"
+    assert result["mergeable"] is False
+    assert any(path.endswith("/pulls/7308") for path in calls)
+
+
+def test_check_ancestry_invalidates_closed_unmerged_parent(monkeypatch, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    """A closed-unmerged declared parent fails closed (issue #7515)."""
+    from scripts.dev.stacked_prs import check_ancestry
+
+    declaration = f"## Stack Declaration\nparent_pr: #7308\nparent_head: {'a' * 40}\n"
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        if path.endswith("/pulls/4"):
+            return _ancestry_payload(
+                4,
+                head_ref="fix/child",
+                head_sha="c" * 40,
+                base_ref="main",
+                body=declaration,
+            ), None
+        if path.endswith("/pulls/7308"):
+            payload = _ancestry_payload(
+                7308,
+                head_ref="fix/parent",
+                head_sha="a" * 40,
+                base_ref="main",
+                body="",
+            )
+            payload["state"] = "closed"
+            payload["merged"] = False
+            return payload, None
+        raise AssertionError(f"unexpected api call: {path}")
+
+    result = check_ancestry(
+        "owner/repo",
+        target="4",
+        worktree=tmp_path,
+        api=fake_api,
+        git_runner=_ancestry_git_runner(tmp_path),
+    )
+
+    assert result["state"] == "parent_invalidated"
+    assert result["status"] == "blocked"

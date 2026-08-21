@@ -363,15 +363,15 @@
       "hash_without_artifact_path": 1
     },
     "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json": {
-      "artifact_hash_mismatch": 1
+      "artifact_hash_mismatch": 3
     }
   },
-  "generated_at": "2026-08-21T12:08:30Z",
+  "generated_at": "2026-08-21T13:45:00Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 16,
+      "artifact_hash_mismatch": 18,
       "config_missing_at_commit": 6,
       "dangling_commit": 20,
       "duplicate_campaign_id": 7,
@@ -383,6 +383,6 @@
       "uncommitted_artifact_missing_location": 150
     },
     "files_with_findings": 96,
-    "total_findings": 430
+    "total_findings": 432
   }
 }

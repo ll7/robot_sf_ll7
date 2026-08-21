@@ -53,6 +53,7 @@ export SDL_VIDEODRIVER="dummy"
 if command -v module >/dev/null 2>&1; then
   module purge || true
 fi
+export PATH="${HOME}/.local/bin:${PATH}"
 if [[ -n "${UV_PROJECT_ENVIRONMENT:-}" ]]; then
   echo "   using UV_PROJECT_ENVIRONMENT=${UV_PROJECT_ENVIRONMENT}"
 elif [[ -x "${PROJECT_ROOT}/.venv/bin/python" ]]; then

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ll7/robot_sf_ll7/schemas/single_account_merge_receipt.v1.schema.json",
+  "title": "Robot SF bounded single-account merge receipt",
+  "type": "object",
+  "required": [
+    "schema",
+    "repository",
+    "pr_number",
+    "head_sha",
+    "base_sha",
+    "current_base_sha",
+    "metadata_digest",
+    "required_checks",
+    "implementation_review",
+    "thread_resolution",
+    "requested_reviewers",
+    "requested_teams",
+    "holds",
+    "waiver",
+    "expected_head_cas",
+    "observed_at",
+    "merge_result",
+    "receipt_digest",
+    "status",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema": {"const": "single_account_merge_receipt.v1"},
+    "repository": {"type": "string", "minLength": 3},
+    "pr_number": {"type": "integer", "minimum": 1},
+    "head_sha": {"type": "string", "pattern": "^[0-9a-fA-F]{40}$"},
+    "base_sha": {"type": "string", "pattern": "^[0-9a-fA-F]{40}$"},
+    "current_base_sha": {"type": "string", "pattern": "^[0-9a-fA-F]{40}$"},
+    "metadata_digest": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "required_checks": {
+      "type": "object",
+      "required": ["status", "head_sha", "checks", "reason_codes"],
+      "properties": {
+        "status": {
+          "enum": ["success", "failure", "pending", "unavailable", "stale", "malformed"]
+        },
+        "head_sha": {"type": "string", "pattern": "^[0-9a-fA-F]{40}$"},
+        "checks": {"type": "array"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "implementation_review": {
+      "type": "object",
+      "required": ["status", "carrier", "reason_codes"],
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted",
+            "missing",
+            "pending",
+            "unavailable",
+            "stale",
+            "conflicting",
+            "malformed",
+            "superseded",
+            "dismissed",
+            "withdrawn",
+            "failure"
+          ]
+        },
+        "carrier": {"type": ["object", "null"]},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "thread_resolution": {"type": "object"},
+    "requested_reviewers": {"type": "object"},
+    "requested_teams": {"type": "object"},
+    "holds": {
+      "type": "object",
+      "required": [
+        "merge",
+        "dependency",
+        "draft",
+        "domain",
+        "scientific_evidence",
+        "legal_release",
+        "security"
+      ],
+      "properties": {
+        "merge": {"$ref": "#/$defs/disposition"},
+        "dependency": {"$ref": "#/$defs/disposition"},
+        "draft": {"$ref": "#/$defs/disposition"},
+        "domain": {"$ref": "#/$defs/disposition"},
+        "scientific_evidence": {"$ref": "#/$defs/disposition"},
+        "legal_release": {"$ref": "#/$defs/disposition"},
+        "security": {"$ref": "#/$defs/disposition"}
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "required": ["used", "actor", "reason", "observed_at"],
+      "properties": {
+        "used": {"type": "boolean"},
+        "actor": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]},
+        "observed_at": {"type": "string", "minLength": 1}
+      }
+    },
+    "expected_head_cas": {
+      "type": "object",
+      "required": ["request", "status"],
+      "properties": {
+        "request": {"type": "object"},
+        "status": {"type": "string"}
+      }
+    },
+    "gate_audit": {"type": ["object", "null"]},
+    "observed_at": {"type": "string", "minLength": 1},
+    "merge_result": {
+      "type": "object",
+      "required": ["status", "returned_merged_sha"],
+      "properties": {
+        "status": {"enum": ["not_applied", "failed", "merged"]},
+        "returned_merged_sha": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-fA-F]{40}$"
+        }
+      }
+    },
+    "status": {"enum": ["ready", "blocked", "applied", "merged"]},
+    "reason_codes": {"type": "array", "items": {"type": "string"}},
+    "receipt_digest": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"}
+  },
+  "$defs": {
+    "disposition": {
+      "type": "object",
+      "required": ["status", "reason_codes", "source"],
+      "properties": {
+        "status": {"type": "string"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}},
+        "source": {"type": "string"}
+      }
+    }
+  }
+}

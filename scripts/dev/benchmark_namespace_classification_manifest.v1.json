@@ -7,6 +7,7 @@
     "adversarial",
     "agent_figure_interpretation_eval.py",
     "aggregate.py",
+    "algorithm_contract.py",
     "algorithm_metadata.py",
     "algorithm_readiness.py",
     "ammv_feasibility.py",

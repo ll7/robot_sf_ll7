@@ -19,6 +19,7 @@ import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
 from scripts.analysis import verify_ch7_evidence_admission as admission
+from scripts.analysis import verify_ch7_source_registry as source_registry
 
 PACKAGE_SCHEMA = (
     Path(__file__).parents[2] / "robot_sf/benchmark/schemas/ch7-evidence-package.v2.json"
@@ -48,6 +49,23 @@ V2_PORTFOLIO_SHA256 = "ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80
 
 class Ch7EvidenceAdmissionV2Error(ValueError):
     """Raised when a v2 package or admission receipt fails closed."""
+
+
+def _verify_source_registry_binding(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    binding = manifest.get("source_registry")
+    if not isinstance(binding, Mapping):
+        raise Ch7EvidenceAdmissionV2Error("v2 package lacks a canonical source registry binding")
+    try:
+        expected = source_registry.verify_source_registry(repository_root=Path(__file__).parents[2])
+    except source_registry.SourceRegistryError as exc:
+        raise Ch7EvidenceAdmissionV2Error(
+            f"canonical source registry verification failed: {exc.status}: {exc}"
+        ) from exc
+    if dict(binding) != expected:
+        raise Ch7EvidenceAdmissionV2Error(
+            "v2 package source registry binding differs from registry"
+        )
+    return expected
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:
@@ -82,15 +100,23 @@ def _validate(payload: Mapping[str, Any], schema_path: Path, label: str) -> None
 def _verify_package_members_for_diagnostic(package: Path) -> tuple[str, list[str]]:
     """Verify a fresh build or a complete durable package without weakening sidecar checks."""
 
-    sidecars = tuple(path for path in package.rglob("*.review.json") if path.is_file())
     try:
         return admission._verify_members(
-            package,
-            label="Chapter 7 v2 evidence package",
-            require_review_sidecars=bool(sidecars),
+            package, label="Chapter 7 v2 evidence package", require_review_sidecars=False
         )
-    except admission.Ch7EvidenceAdmissionError as exc:
-        raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
+    except admission.Ch7EvidenceAdmissionError as first_error:
+        if "unbound review sidecars" not in str(first_error):
+            raise Ch7EvidenceAdmissionV2Error(
+                f"package member verification failed: {first_error}"
+            ) from first_error
+        try:
+            return admission._verify_members(
+                package, label="Chapter 7 v2 evidence package", require_review_sidecars=True
+            )
+        except admission.Ch7EvidenceAdmissionError as second_error:
+            raise Ch7EvidenceAdmissionV2Error(
+                f"package member verification failed: {second_error}"
+            ) from second_error
 
 
 def _load_portfolio_selection() -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -379,6 +405,7 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
     _verify_projection_contract(package, manifest)
+    registry_binding = _verify_source_registry_binding(manifest)
     if (
         manifest.get("status") != "blocked_pending_domain_approval"
         or manifest.get("admission_status") != "not_admitted"
@@ -431,10 +458,12 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
             "v1_audit_member_sha256": source["v1_audit_member_sha256"],
             "v1_reduced_atlas_member_sha256": source["v1_reduced_atlas_member_sha256"],
             "portfolio_config_sha256": portfolio["sha256"],
+            "source_registry_sha256": registry_binding["registry_sha256"],
         },
         "diagnostics": {
             "package_checksums_verified": True,
             "package_manifest_schema_verified": True,
+            "source_registry_verified": True,
             "admission_authorized": False,
             "empirical_outcomes_admitted": False,
             "receipt_created": False,
@@ -460,6 +489,7 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
     _verify_projection_contract(package, manifest)
+    registry_binding = _verify_source_registry_binding(manifest)
     if (
         manifest.get("status") != "admitted"
         or manifest.get("admission_status") != "admitted"
@@ -501,6 +531,7 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
         "status": "admitted",
         "package_sha256sums_sha256": sums_sha,
         "manifest_sha256": manifest_sha,
+        "source_registry_sha256": registry_binding["registry_sha256"],
         "receipt_sha256": _sha256_file(receipt.resolve()),
     }
 

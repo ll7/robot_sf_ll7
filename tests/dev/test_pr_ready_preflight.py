@@ -1074,3 +1074,80 @@ def test_pr_ready_check_regression_shapes_classification(preflight_repo: Path) -
         "core --lane core",
         "optional --lane optional",
     ]
+
+
+def _wire_real_ruff_fix_format(repo: Path) -> None:
+    """Replace the stubbed ruff_fix_format.sh with the real scoped formatter.
+
+    The stubbed post-preflight scripts exit 0 without mutating files, so the
+    issue #7710 regression test must wire in the real script to prove that an
+    unrelated unformatted base-only file is no longer dirtied by readiness.
+    """
+    shutil.copy2(
+        SCRIPTS_DEV / "ruff_fix_format.sh",
+        repo / "scripts" / "dev" / "ruff_fix_format.sh",
+    )
+
+
+def test_pr_ready_scoped_format_keeps_unrelated_base_file_clean(tmp_path: Path) -> None:
+    """Issue #7710: readiness must not reformat unrelated unformatted base-only files.
+
+    Before the fix, ``pr_ready_check.sh`` ran ``ruff format .`` over the whole
+    checkout, so an unformatted file already present on the base ref got
+    reformatted and dirtied an otherwise clean PR worktree. The final freshness
+    gate then reported ``dirty_worktree`` even though the PR never touched that
+    file. With the scoped formatter, only PR-changed Python files are
+    fix/formatted, so the tree must stay clean.
+    """
+    repo = tmp_path / "repo"
+    scripts_dir = repo / "scripts" / "dev"
+    scripts_dir.mkdir(parents=True)
+    shutil.copy2(SCRIPTS_DEV / "common_setup.sh", scripts_dir / "common_setup.sh")
+    shutil.copy2(SCRIPTS_DEV / "pr_ready_check.sh", scripts_dir / "pr_ready_check.sh")
+    _make_fake_scripts(repo)
+    _wire_real_ruff_fix_format(repo)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".git" / "info" / "exclude").write_text("bin/\n.home/\nlane.log\n", encoding="utf-8")
+
+    # Base commit: a deliberately unformatted base-only file (as #7707 introduced
+    # on origin/main) plus an unrelated clean module the PR will change.
+    base_only = repo / "base_only.py"
+    # ruff format would rewrite this into a wrapped call; leave it unformatted.
+    base_only.write_text(
+        "def base_only():\n"
+        "    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]\n",
+        encoding="utf-8",
+    )
+    pr_file = repo / "pr_module.py"
+    pr_file.write_text("def pr_change():\n    return 1\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/main", base_sha], cwd=repo, check=True
+    )
+
+    # PR commit changes only pr_module.py (a Python file, so scoped format targets it).
+    pr_file.write_text("def pr_change():\n    return 2\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "pr change")
+
+    # Interim mode: cheap and sufficient for the regression; the stub lanes exit 0.
+    result = _run_pr_ready(
+        repo,
+        help_flag=False,
+        env_overrides={"BASE_REF": "origin/main", "PR_READY_MODE": "interim"},
+    )
+    assert result.returncode == 0, f"readiness failed: {result.stderr}"
+
+    # The tree must remain clean: scoped format must not reformat base_only.py.
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status == "", f"readiness dirtied the tree: {status!r}"

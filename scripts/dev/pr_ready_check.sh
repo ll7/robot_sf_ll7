@@ -391,7 +391,21 @@ else
 fi
 uv run python "$SCRIPT_DIR/check_perf_evidence.py" "${perf_args[@]}"
 uv run python "$SCRIPT_DIR/check_fast_results_claim_map.py"
-"$SCRIPT_DIR/ruff_fix_format.sh"
+# Scope ruff fix/format to PR-changed Python files so unrelated unformatted
+# files already present on the base ref never dirty a clean PR worktree
+# (issue #7710). Whole-tree mode remains the fallback when no Python files
+# changed (e.g. docs-only PRs still need repo-wide lint consistency).
+format_targets=()
+for changed_file in "${changed_files[@]}"; do
+  if [[ "$changed_file" == *.py ]]; then
+    format_targets+=("$changed_file")
+  fi
+done
+if [[ ${#format_targets[@]} -gt 0 ]]; then
+  "$SCRIPT_DIR/ruff_fix_format.sh" "${format_targets[@]}"
+else
+  "$SCRIPT_DIR/ruff_fix_format.sh"
+fi
 
 # Keep coverage.py's SQLite database outside pytest's managed temporary roots.
 # The readiness wrapper owns this absolute path and removes it only when every

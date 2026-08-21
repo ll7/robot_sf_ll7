@@ -1,5 +1,7 @@
 """Regression tests for the issue #7602 forecast-preparation contract."""
 
+# evidence-writer-exempt: tests write transient malformed JSON parser fixtures, not generated evidence.
+
 from __future__ import annotations
 
 import json

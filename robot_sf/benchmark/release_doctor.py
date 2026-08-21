@@ -283,7 +283,7 @@ def _zenodo_check(
         session = build_session(token_file or Path("<missing>"))
         response = session.get("https://zenodo.org/api/deposit/depositions?size=1", timeout=30)
         response.raise_for_status()
-    except Exception:  # noqa: BLE001
+    except (OSError, RuntimeError, ValueError):
         checks.append(ReleaseDoctorCheck("zenodo_auth", "fail", "Zenodo token/auth is unavailable"))
     else:
         checks.append(ReleaseDoctorCheck("zenodo_auth", "pass", "Zenodo token/auth is usable"))

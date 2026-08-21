@@ -132,7 +132,7 @@ def _json_object(response: _Response, operation: str) -> dict[str, Any]:
     try:
         response.raise_for_status()
         payload = response.json()
-    except Exception as exc:  # requests raises provider-specific exceptions
+    except (OSError, RuntimeError, ValueError) as exc:
         raise ZenodoPublisherError(f"Zenodo {operation} request failed") from exc
     if not isinstance(payload, dict):
         raise ZenodoPublisherError(f"Zenodo {operation} response was not a JSON object")

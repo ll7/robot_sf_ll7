@@ -193,6 +193,12 @@ remains open and the plan records a closure review finding.
 
 ## Shared plan schema
 
+Implementation admission may consume one canonical `issue_dependency_packet.v1` for exact
+prerequisites. The packet is a predicate record attached to the issue contract, not a second issue
+graph; mandatory unsatisfied, unavailable, conflicting, or invalid rows keep admission blocked.
+See [Typed Issue Dependency Packets](../ai/issue_dependency_packets.md) for the row contract and
+read-only resolver.
+
 Every plan has schema issue_audit_plan.v1 and contains:
 
     {

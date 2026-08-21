@@ -151,7 +151,12 @@ input_provenance:
       # Refreshed after the additive, outcome-free BRNE diagnostic registry metadata
       # change in issue #6464; no target, split, budget, estimator, gate, or decision
       # field changed.
-      sha256: 3ea3c8b38101ca1b218a01e906114fd51364ae98a4c9ea0f8ea6aa0ec374bd5c
+      # Refreshed again for issue #7676: algorithm_metadata now sources its migrated
+      # entries from the canonical algorithm contract registry. Values, key order,
+      # public API, and error behavior are byte-identical (proven by the committed
+      # pre-refactor snapshot parity tests); no target, split, budget, estimator,
+      # gate, or decision field changed.
+      sha256: e322ee1327eed4446657461cbbb9758c479aaa8d774b2190dc3c98518dbbf5fc
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

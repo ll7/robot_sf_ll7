@@ -34,6 +34,7 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
+from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
@@ -195,6 +196,15 @@ def _record_publication_payload(campaign_root: Path, publication_payload: dict[s
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
 
+def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) -> None:
+    """Persist the full-release gate beside the campaign summary and report."""
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = _read_json(summary_path)
+    summary["full_release_acceptance"] = acceptance
+    _write_json(summary_path, summary)
+    write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -346,6 +356,25 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     )
     _merge_release_provenance(campaign_root, release_provenance)
 
+    release_acceptance = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=manifest,
+        campaign_config=cfg,
+    )
+    _record_release_acceptance(campaign_root, release_acceptance)
+    result["release_acceptance"] = release_acceptance
+    full_release_acceptance_failed = (
+        getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2"
+        and release_acceptance["status"] != "valid"
+    )
+    if getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2":
+        # Keep the campaign's permissive core-success counters available in the
+        # nested payload, but never expose them as full-release success.
+        result["campaign_benchmark_success"] = bool(run_payload.get("benchmark_success"))
+        result["benchmark_success"] = bool(
+            run_payload.get("benchmark_success") and not full_release_acceptance_failed
+        )
+
     missing = _required_artifacts_missing(campaign_root, manifest.required_artifact_paths)
     result["required_artifact_paths"] = list(manifest.required_artifact_paths)
     result["missing_required_artifacts"] = missing
@@ -354,7 +383,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     release_dir = campaign_root / "release"
     _write_json(release_dir / "release_manifest.resolved.json", resolved_manifest)
 
-    release_benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
+    release_benchmark_success = (
+        bool(run_payload.get("benchmark_success"))
+        and not missing
+        and not full_release_acceptance_failed
+    )
     result["release_benchmark_success"] = release_benchmark_success
     publication_requested = bool(getattr(cfg, "export_publication_bundle", True))
     result["publication_requested"] = publication_requested
@@ -374,6 +407,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
     result["release_status"] = (
         "missing_required_artifacts"
         if missing
+        else "full_release_acceptance_failed"
+        if full_release_acceptance_failed
         else (
             "ok"
             if release_benchmark_success
@@ -386,11 +421,20 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         else (
             "release is missing required benchmark artifacts"
             if missing
-            else str(run_payload.get("status_reason", "benchmark release did not succeed"))
+            else (
+                "full benchmark release acceptance failed: "
+                + str((release_acceptance.get("blockers") or ["unspecified"])[0])
+                if full_release_acceptance_failed
+                else str(run_payload.get("status_reason", "benchmark release did not succeed"))
+            )
         )
     )
     result["release_exit_code"] = (
-        0 if release_benchmark_success else (2 if missing else int(run_payload.get("exit_code", 2)))
+        0
+        if release_benchmark_success
+        else (
+            2 if missing or full_release_acceptance_failed else int(run_payload.get("exit_code", 2))
+        )
     )
 
     if release_benchmark_success and publication_requested:

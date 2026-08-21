@@ -95,6 +95,7 @@ class BenchmarkReleaseManifest:
     release_checklist_path: Path
     latest_main_base_commit: str | None = None
     expected_episode_cells: int | None = None
+    expected_horizon_steps: int | None = None
     publication_channel: str | None = None
     suite_policy_path: Path | None = None
     suite_policy_sha256: str | None = None
@@ -345,6 +346,7 @@ def _load_v02_contract(  # noqa: C901
     defaults = {
         "latest_main_base_commit": None,
         "expected_episode_cells": None,
+        "expected_horizon_steps": None,
         "publication_channel": None,
         "suite_policy_path": None,
         "suite_policy_sha256": None,
@@ -364,6 +366,9 @@ def _load_v02_contract(  # noqa: C901
     matrix = payload.get("matrix")
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
+    horizon_steps = matrix.get("horizon_steps")
+    if not isinstance(horizon_steps, int) or isinstance(horizon_steps, bool) or horizon_steps <= 0:
+        raise ValueError("matrix.horizon_steps must be a positive integer")
     publication = payload.get("publication")
     if not isinstance(publication, dict):
         raise ValueError("publication must be a mapping")
@@ -390,6 +395,7 @@ def _load_v02_contract(  # noqa: C901
     return {
         "latest_main_base_commit": latest_main_base_commit,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
+        "expected_horizon_steps": horizon_steps,
         "publication_channel": str(publication["channel"]),
         "suite_policy_path": _resolve_required_file(
             manifest_path, scenario.get("suite_policy_path"), "scenario.suite_policy_path"
@@ -650,7 +656,7 @@ def _validate_release_planners(
         problems.append("planners.groups does not match campaign config")
 
 
-def _validate_v02_contract(
+def _validate_v02_contract(  # noqa: C901
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
@@ -684,6 +690,23 @@ def _validate_v02_contract(
     cells = len(scenarios) * len(resolved_seeds) * enabled_planners
     if cells != manifest.expected_episode_cells:
         problems.append("matrix.expected_episode_cells does not match resolved matrix")
+    if manifest.expected_horizon_steps is None:
+        problems.append("matrix.horizon_steps is missing")
+    elif cfg.horizon != manifest.expected_horizon_steps:
+        problems.append("matrix.horizon_steps does not match campaign config")
+    else:
+        overridden_horizons = {
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled
+            and planner.horizon_override is not None
+            and planner.horizon_override != manifest.expected_horizon_steps
+        }
+        if overridden_horizons:
+            problems.append(
+                "planner horizon overrides do not match matrix.horizon_steps: "
+                + ", ".join(sorted(overridden_horizons))
+            )
     if manifest.doi != manifest.version_doi:
         problems.append("provenance.doi must match publication.version_doi")
     if manifest.concept_doi == manifest.version_doi:
@@ -795,7 +818,10 @@ def build_resolved_release_manifest(
             "concept_doi": manifest.concept_doi,
             "version_doi": manifest.version_doi,
         },
-        "matrix": {"expected_episode_cells": manifest.expected_episode_cells},
+        "matrix": {
+            "expected_episode_cells": manifest.expected_episode_cells,
+            "horizon_steps": manifest.expected_horizon_steps,
+        },
         "release_contract": {
             "suite_policy_path": (
                 _repo_relative(manifest.suite_policy_path) if manifest.suite_policy_path else None

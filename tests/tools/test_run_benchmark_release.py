@@ -566,6 +566,84 @@ def test_runtime_smoke_skips_publication_when_config_disables_export(
     assert payload["publication_preflight_status"] == "not_requested"
 
 
+def test_full_release_acceptance_failure_blocks_publication(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A permissive campaign result cannot publish when the full gate fails."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    manifest = SimpleNamespace(
+        **_manifest_fixture().__dict__,
+        schema_version="benchmark-release-manifest.v0.2",
+    )
+    cfg = SimpleNamespace(export_publication_bundle=True)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "core rows passed",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "full",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {
+            "status": "invalid",
+            "benchmark_success": False,
+            "blockers": ["fallback row present"],
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("publication must be blocked by full acceptance")
+        ),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["campaign_benchmark_success"] is True
+    assert payload["benchmark_success"] is False
+    assert payload["release_benchmark_success"] is False
+    assert payload["release_status"] == "full_release_acceptance_failed"
+    assert payload["release_exit_code"] == 2
+    assert payload["publication_bundle"] is None
+
+
 def test_release_preflight_fails_closed_when_orca_rvo2_missing(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

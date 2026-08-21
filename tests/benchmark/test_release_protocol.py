@@ -287,7 +287,7 @@ def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path)
         {
             "schema_version": "benchmark-release-manifest.v0.2",
             "latest_main_base_commit": "a" * 40,
-            "matrix": {"expected_episode_cells": 20160},
+            "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
             "publication": {
                 "channel": "direct_zenodo_benchmark_dataset",
                 "concept_doi": "10.5281/zenodo.99999990",
@@ -333,6 +333,7 @@ def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path)
     result = validate_release_manifest(manifest)
     assert result["status"] == "valid"
     assert manifest.expected_episode_cells == 20160
+    assert manifest.expected_horizon_steps == 600
     assert manifest.snqi_claim_policy == "advisory_no_ranking"
     assert manifest.concept_doi != manifest.version_doi
 

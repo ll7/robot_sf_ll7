@@ -23,7 +23,7 @@ def _v02_payload() -> dict[str, Any]:
         {
             "schema_version": release_protocol.RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
             "latest_main_base_commit": "a" * 40,
-            "matrix": {"expected_episode_cells": 20160},
+            "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
             "publication": {
                 "channel": "direct_zenodo_benchmark_dataset",
                 "concept_doi": "10.5281/zenodo.99999990",
@@ -72,6 +72,7 @@ def _v02_payload() -> dict[str, Any]:
             "latest_main_base_commit",
         ),
         (lambda payload: payload.update(matrix={}), "matrix.expected_episode_cells"),
+        (lambda payload: payload["matrix"].pop("horizon_steps"), "matrix.horizon_steps"),
         (lambda payload: payload.update(publication=[]), "publication must be a mapping"),
         (
             lambda payload: payload["publication"].update(channel="github_release"),
@@ -119,6 +120,7 @@ def test_v02_loader_rejects_each_incomplete_publication_contract(
         ("seed_sets_sha256", "0" * 64, "seed_sets_sha256"),
         ("resolved_seeds", (999,), "resolved_seeds"),
         ("expected_episode_cells", 1, "expected_episode_cells"),
+        ("expected_horizon_steps", 500, "matrix.horizon_steps"),
         ("doi", "10.5281/zenodo.other", "provenance.doi"),
         ("concept_doi", "10.5281/zenodo.99999991", "concept and version DOI"),
     ],

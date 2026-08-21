@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #7670 exact dependency-license disposition: the canonical inventory now
+binds the reviewed llvmlite 0.49.0 package/version/expression, lock artifacts,
+profile target, notice references, and allowed release surfaces without
+generalizing the exception:
+[dependency_license_inventory.md](dependency_license_inventory.md).
+
 Issue #7340 real-manifest feasibility-first diagnostic: a config-first native probe over a fixed
 station-platform candidate pool, with route certification, loader-backed pedestrian binding,
 separate rejection/unavailability accounting, and a fail-closed comparison contract. The bounded

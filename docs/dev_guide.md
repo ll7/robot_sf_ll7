@@ -699,6 +699,44 @@ in-repo `gh-pr-merger` preflight remains binding for guarded merges. Enabling Gi
 queue itself also requires maintainer approval to toggle branch-protection settings, consistent
 with the gate-side rationale above.
 
+### Single-account merge receipt (issue #7669)
+
+**Plain-language contract.** A merge may proceed with one account only when a versioned receipt
+proves that every ordinary implementation-integrity condition was observed on the exact PR head.
+The receipt does not turn a missing approval into a general bypass: domain, scientific/evidence,
+legal/release, security, dependency, draft, thread, requested-reviewer, metadata, and hosted-check
+conditions remain independent fail-closed holds.
+
+The canonical owner is
+`scripts/dev/single_account_merge_receipt.py`, with the contract recorded in
+`scripts/dev/single_account_merge_receipt.v1.schema.json`. A receipt binds the repository and PR,
+head/base/current-main SHAs, final PR metadata digest, terminal exact-head required checks,
+independent implementation-review carrier and evidence digest, review-thread disposition,
+requested reviewers and teams, all separate hold dimensions, optional waiver actor/reason/time,
+and the expected-head compare-and-swap (CAS) request. The receipt digest covers the pre-merge
+observation and is preserved when GitHub returns the merge commit SHA.
+
+Use the three explicit modes as follows:
+
+- `--mode report-only` reads the canonical merge-gate snapshot and writes an inspectable receipt;
+  it performs no remote mutation.
+- `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
+  receipt; a changed head, base, metadata, check, review, thread, requested reviewer, or hold
+  blocks.
+- `--mode apply --receipt-file <path>` repeats validation and then lets the receipt owner issue
+  exactly one expected-head squash merge, rereading the closed/merged PR and recording the
+  returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack coordinator and
+  delegates its root merge to the same owner.
+
+The only permitted waiver is the bounded absence of a distinct human implementation reviewer,
+and it requires an actor, reason, and timestamp. It cannot waive a required hosted check,
+scientific or evidence review, domain approval, legal/release or security gate, dependency hold,
+draft state, unresolved thread, requested reviewer, stale base, or metadata mismatch. If the
+post-merge readback is invalid, preserve the receipt and route an incident; do not reconstruct the
+pre-merge evidence or reuse the waiver. The repository policy fixture
+`scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the callers and prevents
+new direct merge endpoints from bypassing this contract.
+
 **Changed-line coverage admission (issue #7293).** The authoritative proof for merge admission is
 the `changed-coverage-gate` check run on the exact source PR head SHA. CI enables coverage on the
 fast-feedback shards for pull requests, checks out the immutable PR head, combines those shards,
@@ -1483,8 +1521,11 @@ gh api repos/$OWNER/$REPO/issues/$ISSUE/labels/needs-publication -X DELETE --sil
 ```
 
 ```bash
-gh api repos/$OWNER/$REPO/pulls/$PR/merge -X PUT \
-  -f merge_method="squash" -f commit_title="Merge PR #$PR" -f sha="$PR_SHA"
+RECEIPT_FILE=/tmp/pr-$PR-single-account-receipt.json
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode report-only --output "$RECEIPT_FILE"
+uv run python scripts/dev/single_account_merge_receipt.py \
+  --repo "$OWNER/$REPO" --pr "$PR" --mode apply --receipt-file "$RECEIPT_FILE"
 ```
 
 ```bash

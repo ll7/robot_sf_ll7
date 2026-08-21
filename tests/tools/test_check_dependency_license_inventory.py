@@ -1,5 +1,8 @@
 """Tests for the lock/profile/environment dependency license inventory."""
 
+# evidence-writer-exempt: Unit tests write isolated temporary fixture inputs and reports outside
+# docs/context/evidence; using shared evidence writers would change the fixture contract.
+
 from __future__ import annotations
 
 import json
@@ -192,6 +195,7 @@ source = { registry = "https://pypi.org/simple" }
             },
         ],
         "components": [],
+        "package_dispositions": [],
     }
     (root / "scripts" / "validation" / "dependency_license_policy.v1.json").write_text(
         json.dumps(policy, indent=2) + "\n", encoding="utf-8"
@@ -383,3 +387,67 @@ def test_freshness_with_strict_flag_reapplies_the_unresolved_exit_code(tmp_path:
         )
         == 2
     )
+
+
+def test_current_llvmlite_disposition_matches_both_frozen_lock_profiles() -> None:
+    """The reviewed llvmlite row covers root and standalone profile closures."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(
+        root,
+        distributions=[
+            _Distribution(
+                "llvmlite",
+                "0.49.0",
+                License_Expression="BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+            )
+        ],
+    )
+
+    rows = [row for row in inventory["packages"] if row["normalized_name"] == "llvmlite"]
+    assert {row["lockfile"] for row in rows} == {"uv.lock", "fast-pysf/uv.lock"}
+    assert all(row["exact_policy_status"] == "accepted" for row in rows)
+    assert all(row["policy_disposition"] == "external_dependency_not_redistributed" for row in rows)
+    assert not any("llvmlite" in failure for failure in inventory["failures"])
+    assert inventory["summary"]["policy_exact_match_count"] == 2
+
+
+def test_exact_llvmlite_policy_rejects_another_with_expression(tmp_path: Path) -> None:
+    """An arbitrary SPDX WITH expression cannot inherit the reviewed exception."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    policy["package_dispositions"][0]["license_expression"] = "BSD-2-Clause WITH Apache-2.0"
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+    inventory = build_inventory(
+        root,
+        policy_path=policy_path,
+        distributions=[
+            _Distribution(
+                "llvmlite",
+                "0.49.0",
+                License_Expression="BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+            )
+        ],
+    )
+
+    assert any(
+        "llvmlite: exact policy llvmlite-0-49-0-external-install:"
+        " observed license expression does not match exact policy" in failure
+        for failure in inventory["failures"]
+    )
+
+
+def test_exact_policy_evidence_is_bound_into_report_freshness(tmp_path: Path) -> None:
+    """Changing the exact disposition evidence invalidates an otherwise fresh report."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(root, distributions=[])
+    evidence_path = root / "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+    input_paths = {row["path"] for row in inventory["repository_inputs"]}
+    assert evidence_path.relative_to(root).as_posix() in input_paths
+
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
+    assert check_report_freshness(root, report_path) == []

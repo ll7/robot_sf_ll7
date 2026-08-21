@@ -68,5 +68,89 @@
       ],
       "disposition": "review_required"
     }
+  ],
+  "package_dispositions": [
+    {
+      "id": "llvmlite-0-49-0-external-install",
+      "package": "llvmlite",
+      "version": "0.49.0",
+      "license_expression": "BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "llvmlite-0.49.0.tar.gz",
+          "sha256": "00f16db782f4a13c78c5804aedc434e46794a77e89999a168f9401106270e50a",
+          "size": 194467,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "llvmlite-0.49.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+          "sha256": "ddc7aecd4f56397ed6e8f120ec5dcd5a1a8f0e6032ca4af413462792d4dca2e3",
+          "size": 59890659,
+          "platform_tags": [
+            "cp313",
+            "cp313",
+            "manylinux2014_x86_64.manylinux_2_17_x86_64"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/numba/llvmlite",
+        "tag": "v0.49.0",
+        "notice_paths": [
+          "https://github.com/numba/llvmlite/blob/v0.49.0/LICENSE",
+          "https://github.com/numba/llvmlite/blob/v0.49.0/LICENSE.thirdparty"
+        ]
+      },
+      "profiles": [
+        "core",
+        "viz",
+        "maps",
+        "benchmark",
+        "gpu",
+        "training",
+        "recurrent",
+        "rllib",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "orca",
+        "socnav",
+        "criticality",
+        "all",
+        "fast-pysf"
+      ],
+      "allowed_distribution_modes": ["user_installed", "not_distributed"],
+      "blocked_distribution_modes": ["bundled_source", "built_companion"],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "reviewed",
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked.",
+      "evidence_paths": [
+        "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+      ]
+    }
   ]
 }

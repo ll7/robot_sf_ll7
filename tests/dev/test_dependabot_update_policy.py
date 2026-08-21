@@ -122,6 +122,21 @@ def test_authoritative_changed_file_list_avoids_unneeded_base_lookup(tmp_path: P
     ]
 
 
+def test_exact_diff_replaces_stale_authoritative_base_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A current base must exclude unrelated files from an older PR base."""
+    changed_file_list = tmp_path / "changed-files.txt"
+    changed_file_list.write_text("pyproject.toml\nuv.lock\nREADME.md\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy._diff_vs_head",
+        lambda *args, **kwargs: "docs/research.md\n",
+    )
+
+    assert changed_files(tmp_path, "origin/main", changed_file_list) == ["docs/research.md"]
+
+
 def test_diff_vs_head_falls_back_to_two_dot_when_three_dot_lacks_merge_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

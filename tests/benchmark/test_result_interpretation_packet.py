@@ -239,6 +239,28 @@ class TestFixturesValid:
             summary["results"]["surface"]["released_default"]["clear_hit_rate_max"]
         )
 
+    def test_issue_6962_fixture_binds_reference_control_summary(self) -> None:
+        reference = next(
+            source
+            for source in _VALID_6962["sources"]
+            if source["source_id"] == "lane_formation_reference"
+        )
+        reference_path = Path(__file__).resolve().parents[2] / reference["path"]
+        assert hashlib.sha256(reference_path.read_bytes()).hexdigest() == reference["sha256"]
+        summary = json.loads(reference_path.read_text(encoding="utf-8"))
+        rows = {
+            (row["condition"], row["calibration"]): row
+            for row in summary["reference_stage"]["native_summaries"]
+        }
+        for calibration in ("released_default", "literature_typical"):
+            mixed = rows[("mixed_sustained_flow", calibration)]
+            separated = rows[("separated_lane_control", calibration)]
+            assert mixed["clear_lsi_hits"] == 0
+            assert mixed["clear_lsi_total"] == 3
+            assert separated["clear_lsi_hits"] == 3
+            assert separated["clear_lsi_total"] == 3
+            assert separated["positive_control_not_emergence"] is True
+
     def test_deterministic_json_roundtrip(self, tmp_path: Path) -> None:
         out = tmp_path / "out.json"
         write_deterministic_json(_VALID_6474, out)

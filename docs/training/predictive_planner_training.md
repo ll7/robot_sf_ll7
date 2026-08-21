@@ -61,9 +61,11 @@ uv run python scripts/training/run_predictive_optimization_smoke.py \
 The runner generates one deterministic predictive fixture, invokes the canonical trainer for
 the repeated FP32 control, FP32 loader-optimization, and AMP loader-optimization arms, and writes
 `comparison.json` plus `comparison.md` under the configured output root. Each arm records the
-exact commit, dataset/checkpoint digests, loss traces, post-warm-up examples/steps per second,
-and CUDA peak-memory fields when available. The control-repeat dispersion and absolute tolerance
-rule are frozen in the YAML before outcomes are inspected.
+exact commit, source/config hashes, dataset and split/order digests, checkpoint-load result, loss
+traces, post-warm-up examples/steps per second, and CUDA peak-memory fields when available. The
+runner refuses tracked source drift and rejects any cross-arm split, training-order, update-count,
+or environment mismatch. The control-repeat dispersion and absolute tolerance rule are frozen in
+the YAML before outcomes are inspected.
 
 This is diagnostic training-tooling smoke evidence only. It does not establish policy equivalence,
 general GPU speedup, benchmark improvement, or a paper/dissertation claim. Do not use it as a

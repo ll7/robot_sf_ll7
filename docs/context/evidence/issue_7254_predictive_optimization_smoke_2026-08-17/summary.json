@@ -1,0 +1,145 @@
+{
+  "schema_version": "issue_7254_predictive_optimization_smoke_summary.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "issue": 7254,
+  "parent_issue": 6482,
+  "evidence_tier": "diagnostic-only",
+  "claim_boundary": "bounded one-fixture training-signal equivalence and throughput diagnostic only; no policy, benchmark, general-speedup, or paper claim",
+  "runtime_commit_sha": "74a55c43f46edca6d1d928074a8a890e608065af",
+  "config_path": "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml",
+  "config_sha256": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
+  "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/training/run_predictive_optimization_smoke.py --config configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml --output-root output/review_issue7254_corrected_final_v2",
+  "host": {
+    "gpu_name": "NVIDIA GeForce RTX 3080",
+    "nvidia_smi": "NVIDIA GeForce RTX 3080, 580.159.03, 10240",
+    "python": "3.13.13",
+    "torch": "2.13.0+cu130",
+    "torch_cuda": "13.0"
+  },
+  "source_provenance": {
+    "configs/training/predictive/predictive_optimization_smoke_issue_7254.yaml": "c9d124c935cbc8f0e444ec1e45ffbd6724d787a84883dad641716194064a1942",
+    "robot_sf/planner/predictive_model.py": "7302e6f9581382903091cd6e85abff4eb384cbd92546bb974d3de79644934f26",
+    "scripts/training/run_predictive_optimization_smoke.py": "4b54de1570c764495db95025ea143784d18398667f412b5fd111369337ee6002",
+    "scripts/training/train_predictive_planner.py": "353b4a9dbbc1afb4d6920b485f91810c8c4aba5168fa938de6a195deee85e30a"
+  },
+  "fixture": {
+    "dataset_id": "issue_7254_predictive_fixture_v1",
+    "dataset_sha256": "8b8f30ca85a493805277c2b12ae8390dedf60fc9671e8427974e7e2d7bdcd434",
+    "seed": 7254,
+    "arrays": {
+      "state": [512, 3, 4],
+      "target": [512, 3, 8, 2],
+      "mask": [512, 3],
+      "target_mask": [512, 3, 8]
+    }
+  },
+  "comparison_contract": {
+    "frozen_before_outcomes": true,
+    "warmup_epochs": 1,
+    "measured_epochs": 3,
+    "control_repeats": 2,
+    "repeats_per_arm": 2,
+    "control_dispersion_multiplier": 3.0,
+    "minimum_abs_tolerance": 0.001,
+    "metrics": ["train_loss", "val_loss", "val_ade", "val_fde"]
+  },
+  "identity": {
+    "dataset_sha256": "8b8f30ca85a493805277c2b12ae8390dedf60fc9671e8427974e7e2d7bdcd434",
+    "split_sha256": "a037d8e164ea8275c7b3b52b6f5dcca0a2a19fe1e36ee798b85528158e2a9019",
+    "train_order_sha256": [
+      "753e603920e86a969524bc7ab38bc1f1b972265af782833dc749937c235e26e2",
+      "812873fc1e5631aeace72f34c33774eaf45750cf8a4049ccd37fe0e81ad0486d",
+      "ba7d4318ed52dd2dfc29ca891c823ff707f1db2ec91051e8463801acb1f8731c",
+      "4d4f0777fc14d987b9d5c681c001a8fbe80bfe27f10a8771193fdf38d286991c"
+    ],
+    "environment_fingerprint": "eed0507ca0659f470fbe4e452e085365f736be4ecb8a05c94b4b76b848be08de",
+    "update_counts_identical": true,
+    "strict_checkpoint_loads": true
+  },
+  "runs": [
+    {
+      "arm": "fp32_control",
+      "repeat": 1,
+      "examples_per_sec": 33769.710100771816,
+      "peak_cuda_memory_allocated_bytes": 17415168,
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
+      "checkpoint_load": "strict_ok"
+    },
+    {
+      "arm": "fp32_control",
+      "repeat": 2,
+      "examples_per_sec": 33586.720650526404,
+      "peak_cuda_memory_allocated_bytes": 17415168,
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
+      "checkpoint_load": "strict_ok"
+    },
+    {
+      "arm": "fp32_loader",
+      "repeat": 1,
+      "examples_per_sec": 19314.15988302741,
+      "peak_cuda_memory_allocated_bytes": 17415168,
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
+      "checkpoint_load": "strict_ok"
+    },
+    {
+      "arm": "fp32_loader",
+      "repeat": 2,
+      "examples_per_sec": 23163.87204861334,
+      "peak_cuda_memory_allocated_bytes": 17415168,
+      "checkpoint_sha256": "cf3c43d8f7a3b10f680a36423d57793039b5da9dfd365ab1ff8599959c53d9d4",
+      "checkpoint_load": "strict_ok"
+    },
+    {
+      "arm": "amp_loader",
+      "repeat": 1,
+      "examples_per_sec": 21498.306961682687,
+      "peak_cuda_memory_allocated_bytes": 17344000,
+      "checkpoint_sha256": "d3df28b312a70389b424d71a1cc84d10cbbcceea1736386ee8eef252467f4e95",
+      "checkpoint_load": "strict_ok"
+    },
+    {
+      "arm": "amp_loader",
+      "repeat": 2,
+      "examples_per_sec": 22710.809988909747,
+      "peak_cuda_memory_allocated_bytes": 17344000,
+      "checkpoint_sha256": "d3df28b312a70389b424d71a1cc84d10cbbcceea1736386ee8eef252467f4e95",
+      "checkpoint_load": "strict_ok"
+    }
+  ],
+  "arms": {
+    "fp32_control": {
+      "repeats": 2,
+      "examples_per_sec": 33678.21537564911,
+      "peak_cuda_memory_allocated_bytes": [17415168, 17415168],
+      "curve_result": "control"
+    },
+    "fp32_loader": {
+      "repeats": 2,
+      "examples_per_sec": 21239.015965820374,
+      "peak_cuda_memory_allocated_bytes": [17415168, 17415168],
+      "max_abs_delta_vs_control_mean": {
+        "train_loss": 0.0,
+        "val_loss": 0.0,
+        "val_ade": 0.0,
+        "val_fde": 0.0
+      },
+      "curve_result": "equivalent"
+    },
+    "amp_loader": {
+      "repeats": 2,
+      "examples_per_sec": 22104.558475296217,
+      "peak_cuda_memory_allocated_bytes": [17344000, 17344000],
+      "max_abs_delta_vs_control_mean": {
+        "train_loss": 0.00001474221547,
+        "val_loss": 0.00001102685928,
+        "val_ade": 0.00000655651093,
+        "val_fde": 0.0000114440918
+      },
+      "curve_result": "equivalent"
+    }
+  },
+  "result_classification": "equivalent_smoke",
+  "throughput_interpretation": "Both optimized arms were slower than the control in this run; no default-performance recommendation is supported.",
+  "local_comparison_json_sha256": "799b8347365703465faa10b1050ab296ac9af99793f825d0fa73be582b5322f0",
+  "local_comparison_markdown_sha256": "30d924f12069397a8b8a1bb446f1922d662ce7b8a0ef385dc85dac086cc07854"
+}

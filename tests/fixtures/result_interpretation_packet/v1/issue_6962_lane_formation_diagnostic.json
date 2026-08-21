@@ -10,7 +10,7 @@
     "evidence_id": "issue_6962_lane_formation_sensitivity",
     "tier": "smoke_diagnostic",
     "admission_state": "diagnostic_only",
-    "rationale": "The packet binds the tracked compact summary of 320 native rows and preserves the unresolved scenario, threshold, and model interpretation boundary."
+    "rationale": "The packet binds the tracked compact summary of 320 native rows and the separately retained #6969 reference-control summary while preserving the diagnostic-only scenario, threshold, and model interpretation boundary."
   },
   "sources": [
     {
@@ -26,12 +26,12 @@
     {
       "source_id": "lane_formation_context",
       "path": "docs/context/evidence/issue_6962_lane_formation_sensitivity/README.md",
-      "sha256": "86f8ca239689773a9723448bae1c8a5f5e969b27ff0b405e0524b896c81dd34c",
+      "sha256": "20bd9fbd09e2d7045dac6e442abe160bbd236d72872853d2d9579783114c38f2",
       "kind": "context_note",
       "commit": "a11db4cba1b58478a2b205b6bf23bbeeaa5c9d35",
-      "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b",
+      "tracked_commit": "12b9cc2c34ff40ccfc43390fa876aa5afa8fbeac",
       "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
-      "description": "Claim boundary, protocol, limitations, and next discriminating research direction."
+      "description": "Claim boundary, protocol, limitations, reference-control closeout, and next discriminating research direction."
     },
     {
       "source_id": "lane_formation_provenance",
@@ -42,6 +42,16 @@
       "tracked_commit": "c7a271e3110f1562207744b5b0fc4d7e7108c38b",
       "command": "uv run python scripts/validation/run_issue_6962_lane_formation_sensitivity.py --output-dir output/diagnostics/issue_6962_final --seeds 5149,5150,5151,5152,5153,5154,5155,5156,5157,5158 --generated-at 2026-08-13T06:30:00Z",
       "description": "Provenance classification that keeps raw output ignored and binds the compact tracked evidence surfaces."
+    },
+    {
+      "source_id": "lane_formation_reference",
+      "path": "docs/context/evidence/issue_6969_lane_formation_reference/summary.json",
+      "sha256": "ee35513b0c04eea0e438ce2c163bd78be5cb2a48881a2f20b6788226cfaf1151",
+      "kind": "diagnostic_summary",
+      "commit": "11c72912d76cd83bc73b849af193987eef46f763",
+      "tracked_commit": "11c72912d76cd83bc73b849af193987eef46f763",
+      "command": "uv run python scripts/validation/run_issue_6969_lane_formation_reference.py --output-dir output/diagnostics/issue_6962_threshold_reference_20260814 --generated-at 2026-08-14T00:00:00Z",
+      "description": "Separately retained native mixed-flow and initialized separated-lane reference-control summary for metric discrimination."
     }
   ],
   "population": {
@@ -170,8 +180,8 @@
       "decision_id": "d_6962_clear_lane_regime",
       "metric_id": "clear_lane_hit_rate_max",
       "outcome": "inconclusive",
-      "rationale": "The tested native screen found no reproducible clear-threshold cell, but the threshold is not externally calibrated and independent warm-up or sustained-flow controls were not part of this screen.",
-      "refusal_reason": "Inconclusive diagnostic screen: scenario, threshold, and model explanations remain unresolved."
+      "rationale": "The tested native screen found no reproducible clear-threshold cell. The separately bound #6969 reference-control summary distinguishes known mixed and initialized separated trajectories under sustained flow, but the mixed condition still has 0/3 clear hits in both calibrations and does not identify a scenario or model cause for spontaneous formation.",
+      "refusal_reason": "Reference-control discrimination does not establish spontaneous or model-wide lane formation."
     },
     {
       "decision_id": "d_6962_released_default_surface",
@@ -184,8 +194,8 @@
       "decision_id": "d_6962_literature_typical_surface",
       "metric_id": "lane_segregation_index_literature_typical_all_rows",
       "outcome": "inconclusive",
-      "rationale": "The literature-typical calibration also has no clear-threshold cell and noisy weak-threshold rates; the platform-qualified screen narrows but does not resolve the mechanism question.",
-      "refusal_reason": "The cross-platform historical comparator and threshold calibration are insufficient for a stronger conclusion."
+      "rationale": "The literature-typical calibration also has no clear-threshold cell and noisy weak-threshold rates. The separately bound native reference addresses discrimination for known controls, but not spontaneous formation or cross-platform identity.",
+      "refusal_reason": "The diagnostic screen does not support a stronger cross-platform or model-wide conclusion."
     }
   ],
   "figure_links": [],
@@ -193,7 +203,8 @@
   "claim_boundary": {
     "allowed": [
       "Within the tested native Linux screen, report the observed lane-segregation summary and clear-hit accounting.",
-      "Use the same-seed cell surface to motivate threshold, warm-up, and sustained-flow follow-up."
+      "Use the same-seed cell surface to motivate threshold, warm-up, and sustained-flow follow-up.",
+      "Report that the separately bound #6969 native reference distinguishes a known mixed condition from an initialized separated control under its declared protocol."
     ],
     "forbidden": [
       "Model-wide absence of lane formation.",
@@ -221,16 +232,19 @@
     "Across 32 cells and 320 native rows, no cell reached the clear lane threshold reproducibly.",
     "Released-default and literature-typical all-row mean LSI values are 0.1605 and 0.1492, respectively.",
     "Weak-threshold rates vary with seed and cell; non-default same-seed mean intervals include zero.",
-    "The threshold grid is sensitivity information, not calibration against an external reference case."
+    "The #6962 threshold grid is sensitivity information; the separately bound #6969 reference tests discrimination for known controls only.",
+    "The #6969 mixed sustained-flow reference has 0/3 clear hits in each calibration, while its initialized separated-lane control has 3/3."
   ],
   "limitations": [
     "This is a 2x2x2x2 diagnostic screen with ten seeds per cell, not a full parameter-identification campaign.",
     "Warm-up and sustained inflow were not independently controlled.",
+    "The separately bound #6969 reference uses an initialized positive control; it does not establish spontaneous emergence or a model-wide absence.",
     "All execution was native local Linux/x86_64; the historical comparator was generated on macOS/arm64.",
     "Raw rows, checkpoints, and logs remain ignored worktree-local artifacts with no durable retrieval pointer."
   ],
   "fail_closed_changes": [
     "The packet is diagnostic-only and cannot admit benchmark, safety, paper, or dissertation evidence.",
+    "The #6969 reference source is bound for diagnostic context only and does not upgrade this packet's admission state.",
     "Fallback, degraded, unavailable, invalid, and rejected rows are excluded from the included native population.",
     "No lane metric semantics, released simulator default, parameter recommendation, or campaign runner is changed."
   ]

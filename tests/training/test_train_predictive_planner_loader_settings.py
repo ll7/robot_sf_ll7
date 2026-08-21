@@ -249,6 +249,44 @@ def test_prepare_loaders_positive_workers_are_deterministic() -> None:
     assert all(torch.equal(a, b) for a, b in zip(first_pass, second_pass, strict=True))
 
 
+def test_prepare_loaders_match_control_order_across_worker_settings() -> None:
+    """Control and optimized loaders must materialize the same full train order."""
+    arrays = _make_arrays(n=64)
+    arrays["state"][:, 0, 0] = np.arange(64, dtype=np.float32)
+
+    def _collect(settings: trainer.LoaderSettings) -> list[int]:
+        """Collect row-identifying values from one complete training pass."""
+        train_loader, _val_loader = trainer._prepare_loaders(
+            val_split=0.2,
+            batch_size=8,
+            seed=7254,
+            settings=settings,
+            **arrays,
+        )
+        return [int(value) for batch in train_loader for value in batch[0][:, 0, 0].tolist()]
+
+    control = _collect(_resolve(device="cpu"))
+    workers = _collect(
+        _resolve(
+            num_workers=2,
+            persistent_workers=False,
+            prefetch_factor=2,
+            device="cpu",
+        )
+    )
+    persistent_workers = _collect(
+        _resolve(
+            num_workers=2,
+            persistent_workers=True,
+            prefetch_factor=2,
+            device="cpu",
+        )
+    )
+
+    assert workers == control
+    assert persistent_workers == control
+
+
 def test_run_epoch_forwards_non_blocking_flag_on_cpu_without_cuda() -> None:
     """_run_epoch must accept non_blocking and run on CPU regardless of the flag."""
     arrays = _make_arrays(n=48)

@@ -174,6 +174,13 @@ while [[ $# -gt 0 ]]; do
       show_help
       exit 0
       ;;
+    --)
+      echo "Do not pass a bare '--' separator to this wrapper." >&2
+      echo "pytest receives everything after '--' as literal collection paths, so" >&2
+      echo "'-k <expr>' and other options after it are silently dropped (empty collection)." >&2
+      echo "Pass pytest arguments directly: scripts/dev/run_tests_parallel.sh tests/benchmark -k <expr>" >&2
+      exit 2
+      ;;
     *)
       pytest_args+=("$1")
       shift

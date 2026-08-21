@@ -1,0 +1,314 @@
+"""Contract tests for the single-account merge receipt (issue #7669)."""
+
+from __future__ import annotations
+
+import copy
+import json
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+import pytest
+
+from scripts.dev import single_account_merge_receipt as receipt_module
+from scripts.dev.single_account_merge_receipt import (
+    EVIDENCE_STATES,
+    HOLD_KEYS,
+    apply_guarded_merge,
+    build_receipt,
+    classify_implementation_review,
+    detect_post_merge_incident,
+    normalize_required_checks,
+    receipt_digest,
+    record_merge_result,
+    validate_merge_authority_fixture,
+    validate_receipt,
+    verify_receipt,
+)
+
+HEAD_SHA = "a" * 40
+BASE_SHA = "b" * 40
+CURRENT_BASE_SHA = "c" * 40
+METADATA_DIGEST = "d" * 64
+REVIEW_DIGEST = "e" * 64
+OBSERVED_AT = "2026-08-21T00:00:00Z"
+
+
+def _clear_holds() -> dict[str, dict[str, Any]]:
+    return {key: {"status": "clear", "reason_codes": [], "source": "fixture"} for key in HOLD_KEYS}
+
+
+def _receipt(*, holds: dict[str, dict[str, Any]] | None = None, **overrides: Any) -> dict[str, Any]:
+    """Build a complete ready receipt fixture with explicit immutable evidence."""
+    values: dict[str, Any] = {
+        "repository": "owner/repo",
+        "pr_number": 42,
+        "head_sha": HEAD_SHA,
+        "base_sha": BASE_SHA,
+        "current_base_sha": CURRENT_BASE_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "required_checks": [
+            {
+                "name": "CI",
+                "head_sha": HEAD_SHA,
+                "status": "completed",
+                "conclusion": "success",
+                "identity": "github-actions",
+            }
+        ],
+        "review_source": {
+            "status": "accepted",
+            "kind": "static_report",
+            "identity": "independent-reviewer",
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "evidence_digest": REVIEW_DIGEST,
+        },
+        "thread_resolution": {"status": "resolved", "unresolved": 0},
+        "requested_reviewers": {"status": "clear", "count": 0, "identities": []},
+        "requested_teams": {"status": "clear", "count": 0, "identities": []},
+        "holds": holds or _clear_holds(),
+        "observed_at": OBSERVED_AT,
+        "gate_audit": {"schema": "merge_queue_gate.v1", "passed": True},
+    }
+    values.update(overrides)
+    return build_receipt(**values)
+
+
+def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
+    """Project a receipt back into the live-evidence shape used for rereads."""
+    return {
+        "repository": receipt["repository"],
+        "pr_number": receipt["pr_number"],
+        "head_sha": receipt["head_sha"],
+        "base_sha": receipt["base_sha"],
+        "current_base_sha": receipt["current_base_sha"],
+        "metadata_digest": receipt["metadata_digest"],
+        "required_checks": copy.deepcopy(receipt["required_checks"]),
+        "review_source": copy.deepcopy(receipt["implementation_review"]),
+        "thread_resolution": copy.deepcopy(receipt["thread_resolution"]),
+        "requested_reviewers": copy.deepcopy(receipt["requested_reviewers"]),
+        "requested_teams": copy.deepcopy(receipt["requested_teams"]),
+        "holds": copy.deepcopy(receipt["holds"]),
+    }
+
+
+def test_complete_receipt_is_deterministic_and_verifies() -> None:
+    first = _receipt()
+    second = _receipt()
+
+    assert first == second
+    assert first["status"] == "ready"
+    assert first["reason_codes"] == []
+    assert first["receipt_digest"] == receipt_digest(first)
+    assert validate_receipt(first)["passed"] is True
+    assert verify_receipt(first)["passed"] is True
+
+
+def test_each_hold_dimension_blocks_independently() -> None:
+    for key in HOLD_KEYS:
+        holds = _clear_holds()
+        holds[key] = {"status": "held", "reason_codes": [f"{key}_hold"], "source": "fixture"}
+        blocked = _receipt(holds=holds)
+        assert blocked["status"] == "blocked"
+        assert f"hold_{key}_held" in blocked["reason_codes"]
+
+
+def test_live_head_metadata_and_check_changes_block_without_reconstructing_receipt() -> None:
+    receipt = _receipt()
+
+    changed_metadata = _live_evidence(receipt)
+    changed_metadata["metadata_digest"] = "f" * 64
+    assert (
+        "live_metadata_digest_changed"
+        in verify_receipt(receipt, live_evidence=changed_metadata)["reasons"]
+    )
+
+    changed_head = _live_evidence(receipt)
+    changed_head["head_sha"] = "f" * 40
+    assert "live_head_sha_changed" in verify_receipt(receipt, live_evidence=changed_head)["reasons"]
+
+    changed_checks = _live_evidence(receipt)
+    changed_checks["required_checks"]["checks"][0]["conclusion"] = "failure"
+    changed_checks["required_checks"]["status"] = "failure"
+    assert (
+        "live_required_checks_changed"
+        in verify_receipt(receipt, live_evidence=changed_checks)["reasons"]
+    )
+
+
+def test_review_carrier_precedence_and_fail_closed_states() -> None:
+    accepted_check = {
+        "identity": "CodeRabbit",
+        "approved_source": True,
+        "head_sha": HEAD_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "status": "completed",
+        "conclusion": "success",
+        "evidence_digest": REVIEW_DIGEST,
+    }
+    evidence = {
+        "head_sha": HEAD_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "check_runs": [accepted_check],
+        "comments": [
+            {
+                "identity": "untrusted",
+                "body": "single-account-review: accepted @ " + "f" * 40,
+            }
+        ],
+    }
+    classified = classify_implementation_review(evidence)
+    assert classified["status"] == "accepted"
+    assert classified["carrier"]["kind"] == "check_run"
+
+    pending = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "check_runs": [
+                {
+                    **accepted_check,
+                    "status": "in_progress",
+                }
+            ],
+        }
+    )
+    assert pending["status"] == "pending"
+
+    self_review = classify_implementation_review(
+        {
+            "head_sha": HEAD_SHA,
+            "metadata_digest": METADATA_DIGEST,
+            "waiver_actor": "owner",
+            "reviews": [
+                {
+                    "identity": "owner",
+                    "state": "APPROVED",
+                    "authorAssociation": "OWNER",
+                    "head_sha": HEAD_SHA,
+                    "metadata_digest": METADATA_DIGEST,
+                }
+            ],
+        }
+    )
+    assert self_review["status"] == "conflicting"
+    assert "owner_self_review_not_independent" in self_review["reason_codes"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, "unavailable"),
+        ([{"name": "CI", "head_sha": HEAD_SHA, "status": "in_progress"}], "pending"),
+        (
+            [{"name": "CI", "head_sha": "f" * 40, "status": "completed", "conclusion": "success"}],
+            "stale",
+        ),
+        (
+            [{"name": "CI", "head_sha": HEAD_SHA, "status": "completed", "conclusion": "failure"}],
+            "failure",
+        ),
+        ([{"head_sha": HEAD_SHA, "status": "completed", "conclusion": "success"}], "malformed"),
+    ],
+)
+def test_required_check_states_are_distinct(raw: Any, expected: str) -> None:
+    assert normalize_required_checks(raw, head_sha=HEAD_SHA)["status"] == expected
+    assert expected in EVIDENCE_STATES or expected in {"success"}
+
+
+def test_recorded_merge_sha_preserves_digest_and_post_merge_incident_boundary() -> None:
+    receipt = _receipt()
+    merged_sha = "f" * 40
+    merged = record_merge_result(
+        receipt,
+        status="merged",
+        returned_merged_sha=merged_sha,
+        response={"merged": True, "sha": merged_sha},
+        observed_at=OBSERVED_AT,
+    )
+
+    assert merged["receipt_digest"] == receipt["receipt_digest"]
+    assert verify_receipt(merged, require_merged=True)["passed"] is True
+    assert detect_post_merge_incident(merged, observed_merged_sha=merged_sha)["status"] == "healthy"
+    incident = detect_post_merge_incident(merged, observed_merged_sha="1" * 40)
+    assert incident["status"] == "incident"
+    assert incident["waiver_reuse"] == "blocked"
+
+
+def test_guarded_apply_is_one_put_then_closed_merged_readback() -> None:
+    receipt = _receipt()
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def fake_api(
+        method: str, path: str, payload: dict[str, Any] | None
+    ) -> tuple[dict[str, Any], None]:
+        calls.append((method, path, payload))
+        if method == "PUT":
+            return {"merged": True, "sha": "f" * 40}, None
+        return {"state": "closed", "merged": True}, None
+
+    merged, error = apply_guarded_merge(
+        receipt, repository="owner/repo", api=fake_api, observed_at=OBSERVED_AT
+    )
+    assert error is None
+    assert merged is not None
+    assert calls == [
+        ("PUT", "repos/owner/repo/pulls/42/merge", {"sha": HEAD_SHA, "merge_method": "squash"}),
+        ("GET", "repos/owner/repo/pulls/42", None),
+    ]
+    assert merged["receipt"]["merge_result"]["returned_merged_sha"] == "f" * 40
+
+
+def test_guarded_apply_failure_returns_the_observed_receipt() -> None:
+    receipt = _receipt()
+
+    def failed_api(
+        method: str, path: str, payload: dict[str, Any] | None
+    ) -> tuple[dict[str, Any], None]:
+        return {"merged": False, "message": "head changed"}, None
+
+    failed, error = apply_guarded_merge(receipt, repository="owner/repo", api=failed_api)
+    assert error == "head changed"
+    assert failed is not None
+    assert failed["receipt_digest"] == receipt["receipt_digest"]
+    assert failed["merge_result"]["status"] == "failed"
+
+
+def test_validate_mode_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    receipt = _receipt()
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
+    monkeypatch.setattr(
+        receipt_module,
+        "_run_gh_api",
+        lambda *args, **kwargs: pytest.fail("validate mode must not call the merge API"),
+    )
+
+    assert (
+        receipt_module.main(
+            [
+                "--pr",
+                "42",
+                "--repo",
+                "owner/repo",
+                "--mode",
+                "validate",
+                "--receipt-file",
+                str(receipt_file),
+            ]
+        )
+        == 0
+    )
+
+
+def test_merge_authority_fixture_is_current() -> None:
+    result = validate_merge_authority_fixture()
+    assert result["passed"] is True, result

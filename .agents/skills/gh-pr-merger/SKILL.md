@@ -43,6 +43,25 @@ skill remains the binding authority for guarded merges it executes directly.
 See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
 the audit record shape (`merge_queue_gate.v1`).
 
+## Single-account merge receipt (issue #7669)
+
+Every mutating merge path consumes the versioned
+`single_account_merge_receipt.v1` produced and verified by
+`scripts/dev/single_account_merge_receipt.py`. The receipt binds the exact PR head and
+metadata digest to terminal required checks, independent implementation-review evidence,
+resolved threads, requested-reviewer state, and separate dependency, draft, domain,
+scientific/evidence, legal/release, security, and merge holds. A single-account waiver may
+only document the absence of a distinct human implementation reviewer; it cannot clear any
+other hold or replace hosted checks, domain approval, evidence, legal, release, security, or
+dependency authority. The receipt owner performs the final expected-head compare-and-swap
+merge and records GitHub's returned merge SHA. Report and validate modes are read-only.
+
+The authority fixture at
+`scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the allowed callers
+and is checked in tests. Do not add a second direct merge endpoint or a raw merge command to
+this skill; update the fixture and receipt owner together if the repository adds a legitimate
+caller.
+
 ## Trigger Boundary
 
 Use this skill when the user asks to merge approved, `merge-ready` PRs.
@@ -62,6 +81,9 @@ Do not use it for:
 - `docs/dev_guide.md` ("Merge queue gate", issue #6274)
 - `.github/workflows/merge-queue-gate.yml`
 - `scripts/dev/merge_queue_gate.py`
+- `scripts/dev/single_account_merge_receipt.py`
+- `scripts/dev/single_account_merge_receipt.v1.schema.json`
+- `scripts/dev/single_account_merge_authority_fixture.v1.json`
 - `scripts/dev/base_sensitive_selector.py`
 - `scripts/dev/check_base_sensitive_gates.py`
 - `scripts/dev/check_pr_current_base_cas.py`
@@ -182,13 +204,20 @@ concurrently against the same PR or branch.
    - Run preflight checks.
    - Update the active delegation ledger from `.agents/skills/goal-autopilot/SKILL.md` with the PR
      number, head SHA, preflight status, merge command status, cleanup status, and next action.
-   - If all pass, record the PR head SHA and merge using squash merge:
+   - If all pass, build and validate the exact-head receipt before the compare-and-swap merge:
      ```bash
-     HEAD_SHA=$(gh pr view <number> --json headRefOid --jq .headRefOid)
-     gh pr merge <number> --squash --delete-branch --match-head-commit "$HEAD_SHA"
+     uv run python scripts/dev/single_account_merge_receipt.py \
+       --repo "$OWNER/$REPO" --pr <number> --mode report-only \
+       --output /tmp/pr-<number>-single-account-receipt.json
+     uv run python scripts/dev/single_account_merge_receipt.py \
+       --repo "$OWNER/$REPO" --pr <number> --mode apply \
+       --receipt-file /tmp/pr-<number>-single-account-receipt.json
      ```
-     If `HEAD_SHA` is empty or the `gh pr view` command fails, stop and report
-     the lookup failure before attempting the merge.
+     The report must be `ready`; validate mode rereads live evidence and apply mode performs
+     the one expected-head squash merge through the receipt owner. If any lookup or receipt
+     check fails, stop before attempting the merge. For a root-to-tip stack, use
+     `scripts/dev/stacked_prs.py merge-cascade --apply`; it builds the same receipt and
+     delegates the merge operation to the receipt owner.
    - If merge fails, run diagnostics and handle the failure (see Merge
      Command Failure below) before continuing to the next PR.
    - Update the active ledger after remote merge verification, branch deletion, claim release, and
@@ -242,7 +271,7 @@ Do not merge multiple PRs in parallel. Process sequentially.
 - Do not retry merging the same PR if preflight or merge command failed without
   an external state change (new CI run completed, conflicts resolved, label added).
 - Never retry a PR whose remote state is already `"MERGED"`, even if the local
-  `gh pr merge` command exited nonzero. Check with
+  receipt-apply command exited nonzero. Check with
   `gh pr view <number> --json state` before any retry attempt.
 - After two sequential PRs fail the same preflight check, stop and report the
   pattern instead of continuing.

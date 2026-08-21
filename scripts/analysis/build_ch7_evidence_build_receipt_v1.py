@@ -49,8 +49,11 @@ DIAGNOSTIC_SCHEMA_VERSION = "ch7-evidence-admission-diagnostic.v1"
 EXPECTED_BLOCKERS = [
     "domain_approval_pending",
     "external_admission_receipt_required",
-    "metric_semantics_excluded_issue_7042",
 ]
+EXPECTED_EXCLUSION_BOUNDARY = {
+    "ruling_issue": 7042,
+    "status": "excluded_by_frozen_ruling",
+}
 
 
 class Ch7EvidenceBuildReceiptError(ValueError):
@@ -358,6 +361,21 @@ def _probe_builds(scratch_root: Path) -> tuple[list[dict[str, str]], dict[str, A
     verification = _verification_snapshot(diagnostic)
     if verification["blocker_codes"] != EXPECTED_BLOCKERS:
         raise Ch7EvidenceBuildReceiptError("v2 check-only blocker set changed")
+    diagnostics = diagnostic.get("diagnostics")
+    boundary = diagnostics.get("exclusion_boundary") if isinstance(diagnostics, Mapping) else None
+    if not isinstance(boundary, Mapping):
+        raise Ch7EvidenceBuildReceiptError("v2 check-only diagnostic lacks exclusion_boundary")
+    for key, expected in EXPECTED_EXCLUSION_BOUNDARY.items():
+        if boundary.get(key) != expected:
+            raise Ch7EvidenceBuildReceiptError("v2 check-only exclusion boundary changed")
+    excluded_metrics = boundary.get("metrics")
+    if (
+        not isinstance(excluded_metrics, list)
+        or not excluded_metrics
+        or len(set(excluded_metrics)) != len(excluded_metrics)
+        or not all(isinstance(metric, str) and metric for metric in excluded_metrics)
+    ):
+        raise Ch7EvidenceBuildReceiptError("v2 check-only exclusion boundary metrics are invalid")
     return snapshots, verification
 
 

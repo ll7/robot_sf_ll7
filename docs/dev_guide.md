@@ -1112,6 +1112,36 @@ For example, a green, mergeable PR carrying `state:blocked` remains owner-gated:
 - Start review loops from compact `review_snapshot`, `comment_snapshot`, and `checks` output, not raw
   full-comment payloads.
 
+### Integration admission report (issue #7647)
+
+`scripts/dev/integration_admission_report.py` classifies one PR and a bounded queue snapshot as
+report-only routing evidence. It consumes an existing `pr_queue_snapshot.v2` JSON payload, reuses
+the PR loop policy and trusted metadata/claim readers, and never calls GitHub or authorizes an
+external action. Missing baseline data is `unavailable`; malformed input is `invalid`; blocker and
+invalidation codes remain explicit. Use a fixed `--as-of` instant when age/freshness is required:
+
+```bash
+uv run python scripts/dev/integration_admission_report.py \
+  --snapshot output/pr_queue_snapshot.json --pr 2677 --max-queue-items 20 \
+  --as-of 2026-08-20T12:00:00Z --json
+```
+
+The versioned output contract is [`integration_admission_report.v1.schema.json`](contracts/integration_admission_report.v1.schema.json).
+The report uses the frozen policy dimensions `docs | test_only | tooling | runtime | benchmark |
+evidence | release`, `isolated | component_shared | repository_control_plane`, `low | standard |
+optional_matrix | full`, `ordinary | independent_exact_head | domain | author`, `none | network |
+artifact | compute | release`, and `ordinary | current_base_required`. Unknown and unavailable
+inputs remain explicit. Queue output includes state counts plus separate CI, review, and external
+lane demand; it is an estimate, not a dispatch command.
+
+The #7520 pilot is report-only for 14 days and at least 20 terminal PR dispositions, extending to
+28 days if the sample is smaller. Retain the policy only if useful terminal throughput is not
+materially reduced and CI spent on superseded/unadmitted heads, invalidated exact-head reviews,
+duplicate or competing PRs, stale prepared candidates, post-merge repairs, and maintainer/domain
+decision latency do not worsen. Record a `retain`, `revise`, or `roll_back` disposition with those
+measures; raw open-PR count is diagnostic only. This report remains implementation/workflow
+evidence, not merge authority or scientific evidence.
+
 ```bash
 uv run python -m scripts.dev.snapshot_pr_queue --prs 2677 --json \
   --expected-head-sha "$PR_HEAD_SHA"

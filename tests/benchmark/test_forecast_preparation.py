@@ -159,6 +159,26 @@ def test_packet_shape_contract_fails_closed(case: str, match: str) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    (
+        ("claim_boundary", "benchmark success", "claim_boundary"),
+        ("source_owner", "other.py", "source_owner"),
+        ("source_schema", "other.v1", "source_schema"),
+        ("row_schema_version", "other.v1", "row_schema_version"),
+        ("horizons_s", [2.0], "declared horizons"),
+        ("evidence_references", [], "evidence_references"),
+    ),
+)
+def test_packet_top_level_contract_is_bound(field: str, value: object, match: str) -> None:
+    """Top-level declarations cannot drift from the packet owner contract."""
+    payload = _packet()
+    payload[field] = value
+
+    with pytest.raises(ValueError, match=match):
+        _validate(payload)
+
+
 @pytest.mark.parametrize("field", ("trace_id", "episode_id", "scenario_id", "seed", "planner_id"))
 def test_trace_metadata_is_bound_to_source_export(field: str) -> None:
     """Packet identity fields cannot be rewritten independently of the trace export."""
@@ -376,6 +396,24 @@ def test_row_lineage_metadata_must_match_source_artifact() -> None:
         _validate(payload)
 
 
+def test_row_lineage_rejects_unowned_fields() -> None:
+    """Lineage rows cannot carry unvalidated future or privileged metadata."""
+    payload = _packet()
+    payload["rows"][0]["lineage"]["future_target"] = True
+
+    with pytest.raises(ValueError, match="lineage fields are not canonical"):
+        _validate(payload)
+
+
+def test_source_artifact_rejects_unowned_fields() -> None:
+    """Source artifacts cannot carry metadata the validator does not recompute."""
+    payload = _packet()
+    payload["source_artifacts"][0]["future_target"] = True
+
+    with pytest.raises(ValueError, match="fields are not canonical"):
+        _validate(payload)
+
+
 def test_absolute_source_paths_are_rejected() -> None:
     """Preparation manifests must not retain machine-specific absolute source paths."""
     payload = _packet()
@@ -396,6 +434,27 @@ def test_false_reassurance_case_is_trace_backed_and_not_a_performance_claim() ->
     assert case["ade_m"] == 0.0
     assert case["fde_m"] == 0.0
     assert case["robot_pedestrian_clearance_m"] < case["risk_reference_m"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    (
+        ("cutoff_time_s", -1.0, "false case cutoff_time_s"),
+        ("target_time_s", -1.0, "false case target_time_s"),
+        ("horizon_s", 999.0, "false case horizon_s"),
+        ("stationary_prediction_m", [999.0, 999.0], "false case stationary_prediction_m"),
+        ("target_position_m", [999.0, 999.0], "false case target_position_m"),
+        ("robot_position_m", [999.0, 999.0], "false case robot_position_m"),
+        ("risk_reference_m", 999.0, "false case risk reference"),
+    ),
+)
+def test_false_reassurance_metadata_is_trace_bound(field: str, value: object, match: str) -> None:
+    """The analytic counterexample cannot carry fabricated coordinates or timing."""
+    payload = _packet()
+    payload["ade_fde_false_reassurance_case"][field] = value
+
+    with pytest.raises(ValueError, match=match):
+        _validate(payload)
 
 
 def test_baseline_estimates_record_sample_and_hardware_assumptions() -> None:

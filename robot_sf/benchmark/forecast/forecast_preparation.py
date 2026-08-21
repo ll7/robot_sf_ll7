@@ -34,6 +34,19 @@ OBSERVATION_TIERS = ("oracle_full_state", "ego_observation")
 SPLIT_NAMES = ("train", "validation", "test")
 DEFAULT_EGO_SOURCE_KEY = "tracked_agents"
 DEFAULT_HORIZONS_S = (1.0,)
+_CLAIM_BOUNDARY = (
+    "preparation-only matched oracle-versus-ego design evidence; not forecasting performance, "
+    "training, planner integration, scientific claim, or real-world forecasting"
+)
+_SOURCE_OWNER = "robot_sf/benchmark/forecast/forecast_preparation.py"
+_SOURCE_SCHEMA = "simulation_trace_export.v1"
+_FALSE_REASSURANCE_CASE_ID = "stationary_zero_ade_fde_but_robot_clearance_is_close"
+_FALSE_REASSURANCE_RISK_REFERENCE_M = 0.8
+_FALSE_REASSURANCE_INTERPRETATION = (
+    "A stationary forecast is exactly right for this target, so ADE/FDE are zero, while "
+    "the robot is within the 0.8 m diagnostic clearance reference. ADE/FDE alone do not "
+    "measure robot clearance or collision relevance. This is a counterexample, not a safety claim."
+)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _FORBIDDEN_EGO_INPUT_PARTS = frozenset(
     {
@@ -55,6 +68,64 @@ _NEAR_DUPLICATE_POLICY = {
         "does not perform a forecast campaign"
     ),
 }
+_SOURCE_ARTIFACT_FIELDS = frozenset(
+    {
+        "path",
+        "sha256",
+        "size_bytes",
+        "trace_id",
+        "episode_id",
+        "scenario_id",
+        "scenario_family",
+        "seed",
+        "planner_id",
+        "frame_count",
+        "lineage_group_id",
+        "near_duplicate_fingerprint",
+        "split",
+        "ego_observation_source_key",
+        "ego_observation_status",
+        "ego_observation_reason",
+    }
+)
+_IDENTITY_FIELDS = frozenset(
+    {
+        "source_lineage_id",
+        "frame_step",
+        "cutoff_time_s",
+        "target_frame_step",
+        "target_time_s",
+        "actor_id",
+        "horizon_s",
+    }
+)
+_LINEAGE_FIELDS = frozenset(
+    {
+        "source_path",
+        "source_sha256",
+        "trace_id",
+        "episode_id",
+        "scenario_id",
+        "scenario_family",
+        "seed",
+        "planner_id",
+        "lineage_group_id",
+        "split",
+    }
+)
+_ROW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "pair_id",
+        "observation_tier",
+        "availability_status",
+        "identity",
+        "lineage",
+        "input",
+        "target",
+        "field_leakage_ledger",
+    }
+)
 
 _BASELINE_ESTIMATES: tuple[dict[str, Any], ...] = (
     {
@@ -395,14 +466,11 @@ def build_forecast_preparation_packet(
     packet = {
         "schema_version": FORECAST_PREPARATION_SCHEMA_VERSION,
         "issue": 7602,
-        "claim_boundary": (
-            "preparation-only matched oracle-versus-ego design evidence; not forecasting "
-            "performance, training, planner integration, scientific claim, or real-world forecasting"
-        ),
+        "claim_boundary": _CLAIM_BOUNDARY,
         "evidence_status": "diagnostic-only",
         "observation_contract_changed": False,
-        "source_owner": "robot_sf/benchmark/forecast/forecast_preparation.py",
-        "source_schema": "simulation_trace_export.v1",
+        "source_owner": _SOURCE_OWNER,
+        "source_schema": _SOURCE_SCHEMA,
         "ego_observation_source_key": ego_key,
         "row_schema_version": FORECAST_PREPARATION_ROW_SCHEMA_VERSION,
         "horizons_s": horizons,
@@ -478,10 +546,19 @@ def validate_forecast_preparation_packet(  # noqa: C901
         raise ValueError("schema_version must be forecast_preparation.v1")
     if payload.get("issue") != 7602:
         raise ValueError("issue must be 7602")
+    if payload.get("claim_boundary") != _CLAIM_BOUNDARY:
+        raise ValueError("claim_boundary must preserve the preparation-only boundary")
     if payload.get("evidence_status") != "diagnostic-only":
         raise ValueError("evidence_status must be diagnostic-only")
     if payload.get("observation_contract_changed") is not False:
         raise ValueError("observation_contract_changed must be false")
+    if payload.get("source_owner") != _SOURCE_OWNER:
+        raise ValueError("source_owner is not canonical")
+    if payload.get("source_schema") != _SOURCE_SCHEMA:
+        raise ValueError("source_schema is not canonical")
+    if payload.get("row_schema_version") != FORECAST_PREPARATION_ROW_SCHEMA_VERSION:
+        raise ValueError("row_schema_version is not canonical")
+    horizons = _validate_horizons(payload.get("horizons_s"))
     rows = payload.get("rows")
     source_artifacts = payload.get("source_artifacts")
     if not isinstance(rows, list) or not rows:
@@ -504,11 +581,17 @@ def validate_forecast_preparation_packet(  # noqa: C901
     )
     _validate_coverage_from_packet(payload, source_artifacts)
     _validate_rows(payload, rows, source_by_path, root)
+    _validate_horizon_rows(rows, horizons)
     _validate_split_policy(payload, source_artifacts)
     _validate_deterministic_split_assignments(payload, source_artifacts)
+    _validate_evidence_references(payload.get("evidence_references"), root)
     _validate_estimates(payload.get("runtime_memory_estimates"))
     _validate_dependencies(payload.get("dependency_license_comparison"), root)
-    _validate_false_reassurance_case(payload.get("ade_fde_false_reassurance_case"), root)
+    _validate_false_reassurance_case(
+        payload.get("ade_fde_false_reassurance_case"),
+        root,
+        source_by_path,
+    )
     if verify_checksums:
         _validate_sha256_coverage(payload.get("sha256_coverage"), root)
     return {
@@ -680,6 +763,8 @@ def _validate_rows(  # noqa: C901, PLR0912, PLR0915
     for index, raw_row in enumerate(rows):
         if not isinstance(raw_row, dict):
             raise ValueError(f"rows[{index}] must be a mapping")
+        if set(raw_row) != _ROW_FIELDS:
+            raise ValueError(f"rows[{index}] fields are not canonical")
         if raw_row.get("schema_version") != FORECAST_PREPARATION_ROW_SCHEMA_VERSION:
             raise ValueError(f"rows[{index}] schema_version is not canonical")
         pair_id = _require_text(raw_row.get("pair_id"), f"rows[{index}].pair_id")
@@ -694,6 +779,10 @@ def _validate_rows(  # noqa: C901, PLR0912, PLR0915
         lineage = raw_row.get("lineage")
         if not isinstance(identity, dict) or not isinstance(lineage, dict):
             raise ValueError(f"rows[{index}] requires identity and lineage mappings")
+        if set(identity) != _IDENTITY_FIELDS:
+            raise ValueError(f"rows[{index}] identity fields are not canonical")
+        if set(lineage) != _LINEAGE_FIELDS:
+            raise ValueError(f"rows[{index}] lineage fields are not canonical")
         source_path = _require_text(
             lineage.get("source_path"), f"rows[{index}].lineage.source_path"
         )
@@ -759,6 +848,23 @@ def _validate_rows(  # noqa: C901, PLR0912, PLR0915
             root=root,
             pair_id=pair_id,
         )
+
+
+def _validate_horizon_rows(rows: list[Any], horizons: list[float]) -> None:
+    """Require every source/actor pair to carry every declared horizon."""
+    expected = set(horizons)
+    horizons_by_pair: dict[tuple[str, str], set[float]] = {}
+    for index, row in enumerate(rows):
+        identity = row["identity"]
+        lineage = row["lineage"]
+        horizon = _require_finite_number(identity.get("horizon_s"), f"rows[{index}].horizon_s")
+        key = (lineage["source_path"], identity["actor_id"])
+        horizons_by_pair.setdefault(key, set()).add(horizon)
+    for key, actual in horizons_by_pair.items():
+        if actual != expected:
+            raise ValueError(
+                f"declared horizons do not match row coverage for source/actor {key[0]}/{key[1]}"
+            )
 
 
 def _validate_ego_input(input_fields: dict[str, Any], row: dict[str, Any], index: int) -> None:
@@ -1028,6 +1134,8 @@ def _validate_source_artifacts(
     for index, raw_artifact in enumerate(source_artifacts):
         if not isinstance(raw_artifact, dict):
             raise ValueError(f"source_artifacts[{index}] must be a mapping")
+        if set(raw_artifact) != _SOURCE_ARTIFACT_FIELDS:
+            raise ValueError(f"source_artifacts[{index}] fields are not canonical")
         relative_path = _require_text(raw_artifact.get("path"), f"source_artifacts[{index}].path")
         if Path(relative_path).is_absolute():
             raise ValueError(f"source_artifacts[{index}].path must be repository-relative")
@@ -1171,23 +1279,47 @@ def _validate_dependencies(dependencies: Any, root: Path) -> None:
         raise ValueError("dependency/license comparison coverage drift")
 
 
-def _validate_false_reassurance_case(case: Any, root: Path) -> None:  # noqa: C901
+def _validate_evidence_references(references: Any, root: Path) -> None:
+    """Bind cited evidence paths and digests to the current repository bytes."""
+    expected = _build_evidence_references(root)
+    if references != expected:
+        raise ValueError("evidence_references are not bound to the cited repository bytes")
+
+
+def _validate_false_reassurance_case(  # noqa: C901, PLR0912
+    case: Any,
+    root: Path,
+    source_by_path: Mapping[str, Mapping[str, Any]],
+) -> None:
     if not isinstance(case, dict):
         raise ValueError("ade_fde_false_reassurance_case is required")
     if case.get("status") != "analytic_trace_backed_diagnostic_only":
         raise ValueError("false-reassurance case status is not diagnostic-only")
+    if case.get("case_id") != _FALSE_REASSURANCE_CASE_ID:
+        raise ValueError("false-reassurance case id is not canonical")
+    if case.get("interpretation") != _FALSE_REASSURANCE_INTERPRETATION:
+        raise ValueError("false-reassurance case interpretation is not canonical")
     source_path = _require_text(case.get("source_path"), "false case source_path")
+    source_artifact = source_by_path.get(source_path)
+    if source_artifact is None:
+        raise ValueError("false case source is not one of the packet source artifacts")
+    if source_artifact.get("scenario_family") != "crossing_proxy":
+        raise ValueError("false case source must be the crossing_proxy stratum")
     source_file = _resolve_repo_path(source_path, root)
     expected_source_sha = _require_text(case.get("source_sha256"), "false case source_sha256")
     if not _SHA256_RE.fullmatch(expected_source_sha):
         raise ValueError("false case source_sha256 is not a SHA-256 digest")
+    if expected_source_sha != source_artifact.get("sha256"):
+        raise ValueError("false case source SHA-256 does not match source artifact")
     if sha256_file(source_file) != expected_source_sha:
         raise ValueError("false case source SHA-256 does not match source file")
     source = load_simulation_trace_export(source_file)
     cutoff_step = case.get("cutoff_frame_step")
     target_step = case.get("target_frame_step")
     if (
-        not isinstance(cutoff_step, int)
+        isinstance(cutoff_step, bool)
+        or isinstance(target_step, bool)
+        or not isinstance(cutoff_step, int)
         or not isinstance(target_step, int)
         or target_step <= cutoff_step
     ):
@@ -1197,6 +1329,22 @@ def _validate_false_reassurance_case(case: Any, root: Path) -> None:  # noqa: C9
     actor_id = _require_text(case.get("actor_id"), "false case actor_id")
     cutoff_actor = _actor_for_frame(cutoff.pedestrians, actor_id)
     target_actor = _actor_for_frame(target.pedestrians, actor_id)
+    expected_horizon = float(target.time_s - cutoff.time_s)
+    for field, expected in (
+        ("cutoff_time_s", float(cutoff.time_s)),
+        ("target_time_s", float(target.time_s)),
+        ("horizon_s", expected_horizon),
+    ):
+        value = _require_finite_number(case.get(field), f"false case {field}")
+        if not math.isclose(value, expected, abs_tol=1e-9):
+            raise ValueError(f"false case {field} is not trace-backed")
+    for field, expected in (
+        ("stationary_prediction_m", cutoff_actor["position"]),
+        ("target_position_m", target_actor["position"]),
+        ("robot_position_m", [float(value) for value in cutoff.robot["position"]]),
+    ):
+        if not _vectors_close(case.get(field), expected):
+            raise ValueError(f"false case {field} is not trace-backed")
     actual_error = float(
         np.linalg.norm(np.asarray(cutoff_actor["position"]) - target_actor["position"])
     )
@@ -1222,9 +1370,16 @@ def _validate_false_reassurance_case(case: Any, root: Path) -> None:  # noqa: C9
     )
     if not _SHA256_RE.fullmatch(expected_predicate_sha):
         raise ValueError("false case predicate_reference_sha256 is not a SHA-256 digest")
+    if predicate_path != _FALSE_REASSURANCE_REFERENCE:
+        raise ValueError("false case predicate reference is not canonical")
     if sha256_file(predicate_file) != expected_predicate_sha:
         raise ValueError("false case predicate reference SHA-256 does not match file")
-    if float(case.get("risk_reference_m", 0.0)) <= actual_clearance:
+    risk_reference = _require_finite_number(
+        case.get("risk_reference_m"), "false case risk_reference_m"
+    )
+    if not math.isclose(risk_reference, _FALSE_REASSURANCE_RISK_REFERENCE_M, abs_tol=1e-9):
+        raise ValueError("false case risk reference is not canonical")
+    if risk_reference <= actual_clearance:
         raise ValueError("false case must show clearance below its risk reference")
 
 
@@ -1316,7 +1471,7 @@ def _build_false_reassurance_case(loaded: list[dict[str, Any]], root: Path) -> d
     clearance = float(np.linalg.norm(robot_position - target_position))
     predicate_path = _resolve_repo_path(_FALSE_REASSURANCE_REFERENCE, root)
     return {
-        "case_id": "stationary_zero_ade_fde_but_robot_clearance_is_close",
+        "case_id": _FALSE_REASSURANCE_CASE_ID,
         "status": "analytic_trace_backed_diagnostic_only",
         "source_path": item["relative_path"],
         "source_sha256": item["source_sha256"],
@@ -1334,12 +1489,8 @@ def _build_false_reassurance_case(loaded: list[dict[str, Any]], root: Path) -> d
         "fde_m": error,
         "robot_position_m": [float(value) for value in robot_position],
         "robot_pedestrian_clearance_m": clearance,
-        "risk_reference_m": 0.8,
-        "interpretation": (
-            "A stationary forecast is exactly right for this target, so ADE/FDE are zero, while "
-            "the robot is within the 0.8 m diagnostic clearance reference. ADE/FDE alone do not "
-            "measure robot clearance or collision relevance. This is a counterexample, not a safety claim."
-        ),
+        "risk_reference_m": _FALSE_REASSURANCE_RISK_REFERENCE_M,
+        "interpretation": (_FALSE_REASSURANCE_INTERPRETATION),
     }
 
 
@@ -1516,8 +1667,13 @@ def _has_unavailable_dimension(rows: Sequence[Mapping[str, Any]], dimension: str
     )
 
 
-def _validate_horizons(horizons_s: Sequence[float]) -> list[float]:
-    horizons = [float(value) for value in horizons_s]
+def _validate_horizons(horizons_s: Any) -> list[float]:
+    if isinstance(horizons_s, (str, bytes)) or not isinstance(horizons_s, Sequence):
+        raise ValueError("horizons_s must be a sequence")
+    horizons = [
+        _require_finite_number(value, f"horizons_s[{index}]")
+        for index, value in enumerate(horizons_s)
+    ]
     if not horizons or any(not math.isfinite(value) or value <= 0.0 for value in horizons):
         raise ValueError("horizons_s must contain finite positive values")
     if len(set(horizons)) != len(horizons) or any(

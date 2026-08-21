@@ -218,6 +218,7 @@
     "rare_event_sampling.py",
     "reactivity_ablation.py",
     "reactivity_replay_preflight.py",
+    "release_acceptance.py",
     "release_assurance_case.py",
     "release_doctor.py",
     "release_gates.py",

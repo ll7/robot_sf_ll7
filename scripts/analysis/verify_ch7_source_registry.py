@@ -89,7 +89,7 @@ def _require_git_object(value: Any, label: str) -> str:
 def _read_registry(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise SourceRegistryUnavailableError(f"source registry is unavailable: {path}") from exc
     if not isinstance(payload, Mapping):
         raise SourceRegistryBlockedError("source registry must be a JSON object")
@@ -108,7 +108,7 @@ def _safe_relative_path(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise SourceRegistryBlockedError(f"{label} is missing")
     path = PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts or "\\" in value:
+    if path.is_absolute() or ".." in path.parts or "\\" in value or "\x00" in value:
         raise SourceRegistryBlockedError(f"{label} is not a safe repository path")
     return path.as_posix()
 

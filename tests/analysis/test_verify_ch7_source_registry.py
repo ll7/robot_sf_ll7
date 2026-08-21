@@ -48,6 +48,14 @@ def test_missing_registry_is_unavailable(tmp_path: Path) -> None:
         registry.verify_source_registry(registry_path=tmp_path / "missing.json")
 
 
+def test_invalid_registry_encoding_is_unavailable(tmp_path: Path) -> None:
+    path = tmp_path / "registry.json"
+    path.write_bytes(b"\xff")
+
+    with pytest.raises(registry.SourceRegistryUnavailableError, match="unavailable"):
+        registry.verify_source_registry(registry_path=path)
+
+
 def test_mismatched_member_digest_is_rejected(tmp_path: Path) -> None:
     payload = copy.deepcopy(_registry_payload())
     records = payload["durable_records"]
@@ -94,6 +102,25 @@ def test_moving_commit_reference_is_blocked(tmp_path: Path) -> None:
     _write_registry(path, payload)
 
     with pytest.raises(registry.SourceRegistryBlockedError, match="immutable"):
+        registry.verify_source_registry(registry_path=path)
+
+
+def test_nul_in_package_path_is_blocked(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    packages = record["packages"]
+    assert isinstance(packages, list)
+    package = packages[0]
+    assert isinstance(package, dict)
+    package["path"] = f"{package['path']}\x00"
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="safe repository path"):
         registry.verify_source_registry(registry_path=path)
 
 

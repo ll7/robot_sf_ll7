@@ -581,6 +581,43 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
     assert missing_identity["leakage_invalid"] is True
 
 
+@pytest.mark.parametrize("raw_seed", [1001.0, "1001", True], ids=["float", "string", "bool"])
+def test_capture_episode_rejects_coerced_runtime_seed_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw_seed: object
+) -> None:
+    """Runtime seeds must be strict integers before identity validation can pass."""
+    collector = BalancedOracleCollector(TEST_PACKET_PATH, output_root=tmp_path)
+
+    def fake_run(_scenario: dict[str, Any], _seed: int, **_kwargs: Any) -> dict[str, Any]:
+        return {
+            "status": "success",
+            "scenario_id": "planner_sanity_simple",
+            "seed": raw_seed,
+            "algorithm_metadata": {
+                "simulation_step_trace": {"steps": []},
+                "planner_kinematics": {"execution_mode": "native"},
+                "planner_runtime": {"fallback_count": 0},
+            },
+            "pedestrian_model": {"fallback_degraded_status": "native"},
+        }
+
+    monkeypatch.setattr(collector_module, "_run_map_episode", fake_run)
+    episode = collector._capture_episode(
+        {"name": "planner_sanity_simple"},
+        seed=1001,
+        split="train",
+        episode_id="train__planner_sanity_simple__seed1001",
+        algo="hybrid_rule_local_planner",
+        algo_config={},
+        scenario_path=Path("configs/policy_search/nominal_sanity_matrix.yaml"),
+        horizon=2,
+        dt=0.1,
+    )
+
+    assert episode["leakage_invalid"] is True
+    assert episode["provenance"]["identity_missing"] is True
+
+
 def test_diagnostic_insufficient_manifest_is_rejected(
     tmp_path: Path,
 ) -> None:

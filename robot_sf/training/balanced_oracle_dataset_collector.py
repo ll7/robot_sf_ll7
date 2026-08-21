@@ -1357,10 +1357,8 @@ class BalancedOracleCollector:
         degraded = pedestrian_status != "native" or _contains_degraded_marker(record)
         failed = str(record.get("status", "failed")) != "success"
         actual_scenario = str(record.get("scenario_id") or "").strip()
-        try:
-            actual_seed = int(record.get("seed", -1))
-        except (TypeError, ValueError):
-            actual_seed = -1
+        raw_seed = record.get("seed", -1)
+        actual_seed = int(raw_seed) if _is_strict_integer(raw_seed) else -1
         _declared_split, declared_scenario, declared_seed = parse_episode_id(episode_id, split)
         identity_missing = not actual_scenario or actual_seed < 0
         leakage_invalid = (

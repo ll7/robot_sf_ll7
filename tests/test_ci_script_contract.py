@@ -2516,6 +2516,33 @@ def test_run_tests_parallel_help_does_not_invoke_pytest(tmp_path: Path) -> None:
     assert "uv should not be called" not in result.stderr
 
 
+def test_run_tests_parallel_rejects_bare_separator_before_pytest(tmp_path: Path) -> None:
+    """A bare ``--`` must fail before pytest can silently consume later options."""
+    repo, script_dir, env = _make_help_fixture_repo(
+        tmp_path,
+        ("run_tests_parallel.sh", "common_setup.sh"),
+    )
+    (repo / "tests" / "support").mkdir(parents=True)
+    (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text(
+        "",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Do not pass a bare '--' separator" in result.stderr
+    assert "pytest receives everything after '--' as literal collection paths" in result.stderr
+    assert "uv should not be called" not in result.stderr
+
+
 def test_run_xdist_race_validation_help_does_not_invoke_pytest(tmp_path: Path) -> None:
     """run_xdist_race_validation.sh --help exits 0 before invoking uv."""
     repo, script_dir, env = _make_help_fixture_repo(

@@ -397,6 +397,9 @@ _FAST_FILES = {
     # The mechanism-boundary atlas tests are deterministic schema/lineage checks;
     # keep coverage for the changed producer in pull-request fast shards.
     "test_mechanism_boundary_atlas.py",
+    # The shared DWA diagnostic harness tests are deterministic contract tests;
+    # keep their changed-module coverage in pull-request fast shards.
+    "test_dwa_diagnostic_harness.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

@@ -1,0 +1,290 @@
+# Conditional artifact-only Zenodo surface disposition for issue #7320.
+#
+# This file is a rights/source evidence ledger, not a legal opinion or publication
+# authorization.  A row may become clear only after a separate, mechanically
+# reviewable record names the exact path and bytes and proves project authorship or
+# redistribution clearance for artifact_only_zenodo.  Repository presence, a
+# citation, public availability, or a software license alone never clears a row.
+
+schema_version: release_surface_disposition.v1
+release_id: benchmark_release_0_0_5
+surface: artifact_only_zenodo
+approved_source_sha: dc78f373a28fd9bbb6b2444cfd5a74e698dfe48a
+validation_base_sha: 5a42d9ca580b134320a501d44307a7fd9560f6c9
+
+decision:
+  issue: 7320
+  token: approve-artifact-only
+  conditional: true
+  publication_authorized: false
+  note: >-
+    This route selection preserves the exact approved checksum-covered bytes. It
+    does not clear rights, authorize publication, or widen any candidate claim.
+
+manifest:
+  path: configs/releases/release_0_0_5_checksum_manifest.yaml
+  sha256: 13df47b3b7092a6efb47942c97fe362c38428e9604d21740fbcb5d7526ade741
+  entry_count: 25
+
+claim_boundary: >-
+  Artifact-only Zenodo publication of the exact 25 checksum-manifest paths, with
+  candidate evidence tiers, exclusions, and claim boundaries preserved verbatim.
+  This ledger does not clear model weights, packages, dependencies, source-tree
+  archives, benchmark claims, or external assets whose source/revision is not named.
+
+stop_rules:
+  - Any unknown, conflicting, permission-required, or otherwise unresolved row remains blocked.
+  - A checksum or path mismatch aborts the gate; no approved bytes may be regenerated or replaced.
+  - A repository license, citation, public URL, or mere repository presence is not rights evidence.
+  - Publication remains maintainer-owned even if every row eventually clears.
+
+rows:
+  - row_id: manifest_001
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
+    sha256: 90610a5878217eb8d83372a002ab516846e7a5b570116f6bfdc04e76750aa3b6
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      Bundle README bytes are preserved evidence, but no separate record proves
+      project authorship or redistribution clearance for this exact Zenodo surface.
+    evidence: []
+
+  - row_id: manifest_002
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md.review.json
+    sha256: 54bba08bfecfecffcd6905b053890e78ca1718295db75386e1bab5cee8e0baa4
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The review marker explicitly identifies AI-generated content needing review;
+      it is integrity metadata, not authorship or redistribution evidence.
+    evidence: []
+
+  - row_id: manifest_003
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
+    sha256: d9155e7122cbc6ecb89f80a798290951c235261b43eae42f5fe6d7c97e0bccf9
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The release manifest records candidate provenance and claim boundaries, but
+      does not itself prove rights to redistribute every referenced byte.
+    evidence: []
+
+  - row_id: manifest_004
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml.review.json
+    sha256: 43d9782be3cb5187a9e9ca99dbda7ee6045109aef160a9d19fdcabb5bf7e3abd
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The review marker is integrity metadata and explicitly needs review; it is
+      not a rights or source-clearance record.
+    evidence: []
+
+  - row_id: manifest_005
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
+    sha256: c152e004bb1537ed14e7a341caece7504759b33d7af3e65f921907f3bfd85af7
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      A checksum file proves byte identity only; it does not prove project
+      authorship or permission to redistribute the listed files.
+    evidence: []
+
+  - row_id: manifest_006
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS.review.json
+    sha256: 6f37351f8bd475fe91f2af19b8bfed2bee10205bd8030be15ec0df5772ffec80
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The review marker is integrity metadata and explicitly needs review; it is
+      not a rights or source-clearance record.
+    evidence: []
+
+  - row_id: manifest_007
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
+    sha256: 517b9dec6cdf725046af75a16886632a6e3a63b64887091bbe8d2ba679bfc09d
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      This candidate reference records metric-evidence provenance and a claim
+      boundary, but no exact-byte rights/source clearance record is attached.
+    evidence: []
+
+  - row_id: manifest_008
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml.review.json
+    sha256: 6e71d217025e58d49eb94923003d74a22efbfd66ea398806001657c0c24f9c88
+    status: blocked
+    reason_code: conflicting
+    rationale: >-
+      The review marker declares AI-generated content needing review; that status
+      conflicts with treating it as final rights evidence.
+    evidence: []
+
+  - row_id: manifest_009
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
+    sha256: 6fae6cb13ad9c019b52ea1db17ee9c0fd53b7c73cd617508b734be6f9169dddf
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      This candidate reference records certified-archive provenance and a claim
+      boundary, but no exact-byte rights/source clearance record is attached.
+    evidence: []
+
+  - row_id: manifest_010
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml.review.json
+    sha256: bcd51671e4b0d72693274f4e713f63832317360f148ca9bee913f2f015530165
+    status: blocked
+    reason_code: conflicting
+    rationale: >-
+      The review marker declares AI-generated content needing review; that status
+      conflicts with treating it as final rights evidence.
+    evidence: []
+
+  - row_id: manifest_011
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
+    sha256: 473ea3e27d50f2324cb7e146488fed36c6ff86927e01ecd3c775c997f20f3556
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      This preregistration reference records contract provenance and a claim
+      boundary, but no exact-byte rights/source clearance record is attached.
+    evidence: []
+
+  - row_id: manifest_012
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml.review.json
+    sha256: 7dd05da838fa746dfc2a6bd0609ed9a5c15790ae66aed66c2c73365606920398
+    status: blocked
+    reason_code: conflicting
+    rationale: >-
+      The review marker declares AI-generated content needing review; that status
+      conflicts with treating it as final rights evidence.
+    evidence: []
+
+  - row_id: manifest_013
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+    sha256: 84af86ca08b060132ed3d9f40d95254c8c73cc5096229623e173524d4ffe9177
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The frozen candidate manifest proves candidate eligibility and checksums,
+      not redistribution rights for each exact release byte.
+    evidence: []
+
+  - row_id: manifest_014
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
+    sha256: b9223fb6374545b34419d0448aa6d68c65e053c5d17b04a78e47cc22b23f2b61
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      A checksum sidecar proves byte identity only and cannot establish authorship
+      or redistribution permission.
+    evidence: []
+
+  - row_id: manifest_015
+    path: configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml
+    sha256: 02cbbc2569ab30ce24708b742b66b0034c85036ddd37a914a48cec8a7abaff4d
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      The preflight checklist is project workflow metadata, but no separate
+      exact-byte authorship record is attached to this publication surface.
+    evidence: []
+
+  - row_id: manifest_016
+    path: docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json
+    sha256: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      Candidate metric evidence includes campaign-derived content; a maintainer
+      rights/source decision for this exact byte set is required before deposit.
+    evidence: []
+
+  - row_id: manifest_017
+    path: docs/context/evidence/issue_5034_control_action_latency_sweep/README.md
+    sha256: d9fe91eed69843bd85919233199aa67b0476b68d39180a07aee7a39ce0e378ba
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      Candidate metric-evidence documentation has no attached exact-byte
+      redistribution clearance record.
+    evidence: []
+
+  - row_id: manifest_018
+    path: docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256
+    sha256: 973e043a332d65dddc67da7f006e6fc556aeae58aad4b69d33b7ed685d57fcf8
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      A candidate checksum sidecar proves integrity only and cannot clear rights
+      for the referenced evidence bytes.
+    evidence: []
+
+  - row_id: manifest_019
+    path: docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json
+    sha256: 5ba2974cd8f300e61153e9e5d25ffe737dadbfb5efc62fc2659b19f9f9ec3949
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      Analysis output is campaign-derived evidence; no exact-byte project-authorship
+      or redistribution clearance record is attached.
+    evidence: []
+
+  - row_id: manifest_020
+    path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json
+    sha256: d297f759e5cb91d7c18a964c09162fd98091f8c38f9c30756431260a2dbb587c
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      The acceptance report describes a certified archive but does not itself
+      establish rights to redistribute every exact archive-derived byte.
+    evidence: []
+
+  - row_id: manifest_021
+    path: docs/context/evidence/issue_5305_certified_archive/archive.json
+    sha256: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      The registered archive is derived campaign evidence; rights to its exact
+      records and embedded source references require an explicit clearance record.
+    evidence: []
+
+  - row_id: manifest_022
+    path: docs/context/evidence/issue_5305_certified_archive/README.md
+    sha256: 139332cded16d21a2228906bd50237bc4de3cad4d30137d405584298c05563aa
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      Archive documentation describes provenance and claim boundaries but does not
+      itself prove redistribution rights for the exact archive surface.
+    evidence: []
+
+  - row_id: manifest_023
+    path: docs/context/evidence/issue_5305_certified_archive/SHA256SUMS
+    sha256: b5bcbd13fc596208c49cce5f53d7e84403780f3121cfe31d6bc6aa6c5d9ae014
+    status: blocked
+    reason_code: rights_not_reviewed
+    rationale: >-
+      A checksum file proves byte identity only and cannot establish redistribution
+      permission for the archive members.
+    evidence: []
+
+  - row_id: manifest_024
+    path: configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml
+    sha256: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      The scenario matrix references included topology definitions and maps; an
+      exact-scope source/redistribution review is required for Zenodo deposit.
+    evidence: []
+
+  - row_id: manifest_025
+    path: configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml
+    sha256: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4
+    status: blocked
+    reason_code: permission_required
+    rationale: >-
+      The preregistration packet references scenario/configuration inputs; no
+      exact-byte redistribution clearance record is attached.
+    evidence: []

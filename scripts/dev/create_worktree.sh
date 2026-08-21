@@ -105,6 +105,26 @@ if [[ "$dry_run" -eq 1 ]]; then
   exit 0
 fi
 
+# Recover from a prior interrupted checkout: git can die mid-"Updating files"
+# (e.g. SIGPIPE when output is piped through head), leaving the branch ref
+# present without a registered worktree. The next retry would otherwise fail
+# with a bare "fatal: a branch named '<branch>' already exists".
+if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+  if ! git worktree list --porcelain | grep -q "^branch refs/heads/$branch_name$"; then
+    if git rev-parse --verify --quiet "$branch_name^{commit}" >/dev/null &&
+       git merge-base --is-ancestor "$branch_name" "$base_ref" >/dev/null 2>&1; then
+      echo "create_worktree: removing orphan branch '$branch_name' (points at base $base_ref)" >&2
+      git branch -D "$branch_name"
+    else
+      echo "create_worktree: orphan branch '$branch_name' does not point at base $base_ref;" >&2
+      echo "create_worktree: recover manually with:" >&2
+      echo "  git branch -D $branch_name && git worktree prune" >&2
+      exit 2
+    fi
+  fi
+fi
+git worktree prune
+
 git worktree add -b "$branch_name" "$worktree_path" "$base_ref"
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."

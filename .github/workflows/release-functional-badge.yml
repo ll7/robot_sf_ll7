@@ -49,6 +49,10 @@ jobs:
       - name: Verify Zenodo release metadata
         run: uv run python scripts/validation/check_zenodo_release_metadata.py
 
+      - name: Verify release 0.0.5 artifact surface
+        if: github.ref_name == '0.0.5'
+        run: uv run python scripts/validation/check_release_surface.py
+
       - name: Verify claimed level and run smoke test
         run: |
           # If archive is not specified, build a mock/test bundle to verify pipeline integrity

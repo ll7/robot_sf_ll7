@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from scripts.validation import check_release_surface as gate
@@ -61,7 +62,12 @@ def _minimal_surface(tmp_path: Path, *, status: str = "blocked") -> tuple[Path, 
             "surface": gate.SURFACE,
             "approved_source_sha": gate.EXPECTED_APPROVED_SOURCE_SHA,
             "validation_base_sha": gate.EXPECTED_VALIDATION_BASE_SHA,
-            "decision": {"token": "approve-artifact-only"},
+            "decision": {
+                "issue": 7320,
+                "token": "approve-artifact-only",
+                "conditional": True,
+                "publication_authorized": False,
+            },
             "manifest": {
                 "path": "configs/releases/release_0_0_5_checksum_manifest.yaml",
                 "sha256": gate.EXPECTED_MANIFEST_SHA256,
@@ -111,6 +117,7 @@ def test_committed_surface_is_exactly_25_paths_and_remains_blocked() -> None:
         "project_authored": 0,
     }
     assert sum(issue["code"] == "rights_blocked" for issue in report["blockers"]) == 25
+    assert any(issue["code"] == "approved_source_sha_mismatch" for issue in report["blockers"])
     assert {
         issue["path"]
         for issue in report["blockers"]
@@ -231,3 +238,37 @@ def test_permission_required_status_is_not_a_clearance(tmp_path: Path) -> None:
     )
 
     assert any(issue["code"] == "disposition_status" for issue in issues)
+
+
+def test_noncanonical_sidecar_cli_overrides_are_rejected(tmp_path: Path) -> None:
+    """Production validation cannot replace committed disposition/checklist controls."""
+
+    with pytest.raises(SystemExit):
+        gate._parse_args(["--disposition", str(tmp_path / "disposition.yaml")])
+
+
+def test_non_checkout_source_root_is_blocked(tmp_path: Path) -> None:
+    """A copied byte tree cannot impersonate the exact approved Git checkout."""
+
+    sha, error = gate._checkout_sha(tmp_path)
+
+    assert sha is None
+    assert error is not None
+
+
+def test_authorization_fields_cannot_be_weakened() -> None:
+    """The sidecar cannot widen the maintainer's conditional route selection."""
+
+    payload = yaml.safe_load((REPO_ROOT / gate.DEFAULT_DISPOSITION).read_text(encoding="utf-8"))
+    payload["decision"]["issue"] = 9999
+    payload["decision"]["conditional"] = False
+    payload["decision"]["publication_authorized"] = True
+    issues: list[dict] = []
+
+    gate._validate_disposition_header(payload, issues=issues)
+
+    assert {issue["code"] for issue in issues} == {
+        "decision_conditional",
+        "decision_issue",
+        "decision_publication_authorized",
+    }

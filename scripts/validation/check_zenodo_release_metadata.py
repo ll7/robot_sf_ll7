@@ -92,6 +92,7 @@ ZENODO_UPLOAD_TYPES = frozenset(
     }
 )
 ZENODO_ACCESS_RIGHTS = frozenset({"closed", "embargoed", "open", "restricted"})
+EXPECTED_LICENSE = "GPL-3.0-only"
 
 
 def _load_json_object(path: Path, label: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -295,6 +296,13 @@ def _validate_release_values(
         ".zenodo.json license does not match pyproject.toml",
         errors,
     )
+    for label, value in (
+        (".zenodo.json", license_id),
+        ("CITATION.cff", citation_license),
+        ("pyproject.toml", project_license),
+    ):
+        if value is not None and value != EXPECTED_LICENSE:
+            errors.append(f"{label} license must remain {EXPECTED_LICENSE!r}; got {value!r}")
     if access_right is not None and access_right not in ZENODO_ACCESS_RIGHTS:
         errors.append(
             f".zenodo.json access_right is not an official Zenodo value: {access_right!r}"

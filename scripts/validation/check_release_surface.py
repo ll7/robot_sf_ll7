@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +106,44 @@ def _load_yaml(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(payload, dict):
         return None, f"{path} must contain a mapping"
     return payload, None
+
+
+def _checkout_sha(repo_root: Path) -> tuple[str | None, str | None]:
+    """Resolve the exact commit for a repository-root checkout without parent fallback."""
+
+    try:
+        top_level = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"cannot inspect approved-source checkout: {exc}"
+    if top_level.returncode != 0:
+        return None, "approved-source root is not a Git checkout"
+    try:
+        resolved_top = Path(top_level.stdout.strip()).resolve()
+    except OSError as exc:
+        return None, f"cannot resolve approved-source checkout root: {exc}"
+    if resolved_top != repo_root.resolve():
+        return None, "approved-source root is nested inside a different Git checkout"
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--verify", "HEAD^{commit}"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, f"cannot resolve approved-source commit: {exc}"
+    sha = result.stdout.strip().lower()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return None, "approved-source checkout has no resolvable HEAD commit"
+    return sha, None
 
 
 def _issue(
@@ -232,6 +271,28 @@ def _binding(
     return {"path": path, "sha256": str(digest).lower(), "entry_count": count}
 
 
+def _validate_decision(decision: Any, *, issues: list[dict[str, Any]]) -> None:
+    """Validate the exact conditional maintainer route without granting authority."""
+
+    if not isinstance(decision, dict) or decision.get("token") != "approve-artifact-only":
+        _issue(
+            issues,
+            "decision_token",
+            "disposition must record the conditional #7320 token approve-artifact-only",
+        )
+    if isinstance(decision, dict):
+        if decision.get("issue") != 7320:
+            _issue(issues, "decision_issue", "disposition decision must remain bound to issue 7320")
+        if decision.get("conditional") is not True:
+            _issue(issues, "decision_conditional", "artifact-only route must remain conditional")
+        if decision.get("publication_authorized") is not False:
+            _issue(
+                issues,
+                "decision_publication_authorized",
+                "the disposition ledger cannot authorize publication",
+            )
+
+
 def _validate_disposition_header(
     payload: dict[str, Any],
     *,
@@ -249,13 +310,7 @@ def _validate_disposition_header(
         _issue(issues, "disposition_release_id", f"disposition release_id must be {RELEASE_ID!r}")
     if payload.get("surface") != SURFACE:
         _issue(issues, "disposition_surface", f"publication surface must be {SURFACE!r}")
-    decision = payload.get("decision")
-    if not isinstance(decision, dict) or decision.get("token") != "approve-artifact-only":
-        _issue(
-            issues,
-            "decision_token",
-            "disposition must record the conditional #7320 token approve-artifact-only",
-        )
+    _validate_decision(payload.get("decision"), issues=issues)
     source_sha = payload.get("approved_source_sha")
     if source_sha != EXPECTED_APPROVED_SOURCE_SHA:
         _issue(
@@ -612,17 +667,24 @@ def _validate_checklist(  # noqa: C901
 def build_report(
     *,
     repo_root: Path | None = None,
-    manifest_path: Path | None = None,
-    disposition_path: Path | None = None,
-    checklist_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Build a deterministic fail-closed report for the configured release surface."""
+    """Build a deterministic report using canonical controls and one approved checkout."""
 
     root = (repo_root or REPO_ROOT).resolve()
-    manifest = manifest_path or root / DEFAULT_MANIFEST
-    disposition = disposition_path or root / DEFAULT_DISPOSITION
-    checklist = checklist_path or root / DEFAULT_CHECKLIST
+    manifest = root / DEFAULT_MANIFEST
+    disposition = REPO_ROOT / DEFAULT_DISPOSITION
+    checklist = REPO_ROOT / DEFAULT_CHECKLIST
     issues: list[dict[str, Any]] = []
+
+    source_sha, source_error = _checkout_sha(root)
+    if source_error:
+        _issue(issues, "approved_source_checkout", source_error)
+    elif source_sha != EXPECTED_APPROVED_SOURCE_SHA:
+        _issue(
+            issues,
+            "approved_source_sha_mismatch",
+            f"approved-source checkout must be {EXPECTED_APPROVED_SOURCE_SHA}; got {source_sha}",
+        )
 
     manifest_payload, manifest_error = _load_yaml(manifest)
     if manifest_error:
@@ -647,7 +709,7 @@ def build_report(
     counts = _validate_disposition_rows(
         disposition_payload,
         entries=entries,
-        repo_root=root,
+        repo_root=REPO_ROOT,
         issues=issues,
     )
 
@@ -692,6 +754,11 @@ def build_report(
         "status": status,
         "gate_passed": status == "passed",
         "publication_authorized": False,
+        "approved_source": {
+            "path": str(root),
+            "sha": source_sha,
+            "expected_sha": EXPECTED_APPROVED_SOURCE_SHA,
+        },
         "claim_boundary": (
             "Artifact-only Zenodo surface integrity and rights/source evidence gate. "
             "This report does not authorize publication, alter bytes, or strengthen scientific claims."
@@ -752,9 +819,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
-    parser.add_argument("--manifest", type=Path, default=None)
-    parser.add_argument("--disposition", type=Path, default=None)
-    parser.add_argument("--checklist", type=Path, default=None)
     parser.add_argument("--json", action="store_true", help="Emit a JSON report.")
     parser.add_argument("--format", choices=("text", "json"), default=None)
     return parser.parse_args(argv)
@@ -765,12 +829,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = _parse_args(argv)
     root = args.repo_root.resolve()
-    report = build_report(
-        repo_root=root,
-        manifest_path=args.manifest,
-        disposition_path=args.disposition,
-        checklist_path=args.checklist,
-    )
+    report = build_report(repo_root=root)
     if args.json or args.format == "json":
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

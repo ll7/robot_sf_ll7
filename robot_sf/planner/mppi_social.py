@@ -31,11 +31,12 @@ def _validate_active_pedestrian_count(count_raw: Any, row_count: int) -> int:
     if isinstance(count_raw, (bool, np.bool_)):
         raise ValueError("planner-visible pedestrian count must be numeric")
     try:
-        count_values = np.asarray(count_raw, dtype=float).reshape(-1)
+        raw_values = np.asarray(count_raw)
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("planner-visible pedestrian count must be numeric") from exc
-    if count_values.size != 1:
+    if raw_values.size != 1 or raw_values.dtype.kind not in "iuf":
         raise ValueError("planner-visible pedestrian count must be a finite non-negative integer")
+    count_values = raw_values.astype(float, copy=False).reshape(-1)
     count_value = count_values[0]
     if not np.isfinite(count_value) or count_value < 0.0 or count_value != np.floor(count_value):
         raise ValueError("planner-visible pedestrian count must be a finite non-negative integer")

@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
 from scripts.validation.run_predictive_baseline_diagnostic import run_diagnostic
 
 
-def test_predictive_baseline_fixture_is_schema_valid_and_fail_closed() -> None:
-    """The same-seed fixture emits method cards and no benchmark metrics."""
+def _fixture_config() -> dict[str, object]:
+    """Load the canonical predictive-baseline smoke configuration."""
 
     root = Path(__file__).parents[2]
-    config = yaml.safe_load(
+    return yaml.safe_load(
         (root / "configs/benchmarks/issue_7319_predictive_baselines_smoke.yaml").read_text(
             encoding="utf-8"
         )
     )
+
+
+def test_predictive_baseline_fixture_is_schema_valid_and_fail_closed() -> None:
+    """The same-seed fixture emits method cards and no benchmark metrics."""
+
+    root = Path(__file__).parents[2]
+    config = _fixture_config()
     report = run_diagnostic(config)
     schema = json.loads(
         (root / "robot_sf/benchmark/schemas/predictive_baseline_diagnostic.v1.json").read_text(
@@ -52,3 +61,26 @@ def test_predictive_baseline_fixture_is_schema_valid_and_fail_closed() -> None:
     assert cost_diagnostics["unavailable_or_degraded_result"].startswith(
         "smoke record status=failed"
     )
+
+
+@pytest.mark.parametrize("section", ["pgif", "anisotropic"])
+def test_predictive_baseline_rejects_non_mapping_cost_sections(section: str) -> None:
+    """Malformed nested cost sections fail with an actionable validation error."""
+
+    config = _fixture_config()
+    config[section] = []
+    with pytest.raises(ValueError, match=f"{section} must be a mapping"):
+        run_diagnostic(config)
+
+
+def test_predictive_baseline_allows_explicit_unbounded_anisotropic_cutoff() -> None:
+    """An explicit null cutoff preserves the supported unbounded Gaussian mode."""
+
+    config = _fixture_config()
+    config = copy.deepcopy(config)
+    config["anisotropic"]["cutoff_distance_m"] = None  # type: ignore[index]
+    report = run_diagnostic(config)
+    card = next(
+        card for card in report["methods"] if card["method_id"] == "anisotropic_gaussian_mppi_v1"
+    )
+    assert card["config"]["predictive_human_cost"]["cutoff_distance_m"] is None

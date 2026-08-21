@@ -101,6 +101,14 @@ def _load_config(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _require_mapping(value: Any, name: str) -> dict[str, Any]:
+    """Require one nested diagnostic configuration section to be a mapping."""
+
+    if not isinstance(value, dict):
+        raise ValueError(f"{name} must be a mapping")
+    return value
+
+
 def _build_observation(*, seed: int, pedestrian_count: int) -> dict[str, Any]:
     """Build the fixed-seed planar crossing fixture observation."""
 
@@ -363,28 +371,30 @@ def run_diagnostic(config: dict[str, Any]) -> dict[str, Any]:
         seed=seed,
         pedestrian_count=int(config["pedestrian_count"]),
     )
+    pgif_payload = _require_mapping(config.get("pgif"), "pgif")
+    anisotropic_payload = _require_mapping(config.get("anisotropic", {}), "anisotropic")
     pgif_config = PredictiveGaussianHumanCostConfig(
         enabled=True,
-        weight=float(config["pgif"]["weight"]),
-        longitudinal_sigma_m=float(config["pgif"]["longitudinal_sigma_m"]),
-        lateral_sigma_m=float(config["pgif"]["lateral_sigma_m"]),
-        forward_speed_gain=float(config["pgif"]["forward_speed_gain"]),
+        weight=float(pgif_payload["weight"]),
+        longitudinal_sigma_m=float(pgif_payload["longitudinal_sigma_m"]),
+        lateral_sigma_m=float(pgif_payload["lateral_sigma_m"]),
+        forward_speed_gain=float(pgif_payload["forward_speed_gain"]),
     )
-    aniso_payload = config.get("anisotropic", {})
+    cutoff_raw = anisotropic_payload.get("cutoff_distance_m", 3.0)
     aniso_config = PredictiveGaussianHumanCostConfig(
         enabled=True,
-        weight=float(aniso_payload.get("weight", config["pgif"]["weight"])),
+        weight=float(anisotropic_payload.get("weight", pgif_payload["weight"])),
         longitudinal_sigma_m=float(
-            aniso_payload.get("longitudinal_sigma_m", config["pgif"]["longitudinal_sigma_m"])
+            anisotropic_payload.get("longitudinal_sigma_m", pgif_payload["longitudinal_sigma_m"])
         ),
         lateral_sigma_m=float(
-            aniso_payload.get("lateral_sigma_m", config["pgif"]["lateral_sigma_m"])
+            anisotropic_payload.get("lateral_sigma_m", pgif_payload["lateral_sigma_m"])
         ),
         forward_speed_gain=float(
-            aniso_payload.get("forward_speed_gain", config["pgif"]["forward_speed_gain"])
+            anisotropic_payload.get("forward_speed_gain", pgif_payload["forward_speed_gain"])
         ),
-        cutoff_distance_m=float(aniso_payload.get("cutoff_distance_m", 3.0)),
-        aggregation=str(aniso_payload.get("aggregation", "sum")),
+        cutoff_distance_m=None if cutoff_raw is None else float(cutoff_raw),
+        aggregation=str(anisotropic_payload.get("aggregation", "sum")),
     )
     mppi_config = _mppi_config(config, human_cost=PredictiveGaussianHumanCostConfig())
     nmpc_config = NMPCSocialConfig(

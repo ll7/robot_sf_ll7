@@ -335,7 +335,10 @@ def test_mppi_enabled_cost_requires_declared_pedestrian_count(
         planner._extract_state(observation)
 
 
-@pytest.mark.parametrize("count", [[1.5], [4.0], [float("nan")], [-1.0], [1.0, 1.0]])
+@pytest.mark.parametrize(
+    "count",
+    [[1.5], [4.0], [float("nan")], [-1.0], [1.0, 1.0], [True], ["1"]],
+)
 def test_mppi_enabled_cost_rejects_invalid_pedestrian_count(count: list[float]) -> None:
     """Malformed active counts cannot silently change the enabled cost state."""
 

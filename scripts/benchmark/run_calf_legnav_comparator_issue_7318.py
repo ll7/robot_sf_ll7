@@ -45,6 +45,24 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _input_refs(config_path: Path, config: dict[str, Any]) -> dict[str, str]:
+    """Return stable input paths and digests, or raise on missing provenance inputs."""
+    scenario_matrix = _repo_path(str(config["scenario_matrix"]))
+    candidate_registry = _repo_path(str(config["candidate_registry"]))
+    refs = {
+        "config": _display_path(config_path),
+        "scenario_matrix": _display_path(scenario_matrix),
+        "candidate_registry": _display_path(candidate_registry),
+    }
+    for name, path in (
+        ("config", config_path),
+        ("scenario_matrix", scenario_matrix),
+        ("candidate_registry", candidate_registry),
+    ):
+        refs[f"{name}_sha256"] = _sha256(path)
+    return refs
+
+
 def _load_config(path: Path) -> dict[str, Any]:
     """Load and minimally validate the comparator YAML config."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -57,6 +75,12 @@ def _load_config(path: Path) -> dict[str, Any]:
     if errors:
         details = "; ".join(f"{list(error.path)}: {error.message}" for error in errors[:5])
         raise ValueError(f"Comparator config failed schema validation: {details}")
+    try:
+        json.dumps(payload, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Comparator config must contain only finite JSON-compatible values"
+        ) from exc
     return payload
 
 
@@ -298,15 +322,22 @@ def main(argv: list[str] | None = None) -> int:
         if error is not None:
             runner_errors.append(error)
 
-    candidate_registry_path = _repo_path(str(config["candidate_registry"]))
-    input_refs = {
-        "config": str(config_path.relative_to(REPO_ROOT)),
-        "config_sha256": _sha256(config_path),
-        "scenario_matrix": str(_repo_path(str(config["scenario_matrix"])).relative_to(REPO_ROOT)),
-        "scenario_matrix_sha256": _sha256(_repo_path(str(config["scenario_matrix"]))),
-        "candidate_registry": str(candidate_registry_path.relative_to(REPO_ROOT)),
-        "candidate_registry_sha256": _sha256(candidate_registry_path),
-    }
+    try:
+        input_refs = _input_refs(config_path, config)
+    except (OSError, ValueError) as exc:
+        runner_errors.append(
+            {
+                "condition": "inputs",
+                "status": "blocked",
+                "reason": f"comparator provenance input could not be read: {exc}",
+                "command": ["_input_refs"],
+            }
+        )
+        input_refs = {
+            "config": _display_path(config_path),
+            "scenario_matrix": _display_path(_repo_path(str(config["scenario_matrix"]))),
+            "candidate_registry": _display_path(_repo_path(str(config["candidate_registry"]))),
+        }
     try:
         report = build_calf_legnav_comparator_report(
             traces["perfect_perception"],
@@ -332,7 +363,26 @@ def main(argv: list[str] | None = None) -> int:
     if runner_errors:
         report["status"] = "blocked"
         report["runner_errors"] = runner_errors
-    _validate_report(report)
+    try:
+        _validate_report(report)
+    except (TypeError, ValueError) as exc:
+        runner_errors.append(
+            {
+                "condition": "paired",
+                "status": "blocked",
+                "reason": f"trace report failed schema validation: {exc}",
+                "command": ["_validate_report"],
+            }
+        )
+        report = build_calf_legnav_comparator_report(
+            _placeholder_trace(config),
+            _placeholder_trace(config),
+            config=config,
+            input_refs=input_refs,
+        )
+        report["status"] = "blocked"
+        report["runner_errors"] = runner_errors
+        _validate_report(report)
     (output_dir / "summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (output_dir / "README.md").write_text(_markdown(report), encoding="utf-8")
     print(

@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
+from numbers import Integral, Real
 from typing import Any
 
 import numpy as np
@@ -32,7 +33,12 @@ CONDITIONS = (CONDITION_IDEAL, CONDITION_SENSOR)
 
 def canonical_config_digest(config: Mapping[str, Any]) -> str:
     """Return a SHA-256 digest for a JSON-compatible comparator config."""
-    encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        config,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -43,13 +49,20 @@ def _mapping(value: Any) -> Mapping[str, Any]:
 
 def _finite_number(value: Any) -> float | None:
     """Return a finite float, preserving unavailable values as ``None``."""
-    if value is None or isinstance(value, bool):
+    if value is None or isinstance(value, bool) or not isinstance(value, Real):
         return None
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
+
+
+def _integer_value(value: Any) -> int | None:
+    """Return a strict integer value, rejecting booleans, floats, and strings."""
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        return None
+    return int(value)
 
 
 def _trace_rows(trace: Mapping[str, Any]) -> list[Mapping[str, Any]]:
@@ -60,6 +73,29 @@ def _trace_rows(trace: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     if not all(isinstance(row, Mapping) for row in rows):
         raise ValueError("trace.steps must contain only mapping rows")
     return list(rows)
+
+
+def _trace_completion_reason(trace: Mapping[str, Any]) -> str | None:
+    """Return a blocker when a trace is incomplete or has invalid step identity."""
+    rows = _trace_rows(trace)
+    horizon = _integer_value(trace.get("horizon"))
+    if horizon is None or horizon < 1:
+        return "trace.horizon must be a positive integer"
+    steps = [row.get("step") for row in rows]
+    if any(_integer_value(step) is None for step in steps):
+        return "trace steps must expose integer step identities"
+    if [int(step) for step in steps] != list(range(len(rows))):
+        return "trace step identities must be contiguous from zero"
+    if len(rows) > horizon:
+        return "trace contains more steps than its declared horizon"
+    if len(rows) == horizon:
+        return None
+    done_info = trace.get("done_info")
+    if not isinstance(done_info, Mapping) or not any(
+        done_info.get(field) is True for field in ("success", "terminated", "truncated")
+    ):
+        return "trace ended before its horizon without a terminal done_info verdict"
+    return None
 
 
 def _metric(
@@ -108,7 +144,7 @@ def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bo
             if key not in row or row[key] is None:
                 continue
             value = _finite_number(row[key])
-            if value is None:
+            if value is None or value < 0.0:
                 malformed = True
             else:
                 row_values.append(value)
@@ -167,6 +203,27 @@ def _action_values(rows: Sequence[Mapping[str, Any]]) -> tuple[np.ndarray, bool]
     )
 
 
+def _observed_actor_counts(rows: Sequence[Mapping[str, Any]]) -> tuple[list[int], bool]:
+    """Extract non-negative observed actor counts and flag malformed metadata.
+
+    Returns:
+        Valid counts and whether any row contained missing or malformed count metadata.
+    """
+    counts: list[int] = []
+    malformed = False
+    for row in rows:
+        perturbation = row.get("observation_perturbation")
+        if not isinstance(perturbation, Mapping) or "observed_actor_count" not in perturbation:
+            malformed = True
+            continue
+        count = _integer_value(perturbation["observed_actor_count"])
+        if count is None or count < 0:
+            malformed = True
+            continue
+        counts.append(count)
+    return counts, malformed
+
+
 def _observation_contract(
     trace: Mapping[str, Any], *, expected_condition: str | None = None
 ) -> dict[str, Any]:
@@ -213,11 +270,18 @@ def _observation_contract(
             f"slot {expected_condition!r}; the pair is not a valid contrast"
         )
         status = "unavailable"
-    malformed_reason = (
-        "each trace row must expose a typed observed observation evidence class and noise profile"
-        if malformed_rows
-        else None
-    )
+    actor_counts, malformed_actor_counts = _observed_actor_counts(rows)
+    malformed_reasons = []
+    if malformed_rows:
+        malformed_reasons.append(
+            "each trace row must expose a typed observed observation evidence class and noise profile"
+        )
+    if malformed_actor_counts:
+        malformed_reasons.append(
+            "each trace row must expose a non-negative integer observed_actor_count"
+        )
+        status = "unavailable"
+    malformed_reason = "; ".join(malformed_reasons) or None
     config = _mapping(trace.get("observation_perturbation_config"))
     return {
         "condition": condition,
@@ -237,28 +301,8 @@ def _observation_contract(
         "noise_profiles": sorted(profiles),
         "config": dict(config),
         "observed_actor_count": {
-            "min": min(
-                (
-                    int(_mapping(row.get("observation_perturbation")).get("observed_actor_count"))
-                    for row in rows
-                    if _finite_number(
-                        _mapping(row.get("observation_perturbation")).get("observed_actor_count")
-                    )
-                    is not None
-                ),
-                default=None,
-            ),
-            "max": max(
-                (
-                    int(_mapping(row.get("observation_perturbation")).get("observed_actor_count"))
-                    for row in rows
-                    if _finite_number(
-                        _mapping(row.get("observation_perturbation")).get("observed_actor_count")
-                    )
-                    is not None
-                ),
-                default=None,
-            ),
+            "min": min(actor_counts, default=None),
+            "max": max(actor_counts, default=None),
         },
     }
 
@@ -271,8 +315,17 @@ def _execution_block(trace: Mapping[str, Any]) -> dict[str, Any]:
         status = "blocked"
         reason = "trace reports fallback_or_degraded execution"
     elif reported is False:
-        status = "available"
-        reason = None
+        completion_reason = _trace_completion_reason(trace)
+        execution_mode = trace.get("planner_execution_mode")
+        if completion_reason is not None:
+            status = "blocked"
+            reason = completion_reason
+        elif execution_mode not in {"native_env_action", "command_adapter", "mixed"}:
+            status = "blocked"
+            reason = "trace lacks a recognized planner execution mode"
+        else:
+            status = "available"
+            reason = None
     else:
         status = "blocked"
         reason = "trace lacks an explicit fallback_or_degraded verdict"
@@ -406,8 +459,8 @@ def _condition_metrics(
     collision = (
         None if malformed_collision or not collision_values else float(any(collision_values))
     )
-    horizon = _finite_number(trace.get("horizon"))
-    horizon_reached = horizon is not None and horizon > 0.0 and len(rows) >= int(horizon)
+    horizon = _integer_value(trace.get("horizon"))
+    horizon_reached = horizon is not None and horizon > 0 and len(rows) >= horizon
     row_truncated_values, malformed_row_truncated = _boolean_values(rows, "truncated")
     done_truncated, malformed_done_truncated = _optional_boolean(done_info, "truncated")
     truncated = (
@@ -423,7 +476,7 @@ def _condition_metrics(
     actions, malformed_actions = _action_values(rows)
     boolean_reason = "outcome flags must be booleans when present"
     distance_reason = (
-        "distance fields must be finite numbers when present"
+        "distance fields must be finite non-negative numbers when present"
         if malformed_distances
         else "ground-truth simulator distance is not present"
     )

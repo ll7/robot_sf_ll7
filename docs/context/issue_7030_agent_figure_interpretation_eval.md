@@ -88,7 +88,7 @@ adjudication, and any external model execution remain separate follow-up work un
 
 ## Current local baseline
 
-On the current-main fixture corpus, the focused suite passes 73 tests and the replay inventory
+On the current-main fixture corpus, the focused suite passes 79 tests and the replay inventory
 contains one canonical source-backed packet plus eleven deterministic mutation cases: one clean
 case and eleven deliberate failure cases. All eleven critical mutation classes are detected.
 Reviewer accounting and paired workflow comparison are `not_available` because the committed

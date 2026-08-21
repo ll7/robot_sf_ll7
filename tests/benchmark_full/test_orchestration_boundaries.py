@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,11 @@ from robot_sf.benchmark.full_classic.execution import (
     execute_episode_record,
 )
 from robot_sf.benchmark.full_classic.finalizer import finalize_run
-from robot_sf.benchmark.full_classic.scheduler import partition_jobs
+from robot_sf.benchmark.full_classic.scheduler import (
+    execute_episode_jobs,
+    partition_jobs,
+    scan_existing_episode_ids,
+)
 
 
 class _Job:
@@ -25,6 +30,15 @@ class _Job:
     archetype = "crossing"
     density = "low"
     horizon = 20
+
+
+def _build_scheduler_record(job, cfg):
+    """Build a picklable record for scheduler process-boundary tests."""
+    return {
+        "episode_id": f"{job.scenario_id}-{job.seed}",
+        "seed": job.seed,
+        "disable_videos": getattr(cfg, "disable_videos", False),
+    }
 
 
 def test_run_context_is_frozen_and_reproducible(config_factory) -> None:
@@ -100,6 +114,49 @@ def test_scheduler_partition_keeps_input_order_and_resume_count() -> None:
 
     assert [job.seed for job in runnable] == [1, 3]
     assert skipped == 1
+
+
+def test_scheduler_scan_ignores_blank_and_malformed_records(tmp_path: Path) -> None:
+    """Resume scanning keeps valid IDs while tolerating bad JSONL lines."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(
+        '\nnot-json\n{"episode_id": "known"}\n{"episode_id": 7}\n',
+        encoding="utf-8",
+    )
+
+    assert scan_existing_episode_ids(episodes_path) == {"known"}
+
+
+def test_scheduler_parallel_branch_preserves_order_and_resume(tmp_path: Path) -> None:
+    """The process path appends in plan order and injects its safe config default."""
+    jobs = [SimpleNamespace(scenario_id="s", seed=seed) for seed in (1, 2, 3)]
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text('{"episode_id":"s-2"}\n', encoding="utf-8")
+    manifest = SimpleNamespace(
+        episodes_path=str(episodes_path),
+        executed_jobs=0,
+        skipped_jobs=0,
+    )
+    cfg = SimpleNamespace(workers=2)
+
+    records = list(
+        execute_episode_jobs(
+            jobs,
+            cfg,
+            manifest,
+            record_builder=_build_scheduler_record,
+        )
+    )
+
+    assert [record["episode_id"] for record in records] == ["s-1", "s-3"]
+    assert all(record["disable_videos"] for record in records)
+    assert manifest.executed_jobs == 2
+    assert manifest.skipped_jobs == 1
+    assert [json.loads(line)["episode_id"] for line in episodes_path.read_text().splitlines()] == [
+        "s-2",
+        "s-1",
+        "s-3",
+    ]
 
 
 def test_finalizer_closes_manifest_and_invokes_publication_phase(tmp_path: Path) -> None:

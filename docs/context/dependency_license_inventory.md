@@ -71,6 +71,24 @@ so a report built against a substitute manifest or a relaxed policy cannot pass
 as fresh. Adding `--fail-on-unresolved` to the freshness form re-applies the
 strict exit code to the report's recorded `unresolved_count`.
 
+## Exact package dispositions
+
+The policy's `package_dispositions` registry is the only place where a reviewed
+package/version exception may override a broad distribution-mode hold. Each row
+is bound to its exact license expression, source/index, lock artifact filenames
+and SHA-256 values, upstream notice references, frozen profile set, allowed and
+blocked surfaces, and a local evidence path. A package row passes this exact
+policy only when all of those identities match the lock and observed metadata.
+
+The llvmlite 0.49.0 row records the bounded `A_surface_specific_disposition`
+ruling from Issue #7653: `user_installed` and `not_distributed` are allowed;
+`bundled_source` and `built_companion` remain blocked, as do mirrored,
+vendored, container-bundled, unknown, unavailable, and conflicting surfaces. The exact
+`BSD-2-Clause AND Apache-2.0 WITH LLVM-exception` expression is not generalized
+to arbitrary SPDX `WITH` expressions. Its durable notice and provenance
+references are recorded in
+`docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md`.
+
 This is release-compliance evidence, not a legal opinion. Closing #7298 still
 requires reviewed dispositions for release-relevant blocked rows and a separate
 proof that each supported profile was resolved with its pinned lock.

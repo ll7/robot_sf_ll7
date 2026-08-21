@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ll7.github.io/robot_sf_ll7/schemas/integration_admission_report.v1.schema.json",
+  "title": "Integration admission report v1",
+  "description": "Deterministic, report-only classification of one PR and a bounded queue snapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "report_only", "input", "pr", "queue"],
+  "properties": {
+    "schema": {"const": "integration_admission_report.v1"},
+    "report_only": {"const": true},
+    "input": {"type": "object", "additionalProperties": false, "required": ["snapshot_schema", "repo", "as_of"], "properties": {"snapshot_schema": {"type": ["string", "null"]}, "repo": {"type": ["string", "null"]}, "as_of": {"type": ["string", "null"]}}},
+    "pr": {"$ref": "#/$defs/classification"},
+    "queue": {"type": "object", "additionalProperties": false, "required": ["bounded", "observed_rows", "source_rows", "truncated", "state_counts", "capacity_demand", "lane_demand", "reason_codes", "invalidation_codes"], "properties": {"bounded": {"const": true}, "requested_limit": {"type": ["integer", "null"], "minimum": 0}, "observed_rows": {"type": "integer", "minimum": 0}, "source_rows": {"type": "integer", "minimum": 0}, "truncated": {"type": "boolean"}, "state_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "capacity_demand": {"$ref": "#/$defs/capacity_demand"}, "lane_demand": {"$ref": "#/$defs/lane_demand"}, "reason_codes": {"type": "array", "items": {"type": "string"}}, "invalidation_codes": {"type": "array", "items": {"type": "string"}}}}
+  },
+  "$defs": {
+    "classification": {"type": "object", "additionalProperties": false, "required": ["state", "reason_codes", "invalidation_codes"], "properties": {"state": {"enum": ["local_only", "preparation_pr", "integration_candidate", "integration_blocked", "review_active", "merge_candidate", "terminal", "unavailable", "invalid"]}, "reason_codes": {"type": "array", "items": {"type": "string"}}, "invalidation_codes": {"type": "array", "items": {"type": "string"}}, "policy_state": {"type": ["string", "null"]}, "dimensions": {"$ref": "#/$defs/dimensions"}, "identity": {"type": "object"}, "current_main_baseline": {"type": "object"}, "blockers": {"$ref": "#/$defs/blockers"}, "age_freshness": {"type": "object"}}},
+    "dimensions": {"type": "object", "additionalProperties": false, "required": ["change_class", "shared_surface", "ci_cost", "review_requirement", "external_action", "base_sensitivity", "ownership"], "properties": {"change_class": {"enum": ["docs", "test_only", "tooling", "runtime", "benchmark", "evidence", "release", "mixed", "unknown", "unavailable"]}, "shared_surface": {"enum": ["isolated", "component_shared", "repository_control_plane", "unknown", "unavailable"]}, "ci_cost": {"enum": ["low", "standard", "optional_matrix", "full", "unknown", "unavailable"]}, "review_requirement": {"enum": ["ordinary", "independent_exact_head", "domain", "author", "unknown", "unavailable"]}, "external_action": {"enum": ["none", "network", "artifact", "compute", "release", "unknown", "unavailable"]}, "base_sensitivity": {"enum": ["ordinary", "current_base_required", "unknown", "unavailable"]}, "ownership": {"enum": ["local", "claimed", "maintainer", "external", "unassigned", "unknown", "unavailable"]}}},
+    "blockers": {"type": "object", "additionalProperties": false, "required": ["dependency", "decision", "review", "external"], "properties": {"dependency": {"$ref": "#/$defs/blocker"}, "decision": {"$ref": "#/$defs/blocker"}, "review": {"$ref": "#/$defs/blocker"}, "external": {"$ref": "#/$defs/blocker"}}},
+    "blocker": {"type": "object", "additionalProperties": false, "required": ["blocked", "codes"], "properties": {"blocked": {"type": "boolean"}, "codes": {"type": "array", "items": {"type": "string"}}}},
+    "capacity_demand": {"type": "object", "additionalProperties": false, "required": ["demand", "capacity", "capacity_known", "pressure"], "properties": {"demand": {"type": "integer", "minimum": 0}, "capacity": {"type": ["integer", "null"], "minimum": 0}, "capacity_known": {"type": "boolean"}, "pressure": {"enum": ["unknown", "over_capacity", "within_capacity"]}}},
+    "lane_demand": {"type": "object", "additionalProperties": false, "required": ["ci", "review", "external"], "properties": {"ci": {"$ref": "#/$defs/lane"}, "review": {"$ref": "#/$defs/lane"}, "external": {"$ref": "#/$defs/lane"}}},
+    "lane": {"type": "object", "additionalProperties": false, "required": ["candidates", "demand"], "properties": {"candidates": {"type": "integer", "minimum": 0}, "demand": {"type": "integer", "minimum": 0}, "by_cost": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "by_requirement": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}, "by_action": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}}}}
+  }
+}

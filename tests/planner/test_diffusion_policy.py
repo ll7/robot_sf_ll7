@@ -16,6 +16,7 @@ from robot_sf.planner.diffusion_policy import (  # noqa: E402
     RobotPedestrianGraphEncoder,
     build_diffusion_policy_config,
 )
+from robot_sf.telemetry.gpu import classify_cuda_runtime  # noqa: E402
 
 
 def _observation() -> dict[str, object]:
@@ -193,7 +194,10 @@ def test_random_sampling_uses_adapter_owned_cpu_generator() -> None:
     assert payload["device"] == "cpu"
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@pytest.mark.skipif(
+    not classify_cuda_runtime().usable,
+    reason="usable CUDA device required for the diffusion policy CUDA smoke path (issue #7712)",
+)
 def test_cuda_plan_uses_configured_device_when_available() -> None:
     """CUDA smoke test guards against mixed-device sampler tensors."""
     adapter = DiffusionPolicyAdapter(

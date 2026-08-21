@@ -18,6 +18,7 @@ from robot_sf.common.seed import (
     get_seed_state_sample,
     set_global_seed,
 )
+from robot_sf.telemetry.gpu import classify_cuda_runtime
 
 
 @pytest.fixture(autouse=True)
@@ -256,10 +257,13 @@ def test_torch_determinism_reports_unavailable_setter(monkeypatch):
 
 
 torch = _import_torch()
-_HAS_CUDA = torch is not None and torch.cuda.is_available()
+_cuda_class = classify_cuda_runtime()
 requires_cuda = pytest.mark.skipif(
-    not _HAS_CUDA,
-    reason="CUDA device required to exercise the Torch 2.13.0 GPU determinism path (issue #5556)",
+    not _cuda_class.usable,
+    reason=(
+        "usable CUDA device required to exercise the Torch 2.13.0 GPU determinism path "
+        f"(issue #5556); classified: {_cuda_class.status}: {_cuda_class.reason}"
+    ),
 )
 
 

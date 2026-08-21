@@ -93,6 +93,7 @@ from scripts.dev.snapshot_pr_queue import (  # noqa: E402
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
 RECEIPT_REVIEW_CHECK_NAMES = frozenset({"pr-contract-check"})
+NON_REQUIRED_RECEIPT_CHECK_NAMES = frozenset({"coderabbit"})
 
 # CI rollup classification constants (mirror scripts/dev/check_pr_ci_status.py
 # so the gate does not couple to that module's private helpers).
@@ -852,6 +853,8 @@ def _to_receipt_check_runs(
             continue
         app = item.get("app") if isinstance(item.get("app"), dict) else {}
         name = str(item.get("name") or item.get("context") or "")
+        if name.strip().lower() in NON_REQUIRED_RECEIPT_CHECK_NAMES:
+            continue
         is_receipt_review = name in RECEIPT_REVIEW_CHECK_NAMES
         checks.append(
             {

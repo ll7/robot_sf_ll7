@@ -42,6 +42,7 @@ def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadat
                 "status": "COMPLETED",
                 "conclusion": "SUCCESS",
             },
+            {"context": "CodeRabbit", "status": None, "conclusion": None},
         ],
         head_sha=FULL_SHA,
         expected_metadata_digest=METADATA_DIGEST,
@@ -52,6 +53,7 @@ def test_receipt_check_projection_binds_focused_review_to_exact_head_and_metadat
     assert checks[0]["metadata_digest"] == METADATA_DIGEST
     assert checks[1]["approved_source"] is False
     assert checks[1]["metadata_digest"] is None
+    assert [check["name"] for check in checks] == ["pr-contract-check", "CI"]
 
 
 def _exact_changed_coverage_response(

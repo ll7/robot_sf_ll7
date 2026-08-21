@@ -1,21 +1,21 @@
-"""Orchestration logic for executing episode jobs and adaptive sampling.
+"""Compatibility facade for Full Classic execution and adaptive sampling.
 
 Implemented incrementally in tasks T026-T029, T027 (parallel), T028 (adaptive iteration),
 T029 (full run orchestration skeleton).
+
+Setup, episode record construction, scheduling, and final artifact publication live in the
+adjacent ``context``, ``execution``, ``scheduler``, and ``finalizer`` modules.  This facade
+retains the historical public and test import paths while coordinating those phases.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import platform
-import random
 import subprocess
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -38,7 +38,6 @@ from robot_sf.benchmark.termination_reason import (
     resolve_termination_reason,
     status_from_termination_reason,
 )
-from robot_sf.benchmark.thresholds import ensure_metric_parameters
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import (
@@ -46,13 +45,29 @@ from robot_sf.training.scenario_loader import (
     resolve_map_definition,
 )
 
+from . import context as _context
+from . import finalizer as _finalizer
+from . import scheduler as _scheduler
 from .aggregation import aggregate_metrics
 from .effects import compute_effect_sizes
-from .io_utils import append_episode_record, write_manifest
-from .planning import expand_episode_jobs, load_scenario_matrix, plan_scenarios
+from .execution import EpisodeExecutionHooks, execute_episode_record
 from .precision import evaluate_precision
 from .replay import ReplayCapture  # T021 optional replay capture
 from .visuals import generate_visual_artifacts  # new visual artifact integration
+
+BenchmarkManifest = _context.BenchmarkManifest
+_prepare_output_dirs = _context._prepare_output_dirs
+build_run_context = _context.build_run_context
+_update_scaling_efficiency = _finalizer.update_scaling_efficiency
+_write_iteration_artifacts = _finalizer.write_iteration_artifacts
+_write_json = _finalizer.write_json
+_serialize_effects = _finalizer.serialize_effects
+_serialize_groups = _finalizer.serialize_groups
+_serialize_precision = _finalizer.serialize_precision
+_partition_jobs = _scheduler.partition_jobs
+_scan_existing_episode_ids = _scheduler.scan_existing_episode_ids
+execute_episode_jobs = _scheduler.execute_episode_jobs
+finalize_run = _finalizer.finalize_run
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -62,11 +77,11 @@ ROLLOVER_STABILITY_METADATA_KEY = "rollover_stability"
 
 # Import new visualization functions for real plots/videos from episode data
 try:
-    from robot_sf.benchmark.visualization import (
-        VisualizationError,
-        generate_benchmark_plots,
-        validate_visual_artifacts,
-    )
+    from robot_sf.benchmark import visualization as _visualization
+
+    VisualizationError = _visualization.VisualizationError
+    generate_benchmark_plots = _visualization.generate_benchmark_plots
+    validate_visual_artifacts = _visualization.validate_visual_artifacts
 
     _VISUALIZATION_AVAILABLE = True
 except ImportError:
@@ -95,26 +110,6 @@ def _find_repo_root(path: Path) -> Path:
 
 
 _REPO_ROOT = _find_repo_root(Path(__file__).resolve())
-
-
-@dataclass
-class BenchmarkManifest:
-    """Manifest metadata for a benchmark run."""
-
-    output_root: Path
-    git_hash: str
-    scenario_matrix_hash: str
-    config: object
-    episodes_path: str
-    created_at: float = field(default_factory=time.time)
-    executed_jobs: int = 0
-    skipped_jobs: int = 0
-    notes: str = "skeleton_t029"
-    runtime_sec: float = 0.0
-    episodes_per_second: float = 0.0
-    workers: int = 1
-    scaling_efficiency: dict = field(default_factory=dict)
-    freeze_validation: dict[str, Any] = field(default_factory=dict)
 
 
 def _ensure_algo_metadata(
@@ -329,22 +324,6 @@ def _write_run_meta_files(root: Path, cfg, manifest: BenchmarkManifest) -> None:
     _write_json(root / "run_meta.json", run_meta)
 
 
-def _prepare_output_dirs(cfg):
-    """Create and return output directories for benchmark artifacts.
-
-    Returns:
-        Tuple of (root, episodes_dir, aggregates_dir, reports_dir, plots_dir).
-    """
-    root = Path(cfg.output_root)
-    episodes_dir = root / "episodes"
-    aggregates_dir = root / "aggregates"
-    reports_dir = root / "reports"
-    plots_dir = root / "plots"
-    for d in (episodes_dir, aggregates_dir, reports_dir, plots_dir):
-        d.mkdir(parents=True, exist_ok=True)
-    return root, episodes_dir, aggregates_dir, reports_dir, plots_dir
-
-
 def _init_manifest(
     root: Path,
     episodes_path: Path,
@@ -365,57 +344,6 @@ def _init_manifest(
     )
 
 
-def _update_scaling_efficiency(manifest: BenchmarkManifest, cfg):
-    """Update runtime, throughput and scaling diagnostics in manifest.
-
-    Returns:
-        Updated scaling_efficiency dictionary from the manifest.
-    """
-    now = time.time()
-    manifest.runtime_sec = max(0.0, now - manifest.created_at)
-    manifest.workers = int(getattr(cfg, "workers", 1) or 1)
-    if manifest.runtime_sec > 0:
-        manifest.episodes_per_second = manifest.executed_jobs / manifest.runtime_sec
-    throughput_per_worker = (
-        manifest.episodes_per_second / manifest.workers if manifest.workers > 0 else 0.0
-    )
-    compatibility_efficiency = (
-        1.0 / manifest.workers
-        if manifest.workers > 0 and manifest.episodes_per_second > 0.0
-        else 0.0
-    )
-    evidence_status = (
-        "smoke_only_non_evidence" if bool(getattr(cfg, "smoke", False)) else "diagnostic_only"
-    )
-    manifest.scaling_efficiency = {
-        "runtime_sec": manifest.runtime_sec,
-        "executed_jobs": manifest.executed_jobs,
-        "skipped_jobs": manifest.skipped_jobs,
-        "episodes_per_second": manifest.episodes_per_second,
-        "workers": manifest.workers,
-        "throughput_per_worker": throughput_per_worker,
-        "parallel_efficiency": "not_available",
-        "parallel_efficiency_basis": "requires measured sequential baseline",
-        "evidence_status": evidence_status,
-        "parallel_efficiency_placeholder": compatibility_efficiency,
-        "parallel_efficiency_placeholder_deprecated": True,
-        "parallel_efficiency_placeholder_note": (
-            "Deprecated compatibility alias; not benchmark-strength evidence."
-        ),
-    }
-    return manifest.scaling_efficiency
-
-
-def _write_iteration_artifacts(root: Path, groups, effects, precision_report):
-    """Write aggregate/report JSON artifacts for an iteration."""
-    _write_json(root / "aggregates" / "summary.json", _serialize_groups(groups))
-    _write_json(root / "reports" / "effect_sizes.json", _serialize_effects(effects))
-    _write_json(
-        root / "reports" / "statistical_sufficiency.json",
-        _serialize_precision(precision_report),
-    )
-
-
 def _episode_id_from_job(job) -> str:
     """Deterministically derive an episode_id from a job.
 
@@ -427,31 +355,6 @@ def _episode_id_from_job(job) -> str:
         Episode ID string in format "scenario_id-seed".
     """
     return f"{job.scenario_id}-{job.seed}"
-
-
-def _scan_existing_episode_ids(path: Path) -> set[str]:
-    """Return episode_id values already present in an episodes JSONL file."""
-    ids: set[str] = set()
-    if not path.exists():
-        return ids
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                # Lightweight JSON parse (json imported at module top level)
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    logger.warning("Skipping malformed episode record line in {}", path)
-                    continue
-                ep_id = rec.get("episode_id")
-                if isinstance(ep_id, str):
-                    ids.add(ep_id)
-    except OSError as exc:  # pragma: no cover - unlikely on normal FS
-        logger.warning("Failed reading existing episodes file {}: {}", path, exc)
-    return ids
 
 
 _DEFAULT_SNQI_WEIGHTS = {
@@ -1174,227 +1077,71 @@ def _attach_replay_payload(
 
 
 def _make_episode_record(job, cfg) -> dict[str, Any]:
-    """Execute a real episode using the environment factory and compute metrics.
+    """Execute one episode through the isolated record-assembly phase.
 
     Returns:
-        Episode record dictionary containing metrics, status, and metadata.
+        Episode record with the established v1 schema.
     """
-
-    episode_id = _episode_id_from_job(job)
-    horizon = _resolve_horizon(job, cfg)
-    if bool(getattr(cfg, "fast_stub", False)):
-        record = _make_stub_episode_record(
-            job,
-            cfg,
-            episode_id=episode_id,
-            horizon=horizon,
-        )
-        _ensure_algo_metadata(record, algo=getattr(cfg, "algo", None), episode_id=episode_id)
-        ensure_metric_parameters(record)
-        return record
-
-    scenario = _require_job_scenario(job, episode_id=episode_id)
-    runtime = _orchestrate_real_episode(
-        job,
-        cfg,
-        episode_id=episode_id,
-        scenario=scenario,
-        horizon=horizon,
+    hooks = EpisodeExecutionHooks(
+        episode_id_from_job=_episode_id_from_job,
+        resolve_horizon=_resolve_horizon,
+        make_stub_episode_record=_make_stub_episode_record,
+        require_job_scenario=_require_job_scenario,
+        orchestrate_real_episode=_orchestrate_real_episode,
+        attach_replay_payload=_attach_replay_payload,
+        termination_payload_from_metrics=_termination_payload_from_metrics,
+        ensure_algo_metadata=_ensure_algo_metadata,
     )
-    metrics = runtime["metrics"]
-    steps_taken = int(runtime["steps_taken"])
-    wall_time = float(runtime["wall_time"])
-    start_time = float(runtime["start_time"])
-    termination_reason, outcome, contradictions = _termination_payload_from_metrics(metrics)
-    record: dict[str, Any] = {
-        "version": "v1",
-        "episode_id": episode_id,
-        "scenario_id": job.scenario_id,
-        "seed": job.seed,
-        "archetype": job.archetype,
-        "density": job.density,
-        "status": status_from_termination_reason(termination_reason),
-        "termination_reason": termination_reason,
-        "outcome": outcome,
-        "integrity": {"contradictions": contradictions},
-        "metrics": metrics,
-        "steps": steps_taken,
-        "horizon": horizon,
-        "wall_time_sec": wall_time,
-        "created_at": start_time,
-        "timing": {
-            "steps_per_second": float(steps_taken) / wall_time if wall_time > 0 else 0.0,
-        },
-        "scenario_params": {
-            "archetype": job.archetype,
-            "density": job.density,
-            "max_episode_steps": horizon,
-            "scenario_id": job.scenario_id,
-            "map_file": getattr(scenario, "map_path", ""),
-            "simulation_config": getattr(scenario, "raw", {}).get("simulation_config", {}),
-            "metadata": getattr(scenario, "raw", {}).get("metadata", {}),
-            "hash_fragment": getattr(scenario, "hash_fragment", ""),
-        },
-    }
-    replay_capture = runtime["replay_capture"]
-    if bool(getattr(cfg, "capture_replay", False)) and isinstance(replay_capture, ReplayCapture):
-        _attach_replay_payload(
-            record,
-            scenario=scenario,
-            replay_capture=replay_capture,
-            ped_forces=runtime["ped_forces"],
-        )
-    _ensure_algo_metadata(
-        record,
-        algo=getattr(cfg, "algo", None),
-        episode_id=episode_id,
-    )
-    ensure_metric_parameters(record)
-    return record
-
-
-def _partition_jobs(existing_ids: set[str], job_iter: Iterable[object]) -> tuple[list[object], int]:
-    """Split incoming jobs into runnable jobs and skipped count.
-
-    Args:
-        existing_ids: Episode IDs already present on disk.
-        job_iter: Iterable of job payloads (scenario + seed).
-
-    Returns:
-        Tuple of (jobs_to_run, skipped_count).
-    """
-    run_list: list[object] = []
-    skip_count = 0
-    for jb in job_iter:
-        if _episode_id_from_job(jb) in existing_ids:
-            skip_count += 1
-        else:
-            run_list.append(jb)
-    return run_list, skip_count
-
-
-def _execute_seq(
-    job_list: list[object],
-    existing_ids: set[str],
-    episodes_path: Path,
-    cfg,
-    manifest,
-) -> Iterator[dict]:
-    """Execute episode jobs sequentially while appending JSONL output.
-
-    Args:
-        job_list: Episode configurations to run.
-        existing_ids: Episode ids that already exist on disk (used to skip duplicates).
-        episodes_path: Target JSONL path for appending completed episode records.
-        cfg: Benchmark configuration namespace.
-        manifest: Mutable manifest object for accounting (executed_jobs, etc.).
-
-    Yields:
-        dict: Episode record emitted after each job finishes.
-    """
-    for jb in job_list:
-        start = time.time()
-        rec = _make_episode_record(jb, cfg)
-        end = time.time()
-        rec["wall_time_sec"] = end - start
-        append_episode_record(episodes_path, rec)
-        existing_ids.add(rec["episode_id"])
-        if hasattr(manifest, "executed_jobs"):
-            manifest.executed_jobs += 1
-        yield rec
-
-
-def _worker_job_wrapper(job, cfg_payload):  # top-level for pickling on spawn
-    """Run a single job with a lightweight config payload for multiprocessing.
-
-    Args:
-        job: Episode job payload.
-        cfg_payload: Serializable config values to build a temp config.
-
-    Returns:
-        Episode record dictionary with wall_time_sec added.
-    """
-
-    class _TempCfg:
-        """Namespace-like wrapper for passing config values into worker jobs."""
-
-        def __init__(self, payload):
-            """Populate config fields from a dict payload.
-
-            Args:
-                payload: Mapping of config keys to values.
-            """
-            for k, v in payload.items():
-                setattr(self, k, v)
-
-    start = time.time()
-    rec = _make_episode_record(job, _TempCfg(cfg_payload))
-    rec["wall_time_sec"] = time.time() - start
-    return rec
-
-
-def _execute_parallel(
-    job_list: list[object],
-    existing_ids: set[str],
-    episodes_path: Path,
-    cfg,
-    manifest,
-    workers: int,
-) -> Iterator[dict]:
-    """Execute episode jobs in parallel worker processes with deterministic appends.
-
-    Args:
-        job_list: Episode configurations to run.
-        existing_ids: Episode ids to skip (already present on disk).
-        episodes_path: Target JSONL path for appending completed episode records.
-        cfg: Benchmark configuration namespace.
-        manifest: Mutable manifest object for accounting (executed_jobs, etc.).
-        workers: Number of process-pool workers to launch.
-
-    Yields:
-        dict: Episode record emitted once the parent process appends the result.
-    """
-    logger.debug("Executing {} jobs in parallel with {} workers", len(job_list), workers)
-    cfg_payload = vars(cfg).copy() if hasattr(cfg, "__dict__") else {}
-    if "disable_videos" not in cfg_payload:
-        cfg_payload["disable_videos"] = True
-    results_map: dict[str, dict] = {}
-    with ProcessPoolExecutor(max_workers=workers) as ex:
-        future_map = {ex.submit(_worker_job_wrapper, j, cfg_payload): j for j in job_list}
-        for fut in as_completed(future_map):
-            rec = fut.result()
-            results_map[rec["episode_id"]] = rec
-    # Deterministic ordering for append
-    for jb in job_list:
-        ep_id = _episode_id_from_job(jb)
-        rec = results_map[ep_id]
-        append_episode_record(episodes_path, rec)
-        existing_ids.add(ep_id)
-        if hasattr(manifest, "executed_jobs"):
-            manifest.executed_jobs += 1
-        yield rec
+    return execute_episode_record(job, cfg, hooks)
 
 
 def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  # T026/T027
-    """Execute episode jobs with resume + optional parallel workers.
+    """Execute episode jobs through the resume-aware scheduler facade.
 
-    T026 (completed earlier): sequential execution + resume scan.
-    T027 extension:
-      - If cfg.workers > 1 use a process pool to compute episode records in parallel.
-      - Parent process performs file appends (avoids concurrent writes).
-      - Update manifest counters: executed_jobs, skipped_jobs.
+    The facade remains in the historical module so existing callers and tests keep their
+    import path.  The scheduler owns partitioning, process execution, and deterministic
+    parent-side appends; the callback preserves the existing record-builder seam.
     """
-    episodes_path = Path(manifest.episodes_path)
-    existing_ids = _scan_existing_episode_ids(episodes_path)
-    logger.debug("Found {} existing episode records (resume)", len(existing_ids))
-    to_run, skipped = _partition_jobs(existing_ids, list(jobs))
-    if hasattr(manifest, "skipped_jobs"):
-        manifest.skipped_jobs += skipped
-    workers = int(getattr(cfg, "workers", 1) or 1)
-    if workers <= 1 or len(to_run) <= 1:
-        yield from _execute_seq(to_run, existing_ids, episodes_path, cfg, manifest)
-    else:
-        yield from _execute_parallel(to_run, existing_ids, episodes_path, cfg, manifest, workers)
+    yield from execute_episode_jobs(
+        jobs,
+        cfg,
+        manifest,
+        record_builder=_make_episode_record,
+    )
+
+
+def _execute_seq(job_list, existing_ids, episodes_path, cfg, manifest):
+    """Compatibility wrapper for the historical sequential scheduler helper."""
+    yield from _scheduler.execute_sequential(
+        job_list,
+        existing_ids,
+        episodes_path,
+        cfg,
+        manifest,
+        _make_episode_record,
+    )
+
+
+def _execute_parallel(job_list, existing_ids, episodes_path, cfg, manifest, workers):
+    """Compatibility wrapper for the historical process scheduler helper."""
+    yield from _scheduler.execute_parallel(
+        job_list,
+        existing_ids,
+        episodes_path,
+        cfg,
+        manifest,
+        workers,
+        _make_episode_record,
+    )
+
+
+def _worker_job_wrapper(job, cfg_payload):
+    """Compatibility wrapper for the historical process-worker entrypoint.
+
+    Returns:
+        Episode record produced by the configured record builder.
+    """
+    return _scheduler._worker_job_wrapper(job, cfg_payload, _make_episode_record)
 
 
 def adaptive_sampling_iteration(
@@ -1473,7 +1220,7 @@ def adaptive_sampling_iteration(
     return done_flag, jobs
 
 
-def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
+def run_full_benchmark(  # noqa: C901
     cfg,
 ) -> BenchmarkManifest:  # T029 + T034 integration (refactored in polish phase)
     """Execute classic benchmark with adaptive precision loop.
@@ -1485,29 +1232,14 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
     Returns:
         Final BenchmarkManifest object with execution statistics and artifact paths.
     """
-    # Output & planning
-    root, episodes_dir, _aggregates_dir, _reports_dir, _plots_dir = _prepare_output_dirs(cfg)
-    episodes_path = episodes_dir / "episodes.jsonl"
-    raw = load_scenario_matrix(cfg.scenario_matrix_path)
-    matrix_bytes = json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    scenario_matrix_hash = hashlib.sha1(matrix_bytes).hexdigest()[:12]
-    rng = random.Random(int(getattr(cfg, "master_seed", 123)))
-    scenarios = plan_scenarios(raw, cfg, rng=rng)
-    jobs = expand_episode_jobs(scenarios, cfg)
-    scenarios_list = list(scenarios)
-    smoke_limit = bool(getattr(cfg, "smoke_limit_jobs", False))
-    if getattr(cfg, "smoke", False) and scenarios_list and smoke_limit:
-        scenarios_list = scenarios_list[:1]
-        allowed = {sc.scenario_id for sc in scenarios_list}
-        jobs = [jb for jb in jobs if jb.scenario_id in allowed]
-        jobs = jobs[: max(1, int(getattr(cfg, "smoke_episodes", 1) or 1))]
-    if getattr(cfg, "smoke", False):
-        horizon_cap = int(getattr(cfg, "smoke_horizon_cap", 40) or 40)
-        for jb in jobs:
-            try:
-                jb.horizon = min(int(getattr(jb, "horizon", horizon_cap)), horizon_cap)
-            except (ValueError, TypeError, AttributeError):
-                jb.horizon = horizon_cap
+    # Resolve the immutable setup/provenance boundary once.
+    context = build_run_context(cfg)
+    root = context.root
+    episodes_path = context.episodes_path
+    raw = list(context.raw_scenarios)
+    scenario_matrix_hash = context.scenario_matrix_hash
+    scenarios_list = list(context.scenarios)
+    jobs = list(context.jobs)
 
     # Manifest & initial execution
     manifest = _init_manifest(root, episodes_path, cfg, scenario_matrix_hash)
@@ -1591,166 +1323,20 @@ def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
             logger.info("Early exit guard (smoke small-budget) triggered after first iteration")
             break
 
-    # Finalize & persist manifest
-    _update_scaling_efficiency(manifest, cfg)
-    manifest.scaling_efficiency.setdefault("finalized", True)
-    write_manifest(manifest, str(root / "manifest.json"))
-    _write_run_meta_files(root, cfg, manifest)
-
-    # Visual artifacts (plots + videos) generation (post adaptive loop single pass)
-    try:
-        generate_visual_artifacts(root, cfg, groups, all_records)
-
-        # Also generate real visualizations using new visualization module
-        # Skip generating heavy real visualizations when running in smoke mode
-        # (smoke mode intentionally keeps runtime small for tests).
-        if _VISUALIZATION_AVAILABLE and not getattr(cfg, "smoke", False):
-            logger.info("Generating additional real visualizations from episode data")
-            try:
-                plots_dir = root / "plots"
-                videos_dir = root / "videos"
-                plots_dir.mkdir(exist_ok=True)
-                videos_dir.mkdir(exist_ok=True)
-
-                # Generate real plots from episode data
-                plot_artifacts = generate_benchmark_plots(all_records, str(root))
-                logger.info(
-                    "Generated {} real plots into {}",
-                    len(plot_artifacts),
-                    plots_dir,
-                )
-
-                # Skip legacy episode_*.mp4 generation when SimulationView videos are available
-                video_artifacts = []
-                logger.debug(
-                    "Skipping legacy episode video generation (sim-view videos already produced)"
-                )
-                logger.info("Generated sim_view videos into {}", videos_dir)
-
-                # Validate all generated artifacts
-                all_artifacts = plot_artifacts + video_artifacts
-                validation = validate_visual_artifacts(all_artifacts)
-                if validation.passed:
-                    logger.info("All real visualizations validated successfully")
-                else:
-                    logger.warning(
-                        "Some visualizations failed validation: {} failed artifacts",
-                        len(validation.failed_artifacts),
-                    )
-
-            except (VisualizationError, FileNotFoundError) as vis_exc:
-                logger.warning("Real visualization generation failed (non-fatal): {}", vis_exc)
-
-    except (VisualizationError, FileNotFoundError) as exc:
-        logger.warning("Visual artifact generation failed (non-fatal): {}", exc)
+    # Close the run through the finalizer boundary.  Optional visualization callables are
+    # injected from this facade so existing monkeypatches and dependency availability remain
+    # observable without changing the public entrypoint.
+    finalize_run(
+        root,
+        cfg,
+        manifest,
+        groups=groups,
+        all_records=all_records,
+        write_run_meta_files_fn=_write_run_meta_files,
+        visual_generator=generate_visual_artifacts,
+        visualization_available=_VISUALIZATION_AVAILABLE,
+        plot_generator=globals().get("generate_benchmark_plots"),
+        validation_fn=globals().get("validate_visual_artifacts"),
+    )
 
     return manifest
-
-
-def _write_json(path: Path, obj):  # helper
-    """Write JSON to disk with a temp file for atomic replace.
-
-    Args:
-        path: Output path to write.
-        obj: JSON-serializable payload.
-    """
-    try:
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(obj, f, indent=2, sort_keys=True)
-        tmp.replace(path)
-    except (OSError, TypeError) as exc:
-        logger.warning("Failed writing JSON artifact {}: {}", path, exc)
-
-
-def _serialize_groups(groups):
-    """Serialize aggregation group objects into JSON-friendly dicts.
-
-    Args:
-        groups: Iterable of aggregation group objects.
-
-    Returns:
-        List of serialized group dictionaries.
-    """
-    out = []
-    for g in groups:
-        out.append(
-            {
-                "archetype": g.archetype,
-                "density": g.density,
-                "count": g.count,
-                "metrics": {
-                    k: {
-                        "mean": m.mean,
-                        "median": m.median,
-                        "p95": m.p95,
-                        "mean_ci": m.mean_ci,
-                        "median_ci": m.median_ci,
-                    }
-                    for k, m in g.metrics.items()
-                },
-            },
-        )
-    return out
-
-
-def _serialize_effects(effects):
-    """Serialize effect-size reports into JSON-friendly dicts.
-
-    Args:
-        effects: Iterable of effect report objects.
-
-    Returns:
-        List of serialized effect size report dictionaries.
-    """
-    out = []
-    for rep in effects:
-        out.append(
-            {
-                "archetype": rep.archetype,
-                "comparisons": [
-                    {
-                        "metric": c.metric,
-                        "density_low": c.density_low,
-                        "density_high": c.density_high,
-                        "diff": c.diff,
-                        "standardized": c.standardized,
-                    }
-                    for c in rep.comparisons
-                ],
-            },
-        )
-    return out
-
-
-def _serialize_precision(report):
-    """Serialize precision report into a JSON-friendly dictionary.
-
-    Args:
-        report: Precision report object.
-
-    Returns:
-        Dictionary containing serialized precision report.
-    """
-    return {
-        "final_pass": report.final_pass,
-        "evaluations": [
-            {
-                "scenario_id": ev.scenario_id,
-                "archetype": ev.archetype,
-                "density": ev.density,
-                "episodes": ev.episodes,
-                "all_pass": ev.all_pass,
-                "metric_status": [
-                    {
-                        "metric": ms.metric,
-                        "half_width": ms.half_width,
-                        "target": ms.target,
-                        "passed": ms.passed,
-                    }
-                    for ms in ev.metric_status
-                ],
-            }
-            for ev in report.evaluations
-        ],
-    }

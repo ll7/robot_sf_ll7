@@ -21,7 +21,11 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_status,
 )
 from scripts.dev.github_graphql_retry import run_with_retry
-from scripts.dev.pr_loop_policy import BASE_POLICY_RE, GATE_VERDICT_RE
+from scripts.dev.pr_loop_policy import (
+    BASE_POLICY_RE,
+    GATE_VERDICT_RE,
+    authoritative_body_text,
+)
 from scripts.dev.pr_metadata import extract_metadata_digests, metadata_digest, metadata_trailer
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -1021,9 +1025,6 @@ def _parse_explicit_verdict(item: Any) -> str | None:
     return None
 
 
-_TRUSTED_GATE_VERDICT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
-
-
 def _extract_trailers_from_bodies(items: Any) -> list[str]:
     """Extract verdicts only from repository-trusted comment or review authors."""
     trailers: list[str] = []
@@ -1031,11 +1032,8 @@ def _extract_trailers_from_bodies(items: Any) -> list[str]:
         return trailers
     for entry in items:
         if isinstance(entry, dict):
-            association = str(entry.get("authorAssociation", "")).upper()
-            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
-                continue
-            body = entry.get("body")
-            if isinstance(body, str) and body:
+            body = authoritative_body_text(entry)
+            if body is not None:
                 for match in GATE_VERDICT_RE.finditer(body):
                     trailers.append(f"gate-verdict: accepted @ {match.group(1)}")
     return trailers
@@ -1077,11 +1075,8 @@ def _extract_base_policies(pr: dict[str, Any]) -> list[str]:
         for entry in items:
             if not isinstance(entry, dict):
                 continue
-            association = str(entry.get("authorAssociation", "")).upper()
-            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
-                continue
-            body = entry.get("body")
-            if not isinstance(body, str):
+            body = authoritative_body_text(entry)
+            if body is None:
                 continue
             policies.extend(match.group(0) for match in BASE_POLICY_RE.finditer(body))
     return list(dict.fromkeys(policies))
@@ -1119,11 +1114,8 @@ def _extract_metadata_verdicts(pr: dict[str, Any]) -> list[str]:  # noqa: C901
         for entry in items:
             if not isinstance(entry, dict):
                 continue
-            association = str(entry.get("authorAssociation", "")).upper()
-            if association not in _TRUSTED_GATE_VERDICT_ASSOCIATIONS:
-                continue
-            body = entry.get("body")
-            if isinstance(body, str):
+            body = authoritative_body_text(entry)
+            if body is not None:
                 verdicts.extend(
                     metadata_trailer(digest) for digest in extract_metadata_digests(body)
                 )

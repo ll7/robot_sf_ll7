@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/mechanism_boundary_atlas.v1.json",
+  "title": "Negative-result mechanism-boundary atlas",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "atlas_id",
+    "issue",
+    "generated_by",
+    "claim_boundary",
+    "cards"
+  ],
+  "properties": {
+    "schema_version": {"const": "mechanism_boundary_atlas.v1"},
+    "atlas_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
+    "issue": {"const": 7032},
+    "generated_by": {"type": "string", "minLength": 1},
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "not benchmark|diagnostic|planning|no visual|no dissertation"
+    },
+    "cards": {
+      "type": "array",
+      "minItems": 6,
+      "items": {"$ref": "#/$defs/card"}
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "title",
+        "question_and_hypothesis",
+        "linked_issues",
+        "code_or_config_identity",
+        "source_refs",
+        "result_state",
+        "mechanism_boundary",
+        "mechanism_activation_evidence",
+        "observed_result",
+        "scope_boundary",
+        "hypotheses_contradicted",
+        "hypotheses_still_viable",
+        "claim_boundary",
+        "dissertation_admission_status",
+        "deferred_or_blocked_outputs"
+      ],
+      "properties": {
+        "case_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
+        "title": {"type": "string", "minLength": 1},
+        "question_and_hypothesis": {"type": "string", "minLength": 1},
+        "linked_issues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 1},
+          "uniqueItems": true
+        },
+        "code_or_config_identity": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/codeConfigIdentity"}
+        },
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        },
+        "result_state": {"$ref": "#/$defs/resultState"},
+        "mechanism_boundary": {"$ref": "#/$defs/mechanismBoundary"},
+        "mechanism_activation_evidence": {"type": "string", "minLength": 1},
+        "observed_result": {"type": "string", "minLength": 1},
+        "scope_boundary": {"$ref": "#/$defs/scopeBoundary"},
+        "hypotheses_contradicted": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "hypotheses_still_viable": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "claim_boundary": {"$ref": "#/$defs/claimBoundary"},
+        "dissertation_admission_status": {
+          "enum": ["blocked", "not_admitted", "pending_independent_review"]
+        },
+        "deferred_or_blocked_outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "role"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "not": {"anyOf": [{"pattern": "^/"}, {"pattern": "(^|/)\\.\\.(/|$)"}]}
+        },
+        "status": {"enum": ["available", "unavailable", "blocked"]},
+        "role": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "unavailable_reason": {"type": ["string", "null"], "minLength": 1},
+        "digest_verified": {"type": ["boolean", "null"]},
+        "tracked": {"type": ["boolean", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "available"}}},
+          "then": {"required": ["sha256"]}
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["unavailable", "blocked"]}}},
+          "then": {"required": ["unavailable_reason"]}
+        }
+      ]
+    },
+    "codeConfigIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "label"],
+      "properties": {
+        "kind": {"enum": ["path", "commit", "digest"]},
+        "label": {"type": "string", "minLength": 1},
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "not": {"anyOf": [{"pattern": "^/"}, {"pattern": "(^|/)\\.\\.(/|$)"}]}
+        },
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "repository": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {
+          "properties": {"kind": {"const": "path"}},
+          "required": ["path", "sha256"],
+          "not": {"anyOf": [{"required": ["commit"]}, {"required": ["repository"]}]}
+        },
+        {
+          "properties": {"kind": {"const": "commit"}},
+          "required": ["commit", "repository"],
+          "not": {"anyOf": [{"required": ["path"]}, {"required": ["sha256"]}]}
+        },
+        {
+          "properties": {"kind": {"const": "digest"}},
+          "required": ["sha256", "repository"],
+          "not": {"anyOf": [{"required": ["path"]}, {"required": ["commit"]}]}
+        }
+      ]
+    },
+    "resultState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlled_state", "evidence_tier", "state_reason"],
+      "properties": {
+        "controlled_state": {
+          "enum": [
+            "supported_positive",
+            "supported_negative",
+            "not_supported",
+            "inconclusive",
+            "invalid_evidence_contract",
+            "unavailable"
+          ]
+        },
+        "evidence_tier": {
+          "enum": ["diagnostic_only", "smoke_diagnostic", "preflight_only", "analysis_only"]
+        },
+        "state_reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "mechanismBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary_labels",
+        "mechanism_dimension",
+        "status",
+        "evidence_boundary",
+        "confidence",
+        "condition_that_would_change"
+      ],
+      "properties": {
+        "boundary_labels": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "mechanism_not_activated",
+              "mechanism_active_no_endpoint_benefit",
+              "candidate_or_action_distribution_collapse",
+              "adapter_or_representation_mismatch",
+              "objective_or_information_insufficiency",
+              "scenario_or_threshold_dependence",
+              "design_underpowered",
+              "missing_required_producer",
+              "noncomparable_rows",
+              "measurement_instability",
+              "artifact_not_durable"
+            ]
+          }
+        },
+        "mechanism_dimension": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": [
+            "narrowed_diagnostic_lead",
+            "not_distinguished",
+            "blocked_by_missing_source",
+            "blocked_by_missing_outcomes",
+            "bounded_software_fixture",
+            "stop_same_scope"
+          ]
+        },
+        "evidence_boundary": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "condition_that_would_change": {"type": "string", "minLength": 1}
+      }
+    },
+    "scopeBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "estimand", "uncertainty", "exclusions"],
+      "properties": {
+        "scope": {"type": "string", "minLength": 1},
+        "estimand": {"type": "string", "minLength": 1},
+        "uncertainty": {"type": "string", "minLength": 1},
+        "exclusions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "claimBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bounded_claims", "forbidden_wording", "smallest_next_proof_or_stop"],
+      "properties": {
+        "bounded_claims": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forbidden_wording": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "smallest_next_proof_or_stop": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

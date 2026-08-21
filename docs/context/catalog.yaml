@@ -52,6 +52,18 @@ entries:
   status: current
   freshness: policy
   area: workflow_policy
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas/atlas_input.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6969_lane_formation_reference/README.md
   status: evidence
   freshness: evidence
@@ -934,6 +946,18 @@ entries:
   freshness: evidence
   area: training
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/README.md
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/summary.json
+  status: evidence
+  freshness: evidence
+  area: training
+- path: docs/context/evidence/issue_7254_predictive_optimization_smoke_2026-08-17/artifact_provenance.json
+  status: evidence
+  freshness: evidence
+  area: training
 - path: docs/context/evidence/issue_4013_learned_model_based_planning/real_trajectory_readiness.v1.json
   status: evidence
   freshness: evidence
@@ -5252,6 +5276,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_7032_mechanism_boundary_atlas
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/raycast_numba_toggle_2026-08-14
   status: evidence
   freshness: evidence
@@ -5268,3 +5296,19 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation/checksums.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_7399_forecast_preparation
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

@@ -194,6 +194,13 @@ def test_reconcile_pr_metadata_fails_closed_when_remote_changes_after_patch(
     assert result["status"] == "conflict"
     assert "changed during reconciliation" in result["error"]
     assert result["observed_metadata_digest"] == metadata_digest("newer title", "newer body")
+    assert result["next_action"] == "refresh_live_metadata_and_exact_head_review"
+    assert result["policy_state"] == "pending_pr_metadata"
+    assert result["policy_action"] == "refresh_snapshot"
+    assert result["prior_review_reuse"] == "forbidden"
+    assert result["requires_exact_head_review"] is True
+    assert result["previous_head_sha"] is None
+    assert result["observed_head_sha"] is None
 
 
 def test_reconcile_pr_metadata_is_an_explicit_noop_when_current_state_matches(

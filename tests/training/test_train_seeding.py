@@ -56,7 +56,13 @@ def test_predictive_planner_calls_set_global_seed(monkeypatch, tmp_path: Path) -
     dataset_path = tmp_path / "dataset.npz"
     np.savez(dataset_path, state=state, target=target, mask=mask, target_mask=target_mask)
 
-    monkeypatch.setattr(trainer, "_run_epoch", lambda **kw: (0.1, 0.2, 0.3))
+    def _fake_run_epoch(**kwargs):
+        if kwargs["optimizer"] is not None:
+            for _batch in kwargs["loader"]:
+                pass
+        return (0.1, 0.2, 0.3)
+
+    monkeypatch.setattr(trainer, "_run_epoch", _fake_run_epoch)
 
     rc = trainer.main(
         [

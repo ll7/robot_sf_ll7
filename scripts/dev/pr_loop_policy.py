@@ -69,6 +69,7 @@ from scripts.dev.route_efficiency_report import (
 )
 
 DEFAULT_MAX_ACTIONS = 5
+METADATA_CONFLICT_NEXT_ACTION = "refresh_live_metadata_and_exact_head_review"
 
 VALID_ACTIONS = frozenset(
     {
@@ -403,6 +404,26 @@ class PolicyDecision:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the decision as a plain dict."""
         return asdict(self)
+
+
+def metadata_conflict_handoff(result: dict[str, Any]) -> dict[str, Any]:
+    """Route a concurrent metadata conflict back through the PR loop.
+
+    The REST writer cannot safely retry after an external write.  This compact
+    handoff gives callers a stable policy state/action and makes it explicit
+    that the previous metadata digest and exact-head review must not be reused.
+    Non-conflict results return an empty mapping so existing callers remain
+    compatible.
+    """
+    if not isinstance(result, dict) or result.get("status") != "conflict":
+        return {}
+    return {
+        "next_action": METADATA_CONFLICT_NEXT_ACTION,
+        "policy_state": "pending_pr_metadata",
+        "policy_action": "refresh_snapshot",
+        "prior_review_reuse": "forbidden",
+        "requires_exact_head_review": True,
+    }
 
 
 def _extract_manifest_compact_artifacts(manifest: dict[str, Any]) -> dict[str, Any]:

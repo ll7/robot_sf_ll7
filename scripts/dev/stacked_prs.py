@@ -675,6 +675,11 @@ def build_stack_status(
         )
         metadata = metadata_digest(pr["title"], pr["body"])
         gate = _gate_status(pr, review_data, metadata=metadata)
+        hold_source = {
+            **pr,
+            "reviews": review_data["reviews"],
+            "comments": review_data["conversation_comments"],
+        }
         entry: dict[str, Any] = {
             "position": index,
             "pr": pr["number"],

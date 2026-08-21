@@ -798,6 +798,15 @@ reconciliation does not rerun source CI, but it invalidates prior final-state re
 the new digest is reviewed. The legacy body-only REST mode remains available for compatibility;
 new final-state handoffs use reconciliation.
 
+If the final verification read observes a concurrent external write, the helper returns
+`status: conflict` with the previous, desired, and observed metadata digests plus any available
+head SHAs. It also returns the stable `next_action`
+`refresh_live_metadata_and_exact_head_review`, `policy_state: pending_pr_metadata`, and
+`policy_action: refresh_snapshot`. Treat `prior_review_reuse: forbidden` as binding: refresh the
+live PR metadata, rebuild the final review evidence, and obtain a new exact-head review before
+retrying. Do not overwrite the newer metadata automatically or treat this result as an ordinary
+successful reconciliation.
+
 ### Exact-head stability snapshot (issue #7523)
 
 Final exact-head handoffs need repeated manual refreshes whenever `main` moves during local proof
@@ -925,6 +934,11 @@ marks the bounded blocker as `checks.pending_reason: "status_propagation_lag"` a
 parent-run/job IDs. It also emits `checks.diagnostic: "check_run_stale_job_success"` (and copies that
 code into `monitor.diagnostic`) so consumers can distinguish this check-run reconciliation condition
 from ordinary pending work. This remains fail-closed pending evidence; it is not merge authorization.
+When current Actions checks remain `queued` beyond the monitor's five-minute default threshold,
+the payload instead records `checks.pending_reason: "runner_queue_starvation"`, the oldest queued
+age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
+that diagnostic threshold for a known environment. This is an external queue blocker only:
+`checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job

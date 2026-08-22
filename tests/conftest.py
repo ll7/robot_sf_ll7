@@ -412,6 +412,7 @@ _FAST_FILES = {
     # when the release lane is evaluated against current main.
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
+    "test_camera_ready_subprocess_isolation.py",
     "test_checkpoint_staging_receipt.py",
     "test_fallback_policy.py",
     "test_release_acceptance.py",

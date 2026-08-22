@@ -16,6 +16,7 @@ from robot_sf.common.optional_import import try_import
 ZENODO_API_BASE = "https://zenodo.org/api"
 ZENODO_STATE_SCHEMA = "robot-sf-zenodo-deposition.v1"
 ZENODO_VERIFICATION_SCHEMA = "robot-sf-zenodo-verification.v2"
+_REMOTE_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag/[^/?#]+$")
 _CLAIM_BOUNDARY_TERMS = ("snqi", "advisory", "ranking")
@@ -30,10 +31,12 @@ class _Response(Protocol):
     """Small response protocol used by the publisher and mocked tests."""
 
     status_code: int
-    content: bytes
 
     def json(self) -> Any:
         """Return the decoded response body."""
+
+    def iter_content(self, *, chunk_size: int) -> Any:
+        """Yield bounded chunks from a streamed response body."""
 
     def raise_for_status(self) -> None:
         """Raise for an unsuccessful HTTP response."""
@@ -252,6 +255,36 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _stream_remote_file(response: _Response) -> tuple[int, str]:
+    """Hash and count a remote file without materializing its response body.
+
+    Returns:
+        A ``(byte_count, sha256)`` tuple for the streamed response.
+
+    Raises:
+        ZenodoPublisherError: If the response cannot provide valid byte chunks.
+    """
+    iterator = getattr(response, "iter_content", None)
+    if not callable(iterator):
+        raise ZenodoPublisherError("Zenodo response does not support streamed downloads")
+    digest = hashlib.sha256()
+    byte_count = 0
+    try:
+        for chunk in iterator(chunk_size=_REMOTE_DOWNLOAD_CHUNK_SIZE):
+            if not chunk:
+                continue
+            if not isinstance(chunk, (bytes, bytearray, memoryview)):
+                raise ZenodoPublisherError("Zenodo streamed download yielded a non-byte chunk")
+            chunk_bytes = bytes(chunk)
+            byte_count += len(chunk_bytes)
+            digest.update(chunk_bytes)
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+    return byte_count, digest.hexdigest()
 
 
 def read_token_file(path: str | Path) -> str:
@@ -585,17 +618,20 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         if not isinstance(download_url, str) or not download_url.startswith("https://"):
             problems.append(f"remote file {name} has no secure download URL")
             continue
-        response = session.get(download_url, timeout=3600)
+        response = session.get(download_url, stream=True, timeout=3600)
         if response.status_code >= 400:
             problems.append(f"remote file {name} download failed")
             continue
-        content = response.content
-        if not content:
+        try:
+            downloaded_size, observed_sha = _stream_remote_file(response)
+        except (OSError, RuntimeError, TypeError, ValueError, ZenodoPublisherError):
+            problems.append(f"remote file {name} download failed")
+            continue
+        if downloaded_size <= 0:
             problems.append(f"remote file {name} is empty")
             continue
-        if len(content) != expected.get("size"):
+        if downloaded_size != expected.get("size"):
             problems.append(f"remote file {name} downloaded size does not match uploaded bytes")
-        observed_sha = hashlib.sha256(content).hexdigest()
         if observed_sha != expected.get("sha256"):
             problems.append(f"remote file {name} SHA-256 does not match uploaded bytes")
 

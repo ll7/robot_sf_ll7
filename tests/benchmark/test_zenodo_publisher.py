@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from typing import TYPE_CHECKING, Any
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from robot_sf.benchmark.zenodo_publisher import (
+    _REMOTE_DOWNLOAD_CHUNK_SIZE,
     ZENODO_STATE_SCHEMA,
     ZenodoPublisherError,
     _seal_state,
@@ -41,6 +43,37 @@ class _Response:
         if self.status_code >= 400:
             raise RuntimeError("HTTP failure")
 
+    def iter_content(self, *, chunk_size: int) -> Any:
+        """Yield the configured body as a requests-like streamed chunk."""
+        del chunk_size
+        yield self.content
+
+
+class _StreamingResponse:
+    """Response fixture that forbids full-body access and exposes chunks."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.status_code = 200
+        self.chunks = chunks
+        self.chunk_sizes: list[int] = []
+
+    @property
+    def content(self) -> bytes:
+        """Fail if verification tries to materialize the response body."""
+        raise AssertionError("streamed response content must not be accessed")
+
+    def iter_content(self, *, chunk_size: int) -> Any:
+        """Return bounded chunks and record the requested chunk size."""
+        self.chunk_sizes.append(chunk_size)
+        yield from self.chunks
+
+    def json(self) -> dict[str, Any]:
+        """Provide the response protocol's JSON method for type compatibility."""
+        return {}
+
+    def raise_for_status(self) -> None:
+        """Provide the response protocol's status method for type compatibility."""
+
 
 class _Session:
     """Queue-backed requests session fixture."""
@@ -51,6 +84,7 @@ class _Session:
         self.gets: list[_Response] = []
         self.puts: list[_Response] = []
         self.urls: list[str] = []
+        self.get_kwargs: list[dict[str, Any]] = []
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         """Consume a POST response."""
@@ -60,6 +94,7 @@ class _Session:
     def get(self, url: str, **kwargs: Any) -> _Response:
         """Consume a GET response."""
         self.urls.append(url)
+        self.get_kwargs.append(kwargs)
         return self.gets.pop(0)
 
     def put(self, url: str, **kwargs: Any) -> _Response:
@@ -214,3 +249,46 @@ def test_publish_requires_prior_verification_receipt(tmp_path: Path) -> None:
     with pytest.raises(ZenodoPublisherError, match="verification receipt"):
         publish(session, state, _metadata())
     assert session.posts == []
+
+
+def test_verify_streams_remote_bundle_in_bounded_chunks_without_content_access(
+    tmp_path: Path,
+) -> None:
+    """Cold verification hashes chunks without materializing the remote bundle."""
+    bundle = tmp_path / "bundle.tar.gz"
+    chunks = [b"bundle ", b"chunk", b" payload"]
+    bundle.write_bytes(b"".join(chunks))
+    session = _Session()
+    state = _seal_state(
+        {
+            "schema_version": ZENODO_STATE_SCHEMA,
+            "deposition_id": 123,
+            "record_id": 123,
+            "concept_record_id": "122",
+            "doi": "10.5281/zenodo.123",
+            "submitted": False,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+                }
+            ],
+        }
+    )
+    remote_draft = _draft_payload()
+    remote_draft["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+        }
+    ]
+    streamed = _StreamingResponse(chunks)
+    session.gets = [_Response(remote_draft), streamed]
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "pass"
+    assert streamed.chunk_sizes == [_REMOTE_DOWNLOAD_CHUNK_SIZE]
+    assert session.get_kwargs[-1] == {"stream": True, "timeout": 3600}

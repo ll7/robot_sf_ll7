@@ -31,6 +31,11 @@ class _Response:
         if self.status_code >= 400:
             raise RuntimeError("HTTP failure")
 
+    def iter_content(self, *, chunk_size: int) -> Any:
+        """Yield the configured body as a requests-like streamed chunk."""
+        del chunk_size
+        yield self.content
+
 
 class _Session:
     """Queue-backed session fixture."""

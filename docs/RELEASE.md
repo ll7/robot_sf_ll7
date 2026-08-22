@@ -117,7 +117,7 @@ uv run robot-sf release doctor \
   --expected-release-sha <exact-release-sha> \
   --expected-base-sha 43bd25edba11f1e4aa848c787e92eccf0670aa5a \
   --tag paper-matrix-v2-h600-s30-2026-08-43bd25edba11 \
-  --checkpoint-receipt output/release/checkpoints/benchmark_data_release_staging_receipt.json \
+  --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \
   --token-file /home/luttkule/.config/robot-sf/zenodo.token

@@ -1427,7 +1427,7 @@ def _snapshot_resume_command(
         if "metadata_digest_changed" in reasons and desired_hint:
             return {
                 "command": (
-                    f"scripts/dev/gh_pr_body_rest.py {pr} --reconcile {desired_hint} "
+                    f"uv run python scripts/dev/gh_pr_body_rest.py {pr} --reconcile {desired_hint} "
                     f"&& {snapshot_cmd}"
                 ),
                 "reason": "reconcile_metadata_then_rerun",

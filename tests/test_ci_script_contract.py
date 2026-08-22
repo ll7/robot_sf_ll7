@@ -7,8 +7,8 @@ handle both forms as cheap success paths: exit 0, print usage to stdout,
 and return before sourcing common_setup.sh or invoking heavy dependencies
 (uv, ruff, pytest, gh, etc.).
 
-Covered scripts (11 total):
-  pr_ready_check.sh, gh_comment.sh, run_worktree_shared_venv.sh,
+Covered scripts (13 total):
+  pr_ready_check.sh, gh_comment.sh, gh_pr_merge.sh, run_worktree_shared_venv.sh,
   run_tests_parallel.sh, run_xdist_race_validation.sh, run_ci_local.sh, local_signoff.sh,
   ci_driver.sh, check_runtime_requirements.sh, check_carla_runtime.sh,
   bootstrap_worktree.sh
@@ -37,6 +37,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
+GH_PR_MERGE = ROOT / "scripts" / "dev" / "gh_pr_merge.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
 OPTIONAL_ALLOWLIST = ROOT / "tests" / "support" / "optional_test_allowlist.txt"
@@ -3176,3 +3177,46 @@ def test_coverage_docs_match_ci_workflow_contract() -> None:
     assert "changed-coverage-gate" in dev_guide_text
     assert "changed-coverage.v1" in dev_guide_text
     assert "85.0%" in dev_guide_text or "85.0" in dev_guide_text
+
+
+def test_gh_pr_merge_wrapper_has_valid_shell_syntax() -> None:
+    """gh_pr_merge.sh should pass bash -n syntax check."""
+    syntax = subprocess.run(
+        ["bash", "-n", str(GH_PR_MERGE)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert syntax.returncode == 0, syntax.stderr
+
+
+def test_gh_pr_merge_wrapper_help() -> None:
+    """gh_pr_merge.sh --help and -h print usage and exit 0."""
+    for flag in ("--help", "-h"):
+        result = subprocess.run(
+            [str(GH_PR_MERGE), flag],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "Usage:" in result.stdout
+        assert "--match-head-commit" in result.stdout
+
+
+def test_gh_pr_merge_wrapper_refuses_without_exact_head_binding() -> None:
+    """The REST fallback must never run without a full expected head SHA."""
+    result = subprocess.run(
+        [str(GH_PR_MERGE), "1234", "--match-head-commit", "short"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "requires a full 40-char SHA" in result.stderr

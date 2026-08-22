@@ -20,6 +20,7 @@ from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_acceptance import _status_markers
 from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
+from robot_sf.benchmark.utils import _config_hash
 
 RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2"
 RUNTIME_SMOKE_MANIFEST = Path(
@@ -58,12 +59,17 @@ _FORBIDDEN_RUNTIME_STATUSES = frozenset(
         "fallback",
         "not-available",
         "not_available",
+        "not-applicable",
+        "not_applicable",
         "not-run",
         "not_run",
         "partial-failure",
         "partial_failure",
+        "partial",
         "placeholder",
+        "skipped",
         "unavailable",
+        "unknown",
     }
 )
 _RUNTIME_STATUS_FIELDS = frozenset(
@@ -304,6 +310,23 @@ def _is_campaign_preflight_unknown(path: str, value: Any) -> bool:
     return value is None or str(value).strip().lower().replace(" ", "_") == "not_run"
 
 
+def _is_allowed_runtime_marker(path: str, key: str, value: Any) -> bool:
+    """Return whether a non-boolean/status token is canonical for its exact report surface.
+
+    Returns:
+        Whether the marker is an explicitly allowed producer representation.
+    """
+    normalized = str(value).strip().lower().replace(" ", "_")
+    if _is_campaign_preflight_unknown(path, value):
+        return True
+    if path.startswith("planner_rows[") and key == "benchmark_success":
+        return normalized == "true"
+    return "learned_policy_contract" in path and normalized in {
+        "not_applicable",
+        "not-applicable",
+    }
+
+
 def _forbidden_status_markers(  # noqa: C901
     payload: Any, prefix: str
 ) -> list[tuple[str, str]]:
@@ -322,7 +345,7 @@ def _forbidden_status_markers(  # noqa: C901
                 normalized_key = str(key).strip().lower()
                 marker_value = (
                     None
-                    if _is_campaign_preflight_unknown(child_path, child)
+                    if _is_allowed_runtime_marker(child_path, normalized_key, child)
                     else _runtime_marker_value(normalized_key, child)
                 )
                 if marker_value is not None:
@@ -428,6 +451,58 @@ def _read_campaign_object(path: Path, *, campaign_root: Path, label: str) -> dic
     return _read_object(resolved, label)
 
 
+def _canonical_repo_artifact(path: Path, *, repo_root: Path, label: str) -> Path:
+    """Resolve one canonical tracked input without following symlink components.
+
+    Returns:
+        Exact regular file inside the release worktree.
+    """
+    return _resolve_campaign_artifact(
+        raw_path=str(path),
+        campaign_root=repo_root,
+        repo_root=repo_root,
+        expected_path=path,
+        label=label,
+        expected_root=repo_root,
+    )
+
+
+def _canonical_scenario_matrix_hash(
+    scenario_path: Path, *, repo_root: Path, scenario_id: str, seed: int
+) -> str:
+    """Reproduce the scoped scenario digest written by the canonical campaign producer.
+
+    Returns:
+        Stable structural digest after map, seed, and kinematics normalization.
+    """
+    payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
+    scenarios = payload.get("scenarios")
+    if not isinstance(scenarios, list) or len(scenarios) != 1 or not isinstance(scenarios[0], dict):
+        raise RuntimeSmokeAdmissionError(
+            "canonical runtime smoke must resolve exactly one scenario"
+        )
+    scenario = dict(scenarios[0])
+    observed_id = str(scenario.get("name") or scenario.get("id") or "").strip()
+    if observed_id != scenario_id:
+        raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier mismatch")
+    raw_map = scenario.get("map_file")
+    if isinstance(raw_map, str) and raw_map.strip():
+        map_path = Path(raw_map)
+        if not map_path.is_absolute():
+            map_path = scenario_path.parent / map_path
+        resolved_map = map_path.resolve()
+        if not resolved_map.is_relative_to(repo_root) or not resolved_map.is_file():
+            raise RuntimeSmokeAdmissionError("canonical runtime smoke map path is invalid")
+        scenario["map_file"] = resolved_map.relative_to(repo_root).as_posix()
+    scenario["seeds"] = [seed]
+    robot_config = (
+        dict(scenario.get("robot_config")) if isinstance(scenario.get("robot_config"), dict) else {}
+    )
+    robot_config["type"] = RUNTIME_SMOKE_KINEMATICS
+    scenario["robot_config"] = robot_config
+    return _config_hash([scenario])
+
+
 def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
     *,
     episodes_path: Path,
@@ -440,6 +515,7 @@ def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
     expected_source_commit: str,
     scenario_id: str,
     seed: int,
+    expected_scenario_matrix_hash: str,
     episode_id: str,
     row_config_hash: str,
     relocation_root: Path | None,
@@ -482,6 +558,12 @@ def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
         identity.get("suite_key"),
         RUNTIME_SMOKE_SUITE_KEY,
         f"planner {planner_key} sidecar suite",
+    )
+    _require_equal(
+        problems,
+        identity.get("scenario_matrix_hash"),
+        expected_scenario_matrix_hash,
+        f"planner {planner_key} sidecar scenario identity hash",
     )
     _require_equal(problems, _strict_int(identity.get("total_jobs")), 1, "sidecar total jobs")
     _require_equal(problems, _strict_int(identity.get("written")), 1, "sidecar written rows")
@@ -628,19 +710,55 @@ def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
             sha256_file(expected_schema),
             f"planner {planner_key} sidecar episode schema hash",
         )
+    completeness = sidecar.get("completeness")
+    completeness = completeness if isinstance(completeness, dict) else {}
+    _require_equal(
+        problems,
+        completeness.get("status"),
+        "complete",
+        f"planner {planner_key} sidecar completeness",
+    )
+    expected_config_hash = _config_hash(
+        {
+            "schema_path": schema_input.get("path"),
+            "algo": algorithm,
+            "algo_config_path": config_input.get("path") if algorithm_config is not None else None,
+        }
+    )
+    _require_equal(
+        problems,
+        identity.get("config_hash"),
+        expected_config_hash,
+        f"planner {planner_key} sidecar campaign config hash",
+    )
+    _require_equal(
+        problems,
+        run.get("runner"),
+        "map_runner.run_map_batch",
+        f"planner {planner_key} sidecar runner",
+    )
 
 
 def _canonical_smoke_contract(  # noqa: C901
     *, repo_root: Path, expected_planner_keys: tuple[str, ...]
-) -> tuple[Path, Path, Path, str, int, dict[str, str], dict[str, str | None]]:
+) -> tuple[Path, Path, Path, str, int, str, dict[str, str], dict[str, str | None]]:
     """Resolve the tracked smoke axes and planner algorithms from canonical inputs.
 
     Returns:
         Manifest path, config path, scenario path, scenario ID, seed,
-        planner-to-algorithm mapping, and planner-to-algorithm-config mapping.
+        expected scoped-scenario hash, planner-to-algorithm mapping, and
+        planner-to-algorithm-config mapping.
     """
-    manifest_path = repo_root / RUNTIME_SMOKE_MANIFEST
-    config_path = repo_root / RUNTIME_SMOKE_CONFIG
+    manifest_path = _canonical_repo_artifact(
+        repo_root / RUNTIME_SMOKE_MANIFEST,
+        repo_root=repo_root,
+        label="canonical runtime smoke manifest",
+    )
+    config_path = _canonical_repo_artifact(
+        repo_root / RUNTIME_SMOKE_CONFIG,
+        repo_root=repo_root,
+        label="canonical runtime smoke config",
+    )
     manifest = _read_yaml_object(manifest_path, "canonical runtime smoke manifest")
     config = _read_yaml_object(config_path, "canonical runtime smoke config")
     if tuple(expected_planner_keys) != RUNTIME_SMOKE_PLANNER_KEYS:
@@ -678,9 +796,11 @@ def _canonical_smoke_contract(  # noqa: C901
     scenario_rel = scenario.get("matrix_path")
     if not isinstance(scenario_rel, str) or not scenario_rel.strip():
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario path is missing")
-    scenario_path = (manifest_path.parent / scenario_rel).resolve()
-    if not scenario_path.is_file():
-        raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario is missing")
+    scenario_path = _canonical_repo_artifact(
+        manifest_path.parent / scenario_rel,
+        repo_root=repo_root,
+        label="canonical runtime smoke scenario",
+    )
     if scenario.get("matrix_sha256") != sha256_file(scenario_path):
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario pin mismatch")
     scenario_payload = _read_yaml_object(scenario_path, "canonical runtime smoke scenario")
@@ -692,6 +812,12 @@ def _canonical_smoke_contract(  # noqa: C901
     scenario_id = str(scenarios[0].get("name") or scenarios[0].get("id") or "").strip()
     if not scenario_id:
         raise RuntimeSmokeAdmissionError("canonical runtime smoke scenario identifier is missing")
+    expected_scenario_matrix_hash = _canonical_scenario_matrix_hash(
+        scenario_path,
+        repo_root=repo_root,
+        scenario_id=scenario_id,
+        seed=int(seeds[0]),
+    )
     algorithms = {str(entry["key"]): str(entry.get("algo", "")) for entry in enabled}
     algorithm_configs = {
         str(entry["key"]): (
@@ -705,6 +831,7 @@ def _canonical_smoke_contract(  # noqa: C901
         scenario_path,
         scenario_id,
         int(seeds[0]),
+        expected_scenario_matrix_hash,
         algorithms,
         algorithm_configs,
     )
@@ -863,6 +990,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         scenario_path,
         scenario_id,
         seed,
+        expected_scenario_matrix_hash,
         algorithms,
         algorithm_configs,
     ) = _canonical_smoke_contract(
@@ -1325,6 +1453,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                     expected_source_commit=expected_source_commit,
                     scenario_id=scenario_id,
                     seed=seed,
+                    expected_scenario_matrix_hash=expected_scenario_matrix_hash,
                     episode_id=str(row.get("episode_id", "")).strip(),
                     row_config_hash=row_config_hash,
                     relocation_root=relocation_root,
@@ -1454,6 +1583,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             continue
         planner_row_arms.append(str(row.get("planner_key", "")).strip())
         _require_equal(problems, row.get("status"), "ok", f"planner row {index} status")
+        planner_success = row.get("benchmark_success")
+        if planner_success is not True and planner_success != "true":
+            problems.append(f"planner row {index} benchmark success mismatch")
         _require_equal(
             problems, _strict_int(row.get("episodes")), 1, f"planner row {index} episodes"
         )

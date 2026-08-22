@@ -115,7 +115,13 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             episode_records=[episode_row],
             schema_path=schema,
             scenario_path=scenario,
-            scenarios=[{"name": "runtime-smoke-scenario"}],
+            scenarios=[
+                {
+                    "name": "runtime-smoke-scenario",
+                    "seeds": [111],
+                    "robot_config": {"type": "differential_drive"},
+                }
+            ],
             algo=f"algo-{index}",
             algo_config_path=tmp_path / planner_configs[planner],
             benchmark_profile="baseline-safe",
@@ -163,6 +169,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
                 "kinematics": "differential_drive",
                 "status": "ok",
                 "episodes": 1,
+                "benchmark_success": "true",
             }
         )
     result = {
@@ -488,6 +495,9 @@ def test_runtime_smoke_rejects_nested_preflight_fallback(
         ("fallback_used", "true"),
         ("benchmark_success", False),
         ("load_succeeded", False),
+        ("status", "skipped"),
+        ("availability_status", "unknown"),
+        ("execution_mode", "partial"),
     ],
 )
 def test_runtime_smoke_rejects_malformed_or_false_runtime_markers(
@@ -508,6 +518,22 @@ def test_runtime_smoke_rejects_malformed_or_false_runtime_markers(
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
         _admit(result, planners, tmp_path)
+
+
+def test_runtime_smoke_allows_nonlearned_policy_contract_not_applicable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["learned_policy_contract"] = {"status": "not_applicable"}
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
 
 
 def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
@@ -676,6 +702,22 @@ def test_runtime_smoke_rejects_canonical_metadata_symlink(
         _admit(result, planners, tmp_path)
 
 
+@pytest.mark.parametrize("relative_path", [RUNTIME_SMOKE_MANIFEST, RUNTIME_SMOKE_CONFIG])
+def test_runtime_smoke_rejects_canonical_source_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: Path,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    source = tmp_path / relative_path
+    saved = tmp_path / f"external-{source.name}"
+    source.replace(saved)
+    source.symlink_to(saved)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="path contains a symlink"):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_rejects_raw_artifact_hash_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -722,6 +764,19 @@ def test_runtime_smoke_rejects_sidecar_scenario_matrix_hash_drift(
         ),
         (lambda payload: payload["rows"][0].update(episode_id="forged"), "episode id mismatch"),
         (lambda payload: payload["rows"][0].update(jsonl_line=1), "JSONL line mismatch"),
+        (
+            lambda payload: payload.update(completeness={}),
+            "sidecar completeness mismatch",
+        ),
+        (
+            lambda payload: payload["campaign_identity"].update(config_hash="forged"),
+            "campaign config hash mismatch",
+        ),
+        (
+            lambda payload: payload["campaign_identity"].update(scenario_matrix_hash="forged"),
+            "scenario identity hash mismatch",
+        ),
+        (lambda payload: payload["run"].update(runner="forged"), "sidecar runner mismatch"),
     ],
 )
 def test_runtime_smoke_rejects_incomplete_sidecar_identity(

@@ -16,7 +16,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts.dev import check_base_sensitive_gates as gate
 from scripts.dev.base_sensitive_selector import find_base_sensitive_test_files
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -141,6 +143,116 @@ class TestGateScript:
         assert result.returncode == 0, (
             f"base_sensitive subset failed:\n{result.stdout}\n{result.stderr}"
         )
+
+
+class TestChangedFileEnumeration:
+    """Verify oversized-diff fallback and fail-closed JSON behavior."""
+
+    def test_small_diff_uses_existing_fast_path(self) -> None:
+        """A successful unified diff does not make an unnecessary API request."""
+        with patch.object(
+            gate.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(
+                args=["gh", "pr", "diff"], returncode=0, stdout="robot_sf/example.py\n", stderr=""
+            ),
+        ) as run:
+            assert gate._get_pr_changed_files("7469") == ["robot_sf/example.py"]
+
+        run.assert_called_once()
+
+    def test_oversized_diff_falls_back_to_paginated_files_api(self) -> None:
+        """A diff-size failure uses a complete REST files page instead of guessing."""
+        responses = [
+            subprocess.CompletedProcess(
+                args=["gh", "pr", "diff"],
+                returncode=1,
+                stdout="",
+                stderr="HTTP 406: PullRequest.diff_too_large",
+            ),
+            subprocess.CompletedProcess(
+                args=["gh", "api"],
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {"filename": "tests/dev/test_base_sensitive_gate_contract.py"},
+                        {"filename": "docs/dev_guide.md"},
+                    ]
+                ),
+                stderr="",
+            ),
+        ]
+        with patch.object(gate.subprocess, "run", side_effect=responses) as run:
+            changed = gate._get_pr_changed_files("7469")
+
+        assert changed == [
+            "tests/dev/test_base_sensitive_gate_contract.py",
+            "docs/dev_guide.md",
+        ]
+        assert run.call_count == 2
+        assert run.call_args_list[1].args[0][:2] == ["gh", "api"]
+        assert "repos/ll7/robot_sf_ll7/pulls/7469/files" in run.call_args_list[1].args[0][2]
+
+    def test_full_api_page_requires_a_terminal_page(self) -> None:
+        """A full page is not treated as complete until the next page is observed."""
+        responses = [
+            subprocess.CompletedProcess(
+                args=["gh", "pr", "diff"], returncode=1, stdout="", stderr="large"
+            ),
+            subprocess.CompletedProcess(
+                args=["gh", "api"],
+                returncode=0,
+                stdout=json.dumps([{"filename": f"file-{index}.py"} for index in range(100)]),
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["gh", "api"],
+                returncode=0,
+                stdout=json.dumps([{"filename": "terminal.py"}]),
+                stderr="",
+            ),
+        ]
+        with patch.object(gate.subprocess, "run", side_effect=responses) as run:
+            changed = gate._get_pr_changed_files("7469")
+
+        assert changed is not None
+        assert len(changed) == 101
+        assert changed[-1] == "terminal.py"
+        assert run.call_count == 3
+
+    def test_malformed_files_api_remains_unavailable(self) -> None:
+        """Malformed fallback data cannot become an ordinary changed-file inventory."""
+        responses = [
+            subprocess.CompletedProcess(
+                args=["gh", "pr", "diff"], returncode=1, stdout="", stderr="large"
+            ),
+            subprocess.CompletedProcess(
+                args=["gh", "api"],
+                returncode=0,
+                stdout=json.dumps([{"path": "wrong-key"}]),
+                stderr="",
+            ),
+        ]
+        with patch.object(gate.subprocess, "run", side_effect=responses):
+            assert gate._get_pr_changed_files("7469") is None
+
+    def test_json_mode_reports_indeterminate_changed_file_inventory(self, capsys) -> None:
+        """Unknown classification always emits structured JSON when requested."""
+        with patch.object(
+            gate,
+            "check_pr_touches_base_sensitive",
+            return_value={
+                "needs_gate": None,
+                "base_sensitivity": "unknown",
+                "reason": "changed_file_inventory_unavailable",
+                "error": "changed-file response exceeded the bounded pagination limit",
+            },
+        ):
+            assert gate.main(["--pr", "7469", "--json"]) == 2
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["pr_check"]["base_sensitivity"] == "unknown"
+        assert payload["error"] == "changed-file response exceeded the bounded pagination limit"
 
 
 class TestSimulatedStaleBase:

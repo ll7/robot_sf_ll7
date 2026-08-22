@@ -133,6 +133,21 @@ populated worktree. The default threshold is 2 GiB and can be overridden for
 a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
 `--minimum-free-bytes`.
 
+When the next action must run in the new worktree, bind it to the creation
+command with `--exec`; this is safer than assuming a shell changes directory
+after `git worktree add`:
+
+```bash
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main \
+  --exec git rev-parse --show-toplevel
+```
+
+The supplied command runs with the new worktree as its working directory. If it
+fails, the worktree remains available for diagnosis.
+
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
 `<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to
@@ -478,6 +493,10 @@ repository uses the explicit `base_sensitive` marker-file selector from issue #5
   `scripts/dev/check_base_sensitive_gates.py --pr <pr-number> --json` classify a complete changed-file
   inventory as `base_sensitive` when it intersects a test file declaring the `base_sensitive` marker;
   a missing inventory is `unknown` and fails closed.
+- **Changed-file provenance**: the gate tries `gh pr diff <pr-number> --name-only` first. If GitHub
+  rejects the unified diff because it exceeds its line limit, it falls back to the paginated REST
+  `pulls/<number>/files` endpoint with strict page and filename validation. A failed, malformed, empty,
+  or pagination-exhausted response remains `unknown`; no partial file list is used for admission.
 - **Base-sensitive path**: a `base_sensitive` PR must pass the existing workflow-run/base freshness
   check and the focused `base_sensitive` subset against the current base before merge-ready admission.
 - **Ordinary path**: a trusted exact-head review may record

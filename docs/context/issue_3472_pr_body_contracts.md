@@ -11,6 +11,11 @@ without blocking docs-only/template-only PRs on the same rule.
 
 ## Contract
 
+New PRs may use the compact, schema-validated
+[`pr-contract:v2`](issue_7665_pr_contract_v2.md) block. The v2 block is authoritative when its
+marker is present; malformed v2 metadata fails closed and does not fall back to Markdown parsing.
+Older PRs without the marker continue to use the v1 heading-based contract below.
+
 - `scripts/dev/check_pr_followups.py --require-body` fails closed when the PR body is unavailable.
 - `--require-open-issues` verifies linked follow-up issues for declared deferred work are open.
 - Domain-aware approval remains required when Research Result Guidance contains non-`NA`/

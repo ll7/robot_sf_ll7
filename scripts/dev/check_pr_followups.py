@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Check that declared deferred PR work has an explicit follow-up disposition.
+"""Check PR deferred-work and evidence metadata with v1/v2 compatibility.
 
 The check is intentionally bounded for agent PR-readiness runs.  It reads a PR
-body from an explicit file or GitHub pull-request event payload, scans the
-default template's Follow-Up Issues section, and prints a compact report.
+body from an explicit file or GitHub pull-request event payload. Bodies with a
+``pr-contract:v2`` marker use the strict machine-readable contract; older
+bodies use the heading-based compatibility parser.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from scripts.dev.pr_contract_v2 import PrContractV2Result, parse_pr_contract_v2
 from scripts.dev.pr_loop_policy import extract_sha_carriers, invalid_sha_carriers
 
 ISSUE_RE = re.compile(r"(?:#|/issues/)(\d+)\b")
@@ -537,8 +539,86 @@ def _verify_open_issues(issues: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(errors)
 
 
+def _v2_followup_report(result: PrContractV2Result, *, require_open_issues: bool) -> FollowupReport:
+    """Translate a valid v2 deferred-work declaration into the v1 report shape."""
+    if result.status == "malformed":
+        return FollowupReport(
+            status="malformed_v2_contract",
+            source=result.source,
+            deferred_work="",
+            linked_issues=(),
+            explicit_no_issue_reason="",
+            issue_state_errors=(),
+            message=result.message + "; v1 fallback is disabled when a v2 marker is present.",
+        )
+    contract = result.contract
+    if contract is None:
+        return FollowupReport(
+            status="malformed_v2_contract",
+            source=result.source,
+            deferred_work="",
+            linked_issues=(),
+            explicit_no_issue_reason="",
+            issue_state_errors=(),
+            message="pr-contract:v2 result did not contain a validated contract.",
+        )
+    linked_issues = tuple(f"#{issue}" for issue in contract.deferred_issues)
+    issue_state_errors = _verify_open_issues(linked_issues) if require_open_issues else ()
+    deferred_work = "" if contract.deferred_status == "none" else contract.deferred_reason
+    if issue_state_errors:
+        return FollowupReport(
+            status="issue_state_error",
+            source=result.source,
+            deferred_work=deferred_work,
+            linked_issues=linked_issues,
+            explicit_no_issue_reason="",
+            issue_state_errors=issue_state_errors,
+            message="v2 deferred-work follow-up issue state could not be verified open.",
+        )
+    if contract.deferred_status == "none":
+        return FollowupReport(
+            status="ok",
+            source=result.source,
+            deferred_work="",
+            linked_issues=(),
+            explicit_no_issue_reason="none",
+            issue_state_errors=(),
+            message="pr-contract:v2 declares no deferred work.",
+        )
+    if linked_issues:
+        return FollowupReport(
+            status="ok",
+            source=result.source,
+            deferred_work=deferred_work or contract.deferred_status,
+            linked_issues=linked_issues,
+            explicit_no_issue_reason="",
+            issue_state_errors=(),
+            message="v2 deferred work has linked follow-up issue(s).",
+        )
+    return FollowupReport(
+        status="ok",
+        source=result.source,
+        deferred_work=deferred_work,
+        linked_issues=(),
+        explicit_no_issue_reason=deferred_work,
+        issue_state_errors=(),
+        message="v2 deferred work has an explicit reason and no follow-up issue.",
+    )
+
+
 def analyze_body(body: str, *, source: str, require_open_issues: bool = False) -> FollowupReport:
-    """Return a compact follow-up report for a PR body."""
+    """Return a compact follow-up report, selecting v2 or the v1 compatibility parser."""
+    v2_result = parse_pr_contract_v2(body, source=source)
+    if v2_result.status != "absent":
+        return _v2_followup_report(v2_result, require_open_issues=require_open_issues)
+
+    return _analyze_body_v1(body, source=source, require_open_issues=require_open_issues)
+
+
+def _analyze_body_v1(
+    body: str, *, source: str, require_open_issues: bool = False
+) -> FollowupReport:
+    """Run the original heading-based follow-up parser for v1 bodies."""
     section = _extract_section(body, "Follow-Up Issues")
     deferred = _value_after_label(section, "Deferred work") if section else ""
     issue_value = _value_after_label(section, "Issues opened for follow-up") if section else ""
@@ -690,6 +770,90 @@ def _domain_status_report(
     return None
 
 
+def _v2_domain_report(
+    result: PrContractV2Result,
+    *,
+    title: str,
+    changed_files: tuple[str, ...],
+) -> DomainApprovalReport:
+    """Translate v2 approval metadata and enforce title/path consistency."""
+    if result.status == "malformed":
+        return DomainApprovalReport(
+            status="malformed_v2_contract",
+            source=result.source,
+            sensitive_terms=(),
+            required="",
+            approval_status="",
+            approval_note="",
+            checklist_errors=(),
+            message=result.message + "; v1 fallback is disabled when a v2 marker is present.",
+        )
+    contract = result.contract
+    if contract is None:
+        return DomainApprovalReport(
+            status="malformed_v2_contract",
+            source=result.source,
+            sensitive_terms=(),
+            required="",
+            approval_status="",
+            approval_note="",
+            checklist_errors=(),
+            message="pr-contract:v2 result did not contain a validated contract.",
+        )
+
+    title_signals = _evidence_signal_from_title(title)
+    file_signals = _evidence_signal_from_files(changed_files)
+    signal_terms = title_signals + file_signals
+    sensitive_terms = signal_terms
+    if contract.evidence_applicability == "evidence-bearing":
+        sensitive_terms = (
+            f"Evidence tier: {contract.evidence_tier}",
+            f"Result classification: {contract.evidence_result}",
+            *signal_terms,
+        )
+    substantive_files = tuple(path for path in changed_files if _is_substantive_file(path))
+    class_mismatch = contract.change_class == "docs" and bool(substantive_files)
+    class_mismatch = class_mismatch or (
+        bool(signal_terms) and contract.evidence_applicability != "evidence-bearing"
+    )
+    if class_mismatch:
+        return DomainApprovalReport(
+            status="v2_change_class_mismatch",
+            source=result.source,
+            sensitive_terms=sensitive_terms,
+            required=str(contract.domain_required).lower(),
+            approval_status=contract.domain_status,
+            approval_note=contract.domain_note,
+            checklist_errors=(),
+            message=(
+                "pr-contract:v2 change_class/evidence declaration conflicts with changed paths or "
+                "title signals; declare evidence-bearing work and the appropriate class instead of "
+                "using a weak tooling/docs declaration."
+            ),
+        )
+    if contract.evidence_applicability != "evidence-bearing":
+        return DomainApprovalReport(
+            status="ok",
+            source=result.source,
+            sensitive_terms=(),
+            required=str(contract.domain_required).lower(),
+            approval_status=contract.domain_status,
+            approval_note=contract.domain_note,
+            checklist_errors=(),
+            message="pr-contract:v2 declares no evidence-validity-sensitive claim.",
+        )
+    return DomainApprovalReport(
+        status="ok",
+        source=result.source,
+        sensitive_terms=sensitive_terms,
+        required=str(contract.domain_required).lower(),
+        approval_status=contract.domain_status,
+        approval_note=contract.domain_note,
+        checklist_errors=(),
+        message="pr-contract:v2 carries explicit evidence and domain-approval metadata.",
+    )
+
+
 def analyze_domain_approval(
     body: str,
     *,
@@ -697,7 +861,24 @@ def analyze_domain_approval(
     title: str = "",
     changed_files: tuple[str, ...] = (),
 ) -> DomainApprovalReport:
-    """Return whether domain-sensitive PR bodies carry explicit approval or blocker status."""
+    """Return domain approval status using v2 metadata or the v1 compatibility parser."""
+    v2_result = parse_pr_contract_v2(body, source=source)
+    if v2_result.status != "absent":
+        return _v2_domain_report(v2_result, title=title, changed_files=changed_files)
+
+    return _analyze_domain_approval_v1(
+        body, source=source, title=title, changed_files=changed_files
+    )
+
+
+def _analyze_domain_approval_v1(
+    body: str,
+    *,
+    source: str,
+    title: str = "",
+    changed_files: tuple[str, ...] = (),
+) -> DomainApprovalReport:
+    """Run the original heading-based domain-approval parser for v1 bodies."""
     sensitive_terms = _domain_approval_triggers(body, title=title, changed_files=changed_files)
     if not sensitive_terms:
         return DomainApprovalReport(
@@ -911,6 +1092,16 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
     abbreviated or stale carriers fail closed so already-written bodies are
     caught by the hosted contract.
     """
+    v2_result = parse_pr_contract_v2(body, source=source)
+    if v2_result.status == "malformed":
+        return ShaCarrierReport(
+            status="malformed_v2_contract",
+            source=source,
+            head_sha=head_sha,
+            invalid=(),
+            message=v2_result.message + "; v1 fallback is disabled when a v2 marker is present.",
+        )
+    v2_exact_head = v2_result.contract.exact_head if v2_result.contract is not None else None
     if not head_sha:
         return ShaCarrierReport(
             status="skipped",
@@ -920,7 +1111,13 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
             message="No PR head SHA available; exact-head carrier check skipped.",
         )
     carriers = extract_sha_carriers(body)
-    if not carriers:
+    invalid = invalid_sha_carriers(carriers, head_sha)
+    v2_mismatch = bool(v2_exact_head and v2_exact_head != head_sha)
+    if v2_mismatch:
+        v2_detail = f"pr-contract:v2 exact_head {v2_exact_head}"
+    else:
+        v2_detail = ""
+    if not carriers and not v2_detail:
         return ShaCarrierReport(
             status="ok",
             source=source,
@@ -928,8 +1125,13 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
             invalid=(),
             message="No exact-head SHA carriers present.",
         )
-    invalid = invalid_sha_carriers(carriers, head_sha)
-    if not invalid:
+    details = tuple(
+        f"{carrier.kind} {carrier.sha}" + ("" if carrier.full else " (abbreviated)")
+        for carrier in invalid
+    )
+    if v2_detail:
+        details = (*details, v2_detail)
+    if not invalid and not v2_mismatch:
         return ShaCarrierReport(
             status="ok",
             source=source,
@@ -937,10 +1139,6 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
             invalid=(),
             message="All exact-head SHA carriers match the PR head.",
         )
-    details = tuple(
-        f"{carrier.kind} {carrier.sha}" + ("" if carrier.full else " (abbreviated)")
-        for carrier in invalid
-    )
     return ShaCarrierReport(
         status="invalid_sha_carrier",
         source=source,
@@ -1089,6 +1287,20 @@ def _format_sha_carrier_report(report: ShaCarrierReport) -> str:
     )
 
 
+def _format_contract_v2_report(report: PrContractV2Result) -> str:
+    """Format the v2 marker report for local and hosted logs."""
+    errors = "; ".join(report.errors) if report.errors else "none"
+    fallback = (
+        " v1 fallback is disabled when a v2 marker is present."
+        if report.status == "malformed"
+        else ""
+    )
+    return (
+        "PR contract v2 check: "
+        f"status={report.status}; source={report.source}; errors={errors}; {report.message}{fallback}"
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--body-file", type=Path, help="Markdown PR body to check.")
@@ -1203,6 +1415,7 @@ def main(argv: list[str] | None = None) -> int:
         changed_files=changed_files,
         require_substantive_body=require_substantive_body,
     )
+    contract_v2_report = parse_pr_contract_v2(body, source=source)
     report = analyze_body(body, source=source, require_open_issues=require_open)
     domain_report = analyze_domain_approval(
         body, source=source, title=title, changed_files=changed_files
@@ -1221,6 +1434,7 @@ def main(argv: list[str] | None = None) -> int:
         "incomplete_domain_approval",
         "pending_domain_approval",
         "invalid_domain_approval_status",
+        "v2_change_class_mismatch",
     }
     body_quality_failing_statuses = {
         "empty_body",
@@ -1232,6 +1446,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "body_quality": body_quality_report.__dict__,
+                    "contract_v2": contract_v2_report.as_dict(),
                     "followups": report.__dict__,
                     "domain_approval": domain_report.__dict__,
                     "sha_carriers": sha_carrier_report.__dict__,
@@ -1240,6 +1455,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     else:
+        contract_stream = sys.stderr if contract_v2_report.status == "malformed" else sys.stdout
+        print(_format_contract_v2_report(contract_v2_report), file=contract_stream)
         stream = sys.stderr if report.status in failing_statuses else sys.stdout
         print(_format_report(report), file=stream)
         domain_stream = (
@@ -1256,7 +1473,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr if sha_carrier_report.status in sha_carrier_failing_statuses else sys.stdout
         )
         print(_format_sha_carrier_report(sha_carrier_report), file=sha_stream)
-    failing_messages = [
+    failing_messages: list[str] = []
+    if contract_v2_report.status == "malformed":
+        failing_messages.append(contract_v2_report.message)
+    failing_messages.extend(
         rep.message
         for rep, statuses in (
             (report, failing_statuses),
@@ -1265,7 +1485,7 @@ def main(argv: list[str] | None = None) -> int:
             (sha_carrier_report, sha_carrier_failing_statuses),
         )
         if rep.status in statuses
-    ]
+    )
     return _resolve_exit(failing_messages, advisory=advisory)
 
 

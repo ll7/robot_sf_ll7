@@ -99,6 +99,10 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "--lane core|optional|all" in script_text
     assert "ROBOT_SF_TEST_LANE=core|optional|all" in script_text
     assert "Resolved pytest lane:" in script_text
+    assert 'dependency_profile="all-extras"' in script_text
+    assert 'dependency_profile="core"' in script_text
+    assert 'preflight_check_worktree_dependency_profile "$dependency_profile"' in script_text
+    assert "Repair with: cd" in script_text
     assert "normalize_pytest_target_path()" in script_text
     assert "${path%%::*}" in script_text
     assert "core_test_paths=(" in script_text
@@ -164,6 +168,10 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
     fake_bin.mkdir()
     (repo / "tests" / "support").mkdir(parents=True)
     (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text("", encoding="utf-8")
+    venv_python = repo / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
     for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
         source = ROOT / "scripts" / "dev" / script_name
         target = script_dir / script_name
@@ -462,6 +470,65 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
     assert "resolve_pytest_workers.py" not in result.stderr
 
 
+def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile(
+    tmp_path: Path,
+) -> None:
+    """A partial fresh-worktree venv is setup evidence, not a collection failure (#7726)."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    (repo / "tests" / "support").mkdir(parents=True)
+    (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text("", encoding="utf-8")
+    for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    venv_python = repo / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'Worktree optional dependency preflight: missing_optional (all-extras)\\n'\n"
+        "printf 'Missing optional imports: pandas\\n'\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    venv_python.chmod(0o755)
+    uv_called = repo / "uv-called.txt"
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$*" > "$UV_CALLED"\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", "all"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "UV_CALLED": str(uv_called),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    diagnostic = result.stdout + result.stderr
+    assert "dependency profile 'all-extras' is incomplete" in diagnostic
+    assert "Missing optional imports: pandas" in diagnostic
+    assert "pytest was not started" in diagnostic
+    assert "uv sync --all-extras" in diagnostic
+    assert not uv_called.exists()
+
+
 def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_path: Path) -> None:
     """New top-level core tests must reach PR-readiness pytest collection (issue #5108)."""
     repo = tmp_path / "repo"
@@ -478,6 +545,10 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         target.chmod(0o755)
     optional_allowlist.write_text("tests/test_optional_top_level.py\n", encoding="utf-8")
+    venv_python = repo / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
 
     captured_args = repo / "captured-pytest-args.txt"
     fake_uv = fake_bin / "uv"
@@ -604,6 +675,10 @@ def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
         target = script_dir / script_name
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         target.chmod(0o755)
+    venv_python = repo / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
 
     captured_args = repo / "captured-pytest-args.txt"
     invocation_count = repo / "pytest-invocations.txt"

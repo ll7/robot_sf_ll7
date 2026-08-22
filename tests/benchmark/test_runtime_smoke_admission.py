@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,6 +16,13 @@ from robot_sf.benchmark.runtime_smoke_admission import (
     RUNTIME_SMOKE_MANIFEST,
     RUNTIME_SMOKE_RELEASE_ID,
     RuntimeSmokeAdmissionError,
+    _episode_horizon,
+    _read_episode_rows,
+    _read_object,
+    _read_yaml_object,
+    _source_commit,
+    _strict_int,
+    _validate_age,
     validate_runtime_smoke_result,
 )
 
@@ -174,6 +181,61 @@ def _admit(result: Path, planners: tuple[str, ...], tmp_path: Path) -> dict:
         expected_source_commit="a" * 40,
         expected_planner_keys=planners,
     )
+
+
+def test_runtime_smoke_parsers_reject_malformed_or_wrong_shaped_inputs(tmp_path: Path) -> None:
+    invalid_json = tmp_path / "invalid.json"
+    invalid_json.write_text("{", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="missing or invalid"):
+        _read_object(invalid_json, "test JSON")
+    list_json = tmp_path / "list.json"
+    list_json.write_text("[]", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="not a JSON object"):
+        _read_object(list_json, "test JSON")
+
+    invalid_yaml = tmp_path / "invalid.yaml"
+    invalid_yaml.write_text("[", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="missing or invalid"):
+        _read_yaml_object(invalid_yaml, "test YAML")
+    list_yaml = tmp_path / "list.yaml"
+    list_yaml.write_text("[]", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="not a YAML object"):
+        _read_yaml_object(list_yaml, "test YAML")
+
+
+def test_runtime_smoke_scalar_provenance_helpers_fail_closed() -> None:
+    assert _strict_int(True) is None
+    assert _strict_int(" 600 ") == 600
+    assert _strict_int(1.5) is None
+    assert _source_commit({"git_hash": "ABC"}) == "abc"
+    assert (
+        _episode_horizon({"result_provenance": {"simulator_settings": {"horizon": "600"}}}) == 600
+    )
+    assert _episode_horizon({}) is None
+
+
+def test_runtime_smoke_age_rejects_invalid_and_stale_timestamps() -> None:
+    with pytest.raises(RuntimeSmokeAdmissionError, match="timestamp is invalid"):
+        _validate_age({"finished_at_utc": "not-a-time"}, max_age_hours=24)
+    stale = (datetime.now(UTC) - timedelta(hours=25)).isoformat()
+    with pytest.raises(RuntimeSmokeAdmissionError, match="stale or future-dated"):
+        _validate_age({"finished_at_utc": stale}, max_age_hours=24)
+    naive = datetime.now(UTC).replace(tzinfo=None, microsecond=0).isoformat()
+    assert _validate_age({"finished_at_utc": naive}, max_age_hours=24).endswith("Z")
+
+
+def test_runtime_smoke_episode_reader_handles_blank_and_rejects_malformed_rows(
+    tmp_path: Path,
+) -> None:
+    rows_path = tmp_path / "rows.jsonl"
+    rows_path.write_text('\n{"ok": true}\n', encoding="utf-8")
+    assert _read_episode_rows(rows_path) == [{"ok": True}]
+    rows_path.write_text("[]\n", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="is not an object"):
+        _read_episode_rows(rows_path)
+    rows_path.write_text("{\n", encoding="utf-8")
+    with pytest.raises(RuntimeSmokeAdmissionError, match="missing or invalid"):
+        _read_episode_rows(rows_path)
 
 
 def test_runtime_smoke_admits_exact_source_complete_roster(

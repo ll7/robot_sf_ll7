@@ -7,7 +7,20 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
+import pytest
+
+from robot_sf.benchmark import release_acceptance
+from robot_sf.benchmark.release_acceptance import (
+    _episode_horizon,
+    _read_campaign_summary,
+    _read_episode_rows,
+    _resolve_expected_matrix_axes,
+    _scenario_id,
+    _source_commit,
+    _status_markers,
+    _strict_int,
+    validate_full_benchmark_release_acceptance,
+)
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
 _SCENARIO_IDS = tuple(f"scenario_{index:02d}" for index in range(48))
@@ -230,3 +243,230 @@ def test_full_release_rejects_duplicate_or_missing_episode_identity(tmp_path: Pa
     assert result["status"] == "invalid"
     assert result["unique_episode_identities"] == 20_159
     assert any("duplicate episode identity" in blocker for blocker in result["blockers"])
+
+
+def test_release_acceptance_helpers_are_strict_about_shapes_and_provenance(tmp_path: Path) -> None:
+    """Low-level readers and coercions reject malformed release evidence deterministically."""
+    assert _strict_int(True) is None
+    assert _strict_int(" 12 ") == 12
+    assert _strict_int("not-an-int") is None
+    assert _source_commit({"git_hash": " ABC "}) == "abc"
+    assert _source_commit({"result_provenance": {"repo_commit": "DEF"}, "git_hash": "ABC"}) == "def"
+    assert _episode_horizon({"horizon": "600"}) == (600, True)
+    assert _episode_horizon({"result_provenance": {"simulator_settings": {"horizon": 600}}}) == (
+        600,
+        True,
+    )
+    assert _episode_horizon({"result_provenance": {"simulator_settings": {}}}) == (None, False)
+    assert _scenario_id({"id": "primary", "scenario_id": "secondary"}) == "primary"
+    assert _scenario_id({"scenario_id": "secondary"}) == "secondary"
+    assert _scenario_id({"name": "named"}) == "named"
+    assert _scenario_id({}) == ""
+
+    markers = _status_markers(
+        {
+            "row_status": "degraded",
+            "readiness_status": "failed",
+            "availability_status": "unavailable",
+            "evidence_status": "excluded",
+            "execution_status": "not-available",
+            "benchmark_success": "no",
+            "degraded": True,
+            "algorithm_metadata": {
+                "status": "error",
+                "fallback_or_degraded": True,
+                "planner_kinematics": {"execution_mode": "fallback"},
+                "adapter_impact": {"execution_mode": "degraded"},
+            },
+            "algorithm_metadata_contract": {"status": "fallback"},
+            "benchmark_availability": {
+                "status": "failed",
+                "readiness_status": "unavailable",
+                "availability_status": "excluded",
+                "execution_mode": "fallback",
+            },
+        },
+        "row",
+    )
+    marker_values = {value for _, value in markers}
+    assert {
+        "degraded",
+        "failed",
+        "unavailable",
+        "excluded",
+        "not-available",
+        "false",
+        "true",
+        "error",
+        "fallback",
+    } <= marker_values
+
+    missing_summary, missing_error = _read_campaign_summary(tmp_path / "missing")
+    assert missing_summary is None
+    assert missing_error and "cannot be read" in missing_error
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir()
+    (report_dir / "campaign_summary.json").write_text("[]", encoding="utf-8")
+    object_summary, object_error = _read_campaign_summary(tmp_path)
+    assert object_summary is None
+    assert object_error == "campaign summary must be a JSON object"
+
+    episode_path = tmp_path / "episodes.jsonl"
+    episode_path.write_text("\n[]\n", encoding="utf-8")
+    rows, row_error = _read_episode_rows(episode_path)
+    assert rows == []
+    assert row_error and "episode row must be an object" in row_error
+    episode_path.write_text("{malformed}\n", encoding="utf-8")
+    rows, row_error = _read_episode_rows(episode_path)
+    assert rows == []
+    assert row_error and "invalid JSON" in row_error
+    rows, row_error = _read_episode_rows(tmp_path / "missing-episodes.jsonl")
+    assert rows == []
+    assert row_error and "cannot read episode artifact" in row_error
+
+
+def test_release_acceptance_resolves_config_axes_and_rejects_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolved config axes are checked against the manifest instead of trusted blindly."""
+    monkeypatch.setattr(
+        release_acceptance,
+        "_load_campaign_scenarios",
+        lambda _config: [{"id": "first"}, {"scenario_id": "second"}, {"name": "third"}, {}],
+    )
+    monkeypatch.setattr(
+        release_acceptance,
+        "_resolved_seed_inventory",
+        lambda _scenarios: (1, 2, 3),
+    )
+    manifest = SimpleNamespace(resolved_seeds=(1, "bad"))
+
+    scenario_ids, seeds, blockers = _resolve_expected_matrix_axes(manifest, object())
+
+    assert scenario_ids == ("first", "second", "third", "")
+    assert seeds == (1, 2, 3)
+    assert "empty scenario identifier" in " ".join(blockers)
+    assert "resolved seeds do not match" in " ".join(blockers)
+
+
+def test_release_acceptance_handles_unavailable_config_and_legacy_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Missing canonical inputs and legacy manifests remain explicit non-success states."""
+    monkeypatch.setattr(
+        release_acceptance,
+        "load_campaign_config",
+        lambda _path: (_ for _ in ()).throw(OSError("missing config")),
+    )
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=tmp_path / "missing.yaml",
+        resolved_scenario_ids=(),
+        resolved_seeds=(),
+    )
+    scenario_ids, seeds, blockers = _resolve_expected_matrix_axes(manifest, None)
+    assert scenario_ids == ()
+    assert seeds == ()
+    assert "cannot be resolved" in " ".join(blockers)
+    assert "axes are unavailable" in " ".join(blockers)
+
+    legacy = validate_full_benchmark_release_acceptance(
+        tmp_path,
+        manifest=SimpleNamespace(schema_version="benchmark-release-manifest.v0.1"),
+    )
+    assert legacy["status"] == "not_applicable"
+    assert legacy["benchmark_success"] is False
+
+
+def test_release_acceptance_rejects_malformed_run_and_aggregate_rows(tmp_path: Path) -> None:
+    """Malformed run and aggregate rows cannot be promoted by matching top-level counts."""
+    campaign_root = tmp_path / "campaign"
+    (campaign_root / "reports").mkdir(parents=True)
+    episode_path = campaign_root / "runs" / "planner_00" / "episodes.jsonl"
+    episode_path.parent.mkdir(parents=True)
+    episode_path.write_text(
+        "\n".join(
+            [
+                json.dumps({"status": "failed", "seed": "bad"}),
+                json.dumps({"scenario_id": "scenario_00", "seed": 1, "git_hash": "bad"}),
+                json.dumps({"scenario_id": "scenario_00", "seed": 1, "git_hash": "bad"}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    summary = {
+        "campaign": {
+            "status": "not-ready",
+            "benchmark_success": False,
+            "evidence_status": "invalid",
+            "campaign_execution_status": "failed",
+            "git_hash": "bad",
+            "row_status_summary": {"successful_evidence_rows": "bad"},
+        },
+        "campaign_integrity": {"status": "invalid"},
+        "runs": [
+            None,
+            {
+                "planner": {},
+                "status": "failed",
+                "summary": {
+                    "benchmark_success": False,
+                    "failed_jobs": 2,
+                    "failures": ["boom"],
+                },
+            },
+            {
+                "planner": {"key": "planner_00", "kinematics": "differential_drive", "horizon": 0},
+                "status": "ok",
+                "episodes_path": "../outside.jsonl",
+            },
+            {
+                "planner": {
+                    "key": "planner_00",
+                    "kinematics": "differential_drive",
+                    "horizon": 600,
+                },
+                "status": "ok",
+                "episodes_path": "runs/planner_00/episodes.jsonl",
+                "summary": {"written": 0},
+            },
+        ],
+        "planner_rows": [
+            None,
+            {
+                "planner_key": "outside",
+                "kinematics": "differential_drive",
+                "status": "failed",
+                "episodes": 0,
+                "benchmark_success": False,
+            },
+        ],
+    }
+    (campaign_root / "reports" / "campaign_summary.json").write_text(
+        json.dumps(summary),
+        encoding="utf-8",
+    )
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert result["observed_episode_rows"] == 3
+    assert result["unique_episode_identities"] == 1
+    assert any("runs[0] must be an object" in blocker for blocker in result["blockers"])
+    assert any("episodes_path rejected" in blocker for blocker in result["blockers"])
+    assert any("duplicate episode identity" in blocker for blocker in result["blockers"])
+    assert any("planner_rows[0] must be an object" in blocker for blocker in result["blockers"])
+    assert any("outside the manifest roster" in blocker for blocker in result["blockers"])
+
+
+def test_release_acceptance_bounds_duplicate_blockers() -> None:
+    """Repeated row errors remain bounded and deterministic."""
+    blockers: list[str] = []
+    for _ in range(150):
+        release_acceptance._append_blocker(blockers, "same blocker")
+    for index in range(150):
+        release_acceptance._append_blocker(blockers, f"blocker-{index}")
+
+    assert blockers[0] == "same blocker"
+    assert len(blockers) == 100

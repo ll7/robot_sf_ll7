@@ -13,9 +13,10 @@ route geometry is consistent with the spawn/goal zones the map declares:
 The checker never mutates map files and makes no simulation, reachability,
 or runtime-parameter claim. Its report is deterministic for a given map set.
 
-Exit-code policy: findings are informational by default so the first landing
-records existing known deviations without reddening CI; ``--fail-on-violation``
-promotes any finding to exit code 1 for later gate enforcement.
+Exit-code policy: findings are informational by default so existing known
+deviations remain visible without reddening local diagnostics. In
+``--fail-on-violation`` mode, an explicit exact-waiver file is required and
+any missing, stale, duplicate, or changed-evidence row returns exit code 2.
 """
 
 from __future__ import annotations
@@ -32,8 +33,15 @@ from shapely.geometry import LineString, Point, Polygon
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.svg_map_parser import SvgMapConverter
+from scripts.validation.scenario_validation_waivers import (
+    WaiverValidationError,
+    canonical_repo_path,
+    load_waiver_rows,
+    validate_exact_waivers,
+)
 
 DEFAULT_TOLERANCE_M = 0.5
+DEFAULT_WAIVER_FILE = Path("configs/scenarios/archetype_validation_waivers.yaml")
 DEFAULT_MAPS = (
     "maps/svg_maps/classic_doorway.svg",
     "maps/svg_maps/classic_head_on_corridor.svg",
@@ -73,6 +81,7 @@ class MapGeometryReport:
     endpoints: list[EndpointCheck] = field(default_factory=list)
     fragments: list[FragmentCheck] = field(default_factory=list)
     missing_zone_kinds: list[str] = field(default_factory=list)
+    route_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def violations(self) -> int:
@@ -219,7 +228,123 @@ def inspect_map_geometry(
         report.endpoints.extend(_endpoint_checks(map_def, kind, routes, tolerance_m))
         report.fragments.extend(_fragment_checks(map_def, kind, routes))
     report.missing_zone_kinds = _missing_zone_kinds(map_def)
+    report.route_counts = {
+        "robot": len(map_def.robot_routes),
+        "ped": len(map_def.ped_routes),
+    }
     return report
+
+
+_GEOMETRY_IDENTITY_FIELDS = (
+    "map",
+    "finding_type",
+    "route_kind",
+    "label",
+    "end",
+    "zone_kind",
+    "zone_index",
+    "first_disconnected_segment",
+)
+
+
+def _geometry_findings(reports: list[MapGeometryReport]) -> list[dict[str, object]]:
+    """Convert current geometry findings into exact-waiver identity rows."""
+
+    findings: list[dict[str, object]] = []
+    for report in reports:
+        for endpoint in report.endpoints:
+            if not endpoint.inside_zone:
+                findings.append(
+                    {
+                        "map": canonical_repo_path(report.map_path),
+                        "finding_type": "endpoint",
+                        "route_kind": endpoint.route_kind,
+                        "label": endpoint.label,
+                        "end": endpoint.end,
+                        "zone_kind": endpoint.zone_kind,
+                        "zone_index": endpoint.zone_index,
+                        "expected_offset_to_centre_m": endpoint.offset_to_centre_m,
+                    }
+                )
+        for fragment in report.fragments:
+            if fragment.disconnected_fragment_count:
+                findings.append(
+                    {
+                        "map": canonical_repo_path(report.map_path),
+                        "finding_type": "fragment",
+                        "route_kind": fragment.route_kind,
+                        "label": fragment.label,
+                        "first_disconnected_segment": fragment.first_disconnected_segment,
+                        "expected_disconnected_fragment_count": fragment.disconnected_fragment_count,
+                    }
+                )
+        for route_kind in report.missing_zone_kinds:
+            findings.append(
+                {
+                    "map": canonical_repo_path(report.map_path),
+                    "finding_type": "missing_zone",
+                    "route_kind": route_kind,
+                    "expected_route_count": report.route_counts.get(route_kind, 0),
+                }
+            )
+    return findings
+
+
+def _validate_geometry_waiver_shape(row: dict[str, object], index: int) -> None:
+    """Require the exact identity and evidence fields for one geometry waiver."""
+
+    prefix = f"geometry[{index}]"
+    for field_name in ("map", "finding_type", "route_kind"):
+        if not isinstance(row.get(field_name), str) or not str(row[field_name]).strip():
+            raise WaiverValidationError(f"{prefix} requires non-empty {field_name}")
+    finding_type = row["finding_type"]
+    if finding_type == "endpoint":
+        required = ("label", "end", "zone_kind", "zone_index", "expected_offset_to_centre_m")
+    elif finding_type == "fragment":
+        required = (
+            "label",
+            "first_disconnected_segment",
+            "expected_disconnected_fragment_count",
+        )
+    elif finding_type == "missing_zone":
+        required = ("expected_route_count",)
+    else:
+        raise WaiverValidationError(f"{prefix} has unsupported finding_type {finding_type!r}")
+    missing = [field_name for field_name in required if field_name not in row]
+    if missing:
+        raise WaiverValidationError(f"{prefix} is missing fields: {', '.join(missing)}")
+
+
+def _geometry_evidence_matches(actual: dict[str, object], waiver: dict[str, object]) -> bool:
+    """Compare the expected measurement/fingerprint fields for one geometry row."""
+
+    finding_type = actual["finding_type"]
+    if finding_type == "endpoint":
+        return round(float(actual["expected_offset_to_centre_m"]), 3) == round(
+            float(waiver["expected_offset_to_centre_m"]), 3
+        )
+    if finding_type == "fragment":
+        return (
+            actual["first_disconnected_segment"] == waiver["first_disconnected_segment"]
+            and actual["expected_disconnected_fragment_count"]
+            == waiver["expected_disconnected_fragment_count"]
+        )
+    return actual["expected_route_count"] == waiver["expected_route_count"]
+
+
+def enforce_geometry_waivers(reports: list[MapGeometryReport], waiver_file: Path) -> None:
+    """Fail closed unless the exact current geometry findings are waived."""
+
+    waiver_rows = load_waiver_rows(waiver_file, "geometry")
+    for index, row in enumerate(waiver_rows):
+        _validate_geometry_waiver_shape(row, index)
+    validate_exact_waivers(
+        _geometry_findings(reports),
+        waiver_rows,
+        identity_fields=_GEOMETRY_IDENTITY_FIELDS,
+        evidence_matches=_geometry_evidence_matches,
+        label="geometry",
+    )
 
 
 def format_console_table(report: MapGeometryReport) -> str:
@@ -257,11 +382,16 @@ def main(argv: list[str] | None = None) -> int:
         help="SVG map path; repeatable. Defaults to the four pinned archetype maps.",
     )
     parser.add_argument("--tolerance-m", type=float, default=DEFAULT_TOLERANCE_M)
+    parser.add_argument(
+        "--waiver-file",
+        type=Path,
+        help="Exact waiver YAML required with --fail-on-violation.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit the JSON report only.")
     parser.add_argument(
         "--fail-on-violation",
         action="store_true",
-        help="Exit 1 when any finding exists (for later CI enforcement).",
+        help="Require exact waivers for every finding (for CI enforcement).",
     )
     args = parser.parse_args(argv)
 
@@ -276,8 +406,15 @@ def main(argv: list[str] | None = None) -> int:
             print(format_console_table(report))
         print(f"\ntotal findings: {total}")
 
-    if args.fail_on_violation and total > 0:
-        return 1
+    if args.fail_on_violation:
+        if args.waiver_file is None:
+            print("ERROR: --fail-on-violation requires --waiver-file", file=sys.stderr)
+            return 2
+        try:
+            enforce_geometry_waivers(reports, args.waiver_file)
+        except WaiverValidationError as exc:
+            print(f"ERROR: geometry waiver validation failed: {exc}", file=sys.stderr)
+            return 2
     return 0
 
 

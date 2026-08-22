@@ -120,6 +120,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### Getting Started
 
 * **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
+* **[Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md)** - Exact waiver schema and fail-closed CI checks for the four pinned archetypes
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker

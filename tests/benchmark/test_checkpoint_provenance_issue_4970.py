@@ -203,6 +203,37 @@ def test_batch_summary_bridges_runtime_checkpoint_provenance() -> None:
     assert unchanged["checkpoint_provenance"]["model_id"] == "ppo_demo"
 
 
+def test_batch_summary_preserves_generic_runtime_fallback_markers() -> None:
+    """Episode diagnostics reach the batch contract with sticky fallback semantics."""
+    contract: dict = {}
+    merge_runtime_algorithm_contract(
+        contract,
+        {
+            "planner_runtime": {
+                "planner_type": "SocNavBenchSamplingAdapter",
+                "fallback_triggered": False,
+                "fallback_count": 0,
+            }
+        },
+    )
+    merge_runtime_algorithm_contract(
+        contract,
+        {
+            "planner_runtime": {
+                "planner_type": "SocNavBenchSamplingAdapter",
+                "fallback_triggered": True,
+                "fallback_count": 2,
+                "readiness_status": "fallback",
+            }
+        },
+    )
+
+    runtime = contract["planner_runtime"]
+    assert runtime["fallback_triggered"] is True
+    assert runtime["fallback_count"] == 2
+    assert runtime["readiness_status"] == "fallback"
+
+
 def test_generic_runtime_fallback_fails_benchmark_availability() -> None:
     """Non-checkpoint adapter fallback diagnostics cannot remain benchmark success."""
     planner_runtime = {

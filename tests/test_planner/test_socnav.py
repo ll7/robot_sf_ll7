@@ -69,6 +69,7 @@ def test_local_sampling_adapter_is_explicit_baseline_not_fallback():
     assert diagnostics["upstream_loaded"] is False
     assert diagnostics["fallback_triggered"] is False
     assert diagnostics["fallback_count"] == 0
+    assert diagnostics["fallback_reason"] is None
     assert diagnostics["readiness_status"] == "experimental"
 
 
@@ -83,7 +84,34 @@ def test_socnavbench_missing_upstream_is_reported_as_runtime_fallback():
     assert diagnostics["upstream_loaded"] is False
     assert diagnostics["fallback_triggered"] is True
     assert diagnostics["fallback_count"] == 1
+    assert "unavailable" in diagnostics["fallback_reason"]
     assert diagnostics["readiness_status"] == "fallback"
+
+
+def test_socnavbench_runtime_empty_trajectory_records_fallback():
+    """A post-load upstream failure must remain visible in runtime diagnostics."""
+
+    class Waypoint:
+        @classmethod
+        def from_pos3(cls, value):
+            del value
+            return cls()
+
+    class Planner:
+        opt_waypt = Waypoint()
+
+        def optimize(self, **kwargs):
+            del kwargs
+            return {"trajectory": None}
+
+    adapter = SocNavBenchSamplingAdapter(planner_factory=Planner, allow_fallback=True)
+    adapter.plan(_base_observation())
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["fallback_triggered"] is True
+    assert diagnostics["fallback_count"] == 1
+    assert diagnostics["implementation_mode"] == "heuristic_fallback"
+    assert "no trajectory" in diagnostics["fallback_reason"]
 
 
 def test_extract_grid_payload_handles_flattened_meta():

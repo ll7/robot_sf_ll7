@@ -343,6 +343,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         self._goal_objective: SamplingPlannerAdapter._GoalDistanceObjective | None = None
         self._use_upstream = bool(use_upstream)
         self._allow_fallback = bool(allow_fallback)
+        self._fallback_count = 0
+        self._fallback_reason: str | None = None
 
         if self._use_upstream:
             if planner_factory is not None:
@@ -350,6 +352,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             else:
                 self._planner = self._load_upstream_planner(socnav_root)
             if self._planner is None and self._allow_fallback:
+                self._record_fallback("upstream planner was unavailable during initialization")
                 logger.warning(
                     "SamplingPlannerAdapter is running in fallback heuristic mode and "
                     "is not benchmark-ready."
@@ -455,6 +458,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
             traj = data.get("trajectory")
             if traj is None:
+                if not self._allow_fallback:
+                    raise RuntimeError("SocNavBench planner returned no trajectory")
+                self._record_fallback("upstream planner returned no trajectory")
                 return self._heuristic_plan(observation)
             # NOTE: upstream returns a trajectory and controller matrices; for now we
             # consume only the immediate waypoint to preserve the (v, w) interface and
@@ -484,8 +490,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         # Upstream planner failures use the heuristic fallback when enabled.
         except Exception as exc:  # pragma: no cover - broad catch: planner surface unknown; heuristic fallback or re-raise
             if self._allow_fallback:
+                self._record_fallback(f"upstream runtime failure: {type(exc).__name__}")
                 return self._heuristic_plan(observation)
             raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
+
+    def _record_fallback(self, reason: str) -> None:
+        """Record a sticky upstream-to-heuristic fallback event."""
+        self._fallback_count += 1
+        self._fallback_reason = reason
 
     def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
         """Invoke a user-provided factory defensively.
@@ -770,11 +782,11 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     def diagnostics(self) -> dict[str, Any]:
         """Return explicit implementation and fallback diagnostics."""
         upstream_loaded = self._planner is not None
-        fallback_triggered = self._use_upstream and not upstream_loaded
-        if upstream_loaded:
-            implementation_mode = "upstream_socnavbench"
-        elif fallback_triggered:
+        fallback_triggered = self._fallback_count > 0
+        if fallback_triggered:
             implementation_mode = "heuristic_fallback"
+        elif upstream_loaded:
+            implementation_mode = "upstream_socnavbench"
         else:
             implementation_mode = "in_repo_heuristic_baseline"
         return {
@@ -783,7 +795,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             "upstream_requested": self._use_upstream,
             "upstream_loaded": upstream_loaded,
             "fallback_triggered": fallback_triggered,
-            "fallback_count": int(fallback_triggered),
+            "fallback_count": self._fallback_count,
+            "fallback_reason": self._fallback_reason,
             "readiness_status": "fallback" if fallback_triggered else "experimental",
         }
 

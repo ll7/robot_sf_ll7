@@ -35,6 +35,10 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--expected-release-sha", required=True)
     doctor.add_argument("--expected-base-sha", required=True)
     doctor.add_argument("--tag", required=True)
+    doctor.add_argument(
+        "--expected-campaign-id",
+        help="Require the admitted private packet and queue row to use this fixed campaign ID.",
+    )
     doctor.add_argument("--checkpoint-receipt", type=Path)
     doctor.add_argument("--private-launch-packet", type=Path)
     doctor.add_argument("--private-queue", type=Path)
@@ -74,6 +78,7 @@ def handle(args: argparse.Namespace) -> int:
             expected_release_sha=args.expected_release_sha,
             expected_base_sha=args.expected_base_sha,
             tag=args.tag,
+            expected_campaign_id=getattr(args, "expected_campaign_id", None),
             checkpoint_receipt=args.checkpoint_receipt,
             private_launch_packet=args.private_launch_packet,
             private_queue=getattr(args, "private_queue", None),

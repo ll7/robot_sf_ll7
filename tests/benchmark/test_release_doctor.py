@@ -198,6 +198,7 @@ def test_top_level_cli_registers_release_doctor(capsys) -> None:
     output = capsys.readouterr().out
     assert "--expected-release-sha" in output
     assert "--expected-base-sha" in output
+    assert "--expected-campaign-id" in output
 
 
 def _write_final_packet_fixture(

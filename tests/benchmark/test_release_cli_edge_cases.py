@@ -127,6 +127,7 @@ def test_release_cli_doctor_propagates_report_status(
         expected_release_sha="a" * 40,
         expected_base_sha="b" * 40,
         tag="release",
+        expected_campaign_id="campaign-1",
         checkpoint_receipt=None,
         private_launch_packet=None,
         dissertation=None,
@@ -135,10 +136,13 @@ def test_release_cli_doctor_propagates_report_status(
         minimum_free_gib=100.0,
         require_zenodo_webhook_disabled=False,
     )
-    monkeypatch.setattr(
-        release_cli,
-        "collect_release_doctor_report",
-        lambda **kwargs: {"status": status, "checks": []},
-    )
+    captured: dict[str, object] = {}
+
+    def collect(**kwargs):
+        captured.update(kwargs)
+        return {"status": status, "checks": []}
+
+    monkeypatch.setattr(release_cli, "collect_release_doctor_report", collect)
     assert release_cli.handle(args) == (0 if status == "pass" else 2)
+    assert captured["expected_campaign_id"] == "campaign-1"
     assert status in capsys.readouterr().out

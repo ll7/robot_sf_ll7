@@ -1499,9 +1499,7 @@ def _update_checkpoint_reference_runtime(
             if isinstance(item.get("fallback_triggered"), bool)
         ]
         reference["load_succeeded"] = all(reference_loads) if reference_loads else None
-        reference["fallback_triggered"] = (
-            any(reference_fallbacks) if reference_fallbacks else None
-        )
+        reference["fallback_triggered"] = any(reference_fallbacks) if reference_fallbacks else None
         if reference["fallback_triggered"] is True:
             reference["load_status"] = "fallback"
         elif reference["load_succeeded"] is True:

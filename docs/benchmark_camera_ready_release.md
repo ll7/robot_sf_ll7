@@ -29,6 +29,13 @@ this release, including when calibration emits a warning.
   - `publication_bundle.archive_path`
   - `publication_bundle.checksums_path`
   - `publication_bundle.manifest_path`
+- A final release bundle whose `publication_manifest.json` declares
+  `release_metadata.schema_version: benchmark-release-publication-metadata.v1`
+  and includes the resolved release manifest/result, citation metadata, exact
+  Zenodo metadata, generated rights/provenance statement, and pinned SNQI
+  weights/baseline for cold verification.
+- An immutable release identity recorded in the resolved manifest and release
+  result: exact tag, source SHA, campaign-config SHA, and bundle SHA-256.
 - `gh` CLI authenticated for repository upload.
 
 ## Recommended Tag Naming
@@ -47,6 +54,12 @@ version DOI after the final bundle is validated. Do not reuse historical
 concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`, and do not
 assume GitHub-to-Zenodo automation is enabled. Until a real record exists, keep
 the manifest DOI as a pending placeholder.
+
+The direct Zenodo path is deliberately separate from the GitHub release path.
+Disable the repository's GitHub-to-Zenodo webhook immediately before publishing
+the GitHub Release and leave it disabled. Do not use the webhook to create or
+update this benchmark-data deposition: unrelated software or model releases
+must not contaminate the benchmark concept.
 
 ## Command Path
 
@@ -70,6 +83,50 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --execute-upload
 ```
 
+The upload helper creates or updates a draft GitHub Release only. It does not
+reserve, upload to, or publish Zenodo. Use the direct Zenodo CLI for the
+reserved deposition after the bundle has passed the independent cold check:
+
+```bash
+# Keep this file outside Git with mode 0600; never print its contents.
+ZENODO_TOKEN_FILE=/home/<user>/.config/robot-sf/zenodo.token
+ZENODO_STATE=output/release/zenodo-deposition.json
+ZENODO_METADATA=configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
+
+uv run robot-sf release zenodo reserve \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --metadata "$ZENODO_METADATA"
+
+uv run robot-sf release zenodo upload \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  output/benchmarks/publication/<campaign_id>_publication_bundle.tar.gz
+
+uv run robot-sf release zenodo verify \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --metadata "$ZENODO_METADATA"
+
+# Run only after acceptance and independent cold verification pass.
+uv run robot-sf release zenodo publish \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --metadata "$ZENODO_METADATA"
+```
+
+`reserve` must return a fresh concept and version DOI; freeze those values in
+the release manifest before the immutable execution point. `upload` must send
+the byte-identical bundle used for GitHub. `verify` is read-only and must check
+the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
+and concept/version DOI distinction. `publish` is irreversible; never run it
+for a draft with missing files, unaccepted rows, or an unresolved DOI.
+
+Disable the specific GitHub-to-Zenodo webhook through repository settings or
+the approved GitHub API operation immediately before GitHub publication. Confirm
+its effective state with the release doctor and retain only webhook id/state in
+the operator receipt; never put a token or authorization header in that receipt.
+
 ## Validation Checklist
 
 - `release_publish_plan.json` contains expected paths and URLs.
@@ -79,6 +136,35 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   - `release_url`
   - `release_asset_url`
   - `doi_url`
+
+## Cold verification and exact identity checks
+
+Perform these checks from a clean temporary directory that contains neither
+the build output nor the source worktree:
+
+1. Download the GitHub Release archive and its checksum/manifest assets. Extract
+   the archive and run `sha256sum -c checksums.sha256` from the bundle root.
+2. Confirm that `payload/release/release_manifest.resolved.json` and
+   `payload/release/release_result.json` agree on release id, tag, source SHA,
+   acceptance status, and 20,160 episode identities. No fallback, degraded,
+   failed, or unavailable row may be treated as evidence.
+3. Confirm that the metadata roles in `publication_manifest.json` point to
+   files inside the archive and that every declared digest matches. The citation,
+   Zenodo metadata, rights/provenance statement, and both pinned SNQI assets
+   must be present. Raw episode and component-metric files remain in the
+   payload; `output/` remains working storage, not a citation target.
+4. Confirm the tag points to the exact source SHA recorded by the release result
+   and that the frozen manifest/config hashes match the bundle. A tag or DOI
+   mismatch is a release blocker, not a documentation warning.
+5. Download the Zenodo file independently after upload (and again after
+   publication), extract it into a second clean directory, and repeat steps
+   1–4. Compare the GitHub and Zenodo archive SHA-256 values byte-for-byte.
+6. Verify that Zenodo reports the reserved version DOI and parent concept, the
+   exact title/type/license/creators, and the source-tag relation. Keep the
+   readback receipts with the private durable-artifact record.
+
+These checks are independent of the local build directory. A successful local
+`export` or draft upload alone is not benchmark evidence or a publication.
 
 ## Paper Ingestion Links
 

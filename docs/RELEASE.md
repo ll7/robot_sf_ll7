@@ -187,3 +187,8 @@ reviewed.
 - keep the release tag and release asset URL stable
 - require the manifest's reserved version DOI to match the published record and
   independently verify the concept/version distinction
+- For the benchmark-data lane, follow
+  [`benchmark_camera_ready_release.md`](./benchmark_camera_ready_release.md) for
+  the direct Zenodo reserve/upload/verify/publish sequence, webhook disablement,
+  and GitHub/Zenodo cold-download comparison. This lane does not bump the
+  package version or publish the software-release DOI.

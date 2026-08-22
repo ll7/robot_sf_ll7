@@ -5,22 +5,23 @@ from __future__ import annotations
 import json
 import os
 import tarfile
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from robot_sf.benchmark.artifact_publication import (
+    _SNQI_DEFAULT_BASELINE_NAME,
+    _SNQI_DEFAULT_WEIGHTS_NAME,
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
     _compute_and_emit_badging_artifacts,
+    _snqi_load_canonical_basis,
     discover_run_directories,
     export_publication_bundle,
     list_publication_files,
     measure_artifact_size_ranges,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write(path: Path, payload: str) -> None:
@@ -481,3 +482,110 @@ def test_export_publication_bundle_placeholder_doi_yields_none(tmp_path: Path) -
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["artifact_badging"]["claimed_level"] == "none"
+
+
+def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_path: Path) -> None:
+    """A completed release export carries metadata and pinned SNQI inputs for cold checks."""
+    run_dir = tmp_path / "benchmarks" / "release_export"
+    _make_run(run_dir, with_video=True)
+    _write(
+        run_dir / "run_meta.json",
+        json.dumps(
+            {
+                "repo": {
+                    "remote": "git@github.com:ll7/robot_sf_ll7.git",
+                    "commit": "a" * 40,
+                }
+            }
+        ),
+    )
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps(
+            {
+                "schema_version": "benchmark-release-manifest.v0.2",
+                "release_id": "release_export",
+                "release_tag": "paper-matrix-v2-h600-s30-2026-08-abc123456789",
+                "metrics": {
+                    "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                    "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+                },
+                "provenance": {
+                    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+                    "doi": "10.5281/zenodo.1234567",
+                    "citation_path": "CITATION.cff",
+                },
+            }
+        ),
+    )
+    _write(
+        run_dir / "release" / "release_result.json",
+        json.dumps({"status": "ok", "source_commit": "a" * 40}),
+    )
+
+    result = export_publication_bundle(
+        run_dir,
+        tmp_path / "publication",
+        bundle_name="release_export_bundle",
+        include_videos=False,
+        release_tag="paper-matrix-v2-h600-s30-2026-08-abc123456789",
+        doi="10.5281/zenodo.1234567",
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest["release_metadata"]
+
+    assert metadata["schema_version"] == "benchmark-release-publication-metadata.v1"
+    assert metadata["required"] is True
+    assert set(metadata["files"]) == {
+        "release_manifest",
+        "release_result",
+        "citation",
+        "zenodo_metadata",
+        "rights_provenance",
+        "snqi_weights",
+        "snqi_baseline",
+    }
+    assert metadata["raw_artifact_policy"]["campaign_output"] == "durable-required"
+    assert metadata["cold_verification"]["credentials"] == "not_recorded"
+    assert (result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff").is_file()
+    assert (result.bundle_dir / "payload" / "release_metadata" / "zenodo_metadata.json").is_file()
+    rights = result.bundle_dir / "payload" / "release_metadata" / "rights_provenance.md"
+    assert "SNQI" in rights.read_text(encoding="utf-8")
+    assert "a" * 40 in rights.read_text(encoding="utf-8")
+    assert (
+        result.bundle_dir / "payload" / "release_metadata" / "snqi" / _SNQI_DEFAULT_WEIGHTS_NAME
+    ).is_file()
+    assert (
+        result.bundle_dir / "payload" / "release_metadata" / "snqi" / _SNQI_DEFAULT_BASELINE_NAME
+    ).is_file()
+    # Raw episode rows are retained even when optional videos are excluded.
+    assert (result.bundle_dir / "payload" / "episodes" / "episodes.jsonl").is_file()
+    assert not (result.bundle_dir / "payload" / "videos").exists()
+
+
+def test_release_bundle_snqi_basis_prefers_pinned_payload_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cold verification must not silently fall back to a checkout's SNQI files."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    weights_path = payload_dir / "release_metadata" / "snqi" / _SNQI_DEFAULT_WEIGHTS_NAME
+    baseline_path = payload_dir / "release_metadata" / "snqi" / _SNQI_DEFAULT_BASELINE_NAME
+    weights_path.parent.mkdir(parents=True, exist_ok=True)
+    weights_path.write_text(
+        (Path("configs/benchmarks") / _SNQI_DEFAULT_WEIGHTS_NAME).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    baseline_path.write_text(
+        (Path("configs/benchmarks") / _SNQI_DEFAULT_BASELINE_NAME).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    missing_checkout = tmp_path / "cold_checkout"
+    missing_checkout.mkdir()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.artifact_publication.get_repository_root", lambda: missing_checkout
+    )
+
+    basis = _snqi_load_canonical_basis(payload_dir)
+    assert basis["weights_sha256"]
+    assert basis["baseline_sha256"]
+    assert "rejections" not in basis

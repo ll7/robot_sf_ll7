@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import mimetypes
+import re
 import shutil
 import tarfile
 import tempfile
@@ -35,6 +36,7 @@ from robot_sf.benchmark.snqi_scalarization_sensitivity import (
 from robot_sf.common.artifact_paths import get_repository_root
 
 PUBLICATION_BUNDLE_SCHEMA_VERSION = "benchmark-publication-bundle.v2"
+RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION = "benchmark-release-publication-metadata.v1"
 EVIDENCE_BUNDLE_SCHEMA_VERSION = "evidence_bundle.v1"
 EVIDENCE_MIRROR_MANIFEST_SCHEMA_VERSION = "evidence_bundle_mirror.v1"
 MANUSCRIPT_ARTIFACT_BUNDLE_SCHEMA_VERSION = "dissertation_artifact_bundle.v1"
@@ -56,6 +58,20 @@ _CAMPAIGN_PREFLIGHT_REQUIRED = (
 # drift silently (see ``scripts/validation/check_release_snqi_field_consistency.py``).
 _SNQI_DEFAULT_WEIGHTS_NAME = "snqi_weights_camera_ready_v3.json"
 _SNQI_DEFAULT_BASELINE_NAME = "snqi_baseline_camera_ready_v3.json"
+_DEFAULT_ZENODO_METADATA_RELATIVE = Path(
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json"
+)
+_BUNDLED_SNQI_WEIGHTS_RELATIVE = Path("release_metadata/snqi/snqi_weights_camera_ready_v3.json")
+_BUNDLED_SNQI_BASELINE_RELATIVE = Path("release_metadata/snqi/snqi_baseline_camera_ready_v3.json")
+_REQUIRED_RELEASE_METADATA_ROLES = (
+    "release_manifest",
+    "release_result",
+    "citation",
+    "zenodo_metadata",
+    "rights_provenance",
+    "snqi_weights",
+    "snqi_baseline",
+)
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
 _RECOMMENDED_MANUSCRIPT_USES = {
@@ -87,6 +103,15 @@ class PublicationBundleResult:
     checksums_path: Path
     file_count: int
     total_bytes: int
+
+
+@dataclass(frozen=True)
+class _ReleasePublicationMetadata:
+    """Resolved metadata inputs copied into a benchmark release bundle."""
+
+    files: dict[str, tuple[Path, Path]]
+    rights_provenance: str
+    source_paths: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -447,6 +472,245 @@ def validate_artifact_badging_block(block: dict[str, Any]) -> None:  # noqa: C90
         for item in nondet:
             if not isinstance(item, str):
                 raise ValueError("known_nondeterminism items must be strings")
+
+
+def _resolve_repo_file(value: object, *, repo_root: Path) -> Path | None:
+    """Resolve a repository-relative metadata path without accepting external files.
+
+    Returns:
+        The resolved file, or ``None`` when the value is absent or invalid.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = Path(value.strip())
+    resolved = (candidate if candidate.is_absolute() else repo_root / candidate).resolve()
+    if not resolved.is_relative_to(repo_root) or not resolved.is_file():
+        return None
+    return resolved
+
+
+def _find_release_sha(payloads: list[object]) -> str | None:  # noqa: C901
+    """Find an explicitly named 40-character source SHA in release metadata.
+
+    Returns:
+        The first source SHA found, or ``None`` when metadata does not carry one.
+    """
+    preferred_keys = (
+        "source_commit",
+        "public_source_commit",
+        "release_sha",
+        "execution_commit",
+        "commit",
+        "git_hash",
+    )
+
+    def visit(value: object) -> str | None:
+        if isinstance(value, Mapping):
+            for key in preferred_keys:
+                candidate = value.get(key)
+                if isinstance(candidate, str) and re.fullmatch(r"[0-9a-fA-F]{40}", candidate):
+                    return candidate.lower()
+            for child in value.values():
+                found = visit(child)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = visit(child)
+                if found is not None:
+                    return found
+        return None
+
+    for payload in payloads:
+        found = visit(payload)
+        if found is not None:
+            return found
+    return None
+
+
+def _build_rights_provenance_statement(
+    *,
+    resolved_manifest: Mapping[str, Any],
+    release_result: Mapping[str, Any],
+    zenodo_metadata: Mapping[str, Any],
+    campaign_metadata: list[Mapping[str, Any]] | None = None,
+) -> str:
+    """Build a credential-free rights and provenance statement for cold verification.
+
+    Returns:
+        A deterministic Markdown statement containing rights and provenance boundaries.
+    """
+    metadata = zenodo_metadata.get("metadata")
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    license_name = str(metadata.get("license", "GPL-3.0-only")).strip() or "GPL-3.0-only"
+    creators = metadata.get("creators")
+    creator_names = (
+        [
+            str(row.get("name")).strip()
+            for row in creators
+            if isinstance(row, Mapping) and str(row.get("name", "")).strip()
+        ]
+        if isinstance(creators, list)
+        else []
+    )
+    release_tag = str(resolved_manifest.get("release_tag", "")).strip() or "(recorded in manifest)"
+    provenance = resolved_manifest.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    doi = (
+        str(
+            provenance.get("version_doi") or provenance.get("doi") or metadata.get("doi", "")
+        ).strip()
+        or "(recorded in release metadata)"
+    )
+    repository_url = str(provenance.get("repository_url", "")).strip()
+    source_sha = _find_release_sha([release_result, resolved_manifest, *(campaign_metadata or [])])
+    source_text = source_sha or "recorded in release_result.json and episode provenance"
+    creator_text = (
+        ", ".join(creator_names) if creator_names else "the authoritative release creators"
+    )
+    repository_text = repository_url or "the repository URL recorded in the resolved manifest"
+
+    return f"""# Benchmark-data release rights and provenance
+
+This statement travels with the immutable benchmark-data bundle so a cold
+download can be checked without access to the build workspace.
+
+- Artifact kind: benchmark dataset (not a software/package release).
+- License: `{license_name}`.
+- Authoritative creators: {creator_text}.
+- Release tag: `{release_tag}`.
+- Version DOI: `{doi}`.
+- Source repository: {repository_text}.
+- Source/execution commit: `{source_text}`.
+- Contract: the resolved release manifest is authoritative for the planner,
+  scenario, seed, horizon, kinematics, and metric inputs.
+- Raw-artifact policy: raw episode rows and component metrics remain part of
+  the durable publication payload; generated local `output/` directories are
+  working storage and are not citation targets. Large raw artifacts are not
+  added to Git merely to make a release reproducible.
+- SNQI boundary: the Social Navigation Quality Index (SNQI) is advisory only
+  for this release and must not be used as a planner-ranking authority. The
+  pinned weights and baseline are included under `release_metadata/snqi/` for
+  checksum-bound diagnostic recomputation.
+- Rights boundary: this statement does not grant rights to external datasets,
+  learned checkpoints, or private operational logs that are not listed in the
+  bundle manifest.
+
+The release result records acceptance status and the resolved manifest records
+the exact contract. Verify both files, the citation metadata, Zenodo metadata,
+this statement, and every checksum before treating the bundle as paper-facing
+evidence.
+"""
+
+
+def _resolve_release_publication_metadata(  # noqa: C901
+    run_root: Path,
+) -> _ReleasePublicationMetadata | None:
+    """Resolve the metadata needed to make a benchmark bundle cold-verifiable.
+
+    A normal exploratory run has no ``release/release_manifest.resolved.json``
+    and is unchanged. Once the release runner has written both the resolved
+    manifest and release result, the exporter fails closed unless it can stage
+    the citation, Zenodo metadata, rights statement, and pinned SNQI assets.
+
+    Returns:
+        Resolved metadata sources, or ``None`` for a non-release run.
+    """
+    release_manifest_path = run_root / "release" / "release_manifest.resolved.json"
+    release_result_path = run_root / "release" / "release_result.json"
+    if not release_manifest_path.is_file() or not release_result_path.is_file():
+        return None
+
+    try:
+        resolved_manifest = _read_json_file(release_manifest_path)
+        release_result = _read_json_file(release_result_path)
+    except ValueError as exc:
+        raise ValueError(f"Release publication metadata is malformed: {exc}") from exc
+
+    repo_root = get_repository_root().resolve()
+    provenance = resolved_manifest.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    metrics = resolved_manifest.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+
+    citation_path = _resolve_repo_file(provenance.get("citation_path"), repo_root=repo_root)
+    if citation_path is None:
+        citation_path = _resolve_repo_file("CITATION.cff", repo_root=repo_root)
+
+    metadata_path = _resolve_repo_file(
+        provenance.get("zenodo_metadata_path") or provenance.get("metadata_path"),
+        repo_root=repo_root,
+    )
+    if metadata_path is None:
+        publication = resolved_manifest.get("publication")
+        if isinstance(publication, Mapping):
+            metadata_path = _resolve_repo_file(
+                publication.get("metadata_path"), repo_root=repo_root
+            )
+    if metadata_path is None:
+        metadata_path = _resolve_repo_file(
+            _DEFAULT_ZENODO_METADATA_RELATIVE.as_posix(), repo_root=repo_root
+        )
+    if metadata_path is None:
+        candidates = sorted(
+            (repo_root / "configs" / "benchmarks" / "releases").glob("*_zenodo_metadata.json")
+        )
+        if len(candidates) == 1:
+            metadata_path = candidates[0]
+
+    weights_path = _resolve_repo_file(metrics.get("snqi_weights_path"), repo_root=repo_root)
+    baseline_path = _resolve_repo_file(metrics.get("snqi_baseline_path"), repo_root=repo_root)
+
+    source_paths: dict[str, str] = {}
+    resolved_sources: dict[str, Path | None] = {
+        "release_manifest": release_manifest_path,
+        "release_result": release_result_path,
+        "citation": citation_path,
+        "zenodo_metadata": metadata_path,
+        "snqi_weights": weights_path,
+        "snqi_baseline": baseline_path,
+    }
+    missing = [role for role, path in resolved_sources.items() if path is None]
+    if missing:
+        raise ValueError(
+            "Release publication metadata is missing required inputs: " + ", ".join(missing)
+        )
+
+    zenodo_payload = _read_json_file(metadata_path)  # type: ignore[arg-type]
+    campaign_metadata: list[Mapping[str, Any]] = []
+    for metadata_name in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        metadata_candidate = run_root / metadata_name
+        if metadata_candidate.is_file():
+            try:
+                campaign_metadata.append(_read_json_file(metadata_candidate))
+            except ValueError:
+                continue
+    rights_provenance = _build_rights_provenance_statement(
+        resolved_manifest=resolved_manifest,
+        release_result=release_result,
+        zenodo_metadata=zenodo_payload,
+        campaign_metadata=campaign_metadata,
+    )
+    files: dict[str, tuple[Path, Path]] = {
+        "release_manifest": (release_manifest_path, Path("release/release_manifest.resolved.json")),
+        "release_result": (release_result_path, Path("release/release_result.json")),
+        "citation": (citation_path, Path("release_metadata/CITATION.cff")),  # type: ignore[arg-type]
+        "zenodo_metadata": (
+            metadata_path,  # type: ignore[arg-type]
+            Path("release_metadata/zenodo_metadata.json"),
+        ),
+        "snqi_weights": (weights_path, _BUNDLED_SNQI_WEIGHTS_RELATIVE),  # type: ignore[arg-type]
+        "snqi_baseline": (baseline_path, _BUNDLED_SNQI_BASELINE_RELATIVE),  # type: ignore[arg-type]
+    }
+    for role, path in resolved_sources.items():
+        if path is not None:
+            source_paths[role] = _to_repo_relative(path)
+    source_paths["rights_provenance"] = "generated:release_metadata/rights_provenance.md"
+    return _ReleasePublicationMetadata(
+        files=files,
+        rights_provenance=rights_provenance,
+        source_paths=source_paths,
+    )
 
 
 def _validate_publication_requirements(run_root: Path, selected_files: list[Path]) -> None:
@@ -1076,7 +1340,7 @@ For details on verification, see [release_artifact_badging.md](docs/release_arti
     return computed_badging, achieved_level
 
 
-def export_publication_bundle(  # noqa: PLR0913
+def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
     run_dir: Path,
     out_dir: Path,
     *,
@@ -1107,6 +1371,7 @@ def export_publication_bundle(  # noqa: PLR0913
     if not selected_files:
         raise ValueError(f"No eligible files found under {run_root}")
     _validate_publication_requirements(run_root, selected_files)
+    release_metadata = _resolve_release_publication_metadata(run_root)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)
@@ -1145,6 +1410,57 @@ def export_publication_bundle(  # noqa: PLR0913
             )
         )
 
+    metadata_records: dict[str, dict[str, Any]] = {}
+    if release_metadata is not None:
+        # Release manifest/result are already selected from the campaign root.  The
+        # remaining metadata is copied into a separate, stable namespace so a cold
+        # extraction never needs the source checkout to verify the release.
+        existing_paths = {entry.path for entry in entries}
+        for role, (source, payload_relative) in release_metadata.files.items():
+            payload_path = payload_relative.as_posix()
+            if payload_path not in existing_paths:
+                destination = payload_root / payload_relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+                size_bytes = int(destination.stat().st_size)
+                total_bytes += size_bytes
+                entries.append(
+                    PublicationFileEntry(
+                        path=payload_path,
+                        size_bytes=size_bytes,
+                        sha256=_sha256_file(destination),
+                        kind="provenance",
+                    )
+                )
+                existing_paths.add(payload_path)
+            entry = next(item for item in entries if item.path == payload_path)
+            metadata_records[role] = {
+                "path": f"payload/{payload_path}",
+                "sha256": entry.sha256,
+                "source": release_metadata.source_paths.get(role, "unknown"),
+            }
+
+        rights_relative = Path("release_metadata/rights_provenance.md")
+        rights_destination = payload_root / rights_relative
+        rights_destination.parent.mkdir(parents=True, exist_ok=True)
+        rights_destination.write_text(release_metadata.rights_provenance, encoding="utf-8")
+        rights_path = rights_relative.as_posix()
+        rights_size = int(rights_destination.stat().st_size)
+        rights_entry = PublicationFileEntry(
+            path=rights_path,
+            size_bytes=rights_size,
+            sha256=_sha256_file(rights_destination),
+            kind="provenance",
+        )
+        entries = [entry for entry in entries if entry.path != rights_path]
+        entries.append(rights_entry)
+        total_bytes += rights_size
+        metadata_records["rights_provenance"] = {
+            "path": f"payload/{rights_path}",
+            "sha256": rights_entry.sha256,
+            "source": release_metadata.source_paths["rights_provenance"],
+        }
+
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
     # The checksum manifest lives at the bundle root. Keep every target
@@ -1168,6 +1484,23 @@ def export_publication_bundle(  # noqa: PLR0913
         "totals": {"file_count": len(entries), "total_bytes": total_bytes},
         "files": [asdict(entry) for entry in entries],
     }
+    if release_metadata is not None:
+        manifest_payload["release_metadata"] = {
+            "schema_version": RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION,
+            "required": True,
+            "files": metadata_records,
+            "raw_artifact_policy": {
+                "campaign_output": "durable-required",
+                "publication_bundle": "durable-required",
+                "source_control": "compact-metadata-only",
+                "local_output": "working-storage-not-citation-target",
+            },
+            "cold_verification": {
+                "required_inputs": list(_REQUIRED_RELEASE_METADATA_ROLES),
+                "credentials": "not_recorded",
+                "snqi_claim_policy": "advisory_no_ranking",
+            },
+        }
 
     # Dynamically compute badging block and emit README
     if artifact_badging is not None:
@@ -1478,7 +1811,7 @@ def _snqi_diagnostics_ordering(diagnostics: Mapping[str, Any]) -> dict[str, int]
     return ordering
 
 
-def _snqi_load_canonical_basis() -> dict[str, Any]:
+def _snqi_load_canonical_basis(payload_dir: Path | None = None) -> dict[str, Any]:
     """Load canonical SNQI weights and baseline files for consistency checking.
 
     Returns:
@@ -1486,8 +1819,19 @@ def _snqi_load_canonical_basis() -> dict[str, Any]:
         or ``weights``, ``baseline``, ``weights_sha256``, and ``baseline_sha256``.
     """
     repo_root = get_repository_root()
-    weights_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_WEIGHTS_NAME
-    baseline_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_BASELINE_NAME
+    bundled_weights = payload_dir / _BUNDLED_SNQI_WEIGHTS_RELATIVE if payload_dir else None
+    bundled_baseline = payload_dir / _BUNDLED_SNQI_BASELINE_RELATIVE if payload_dir else None
+    if (
+        bundled_weights is not None
+        and bundled_baseline is not None
+        and bundled_weights.is_file()
+        and bundled_baseline.is_file()
+    ):
+        weights_path = bundled_weights
+        baseline_path = bundled_baseline
+    else:
+        weights_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_WEIGHTS_NAME
+        baseline_path = repo_root / "configs" / "benchmarks" / _SNQI_DEFAULT_BASELINE_NAME
     rejections: list[str] = []
     if not weights_path.is_file():
         rejections.append(f"canonical SNQI weights file is missing: {weights_path}")
@@ -1748,7 +2092,7 @@ def _check_snqi_field_consistency(
     if diagnostics is None:
         return {"checked": False, "violation_count": 0, "violations": [], "ordering": {}}
 
-    canonical = _snqi_load_canonical_basis()
+    canonical = _snqi_load_canonical_basis(payload_dir)
     if "rejections" in canonical:
         result: dict[str, Any] = {
             "checked": True,
@@ -1875,6 +2219,56 @@ def _preflight_check_channels(
                 )
     elif "publication_channels" not in manifest:
         warnings.append("publication_manifest.json omits publication_channels")
+
+
+def _preflight_check_release_metadata(  # noqa: C901
+    payload_dir: Path,
+    manifest: Mapping[str, Any],
+    *,
+    violations: list[str],
+) -> None:
+    """Check the cold-verification metadata declared by a release bundle."""
+    block = manifest.get("release_metadata")
+    if block is None:
+        return
+    if not isinstance(block, Mapping):
+        violations.append("publication_manifest.release_metadata must be an object")
+        return
+    if block.get("schema_version") != RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION:
+        violations.append("publication_manifest.release_metadata has an unsupported schema_version")
+    required = block.get("required") is True
+    files = block.get("files")
+    if not isinstance(files, Mapping):
+        violations.append("publication_manifest.release_metadata.files must be an object")
+        return
+    required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
+    for role in required_roles:
+        entry = files.get(role)
+        if not isinstance(entry, Mapping):
+            violations.append(f"release metadata is missing required role {role!r}")
+            continue
+        raw_path = entry.get("path")
+        declared_sha = entry.get("sha256")
+        if not isinstance(raw_path, str) or not raw_path.startswith("payload/"):
+            violations.append(f"release metadata role {role!r} has an invalid payload path")
+            continue
+        candidate = (payload_dir.parent / raw_path).resolve()
+        if not candidate.is_relative_to(payload_dir.parent) or not candidate.is_file():
+            violations.append(f"release metadata role {role!r} payload is missing")
+            continue
+        actual_sha = _sha256_file(candidate)
+        if not isinstance(declared_sha, str) or declared_sha.lower() != actual_sha:
+            violations.append(f"release metadata role {role!r} checksum does not match payload")
+
+    if required:
+        raw_policy = block.get("raw_artifact_policy")
+        if not isinstance(raw_policy, Mapping):
+            violations.append("release metadata raw_artifact_policy is missing")
+        elif raw_policy.get("campaign_output") != "durable-required":
+            violations.append("release metadata raw-artifact policy must retain campaign output")
+        cold = block.get("cold_verification")
+        if not isinstance(cold, Mapping) or cold.get("credentials") != "not_recorded":
+            violations.append("release metadata cold-verification credential policy is invalid")
 
 
 def _preflight_check_release_reconciliation(
@@ -2051,6 +2445,7 @@ def verify_publication_bundle_preflight(
         violations.append(f"checksums.sha256 cannot be validated: {exc}")
         checksums = {}
     _preflight_check_channels(manifest, violations=violations, warnings=warnings)
+    _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
     try:
         _preflight_check_release_reconciliation(
             payload_dir,

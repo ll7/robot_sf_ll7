@@ -275,6 +275,10 @@ def test_generic_runtime_fallback_fails_benchmark_availability() -> None:
             {"foresight_prediction": {"fallback_used": True}},
             ("foresight_prediction.fallback_used", "true"),
         ),
+        (
+            {"guard_stats": {"fallback_safe": 2}},
+            ("guard_stats.fallback_safe", "2"),
+        ),
     ],
 )
 def test_runtime_fallback_detector_catches_foresight_fallback_metadata(

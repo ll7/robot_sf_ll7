@@ -843,6 +843,7 @@ class TestScopedScenarioParity:
             result = _run_single_arm_subprocess(params)
 
         assert captured["scenarios"] == self.SCOPED
+        assert captured["scenario_path"] == params.scenario_matrix_path
         assert captured["resume"] is False
         assert result["summary"]["status"] == "ok"
 

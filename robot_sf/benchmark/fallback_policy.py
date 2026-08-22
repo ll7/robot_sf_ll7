@@ -97,7 +97,7 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                 if key in _RUNTIME_BOOLEAN_MARKERS and item is True:
                     return item_path, "true"
                 if (
-                    (key == "fallback_count" or key.endswith("_fallback_count"))
+                    "fallback" in key
                     and isinstance(item, (int, float))
                     and not isinstance(item, bool)
                     and item > 0

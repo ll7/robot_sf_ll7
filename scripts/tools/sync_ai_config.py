@@ -27,6 +27,9 @@ class PointerSpec:
 
     path: str
     must_reference: str
+    max_nonblank_lines: int | None = None
+    allowed_sections: tuple[str, ...] = ()
+    forbidden_sections: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -83,10 +86,50 @@ def load_manifest() -> MirrorManifest:
         PointerSpec(
             path=_manifest_str(entry, "pointer_files", index, "path"),
             must_reference=_manifest_str(entry, "pointer_files", index, "must_reference"),
+            max_nonblank_lines=_manifest_opt_int(
+                entry, "pointer_files", index, "max_nonblank_lines"
+            ),
+            allowed_sections=_manifest_opt_str_list(
+                entry, "pointer_files", index, "allowed_sections"
+            ),
+            forbidden_sections=_manifest_opt_str_list(
+                entry, "pointer_files", index, "forbidden_sections"
+            ),
         )
         for index, entry in enumerate(_manifest_entries(manifest, "pointer_files"))
     )
     return MirrorManifest(symlink_mirrors=symlink_mirrors, pointer_files=pointer_files)
+
+
+def _manifest_opt_int(entry: dict[str, object], section: str, index: int, field: str) -> int | None:
+    """Read an optional non-negative integer field from a manifest entry."""
+    value = entry.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            f"{MANIFEST_PATH}: {section}[{index}].{field} must be a non-negative integer"
+        )
+    return value
+
+
+def _manifest_opt_str_list(
+    entry: dict[str, object], section: str, index: int, field: str
+) -> tuple[str, ...]:
+    """Read an optional list of non-empty strings from a manifest entry."""
+    value = entry.get(field)
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError(f"{MANIFEST_PATH}: {section}[{index}].{field} must be a list")
+    items: list[str] = []
+    for item_index, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(
+                f"{MANIFEST_PATH}: {section}[{index}].{field}[{item_index}] must be a non-empty string"
+            )
+        items.append(item)
+    return tuple(items)
 
 
 LINK_SPECS = load_manifest().symlink_mirrors
@@ -126,20 +169,39 @@ def _check_link(spec: LinkSpec, *, fix: bool) -> list[str]:
     return errors
 
 
-def _check_pointer_file(path: str, expected_text: str) -> list[str]:
+def _check_pointer_file(spec: PointerSpec) -> list[str]:
     """Return drift errors when a tool-specific instruction pointer stops pointing canonical."""
-    pointer_path = _repo_path(path)
-    if not pointer_path.exists():
-        return [f"{path}: missing pointer file referencing {expected_text!r}"]
-    if not pointer_path.is_file():
-        return [f"{path}: pointer path exists but is not a file"]
+    path = _repo_path(spec.path)
+    if not path.exists():
+        return [f"{spec.path}: missing pointer file referencing {spec.must_reference!r}"]
+    if not path.is_file():
+        return [f"{spec.path}: pointer path exists but is not a file"]
     try:
-        content = pointer_path.read_text(encoding="utf-8")
+        content = path.read_text(encoding="utf-8")
     except OSError as exc:
-        return [f"{path}: cannot read pointer file: {exc}"]
-    if expected_text not in content:
-        return [f"{path}: expected to reference {expected_text!r}"]
-    return []
+        return [f"{spec.path}: cannot read pointer file: {exc}"]
+    errors: list[str] = []
+    if spec.must_reference not in content:
+        errors.append(f"{spec.path}: expected to reference {spec.must_reference!r}")
+
+    nonblank = [line for line in content.splitlines() if line.strip()]
+    if spec.max_nonblank_lines is not None and len(nonblank) > spec.max_nonblank_lines:
+        errors.append(
+            f"{spec.path}: {len(nonblank)} nonblank lines exceeds "
+            f"budget {spec.max_nonblank_lines}; move policy back to the canonical source"
+        )
+
+    lowered = content.lower()
+    for section in spec.forbidden_sections:
+        heading = f"## {section.lower()}"
+        # Match the section as an actual heading (`## <name>`). A plain prose
+        # mention that merely points to the canonical location is not a copy.
+        if heading in lowered:
+            errors.append(
+                f"{spec.path}: forbidden duplicated section {section!r}; "
+                f"policy must live in the canonical source only"
+            )
+    return errors
 
 
 def main() -> int:
@@ -157,7 +219,7 @@ def main() -> int:
         errors.extend(_check_link(spec, fix=fix))
 
     for spec in manifest.pointer_files:
-        errors.extend(_check_pointer_file(spec.path, spec.must_reference))
+        errors.extend(_check_pointer_file(spec))
 
     if errors:
         raise SystemExit("AI config drift detected:\n- " + "\n- ".join(errors))

@@ -798,7 +798,11 @@ def _validate_release_metadata_contract(
         manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2
         and manifest.release_kind == "benchmark-data"
     )
-    if not requires_metadata and manifest.metadata_path is None and manifest.metadata_sha256 is None:
+    if (
+        not requires_metadata
+        and manifest.metadata_path is None
+        and manifest.metadata_sha256 is None
+    ):
         return
     if manifest.metadata_path is None:
         problems.append("publication.metadata_path is missing")

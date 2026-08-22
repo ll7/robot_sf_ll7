@@ -781,8 +781,11 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return explicit implementation and fallback diagnostics."""
-        upstream_loaded = self._planner is not None
-        fallback_triggered = self._fallback_count > 0
+        upstream_requested = bool(getattr(self, "_use_upstream", False))
+        upstream_loaded = getattr(self, "_planner", None) is not None
+        fallback_count = int(getattr(self, "_fallback_count", 0) or 0)
+        fallback_reason = getattr(self, "_fallback_reason", None)
+        fallback_triggered = fallback_count > 0
         if fallback_triggered:
             implementation_mode = "heuristic_fallback"
         elif upstream_loaded:
@@ -792,11 +795,11 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         return {
             "planner_type": "SamplingPlannerAdapter",
             "implementation_mode": implementation_mode,
-            "upstream_requested": self._use_upstream,
+            "upstream_requested": upstream_requested,
             "upstream_loaded": upstream_loaded,
             "fallback_triggered": fallback_triggered,
-            "fallback_count": self._fallback_count,
-            "fallback_reason": self._fallback_reason,
+            "fallback_count": fallback_count,
+            "fallback_reason": fallback_reason,
             "readiness_status": "fallback" if fallback_triggered else "experimental",
         }
 

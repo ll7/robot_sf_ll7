@@ -296,6 +296,9 @@ def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path)
         }
     )
     payload["canonical_campaign_config"] = str(loaded.canonical_campaign_config_path)
+    payload["campaign_config_sha256"] = release_protocol._sha256_file(
+        loaded.canonical_campaign_config_path
+    )
     payload["scenario"]["matrix_path"] = str(loaded.scenario_matrix_path)
     suite_policy = Path(
         "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"

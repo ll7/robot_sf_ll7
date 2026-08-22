@@ -36,6 +36,7 @@ from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import (
+    HISTORICAL_ZENODO_CONCEPT_DOIS,
     build_release_provenance,
     build_resolved_release_manifest,
     load_release_manifest,
@@ -46,6 +47,16 @@ from robot_sf.common.artifact_paths import get_artifact_category_path, get_repos
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+HISTORICAL_RELEASE_IDENTITY_TOKENS = frozenset({"0.0.3.post1", *HISTORICAL_ZENODO_CONCEPT_DOIS})
+_TEXT_ARTIFACT_SUFFIXES = frozenset(
+    {".cff", ".csv", ".html", ".json", ".jsonl", ".md", ".tex", ".tsv", ".txt", ".yaml", ".yml"}
+)
+
+
+class ReleaseArtifactIdentityError(ValueError):
+    """Raised when a campaign artifact still carries a predecessor identity."""
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -132,6 +143,51 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
         _write_json(path, payload)
 
 
+def _assert_no_historical_release_identity(campaign_root: Path) -> None:
+    """Reject text artifacts that retain a superseded release tag or DOI.
+
+    The campaign runner writes release metadata before this guard runs.  A
+    stale fixed-campaign directory can still contain predecessor fields in
+    files that the runner does not own, however.  Rejecting that tree keeps
+    the publication bundle internally authoritative instead of silently
+    mixing two release identities.
+    """
+    offenders: list[str] = []
+    token_bytes = {token: token.encode("ascii") for token in HISTORICAL_RELEASE_IDENTITY_TOKENS}
+    overlap = max(len(value) for value in token_bytes.values()) - 1
+    for candidate in sorted(campaign_root.rglob("*")):
+        if (
+            not candidate.is_file()
+            or candidate.is_symlink()
+            or candidate.suffix.lower() not in _TEXT_ARTIFACT_SUFFIXES
+        ):
+            continue
+        try:
+            with candidate.open("rb") as handle:
+                matched: set[str] = set()
+                tail = b""
+                while chunk := handle.read(1024 * 1024):
+                    searchable = tail + chunk
+                    for token, token_value in token_bytes.items():
+                        if token_value in searchable:
+                            matched.add(token)
+                    if matched == HISTORICAL_RELEASE_IDENTITY_TOKENS:
+                        break
+                    tail = searchable[-overlap:]
+        except OSError as exc:
+            raise ReleaseArtifactIdentityError(
+                "unable to inspect campaign artifact for release identity"
+            ) from exc
+        if matched:
+            relative = candidate.relative_to(campaign_root).as_posix()
+            offenders.append(f"{relative} ({', '.join(sorted(matched))})")
+    if offenders:
+        raise ReleaseArtifactIdentityError(
+            "campaign artifacts retain a historical release identity; refusing release: "
+            + "; ".join(offenders[:8])
+        )
+
+
 def _required_artifacts_missing(campaign_root: Path, required_paths: tuple[str, ...]) -> list[str]:
     """Return required artifact paths that are missing from the campaign root."""
     missing: list[str] = []
@@ -205,7 +261,7 @@ def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) 
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
 
-def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     args = parse_release_args(raw_argv)
@@ -354,7 +410,30 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
         campaign_root=campaign_root,
         invoked_command=invoked_command,
     )
-    _merge_release_provenance(campaign_root, release_provenance)
+    result["benchmark_release"] = release_provenance
+    try:
+        _merge_release_provenance(campaign_root, release_provenance)
+        _assert_no_historical_release_identity(campaign_root)
+    except ReleaseArtifactIdentityError as exc:
+        reason = str(exc)
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "release_identity_rejected",
+                "status_reason": reason,
+                "campaign_execution_status": str(
+                    run_payload.get("campaign_execution_status", "completed")
+                ),
+                "evidence_status": "blocked",
+                "release_status": "release_identity_rejected",
+                "release_status_reason": reason,
+                "release_benchmark_success": False,
+                "release_exit_code": 2,
+            }
+        )
+        _write_json(campaign_root / "release" / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return 2
 
     release_acceptance = validate_full_benchmark_release_acceptance(
         campaign_root,
@@ -462,7 +541,21 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
                     "publication bundle descriptor did not stabilize after final metadata write"
                 )
             result["publication_bundle"] = publication_payload
+            _assert_no_historical_release_identity(Path(publication_payload["bundle_dir"]))
             _run_publication_preflight(Path(publication_payload["bundle_dir"]))
+        except ReleaseArtifactIdentityError as exc:
+            result["publication_bundle"] = None
+            result["publication_preflight_status"] = "fail"
+            result["publication_preflight_violations"] = [str(exc)]
+            result["release_benchmark_success"] = False
+            result["release_status"] = "publication_identity_rejected"
+            result["release_status_reason"] = (
+                "publication bundle retained a historical release identity"
+            )
+            result["release_exit_code"] = 2
+            _write_json(release_dir / "release_result.json", result)
+            print(json.dumps(result, indent=2))
+            return 2
         except PublicationPreflightError as exc:
             result["publication_bundle"] = None
             result["publication_preflight_status"] = "fail"

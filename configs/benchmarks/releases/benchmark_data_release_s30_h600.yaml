@@ -11,7 +11,7 @@ release_kind: benchmark-data
 latest_main_base_commit: "43bd25edba11f1e4aa848c787e92eccf0670aa5a"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
-campaign_config_sha256: "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701"
+campaign_config_sha256: "a9dc20f5dc690bffb7cb8a5292c39c6752209ac445397d2ad7abac2bb7cc7dc1"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 

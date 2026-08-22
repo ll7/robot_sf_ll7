@@ -45,6 +45,7 @@ workers: 1
 horizon: 600
 dt: 0.1
 record_forces: true
+checkpoint_provenance_enforcement: error
 resume: false
 stop_on_failure: true
 bootstrap_samples: 100
@@ -68,7 +69,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
-  config_sha256: c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701
+  config_sha256: a9dc20f5dc690bffb7cb8a5292c39c6752209ac445397d2ad7abac2bb7cc7dc1
 claim_boundary:
   evidence_class: runtime-smoke
   benchmark_data_release: true

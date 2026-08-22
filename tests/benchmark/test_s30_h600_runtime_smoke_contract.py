@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
 )
+FULL_MANIFEST_PATH = REPO_ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
 SMOKE_CONFIG_PATH = (
     REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml"
 )
@@ -87,13 +89,64 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
     for key in EXPECTED_PLANNER_KEYS:
         source_row = dict(source_planners[key])
         smoke_row = dict(smoke_planners[key])
-        if key in {"orca", "sacadrl"}:
-            assert source_row.pop("socnav_missing_prereq_policy") == "fallback"
-            assert smoke_row.pop("socnav_missing_prereq_policy") == "fail-fast"
         assert smoke_row == source_row
         if smoke_row.get("algo_config"):
             assert (REPO_ROOT / smoke_row["algo_config"]).is_file()
         assert smoke_row.get("socnav_missing_prereq_policy") != "fallback"
+        assert source_row.get("socnav_missing_prereq_policy", "fail-fast") == "fail-fast"
+
+
+def test_full_and_smoke_release_configs_are_strict_and_use_new_identity() -> None:
+    """Canonical benchmark-data execution cannot use fallback or predecessor metadata."""
+    source = _load_yaml(SOURCE_CONFIG_PATH)
+    smoke = _load_yaml(SMOKE_CONFIG_PATH)
+    full_manifest = _load_yaml(FULL_MANIFEST_PATH)
+
+    for payload in (source, smoke):
+        assert payload["checkpoint_provenance_enforcement"] == "error"
+        assert all(
+            row.get("socnav_missing_prereq_policy", "fail-fast") == "fail-fast"
+            for row in payload["planners"]
+        )
+
+    assert source["release_tag"] == full_manifest["release_tag"]
+    assert source["doi"] == full_manifest["provenance"]["doi"]
+    serialized = yaml.safe_dump(source)
+    assert "0.0.3.post1" not in serialized
+    assert "19482025" not in serialized
+    assert "19563812" not in serialized
+
+
+def test_release_protocol_rejects_relaxed_or_predecessor_execution_contract() -> None:
+    """Manifest validation blocks fallback, audit-only checkpoints, and old identity drift."""
+    manifest = load_release_manifest(FULL_MANIFEST_PATH)
+    cfg = load_campaign_config(SOURCE_CONFIG_PATH)
+    planners = tuple(
+        replace(
+            planner,
+            socnav_missing_prereq_policy=("fallback" if planner.key == "orca" else "fail-fast"),
+        )
+        for planner in cfg.planners
+    )
+    drifted_cfg = replace(
+        cfg,
+        checkpoint_provenance_enforcement="warn",
+        planners=planners,
+        release_tag="0.0.3.post1",
+        doi="10.5281/zenodo.19482025",
+    )
+
+    validation = validate_release_manifest(manifest, campaign_config=drifted_cfg)
+
+    assert validation["status"] == "invalid"
+    assert any(
+        "checkpoint_provenance_enforcement=error" in problem for problem in validation["problems"]
+    )
+    assert any(
+        "fail-fast missing-prerequisite policy" in problem for problem in validation["problems"]
+    )
+    assert "campaign config release_tag does not match release manifest" in validation["problems"]
+    assert "campaign config doi does not match release manifest" in validation["problems"]
 
 
 def test_runtime_smoke_claim_boundary_and_fresh_zenodo_requirement() -> None:

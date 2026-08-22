@@ -24,6 +24,14 @@ SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS = frozenset(
 )
 BENCHMARK_PROTOCOL_VERSION = "0.1.0"
 DIAGNOSTIC_RELEASE_MATURITY = "diagnostic"
+# These are historical benchmark/software concepts.  A benchmark-data release
+# must reserve a new concept rather than append another version to either one.
+HISTORICAL_ZENODO_CONCEPT_DOIS = frozenset(
+    {
+        "10.5281/zenodo.19482025",
+        "10.5281/zenodo.19563812",
+    }
+)
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -106,6 +114,7 @@ class BenchmarkReleaseManifest:
     snqi_claim_policy: str | None = None
     concept_doi: str | None = None
     version_doi: str | None = None
+    release_kind: str | None = None
 
 
 def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> Path:
@@ -332,6 +341,11 @@ def _load_manifest_release_metadata(payload: dict[str, Any]) -> dict[str, str | 
             else None
         ),
         "campaign_config_sha256": str(payload.get("campaign_config_sha256", "")).strip(),
+        "release_kind": (
+            str(payload.get("release_kind")).strip()
+            if payload.get("release_kind") is not None
+            else None
+        ),
     }
 
 
@@ -388,9 +402,15 @@ def _load_v02_contract(  # noqa: C901
         raise ValueError("metrics.snqi_claim_policy must be advisory_no_ranking")
     concept_doi = str(publication.get("concept_doi", "")).strip()
     version_doi = str(publication.get("version_doi", "")).strip()
-    if not concept_doi.startswith("10.5281/zenodo.") or concept_doi.endswith("19482025"):
+    if (
+        not concept_doi.startswith("10.5281/zenodo.")
+        or concept_doi in HISTORICAL_ZENODO_CONCEPT_DOIS
+    ):
         raise ValueError("publication.concept_doi must name a fresh Zenodo concept")
-    if not version_doi.startswith("10.5281/zenodo."):
+    if (
+        not version_doi.startswith("10.5281/zenodo.")
+        or version_doi in HISTORICAL_ZENODO_CONCEPT_DOIS
+    ):
         raise ValueError("publication.version_doi must name the reserved Zenodo version")
     return {
         "latest_main_base_commit": latest_main_base_commit,
@@ -504,6 +524,7 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
         doi=doi,
         citation_path=path_section["citation_path"],
         release_checklist_path=path_section["release_checklist_path"],
+        release_kind=release_metadata["release_kind"],
         **v02_contract,
     )
 
@@ -584,7 +605,7 @@ def _validate_optional_metric_asset(
         problems.append(f"{label} presence does not match campaign config")
 
 
-def _validate_release_campaign_contract(
+def _validate_release_campaign_contract(  # noqa: C901
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
@@ -612,6 +633,25 @@ def _validate_release_campaign_contract(
         and cfg.holonomic_command_mode != manifest.expected_holonomic_command_mode
     ):
         problems.append("kinematics.holonomic_command_mode does not match campaign config")
+    if manifest.release_kind == "benchmark-data":
+        if cfg.checkpoint_provenance_enforcement != "error":
+            problems.append(
+                "benchmark-data release requires checkpoint_provenance_enforcement=error"
+            )
+        non_fail_fast = sorted(
+            planner.key
+            for planner in cfg.planners
+            if planner.enabled and planner.socnav_missing_prereq_policy != "fail-fast"
+        )
+        if non_fail_fast:
+            problems.append(
+                "benchmark-data release requires fail-fast missing-prerequisite policy for: "
+                + ", ".join(non_fail_fast)
+            )
+        if cfg.release_tag != manifest.release_tag:
+            problems.append("campaign config release_tag does not match release manifest")
+        if cfg.doi != manifest.doi:
+            problems.append("campaign config doi does not match release manifest")
 
 
 def _validate_release_seed_policy(
@@ -709,6 +749,10 @@ def _validate_v02_contract(  # noqa: C901
             )
     if manifest.doi != manifest.version_doi:
         problems.append("provenance.doi must match publication.version_doi")
+    if manifest.concept_doi in HISTORICAL_ZENODO_CONCEPT_DOIS:
+        problems.append("publication.concept_doi must name a fresh Zenodo concept")
+    if manifest.version_doi in HISTORICAL_ZENODO_CONCEPT_DOIS:
+        problems.append("publication.version_doi must name a fresh Zenodo version")
     if manifest.concept_doi == manifest.version_doi:
         problems.append("publication concept and version DOI must be distinct")
 
@@ -729,6 +773,7 @@ def build_release_provenance(
         "benchmark_protocol_version": manifest.benchmark_protocol_version,
         "release_id": manifest.release_id,
         "release_tag": manifest.release_tag,
+        "release_kind": manifest.release_kind,
         "maturity": manifest.maturity,
         "manifest_path": _repo_relative(manifest.path),
         "manifest_sha256": _sha256_file(manifest.path),
@@ -837,6 +882,7 @@ def build_resolved_release_manifest(
             "resolved_seeds": list(manifest.resolved_seeds),
             "snqi_claim_policy": manifest.snqi_claim_policy,
         },
+        "release_kind": manifest.release_kind,
     }
 
 
@@ -898,6 +944,7 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 __all__ = [
     "BENCHMARK_PROTOCOL_VERSION",
+    "HISTORICAL_ZENODO_CONCEPT_DOIS",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
     "SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS",

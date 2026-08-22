@@ -88,9 +88,16 @@ def _v02_payload() -> dict[str, Any]:
             lambda payload: payload["metrics"].update(snqi_claim_policy="ranking"),
             "snqi_claim_policy",
         ),
+        *(
+            (
+                lambda payload, doi=doi: payload["publication"].update(concept_doi=doi),
+                "fresh Zenodo concept",
+            )
+            for doi in sorted(release_protocol.HISTORICAL_ZENODO_CONCEPT_DOIS)
+        ),
         (
-            lambda payload: payload["publication"].update(concept_doi="10.5281/zenodo.19482025"),
-            "fresh Zenodo concept",
+            lambda payload: payload["publication"].update(version_doi="10.5281/zenodo.19563812"),
+            "reserved Zenodo version",
         ),
         (
             lambda payload: payload["publication"].update(version_doi="not-a-doi"),
@@ -122,6 +129,8 @@ def test_v02_loader_rejects_each_incomplete_publication_contract(
         ("expected_episode_cells", 1, "expected_episode_cells"),
         ("expected_horizon_steps", 500, "matrix.horizon_steps"),
         ("doi", "10.5281/zenodo.other", "provenance.doi"),
+        ("concept_doi", "10.5281/zenodo.19563812", "fresh Zenodo concept"),
+        ("version_doi", "10.5281/zenodo.19482025", "fresh Zenodo version"),
         ("concept_doi", "10.5281/zenodo.99999991", "concept and version DOI"),
     ],
 )

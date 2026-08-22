@@ -98,6 +98,67 @@ def test_release_input_path_rejects_external_location_without_leaking_it(
         raise AssertionError("external release input was not rejected")
 
 
+def test_release_run_rejects_historical_campaign_artifact_identity(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """A stale fixed-campaign artifact cannot contaminate a new release bundle."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    (campaign_root / "reports" / "stale_identity.md").write_text(
+        "release_tag: 0.0.3.post1\ndoi: 10.5281/zenodo.19482025\n",
+        encoding="utf-8",
+    )
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=False)
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "release_identity_rejected"
+    assert payload["release_status"] == "release_identity_rejected"
+    assert payload["release_benchmark_success"] is False
+    assert "historical release identity" in payload["status_reason"]
+
+
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
     """Preflight mode should validate the manifest and emit preflight artifact paths."""
     manifest = SimpleNamespace(

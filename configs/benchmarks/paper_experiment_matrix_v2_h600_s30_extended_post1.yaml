@@ -1,4 +1,4 @@
-# Corrected row-preserving successor campaign metadata for benchmark release 0.0.3.post1.
+# Canonical row-preserving campaign metadata for the S30/H600 benchmark-data release.
 # Derived from paper_experiment_matrix_v1.yaml (canonical 0.0.2 release campaign) with:
 #   - horizon: 100 -> 600  (successor surface per #257/#4364: timeout no longer dominant,
 #     waiting strategies visible; matches the h600 hybrid-roster precedent)
@@ -53,6 +53,7 @@ workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
+checkpoint_provenance_enforcement: error
 resume: true
 # stop_on_failure false: with a fixed --campaign-id the run is resumable, so a single
 # broken arm should surface as a failed row and let the other 13 arms complete; fix,
@@ -69,8 +70,8 @@ export_publication_bundle: true
 include_videos_in_publication: false
 overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7
-release_tag: "0.0.3.post1"
-doi: 10.5281/zenodo.19482025
+release_tag: "paper-matrix-v2-h600-s30-2026-08-43bd25edba11"
+doi: 10.5281/zenodo.22053133
 paper_interpretation_profile: baseline-ready-core
 
 planners:
@@ -95,7 +96,7 @@ planners:
     algo: orca
     planner_group: core
     benchmark_profile: baseline-safe
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   - key: ppo
     algo: ppo
@@ -114,7 +115,7 @@ planners:
     algo: sacadrl
     planner_group: experimental
     benchmark_profile: experimental
-    socnav_missing_prereq_policy: fallback
+    socnav_missing_prereq_policy: fail-fast
 
   # --- hybrid-rule arms (stanzas as executed in paper_experiment_matrix_v1_h600_hybrid_roster.yaml) ---
   - key: scenario_adaptive_hybrid_orca_v1

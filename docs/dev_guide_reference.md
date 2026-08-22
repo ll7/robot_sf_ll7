@@ -881,7 +881,7 @@ the base ref/SHA, the exact title/body SHA-256 metadata digest (the same `metada
   status-propagation-lag, or quota-blocked; resume later).
 
 Optional `--metadata-title` + `--metadata-body-file` compare the desired final title/body pair;
-metadata drift then resumes with `scripts/dev/gh_pr_body_rest.py <pr> --reconcile` before
+metadata drift then resumes with `uv run python scripts/dev/gh_pr_body_rest.py <pr> --reconcile` before
 re-snapshotting. The snapshot does not apply `merge-ready`, bypass reviews, or relax any
 fail-closed gate; `scripts/dev/check_pr_current_base_cas.py` and the monitor's exact-head guard
 remain the binding final preflights.

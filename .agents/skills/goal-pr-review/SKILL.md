@@ -327,7 +327,7 @@ helper is route evidence only and does not perform GitHub-visible writes.
 
 4. Fix actionable items on writable branches; commit and push. After every fix or revision push,
    rebuild the final title/body from the resulting diff, claims, validation, and follow-ups and run
-   `scripts/dev/gh_pr_body_rest.py --reconcile`. Treat an unchanged result as a valid no-op; a
+   `uv run python scripts/dev/gh_pr_body_rest.py --reconcile`. Treat an unchanged result as a valid no-op; a
    changed title is justified only when scope, intent, type, or issue linkage changed.
    The metadata digest binds body *bytes*, not body *truth*, so also check the narrative before
    any label write: every 40-hex SHA in the body must resolve (`git cat-file -e <sha>^{commit}`

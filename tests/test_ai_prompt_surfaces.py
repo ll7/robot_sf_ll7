@@ -116,7 +116,7 @@ def test_ai_skill_files_contain_expected_language() -> None:
 
 
 def test_ai_docs_reference_the_new_skill_surfaces() -> None:
-    """The docs and instruction surfaces should point at the repo-local skills rather than prompts."""
+    """Canonical docs expose skills while provider instructions remain thin adapters."""
 
     docs_readme_text = DOCS_README.read_text(encoding="utf-8")
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
@@ -133,6 +133,13 @@ def test_ai_docs_reference_the_new_skill_surfaces() -> None:
 
     assert "Canonical skills live in `.agents/skills/`" in dev_guide_text
 
+    # Provider instructions delegate repository-wide workflow policy to the canonical sources;
+    # they must not become a second, drifting skill index.
+    assert "AGENTS.md" in copilot_instructions_text
+    assert "docs/maintainer_values.md" in copilot_instructions_text
+    assert "docs/dev_guide.md" in copilot_instructions_text
+    assert ".agents/skills/" not in copilot_instructions_text
+
     for fragment in [
         ".agents/skills/autoresearch/",
         ".agents/skills/auto-improvement/",
@@ -146,19 +153,6 @@ def test_ai_docs_reference_the_new_skill_surfaces() -> None:
     ]:
         assert fragment in repo_overview_text
 
-    for fragment in [
-        "autoresearch/SKILL.md",
-        "auto-improvement/SKILL.md",
-        "context-map/SKILL.md",
-        "what-context-needed/SKILL.md",
-        "quality-playbook/SKILL.md",
-        "agentic-eval/SKILL.md",
-        "review-and-refactor/SKILL.md",
-        "update-docs-on-code-change/SKILL.md",
-        "awesome_copilot_adaptation.md",
-    ]:
-        assert fragment in copilot_instructions_text
-
     assert "context-map" in adaptation_text
     assert "what-context-needed" in adaptation_text
     assert "quality-playbook" in adaptation_text
@@ -168,11 +162,12 @@ def test_ai_docs_reference_the_new_skill_surfaces() -> None:
 
 
 def test_coding_agents_compatibility_note_is_discoverable() -> None:
-    """The coding-agents compatibility note must exist and be linked from the three agent entry points.
+    """The compatibility note must be discoverable through canonical entry points.
 
     Verifies that a contributor or AI assistant can find the cross-agent compatibility stance
-    and the retrieval -> planning -> execution -> verification discipline by reading AGENTS.md,
-    .github/copilot-instructions.md, or docs/dev_guide.md.
+    and the retrieval -> planning -> execution -> verification discipline from AGENTS.md,
+    its relocated guidance, or docs/dev_guide.md. Provider adapters delegate to these canonical
+    sources rather than copying the note.
     """
 
     assert CODING_AGENTS_NOTE.exists(), (
@@ -197,11 +192,12 @@ def test_coding_agents_compatibility_note_is_discoverable() -> None:
         "(docs/dev/agents/relocated-agents-guidance.md); link it from one of them"
     )
 
-    copilot_text = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
-    assert note_ref in copilot_text, f"{note_ref!r} not linked from .github/copilot-instructions.md"
-
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
     assert note_ref in dev_guide_text, f"{note_ref!r} not linked from docs/dev_guide.md"
+
+    copilot_text = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
+    assert "AGENTS.md" in copilot_text
+    assert "docs/dev_guide.md" in copilot_text
 
 
 def test_ready_queue_skills_use_issue_thread_rest_fallback() -> None:

@@ -1,14 +1,12 @@
-# Bounded runtime smoke for the approved S30/H600 benchmark-data release.
-#
-# This is intentionally derived from the 14-arm full campaign, not from the
-# historical seven-planner/S3 smoke.  It exercises one representative scenario
-# and one seed at the production horizon.  A passing smoke is execution
-# evidence only; it is not full benchmark evidence and must not be used to rank
-# planners or to make a Social Navigation Quality Index (SNQI) claim.
-name: paper_experiment_matrix_v2_h600_s30_runtime_smoke
+# Canonical row-preserving campaign metadata for the 2026-08 S30/H600 benchmark-data release.
+# Derived from paper_experiment_matrix_v2_h600_s30_extended_post1.yaml without changing its
+# historical 0.0.3.post1 identity. The scientific matrix remains 14 arms x 48 scenarios x
+# 30 seeds at horizon 600; this release-specific successor adds strict checkpoint/fallback,
+# immutable-resume, and fresh dataset-release identity controls.
+name: paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08
 paper_facing: true
 paper_profile_version: paper-matrix-v1
-scenario_matrix: configs/scenarios/single/francis2023_blind_corner.yaml
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
 route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
 
@@ -23,8 +21,8 @@ amv_profile:
     maneuver_type: [overtake, crossing, bottleneck]
 
 seed_policy:
-  mode: fixed-list
-  seeds: [111]
+  mode: seed-set
+  seed_set: paper_eval_s30
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
@@ -39,62 +37,32 @@ snqi_contract:
   max_component_dominance_warn_threshold: 0.24
   max_component_dominance_fail_threshold: 0.27
   calibration_seed: 123
-  calibration_trials: 600
+  calibration_trials: 6000
 
-workers: 1
+workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
-resume: false
+resume: true
+# Release execution stops at the first broken arm. Same-ID resume is admitted only
+# after an infrastructure interruption with an immutable resume receipt; code,
+# config, dependency, or checkpoint defects require a corrected commit and fresh run.
 stop_on_failure: true
-bootstrap_samples: 100
+bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123
 
 kinematics_matrix:
   - differential_drive
 
-export_publication_bundle: false
+export_publication_bundle: true
 include_videos_in_publication: false
-overwrite_publication_bundle: false
+overwrite_publication_bundle: true
 repository_url: https://github.com/ll7/robot_sf_ll7
-release_tag: paper-matrix-v2-h600-s30-runtime-smoke
-doi: 10.5281/zenodo.<fresh-concept-required>
-paper_interpretation_profile: runtime-smoke-advisory-no-ranking
-
-# Compact provenance and claim-boundary metadata.  The campaign loader ignores
-# these descriptive fields; release manifests and tests retain them for review.
-release_kind: benchmark-data
-release_status: runtime-smoke-only
-derived_from:
-  config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-  config_sha256: 11c3c837e3ae16d261eeb6f0ef42c84747c28bc4fbde86f8edf29376c0dd9fb1
-claim_boundary:
-  evidence_class: runtime-smoke
-  benchmark_data_release: true
-  software_release: false
-  snqi: advisory-no-ranking
-  allowed:
-    - planner construction and one-scenario runtime compatibility
-    - fail-closed detection of missing planner prerequisites
-  prohibited:
-    - full benchmark or paper-facing performance claim
-    - Social Navigation Quality Index planner ranking
-    - software package release or version claim
-zenodo:
-  concept: fresh-required
-  doi_status: pending-assignment
-  reuse_existing_concept: false
-artifact_provenance:
-  raw_episode_outputs: worktree-local-ignored-cache
-  compact_manifest: tracked-compact-evidence
-  source_commit: record-at-run
-  command: >-
-    uv run python scripts/tools/run_benchmark_release.py
-    --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
-    --label runtime-smoke
-  campaign_root: output/benchmarks/camera_ready/<campaign_id>
+release_tag: "paper-matrix-v2-h600-s30-2026-08-43bd25edba11"
+doi: 10.5281/zenodo.22053133
+paper_interpretation_profile: baseline-ready-core
 
 planners:
   - key: prediction_planner

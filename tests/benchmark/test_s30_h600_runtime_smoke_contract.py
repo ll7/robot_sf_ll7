@@ -15,7 +15,7 @@ from robot_sf.benchmark.release_protocol import load_release_manifest, validate_
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
-    REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
+    REPO_ROOT / "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
 )
 FULL_MANIFEST_PATH = REPO_ROOT / "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"
 SMOKE_CONFIG_PATH = (
@@ -59,7 +59,7 @@ def test_runtime_smoke_is_one_scenario_one_seed_at_h600() -> None:
     scenarios = _load_campaign_scenarios(cfg)
 
     assert config["derived_from"]["config"] == (
-        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml"
+        "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml"
     )
     assert config["derived_from"]["config_sha256"] == _sha256(SOURCE_CONFIG_PATH)
     source = _load_yaml(SOURCE_CONFIG_PATH)

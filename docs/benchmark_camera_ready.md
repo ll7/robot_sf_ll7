@@ -6,7 +6,7 @@ camera-ready benchmark outputs across multiple planners.
 ## Current S30/H600 Benchmark-Data Surface
 
 The approved benchmark-data release uses the 14-arm campaign config
-`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
 with 48 scenarios, 30 seeds (`paper_eval_s30`), horizon 600, and
 differential-drive kinematics. Use
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`

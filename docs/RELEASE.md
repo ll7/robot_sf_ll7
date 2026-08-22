@@ -7,7 +7,7 @@ software tag identifies installable source. Do not infer a package version from
 the benchmark-data tag, or reuse a software-release DOI for benchmark data.
 
 The current campaign contract is the 14-arm, differential-drive matrix in
-`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`.
+`configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
 Its publication-grade manifest is
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
 concept DOI `10.5281/zenodo.22053132` and reserved version DOI
@@ -67,7 +67,7 @@ the exact admission receipt:
 
 ```bash
 uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
-  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml \
   --stage \
   --report-path output/release/checkpoints/staging_receipt.json
 ```

@@ -12,7 +12,7 @@ they must not be used as the current release contract.
 
 Current S30/H600 campaign config:
 
-- `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+- `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
 
 Bounded 14-arm runtime-smoke manifest:
 

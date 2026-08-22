@@ -58,7 +58,7 @@ While the release process is still evolving, benchmark releases remain in the
 The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
-  - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+  - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
 - publication-grade manifest:
   - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
 - fresh Zenodo reservation:

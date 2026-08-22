@@ -136,7 +136,7 @@ def test_ci_check_requires_completed_success_for_exact_sha(
 
 @pytest.mark.parametrize(
     ("local_code", "remote_ref_code", "release_code", "expected"),
-    [(0, 2, 1, "fail"), (1, 0, 1, "fail"), (1, 2, 0, "fail"), (1, 2, 1, "pass")],
+    [(0, 2, 1, "fail"), (1, 0, 1, "fail"), (1, 2, 0, "fail"), (1, 2, 1, "fail")],
 )
 def test_tag_check_rejects_local_or_remote_collisions(
     monkeypatch: pytest.MonkeyPatch,
@@ -157,6 +157,54 @@ def test_tag_check_rejects_local_or_remote_collisions(
     monkeypatch.setattr(release_doctor, "_run", lambda *args: next(calls))
     check = release_doctor._tag_check(tmp_path, "tag")
     assert check.status == expected
+
+
+def test_tag_check_accepts_explicit_github_release_not_found(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only an explicit GitHub not-found response means no release collision."""
+    calls = iter(
+        [
+            _result(["git"], returncode=1),
+            _result(["git", "ls-remote"], returncode=2),
+            _result(["gh"], returncode=1, stderr="release not found"),
+        ]
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: next(calls))
+    check = release_doctor._tag_check(tmp_path, "tag")
+    assert check.status == "pass"
+
+
+@pytest.mark.parametrize(
+    ("command_index", "returncode", "stderr", "summary"),
+    [
+        (0, 1, "fatal: not a git repository", "local tag state is unavailable"),
+        (1, 2, "fatal: could not read from remote", "remote tag state is unavailable"),
+        (2, 1, "authentication failed", "GitHub release state is unavailable"),
+        (2, 1, "HTTP 404: Not Found", "GitHub release state is unavailable"),
+    ],
+)
+def test_tag_check_fails_closed_on_ambiguous_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    command_index: int,
+    returncode: int,
+    stderr: str,
+    summary: str,
+) -> None:
+    """An error that resembles absence must not be treated as an unused tag."""
+    results = [
+        _result(["git"], returncode=1),
+        _result(["git", "ls-remote"], returncode=2),
+        _result(["gh"], returncode=1, stderr="release not found"),
+    ]
+    results[command_index] = _result(
+        results[command_index].args, returncode=returncode, stderr=stderr
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: results.pop(0))
+    check = release_doctor._tag_check(tmp_path, "tag")
+    assert check.status == "fail"
+    assert summary in check.summary
 
 
 def test_manifest_check_reports_bad_path_and_wrong_cell_count(tmp_path: Path) -> None:

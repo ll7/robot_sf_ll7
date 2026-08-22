@@ -20,6 +20,7 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
     CheckpointStagingReceiptError,
     validate_checkpoint_staging_receipt,
 )
+from robot_sf.benchmark.release_acceptance import FULL_RELEASE_EXPECTED_EPISODE_CELLS
 from robot_sf.benchmark.release_protocol import (
     RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
     load_release_manifest,
@@ -35,6 +36,10 @@ REQUIRED_CI_WORKFLOWS = ("CI", "CodeQL")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _PLACEHOLDER_RE = re.compile(r"(?:<[^<>]+>|pending[-_]|\b(?:tbd|todo|unset|unknown)\b)", re.I)
+_GH_NOT_FOUND_RE = re.compile(
+    r"\b(?:release|tag)\s+(?:not[ -]?found|does not exist)\b",
+    re.IGNORECASE,
+)
 _HARDCODED_ROBOT_SF_PATH_RE = re.compile(
     r"(?<![\w/])/(?:[^\s/\\\"'<>]+/)*robot_sf_ll7(?:[/\\][^\s\\\"'<>]*)?",
     re.IGNORECASE,
@@ -75,6 +80,22 @@ _REQUIRED_PACKET_TRACE_FIELDS = {
     "checkpoint_receipt_sha256",
     "release_label",
 }
+_REQUIRED_PACKET_INPUT_NAMES = (
+    "release_manifest",
+    "canonical_campaign_config",
+    "scenario_matrix",
+    "public_single_node_entrypoint",
+    "checkpoint_staging_receipt",
+    "private_wrapper",
+    "release_runner",
+)
+_PUBLIC_PACKET_INPUT_NAMES = (
+    "release_manifest",
+    "canonical_campaign_config",
+    "scenario_matrix",
+    "public_single_node_entrypoint",
+    "release_runner",
+)
 
 
 @dataclass(frozen=True)
@@ -196,8 +217,21 @@ def _tag_check(repo: Path, tag: str) -> ReleaseDoctorCheck:
         repo,
     )
     remote = _run(["gh", "release", "view", tag, "--repo", "ll7/robot_sf_ll7"], repo)
-    if remote_ref.returncode not in {0, 2}:
+    local_missing = local.returncode == 1 and not local.stdout and not local.stderr
+    if local.returncode not in {0, 1} or (local.returncode == 1 and not local_missing):
+        return ReleaseDoctorCheck("tag_collision", "fail", "local tag state is unavailable")
+
+    remote_missing = remote_ref.returncode == 2 and not remote_ref.stdout and not remote_ref.stderr
+    if remote_ref.returncode not in {0, 2} or (remote_ref.returncode == 2 and not remote_missing):
         return ReleaseDoctorCheck("tag_collision", "fail", "remote tag state is unavailable")
+
+    release_missing = (
+        remote.returncode != 0
+        and _GH_NOT_FOUND_RE.search(f"{remote.stdout}\n{remote.stderr}") is not None
+    )
+    if remote.returncode not in {0, 1} or (remote.returncode == 1 and not release_missing):
+        return ReleaseDoctorCheck("tag_collision", "fail", "GitHub release state is unavailable")
+
     collision = local.returncode == 0 or remote_ref.returncode == 0 or remote.returncode == 0
     return ReleaseDoctorCheck(
         "tag_collision",
@@ -223,6 +257,18 @@ def _manifest_check(
         planners = [planner for planner in cfg.planners if planner.enabled]
         cells = len(scenarios) * len(seeds) * len(planners)
         problems = list(validation["problems"])
+        manifest_cells = getattr(manifest, "expected_episode_cells", None)
+        if manifest.schema_version == RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
+            if manifest_cells != FULL_RELEASE_EXPECTED_EPISODE_CELLS:
+                problems.append(
+                    "v0.2 benchmark-data manifest must require "
+                    f"{FULL_RELEASE_EXPECTED_EPISODE_CELLS} cells"
+                )
+            if manifest_cells != expected_cells:
+                problems.append(
+                    f"doctor cardinality {expected_cells} does not match manifest-required "
+                    f"{manifest_cells} cells"
+                )
         if cells != expected_cells:
             problems.append(f"matrix has {cells} cells, expected {expected_cells}")
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
@@ -364,14 +410,7 @@ def _validate_packet_input_hashes(packet: dict[str, Any], expected_sha: str | No
     if not isinstance(inputs, dict):
         problems.append("launch packet inputs are missing")
         return problems
-    for input_name in (
-        "release_manifest",
-        "canonical_campaign_config",
-        "scenario_matrix",
-        "public_single_node_entrypoint",
-        "checkpoint_staging_receipt",
-        "private_wrapper",
-    ):
+    for input_name in _REQUIRED_PACKET_INPUT_NAMES:
         item = inputs.get(input_name)
         if not isinstance(item, dict):
             problems.append(f"inputs.{input_name} is missing")
@@ -512,35 +551,45 @@ def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
 
 
 def _validate_packet_file_hashes(packet: dict[str, Any], repo: Path | None) -> list[str]:
-    """Recompute declared public-input hashes when the checkout is available.
+    """Recompute every declared public-input hash from the release checkout.
 
     Returns:
-        Sanitized file-hash problems.  Missing remote-only files are left to
-        the submit wrapper; they are not treated as local mismatches.
+        Sanitized file-hash problems.  Final admission has no implicit
+        remote-only input mode: the private packet schema does not declare one,
+        so every public input must be present in the exact checkout.
     """
     if repo is None:
-        return []
+        return ["public-input checkout is required for final packet admission"]
     inputs = packet.get("inputs")
     if not isinstance(inputs, dict):
-        return []
+        return ["launch packet inputs are missing"]
+    repo_root = repo.resolve()
     problems: list[str] = []
-    for input_name in (
-        "release_manifest",
-        "canonical_campaign_config",
-        "scenario_matrix",
-        "public_single_node_entrypoint",
-    ):
+    for input_name in _PUBLIC_PACKET_INPUT_NAMES:
         item = inputs.get(input_name)
         if not isinstance(item, dict):
+            problems.append(f"inputs.{input_name} is missing")
             continue
         raw_path = str(item.get("path") or "")
         candidate = Path(raw_path)
         if not candidate.is_absolute():
-            candidate = repo / candidate
-        if not candidate.is_file():
+            candidate = repo_root / candidate
+        try:
+            resolved = candidate.resolve(strict=False)
+            resolved.relative_to(repo_root)
+        except (OSError, RuntimeError, ValueError):
+            problems.append(f"inputs.{input_name} is outside the public checkout")
+            continue
+        if not resolved.is_file():
+            problems.append(f"inputs.{input_name} file is missing from the public checkout")
             continue
         expected = str(item.get("sha256") or "").lower()
-        if _sha256(candidate).lower() != expected:
+        try:
+            actual = _sha256(resolved).lower()
+        except OSError:
+            problems.append(f"inputs.{input_name} file could not be read from the public checkout")
+            continue
+        if actual != expected:
             problems.append(f"inputs.{input_name} hash does not match checkout")
     return problems
 
@@ -950,7 +999,19 @@ def collect_release_doctor_report(  # noqa: PLR0913
         if publication_mode not in {"pre-publication", "final"}:
             raise ValueError("publication_mode must be pre-publication or final")
         final = publication_mode == "final"
-    manifest_check, manifest, cfg = _manifest_check(manifest_path, expected_cells)
+    cardinality_override = final and expected_cells != FULL_RELEASE_EXPECTED_EPISODE_CELLS
+    manifest_check, manifest, cfg = _manifest_check(
+        manifest_path,
+        FULL_RELEASE_EXPECTED_EPISODE_CELLS if cardinality_override else expected_cells,
+    )
+    if cardinality_override:
+        manifest_check = ReleaseDoctorCheck(
+            "manifest",
+            "fail",
+            "final doctor cardinality is fixed to manifest-required "
+            f"{FULL_RELEASE_EXPECTED_EPISODE_CELLS} cells; unsafe override rejected; "
+            + manifest_check.summary,
+        )
     if final or private_queue is not None or expected_campaign_id is not None:
         cluster_check = _cluster_check(
             private_launch_packet,

@@ -28,6 +28,18 @@ def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
     assert cfg is not None
 
 
+def test_v02_manifest_cardinality_cannot_be_overridden() -> None:
+    """The v0.2 doctor binds its matrix check to the manifest's 20,160 cells."""
+    check, manifest, cfg = release_doctor._manifest_check(
+        Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml"),
+        1,
+    )
+    assert check.status == "fail"
+    assert "manifest-required" in check.summary
+    assert manifest is not None
+    assert cfg is not None
+
+
 def test_cluster_check_requires_admission_and_exact_source(tmp_path: Path) -> None:
     """A launch packet cannot admit a different public source commit."""
     packet = tmp_path / "launch.json"
@@ -99,6 +111,45 @@ def test_doctor_report_is_credential_free(monkeypatch, tmp_path: Path) -> None:
     assert "super-secret-token" not in encoded
 
 
+def test_final_doctor_rejects_unsafe_cardinality_override(monkeypatch, tmp_path: Path) -> None:
+    """Final doctor mode always validates the fixed S30/H600 cardinality."""
+    passed = ReleaseDoctorCheck("fixture", "pass", "safe")
+    calls: list[int] = []
+    monkeypatch.setattr(
+        release_doctor,
+        "_manifest_check",
+        lambda path, expected: calls.append(expected) or (passed, object(), object()),
+    )
+    monkeypatch.setattr(release_doctor, "_git_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_ci_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_tag_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_release_identity_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_checkpoint_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_cluster_check", lambda *args, **kwargs: passed)
+    monkeypatch.setattr(release_doctor, "_disk_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_zenodo_check", lambda *args, **kwargs: [passed])
+    monkeypatch.setattr(release_doctor, "_dissertation_check", lambda *args: passed)
+
+    report = release_doctor.collect_release_doctor_report(
+        repo=tmp_path,
+        manifest_path=tmp_path / "manifest.yaml",
+        expected_release_sha="a" * 40,
+        expected_base_sha="b" * 40,
+        tag="release",
+        checkpoint_receipt=None,
+        private_launch_packet=None,
+        dissertation=None,
+        token_file=None,
+        expected_cells=1,
+        final=True,
+    )
+
+    assert calls == [release_doctor.FULL_RELEASE_EXPECTED_EPISODE_CELLS]
+    assert report["status"] == "blocked"
+    manifest_checks = [check for check in report["checks"] if check["name"] == "manifest"]
+    assert manifest_checks and "unsafe override rejected" in manifest_checks[0]["summary"]
+
+
 def test_zenodo_hook_check_does_not_surface_hook_config(monkeypatch, tmp_path: Path) -> None:
     """Hook inspection reports active state without echoing private configuration."""
     secret = "private-receiver-token"
@@ -153,8 +204,32 @@ def _write_final_packet_fixture(
     tmp_path: Path, *, source_sha: str = "a" * 40, tag: str = "release-tag"
 ) -> tuple[Path, Path]:
     """Write a minimal but complete final packet/queue pair for doctor tests."""
-    digest = "b" * 64
+    input_names = (
+        "release_manifest",
+        "canonical_campaign_config",
+        "scenario_matrix",
+        "public_single_node_entrypoint",
+        "checkpoint_staging_receipt",
+        "private_wrapper",
+        "release_runner",
+    )
+    input_digests: dict[str, str] = {}
+    for name in input_names:
+        path = tmp_path / "configs" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"fixture:{name}\n", encoding="utf-8")
+        input_digests[name] = release_doctor._sha256(path)
     campaign = "campaign-1"
+    identity_fields = {
+        "release_manifest_sha256": input_digests["release_manifest"],
+        "canonical_config_sha256": input_digests["canonical_campaign_config"],
+        "scenario_matrix_sha256": input_digests["scenario_matrix"],
+        "checkpoint_receipt_sha256": input_digests["checkpoint_staging_receipt"],
+        "public_entrypoint_sha256": input_digests["public_single_node_entrypoint"],
+        "private_wrapper_sha256": input_digests["private_wrapper"],
+        "startup_sentinel_sha256": "b" * 64,
+        "admission_helper_sha256": "b" * 64,
+    }
     packet = {
         "schema": "robot-sf-launch-packet.v1",
         "packet_version": 1,
@@ -180,18 +255,10 @@ def _write_final_packet_fixture(
         },
         "identity": {
             "public_source_commit": source_sha,
-            **dict.fromkeys(release_doctor._REQUIRED_PACKET_HASH_FIELDS, digest),
+            **identity_fields,
         },
         "inputs": {
-            name: {"path": f"configs/{name}", "sha256": digest}
-            for name in (
-                "release_manifest",
-                "canonical_campaign_config",
-                "scenario_matrix",
-                "public_single_node_entrypoint",
-                "checkpoint_staging_receipt",
-                "private_wrapper",
-            )
+            name: {"path": f"configs/{name}", "sha256": input_digests[name]} for name in input_names
         }
         | {
             "source": {
@@ -224,13 +291,16 @@ def _write_final_packet_fixture(
             "RELEASE_EXPECTED_MEM_GB=256",
             "RELEASE_EXPECTED_WALLTIME=36:00:00",
             *(
-                f"{field}={digest}"
-                for field in (
-                    "RELEASE_MANIFEST_SHA256",
-                    "RELEASE_CONFIG_SHA256",
-                    "RELEASE_SCENARIO_SHA256",
-                    "RELEASE_CHECKPOINT_RECEIPT_SHA256",
-                    "RELEASE_PUBLIC_SCRIPT_SHA256",
+                f"{field}={value}"
+                for field, value in (
+                    ("RELEASE_MANIFEST_SHA256", identity_fields["release_manifest_sha256"]),
+                    ("RELEASE_CONFIG_SHA256", identity_fields["canonical_config_sha256"]),
+                    ("RELEASE_SCENARIO_SHA256", identity_fields["scenario_matrix_sha256"]),
+                    (
+                        "RELEASE_CHECKPOINT_RECEIPT_SHA256",
+                        identity_fields["checkpoint_receipt_sha256"],
+                    ),
+                    ("RELEASE_PUBLIC_SCRIPT_SHA256", identity_fields["public_entrypoint_sha256"]),
                 )
             ),
         ]
@@ -271,6 +341,7 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
         expected_tag="release-tag",
         expected_campaign_id="campaign-1",
         queue_path=queue,
+        repo=tmp_path,
     )
     assert check.status == "pass", check.summary
 
@@ -284,6 +355,24 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
         expected_tag="release-tag",
         expected_campaign_id="campaign-1",
         queue_path=queue,
+        repo=tmp_path,
     )
     assert rejected.status == "fail"
     assert "resource contract mismatch" in rejected.summary
+
+
+def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> None:
+    """Final packet admission cannot defer missing public files to the wrapper."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    (tmp_path / "configs" / "release_manifest").unlink()
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "release_manifest file is missing" in rejected.summary

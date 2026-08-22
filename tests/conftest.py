@@ -428,6 +428,12 @@ _FAST_FILES = {
     # The shared DWA diagnostic harness tests are deterministic contract tests;
     # keep their changed-module coverage in pull-request fast shards.
     "test_dwa_diagnostic_harness.py",
+    # Research orchestration tests are deterministic manifest/report contracts;
+    # keep coverage for the benchmark orchestrator basename match in fast shards.
+    "test_orchestrator.py",
+    # Full Classic phase-boundary tests are deterministic scheduler/context/finalizer
+    # contracts; keep extracted orchestration coverage in exact-head fast shards.
+    "test_orchestration_boundaries.py",
     # These smoke/fixture scenario tests run short deterministic simulation
     # episodes through the map-runner trace recorder; they are the only
     # fast-lane coverage for changed trace paths in the exact-head

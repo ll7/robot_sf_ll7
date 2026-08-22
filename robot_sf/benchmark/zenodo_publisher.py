@@ -123,6 +123,43 @@ def _metadata_contract(metadata: Mapping[str, Any]) -> dict[str, Any]:
     return {str(key): value for key, value in metadata.items() if key not in {"prereserve_doi"}}
 
 
+_ZENODO_LICENSE_ALIASES = {
+    "GPL-3.0-only": "gpl-3.0",
+    "gpl-3.0": "gpl-3.0",
+}
+
+
+def _canonical_creator_for_comparison(creator: Any) -> Any:
+    """Remove only Zenodo's null optional affiliation from a creator entry.
+
+    Returns:
+        The creator with a null affiliation omitted, or the original value.
+    """
+    if not isinstance(creator, Mapping):
+        return creator
+    canonical = dict(creator)
+    if canonical.get("affiliation") is None:
+        canonical.pop("affiliation", None)
+    return canonical
+
+
+def _canonical_metadata_value_for_comparison(key: str, value: Any) -> Any:
+    """Canonicalize the known Zenodo read-back aliases for one metadata field.
+
+    The API normalizes the configured GPL identifier and adds a null optional
+    creator affiliation. All other fields and values remain unchanged so that
+    title, type, source identity, and non-null creator metadata stay strict.
+
+    Returns:
+        The comparison value with only known Zenodo aliases canonicalized.
+    """
+    if key == "license" and isinstance(value, str):
+        return _ZENODO_LICENSE_ALIASES.get(value, value)
+    if key == "creators" and isinstance(value, list):
+        return [_canonical_creator_for_comparison(creator) for creator in value]
+    return value
+
+
 def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
     """Hash the exact user-controlled metadata contract.
 
@@ -572,7 +609,10 @@ def verify(  # noqa: C901, PLR0912, PLR0915
 
     expected_metadata = _metadata_contract(normalized_metadata)
     for key, value in expected_metadata.items():
-        if remote_metadata.get(key) != value:
+        remote_value = remote_metadata.get(key)
+        if _canonical_metadata_value_for_comparison(
+            key, remote_value
+        ) != _canonical_metadata_value_for_comparison(key, value):
             problems.append(f"metadata.{key} does not match requested metadata")
     try:
         source_tag = _source_tag(normalized_metadata)

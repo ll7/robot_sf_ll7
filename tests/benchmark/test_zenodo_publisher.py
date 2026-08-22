@@ -146,6 +146,44 @@ def _draft_payload(*, submitted: bool = False) -> dict[str, Any]:
     }
 
 
+def _metadata_verification_fixture(
+    tmp_path: Path,
+) -> tuple[_Session, dict[str, Any], dict[str, Any]]:
+    """Return a valid uploaded state and remote draft for metadata verification tests."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = _seal_state(
+        {
+            "schema_version": ZENODO_STATE_SCHEMA,
+            "deposition_id": 123,
+            "record_id": 123,
+            "concept_record_id": "122",
+            "doi": "10.5281/zenodo.123",
+            "submitted": False,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": hashlib.sha256(bundle.read_bytes()).hexdigest(),
+                }
+            ],
+        }
+    )
+    remote = _draft_payload()
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+        }
+    ]
+    downloaded = _Response({})
+    downloaded.content = bundle.read_bytes()
+    session = _Session()
+    session.gets = [_Response(remote), downloaded]
+    return session, state, remote
+
+
 def test_token_file_requires_private_permissions(tmp_path: Path) -> None:
     """Credentials cannot be read from a group/world-accessible file."""
     path = tmp_path / "zenodo.token"
@@ -229,6 +267,45 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
     assert report["status"] == "pass"
     assert report["publication_state"] == "published"
     assert report["file_count"] == 1
+
+
+def test_verify_accepts_zenodo_license_and_creator_normalization(tmp_path: Path) -> None:
+    """Known Zenodo read-back aliases do not create false metadata mismatches."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    remote["metadata"]["license"] = "gpl-3.0"
+    remote["metadata"]["creators"] = [
+        {"name": "Luttkus, Lennart", "affiliation": None},
+        {"name": "Tröster, Marco", "affiliation": None},
+    ]
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "pass"
+    assert not any(problem.startswith("metadata.") for problem in report["problems"])
+
+
+@pytest.mark.parametrize(
+    ("field", "remote_value"),
+    [
+        ("license", "MIT"),
+        ("creators", [{"name": "Different creator", "affiliation": None}]),
+        ("creators", [{"name": "Luttkus, Lennart", "affiliation": "Different affiliation"}]),
+        ("title", "Different title"),
+        ("upload_type", "software"),
+        ("related_identifiers", []),
+    ],
+)
+def test_verify_rejects_true_metadata_mismatches(
+    tmp_path: Path, field: str, remote_value: Any
+) -> None:
+    """Normalization must not hide real metadata, type, or identity mismatches."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    remote["metadata"][field] = remote_value
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert f"metadata.{field} does not match requested metadata" in report["problems"]
 
 
 def test_publish_requires_prior_verification_receipt(tmp_path: Path) -> None:

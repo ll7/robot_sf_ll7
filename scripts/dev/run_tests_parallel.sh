@@ -206,6 +206,16 @@ case "$lane_mode" in
     ;;
 esac
 
+dependency_profile="all-extras"
+if [[ "$lane_mode" == "core" ]]; then
+  dependency_profile="core"
+fi
+if ! preflight_check_worktree_dependency_profile "$dependency_profile"; then
+  echo "run_tests_parallel: dependency profile '$dependency_profile' is incomplete; pytest was not started." >&2
+  echo "Repair with: cd \"$REPO_ROOT\" && uv sync --all-extras" >&2
+  exit 2
+fi
+
 echo "Resolved pytest-xdist distribution mode: $dist_mode" >&2
 echo "Resolved pytest lane: $lane_mode" >&2
 

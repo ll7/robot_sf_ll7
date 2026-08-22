@@ -28,3 +28,26 @@ pointer_files:
   - path: .github/copilot-instructions.md
     must_reference: AGENTS.md
     description: GitHub Copilot instruction pointer.
+    max_nonblank_lines: 40
+    allowed_sections:
+      - copilot-specific instructions
+      - provider entry points
+    forbidden_sections:
+      - test failure evaluation
+      - benchmark governance
+      - validation tiers
+  - path: .claude/CLAUDE.md
+    must_reference: AGENTS.md
+    description: Claude Code instruction pointer.
+    max_nonblank_lines: 60
+    allowed_sections:
+      - instruction hierarchy
+      - tool-specific entry points
+      - machine context
+      - claude code model and mode selection
+      - preferred command interfaces
+    forbidden_sections:
+      - test failure evaluation
+      - evidence grading for claims
+      - benchmark governance
+      - validation tiers

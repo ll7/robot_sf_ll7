@@ -340,7 +340,7 @@ def _is_canonical_not_applicable_status(path: str, key: str, value: Any) -> bool
     return any(re.fullmatch(pattern, path) is not None for pattern in patterns)
 
 
-def _is_allowed_runtime_marker(path: str, key: str, value: Any) -> bool:
+def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[str, Any]) -> bool:
     """Return whether a non-boolean/status token is canonical for its exact report surface.
 
     Returns:
@@ -350,6 +350,16 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any) -> bool:
         return True
     if path.startswith("planner_rows[") and key == "benchmark_success":
         return str(value).strip().lower() == "true"
+    if (
+        re.fullmatch(
+            r"runs\[\d+\]\.rows\[\d+\]\.algorithm_metadata\."
+            r"foresight_prediction\.fallback_reason",
+            path,
+        )
+        and (value is None or value == "")
+        and parent.get("fallback_used") is False
+    ):
+        return True
     return _is_canonical_not_applicable_status(path, key, value)
 
 
@@ -382,7 +392,7 @@ def _forbidden_status_markers(  # noqa: C901
                 normalized_key = str(key).strip().lower()
                 marker_value = (
                     None
-                    if _is_allowed_runtime_marker(child_path, normalized_key, child)
+                    if _is_allowed_runtime_marker(child_path, normalized_key, child, parent=value)
                     else _runtime_marker_value(normalized_key, child)
                 )
                 if marker_value is not None:
@@ -449,6 +459,8 @@ def _resolve_campaign_artifact(  # noqa: C901, PLR0912
         if resolved == expected and resolved.is_file():
             return resolved
     if raw.is_absolute() and relocation_root is not None:
+        if _contains_symlink_component(raw):
+            raise RuntimeSmokeAdmissionError(f"{label} path contains a symlink")
         lexical_relocation_root = relocation_root.absolute()
         try:
             relative = raw.relative_to(lexical_relocation_root)
@@ -459,13 +471,18 @@ def _resolve_campaign_artifact(  # noqa: C901, PLR0912
                 return expected
         elif trusted_root == repo_root.resolve():
             try:
+                campaign_relative = campaign_root.resolve().relative_to(trusted_root)
                 repo_relative = expected.relative_to(trusted_root)
             except ValueError:
                 repo_relative = None
+                campaign_relative = None
+            old_repo_root = lexical_relocation_root
+            if campaign_relative is not None:
+                for _part in campaign_relative.parts:
+                    old_repo_root = old_repo_root.parent
             if (
                 repo_relative is not None
-                and len(raw.parts) >= len(repo_relative.parts)
-                and raw.parts[-len(repo_relative.parts) :] == repo_relative.parts
+                and raw == old_repo_root / repo_relative
                 and expected.is_file()
             ):
                 return expected
@@ -1175,8 +1192,15 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     if not isinstance(checkpoint_rel, str) or not checkpoint_rel.strip():
         problems.append("checkpoint staging receipt path is missing")
     else:
-        checkpoint_path = (resolved_repo / checkpoint_rel).resolve()
-        if not checkpoint_path.is_relative_to(resolved_repo) or not checkpoint_path.is_file():
+        checkpoint_relative = Path(checkpoint_rel)
+        lexical_checkpoint = resolved_repo / checkpoint_relative
+        checkpoint_path = lexical_checkpoint.resolve()
+        if (
+            checkpoint_relative.is_absolute()
+            or _contains_symlink_component(lexical_checkpoint)
+            or not checkpoint_path.is_relative_to(resolved_repo)
+            or not checkpoint_path.is_file()
+        ):
             problems.append("checkpoint staging receipt path is invalid")
         else:
             _require_equal(

@@ -488,6 +488,48 @@ def test_runtime_smoke_rejects_nested_preflight_fallback(
         _admit(result, planners, tmp_path)
 
 
+@pytest.mark.parametrize("reason", [None, ""])
+def test_runtime_smoke_allows_empty_foresight_fallback_reason_when_unused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["foresight_prediction"] = {
+        "fallback_used": False,
+        "fallback_reason": reason,
+    }
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+def test_runtime_smoke_rejects_nonempty_foresight_fallback_reason_when_unused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["foresight_prediction"] = {
+        "fallback_used": False,
+        "fallback_reason": "unexpected runtime fallback",
+    }
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
 @pytest.mark.parametrize(
     ("runtime_marker", "value"),
     [
@@ -882,6 +924,70 @@ def test_runtime_smoke_admits_consistently_relocated_campaign_bundle(
     )
 
     assert admitted["status"] == "admitted"
+
+
+def test_runtime_smoke_rejects_relocated_raw_path_with_symlinked_old_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_repo = tmp_path / "original"
+    result, planners = _fixture(original_repo, monkeypatch)
+    relocated_repo = tmp_path / "relocated"
+    shutil.copytree(original_repo, relocated_repo)
+    relocated_result = relocated_repo / result.relative_to(original_repo)
+    old_runs = result.parent.parent / "runs"
+    saved_runs = tmp_path / "saved-old-runs"
+    old_runs.rename(saved_runs)
+    old_runs.symlink_to(saved_runs, target_is_directory=True)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="path contains a symlink"):
+        validate_runtime_smoke_result(
+            relocated_result,
+            repo_root=relocated_repo,
+            expected_source_commit="a" * 40,
+            expected_planner_keys=planners,
+        )
+
+
+def test_runtime_smoke_rejects_arbitrary_relocated_canonical_input_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_repo = tmp_path / "original"
+    result, planners = _fixture(original_repo, monkeypatch)
+    relocated_repo = tmp_path / "relocated"
+    shutil.copytree(original_repo, relocated_repo)
+    relocated_result = relocated_repo / result.relative_to(original_repo)
+    sidecar_path = (
+        relocated_result.parent.parent
+        / "runs/prediction_planner__differential_drive/episodes.jsonl.provenance.json"
+    )
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    expected_suffix = Path(sidecar["inputs"]["scenario_matrix"]["path"]).relative_to(original_repo)
+    sidecar["inputs"]["scenario_matrix"]["path"] = str(
+        Path("/arbitrary/untrusted/prefix") / expected_suffix
+    )
+    _write_json(sidecar_path, sidecar)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="sidecar scenario matrix"):
+        validate_runtime_smoke_result(
+            relocated_result,
+            repo_root=relocated_repo,
+            expected_source_commit="a" * 40,
+            expected_planner_keys=planners,
+        )
+
+
+def test_runtime_smoke_rejects_symlinked_checkpoint_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    payload = json.loads(result.read_text(encoding="utf-8"))
+    receipt = tmp_path / payload["checkpoint_staging_receipt"]["path"]
+    saved = tmp_path / "saved-checkpoint-receipt.json"
+    receipt.rename(saved)
+    receipt.symlink_to(saved)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="checkpoint staging receipt path"):
+        _admit(result, planners, tmp_path)
 
 
 def test_runtime_smoke_rejects_checkpoint_receipt_hash_mismatch(

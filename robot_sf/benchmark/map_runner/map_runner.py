@@ -232,6 +232,7 @@ from robot_sf.benchmark.utils import (
     index_existing,
     normalize_track_field,
 )
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.common.math_utils import wrap_angle_pi as _normalize_heading
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.dwa import (  # noqa: F401 - compatibility re-export for tests.
@@ -2913,7 +2914,9 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
     if errors:
         raise ValueError(f"Scenario validation failed: {errors[:3]} (total {len(errors)})")
 
-    ctx.suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
+    ctx.suite_seeds = _resolve_seed_list(
+        get_repository_root() / "configs/benchmarks/seed_list_v1.yaml"
+    )
     ctx.suite_key = _suite_key(ctx.provenance_scenario_path)
     _normalize_batch_specs(ctx)
 
@@ -3490,6 +3493,7 @@ def run_map_batch(  # noqa: PLR0913
     """
     if batch_config is not None:
         scenario_path = batch_config.scenario_path
+        provenance_scenario_path = batch_config.provenance_scenario_path
         horizon = batch_config.horizon
         dt = batch_config.dt
         record_forces = batch_config.record_forces

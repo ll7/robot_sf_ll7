@@ -444,6 +444,7 @@ class MapBatchConfig:
     """
 
     scenario_path: str | Path | None = None
+    provenance_scenario_path: str | Path | None = None
     horizon: int | None = None
     dt: float | None = None
     record_forces: bool = True

@@ -206,6 +206,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         summarize_benchmark_availability,
     )
     from robot_sf.benchmark.runner import load_scenario_matrix, run_batch  # noqa: PLC0415
+    from robot_sf.common.artifact_paths import get_repository_root  # noqa: PLC0415
 
     if params.scoped_scenarios_path is not None:
         # Preferred handoff: consume the parent's fully-prepared scenario list so
@@ -240,7 +241,10 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
         summary = run_batch(
             scoped_scenarios,
             out_path=params.episodes_path,
-            schema_path=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
+            schema_path=(
+                get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+            ),
+            scenario_path=get_repository_root() / "scoped_scenarios.json",
             provenance_scenario_path=params.scenario_matrix_path,
             horizon=params.horizon if params.horizon is not None else 0,
             dt=params.dt if params.dt is not None else 0.0,

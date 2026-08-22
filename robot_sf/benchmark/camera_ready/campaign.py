@@ -526,7 +526,8 @@ def _execute_campaign_planner_batch(
         summary = dependencies.run_batch(
             run.scoped_scenarios,
             out_path=run.episodes_path,
-            schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
+            schema_path=get_repository_root() / DEFAULT_EPISODE_SCHEMA_PATH,
+            scenario_path=get_repository_root() / "scoped_scenarios.json",
             provenance_scenario_path=cfg.scenario_matrix_path,
             horizon=run.effective_horizon if run.effective_horizon is not None else 0,
             dt=run.effective_dt if run.effective_dt is not None else 0.0,

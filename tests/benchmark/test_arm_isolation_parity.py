@@ -215,7 +215,9 @@ def _run_campaign_for_arm_isolation(cfg, output_root: Path, arm_isolation: str) 
 
 
 @pytest.mark.timeout(240)
-def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: Path):
+def test_in_process_and_subprocess_arms_execute_identical_episode_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """Both isolation modes must execute exactly the same (scenario_id, seed) set.
 
     This is the behavior lock for the parent->worker scenario handoff fixed in
@@ -228,6 +230,9 @@ def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: 
     on Slurm jobs 13372/13373).
     """
     config_path = _write_parity_campaign_config(tmp_path)
+    outside_repo = tmp_path / "outside-repository-cwd"
+    outside_repo.mkdir()
+    monkeypatch.chdir(outside_repo)
     cfg_in_process = load_campaign_config(config_path)
     expected_arms = _arm_keys_from_config(cfg_in_process)
     assert len(expected_arms) == 2, (

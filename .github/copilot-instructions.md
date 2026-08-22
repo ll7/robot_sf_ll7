@@ -14,6 +14,7 @@ official [dev_guide](../docs/dev_guide.md) as the primary reference.
   `docs/context/issue_713_batch_first_issue_workflow.md`.
 - For interactive issue, PR, and project work, prefer GitHub MCP / GitHub app tools; keep `gh`
   for deterministic batch automation, score sync, and auth/debugging fallback.
+- Follow the [coding-agent compatibility note](../docs/context/issue_728_coding_agents_compatibility.md).
 - For any changes that affect users, update the `CHANGELOG.md` file.
 - Link new documentation (sub-)pages in the appropriate section of `docs/README.md`.
 

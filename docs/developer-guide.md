@@ -7,8 +7,14 @@ than running experiments (see the [Research & Benchmark Guide](./research-guide.
 
 ## 1. Setup and local workflow
 
-- [Development Guide](./dev_guide.md) — central contributor reference: setup, testing, quality gates,
-  coding standards.
+- [Development Guide](./dev_guide.md) — concise first-use landing page with setup, validation
+  selection, compatibility anchors, and links to canonical task guides.
+- [Linked Worktree Lifecycle](./dev/worktree_lifecycle.md) — create, bootstrap, preserve, and retire
+  isolated worktrees.
+- [Local CI and PR Readiness](./dev/local_ci.md) — dependency profiles, focused checks, and final
+  readiness.
+- [Detailed Development Reference](./dev_guide_reference.md) — preserved deep procedures and
+  historical anchors during the documentation split.
 - [Runtime Requirements](./dev_runtime_requirements.md) — non-`uv` host tools and the capability
   checker.
 - [Environment Configuration](./ENVIRONMENT.md) — detailed host environment setup.
@@ -42,7 +48,8 @@ than running experiments (see the [Research & Benchmark Guide](./research-guide.
 ## 3. Validation gates and CI
 
 - [Coverage Guide](./coverage_guide.md) — coverage collection, baseline tracking, CI integration.
-- [Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget) — soft/hard test timeouts.
+- [Per-Test Performance Budget](./dev_guide_reference.md#per-test-performance-budget) — soft/hard
+  test timeouts.
 - [Code Review Guide](./code_review.md) — benchmark-facing review criteria and regression traps.
 - [Performance Notes](./performance_notes.md) — performance targets and optimization notes.
 - [Benchmark Planner Quality Audit](./benchmark_planner_quality_audit.md) — planner decision table.

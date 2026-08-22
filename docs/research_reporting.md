@@ -300,7 +300,7 @@ Override via CLI:
 
 ### Figure Styles
 
-Figures follow `docs/dev_guide.md` guidelines:
+Figures follow `docs/dev_guide_reference.md` guidelines:
 - Vector PDF + PNG (300 dpi) dual export
 - LaTeX-compatible fonts (matplotlib PGF backend)
 - 9pt labels, 8pt ticks/legend
@@ -362,7 +362,7 @@ Optimization:
 
 - **[Imitation Learning Pipeline](./imitation_learning_pipeline.md)** - Complete guide to PPO pre-training
 - **[Imitation Learning Quickstart](../specs/001-ppo-imitation-pretrain/quickstart.md)** - Step-by-step workflow
-- **[Run Tracker CLI](./dev_guide.md#run-tracker--history-cli)** - Tracker manifest commands
+- **[Run Tracker CLI](./dev_guide_reference.md#run-tracker--history-cli)** - Tracker manifest commands
 - **[Development Guide](./dev_guide.md)** - Coding standards, testing, quality gates
 - **[Specification](../specs/270-imitation-report/spec.md)** - Complete feature specification
 - **[Quickstart Guide](../specs/270-imitation-report/quickstart.md)** - Usage examples and workflows

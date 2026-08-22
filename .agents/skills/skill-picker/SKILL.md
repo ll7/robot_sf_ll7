@@ -37,8 +37,8 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 
 | User intent | Primary skill | Secondary skill |
 | --- | --- | --- |
-| "Take next issue" | `goal-issue-implementation` | `gh-issue-autopilot` |
-| One selected issue to PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
+| "Take next issue" | `goal-issue-implementation` | `implementation-verification`, `pr-ready-check`, `gh-pr-opener` |
+| One selected issue to PR | `goal-issue-implementation` (selected-issue mode) | `implementation-verification`, `gh-pr-opener` |
 | Ambiguous or underspecified issue | `issue-contract-maintainer` | `gh-issue-sequencer` |
 | Create new issue | `gh-issue-creator` | `gh-issue-sequencer` |
 | Sequence issue batch | `gh-issue-sequencer` | `gh-issue-priority-assessor` |
@@ -46,7 +46,7 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 | Open PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify implementation | `implementation-verification` | `pr-ready-check` |
 | Branch cleanup | `clean-up` | `pr-ready-check` |
-| Worktree setup or cleanup | `skill-picker` | `gh-issue-autopilot`, `clean-up`; see `AGENTS.md` |
+| Worktree setup or cleanup | `skill-picker` | `goal-issue-implementation`, `clean-up`; see `AGENTS.md` |
 | Benchmark-sensitive review | `review-benchmark-change` | `benchmark-row-status` |
 | Camera-ready benchmark audit | `analyze-camera-ready-benchmark` | `artifact-provenance` |
 | Submit training or benchmark job | `slurm-campaign-submit` | `artifact-provenance` |
@@ -59,10 +59,13 @@ Select the smallest useful repo-local skill stack when the user request is ambig
 
 - Do not use `autoresearch` for ordinary cleanup.
 - Do not use `paper-facing-docs` for non-claim docs.
-- Do not use `gh-issue-autopilot` for ambiguous issues; route to `issue-contract-maintainer`.
+- Do not use `goal-issue-implementation` for ambiguous issues; route to `issue-contract-maintainer`.
 - Do not use `auxme-issue791-submit` for non-issue-791 campaigns.
 - Do not use `benchmark-overview` as validation proof; it is an orientation skill.
 - Do not combine multiple skills that own the same phase unless one is a legacy compatibility entry.
+
+The legacy names `gh-issue-autopilot`, `issue-to-pr`, and `gh-issue-to-pr` resolve to
+`goal-issue-implementation` selected-issue mode when explicitly requested.
 
 ## Guardrails
 

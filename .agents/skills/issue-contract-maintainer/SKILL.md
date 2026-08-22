@@ -71,7 +71,8 @@ flag malformed YAML or invalid values instead of inventing replacements.
 ## Guardrails
 
 - Do not expand the issue beyond the original intent.
-- Do not implement the issue from this skill; hand ready work to `gh-issue-autopilot`.
+- Do not implement the issue from this skill; hand ready work to `goal-issue-implementation` in
+  selected-issue mode.
 - Do not let the autonomous cleanup route ask questions or write Project #5; hand its pending
   decision queue to `issue-audit`.
 - Do not close useful optional research paths merely to reduce queue size; lower priority, split, or
@@ -94,5 +95,5 @@ blockers:
   - "..."
 pending_decisions:
   - "issue_audit_plan.v1 queue path or none"
-next_skill: issue-audit-autonomous | issue-audit | gh-issue-autopilot | gh-issue-sequencer | issue-splitter | none
+next_skill: issue-audit-autonomous | issue-audit | goal-issue-implementation | gh-issue-sequencer | issue-splitter | none
 ```

@@ -5,6 +5,11 @@ Issue: [#3189](https://github.com/ll7/robot_sf_ll7/issues/3189)
 Evidence status: `analysis-only`. This note audits skill overlap and proposes follow-up
 consolidation work. It does not change skill routing behavior.
 
+Implementation status (2026-08-22): the selected-issue implementation follow-up was delivered in
+issue #7778. The historical inventory and similarity measurements below remain evidence from the
+2026-06-20 audit; current routing is defined by `.agents/skills/skills.yaml` and the generated
+`.agents/skills/README.md`.
+
 Scope boundary:
 
 - Reviewed `.agents/skills/*/SKILL.md` frontmatter and workflow bodies on `origin/main` commit

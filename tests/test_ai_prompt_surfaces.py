@@ -21,7 +21,6 @@ GH_ISSUE_REST_HELPER = ROOT / "scripts" / "dev" / "gh_issue_rest.py"
 # requires these surfaces to point at the canonical REST-fallback helper instead of the
 # broken raw `gh issue view --comments` first-step command.
 ISSUE_THREAD_READ_SKILLS = (
-    "gh-issue-autopilot",
     "gh-issue-clarifier",
     "gh-issue-priority-assessor",
     "gh-issue-template-auditor",
@@ -31,7 +30,6 @@ ISSUE_THREAD_READ_SKILLS = (
 # Ready-queue skills that can admit a candidate directly or delegate its admission. Issue #5172
 # requires an exact merged-fix check so historical failure evidence cannot route duplicate work.
 MERGED_FIX_GUARD_SKILLS = (
-    "gh-issue-autopilot",
     "goal-issue-implementation",
     "goal-autopilot",
 )

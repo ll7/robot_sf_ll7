@@ -239,8 +239,8 @@ evidence from hypothesis when uncertainty remains.
 
 Use repo-local skills under `.agents/skills/` when task primarily involves issue delivery, PR review,
 benchmark/planner context, validation, or GitHub workflow automation. Start with `.agents/skills/README.md`
-when choosing among them. Common delivery skills include `goal-issue-implementation`,
-`gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`,
+when choosing among them. Common delivery skills include `goal-issue-implementation` (including
+selected-issue mode), `implementation-verification`, `pr-ready-check`, `gh-pr-opener`,
 `goal-pr-review`, and `gh-pr-merger`.
 
 ## Friction And Automation

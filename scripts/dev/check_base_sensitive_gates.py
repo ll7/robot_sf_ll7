@@ -39,6 +39,9 @@ from scripts.dev.base_sensitive_selector import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _GUARD_HELPER = REPO_ROOT / "scripts" / "dev" / "gate_worktree_guard.py"
+DEFAULT_REPO = "ll7/robot_sf_ll7"
+_CHANGED_FILES_PAGE_SIZE = 100
+_MAX_CHANGED_FILES_PAGES = 100
 
 
 def _run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
@@ -91,8 +94,54 @@ def _find_base_sensitive_test_files() -> list[Path]:
     return [REPO_ROOT / relative for relative in find_base_sensitive_test_files(REPO_ROOT)]
 
 
-def _get_pr_changed_files(pr_number: str) -> list[str] | None:
-    """Return changed file paths for a PR via gh CLI, or None on error."""
+def _get_pr_changed_files_from_api(pr_number: str, *, repo: str) -> list[str] | None:
+    """Return a complete changed-file list from GitHub's paginated files API.
+
+    The API response is validated page by page.  A full final page does not prove completeness
+    until the next short (or empty) page is observed, and hitting the page bound remains
+    indeterminate rather than silently classifying a partial inventory.
+    """
+    changed_files: list[str] = []
+    for page in range(1, _MAX_CHANGED_FILES_PAGES + 1):
+        try:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "api",
+                    f"repos/{repo}/pulls/{pr_number}/files?per_page={_CHANGED_FILES_PAGE_SIZE}&page={page}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        try:
+            payload = json.loads(result.stdout)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, list):
+            return None
+
+        page_files: list[str] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                return None
+            filename = item.get("filename")
+            if not isinstance(filename, str) or not filename.strip():
+                return None
+            page_files.append(filename.strip())
+        changed_files.extend(page_files)
+        if len(page_files) < _CHANGED_FILES_PAGE_SIZE:
+            return changed_files or None
+    return None
+
+
+def _get_pr_changed_files(pr_number: str, *, repo: str = DEFAULT_REPO) -> list[str] | None:
+    """Return changed file paths via the diff fast path, then a strict REST fallback."""
     try:
         result = subprocess.run(
             [
@@ -107,11 +156,13 @@ def _get_pr_changed_files(pr_number: str) -> list[str] | None:
             timeout=30,
             check=False,
         )
-        if result.returncode != 0:
-            return None
-        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if result.returncode == 0:
+            changed_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if changed_files:
+                return changed_files
     except (subprocess.TimeoutExpired, OSError):
-        return None
+        pass
+    return _get_pr_changed_files_from_api(pr_number, repo=repo)
 
 
 def _branch_is_current_with_main(
@@ -146,7 +197,7 @@ def _report_gate_error(overall: dict[str, Any], message: str, *, as_json: bool) 
     return 2
 
 
-def check_pr_touches_base_sensitive(pr_number: str) -> dict[str, Any]:
+def check_pr_touches_base_sensitive(pr_number: str, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Determine if a PR changes any base-sensitive test files.
 
     Returns a dict with:
@@ -154,7 +205,7 @@ def check_pr_touches_base_sensitive(pr_number: str) -> dict[str, Any]:
       - changed_sensitive_files: list of relative paths
       - all_sensitive_files: full list of base-sensitive test files
     """
-    changed = _get_pr_changed_files(pr_number)
+    changed = _get_pr_changed_files(pr_number, repo=repo)
     selection = classify_changed_files(
         changed,
         sensitive_files=[
@@ -382,6 +433,11 @@ def main(argv: list[str] | None = None) -> int:
         help="GitHub PR number to check for base-sensitive file changes",
     )
     parser.add_argument(
+        "--repo",
+        default=DEFAULT_REPO,
+        help="GitHub repository as OWNER/REPO (default: ll7/robot_sf_ll7)",
+    )
+    parser.add_argument(
         "--run-subset",
         action="store_true",
         help="Run the base_sensitive test subset",
@@ -416,10 +472,18 @@ def main(argv: list[str] | None = None) -> int:
     overall: dict[str, Any] = {}
 
     if args.pr:
-        pr_check = check_pr_touches_base_sensitive(args.pr)
+        pr_check = check_pr_touches_base_sensitive(args.pr, repo=args.repo)
         overall["pr_check"] = pr_check
         if pr_check.get("needs_gate") is None:
-            return 2
+            return _report_gate_error(
+                overall,
+                str(
+                    pr_check.get("error")
+                    or pr_check.get("reason")
+                    or "changed-file inventory unavailable"
+                ),
+                as_json=args.as_json,
+            )
 
         if not pr_check["needs_gate"]:
             print(f"PR #{args.pr}: no base-sensitive files changed; gate not required.")

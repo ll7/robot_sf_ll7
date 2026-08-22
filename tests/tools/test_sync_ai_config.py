@@ -154,7 +154,8 @@ def test_check_pointer_file_accepts_reference(
     pointer.parent.mkdir()
     pointer.write_text("Follow AGENTS.md.\n", encoding="utf-8")
 
-    assert sync_ai_config._check_pointer_file(".github/copilot-instructions.md", "AGENTS.md") == []
+    spec = sync_ai_config.PointerSpec(".github/copilot-instructions.md", "AGENTS.md")
+    assert sync_ai_config._check_pointer_file(spec) == []
 
 
 def test_check_pointer_file_reports_missing_reference(
@@ -166,7 +167,8 @@ def test_check_pointer_file_reports_missing_reference(
     pointer.parent.mkdir()
     pointer.write_text("Only local instructions.\n", encoding="utf-8")
 
-    assert sync_ai_config._check_pointer_file(".github/copilot-instructions.md", "AGENTS.md") == [
+    spec = sync_ai_config.PointerSpec(".github/copilot-instructions.md", "AGENTS.md")
+    assert sync_ai_config._check_pointer_file(spec) == [
         ".github/copilot-instructions.md: expected to reference 'AGENTS.md'"
     ]
 
@@ -178,6 +180,91 @@ def test_check_pointer_file_reports_directory(
     monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
     (tmp_path / ".cursorrules").mkdir()
 
-    assert sync_ai_config._check_pointer_file(".cursorrules", "AGENTS.md") == [
+    spec = sync_ai_config.PointerSpec(".cursorrules", "AGENTS.md")
+    assert sync_ai_config._check_pointer_file(spec) == [
         ".cursorrules: pointer path exists but is not a file"
     ]
+
+
+def test_check_pointer_file_reports_oversized_pointer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pointer over the configured line budget should fail with a policy-home hint."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    pointer = tmp_path / ".github" / "copilot-instructions.md"
+    pointer.parent.mkdir()
+    pointer.write_text(
+        "Follow AGENTS.md.\n" + "\n".join(f"policy line {i}" for i in range(12)),
+        encoding="utf-8",
+    )
+
+    spec = sync_ai_config.PointerSpec(
+        ".github/copilot-instructions.md", "AGENTS.md", max_nonblank_lines=10
+    )
+    errors = sync_ai_config._check_pointer_file(spec)
+
+    assert len(errors) == 1
+    assert "exceeds budget 10" in errors[0]
+    assert "canonical source" in errors[0]
+
+
+def test_check_pointer_file_accepts_within_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pointer within the configured line budget should pass."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    pointer = tmp_path / ".github" / "copilot-instructions.md"
+    pointer.parent.mkdir()
+    pointer.write_text(
+        "Follow AGENTS.md.\n" + "\n".join(f"note {i}" for i in range(5)),
+        encoding="utf-8",
+    )
+
+    spec = sync_ai_config.PointerSpec(
+        ".github/copilot-instructions.md", "AGENTS.md", max_nonblank_lines=10
+    )
+    assert sync_ai_config._check_pointer_file(spec) == []
+
+
+def test_check_pointer_file_reports_forbidden_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A copied canonical policy section in a pointer should fail."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    pointer = tmp_path / ".github" / "copilot-instructions.md"
+    pointer.parent.mkdir()
+    pointer.write_text(
+        "Follow AGENTS.md.\n\n## Test Failure Evaluation\n\nClassify failures first.\n",
+        encoding="utf-8",
+    )
+
+    spec = sync_ai_config.PointerSpec(
+        ".github/copilot-instructions.md",
+        "AGENTS.md",
+        forbidden_sections=("test failure evaluation",),
+    )
+    errors = sync_ai_config._check_pointer_file(spec)
+
+    assert len(errors) == 1
+    assert "forbidden duplicated section 'test failure evaluation'" in errors[0]
+
+
+def test_check_pointer_file_allows_provider_specific_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An allowed provider-specific section should not fail the pointer."""
+    monkeypatch.setattr(sync_ai_config, "REPO_ROOT", tmp_path)
+    pointer = tmp_path / ".claude" / "CLAUDE.md"
+    pointer.parent.mkdir()
+    pointer.write_text(
+        "Follow AGENTS.md.\n\n## Claude Code Model and Mode Selection\n\nDefault Opus.\n",
+        encoding="utf-8",
+    )
+
+    spec = sync_ai_config.PointerSpec(
+        ".claude/CLAUDE.md",
+        "AGENTS.md",
+        allowed_sections=("claude code model and mode selection",),
+        forbidden_sections=("test failure evaluation",),
+    )
+    assert sync_ai_config._check_pointer_file(spec) == []

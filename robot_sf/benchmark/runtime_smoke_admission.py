@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_acceptance import _status_markers
+from robot_sf.benchmark.release_protocol import BENCHMARK_PROTOCOL_VERSION
+from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 
 RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2"
 RUNTIME_SMOKE_MANIFEST = Path(
@@ -27,6 +30,9 @@ RUNTIME_SMOKE_CONFIG = Path(
 )
 RUNTIME_SMOKE_HORIZON = 600
 RUNTIME_SMOKE_KINEMATICS = "differential_drive"
+RUNTIME_SMOKE_MAX_AGE_HOURS = 24.0
+RUNTIME_SMOKE_SUITE_KEY = "default"
+RUNTIME_SMOKE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 RUNTIME_SMOKE_PLANNER_KEYS = (
     "prediction_planner",
     "goal",
@@ -52,10 +58,76 @@ _FORBIDDEN_RUNTIME_STATUSES = frozenset(
         "fallback",
         "not-available",
         "not_available",
+        "not-run",
+        "not_run",
         "partial-failure",
         "partial_failure",
         "placeholder",
         "unavailable",
+    }
+)
+_RUNTIME_STATUS_FIELDS = frozenset(
+    {
+        "status",
+        "row_status",
+        "readiness_status",
+        "availability_status",
+        "evidence_status",
+        "execution_status",
+        "load_status",
+        "checkpoint_status",
+        "fallback_status",
+        "execution_mode",
+        "mode",
+        "policy",
+    }
+)
+_RUNTIME_FLAG_FIELDS = frozenset(
+    {
+        "fallback_triggered",
+        "fallback_used",
+        "fallback_active",
+        "degraded",
+        "fallback_or_degraded",
+    }
+)
+_RUNTIME_SUCCESS_FLAG_FIELDS = frozenset(
+    {
+        "benchmark_success",
+        "load_succeeded",
+        "release_benchmark_success",
+    }
+)
+_RUNTIME_SHALLOW_CONTAINERS = frozenset(
+    {
+        "summary",
+        "benchmark_availability",
+        "campaign_integrity",
+        "row_status_summary",
+        "fallback_policy",
+        "availability",
+    }
+)
+_RUNTIME_DEEP_CONTAINERS = frozenset(
+    {
+        "algorithm_metadata",
+        "algorithm_metadata_contract",
+        "preflight",
+        "learned_policy_contract",
+        "checkpoint_provenance",
+        "planner_runtime",
+        "foresight_prediction",
+        "planner_kinematics",
+        "learned_checkpoint_observation_contract",
+        "execution",
+        "runtime",
+    }
+)
+_RUNTIME_DECLARATIVE_CONTAINERS = frozenset(
+    {
+        "config",
+        "planner_contract",
+        "safety_shield_contract",
     }
 )
 
@@ -102,6 +174,16 @@ def _require_equal(problems: list[str], actual: Any, expected: Any, label: str) 
 
 def _validate_age(run_meta: dict[str, Any], *, max_age_hours: float) -> str:
     """Return the normalized smoke completion timestamp or reject stale evidence."""
+    if (
+        not isinstance(max_age_hours, (int, float))
+        or isinstance(max_age_hours, bool)
+        or not math.isfinite(max_age_hours)
+        or max_age_hours <= 0
+        or max_age_hours > RUNTIME_SMOKE_MAX_AGE_HOURS
+    ):
+        raise RuntimeSmokeAdmissionError(
+            "runtime smoke maximum age must be finite, positive, and no more than 24 hours"
+        )
     raw = str(run_meta.get("finished_at_utc", "")).strip()
     try:
         finished = datetime.fromisoformat(raw.replace("Z", "+00:00"))
@@ -181,6 +263,47 @@ def _read_episode_rows(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _runtime_marker_value(key: str, value: Any) -> str | None:  # noqa: C901
+    """Return a forbidden/malformed runtime marker value, or ``None`` when safe."""
+    normalized = str(value).strip().lower().replace(" ", "_")
+    is_status = key in _RUNTIME_STATUS_FIELDS or key.endswith("_status")
+    if is_status:
+        if not isinstance(value, str):
+            return f"invalid_{type(value).__name__}"
+        if normalized in _FORBIDDEN_RUNTIME_STATUSES or normalized.startswith(
+            "predictive_foresight_model_fallback"
+        ):
+            return normalized
+    if "fallback" in key and key not in _RUNTIME_SHALLOW_CONTAINERS:
+        if isinstance(value, bool):
+            if value or key not in _RUNTIME_FLAG_FIELDS:
+                return normalized
+        elif isinstance(value, (int, float)):
+            if not math.isfinite(value) or value != 0:
+                return normalized
+        else:
+            return normalized or f"invalid_{type(value).__name__}"
+    if key in _RUNTIME_FLAG_FIELDS:
+        if not isinstance(value, bool):
+            return f"invalid_{type(value).__name__}"
+        if value:
+            return "true"
+    if key in _RUNTIME_SUCCESS_FLAG_FIELDS and value is not True:
+        return normalized or f"invalid_{type(value).__name__}"
+    return None
+
+
+def _is_campaign_preflight_unknown(path: str, value: Any) -> bool:
+    """Allow only the producer's explicit pre-execution checkpoint placeholders.
+
+    Returns:
+        Whether the field is a canonical campaign-manifest preflight placeholder.
+    """
+    if not path.startswith("campaign_manifest.planners[") or ".checkpoint_provenance." not in path:
+        return False
+    return value is None or str(value).strip().lower().replace(" ", "_") == "not_run"
+
+
 def _forbidden_status_markers(  # noqa: C901
     payload: Any, prefix: str
 ) -> list[tuple[str, str]]:
@@ -191,91 +314,27 @@ def _forbidden_status_markers(  # noqa: C901
     """
     markers = list(_status_markers(payload, prefix)) if isinstance(payload, dict) else []
     seen = {(path, value) for path, value in markers}
-    status_fields = {
-        "status",
-        "row_status",
-        "readiness_status",
-        "availability_status",
-        "evidence_status",
-        "execution_status",
-        "load_status",
-        "checkpoint_status",
-        "fallback_status",
-        "execution_mode",
-        "mode",
-        "policy",
-    }
-    flag_fields = {
-        "fallback_triggered",
-        "fallback_used",
-        "fallback_active",
-        "degraded",
-        "fallback_or_degraded",
-    }
-    shallow_containers = {
-        "summary",
-        "benchmark_availability",
-        "campaign_integrity",
-        "row_status_summary",
-        "fallback_policy",
-        "availability",
-    }
-    deep_containers = {
-        "algorithm_metadata",
-        "algorithm_metadata_contract",
-        "preflight",
-        "learned_policy_contract",
-        "checkpoint_provenance",
-        "planner_runtime",
-        "foresight_prediction",
-        "planner_kinematics",
-        "learned_checkpoint_observation_contract",
-        "execution",
-        "runtime",
-    }
-    declarative_containers = {
-        "config",
-        "planner_contract",
-        "safety_shield_contract",
-    }
 
-    def _walk(value: Any, path: str, *, descend_all: bool = False) -> None:  # noqa: C901
+    def _walk(value: Any, path: str, *, descend_all: bool = False) -> None:
         if isinstance(value, dict):
             for key, child in value.items():
                 child_path = f"{path}.{key}"
                 normalized_key = str(key).strip().lower()
-                normalized_value = str(child).strip().lower().replace(" ", "_")
-                is_status_key = normalized_key in status_fields or normalized_key.endswith(
-                    "_status"
+                marker_value = (
+                    None
+                    if _is_campaign_preflight_unknown(child_path, child)
+                    else _runtime_marker_value(normalized_key, child)
                 )
-                if is_status_key and (
-                    normalized_value in _FORBIDDEN_RUNTIME_STATUSES
-                    or normalized_value.startswith("predictive_foresight_model_fallback")
-                ):
-                    marker = (child_path, normalized_value)
+                if marker_value is not None:
+                    marker = (child_path, marker_value)
                     if marker not in seen:
                         markers.append(marker)
                         seen.add(marker)
-                if (
-                    "fallback" in normalized_key
-                    and isinstance(child, (int, float))
-                    and not isinstance(child, bool)
-                    and child > 0
-                ):
-                    marker = (child_path, str(child))
-                    if marker not in seen:
-                        markers.append(marker)
-                        seen.add(marker)
-                if normalized_key in flag_fields and child is True:
-                    marker = (child_path, "true")
-                    if marker not in seen:
-                        markers.append(marker)
-                        seen.add(marker)
-                if normalized_key in declarative_containers:
+                if normalized_key in _RUNTIME_DECLARATIVE_CONTAINERS:
                     continue
-                if descend_all or normalized_key in deep_containers:
+                if descend_all or normalized_key in _RUNTIME_DEEP_CONTAINERS:
                     _walk(child, child_path, descend_all=True)
-                elif normalized_key in shallow_containers:
+                elif normalized_key in _RUNTIME_SHALLOW_CONTAINERS:
                     _walk(child, child_path)
         elif isinstance(value, list):
             for index, child in enumerate(value):
@@ -285,7 +344,7 @@ def _forbidden_status_markers(  # noqa: C901
     return markers
 
 
-def _resolve_campaign_artifact(
+def _resolve_campaign_artifact(  # noqa: C901, PLR0912
     *,
     raw_path: Any,
     campaign_root: Path,
@@ -293,6 +352,7 @@ def _resolve_campaign_artifact(
     expected_path: Path,
     label: str,
     expected_root: Path | None = None,
+    relocation_root: Path | None = None,
 ) -> Path:
     """Resolve an artifact only when it is this campaign's expected file.
 
@@ -328,10 +388,47 @@ def _resolve_campaign_artifact(
         resolved = candidate.resolve(strict=False)
         if resolved == expected and resolved.is_file():
             return resolved
+    if raw.is_absolute() and relocation_root is not None:
+        lexical_relocation_root = relocation_root.absolute()
+        try:
+            relative = raw.relative_to(lexical_relocation_root)
+        except ValueError:
+            relative = None
+        if relative is not None and trusted_root == campaign_root.resolve():
+            if trusted_root / relative == expected and expected.is_file():
+                return expected
+        elif trusted_root == repo_root.resolve():
+            try:
+                repo_relative = expected.relative_to(trusted_root)
+            except ValueError:
+                repo_relative = None
+            if (
+                repo_relative is not None
+                and len(raw.parts) >= len(repo_relative.parts)
+                and raw.parts[-len(repo_relative.parts) :] == repo_relative.parts
+                and expected.is_file()
+            ):
+                return expected
     raise RuntimeSmokeAdmissionError(f"{label} is not bound to this campaign")
 
 
-def _validate_episode_provenance_sidecar(  # noqa: PLR0913
+def _read_campaign_object(path: Path, *, campaign_root: Path, label: str) -> dict[str, Any]:
+    """Read one canonical campaign JSON file without following symlink components.
+
+    Returns:
+        Parsed JSON object.
+    """
+    resolved = _resolve_campaign_artifact(
+        raw_path=str(path),
+        campaign_root=campaign_root,
+        repo_root=campaign_root,
+        expected_path=path,
+        label=label,
+    )
+    return _read_object(resolved, label)
+
+
+def _validate_episode_provenance_sidecar(  # noqa: C901, PLR0913, PLR0915
     *,
     episodes_path: Path,
     campaign_root: Path,
@@ -343,7 +440,9 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
     expected_source_commit: str,
     scenario_id: str,
     seed: int,
+    episode_id: str,
     row_config_hash: str,
+    relocation_root: Path | None,
     problems: list[str],
 ) -> None:
     """Bind one raw episode artifact to its exact arm and tracked inputs."""
@@ -352,6 +451,10 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
         problems.append(f"planner {planner_key} episode provenance sidecar is missing")
         return
     sidecar = _read_object(sidecar_path, f"planner {planner_key} episode provenance sidecar")
+    try:
+        validate_result_provenance_manifest(sidecar)
+    except (AttributeError, TypeError, ValueError) as exc:
+        problems.append(f"planner {planner_key} episode provenance schema rejected: {exc}")
     run = sidecar.get("run")
     run = run if isinstance(run, dict) else {}
     _require_equal(
@@ -360,6 +463,12 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
         expected_source_commit,
         f"planner {planner_key} sidecar source commit",
     )
+    _require_equal(
+        problems,
+        run.get("protocol_version"),
+        BENCHMARK_PROTOCOL_VERSION,
+        f"planner {planner_key} sidecar protocol version",
+    )
     identity = sidecar.get("campaign_identity")
     identity = identity if isinstance(identity, dict) else {}
     _require_equal(
@@ -367,6 +476,12 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
         identity.get("algorithm"),
         algorithm,
         f"planner {planner_key} sidecar algorithm",
+    )
+    _require_equal(
+        problems,
+        identity.get("suite_key"),
+        RUNTIME_SMOKE_SUITE_KEY,
+        f"planner {planner_key} sidecar suite",
     )
     _require_equal(problems, _strict_int(identity.get("total_jobs")), 1, "sidecar total jobs")
     _require_equal(problems, _strict_int(identity.get("written")), 1, "sidecar written rows")
@@ -379,7 +494,11 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
         _require_equal(
             problems, sidecar_row.get("scenario_id"), scenario_id, "sidecar scenario identity"
         )
+        _require_equal(problems, sidecar_row.get("episode_id"), episode_id, "sidecar episode id")
         _require_equal(problems, _strict_int(sidecar_row.get("seed")), seed, "sidecar seed")
+        _require_equal(
+            problems, _strict_int(sidecar_row.get("jsonl_line")), 0, "sidecar JSONL line"
+        )
         _require_equal(
             problems,
             str(sidecar_row.get("repo_commit", "")).strip().lower(),
@@ -399,6 +518,7 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
                 repo_root=repo_root,
                 expected_path=episodes_path,
                 label=f"planner {planner_key} sidecar raw artifact",
+                relocation_root=relocation_root,
             )
         except RuntimeSmokeAdmissionError as exc:
             problems.append(str(exc))
@@ -417,6 +537,7 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
                 expected_path=expected_config,
                 label=f"planner {planner_key} sidecar algorithm config",
                 expected_root=repo_root,
+                relocation_root=relocation_root,
             )
         except RuntimeSmokeAdmissionError as exc:
             problems.append(str(exc))
@@ -439,6 +560,7 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
             expected_path=scenario_path,
             label=f"planner {planner_key} sidecar scenario matrix",
             expected_root=repo_root,
+            relocation_root=relocation_root,
         )
     except RuntimeSmokeAdmissionError as exc:
         problems.append(str(exc))
@@ -459,6 +581,12 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
         problems.append(f"planner {planner_key} sidecar raw episode binding is missing")
     else:
         artifact = episode_artifacts[0]
+        _require_equal(
+            problems,
+            artifact.get("artifact_status"),
+            "available",
+            f"planner {planner_key} sidecar raw artifact status",
+        )
         try:
             _resolve_campaign_artifact(
                 raw_path=artifact.get("path"),
@@ -466,6 +594,7 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
                 repo_root=repo_root,
                 expected_path=episodes_path,
                 label=f"planner {planner_key} sidecar raw artifact inventory",
+                relocation_root=relocation_root,
             )
         except RuntimeSmokeAdmissionError as exc:
             problems.append(str(exc))
@@ -474,6 +603,30 @@ def _validate_episode_provenance_sidecar(  # noqa: PLR0913
             artifact.get("sha256"),
             sha256_file(episodes_path),
             f"planner {planner_key} sidecar raw artifact hash",
+        )
+    inputs = sidecar.get("inputs")
+    inputs = inputs if isinstance(inputs, dict) else {}
+    schema_input = inputs.get("schema_path")
+    schema_input = schema_input if isinstance(schema_input, dict) else {}
+    expected_schema = repo_root / RUNTIME_SMOKE_SCHEMA_PATH
+    try:
+        _resolve_campaign_artifact(
+            raw_path=schema_input.get("path"),
+            campaign_root=campaign_root,
+            repo_root=repo_root,
+            expected_path=expected_schema,
+            label=f"planner {planner_key} sidecar episode schema",
+            expected_root=repo_root,
+            relocation_root=relocation_root,
+        )
+    except RuntimeSmokeAdmissionError as exc:
+        problems.append(str(exc))
+    if expected_schema.is_file():
+        _require_equal(
+            problems,
+            schema_input.get("sha256"),
+            sha256_file(expected_schema),
+            f"planner {planner_key} sidecar episode schema hash",
         )
 
 
@@ -572,10 +725,16 @@ def _validate_campaign_metadata(  # noqa: PLR0913
     problems: list[str],
 ) -> None:
     """Bind campaign/manifest metadata to the canonical smoke identity."""
-    campaign_manifest = _read_object(
-        campaign_root / "campaign_manifest.json", "runtime smoke campaign manifest"
+    campaign_manifest = _read_campaign_object(
+        campaign_root / "campaign_manifest.json",
+        campaign_root=campaign_root,
+        label="runtime smoke campaign manifest",
     )
-    run_manifest = _read_object(campaign_root / "manifest.json", "runtime smoke run manifest")
+    run_manifest = _read_campaign_object(
+        campaign_root / "manifest.json",
+        campaign_root=campaign_root,
+        label="runtime smoke run manifest",
+    )
     for label, payload in (
         ("campaign manifest", campaign_manifest),
         ("runtime smoke run manifest", run_manifest),
@@ -671,7 +830,15 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     resolved_repo = repo_root.resolve()
     expected_planner_keys = tuple(str(key).strip() for key in expected_planner_keys)
     expected_source_commit = str(expected_source_commit).strip().lower()
-    resolved_result = result_path.resolve()
+    lexical_result = result_path.absolute()
+    resolved_result = _resolve_campaign_artifact(
+        raw_path=str(lexical_result),
+        campaign_root=lexical_result.parent.parent,
+        repo_root=resolved_repo,
+        expected_path=lexical_result,
+        label="runtime smoke result",
+        expected_root=resolved_repo,
+    )
     if not resolved_result.is_relative_to(resolved_repo):
         raise RuntimeSmokeAdmissionError("runtime smoke result must be inside the release worktree")
     if resolved_result.name != "release_result.json" or resolved_result.parent.name != "release":
@@ -680,9 +847,15 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         )
     result = _read_object(resolved_result, "runtime smoke result")
     campaign_root = resolved_result.parent.parent
-    run_meta = _read_object(campaign_root / "run_meta.json", "runtime smoke run metadata")
-    summary = _read_object(
-        campaign_root / "reports" / "campaign_summary.json", "runtime smoke campaign summary"
+    run_meta = _read_campaign_object(
+        campaign_root / "run_meta.json",
+        campaign_root=campaign_root,
+        label="runtime smoke run metadata",
+    )
+    summary = _read_campaign_object(
+        campaign_root / "reports" / "campaign_summary.json",
+        campaign_root=campaign_root,
+        label="runtime smoke campaign summary",
     )
     (
         manifest_path,
@@ -800,22 +973,24 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         )
 
     expected_campaign_root = campaign_root.resolve()
+    relocation_root: Path | None = None
+    raw_campaign_root = result.get("campaign_root")
+    if raw_campaign_root is not None:
+        raw_candidate = Path(str(raw_campaign_root))
+        was_absolute = raw_candidate.is_absolute()
+        candidate = raw_candidate if was_absolute else resolved_repo / raw_candidate
+        if candidate.resolve(strict=False) != expected_campaign_root:
+            if not was_absolute or candidate.name != expected_campaign_root.name:
+                problems.append("result campaign root mismatch")
+            else:
+                relocation_root = candidate.absolute()
     for field, raw_path in (
-        ("campaign_root", result.get("campaign_root")),
+        ("campaign_root", raw_campaign_root),
         ("summary_json", result.get("summary_json")),
     ):
         if raw_path is None:
             continue
         if field == "campaign_root":
-            candidate = Path(str(raw_path))
-            if not candidate.is_absolute():
-                candidate = resolved_repo / candidate
-            _require_equal(
-                problems,
-                candidate.resolve(),
-                expected_campaign_root,
-                "result campaign root",
-            )
             continue
         try:
             _resolve_campaign_artifact(
@@ -824,6 +999,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 repo_root=resolved_repo,
                 expected_path=expected_campaign_root / "reports" / "campaign_summary.json",
                 label=f"result {field}",
+                relocation_root=relocation_root,
             )
         except RuntimeSmokeAdmissionError as exc:
             problems.append(str(exc))
@@ -1004,6 +1180,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 repo_root=resolved_repo,
                 expected_path=expected_arm_dir / "episodes.jsonl",
                 label=f"run {index} episode artifact",
+                relocation_root=relocation_root,
             )
             rows = _read_episode_rows(episodes_path)
         except (OSError, ValueError, RuntimeSmokeAdmissionError) as exc:
@@ -1016,6 +1193,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 repo_root=resolved_repo,
                 expected_path=expected_arm_dir / "summary.json",
                 label=f"run {index} summary artifact",
+                relocation_root=relocation_root,
             )
             arm_summary = _read_object(summary_path, f"runtime smoke arm {index} summary")
         except (OSError, ValueError, RuntimeSmokeAdmissionError) as exc:
@@ -1057,6 +1235,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                     repo_root=resolved_repo,
                     expected_path=episodes_path,
                     label=f"run {index} summary output",
+                    relocation_root=relocation_root,
                 )
             except RuntimeSmokeAdmissionError as exc:
                 problems.append(str(exc))
@@ -1146,7 +1325,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                     expected_source_commit=expected_source_commit,
                     scenario_id=scenario_id,
                     seed=seed,
+                    episode_id=str(row.get("episode_id", "")).strip(),
                     row_config_hash=row_config_hash,
+                    relocation_root=relocation_root,
                     problems=problems,
                 )
             metadata = row.get("algorithm_metadata")
@@ -1237,6 +1418,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
                 repo_root=resolved_repo,
                 expected_path=campaign_root / "reports" / "campaign_integrity.json",
                 label="campaign integrity artifact",
+                relocation_root=relocation_root,
             )
             persisted_integrity = _read_object(integrity_path, "campaign integrity artifact")
         except (OSError, ValueError, RuntimeSmokeAdmissionError) as exc:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import yaml
 
 import robot_sf.benchmark.runtime_smoke_admission as admission_module
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.result_provenance import build_result_provenance_manifest
 from robot_sf.benchmark.runtime_smoke_admission import (
     RUNTIME_SMOKE_CONFIG,
     RUNTIME_SMOKE_MANIFEST,
@@ -44,6 +46,8 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
     config = tmp_path / RUNTIME_SMOKE_CONFIG
     scenario = tmp_path / "configs/scenarios/single/francis2023_blind_corner.yaml"
     _write_yaml(scenario, {"scenarios": [{"name": "runtime-smoke-scenario"}]})
+    schema = tmp_path / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    _write_json(schema, {"$schema": "https://json-schema.org/draft/2020-12/schema"})
     planner_configs: dict[str, str] = {}
     for index, planner in enumerate(planners):
         config_rel = f"configs/algos/runtime-smoke-{index}.yaml"
@@ -84,66 +88,50 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
     planner_rows: list[dict] = []
     for index, planner in enumerate(planners):
         episodes = root / "runs" / f"{planner}__differential_drive" / "episodes.jsonl"
-        _write_json(
-            episodes,
-            {
-                "algo": f"algo-{index}",
+        episode_row = {
+            "algo": f"algo-{index}",
+            "episode_id": f"runtime-smoke-scenario--111--{index}",
+            "scenario_id": "runtime-smoke-scenario",
+            "seed": 111,
+            "horizon": 600,
+            "config_hash": f"config-{index}",
+            "git_hash": "a" * 40,
+            "result_provenance": {
+                "repo_commit": "a" * 40,
                 "scenario_id": "runtime-smoke-scenario",
                 "seed": 111,
-                "horizon": 600,
                 "config_hash": f"config-{index}",
-                "result_provenance": {
-                    "repo_commit": "a" * 40,
-                    "scenario_id": "runtime-smoke-scenario",
-                    "seed": 111,
-                    "config_hash": f"config-{index}",
-                },
-                "algorithm_metadata": {
-                    "algorithm": "ppo" if planner == "guarded_ppo" else f"algo-{index}",
-                    "canonical_algorithm": f"algo-{index}",
-                    "planner_contract": {"planner_id": f"algo-{index}"},
-                    "status": "ok",
-                },
             },
-        )
-        _write_json(
-            episodes.with_name(f"{episodes.name}.provenance.json"),
-            {
-                "campaign_identity": {
-                    "algorithm": f"algo-{index}",
-                    "total_jobs": 1,
-                    "written": 1,
-                },
-                "run": {"repo_commit": "a" * 40},
-                "rows": [
-                    {
-                        "scenario_id": "runtime-smoke-scenario",
-                        "seed": 111,
-                        "config_hash": f"config-{index}",
-                        "repo_commit": "a" * 40,
-                        "raw_artifact": str(episodes),
-                    }
-                ],
-                "inputs": {
-                    "scenario_matrix": {
-                        "path": str(scenario),
-                        "sha256": sha256_file(scenario),
-                    },
-                    "algo_config": {
-                        "path": str(tmp_path / planner_configs[planner]),
-                        "sha256": sha256_file(tmp_path / planner_configs[planner]),
-                    },
-                },
-                "raw_artifacts": [
-                    {
-                        "kind": "episodes_jsonl",
-                        "path": str(episodes),
-                        "sha256": sha256_file(episodes),
-                        "artifact_status": "available",
-                    }
-                ],
+            "algorithm_metadata": {
+                "algorithm": "ppo" if planner == "guarded_ppo" else f"algo-{index}",
+                "canonical_algorithm": f"algo-{index}",
+                "planner_contract": {"planner_id": f"algo-{index}"},
+                "status": "ok",
             },
+        }
+        _write_json(episodes, episode_row)
+        sidecar = build_result_provenance_manifest(
+            out_path=episodes,
+            episode_records=[episode_row],
+            schema_path=schema,
+            scenario_path=scenario,
+            scenarios=[{"name": "runtime-smoke-scenario"}],
+            algo=f"algo-{index}",
+            algo_config_path=tmp_path / planner_configs[planner],
+            benchmark_profile="baseline-safe",
+            suite_key="default",
+            total_jobs=1,
+            written=1,
+            horizon=600,
+            dt=0.1,
+            record_forces=True,
+            active_observation_mode="socnav_state",
+            active_observation_level="tracked_agents_no_noise",
         )
+        sidecar["run"]["repo_commit"] = "a" * 40
+        sidecar["rows"][0]["repo_commit"] = "a" * 40
+        sidecar["rows"][0]["config_hash"] = f"config-{index}"
+        _write_json(episodes.with_name(f"{episodes.name}.provenance.json"), sidecar)
         arm_summary = {
             "status": "ok",
             "written": 1,
@@ -179,6 +167,8 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
         )
     result = {
         "campaign_id": "smoke",
+        "campaign_root": str(root),
+        "summary_json": str(root / "reports/campaign_summary.json"),
         "benchmark_release": {
             "release_id": RUNTIME_SMOKE_RELEASE_ID,
             "manifest_path": RUNTIME_SMOKE_MANIFEST.as_posix(),
@@ -226,6 +216,11 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
                     "key": planner,
                     "algo": f"algo-{index}",
                     "algo_config_path": planner_configs[planner],
+                    "checkpoint_provenance": {
+                        "status": "not_run",
+                        "load_succeeded": None,
+                        "fallback_triggered": None,
+                    },
                 }
                 for index, planner in enumerate(planners)
             ],
@@ -329,6 +324,9 @@ def test_runtime_smoke_age_rejects_invalid_and_stale_timestamps() -> None:
         _validate_age({"finished_at_utc": stale}, max_age_hours=24)
     naive = datetime.now(UTC).replace(tzinfo=None, microsecond=0).isoformat()
     assert _validate_age({"finished_at_utc": naive}, max_age_hours=24).endswith("Z")
+    for invalid_limit in (float("nan"), float("inf"), 0.0, -1.0, 24.1):
+        with pytest.raises(RuntimeSmokeAdmissionError, match="maximum age"):
+            _validate_age({"finished_at_utc": naive}, max_age_hours=invalid_limit)
 
 
 def test_runtime_smoke_episode_reader_handles_blank_and_rejects_malformed_rows(
@@ -483,6 +481,35 @@ def test_runtime_smoke_rejects_nested_preflight_fallback(
         _admit(result, planners, tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("runtime_marker", "value"),
+    [
+        ("fallback_count", "1"),
+        ("fallback_used", "true"),
+        ("benchmark_success", False),
+        ("load_succeeded", False),
+    ],
+)
+def test_runtime_smoke_rejects_malformed_or_false_runtime_markers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runtime_marker: str,
+    value: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["runtime"] = {runtime_marker: value}
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -625,6 +652,30 @@ def test_runtime_smoke_rejects_parent_directory_symlink(
         _admit(result, planners, tmp_path)
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "campaign_manifest.json",
+        "manifest.json",
+        "run_meta.json",
+        "reports/campaign_summary.json",
+    ],
+)
+def test_runtime_smoke_rejects_canonical_metadata_symlink(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    metadata = result.parent.parent / relative_path
+    saved = tmp_path / f"external-{metadata.name}"
+    metadata.replace(saved)
+    metadata.symlink_to(saved)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="path contains a symlink"):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_rejects_raw_artifact_hash_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -655,6 +706,60 @@ def test_runtime_smoke_rejects_sidecar_scenario_matrix_hash_drift(
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="scenario matrix hash mismatch"):
         _admit(result, planners, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda payload: payload.update(schema_version="forged.v1"), "provenance schema rejected"),
+        (
+            lambda payload: payload["campaign_identity"].update(suite_key="forged"),
+            "sidecar suite mismatch",
+        ),
+        (
+            lambda payload: payload["raw_artifacts"][0].update(artifact_status="missing"),
+            "raw artifact status mismatch",
+        ),
+        (lambda payload: payload["rows"][0].update(episode_id="forged"), "episode id mismatch"),
+        (lambda payload: payload["rows"][0].update(jsonl_line=1), "JSONL line mismatch"),
+    ],
+)
+def test_runtime_smoke_rejects_incomplete_sidecar_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation,
+    message: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    sidecar_path = (
+        result.parent.parent
+        / "runs/prediction_planner__differential_drive/episodes.jsonl.provenance.json"
+    )
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    mutation(sidecar)
+    _write_json(sidecar_path, sidecar)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match=message):
+        _admit(result, planners, tmp_path)
+
+
+def test_runtime_smoke_admits_consistently_relocated_campaign_bundle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_repo = tmp_path / "original"
+    result, planners = _fixture(original_repo, monkeypatch)
+    relocated_repo = tmp_path / "relocated"
+    shutil.copytree(original_repo, relocated_repo)
+    relocated_result = relocated_repo / result.relative_to(original_repo)
+
+    admitted = validate_runtime_smoke_result(
+        relocated_result,
+        repo_root=relocated_repo,
+        expected_source_commit="a" * 40,
+        expected_planner_keys=planners,
+    )
+
+    assert admitted["status"] == "admitted"
 
 
 def test_runtime_smoke_rejects_checkpoint_receipt_hash_mismatch(

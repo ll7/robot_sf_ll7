@@ -113,6 +113,10 @@ def test_socnavbench_runtime_empty_trajectory_records_fallback():
     assert diagnostics["implementation_mode"] == "heuristic_fallback"
     assert "no trajectory" in diagnostics["fallback_reason"]
 
+    strict_adapter = SocNavBenchSamplingAdapter(planner_factory=Planner)
+    with pytest.raises(RuntimeError, match="failed during _plan_upstream"):
+        strict_adapter.plan(_base_observation())
+
 
 def test_extract_grid_payload_handles_flattened_meta():
     """Grid extraction should recover flattened occupancy metadata fields."""
@@ -541,3 +545,6 @@ def test_socnavbench_adapter_uses_upstream_when_available():
 
     assert isinstance(v, float)
     assert isinstance(w, float)
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["implementation_mode"] == "upstream_socnavbench"
+    assert diagnostics["upstream_loaded"] is True

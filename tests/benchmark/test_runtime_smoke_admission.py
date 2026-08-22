@@ -489,15 +489,20 @@ def test_runtime_smoke_rejects_nested_preflight_fallback(
 
 
 @pytest.mark.parametrize("reason", [None, ""])
+@pytest.mark.parametrize("nested", [False, True])
 def test_runtime_smoke_allows_empty_foresight_fallback_reason_when_unused(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     reason: object,
+    nested: bool,
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
-    row["algorithm_metadata"]["foresight_prediction"] = {
+    metadata = row["algorithm_metadata"]
+    if nested:
+        metadata = metadata.setdefault("planner_runtime", {})
+    metadata["foresight_prediction"] = {
         "fallback_used": False,
         "fallback_reason": reason,
     }
@@ -510,13 +515,17 @@ def test_runtime_smoke_allows_empty_foresight_fallback_reason_when_unused(
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
 
 
+@pytest.mark.parametrize("nested", [False, True])
 def test_runtime_smoke_rejects_nonempty_foresight_fallback_reason_when_unused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, nested: bool
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
-    row["algorithm_metadata"]["foresight_prediction"] = {
+    metadata = row["algorithm_metadata"]
+    if nested:
+        metadata = metadata.setdefault("planner_runtime", {})
+    metadata["foresight_prediction"] = {
         "fallback_used": False,
         "fallback_reason": "unexpected runtime fallback",
     }

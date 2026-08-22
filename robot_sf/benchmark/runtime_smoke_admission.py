@@ -353,7 +353,7 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
     if (
         re.fullmatch(
             r"runs\[\d+\]\.rows\[\d+\]\.algorithm_metadata\."
-            r"foresight_prediction\.fallback_reason",
+            r"(?:planner_runtime\.)?foresight_prediction\.fallback_reason",
             path,
         )
         and (value is None or value == "")

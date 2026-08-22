@@ -1122,17 +1122,23 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
         ]
     invalid = invalid_sha_carriers(carriers, head_sha)
     v2_mismatch = bool(v2_exact_head and v2_exact_head != head_sha)
+    v2_matches = bool(v2_exact_head and v2_exact_head == head_sha)
     if v2_mismatch:
         v2_detail = f"pr-contract:v2 exact_head {v2_exact_head}"
     else:
         v2_detail = ""
     if not carriers and not v2_detail:
+        message = (
+            "pr-contract:v2 exact_head matches the PR head."
+            if v2_matches
+            else "No exact-head SHA carriers present."
+        )
         return ShaCarrierReport(
             status="ok",
             source=source,
             head_sha=head_sha,
             invalid=(),
-            message="No exact-head SHA carriers present.",
+            message=message,
         )
     details = tuple(
         f"{carrier.kind} {carrier.sha}" + ("" if carrier.full else " (abbreviated)")
@@ -1146,7 +1152,12 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
             source=source,
             head_sha=head_sha,
             invalid=(),
-            message="All exact-head SHA carriers match the PR head.",
+            message=(
+                "All exact-head SHA carriers match the PR head, including "
+                "pr-contract:v2 exact_head."
+                if v2_matches
+                else "All exact-head SHA carriers match the PR head."
+            ),
         )
     return ShaCarrierReport(
         status="invalid_sha_carrier",

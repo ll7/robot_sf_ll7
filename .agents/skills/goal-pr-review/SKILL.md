@@ -149,7 +149,8 @@ uv run python scripts/dev/gh_pr_comments_rest.py <number> --repo ll7/robot_sf_ll
 scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
 scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
 
-# Exact-head review publication; re-reads PR state/head while holding the local writer lock
+# Exact-head review publication; re-reads PR state/head while holding the local writer lock.
+# The merge-ready carrier gate reads this COMMENTED review directly from the PR reviews API.
 uv run python scripts/dev/gh_pr_review_rest.py <number> --event COMMENT \
     --body-file <path> --expected-head-sha <head_sha> --repo ll7/robot_sf_ll7
 ```
@@ -161,7 +162,9 @@ before resolving review threads. Use `gh_comment.sh pr` for ordinary top-level
 PR conversation comments; it resolves the target through local/REST state and
 posts through `issues/{number}/comments`. The COMMENTED review event in step 8
 is a separate review-verdict operation and must use the guarded review helper
-above. If the helper reports the machine-readable
+above; it is the canonical carrier consumed by `pr_carrier_gate.py`. A matching
+top-level issue comment remains a compatibility carrier for older API paths, but
+is not required when the review endpoint is available. If the helper reports the machine-readable
 `review_skipped_stale_state`, re-read the PR and stop the write path; classify a
 merged PR as `merged_externally` / `no_action`. PR header/title fields that do not
 involve comments can still use `gh pr view <number> --json ...`; only the
@@ -364,9 +367,9 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    `merge-ready` through `gh_pr_label_rest.py` with the same expected head SHA. Both writes
    return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
    head moved. The
-   review event refreshes the source-head queue gate after the verdict. A top-level PR comment alone
-   does not; if review submission is unavailable, remove and reapply `merge-ready` after posting the
-   comment or record the gate-refresh blocker.
+   review event refreshes the source-head queue gate after the verdict. If review submission is
+   unavailable, a matching top-level compatibility carrier may be used only when the guarded label
+   gate can read it; otherwise record the gate-refresh blocker.
 9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
    bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
    `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.

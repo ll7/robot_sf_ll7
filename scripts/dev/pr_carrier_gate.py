@@ -12,8 +12,10 @@ despite a "not current-base merge evidence" refresh note.
 
 This module closes that class of drift:
 
-- a review comment is a valid carrier only when it names the exact live head
+- a top-level review carrier is valid only when it names the exact live head
   and, when it declares a base, the exact live base;
+- a human ``COMMENTED`` review from the PR reviews endpoint is valid only when
+  its body names that live head/base and its ``commit_id`` is the live head;
 - a body or comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition;
@@ -23,7 +25,8 @@ This module closes that class of drift:
 - any failure returns a structured ``error`` and the caller must not write.
 
 All reads go through the shared REST helpers and fail closed on transport or
-payload uncertainty.
+payload uncertainty. A valid top-level carrier remains a compatibility path
+when the review endpoint is unavailable.
 """
 
 from __future__ import annotations
@@ -164,7 +167,11 @@ def _live_pr_identity_error(
 
 
 def _review_carrier_error(
-    comments: Sequence[dict[str, Any]], *, live_head: str, live_base: str
+    comments: Sequence[dict[str, Any]],
+    *,
+    live_head: str,
+    live_base: str,
+    require_review_commit: bool = False,
 ) -> str | None:
     """Return an error when no human review comment is bound to the live state."""
     for entry in comments:
@@ -176,11 +183,55 @@ def _review_carrier_error(
         body = entry.get("body")
         if not isinstance(body, str):
             continue
+        if require_review_commit:
+            if str(entry.get("state", "")).upper() != "COMMENTED":
+                continue
+            review_commit = entry.get("commit_id")
+            if not isinstance(review_commit, str) or not FULL_SHA_RE.fullmatch(review_commit):
+                continue
+            if review_commit.lower() != live_head.lower():
+                continue
         if review_comment_covers(body, live_head=live_head, live_base=live_base):
             return None
     return (
         f"no exact-head review carrier comment covers the live head {live_head} (base {live_base})"
     )
+
+
+def _reviews_verdict(
+    number: int,
+    *,
+    repo: str,
+    live_head: str,
+    live_base: str,
+) -> dict[str, Any]:
+    """Read PR reviews and validate a canonical review-endpoint carrier.
+
+    A review must be a live-head ``COMMENTED`` review with its commit id bound to
+    the live head. The caller checks the top-level issue-comment compatibility
+    carrier first, so older GitHub CLI/API setups do not need this endpoint when
+    that legacy carrier is already present.
+    """
+    reviews_result = _gh_api_get(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
+    reviews, reviews_error = _parse_json(reviews_result, what=f"PR {number} review carriers read")
+    if reviews_error:
+        return {"status": "error", "error": reviews_error}
+    if not isinstance(reviews, list):
+        return {"status": "error", "error": "PR review carriers payload was not a list"}
+
+    narrative_error = _stale_narrative_error(reviews, body="")
+    if narrative_error:
+        return {"status": "error", "error": narrative_error}
+
+    review_error = _review_carrier_error(
+        reviews,
+        live_head=live_head,
+        live_base=live_base,
+        require_review_commit=True,
+    )
+    if review_error:
+        return {"status": "error", "error": review_error}
+    return {"status": "ok", "carrier_source": "pull_request_review"}
 
 
 def _stale_narrative_error(comments: Sequence[dict[str, Any]], *, body: str) -> str | None:
@@ -229,10 +280,18 @@ def _comments_verdict(
         return {"status": "error", "error": narrative_error}
 
     review_error = _review_carrier_error(comments, live_head=live_head, live_base=live_base)
-    if review_error:
-        return {"status": "error", "error": review_error}
+    if review_error is None:
+        return {"status": "ok", "carrier_source": "issue_comment"}
+    reviews_verdict = _reviews_verdict(
+        number,
+        repo=repo,
+        live_head=live_head,
+        live_base=live_base,
+    )
+    if reviews_verdict["status"] != "ok":
+        return reviews_verdict
 
-    return {"status": "ok"}
+    return reviews_verdict
 
 
 def check_merge_ready_carriers(
@@ -292,5 +351,6 @@ def check_merge_ready_carriers(
         "repo": repo,
         "live_head_sha": live_head,
         "live_base_sha": live_base,
+        "carrier_source": comments_verdict.get("carrier_source", "unknown"),
         "operation": "merge_ready_carrier_gate",
     }

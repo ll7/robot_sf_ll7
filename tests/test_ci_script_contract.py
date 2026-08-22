@@ -304,6 +304,13 @@ def test_run_tests_parallel_empty_shard_guard_executes_only_the_safe_case(tmp_pa
     assert "Sharded coverage requires a unique COVERAGE_FILE per shard." in result.stderr
 
 
+def test_ci_fast_feedback_authenticates_gh_release_downloads() -> None:
+    """Keep public release hydration on the authenticated Actions API path."""
+
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    assert workflow["jobs"]["fast-feedback"]["env"]["GH_TOKEN"] == "${{ github.token }}"
+
+
 def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     """Keep CI duration restore, per-shard upload, and aggregate-save wiring intact."""
 

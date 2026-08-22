@@ -19,6 +19,7 @@ from scripts.dev.check_pr_followups import (
     analyze_domain_approval,
     analyze_sha_carriers,
 )
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_pr_followups.py"
 
@@ -597,6 +598,7 @@ def test_domain_approval_accepts_docs_only_opt_out_for_freeform_prose_trigger() 
     with `Status: not required`; that opt-out must be accepted when the trigger is a prose mention
     rather than a filled Research Result Guidance declaration.
     """
+
     body = """## Summary
 Adds a single reference table for reward profiles to aid benchmark interpretation.
 
@@ -610,6 +612,261 @@ Adds a single reference table for reward profiles to aid benchmark interpretatio
 
     assert report.status == "ok"
     assert report.sensitive_terms == ("free-form evidence marker: benchmark interpretation",)
+
+
+def _v2_body(payload: str) -> str:
+    return f"""## Summary
+Human-authored summary for a v2 PR.
+
+<!-- pr-contract:v2
+{payload}
+-->
+"""
+
+
+V2_TOOLING_PAYLOAD = """change_class: tooling
+linked_issues:
+  closes: []
+  relates: []
+deferred_work:
+  status: none
+  issues: []
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+performance:
+  claimed: false"""
+
+
+def test_v2_minimal_tooling_and_docs_contracts_are_valid() -> None:
+    tooling = parse_pr_contract_v2(_v2_body(V2_TOOLING_PAYLOAD), source="fixture")
+    docs = parse_pr_contract_v2(
+        _v2_body(V2_TOOLING_PAYLOAD.replace("change_class: tooling", "change_class: docs")),
+        source="fixture",
+    )
+
+    assert tooling.status == "ok"
+    assert docs.status == "ok"
+    assert tooling.contract is not None
+    assert tooling.contract.change_class == "tooling"
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    [
+        (
+            V2_TOOLING_PAYLOAD.replace(
+                "performance:\n  claimed: false",
+                "performance:\n  claimed: false\nextra: true",
+            ),
+            "unknown field",
+        ),
+        (
+            V2_TOOLING_PAYLOAD.replace("change_class: tooling", "change_class: unsupported"),
+            "change_class must be one of",
+        ),
+        (
+            V2_TOOLING_PAYLOAD.replace(
+                "linked_issues:\n  closes: []",
+                "linked_issues:\n  closes: [12, 12]",
+            ),
+            "duplicate issue references",
+        ),
+    ],
+)
+def test_v2_rejects_unknown_enum_and_duplicate_values(payload: str, expected_error: str) -> None:
+    result = parse_pr_contract_v2(_v2_body(payload), source="fixture")
+
+    assert result.status == "malformed"
+    assert any(expected_error in error for error in result.errors)
+
+
+def test_v2_rejects_duplicate_yaml_keys() -> None:
+    payload = V2_TOOLING_PAYLOAD.replace(
+        "evidence:\n  applicability: na",
+        "evidence:\n  applicability: na\n  applicability: docs-only",
+    )
+
+    result = parse_pr_contract_v2(_v2_body(payload), source="fixture")
+
+    assert result.status == "malformed"
+    assert "duplicate key" in result.message
+
+
+def test_v2_rejects_benchmark_without_evidence_and_domain_approval() -> None:
+    payload = V2_TOOLING_PAYLOAD.replace(
+        "change_class: tooling", "change_class: benchmark_or_metric"
+    )
+
+    result = parse_pr_contract_v2(_v2_body(payload), source="fixture")
+
+    assert result.status == "malformed"
+    assert any("evidence-bearing" in error for error in result.errors)
+
+
+def test_v2_accepts_complete_evidence_bearing_contract() -> None:
+    payload = """change_class: benchmark_or_metric
+linked_issues:
+  closes: []
+  relates: []
+deferred_work:
+  status: none
+  issues: []
+evidence:
+  applicability: evidence-bearing
+  tier: nominal
+  result: diagnostic-only
+domain_approval:
+  required: true
+  status: approved
+  domains: [evidence classification]
+  note: maintainer review of the claim boundary
+  validity_checklist:
+    target_claim: diagnostic gate only
+    comparator_validity: fixed fixture comparator
+    fallback_exclusions: fallback rows excluded
+    claim_boundary: no paper-facing ranking
+    implementation_integrity: focused tests cover the gate
+performance:
+  claimed: false"""
+
+    body = _v2_body(payload)
+    result = parse_pr_contract_v2(body, source="fixture")
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        title="feat(benchmark): add diagnostic gate",
+        changed_files=("robot_sf/benchmark/metrics.py",),
+    )
+
+    assert result.status == "ok"
+    assert report.status == "ok"
+    assert report.approval_status == "approved"
+
+
+def test_v2_rejects_paper_contract_with_missing_approval_fields() -> None:
+    payload = V2_TOOLING_PAYLOAD.replace(
+        "change_class: tooling", "change_class: paper_or_claim"
+    ).replace("applicability: na", "applicability: evidence-bearing")
+    payload = payload.replace("tier: null", "tier: nominal").replace(
+        "result: na", "result: positive"
+    )
+
+    result = parse_pr_contract_v2(_v2_body(payload), source="fixture")
+
+    assert result.status == "malformed"
+    assert any("required=true" in error for error in result.errors)
+    assert any("validity checklist" in error for error in result.errors)
+
+
+def test_v2_rejects_performance_claim_without_measurements() -> None:
+    payload = V2_TOOLING_PAYLOAD.replace(
+        "change_class: tooling", "change_class: performance"
+    ).replace("claimed: false", "claimed: true")
+
+    result = parse_pr_contract_v2(_v2_body(payload), source="fixture")
+
+    assert result.status == "malformed"
+    assert any("measurement field" in error for error in result.errors)
+
+
+def test_v2_marker_error_does_not_fall_back_to_valid_v1_sections() -> None:
+    body = """## Summary
+Human-authored summary.
+
+## Follow-Up Issues
+- Deferred work: none
+- Issues opened for follow-up: none
+
+<!-- pr-contract:v2
+change_class: tooling
+linked_issues: [malformed
+-->
+"""
+
+    result = parse_pr_contract_v2(body, source="fixture")
+    report = analyze_body(body, source="fixture")
+
+    assert result.status == "malformed"
+    assert report.status == "malformed_v2_contract"
+
+
+def test_cli_fails_closed_for_malformed_v2_marker(tmp_path: Path) -> None:
+    body_path = tmp_path / "body.md"
+    body_path.write_text(
+        _v2_body(V2_TOOLING_PAYLOAD.replace("change_class: tooling", "change_class: unknown")),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--body-file", str(body_path)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "PR contract v2 check" in result.stderr
+    assert "v1 fallback is disabled" in result.stderr
+
+
+def test_v1_body_without_marker_retains_compatibility_path() -> None:
+    body = _body(deferred="none")
+
+    result = parse_pr_contract_v2(body, source="fixture")
+    report = analyze_body(body, source="fixture")
+
+    assert result.status == "absent"
+    assert report.status == "ok"
+
+
+def test_v2_name_in_human_prose_does_not_trigger_marker_mode() -> None:
+    body = "## Summary\nDiscuss the `pr-contract:v2` migration without adding its marker.\n"
+
+    result = parse_pr_contract_v2(body, source="fixture")
+    report = analyze_body(body, source="fixture")
+
+    assert result.status == "absent"
+    assert report.status == "ok"
+
+
+def test_v2_path_or_title_signal_cannot_hide_as_tooling() -> None:
+    body = _v2_body(V2_TOOLING_PAYLOAD)
+
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        title="benchmark: update planner comparison",
+        changed_files=("robot_sf/benchmark/metrics.py",),
+    )
+
+    assert report.status == "v2_change_class_mismatch"
+
+
+def test_v2_exact_head_carrier_is_checked() -> None:
+    head = "a" * 40
+    body = _v2_body(V2_TOOLING_PAYLOAD + f"\nexact_head: {head}")
+
+    accepted = analyze_sha_carriers(body, source="fixture", head_sha=head)
+    rejected = analyze_sha_carriers(body, source="fixture", head_sha="b" * 40)
+
+    assert accepted.status == "ok"
+    assert rejected.status == "invalid_sha_carrier"
+    assert "pr-contract:v2 exact_head" in rejected.invalid[0]
+
+
+def test_default_template_emits_a_valid_v2_contract() -> None:
+    template = Path(__file__).resolve().parents[2] / ".github/PULL_REQUEST_TEMPLATE/pr_default.md"
+
+    result = parse_pr_contract_v2(template.read_text(encoding="utf-8"), source=str(template))
+
+    assert result.status == "ok"
+    assert "## Summary" in template.read_text(encoding="utf-8")
 
 
 def test_domain_approval_docs_only_opt_out_uses_default_template_values() -> None:

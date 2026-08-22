@@ -61,6 +61,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 from scripts.dev.pr_metadata import extract_metadata_digests, has_not_ready_body_narrative
 from scripts.dev.route_efficiency_report import (
     EXPECTED_ARTIFACT_KEYS,
@@ -188,8 +189,9 @@ def extract_sha_carriers(text: str) -> list[ShaCarrier]:
 
     Covers the three canonical trailer forms: ``gate-verdict: accepted @
     <sha>``, ``base-policy: (ordinary-cas|current-base) @ <sha>``, and
-    ``Exact head: <sha>``. Surrounding markdown/code fences are tolerated so
-    quoted historical evidence is still surfaced for fail-closed validation.
+    ``Exact head: <sha>``, plus a validated v2 ``exact_head`` field. Surrounding
+    markdown/code fences are tolerated so quoted historical evidence is still
+    surfaced for fail-closed validation.
     Carriers are returned in document order with the SHA as written.
     """
     if not isinstance(text, str) or not text:
@@ -204,6 +206,10 @@ def extract_sha_carriers(text: str) -> list[ShaCarrier]:
     for match in _EXACT_HEAD_RE.finditer(text):
         raw = match.group(1)
         carriers.append(ShaCarrier(kind="exact-head", sha=raw.lower(), full=len(raw) == 40))
+    v2_result = parse_pr_contract_v2(text, source="sha-carrier")
+    if v2_result.contract is not None and v2_result.contract.exact_head:
+        raw = v2_result.contract.exact_head
+        carriers.append(ShaCarrier(kind="exact-head", sha=raw, full=len(raw) == 40))
     return carriers
 
 

@@ -148,6 +148,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install gate runtime dependencies
+        if: steps.gate-source.outputs.available == 'true'
+        run: python -m pip install --quiet pyyaml==6.0.3
+
       - name: Run merge-queue gate (merge_group)
         if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'
         env:

@@ -774,6 +774,34 @@ def test_policy_sweep_alias_resolves_to_camera_ready_skill(
     assert "Preflight check for skill: analyze-camera-ready-benchmark" in captured.out
 
 
+def test_auxme_issue791_alias_resolves_to_reliable_submit_skill(
+    capsys: pytest.CaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retired Issue 791 entry point selects the canonical profile."""
+    check_skills = _load_check_skills_module()
+    monkeypatch.setattr(check_skills, "_check_command", lambda *_args: (True, "available"))
+
+    rc = check_skills._preflight("auxme-issue791-submit")
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Preflight check for skill: auxme-slurm-reliable-submit" in captured.out
+
+
+def test_auxme_issue791_profile_preserves_submission_contract() -> None:
+    """The canonical profile retains the legacy wrapper and submission result contract."""
+    skill_path = Path(__file__).parents[2] / ".agents/skills/auxme-slurm-reliable-submit/SKILL.md"
+    skill_text = skill_path.read_text(encoding="utf-8")
+
+    assert "### Issue-791 profile" in skill_text
+    assert "scripts/dev/sbatch_auxme_issue791.sh" in skill_text
+    assert "campaign_submission.v1" in skill_text
+    assert "Zero Bytes were transmitted or received" in skill_text
+    assert "Never submit an issue-791 wrapper without explicit" in skill_text
+    assert "Do not use this profile for non-issue-791 campaigns" in skill_text
+
+
 def test_preflight_json_output_passing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """Preflight with --json should emit structured JSON on success."""
     check_skills = _load_check_skills_module()

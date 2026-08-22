@@ -177,29 +177,6 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
-  auxme-issue791-submit:
-    writes:
-      git: false
-      github_issue: false
-      github_project: false
-      github_pr: false
-      filesystem: true
-    description: Submit issue-791-specific Auxme training jobs with explicit config provenance and wrapper-safety
-      checks.
-    category: slurm
-    kind: atomic
-    phase: implementation
-    requires_write: true
-    requires_slurm: true
-    requires:
-    - git
-    - slurm
-    - uv
-    delegates_to:
-    - slurm-campaign-submit
-    output_schema: campaign_submission.v1
-    aliases: []
-    requires_benchmark_artifacts: false
   auxme-slurm-reliable-submit:
     description: Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure
       checks, and max-time-safe wrapper routing.
@@ -219,10 +196,10 @@ skills:
     - git
     - slurm
     - uv
-    delegates_to:
-    - auxme-issue791-submit
+    delegates_to: []
     output_schema: skill_run_summary.v1
     aliases:
+    - auxme-issue791-submit
     - auxme-issue791-reliable-submit
   benchmark-overview:
     description: Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts,

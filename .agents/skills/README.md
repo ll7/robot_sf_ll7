@@ -180,8 +180,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `auxme-issue791-submit` | atomic | implementation | yes | yes | no | `slurm-campaign-submit` | Submit issue-791-specific Auxme training jobs with explicit config provenance and wrapper-safety checks. |
-| `auxme-slurm-reliable-submit` | atomic | implementation | yes | yes | no | `auxme-issue791-submit` | Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure checks, and max-time-safe wrapper routing. |
+| `auxme-slurm-reliable-submit` | atomic | implementation | yes | yes | no | none | Submit issue-791 style Auxme SLURM jobs with explicit config, live partition pressure checks, and max-time-safe wrapper routing. |
 | `slurm-campaign-submit` | atomic | implementation | yes | yes | no | `artifact-provenance` | Submit generic SLURM campaigns with preflight, config provenance, job metadata, artifact expectations, and failure classification. |
 
 ### Validation And Cleanup
@@ -202,6 +201,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `agent-improvement-promotion` | `agent-workflow-promotion` |
 | `analyze-latest-policy-sweep` | `analyze-camera-ready-benchmark` |
 | `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
+| `auxme-issue791-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
 | `continuous-autopilot` | `goal-autopilot` |
 | `gh-issue-to-pr` | `gh-issue-autopilot` |

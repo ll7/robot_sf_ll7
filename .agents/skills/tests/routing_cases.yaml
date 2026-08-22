@@ -11,6 +11,11 @@ cases:
   primary: analyze-camera-ready-benchmark
   secondary:
   - benchmark-row-status
+
+- intent: Analyze a legacy policy-analysis sweep
+  primary: analyze-latest-policy-sweep
+  secondary:
+  - analyze-camera-ready-benchmark
 - intent: Submit training job
   primary: slurm-campaign-submit
   secondary:

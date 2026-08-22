@@ -761,6 +761,19 @@ def test_preflight_resolves_alias(tmp_path: Path, capsys: pytest.CaptureFixture)
     assert "Preflight check for skill: my-skill" in captured.out
 
 
+def test_policy_sweep_alias_resolves_to_camera_ready_skill(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """The retired policy-sweep entry point resolves to its canonical analyzer mode."""
+    check_skills = _load_check_skills_module()
+
+    rc = check_skills._preflight("analyze-latest-policy-sweep")
+
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Preflight check for skill: analyze-camera-ready-benchmark" in captured.out
+
+
 def test_preflight_json_output_passing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """Preflight with --json should emit structured JSON on success."""
     check_skills = _load_check_skills_module()

@@ -45,6 +45,25 @@ def _comments_payload(*bodies: str) -> str:
     )
 
 
+def _reviews_payload(
+    *bodies: str,
+    commit_id: str = HEAD_SHA,
+    state: str = "COMMENTED",
+) -> str:
+    """Build pull-request review payloads returned by the REST endpoint."""
+    return json.dumps(
+        [
+            {
+                "user": {"login": "ll7"},
+                "body": body,
+                "commit_id": commit_id,
+                "state": state,
+            }
+            for body in bodies
+        ]
+    )
+
+
 def _review_comment() -> str:
     return (
         "## Exact-head self-review\n\n"
@@ -132,6 +151,119 @@ def test_gate_admits_bound_body_and_review() -> None:
     assert result["live_head_sha"] == HEAD_SHA
 
 
+def test_gate_admits_review_endpoint_carrier_without_compatibility_comment() -> None:
+    """A live-head COMMENTED review from the REST endpoint is a valid carrier."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(_review_comment())),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "ok"
+    assert result["carrier_source"] == "pull_request_review"
+
+
+def test_gate_rejects_review_endpoint_foreign_commit() -> None:
+    """A review body cannot override a review object bound to an older commit."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(_review_comment(), commit_id=OTHER_SHA)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "no exact-head review carrier" in result["error"]
+
+
+def test_gate_rejects_bot_review_endpoint_carrier() -> None:
+    """A bot review cannot satisfy the canonical review carrier path."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    bot_review = json.loads(_reviews_payload(_review_comment()))
+    bot_review[0]["user"] = {"login": "github-actions[bot]"}
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=json.dumps(bot_review)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "no exact-head review carrier" in result["error"]
+
+
+def test_gate_rejects_malformed_review_endpoint_payload() -> None:
+    """Without a compatibility comment, malformed review JSON fails closed."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=json.dumps({"review": "not-a-list"})),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "payload was not a list" in result["error"]
+
+
+def test_gate_rejects_stale_narrative_in_review_endpoint() -> None:
+    """A stale review narrative blocks a review-endpoint carrier."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    stale_review = "## Review note\n\nThe prior evidence is not current-base merge evidence."
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(stale_review)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "not current-base merge evidence" in result["error"]
+
+
 def test_gate_fails_closed_on_stale_body_carrier() -> None:
     """A body carrying exact-head carriers for an older head must withhold merge-ready."""
     title = "fix(benchmark): gate carriers"
@@ -184,6 +316,7 @@ def test_gate_fails_closed_without_review_carrier() -> None:
         side_effect=[
             _proc(stdout=_pr_payload(title=title, body=body)),
             _proc(stdout=_comments_payload(stale_review)),
+            _proc(stdout=_reviews_payload(stale_review)),
         ],
     ):
         result = check_merge_ready_carriers(

@@ -19,6 +19,7 @@ from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready._run_state import _resolve_integrity_artifact_path
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -78,7 +79,9 @@ def _append_blocker(blockers: list[str], message: str) -> None:
         blockers.append(message)
 
 
-def _status_markers(payload: Mapping[str, Any], prefix: str) -> list[tuple[str, str]]:  # noqa: C901
+def _status_markers(  # noqa: C901, PLR0912
+    payload: Mapping[str, Any], prefix: str
+) -> list[tuple[str, str]]:
     """Extract only execution/evidence status markers from one structured row.
 
     Returns:
@@ -123,6 +126,10 @@ def _status_markers(payload: Mapping[str, Any], prefix: str) -> list[tuple[str, 
         adapter_impact = metadata.get("adapter_impact")
         if isinstance(adapter_impact, Mapping):
             _add(f"{field}.adapter_impact.execution_mode", adapter_impact.get("execution_mode"))
+        runtime_marker = runtime_fallback_or_degraded_marker(metadata.get("planner_runtime"))
+        if runtime_marker is not None:
+            marker_path, marker_value = runtime_marker
+            markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))
     availability = payload.get("benchmark_availability")
     if isinstance(availability, Mapping):
         for field in ("status", "readiness_status", "availability_status", "execution_mode"):

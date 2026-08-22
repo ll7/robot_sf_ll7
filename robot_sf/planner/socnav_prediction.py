@@ -1799,7 +1799,9 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "SocNavBenchSamplingAdapter"}
+        diagnostics = super().diagnostics()
+        diagnostics["planner_type"] = "SocNavBenchSamplingAdapter"
+        return diagnostics
 
 
 __all__ = [

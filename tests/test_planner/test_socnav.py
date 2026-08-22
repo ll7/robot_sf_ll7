@@ -60,6 +60,32 @@ def test_occupancy_mixin_is_reexported_from_socnav():
     assert OccupancyAwarePlannerMixin is ExtractedOccupancyMixin
 
 
+def test_local_sampling_adapter_is_explicit_baseline_not_fallback():
+    """The selected socnav_sampling arm must not masquerade as an upstream fallback."""
+    diagnostics = SamplingPlannerAdapter().diagnostics()
+
+    assert diagnostics["implementation_mode"] == "in_repo_heuristic_baseline"
+    assert diagnostics["upstream_requested"] is False
+    assert diagnostics["upstream_loaded"] is False
+    assert diagnostics["fallback_triggered"] is False
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["readiness_status"] == "experimental"
+
+
+def test_socnavbench_missing_upstream_is_reported_as_runtime_fallback():
+    """An explicitly permitted SocNavBench fallback remains fail-closed evidence."""
+    adapter = SocNavBenchSamplingAdapter(planner_factory=lambda: None, allow_fallback=True)
+
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["planner_type"] == "SocNavBenchSamplingAdapter"
+    assert diagnostics["implementation_mode"] == "heuristic_fallback"
+    assert diagnostics["upstream_requested"] is True
+    assert diagnostics["upstream_loaded"] is False
+    assert diagnostics["fallback_triggered"] is True
+    assert diagnostics["fallback_count"] == 1
+    assert diagnostics["readiness_status"] == "fallback"
+
+
 def test_extract_grid_payload_handles_flattened_meta():
     """Grid extraction should recover flattened occupancy metadata fields."""
     adapter = SamplingPlannerAdapter()

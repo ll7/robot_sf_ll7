@@ -408,13 +408,23 @@ _FAST_FILES = {
     "test_export_trace_dossier.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
+    "test_camera_ready_checkpoint_submit_preflight.py",
     "test_checkpoint_staging_receipt.py",
     "test_release_acceptance.py",
+    "test_release_admission_edge_cases.py",
+    "test_release_assurance_case.py",
+    "test_release_cli_edge_cases.py",
     "test_release_doctor.py",
+    "test_release_doctor_edge_cases.py",
     "test_release_protocol.py",
+    "test_release_protocol_edge_cases.py",
+    "test_s30_h600_runtime_smoke_contract.py",
+    "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",
     "test_trace_dossier_renderer.py",
+    "test_run_benchmark_release.py",
     "test_zenodo_publisher.py",
+    "test_zenodo_publisher_edge_cases.py",
     # Both CLI test owners exercise deterministic release command contracts.
     "test_cli.py",
     # Radius rank-stability schema tests exercise the changed benchmark producer;

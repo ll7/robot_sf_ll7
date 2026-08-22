@@ -15,7 +15,12 @@ from robot_sf.benchmark.artifact_publication import (
     _SNQI_DEFAULT_WEIGHTS_NAME,
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
+    _build_rights_provenance_statement,
     _compute_and_emit_badging_artifacts,
+    _find_release_sha,
+    _preflight_check_release_metadata,
+    _resolve_release_publication_metadata,
+    _resolve_repo_file,
     _snqi_load_canonical_basis,
     discover_run_directories,
     export_publication_bundle,
@@ -589,3 +594,100 @@ def test_release_bundle_snqi_basis_prefers_pinned_payload_assets(
     assert basis["weights_sha256"]
     assert basis["baseline_sha256"]
     assert "rejections" not in basis
+
+
+def test_release_metadata_path_and_source_helpers_fail_closed(tmp_path: Path) -> None:
+    """Metadata helpers accept only repository files and explicit source SHA fields."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tracked = repo / "metadata.json"
+    tracked.write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+
+    assert _resolve_repo_file(None, repo_root=repo) is None
+    assert _resolve_repo_file("missing.json", repo_root=repo) is None
+    assert _resolve_repo_file(str(outside), repo_root=repo) is None
+    assert _resolve_repo_file("metadata.json", repo_root=repo) == tracked
+    assert _find_release_sha([{"nested": [{"public_source_commit": "A" * 40}]}]) == "a" * 40
+    assert _find_release_sha([{"commit": "short"}, ["not-a-mapping"]]) is None
+
+
+def test_release_rights_statement_uses_safe_defaults() -> None:
+    """Sparse metadata still yields explicit, credential-free claim boundaries."""
+    statement = _build_rights_provenance_statement(
+        resolved_manifest={"release_tag": ""},
+        release_result={},
+        zenodo_metadata={"metadata": {"creators": [{"name": ""}, "invalid"]}},
+    )
+
+    assert "GPL-3.0-only" in statement
+    assert "authoritative release creators" in statement
+    assert "recorded in release_result.json" in statement
+    assert "credentials" not in statement.lower()
+
+
+def test_release_metadata_resolver_distinguishes_nonrelease_and_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bundle metadata resolution is optional for normal runs and strict for release runs."""
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    assert _resolve_release_publication_metadata(run_root) is None
+
+    release_dir = run_root / "release"
+    release_dir.mkdir()
+    (release_dir / "release_manifest.resolved.json").write_text("not-json", encoding="utf-8")
+    (release_dir / "release_result.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed"):
+        _resolve_release_publication_metadata(run_root)
+
+    (release_dir / "release_manifest.resolved.json").write_text("{}\n", encoding="utf-8")
+    empty_repo = tmp_path / "empty-repo"
+    empty_repo.mkdir()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.artifact_publication.get_repository_root", lambda: empty_repo
+    )
+    with pytest.raises(ValueError, match="missing required inputs"):
+        _resolve_release_publication_metadata(run_root)
+
+
+def test_release_metadata_preflight_reports_schema_roles_and_policy(tmp_path: Path) -> None:
+    """Cold verification reports every malformed release-metadata contract surface."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    payload_dir.mkdir(parents=True)
+    violations: list[str] = []
+    _preflight_check_release_metadata(payload_dir, {}, violations=violations)
+    assert violations == []
+
+    _preflight_check_release_metadata(
+        payload_dir, {"release_metadata": "invalid"}, violations=violations
+    )
+    assert "must be an object" in violations[-1]
+
+    violations.clear()
+    _preflight_check_release_metadata(
+        payload_dir,
+        {
+            "release_metadata": {
+                "schema_version": "wrong",
+                "required": True,
+                "files": {},
+                "raw_artifact_policy": {},
+                "cold_verification": {},
+            }
+        },
+        violations=violations,
+    )
+    assert any("unsupported schema_version" in item for item in violations)
+    assert any("missing required role" in item for item in violations)
+    assert any("must retain campaign output" in item for item in violations)
+    assert any("credential policy is invalid" in item for item in violations)
+
+    violations.clear()
+    _preflight_check_release_metadata(
+        payload_dir,
+        {"release_metadata": {"files": {"citation": {"path": "outside"}}}},
+        violations=violations,
+    )
+    assert any("invalid payload path" in item for item in violations)

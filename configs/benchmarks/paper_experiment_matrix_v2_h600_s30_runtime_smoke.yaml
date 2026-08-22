@@ -69,7 +69,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-  config_sha256: 11c3c837e3ae16d261eeb6f0ef42c84747c28bc4fbde86f8edf29376c0dd9fb1
+  config_sha256: 5a955a433643b34f6e34f92e2a3cdf8d88936168ae8abfbe18d75fab935040c1
 claim_boundary:
   evidence_class: runtime-smoke
   benchmark_data_release: true
@@ -141,25 +141,29 @@ planners:
   - key: scenario_adaptive_hybrid_orca_v1
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    algo_config: >-
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: scenario_adaptive_hybrid_orca_v2_collision_guard
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    algo_config: >-
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: hybrid_rule_v3_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    algo_config: >-
+      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: hybrid_rule_v3_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    algo_config: >-
+      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: guarded_ppo

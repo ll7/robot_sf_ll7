@@ -416,6 +416,8 @@ _FAST_FILES = {
     "test_release_cli_edge_cases.py",
     "test_release_doctor.py",
     "test_release_doctor_edge_cases.py",
+    # These four direct source/test pairs are required by the changed-coverage
+    # router when the release lane is evaluated against current main.
     "test_artifact_publication.py",
     "test_fallback_policy.py",
     "test_release_protocol.py",

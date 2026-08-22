@@ -1111,6 +1111,15 @@ def analyze_sha_carriers(body: str, *, source: str, head_sha: str = "") -> ShaCa
             message="No PR head SHA available; exact-head carrier check skipped.",
         )
     carriers = extract_sha_carriers(body)
+    if v2_exact_head:
+        # The shared carrier extractor also exposes v2 exact_head so write-path
+        # guards enforce it. Keep the v2-specific diagnostic here without
+        # reporting that same carrier twice in this compatibility report.
+        carriers = [
+            carrier
+            for carrier in carriers
+            if not (carrier.kind == "exact-head" and carrier.sha == v2_exact_head)
+        ]
     invalid = invalid_sha_carriers(carriers, head_sha)
     v2_mismatch = bool(v2_exact_head and v2_exact_head != head_sha)
     if v2_mismatch:

@@ -1441,6 +1441,34 @@ def test_extract_sha_carriers_covers_all_three_forms() -> None:
     assert all(carrier.full for carrier in carriers)
 
 
+def test_extract_sha_carriers_includes_valid_v2_exact_head() -> None:
+    """The shared carrier gate must enforce the v2 exact_head field too."""
+    body = f"""<!-- pr-contract:v2
+change_class: tooling
+linked_issues:
+  closes: []
+  relates: []
+deferred_work:
+  status: none
+  issues: []
+  reason: ""
+evidence:
+  applicability: na
+  tier: null
+  result: na
+domain_approval:
+  required: false
+  status: not_required
+  domains: []
+  note: ""
+performance:
+  claimed: false
+exact_head: {FULL_SHA}
+-->"""
+    carriers = extract_sha_carriers(body)
+    assert carriers == [ShaCarrier(kind="exact-head", sha=FULL_SHA, full=True)]
+
+
 def test_extract_sha_carriers_lowercases_and_flags_abbreviated() -> None:
     """Mixed-case and abbreviated carriers are normalized and flagged not-full."""
     text = f"GATE-VERDICT: Accepted @ {FULL_SHA.upper()}\nExact head: {SHORT_SHA}\n"

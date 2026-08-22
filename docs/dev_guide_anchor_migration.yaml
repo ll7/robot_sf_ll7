@@ -1,0 +1,18 @@
+schema_version: dev_guide_anchor_migration.v1
+source: docs/dev_guide.md
+canonical_reference: docs/dev_guide_reference.md
+anchors:
+  setup: docs/dev_guide.md#setup
+  quickstart: docs/dev_guide_reference.md#examples-quickstart-walkthrough
+  environment-factory: docs/dev_guide_reference.md#environment-factory-pattern-critical
+  baseline-policies: docs/dev_guide_reference.md#advanced-feature-demos
+  feature-extractors: docs/dev_guide_reference.md#advanced-feature-demos
+  pedestrian-environments: docs/dev_guide_reference.md#environment-factory-pattern-critical
+  advanced-feature-demos: docs/dev_guide_reference.md#advanced-feature-demos
+  planner-selection-visibility-vs-classic-grid: docs/dev_guide_reference.md#planner-selection-visibility-vs-classic-grid
+  coverage-workflow: docs/coverage_guide.md
+  testing-strategy-unified-test-suite: docs/dev_guide_reference.md#testing-strategy-unified-test-suite
+  cicd-expectations: docs/dev_guide_reference.md#cicd-expectations
+  run-tracker--history-cli: docs/dev_guide_reference.md#run-tracker--history-cli
+  per-test-performance-budget: docs/dev_guide_reference.md#per-test-performance-budget
+  section: docs/developer-guide.md

@@ -119,7 +119,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 ### Getting Started
 
-* **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, setup, testing, quality gates, and coding standards
+* **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, setup, testing, quality gates, and coding standards
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Maintainer Values And Hard Contracts](./maintainer_values.md)** - Compact source of truth for current values: honest, transparent, reproducible progress; exploration labels; uncertainty and validation policy
 * **[Runtime Requirements](./dev_runtime_requirements.md)** - Non-`uv` host tools, system packages, optional Docker/`gh-act` support, and the local capability checker
@@ -220,7 +220,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Waypoint Noise For Route Generalization](./training/waypoint_noise.md)** - Configure Gaussian waypoint perturbation to reduce route memorization during training
 * **[Research Reporting](./research_reporting.md)** - Automated research report generation: multi-seed aggregation, statistical analysis, figure generation, Markdown/LaTeX export
 * **[Feature Extractors Guide](./feature_extractors/usage_guide.md)** - Configure and compare extractor presets, run multi-extractor training, and generate reports
-* **[Run Tracker & History CLI](./dev_guide.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
+* **[Run Tracker & History CLI](./dev_guide_reference.md#run-tracker--history-cli)** - Enable the failure-safe tracker on the imitation pipeline, monitor `status`/`watch` output, run telemetry perf-tests, mirror telemetry to TensorBoard, filter historical runs, and export Markdown/JSON summaries via the `scripts/tools/run_tracker_cli.py` commands (`status`, `watch`, `list`, `summary`, `export`, `perf-tests`, `enable-tensorboard`)
 * **[Issue #845 Slurm Utilization Probe](./context/issue_845_slurm_utilization_probe.md)** - Collect `sstat`/`sacct`/`seff` evidence for low CPU-utilization investigations without launching new jobs
 
 ### Architecture Decision Records
@@ -461,7 +461,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 
 ### 🏗️ Architecture & Development
 
-* **[Development Guide](./dev_guide.md)** - Primary reference for development workflows, testing, and quality standards
+* **[Development Guide](./dev_guide.md)** - First-use landing page for development workflows, testing, and quality standards
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Configuration Architecture](./architecture/configuration.md)** - Configuration hierarchy, precedence rules, and migration guide
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
@@ -630,7 +630,7 @@ A performance budget for tests helps prevent runtime regressions:
 * Relax: `ROBOT_SF_PERF_RELAX=1` suppresses soft breach failure escalation
 * Enforce: `ROBOT_SF_PERF_ENFORCE=1` converts any soft or hard breach into a failure (unless relax set); advanced internal overrides: `ROBOT_SF_PERF_SOFT`,    `ROBOT_SF_PERF_HARD`.
 
-Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide.md#per-test-performance-budget).
+Core helpers live in `tests/perf_utils/` (policy, guidance, reporting, minimal_matrix). See the development guide section for authoring guidance and troubleshooting steps: [Dev Guide – Per-Test Performance Budget](./dev_guide_reference.md#per-test-performance-budget).
 
 ### ⚙️ Setup & Configuration
 
@@ -757,7 +757,7 @@ When contributing to the project:
 
 * **Planner contribution guide**: See `docs/contributing_planner.md` for the minimum planner/adapter contribution flow, metadata, config-first invocation, smoke proof, registry, and benchmark-boundary checklist.
 * **Global Planner**: See `specs/342-svg-global-planner/quickstart.md` for the visibility-graph planner API, POI routing, and integration guidance.
-* **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide.md#planner-selection-visibility-vs-classic-grid`.
+* **Planner selection**: Choose between visibility and classic grid planners in `docs/dev_guide_reference.md#planner-selection-visibility-vs-classic-grid`.
 * **MPC social-navigation spike**: See `docs/context/issue_771_drmpscnav_assessment.md` and `docs/context/issue_771_drmpscnav_implementation_guide.md` for the SICNav / DR-MPC assessment boundary, implementation guardrails, and verified-simple gate plan.
 * **ACMPC learned-MPC feasibility**: See `docs/context/issue_3985_acmpc_feasibility_assessment.md` for the assessment-only boundary for an Actor-Critic Model Predictive Control inspired local planner.
 

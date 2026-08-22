@@ -161,6 +161,92 @@ def test_release_run_rejects_historical_campaign_artifact_identity(
     assert "historical release identity" in payload["status_reason"]
 
 
+def test_publication_identity_rejection_does_not_log_campaign_paths(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Publication identity failures keep filesystem-derived details out of stdout."""
+    secret_marker = "secret-release-path-should-not-be-logged"
+    campaign_root = _make_campaign_tree(tmp_path / secret_marker)
+    bundle_dir = tmp_path / secret_marker / "publication_bundle"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / "stale_identity.md").write_text(
+        "release_tag: 0.0.3.post1\n",
+        encoding="utf-8",
+    )
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=True)
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid", "benchmark_success": True, "blockers": []},
+    )
+    publication_payload = {
+        "bundle_dir": str(bundle_dir),
+        "archive_path": str(bundle_dir.with_suffix(".tar.gz")),
+        "checksums_path": str(bundle_dir / "checksums.sha256"),
+        "manifest_path": str(bundle_dir / "publication_manifest.json"),
+        "file_count": 1,
+        "total_bytes": 32,
+    }
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: publication_payload,
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    stdout = capsys.readouterr().out
+    payload = json.loads(stdout)
+    persisted = json.loads(
+        (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 2
+    assert payload["release_status"] == "publication_identity_rejected"
+    assert payload["release_benchmark_success"] is False
+    assert secret_marker not in stdout
+    assert secret_marker in persisted["campaign_root"]
+
+
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
     """Preflight mode should validate the manifest and emit preflight artifact paths."""
     manifest = SimpleNamespace(

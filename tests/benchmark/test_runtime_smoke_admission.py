@@ -773,6 +773,47 @@ def test_runtime_smoke_rejects_mixed_known_unknown_checkpoint_runtime(
         _admit(result, planners, tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("defect", "expected"),
+    [
+        ("missing_provenance", "checkpoint provenance is missing"),
+        ("missing_references", "checkpoint references are missing"),
+        ("missing_runtime", "checkpoint runtime are missing"),
+        ("invalid_reference_record", r"checkpoint references\[0\] is missing"),
+        ("missing_model_id", r"checkpoint references\[0\] model id is missing"),
+        ("invalid_reference_hash", r"checkpoint references\[0\] checkpoint hash is missing"),
+    ],
+)
+def test_runtime_smoke_rejects_incomplete_checkpoint_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    defect: str,
+    expected: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    manifest_path = result.parent.parent / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    if defect == "missing_provenance":
+        manifest["planners"][0]["checkpoint_provenance"] = None
+    elif defect == "missing_references":
+        provenance["references"] = []
+    elif defect == "missing_runtime":
+        provenance["runtime"] = []
+    elif defect == "invalid_reference_record":
+        provenance["references"] = [None]
+    elif defect == "missing_model_id":
+        provenance["references"][0]["model_id"] = ""
+    elif defect == "invalid_reference_hash":
+        provenance["references"][0]["checkpoint_sha256"] = "not-a-sha256"
+    else:  # pragma: no cover - guarded by the parameter table
+        raise AssertionError(f"unknown defect: {defect}")
+    _write_json(manifest_path, manifest)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match=expected):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

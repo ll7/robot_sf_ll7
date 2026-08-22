@@ -406,9 +406,17 @@ _FAST_FILES = {
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",
+    # Release admission, staging, doctor, and publisher suites are deterministic
+    # provenance/schema contracts for the benchmark-data release lane.
+    "test_checkpoint_staging_receipt.py",
+    "test_release_acceptance.py",
+    "test_release_doctor.py",
     "test_release_protocol.py",
     "test_trace_dossier_package.py",
     "test_trace_dossier_renderer.py",
+    "test_zenodo_publisher.py",
+    # Both CLI test owners exercise deterministic release command contracts.
+    "test_cli.py",
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",

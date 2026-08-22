@@ -9,8 +9,8 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | --- | --- | --- |
 | Not sure which skill applies | `skill-picker` | none |
 | Run continuous implement-review-merge-discover autopilot | `goal-autopilot` | `goal-issue-implementation`, `goal-pr-review`, `gh-pr-merger`, `goal-issue-discovery` |
-| Take the next eligible issue to PR | `goal-issue-implementation` | `gh-issue-autopilot` |
-| Execute one selected issue to ready PR | `gh-issue-autopilot` | `implementation-verification`, `gh-pr-opener` |
+| Take the next eligible issue to PR | `goal-issue-implementation` | `implementation-verification`, `pr-ready-check`, `gh-pr-opener` |
+| Execute one selected issue to ready PR | `goal-issue-implementation` (selected-issue mode) | `implementation-verification`, `gh-pr-opener` |
 | Clarify or repair issue contracts | `issue-contract-maintainer` | legacy aliases only when explicitly named |
 | Run unattended issue cleanup | `issue-audit-autonomous` | `issue-audit` |
 | Present/apply one maintainer decision envelope | `issue-audit` | `issue-contract-maintainer` |
@@ -19,7 +19,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Open a ready PR | `gh-pr-opener` | `artifact-provenance` |
 | Verify branch claims | `implementation-verification` | `pr-ready-check` |
 | Run the standard readiness gate | `pr-ready-check` | none |
-| Set up or clean up worktrees | `skill-picker` | `gh-issue-autopilot`, `clean-up`; see `AGENTS.md` |
+| Set up or clean up worktrees | `skill-picker` | `goal-issue-implementation`, `clean-up`; see `AGENTS.md` |
 | Review benchmark output | `analyze-camera-ready-benchmark` | `benchmark-row-status`, `artifact-provenance` |
 | Classify benchmark rows | `benchmark-row-status` | `review-benchmark-change` |
 | Keep one training SLURM job active | `goal-slurm-experiment` | `goal-issue-implementation`, `slurm-campaign-submit` |
@@ -34,7 +34,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 - Do not use `autoresearch` for ordinary cleanup.
 - Do not use `paper-facing-docs` for non-claim documentation.
-- Do not use `gh-issue-autopilot` for ambiguous issues; route to `issue-contract-maintainer` first.
+- Do not use `goal-issue-implementation` for ambiguous issues; route to `issue-contract-maintainer` first.
 - Do not use `auxme-issue791-submit` for non-issue-791 campaigns.
 - Do not count fallback or degraded benchmark rows as success evidence; use `benchmark-row-status`.
 - Do not cite local `output/` contents as durable evidence; use `artifact-provenance`.
@@ -44,7 +44,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Stack | Skills |
 | --- | --- |
 | Continuous goal autopilot | `goal-autopilot` -> `goal-issue-implementation` -> `goal-pr-review` -> `gh-pr-merger` -> `goal-issue-discovery` |
-| Issue queue to PR | `gh-issue-sequencer` -> `gh-issue-autopilot` -> `implementation-verification` -> `pr-ready-check` -> `gh-pr-opener` |
+| Issue queue to PR | `gh-issue-sequencer` -> `goal-issue-implementation` -> `implementation-verification` -> `pr-ready-check` -> `gh-pr-opener` |
 | Guarded PR merge | `goal-pr-review` -> `gh-pr-merger` |
 | Issue contract repair | `issue-contract-maintainer` -> `gh-issue-sequencer` |
 | PR review cleanup | `gh-pr-comment-fixer` -> `implementation-verification` -> `pr-ready-check` |
@@ -65,11 +65,13 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 ## GitHub And Project Policy
 
-- `goal-issue-implementation` owns the multi-issue loop and stop condition.
+- `goal-issue-implementation` owns the multi-issue loop, selected-issue mode, and stop condition.
 - `goal-autopilot` owns the continuous implement, review, merge, and discover loop.
 - `gh-issue-sequencer` owns Project #5 queue ordering, with current maintainer direction and fresh
   evidence allowed to override score order.
-- `gh-issue-autopilot` owns one selected issue -> branch -> validation -> ready PR.
+- `gh-issue-autopilot`, `issue-to-pr`, and `gh-issue-to-pr` are compatibility aliases for
+  `goal-issue-implementation` selected-issue mode; the canonical skill owns issue -> branch ->
+  validation -> ready PR.
 - `gh-pr-merger` owns guarded merge after `goal-pr-review` has established merge-ready proof.
 - `gh-issue-creator` owns new issue creation.
 - `issue-contract-maintainer` owns ambiguity, template, and decision repair.
@@ -84,7 +86,8 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
   delegated skills, write scopes, or output schemas.
 - Run `uv run python scripts/dev/generate_skills_readme.py` after registry changes.
 - Run `uv run python scripts/dev/check_skills.py` after adding, renaming, or removing skills.
-- Keep legacy compatibility wrappers only when they reduce routing breakage.
+- Keep compatibility aliases only when they reduce routing breakage and resolve to one
+  canonical skill mode.
 - Keep group notes under `.agents/skills/groups/`; direct children of `.agents/skills/`
   must be real skill directories unless explicitly whitelisted by the checker.
 
@@ -142,14 +145,13 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `gh-issue-autopilot` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `artifact-provenance` | Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent metadata handling. |
 | `gh-issue-clarifier` | atomic | context | yes | no | no | none | Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing solution options with pros/cons, and marking decision-required issues when maintainer input is needed. |
 | `gh-issue-creator` | atomic | context | yes | no | no | none | Create structured GitHub issues from vague prompts using repo templates, conservative assumptions, and Project #5 metadata. |
 | `gh-issue-priority-assessor` | atomic | context | yes | no | no | none | LLM-backed review workflow for Project #5 priority inputs; assess plausibility, propose values with uncertainty, route maintainer-value tradeoffs to issue-audit, and optionally apply explicit opt-in updates. |
 | `gh-issue-sequencer` | atomic | context | yes | no | no | none | Maintain a clear next-work queue in GitHub Project #5 by normalizing issue status, priority, and execution order; route genuine priority tradeoffs to issue-audit. |
 | `gh-issue-template-auditor` | atomic | context | yes | no | no | none | Review existing GitHub issues against the repo's issue-template contract and repair underspecified issues when the fix is clear. |
 | `goal-issue-discovery` | orchestrator | analysis | yes | no | no | `gh-issue-creator`, `gh-issue-sequencer`, `gh-issue-priority-assessor`, `agentic-eval`, `auto-improvement`, `autoresearch`, `context-map` | Use for an autonomous Robot SF issue-discovery loop that finds bounded improvement opportunities and creates evidence-graded GitHub issues; not for implementation. |
-| `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `gh-issue-creator`, `context-note-maintainer`, `issue-splitter` | Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements one scoped issue at a time, validates, pushes, and opens PRs. |
+| `goal-issue-implementation` | orchestrator | implementation | yes | no | no | `gh-issue-sequencer`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`, `artifact-provenance`, `gh-issue-creator`, `context-note-maintainer`, `issue-splitter` | Use for an autonomous Robot SF issue-to-PR loop with queue and selected-issue modes that implements one scoped issue at a time, validates, pushes, and opens PRs. |
 | `issue-audit` | atomic | context | yes | no | no | none | Interactive maintainer issue audit that presents one issue_decision_envelope.v1 at a time, applies only an exact answer, and verifies the result. |
 | `issue-audit-autonomous` | atomic | context | yes | no | no | none | Autonomous open-issue audit that applies only evidence-supported label or completion repairs and emits a machine-readable pending-decision queue without asking questions. |
 | `issue-contract-maintainer` | orchestrator | planning | yes | no | no | `gh-issue-clarifier`, `gh-issue-template-auditor`, `issue-audit-autonomous`, `issue-audit`, `issue-splitter` | Maintain GitHub issue contracts through template audits, ambiguity clarification, and user-decision application. |
@@ -204,14 +206,15 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | `auxme-issue791-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
 | `continuous-autopilot` | `goal-autopilot` |
-| `gh-issue-to-pr` | `gh-issue-autopilot` |
+| `gh-issue-autopilot` | `goal-issue-implementation` |
+| `gh-issue-to-pr` | `goal-issue-implementation` |
 | `guarded-pr-merge` | `gh-pr-merger` |
 | `implement-review-merge-discover` | `goal-autopilot` |
 | `issue-clarification` | `issue-contract-maintainer` |
 | `issue-contract-audit` | `issue-contract-maintainer` |
 | `issue-discovery` | `goal-issue-discovery` |
 | `issue-queue-runner` | `goal-issue-implementation` |
-| `issue-to-pr` | `gh-issue-autopilot` |
+| `issue-to-pr` | `goal-issue-implementation` |
 | `parent-to-child-issue` | `issue-splitter` |
 | `pr-merger` | `gh-pr-merger` |
 | `pr-retrospective` | `pr-hindsight-review` |

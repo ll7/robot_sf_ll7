@@ -1,7 +1,7 @@
 ---
 name: goal-issue-implementation
-description: Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues, implements
-  one scoped issue at a time, validates, pushes, and opens PRs.
+description: Use for an autonomous Robot SF issue-to-PR loop with queue and selected-issue modes that
+  implements one scoped issue at a time, validates, pushes, and opens PRs.
 category: github-issue
 kind: orchestrator
 phase: implementation
@@ -10,16 +10,19 @@ requires_slurm: false
 requires_benchmark_artifacts: false
 delegates_to:
 - gh-issue-sequencer
-- gh-issue-autopilot
 - implementation-verification
 - pr-ready-check
 - gh-pr-opener
+- artifact-provenance
 - gh-issue-creator
 - context-note-maintainer
 - issue-splitter
 output_schema: issue_to_pr_summary.v1
 aliases:
 - issue-queue-runner
+- gh-issue-autopilot
+- issue-to-pr
+- gh-issue-to-pr
 ---
 
 # Goal Issue Implementation
@@ -29,10 +32,10 @@ Use this skill when the user asks for goal-driven implementation of open issues.
 It is an orchestrator over:
 
 - `gh-issue-sequencer`
-- `gh-issue-autopilot`
 - `implementation-verification`
 - `pr-ready-check`
 - `gh-pr-opener`
+- `artifact-provenance`
 - `gh-issue-creator`
 - `context-note-maintainer`
 - `issue-splitter`
@@ -49,6 +52,44 @@ Do not use it for:
 - discovering new work without implementation,
 - reviewing existing PRs,
 - merging PRs or rewriting contributor history.
+
+## Selected-Issue Mode
+
+Use `selected-issue` mode when the caller supplies exactly one issue number and wants that issue
+carried from intake to a ready PR. The compatibility invocations `gh-issue-autopilot`, `issue-to-pr`,
+and `gh-issue-to-pr` are intentional aliases for this mode; they do not identify a second canonical
+skill or a delegation target. A selected-issue invocation without one unambiguous issue identity
+fails closed before claim, branch, worktree, or GitHub mutation and routes to issue clarification or
+queue sequencing instead.
+
+The mode retains the legacy single-issue contract while using the canonical rules below: read the
+complete live issue thread, re-check source and duplicate PR coverage, apply the exact merged-fix
+stale-evidence guard, acquire and expose the atomic claim, work only in a linked worktree, validate
+against the current base, publish a ready PR, and release the claim only at terminal delivery.
+The selected issue must still satisfy the canonical eligibility rules; an explicit issue does not
+override blocked, ambiguous, duplicate, dependency, or unavailable-environment stops.
+The selected-issue readiness baseline remains `BASE_REF=origin/main scripts/dev/pr_ready_check.sh`.
+
+### Selected-Issue Behavior-Preservation Matrix
+
+| Legacy contract | Disposition in `selected-issue` mode | Proof surface |
+| --- | --- | --- |
+| Repository `ll7/robot_sf_ll7`, `main` base, `origin/main` readiness command, publication-scout preflight, and the batch-first workflow note | Retained as canonical repository/base and validation references; current-base freshness remains mandatory | `Preflight`, `Process`, and `Validation Tiers` |
+| Project status `Ready`/`Todo`/`Tracked` selection and explicit issue fallback | Selected mode replaces queue selection with the supplied issue; queue mode follows the current label-authority/optional-Project policy, so stale Project columns cannot admit work | `Queue Policy`, `Eligibility`, and the missing-identity fail-closed rule above |
+| Issue body/comments, `source_pr`, linked PRs, `Closes`/`Refs`, and prerequisite checks | Retained and generalized in the canonical live-thread and current-`origin/main` checks | `Eligibility` and `Process` steps 1–2 |
+| Exact merged-fix guard, including the #5145/#4958 and #5480/#5486 fixtures | Retained verbatim in the canonical guard; no issue-number-only duplicate inference is allowed | `Exact merged-fix stale-evidence guard` |
+| Delegated scout output and complete-thread REST fallback | Retained as route evidence only; final authority remains the live REST/thread and Git evidence | `Queue Exhaustion Audit` and `Eligibility` |
+| `goal_issue_admission.py` claim, visible running state, claim comment, and stale-claim cleanup condition | Retained; claim acquisition precedes branch/worktree setup and remains cross-machine atomic | `Process` steps 3–4 and `Race-Condition / Multi-Agent Safety` |
+| Linked worktree, stable issue branch, isolated implementation, and no main-checkout edits | Retained; all non-trivial implementation, validation, and publication stays in the linked worktree | `Process` steps 5–7 and `Branch and State Safety` |
+| Readiness, artifact classification, current-main sync, and prepublication freshness | Retained; stale or blocked evidence stops publication and fallback/degraded results are not success evidence | `Validation Tiers` and `Proof and Artifact Rules` |
+| Ready PR opening, issue coverage, and output summary | Retained through `gh-pr-opener`, with the issue/branch/head and validation evidence recorded | `Process` steps 10–12 and `Required Output` |
+| Ambiguous, duplicate, blocked, auth, branch, validation, and dependency failure states | Retained as explicit stop/routing outcomes; do not retry unchanged failures or silently narrow scope | `Eligibility`, `Delegation Failure Recovery`, and `Anti-Loop and Retry` |
+| Terminal claim release, follow-up linkage, and worktree/artifact cleanup | Retained; keep the claim while a PR is open and release only after merged/closed/abandoned handoff, then preserve or classify outputs before teardown | `Process` steps 11–12 and `Worktree Teardown And Preservation` in `AGENTS.md` |
+
+No benchmark, metric, model-provenance, SLURM, or paper-facing semantics are changed by this
+compatibility mode. The matrix is the behavior-preservation gate: a future edit must update the
+disposition and proof surface before removing any claim, branch, worktree, validation, evidence, or
+failure-state guardrail.
 
 ## Read First
 
@@ -570,7 +611,7 @@ Each child skill or worker may fail. Handle failures per scenario:
     explicit user target or open-issues sweep.
   - If an optional Project mirror write fails, log the error and continue from live labels.
 
-- `gh-issue-autopilot` failure:
+- selected-issue mode failure:
   - If the issue is ambiguous mid-flow, route to `issue-contract-maintainer`,
     mark the issue `skipped`, and continue to the next candidate.
   - If branch creation fails, record the error and skip the issue.

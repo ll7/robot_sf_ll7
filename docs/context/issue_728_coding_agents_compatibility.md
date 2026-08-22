@@ -26,7 +26,7 @@ through tooling rather than informal convention:
 |---|---|
 | **Retrieval** | `context-map`, `what-context-needed`, `benchmark-overview`, `experiment-context` |
 | **Planning** | `quality-playbook`, `gh-issue-clarifier`, `.agents/PLANS.md` convention |
-| **Execution** | `gh-issue-autopilot`, `autoresearch`, `auto-improvement` |
+| **Execution** | `goal-issue-implementation`, `autoresearch`, `auto-improvement` |
 | **Verification** | `implementation-verification`, `pr-ready-check`, `review-benchmark-change` |
 
 No phase is optional for non-trivial work. Skipping retrieval produces misscoped implementations;

@@ -1,7 +1,7 @@
 expected_stacks:
   issue_to_pr:
   - gh-issue-sequencer
-  - gh-issue-autopilot
+  - goal-issue-implementation
   - implementation-verification
   - pr-ready-check
   - gh-pr-opener

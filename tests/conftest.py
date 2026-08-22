@@ -429,8 +429,13 @@ _FAST_FILES = {
     "test_trace_dossier_renderer.py",
     "test_runtime_smoke_admission.py",
     "test_run_benchmark_release.py",
+    "test_zenodo_manifest_binding.py",
     "test_zenodo_publisher.py",
     "test_zenodo_publisher_edge_cases.py",
+    # SocNav runtime-adapter tests cover the changed fallback diagnostics in
+    # the planner modules without requiring an external benchmark dependency.
+    "test_socnav.py",
+    "test_socnav_prediction_module.py",
     # Both CLI test owners exercise deterministic release command contracts.
     "test_cli.py",
     # Radius rank-stability schema tests exercise the changed benchmark producer;

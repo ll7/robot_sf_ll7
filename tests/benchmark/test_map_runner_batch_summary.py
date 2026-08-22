@@ -160,6 +160,33 @@ class TestMergeRuntimeAlgorithmContract:
         result = merge_runtime_algorithm_contract(base, runtime)
         assert result["checkpoint_provenance"]["hash"] == "abc123"
 
+    def test_runtime_fallback_markers_and_nested_metadata_are_merged(self) -> None:
+        """Runtime fallback markers must be monotonic while nested metadata is preserved."""
+        base: dict = {
+            "planner_runtime": {
+                "fallback": False,
+                "fallback_count": 1,
+                "readiness_status": "native",
+                "provenance": {"source": "base"},
+            }
+        }
+        runtime = {
+            "planner_runtime": {
+                "fallback": True,
+                "fallback_count": 3,
+                "readiness_status": "degraded",
+                "provenance": {"checkpoint": "runtime"},
+            }
+        }
+
+        result = merge_runtime_algorithm_contract(base, runtime)
+
+        planner_runtime = result["planner_runtime"]
+        assert planner_runtime["fallback"] is True
+        assert planner_runtime["fallback_count"] == 3
+        assert planner_runtime["readiness_status"] == "degraded"
+        assert planner_runtime["provenance"] == {"source": "base", "checkpoint": "runtime"}
+
 
 class TestBuildAmmvFeasibilitySummary:
     """Tests for build_ammv_feasibility_summary."""

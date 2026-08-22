@@ -1754,8 +1754,10 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         panel_data_h = (fig_w / 2.0) * aspect
         fig_h = panel_data_h + 1.45  # ticks/labels/titles + strip + legend
         fig = plt.figure(figsize=(fig_w, fig_h))
+        # Keep a display-space gutter for two-digit panel-B y ticks; 0.10 lets their leading
+        # digits meet panel A's right spine after tight_layout (ll7/diss#1409, #7748).
         grid = fig.add_gridspec(
-            2, 2, height_ratios=(panel_data_h + 0.55, 0.42), hspace=0.08, wspace=0.10
+            2, 2, height_ratios=(panel_data_h + 0.55, 0.42), hspace=0.08, wspace=0.18
         )
         ax_a = fig.add_subplot(grid[0, 0])
         ax_b = fig.add_subplot(grid[0, 1])

@@ -446,3 +446,5 @@ def test_build_release_provenance_and_helpers_cover_repo_relative_fallback(tmp_p
     assert provenance["manifest_sha256"]
     assert args.mode == "run"
     assert args.manifest.name == "paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+    assert args.resume_receipt is None
+    assert args.resume_receipt_max_age_hours == 24.0

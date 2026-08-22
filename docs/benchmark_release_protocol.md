@@ -167,14 +167,16 @@ The release entrypoint:
 
 1. validates the manifest,
 2. rejects a missing, stale, config-mismatched, or non-submit-safe checkpoint receipt,
-3. runs preflight through the existing camera-ready stack,
-4. runs the canonical campaign,
-5. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
+3. rejects same-campaign resume unless a fresh, hash-bound receipt classifies the
+   interruption as infrastructure-only with the source/config/checkpoint inputs unchanged,
+4. runs preflight through the existing camera-ready stack,
+5. runs the canonical campaign,
+6. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
    product succeeds once at one source commit with no fallback, degraded,
    failed, or unavailable evidence,
-6. injects benchmark-release provenance into campaign artifacts,
-7. exports a publication bundle only for benchmark-valid runs,
-8. writes archival release metadata under `<campaign_root>/release/`.
+7. injects benchmark-release provenance into campaign artifacts,
+8. exports a publication bundle only for benchmark-valid runs,
+9. writes archival release metadata under `<campaign_root>/release/`.
 
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.

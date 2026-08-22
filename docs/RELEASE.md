@@ -78,8 +78,18 @@ Require `submit_safe=true`. Then run:
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --label release \
+  --campaign-id issue7742_benchmark_data_release_s30_h600_20260822 \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json
 ```
+
+That command is a fresh launch. If infrastructure interrupts it, an operator may
+resume the same campaign id only with a fresh `benchmark-release-resume-receipt.v1`
+passed through `--resume-receipt`. The receipt must classify a scheduler requeue,
+node failure, walltime kill, cluster-filesystem interruption, or network interruption
+and bind the unchanged source commit, campaign-config checksum, staged-checkpoint
+receipt checksum, and prior campaign manifest. A code, config, dependency, or
+checkpoint defect requires a corrected release commit and a fresh campaign id. The
+single-node Slurm wrapper uses the same rule and does not blindly request `--requeue`.
 
 Verify:
 

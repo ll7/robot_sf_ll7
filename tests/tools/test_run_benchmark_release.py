@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from scripts.tools import run_benchmark_release
@@ -753,3 +755,59 @@ def test_release_preflight_fails_closed_when_orca_rvo2_missing(
     assert payload["release_status"] == "orca_preflight_failed"
     assert payload["release_exit_code"] == 2
     assert "uv sync --extra orca" in payload["release_status_reason"]
+
+
+def test_release_resume_receipt_requires_fixed_campaign_id(tmp_path: Path) -> None:
+    """A resume ruling cannot be applied to a fresh timestamped campaign."""
+    args = SimpleNamespace(
+        campaign_id=None,
+        output_root=tmp_path,
+        resume_receipt=tmp_path / "resume.json",
+        resume_receipt_max_age_hours=24.0,
+    )
+    cfg = SimpleNamespace(resume=True)
+    config = tmp_path / "campaign.yaml"
+    checkpoint = tmp_path / "checkpoint.json"
+    config.write_text("horizon: 600\n", encoding="utf-8")
+    checkpoint.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(
+        run_benchmark_release.ReleaseResumeAdmissionError,
+        match="explicit fixed campaign_id",
+    ):
+        run_benchmark_release._admit_release_resume(
+            args=args,
+            cfg=cfg,
+            campaign_config_path=config,
+            checkpoint_receipt_path=checkpoint,
+        )
+
+
+def test_release_existing_fixed_campaign_requires_resume_receipt(tmp_path: Path) -> None:
+    """Prior planner output cannot resume from only a fixed campaign id."""
+    campaign_id = "fixed-release"
+    runs = tmp_path / campaign_id / "runs" / "goal__differential_drive"
+    runs.mkdir(parents=True)
+    (runs / "episodes.jsonl").write_text("{}\n", encoding="utf-8")
+    args = SimpleNamespace(
+        campaign_id=campaign_id,
+        output_root=tmp_path,
+        resume_receipt=None,
+        resume_receipt_max_age_hours=24.0,
+    )
+    cfg = SimpleNamespace(resume=True)
+    config = tmp_path / "campaign.yaml"
+    checkpoint = tmp_path / "checkpoint.json"
+    config.write_text("horizon: 600\n", encoding="utf-8")
+    checkpoint.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(
+        run_benchmark_release.ReleaseResumeAdmissionError,
+        match="infrastructure-only resume receipt",
+    ):
+        run_benchmark_release._admit_release_resume(
+            args=args,
+            cfg=cfg,
+            campaign_config_path=config,
+            checkpoint_receipt_path=checkpoint,
+        )

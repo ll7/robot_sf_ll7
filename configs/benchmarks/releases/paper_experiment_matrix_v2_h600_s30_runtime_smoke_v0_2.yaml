@@ -8,7 +8,7 @@ release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2
 release_tag: paper-matrix-v2-h600-s30-runtime-smoke
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml
-campaign_config_sha256: "be85373abef67ad3c715524d71d0c30290f635ff32bf2e49351abb314030057f"
+campaign_config_sha256: "ab0d39ab3db094b00137597e7dc13a07d9ae88335085e9e7d0f11072260ef767"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
 

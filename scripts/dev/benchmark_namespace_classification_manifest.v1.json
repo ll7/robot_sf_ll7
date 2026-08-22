@@ -224,6 +224,7 @@
     "release_gates.py",
     "release_preflight.py",
     "release_protocol.py",
+    "release_resume_admission.py",
     "release_publication_contract.py",
     "release_suite_contract.py",
     "release_suite_reference_validation.py",

@@ -918,10 +918,8 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help=(
             "Optional exact campaign directory id (forwarded to the campaign runner). "
-            "Passing a fixed id makes the release run idempotent: a restart after a "
-            "walltime kill, node failure, or scheduler requeue resumes the existing "
-            "campaign directory through the campaign resume plan instead of starting "
-            "a fresh timestamped one."
+            "An existing fixed-id release campaign is rejected unless --resume-receipt "
+            "proves an infrastructure-only interruption with unchanged inputs."
         ),
     )
     parser.add_argument(
@@ -938,6 +936,21 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=24.0,
         help="Maximum accepted staged-checkpoint receipt age (default: 24 hours).",
+    )
+    parser.add_argument(
+        "--resume-receipt",
+        type=Path,
+        default=None,
+        help=(
+            "Required only when resuming an existing fixed campaign: reviewed JSON receipt "
+            "binding an infrastructure-only interruption to unchanged release inputs."
+        ),
+    )
+    parser.add_argument(
+        "--resume-receipt-max-age-hours",
+        type=float,
+        default=24.0,
+        help="Maximum accepted infrastructure-resume receipt age (default: 24 hours).",
     )
     return parser.parse_args(argv)
 

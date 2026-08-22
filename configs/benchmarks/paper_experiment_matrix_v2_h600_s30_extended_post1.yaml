@@ -55,10 +55,10 @@ dt: 0.1
 record_forces: true
 checkpoint_provenance_enforcement: error
 resume: true
-# stop_on_failure false: with a fixed --campaign-id the run is resumable, so a single
-# broken arm should surface as a failed row and let the other 13 arms complete; fix,
-# then resume the same campaign id to fill only the gaps.
-stop_on_failure: false
+# Release execution stops at the first broken arm. Same-ID resume is admitted only
+# after an infrastructure interruption with an immutable resume receipt; code,
+# config, dependency, or checkpoint defects require a corrected commit and fresh run.
+stop_on_failure: true
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123

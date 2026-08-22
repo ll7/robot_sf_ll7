@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -42,6 +43,11 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     parse_release_args,
     validate_release_manifest,
+)
+from robot_sf.benchmark.release_resume_admission import (
+    ReleaseResumeAdmissionError,
+    campaign_has_prior_execution,
+    validate_release_resume_admission,
 )
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
@@ -90,6 +96,80 @@ def _required_repo_relative(path: Path) -> str:
         return resolved.relative_to(get_repository_root().resolve()).as_posix()
     except ValueError as exc:
         raise ValueError("release input must be inside the repository worktree") from exc
+
+
+def _current_source_commit() -> str:
+    """Return the exact checked-out source commit or fail closed."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        cwd=get_repository_root(),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    commit = completed.stdout.strip().lower()
+    if (
+        completed.returncode != 0
+        or len(commit) != 40
+        or any(c not in "0123456789abcdef" for c in commit)
+    ):
+        raise ReleaseResumeAdmissionError("unable to resolve exact release source commit")
+    return commit
+
+
+def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
+    """Resolve a fixed campaign directory without allowing path traversal."""
+    base = (
+        output_root.resolve()
+        if output_root is not None
+        else (get_artifact_category_path("benchmarks") / "camera_ready").resolve()
+    )
+    candidate = (base / campaign_id).resolve()
+    if not candidate.is_relative_to(base):
+        raise ReleaseResumeAdmissionError("campaign_id resolves outside the campaign output root")
+    return candidate
+
+
+def _admit_release_resume(
+    *,
+    args: Any,
+    cfg: Any,
+    campaign_config_path: Path,
+    checkpoint_receipt_path: Path,
+) -> dict[str, Any] | None:
+    """Admit a fresh run or validate an infrastructure-only same-ID resume.
+
+    Returns:
+        Sanitized resume-receipt metadata, or ``None`` for a fresh campaign.
+    """
+    if args.campaign_id is None:
+        if args.resume_receipt is not None:
+            raise ReleaseResumeAdmissionError(
+                "resume receipt requires an explicit fixed campaign_id"
+            )
+        return None
+    campaign_root = _fixed_campaign_root(
+        output_root=args.output_root,
+        campaign_id=args.campaign_id,
+    )
+    prior_execution = campaign_has_prior_execution(campaign_root)
+    if not prior_execution and args.resume_receipt is None:
+        return None
+    receipt = validate_release_resume_admission(
+        campaign_root=campaign_root,
+        campaign_id=args.campaign_id,
+        campaign_config_path=campaign_config_path,
+        checkpoint_receipt_path=checkpoint_receipt_path,
+        current_source_commit=_current_source_commit(),
+        resume_enabled=bool(cfg.resume),
+        resume_receipt_path=args.resume_receipt,
+        max_age_hours=args.resume_receipt_max_age_hours,
+    )
+    if receipt is None:
+        return None
+    receipt["path"] = _required_repo_relative(args.resume_receipt)
+    return receipt
 
 
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
@@ -393,6 +473,31 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "generated_at_utc": checkpoint_receipt["generated_at_utc"],
         "submit_safe": True,
     }
+
+    try:
+        resume_receipt = _admit_release_resume(
+            args=args,
+            cfg=cfg,
+            campaign_config_path=manifest.canonical_campaign_config_path,
+            checkpoint_receipt_path=args.checkpoint_receipt,
+        )
+    except (ReleaseResumeAdmissionError, ValueError) as exc:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "resume_admission_rejected",
+                "status_reason": str(exc),
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+            }
+        )
+        print(json.dumps(result, indent=2))
+        return 2
+    result["resume_admission"] = (
+        resume_receipt
+        if resume_receipt is not None
+        else {"status": "fresh_campaign", "resume_same_campaign": False}
+    )
 
     run_payload = run_campaign(
         cfg,

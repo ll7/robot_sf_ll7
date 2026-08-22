@@ -519,8 +519,8 @@ For issue management and delivery, use these local skills:
   - Sequential goal loop for implementing eligible open issues through branch, validation, push, and PR creation.
 - `.agents/skills/goal-pr-review/SKILL.md`
   - Autonomous PR review loop that fixes scoped writable gaps before applying `merge-ready` after the full proof bar passes.
-- `.agents/skills/gh-issue-autopilot/SKILL.md`
-  - Autonomous issue-to-PR workflow: select next best issue, branch, implement, validate, push, and open a ready PR.
+- The legacy issue-to-PR names `gh-issue-autopilot`, `issue-to-pr`, and `gh-issue-to-pr` resolve to
+  the selected-issue mode in `.agents/skills/goal-issue-implementation/SKILL.md`.
 - `.agents/skills/gh-issue-clarifier/SKILL.md`
   - Tightens ambiguous issues with pros/cons/recommendation and applies `decision-required` when maintainer input is needed.
 - `.agents/skills/gh-issue-priority-assessor/SKILL.md`

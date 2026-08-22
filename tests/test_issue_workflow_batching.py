@@ -15,7 +15,7 @@ SURFACE_PATHS = {
     ROOT / "docs" / "project_prioritization.md": WORKFLOW_NOTE_PATH_STR,
 }
 SKILL_PATHS = [
-    ROOT / ".agents" / "skills" / "gh-issue-autopilot" / "SKILL.md",
+    ROOT / ".agents" / "skills" / "goal-issue-implementation" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-creator" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-priority-assessor" / "SKILL.md",
     ROOT / ".agents" / "skills" / "gh-issue-clarifier" / "SKILL.md",

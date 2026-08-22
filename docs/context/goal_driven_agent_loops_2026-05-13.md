@@ -33,7 +33,8 @@ should delegate to existing repo-local skills for concrete work:
 - issue creation: `gh-issue-creator`
 - issue clarification and template repair: `gh-issue-clarifier`, `gh-issue-template-auditor`
 - queue routing: `gh-issue-sequencer`, `gh-issue-priority-assessor`
-- issue implementation: `gh-issue-autopilot`, `gh-pr-opener`
+- issue implementation: `goal-issue-implementation` (selected-issue mode when an issue is supplied),
+  `gh-pr-opener`
 - PR repair during review: `gh-pr-comment-fixer`, `gh-issue-creator`
 - verification: `implementation-verification`, `pr-ready-check`, `review-benchmark-change`
 - durable notes: `context-note-maintainer`

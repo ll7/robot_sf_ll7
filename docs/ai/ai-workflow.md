@@ -137,7 +137,9 @@ record the protocol, and keep the run reproducible through a versioned YAML surf
 
 ### 5. Implement the issue
 
-Use `gh-issue-autopilot` when the goal is to take an issue from intake to implementation.
+Use `goal-issue-implementation` in selected-issue mode when the goal is to take one issue from
+intake to implementation. The compatibility names `gh-issue-autopilot`, `issue-to-pr`, and
+`gh-issue-to-pr` resolve to that mode.
 
 The expected implementation loop is:
 
@@ -316,7 +318,7 @@ flowchart TD
   E --> F
   F --> G[Project #5 routing]
   G --> H[context-map / benchmark-overview / experiment-context]
-  H --> I[gh-issue-autopilot]
+  H --> I[goal-issue-implementation<br/>selected-issue mode]
   I --> J[Implement branch + tests + docs]
   J --> K[Validation gates]
   K --> L[Sync latest main + freshness check]

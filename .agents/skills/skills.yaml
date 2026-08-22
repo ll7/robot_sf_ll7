@@ -393,36 +393,6 @@ skills:
     delegates_to: []
     output_schema: skill_run_summary.v1
     aliases: []
-  gh-issue-autopilot:
-    description: Autonomous issue-to-PR workflow from next eligible issue to ready PR with consistent
-      metadata handling.
-    category: github-issue
-    kind: orchestrator
-    phase: implementation
-    requires_write: true
-    requires_slurm: false
-    requires_benchmark_artifacts: false
-    writes:
-      git: true
-      github_issue: true
-      github_project: true
-      github_pr: true
-      filesystem: true
-    requires:
-    - gh
-    - publication-scout-linter
-    - git
-    - project5
-    delegates_to:
-    - gh-issue-sequencer
-    - implementation-verification
-    - pr-ready-check
-    - gh-pr-opener
-    - artifact-provenance
-    output_schema: issue_to_pr_summary.v1
-    aliases:
-    - issue-to-pr
-    - gh-issue-to-pr
   gh-issue-clarifier:
     description: Clarify ambiguous GitHub issues by tightening scope and acceptance criteria, proposing
       solution options with pros/cons, and marking decision-required issues when maintainer input is needed.
@@ -680,7 +650,7 @@ skills:
     aliases:
     - issue-discovery
   goal-issue-implementation:
-    description: Use for an autonomous Robot SF issue-to-PR loop that selects eligible GitHub issues,
+    description: Use for an autonomous Robot SF issue-to-PR loop with queue and selected-issue modes that
       implements one scoped issue at a time, validates, pushes, and opens PRs.
     category: github-issue
     kind: orchestrator
@@ -696,20 +666,24 @@ skills:
       filesystem: true
     requires:
     - gh
+    - publication-scout-linter
     - git
     - project5
     delegates_to:
     - gh-issue-sequencer
-    - gh-issue-autopilot
     - implementation-verification
     - pr-ready-check
     - gh-pr-opener
+    - artifact-provenance
     - gh-issue-creator
     - context-note-maintainer
     - issue-splitter
     output_schema: issue_to_pr_summary.v1
     aliases:
     - issue-queue-runner
+    - gh-issue-autopilot
+    - issue-to-pr
+    - gh-issue-to-pr
   goal-slurm-experiment:
     description: Keep one skill-owned Robot SF learning or training SLURM job active by selecting the
       best current experiment candidate, closing implementation gaps through an issue-to-PR workflow,

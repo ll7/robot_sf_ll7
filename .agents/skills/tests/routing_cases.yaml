@@ -2,7 +2,24 @@ cases:
 - intent: Take the next issue to PR
   primary: goal-issue-implementation
   secondary:
-  - gh-issue-autopilot
+  - implementation-verification
+  - pr-ready-check
+  - gh-pr-opener
+- intent: Execute one selected issue to ready PR
+  primary: goal-issue-implementation
+  secondary:
+  - implementation-verification
+  - gh-pr-opener
+- intent: Execute one selected issue through a legacy compatibility alias
+  primary: gh-issue-autopilot
+  secondary:
+  - goal-issue-implementation
+- intent: Execute issue-to-PR without a selected issue identity
+  primary: issue-contract-maintainer
+  secondary:
+  - gh-issue-sequencer
+  negative:
+  - goal-issue-implementation
 - intent: Fix PR comments
   primary: gh-pr-comment-fixer
   secondary:
@@ -47,7 +64,7 @@ cases:
 - intent: Set up or clean up worktrees
   primary: skill-picker
   secondary:
-  - gh-issue-autopilot
+  - goal-issue-implementation
   - clean-up
 - intent: Edit non-claim docs
   primary: update-docs-on-code-change
@@ -59,7 +76,7 @@ cases:
   secondary:
   - gh-issue-sequencer
   negative:
-  - gh-issue-autopilot
+  - goal-issue-implementation
 - intent: Run unattended open-issue cleanup
   primary: issue-audit-autonomous
   secondary:

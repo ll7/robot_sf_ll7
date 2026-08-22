@@ -1253,8 +1253,8 @@ uv run python scripts/dev/gh_issue_rest.py view <number> --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels comments
 ```
 
-All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
-`goal-issue-implementation`, etc.) use `gh_issue_rest.py thread` as the primary path;
+All issue-delivery skills (`goal-issue-implementation`, `gh-issue-clarifier`,
+and its selected-issue compatibility aliases) use `gh_issue_rest.py thread` as the primary path;
 see `docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
 
 #### Blocked-queue re-surfacing (issue #7070)

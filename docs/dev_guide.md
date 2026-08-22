@@ -478,6 +478,10 @@ repository uses the explicit `base_sensitive` marker-file selector from issue #5
   `scripts/dev/check_base_sensitive_gates.py --pr <pr-number> --json` classify a complete changed-file
   inventory as `base_sensitive` when it intersects a test file declaring the `base_sensitive` marker;
   a missing inventory is `unknown` and fails closed.
+- **Changed-file provenance**: the gate tries `gh pr diff <pr-number> --name-only` first. If GitHub
+  rejects the unified diff because it exceeds its line limit, it falls back to the paginated REST
+  `pulls/<number>/files` endpoint with strict page and filename validation. A failed, malformed, empty,
+  or pagination-exhausted response remains `unknown`; no partial file list is used for admission.
 - **Base-sensitive path**: a `base_sensitive` PR must pass the existing workflow-run/base freshness
   check and the focused `base_sensitive` subset against the current base before merge-ready admission.
 - **Ordinary path**: a trusted exact-head review may record

@@ -176,6 +176,46 @@ def test_generic_learned_planner_stats_capture_runtime_fallback() -> None:
     )
 
 
+def test_predictive_mppi_policy_exposes_nested_checkpoint_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dedicated Predictive MPPI builder attaches its nested predictor diagnostics."""
+
+    class Adapter:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"planner_type": "PredictiveMPPIAdapter"}
+
+        def foresight_diagnostics(self) -> dict[str, object]:
+            return {
+                "foresight_prediction": {
+                    "requested_model_id": "predictive_proxy_selected_v1",
+                    "load_status": "loaded",
+                    "fallback_used": False,
+                }
+            }
+
+    monkeypatch.setattr(map_runner, "PredictiveMPPIAdapter", Adapter)
+    policy, _meta = map_runner._build_predictive_mppi_policy(
+        "predictive_mppi",
+        {},
+        meta={},
+        robot_kinematics="differential_drive",
+        normalized_robot_command_mode=None,
+    )
+
+    assert policy._planner_stats() == {
+        "planner_type": "PredictiveMPPIAdapter",
+        "foresight_prediction": {
+            "requested_model_id": "predictive_proxy_selected_v1",
+            "load_status": "loaded",
+            "fallback_used": False,
+        },
+    }
+
+
 def test_batch_summary_bridges_runtime_checkpoint_provenance() -> None:
     """Per-episode planner diagnostics reach the batch contract consumed by campaigns."""
     runtime = {

@@ -1165,6 +1165,24 @@ def _build_predictive_mppi_policy(
         )
 
     _attach_planner_reset(_policy, adapter)
+    _policy._planner_adapter = adapter
+
+    def _planner_stats() -> dict[str, Any]:
+        """Expose predictive-checkpoint runtime provenance for release admission.
+
+        Returns:
+            Normalized planner diagnostics including nested checkpoint state.
+        """
+        diagnostics = adapter.diagnostics()
+        foresight = adapter.foresight_diagnostics()
+        runtime = normalize_planner_diagnostics(
+            diagnostics, fallback_planner_type=type(adapter).__name__
+        )
+        if isinstance(foresight, Mapping):
+            runtime.update(foresight)
+        return runtime
+
+    _policy._planner_stats = _planner_stats
     return _policy, meta
 
 

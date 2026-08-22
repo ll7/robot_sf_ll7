@@ -549,6 +549,44 @@ def test_runtime_smoke_allows_planner_aggregate_not_applicable_learned_contract(
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
 
 
+@pytest.mark.parametrize("reason", [None, ""])
+def test_runtime_smoke_allows_empty_generic_runtime_reason_when_unused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
+        "planner_runtime": {
+            "fallback_triggered": False,
+            "fallback_reason": reason,
+        }
+    }
+    _write_json(summary_path, summary)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+def test_runtime_smoke_rejects_nonempty_generic_runtime_reason_when_unused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
+        "planner_runtime": {
+            "fallback_triggered": False,
+            "fallback_reason": "unexpected runtime fallback",
+        }
+    }
+    _write_json(summary_path, summary)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
 @pytest.mark.parametrize("nested", [False, True])
 def test_runtime_smoke_rejects_nonempty_foresight_fallback_reason_when_unused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, nested: bool

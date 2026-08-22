@@ -363,6 +363,16 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
     ):
         return True
     if (
+        re.fullmatch(
+            r"runs\[\d+\]\.summary(?:_artifact)?\.(?:preflight\.)?"
+            r"algorithm_metadata_contract\.planner_runtime\.fallback_reason",
+            path,
+        )
+        and (value is None or value == "")
+        and parent.get("fallback_triggered") is False
+    ):
+        return True
+    if (
         key == "learned_policy_contract_status"
         and re.fullmatch(r"planner_rows\[\d+\]\.learned_policy_contract_status", path)
         and str(value).strip().lower().replace(" ", "_") == "not_applicable"

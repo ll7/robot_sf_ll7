@@ -24,7 +24,7 @@ def _load_check_skills_module():
 
 
 def _documented_handoff(readme: str) -> tuple[dict[str, object], str]:
-    """Extract the README's flat handoff and resolver command blocks."""
+    """Extract the flat handoff and resolver command blocks."""
     start_marker = "<!-- handoff.v2-example:start -->"
     end_marker = "<!-- handoff.v2-example:end -->"
     start = readme.index(start_marker)
@@ -37,6 +37,13 @@ def _documented_handoff(readme: str) -> tuple[dict[str, object], str]:
     bash_start = readme.index("```bash", end) + len("```bash")
     bash_end = readme.index("```", bash_start)
     return handoff, readme[bash_start:bash_end]
+
+
+def _handoff_doc_text() -> str:
+    """Return the canonical shared-routing handoff document text."""
+    return (Path(__file__).parents[2] / "docs/ai/agent_workflow_entrypoints.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def _assert_flat_handoff_contract(handoff: dict[str, object]) -> None:
@@ -192,7 +199,7 @@ def _run_shared_resolver_if_available(
 
 def test_shared_route_planner_example_binds_reviewed_execution_contract() -> None:
     """Parse the flat handoff and bind its identity/control fields to the CLI example."""
-    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+    readme = _handoff_doc_text()
 
     assert '"$ROUTING_REPO/scripts/resolve-route.py"' in readme
     assert "--task-id ROBOTSF-EXAMPLE" in readme
@@ -210,7 +217,7 @@ def test_shared_route_planner_example_executes_shared_resolver_when_available(
     tmp_path: Path,
 ) -> None:
     """Run the exact argv contract only with an explicit, deterministic resolver checkout."""
-    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+    readme = _handoff_doc_text()
     target_repo = Path(__file__).parents[2]
     handoff, command_block = _documented_handoff(readme)
     _assert_flat_handoff_contract(handoff)
@@ -270,7 +277,7 @@ def test_documented_handoff_rejects_malformed_or_unknown_controls(
     value: object,
 ) -> None:
     """Malformed or unknown v2 controls must fail the portable contract validator."""
-    readme = (Path(__file__).parents[2] / ".agents/README.md").read_text(encoding="utf-8")
+    readme = _handoff_doc_text()
     handoff, _ = _documented_handoff(readme)
     if field == "__unknown__":
         handoff["unexpected_control"] = value

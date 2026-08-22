@@ -72,14 +72,19 @@ uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
   --report-path output/release/checkpoints/staging_receipt.json
 ```
 
-Require `submit_safe=true`. Then run:
+Require `submit_safe=true`. Before this v0.2 full-release launch, run the
+canonical 14-arm runtime smoke at the exact release source commit and retain its
+successful `release/release_result.json` (for example,
+`output/benchmarks/camera_ready/<smoke_id>/release/release_result.json`). Then
+run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --label release \
   --campaign-id issue7742_benchmark_data_release_s30_h600_20260822 \
-  --checkpoint-receipt output/release/checkpoints/staging_receipt.json
+  --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
+  --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
 ```
 
 That command is a fresh launch. If infrastructure interrupts it, an operator may

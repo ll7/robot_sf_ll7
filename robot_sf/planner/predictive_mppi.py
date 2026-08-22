@@ -661,6 +661,18 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         """Return execution diagnostics."""
         return {"planner_type": "PredictiveMPPIAdapter"}
 
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Expose the nested predictor's checkpoint-load and fallback provenance.
+
+        Returns:
+            Structured predictor runtime provenance for benchmark admission.
+        """
+        return self._predictor.foresight_diagnostics()
+
+    def foresight_degraded(self) -> bool:
+        """Return whether the nested predictor used its constant-velocity fallback."""
+        return self._predictor.foresight_degraded()
+
 
 def build_predictive_mppi_config(cfg: dict[str, object] | None) -> PredictiveMPPIConfig:
     """Build :class:`PredictiveMPPIConfig` from a root mapping payload.

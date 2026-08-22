@@ -115,6 +115,30 @@ class _StubPredictor:
         return self.anchor
 
 
+def test_predictive_mppi_exposes_nested_predictor_provenance() -> None:
+    """Campaign metadata can prove that the nested learned predictor loaded."""
+    planner = PredictiveMPPIAdapter(build_predictive_mppi_config({}), allow_fallback=True)
+
+    class _DiagnosticPredictor:
+        def foresight_diagnostics(self) -> dict[str, object]:
+            return {
+                "foresight_prediction": {
+                    "load_status": "loaded",
+                    "fallback_used": False,
+                }
+            }
+
+        def foresight_degraded(self) -> bool:
+            return False
+
+    planner._predictor = _DiagnosticPredictor()  # type: ignore[assignment]
+
+    assert planner.foresight_diagnostics() == {
+        "foresight_prediction": {"load_status": "loaded", "fallback_used": False}
+    }
+    assert planner.foresight_degraded() is False
+
+
 def test_predictive_mppi_is_deterministic_for_fixed_seed() -> None:
     """Two planners with identical seed and predictor should return same action."""
     cfg = build_predictive_mppi_config({"random_seed": 7, "sample_count": 24, "iterations": 2})

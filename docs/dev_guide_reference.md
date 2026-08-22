@@ -156,6 +156,10 @@ scripts/dev/create_worktree.sh \
 The supplied command runs with the new worktree as its working directory. If it
 fails, the worktree remains available for diagnosis.
 
+The helper creates new branches without automatic upstream tracking so concurrent
+linked-worktree creation does not contend on the shared Git configuration. Set a
+remote explicitly when publishing, such as `git push -u origin <branch>`.
+
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
 `<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to

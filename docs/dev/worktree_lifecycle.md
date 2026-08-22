@@ -28,6 +28,10 @@ scripts/dev/create_worktree.sh \
   --exec git rev-parse --show-toplevel
 ```
 
+New branches are created without automatic upstream tracking. This avoids concurrent workers
+contending on the shared repository configuration while they create linked worktrees. Configure a
+remote explicitly when publishing a branch, for example with `git push -u origin <branch>`.
+
 Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. For a cheap
 targeted check, use the shared environment wrapper instead:
 

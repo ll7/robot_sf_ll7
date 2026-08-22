@@ -59,6 +59,11 @@ The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
   - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`
+- publication-grade manifest:
+  - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
+- fresh Zenodo reservation:
+  - concept DOI `10.5281/zenodo.22053132`
+  - version DOI `10.5281/zenodo.22053133`
 - source contract:
   - 14 planner arms, `paper_eval_s30`, `horizon: 600`, and
     `kinematics_matrix: [differential_drive]`
@@ -86,8 +91,16 @@ Canonical fields:
 - planner keys and planner-group expectations
 - kinematics contract
 - required campaign artifacts
-- repository URL and DOI placeholder
+- repository URL and distinct reserved concept/version DOI identities
 - citation/checklist references
+
+The publication-grade manifest uses
+`schema_version: benchmark-release-manifest.v0.2`. In addition to the fields
+above, it pins the exact latest-green base commit, expected 20,160 episode
+identities, suite policy and route-certification hashes, resolved seeds
+`111..140`, the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
+channel, and distinct fresh concept/version DOIs. `provenance.doi` must equal
+the reserved version DOI.
 
 The release claim boundary must also state:
 
@@ -145,9 +158,10 @@ uv run python scripts/tools/run_benchmark_release.py \
   --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
 
-This command is the bounded smoke path. Use the separately reviewed
-S30/H600 full-release manifest for publication; do not replace it with the
-historical seven-planner/S3 manifest.
+This command is the bounded smoke path. Use
+`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml` for the
+full publication campaign; do not replace it with the historical
+seven-planner/S3 manifest.
 
 The release entrypoint:
 
@@ -155,7 +169,9 @@ The release entrypoint:
 2. rejects a missing, stale, config-mismatched, or non-submit-safe checkpoint receipt,
 3. runs preflight through the existing camera-ready stack,
 4. runs the canonical campaign,
-5. fails closed if `benchmark_success` is false,
+5. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
+   product succeeds once at one source commit with no fallback, degraded,
+   failed, or unavailable evidence,
 6. injects benchmark-release provenance into campaign artifacts,
 7. exports a publication bundle only for benchmark-valid runs,
 8. writes archival release metadata under `<campaign_root>/release/`.

@@ -8,6 +8,10 @@ the benchmark-data tag, or reuse a software-release DOI for benchmark data.
 
 The current campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended_post1.yaml`.
+Its publication-grade manifest is
+`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
+concept DOI `10.5281/zenodo.22053132` and reserved version DOI
+`10.5281/zenodo.22053133`.
 The bounded one-scenario/one-seed preflight and runtime smoke is tracked by
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`.
 The smoke is execution evidence only: the Social Navigation Quality Index
@@ -16,16 +20,21 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 ## Before Running
 
 - confirm the target branch/tag is the intended immutable code state
-- confirm the approved S30/H600 full-release manifest is the one paired with the
-  campaign config above; do not substitute the historical v1 seven-planner/S3
-  manifest
+- confirm the approved S30/H600 full-release manifest is
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`; do not
+  substitute the historical v1 seven-planner/S3 manifest
 - confirm the bounded smoke manifest is correct:
   - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 - confirm manifest hashes still match referenced config and assets
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
+  current reservation is concept `10.5281/zenodo.22053132` and version
+  `10.5281/zenodo.22053133`; verify both again after publication; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
+- confirm the dataset metadata is the tracked benchmark-specific file
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json`;
+  do not modify or reuse the root software-release `.zenodo.json`
 - confirm SNQI is documented as advisory/no-ranking, including when calibration
   reports a warning
 - classify smoke artifacts before handoff: raw episode files remain worktree-local
@@ -67,7 +76,7 @@ Require `submit_safe=true`. Then run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest <approved-s30-h600-full-release-manifest.yaml> \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --label release \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json
 ```
@@ -97,7 +106,40 @@ note.
 
 ## Publication
 
-Upload the generated bundle using:
+Before campaign submission, run the fail-closed release doctor against the
+exact release worktree. Supply the private-ops packet and dissertation checkout
+when they are available:
+
+```bash
+uv run robot-sf release doctor \
+  --repo "$PWD" \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --expected-release-sha <exact-release-sha> \
+  --expected-base-sha 43bd25edba11f1e4aa848c787e92eccf0670aa5a \
+  --tag paper-matrix-v2-h600-s30-2026-08-43bd25edba11 \
+  --checkpoint-receipt output/release/checkpoints/benchmark_data_release_staging_receipt.json \
+  --private-launch-packet <private-ops-launch-packet> \
+  --dissertation <dissertation-worktree> \
+  --token-file /home/luttkule/.config/robot-sf/zenodo.token
+```
+
+The report must be `pass`. It prints stable status and identity data, never the
+credential. For a future release, reserve a fresh benchmark-data
+concept/version before freezing the DOI into its v0.2 manifest:
+
+```bash
+uv run robot-sf release zenodo reserve \
+  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
+  --state <credential-free-zenodo-state.json> \
+  --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
+```
+
+Keep the token file outside Git with mode `0600`. The state file contains no
+credential and binds subsequent `upload`, `verify`, and irreversible `publish`
+operations to the same deposition. Do not run `publish` until the accepted
+20,160-cell campaign bundle has passed independent cold verification.
+
+Upload and verify the generated bundle using:
 
 - `docs/benchmark_camera_ready_release.md`
 
@@ -133,4 +175,5 @@ reviewed.
 
 - ensure `CITATION.cff` remains current (aligned to the latest full release tag)
 - keep the release tag and release asset URL stable
-- replace DOI placeholder only when a real DOI exists
+- require the manifest's reserved version DOI to match the published record and
+  independently verify the concept/version distinction

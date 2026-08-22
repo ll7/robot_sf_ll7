@@ -1,0 +1,156 @@
+# Canonical benchmark-data publication manifest for the 14-arm S30/H600 matrix.
+# This is a dataset release, not a Robot SF software-version release. The source
+# tag names the latest-green base used to start the release branch; execution
+# provenance records the final immutable merged source SHA separately.
+schema_version: benchmark-release-manifest.v0.2
+benchmark_protocol_version: 0.1.0
+release_id: paper_matrix_v2_h600_s30_2026_08_43bd25edba11
+release_tag: paper-matrix-v2-h600-s30-2026-08-43bd25edba11
+maturity: pre-1.0
+release_kind: benchmark-data
+latest_main_base_commit: "43bd25edba11f1e4aa848c787e92eccf0670aa5a"
+
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_extended_post1.yaml
+campaign_config_sha256: "c43d7bc24a182dcc56082f4da11d76e09a66d8b1cc0d0dc84b29536726022701"
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: baseline-ready-core
+
+matrix:
+  planner_arms: 14
+  scenarios: 48
+  seeds: 30
+  expected_episode_cells: 20160
+  horizon_steps: 600
+
+publication:
+  channel: direct_zenodo_benchmark_dataset
+  concept_doi: 10.5281/zenodo.22053132
+  version_doi: 10.5281/zenodo.22053133
+  concept_record_id: "22053132"
+  version_record_id: "22053133"
+  reservation_status: reserved_unpublished
+  metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.json
+  metadata_sha256: "7341e20007f56ce002f841c4b3264e9d81bd7e91d53707e39a1233b49557ed20"
+  github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
+
+claim_boundary:
+  evidence_class_before_acceptance: not-benchmark-evidence
+  evidence_class_after_full_acceptance: nominal-benchmark-evidence
+  software_release: false
+  snqi: advisory-no-ranking
+  fallback_or_degraded_evidence: prohibited
+
+scenario:
+  matrix_path: ../../scenarios/classic_interactions_francis2023.yaml
+  matrix_sha256: "d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"
+  suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+  suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
+  route_certification_path: ../route_clearance_certifications_v1.yaml
+  route_certification_sha256: "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a"
+
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seeds: []
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+  seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+  resolved_seeds:
+    - 111
+    - 112
+    - 113
+    - 114
+    - 115
+    - 116
+    - 117
+    - 118
+    - 119
+    - 120
+    - 121
+    - 122
+    - 123
+    - 124
+    - 125
+    - 126
+    - 127
+    - 128
+    - 129
+    - 130
+    - 131
+    - 132
+    - 133
+    - 134
+    - 135
+    - 136
+    - 137
+    - 138
+    - 139
+    - 140
+
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+  snqi_claim_policy: advisory_no_ranking
+
+planners:
+  keys:
+    - prediction_planner
+    - goal
+    - social_force
+    - orca
+    - ppo
+    - socnav_sampling
+    - sacadrl
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - guarded_ppo
+    - predictive_mppi
+    - risk_dwa
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+    scenario_adaptive_hybrid_orca_v1: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
+    hybrid_rule_v3_fast_progress_static_escape: experimental
+    hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
+    guarded_ppo: experimental
+    predictive_mppi: experimental
+    risk_dwa: experimental
+
+kinematics:
+  matrix: [differential_drive]
+
+artifacts:
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - reports/campaign_summary.json
+    - reports/campaign_report.md
+    - reports/matrix_summary.json
+    - reports/campaign_table.md
+    - reports/snqi_diagnostics.json
+
+artifact_provenance:
+  raw_campaign_output: durable-required
+  publication_bundle: durable-required
+  compact_manifest: tracked-compact-evidence
+  source_commit: record-at-run-and-require-one-exact-sha
+  full_acceptance: require-14-arms-and-20160-exact-identities
+
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: 10.5281/zenodo.22053133
+
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md

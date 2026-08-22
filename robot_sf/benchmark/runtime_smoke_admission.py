@@ -348,6 +348,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         problems.append("runtime smoke summary planner_rows are missing")
     observed_arms: list[str] = []
     observed_episode_identities: list[tuple[str, str, int]] = []
+    observed_episode_paths: set[Path] = set()
     fallback_markers: list[str] = []
     for index, entry in enumerate(runs):
         if not isinstance(entry, dict):
@@ -386,6 +387,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         except (OSError, ValueError, RuntimeSmokeAdmissionError) as exc:
             problems.append(f"run {index} episode artifact rejected: {exc}")
             continue
+        if episodes_path in observed_episode_paths:
+            problems.append(f"run {index} reuses another planner arm episode artifact")
+        observed_episode_paths.add(episodes_path)
         if len(rows) != 1:
             problems.append(f"run {index} must contain exactly one episode row")
         declared = entry.get("summary")
@@ -419,6 +423,15 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             metadata = metadata if isinstance(metadata, dict) else {}
             if not metadata:
                 problems.append(f"run {index} algorithm metadata is missing")
+            expected_metadata_algorithm = (
+                "ppo" if planner_key == "guarded_ppo" else algorithms.get(planner_key)
+            )
+            _require_equal(
+                problems,
+                metadata.get("algorithm"),
+                expected_metadata_algorithm,
+                f"run {index} episode algorithm",
+            )
             observed_episode_identities.append((planner_key, scenario_id, seed))
 
     if tuple(observed_arms) != expected_planner_keys or len(set(observed_arms)) != expected_rows:
@@ -464,6 +477,7 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
     if (
         set(planner_row_arms) != set(expected_planner_keys)
         or len(set(planner_row_arms)) != expected_rows
+        or len(planner_row_arms) != expected_rows
     ):
         problems.append("runtime smoke planner aggregates do not match the exact roster")
 

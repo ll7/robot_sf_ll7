@@ -243,6 +243,19 @@ def test_runtime_smoke_rejects_forged_green_summary_without_raw_runs(
         _admit(result, planners, tmp_path)
 
 
+def test_runtime_smoke_rejects_reused_episode_artifact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["runs"][1]["episodes_path"] = summary["runs"][0]["episodes_path"]
+    _write_json(summary_path, summary)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="reuses another planner arm"):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_rejects_raw_episode_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

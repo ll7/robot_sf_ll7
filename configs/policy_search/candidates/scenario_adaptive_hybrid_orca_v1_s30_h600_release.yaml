@@ -1,4 +1,6 @@
-name: scenario_adaptive_hybrid_orca_v2_collision_guard
+# Release-specific successor: preserves the frozen v1 candidate while adding
+# blind-corner yielding and geometric static-clearance checks for S30/H600.
+name: scenario_adaptive_hybrid_orca_v1_s30_h600_release
 algo: hybrid_rule_local_planner
 allow_testing_algorithms: true
 base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
@@ -13,9 +15,11 @@ params:
   static_recenter_weight: 0.7
   static_recenter_probe_speed: 0.3
 scenario_overrides:
-  classic_merging_low:
-    static_clearance_escape_enabled: false
-    static_recenter_enabled: false
+  francis2023_blind_corner:
+    continuous_static_clearance_enabled: true
+    static_hard_safety_margin: 0.0
+    slow_distance_human: 3.5
+    moderate_distance_human: 4.5
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6
     static_clearance_escape_max_speed: 0.6

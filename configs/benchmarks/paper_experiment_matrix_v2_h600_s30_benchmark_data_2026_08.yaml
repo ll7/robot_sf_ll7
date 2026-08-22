@@ -109,25 +109,29 @@ planners:
   - key: scenario_adaptive_hybrid_orca_v1
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    algo_config: >-
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: scenario_adaptive_hybrid_orca_v2_collision_guard
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    algo_config: >-
+      configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: hybrid_rule_v3_fast_progress_static_escape
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    algo_config: >-
+      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: hybrid_rule_v3_fast_progress_static_escape_continuous
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    algo_config: >-
+      configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: guarded_ppo

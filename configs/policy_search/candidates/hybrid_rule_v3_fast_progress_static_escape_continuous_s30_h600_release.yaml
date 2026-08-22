@@ -1,4 +1,6 @@
-name: hybrid_rule_v3_fast_progress_static_escape_continuous
+# Release-specific successor: preserves the frozen continuous-clearance candidate
+# while adding blind-corner yielding and a route-compatible static margin for S30/H600.
+name: hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release
 algo: hybrid_rule_local_planner
 allow_testing_algorithms: true
 base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
@@ -37,6 +39,11 @@ params:
   corridor_subgoal_clearance_weight: 0.3
   corridor_subgoal_continuity_weight: 0.2
 scenario_overrides:
+  francis2023_blind_corner:
+    hard_safety_margin: 0.05
+    static_hard_safety_margin: 0.0
+    slow_distance_human: 3.5
+    moderate_distance_human: 4.5
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6
     static_clearance_escape_max_speed: 0.6

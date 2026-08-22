@@ -1,4 +1,6 @@
-name: hybrid_rule_v3_fast_progress_static_escape
+# Release-specific successor: preserves the frozen fast-progress candidate while
+# adding blind-corner yielding and geometric static-clearance checks for S30/H600.
+name: hybrid_rule_v3_fast_progress_static_escape_s30_h600_release
 algo: hybrid_rule_local_planner
 allow_testing_algorithms: true
 base_config_path: configs/algos/hybrid_rule_v3_teb_like_rollout.yaml
@@ -18,6 +20,11 @@ params:
   static_corridor_transit_min_progress_3s: 0.1
   static_corridor_transit_weight: 0.5
 scenario_overrides:
+  francis2023_blind_corner:
+    continuous_static_clearance_enabled: true
+    static_hard_safety_margin: 0.0
+    slow_distance_human: 3.5
+    moderate_distance_human: 4.5
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6
     static_clearance_escape_max_speed: 0.6

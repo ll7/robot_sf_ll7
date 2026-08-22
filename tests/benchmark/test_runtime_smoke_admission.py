@@ -259,6 +259,22 @@ def test_runtime_smoke_rejects_raw_episode_fallback(
         _admit(result, planners, tmp_path)
 
 
+def test_runtime_smoke_rejects_nested_foresight_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary = json.loads(
+        (result.parent.parent / "reports/campaign_summary.json").read_text(encoding="utf-8")
+    )
+    episode_path = Path(summary["runs"][0]["episodes_path"])
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["foresight_prediction"] = {"fallback_used": True}
+    _write_json(episode_path, row)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_rejects_checkpoint_receipt_hash_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -190,6 +190,71 @@ def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:
     assert not target.exists()
 
 
+def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) -> None:
+    target = tmp_path / "new-worktree"
+    branch = "test/exec-in-worktree"
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--exec",
+                "git",
+                "rev-parse",
+                "--show-toplevel",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines()[-1] == str(target)
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(target)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "worktree", "prune"], cwd=REPO_ROOT, capture_output=True, check=False
+        )
+        subprocess.run(
+            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
+        )
+
+
+def test_create_worktree_exec_requires_command(tmp_path: Path) -> None:
+    target = tmp_path / "new-worktree"
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            "test/exec-missing-command",
+            "--minimum-free-bytes",
+            "0",
+            "--exec",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--exec requires a command" in result.stderr
+    assert not target.exists()
+
+
 def test_create_worktree_refuses_low_space_before_git(tmp_path: Path) -> None:
     target = tmp_path / "new-worktree"
     result = subprocess.run(

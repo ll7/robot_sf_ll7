@@ -133,6 +133,21 @@ populated worktree. The default threshold is 2 GiB and can be overridden for
 a deliberately bounded local run with `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` or
 `--minimum-free-bytes`.
 
+When the next action must run in the new worktree, bind it to the creation
+command with `--exec`; this is safer than assuming a shell changes directory
+after `git worktree add`:
+
+```bash
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main \
+  --exec git rev-parse --show-toplevel
+```
+
+The supplied command runs with the new worktree as its working directory. If it
+fails, the worktree remains available for diagnosis.
+
 Bootstrap the local machine context before using Python tools. You can detect a linked worktree
 because `.git` is a file that points into
 `<main checkout>/.git/worktrees/<worktree-name>`, and `git rev-parse --git-common-dir` resolves to

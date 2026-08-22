@@ -95,7 +95,6 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | Skill | Kind | Phase | Writes | SLURM | Artifacts | Delegates | Use When |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `analyze-camera-ready-benchmark` | atomic | context | no | no | yes | none | Analyze a camera-ready benchmark campaign for consistency, runtime hotspots, fallback/degraded planners, and reproducibility metadata. |
-| `analyze-latest-policy-sweep` | atomic | context | no | no | yes | none | Analyze latest policy analysis sweep runs (*_policy_analysis_*) by comparing episodes/summary metrics, diagnostics, and video artifacts; generate a concise markdown report and optional frame snapshots. |
 | `artifact-provenance` | atomic | verification | yes | no | yes | none | Classify, promote, or document generated artifacts so durable evidence is separated from local output caches. |
 | `benchmark-overview` | atomic | context | no | no | yes | none | Fast benchmark-faithful orientation for scenario splits, baselines, metrics, artifacts, and reproducibility constraints in robot_sf_ll7. |
 | `benchmark-row-status` | policy | analysis | no | no | yes | none | Classify benchmark campaign rows under the fail-closed policy so fallback or degraded execution never counts as successful evidence. |
@@ -201,6 +200,7 @@ generated routing index; read the specific `SKILL.md` before applying a skill.
 | --- | --- |
 | `agent-improvement-capture` | `agent-workflow-capture` |
 | `agent-improvement-promotion` | `agent-workflow-promotion` |
+| `analyze-latest-policy-sweep` | `analyze-camera-ready-benchmark` |
 | `auxme-issue791-reliable-submit` | `auxme-slurm-reliable-submit` |
 | `context-unblocker` | `what-context-needed` |
 | `continuous-autopilot` | `goal-autopilot` |

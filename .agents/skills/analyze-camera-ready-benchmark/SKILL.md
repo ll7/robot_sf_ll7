@@ -10,6 +10,8 @@ requires_slurm: false
 requires_benchmark_artifacts: true
 delegates_to: []
 output_schema: skill_run_summary.v1
+aliases:
+- analyze-latest-policy-sweep
 ---
 
 # Analyze Camera-Ready Benchmark
@@ -18,6 +20,42 @@ output_schema: skill_run_summary.v1
 
 Use this skill when reviewing `*_policy_analysis*` or camera-ready campaign outputs and you need
 consistency, reproducibility, and fallback-mode visibility before claiming benchmark conclusions.
+
+## Modes
+
+Use the default `camera-ready` mode for a complete campaign. Select the `policy-sweep` mode when
+comparing recent `*_policy_analysis_*` runs. The legacy `analyze-latest-policy-sweep` name is a
+compatibility alias for this canonical mode.
+
+### Policy-sweep mode
+
+1. Confirm each run directory contains `episodes.jsonl` and `summary.json`.
+2. Compare per-episode metrics with summary aggregates; any mismatch blocks interpretation.
+3. Write a compact report under `specs/409-planner-comparison/` and include evidence-location links.
+
+The policy-sweep report preserves this contract:
+
+- aggregate success, collision, time-to-goal, speed, near-miss, comfort, energy, and raw/filtered
+  jerk/curvature metrics;
+- the five worst collision scenarios, five lowest-success scenarios, and top problem episodes
+  (`collisions*10 + comfort*2 + failure`) with video paths;
+- path-efficiency saturation, `shortest_path_len` presence, and the explicit low-speed filter
+  (`epsilon=0.1`) diagnostics;
+- explicit `native`, `adapter`, `fallback`, or `degraded` mode labels for every comparison.
+
+Optional frame extraction uses ffmpeg at 25/50/75% of each top-problem episode and writes to
+`output/analysis/<report_id>/frames/`. Use
+`specs/409-planner-comparison/analyze_latest_policy_sweep_prompt.md` as the report template when
+needed. Videos follow
+`output/recordings/<run_dir>/<scenario>_seed<seed>_<policy>.mp4`.
+
+| Legacy contract item | Canonical policy-sweep disposition |
+| --- | --- |
+| `*_policy_analysis_*` trigger and run inputs | Named `policy-sweep` mode; require `episodes.jsonl` and `summary.json`. |
+| Aggregate, worst/lowest, and top-problem tables | Required report fields above; unchanged scoring and links. |
+| Path-efficiency, shortest-path, and low-speed diagnostics | Required diagnostics above; filtering remains explicit. |
+| Optional frames, template, and video names | Preserved as optional/reporting conventions above. |
+| Mismatch/fallback/superiority guardrails | Canonical proof and guardrails below; no ranking from partial or fallback evidence. |
 
 ## Read First
 

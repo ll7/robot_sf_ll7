@@ -143,10 +143,11 @@ jobs:
           fi
           echo "::notice::Trusted base does not contain scripts/dev/merge_queue_gate.py; source-head evaluation is advisory and was skipped."
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
         with:
-          python-version: "3.12"
+          install-system-packages: "false"
+          migrate-artifacts: "false"
 
       - name: Run merge-queue gate (merge_group)
         if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'

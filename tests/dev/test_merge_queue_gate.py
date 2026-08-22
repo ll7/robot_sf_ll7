@@ -680,6 +680,9 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "statuses: read" in workflow
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
     assert "conversation resolution before merging" in workflow
+    assert "uses: ./.github/actions/setup-ci-python" in workflow
+    assert 'install-system-packages: "false"' in workflow
+    assert 'migrate-artifacts: "false"' in workflow
     assert "exit 0" in workflow
 
 

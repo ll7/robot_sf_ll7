@@ -49,6 +49,10 @@ from robot_sf.benchmark.release_resume_admission import (
     campaign_has_prior_execution,
     validate_release_resume_admission,
 )
+from robot_sf.benchmark.runtime_smoke_admission import (
+    RuntimeSmokeAdmissionError,
+    validate_runtime_smoke_result,
+)
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
 if TYPE_CHECKING:
@@ -493,6 +497,43 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "generated_at_utc": checkpoint_receipt["generated_at_utc"],
         "submit_safe": True,
     }
+
+    if getattr(manifest, "schema_version", None) == "benchmark-release-manifest.v0.2":
+        smoke_result_path = getattr(args, "runtime_smoke_receipt", None)
+        if smoke_result_path is None:
+            result.update(
+                {
+                    "benchmark_success": False,
+                    "status": "runtime_smoke_receipt_missing",
+                    "status_reason": "v0.2 run mode requires exact-source runtime smoke evidence",
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                }
+            )
+            print(json.dumps(result, indent=2))
+            return 2
+        try:
+            smoke_path = _required_repo_relative(smoke_result_path)
+            smoke_receipt = validate_runtime_smoke_result(
+                smoke_result_path,
+                repo_root=get_repository_root(),
+                expected_source_commit=_current_source_commit(),
+                expected_planner_keys=tuple(manifest.planner_keys),
+                max_age_hours=getattr(args, "runtime_smoke_receipt_max_age_hours", 24.0),
+            )
+        except (RuntimeSmokeAdmissionError, ValueError) as exc:
+            result.update(
+                {
+                    "benchmark_success": False,
+                    "status": "runtime_smoke_receipt_rejected",
+                    "status_reason": str(exc),
+                    "campaign_execution_status": "not_started",
+                    "evidence_status": "blocked",
+                }
+            )
+            print(json.dumps(result, indent=2))
+            return 2
+        result["runtime_smoke_receipt"] = {"path": smoke_path, **smoke_receipt}
 
     try:
         resume_receipt = _admit_release_resume(

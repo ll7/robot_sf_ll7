@@ -938,6 +938,21 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Maximum accepted staged-checkpoint receipt age (default: 24 hours).",
     )
     parser.add_argument(
+        "--runtime-smoke-receipt",
+        type=Path,
+        default=None,
+        help=(
+            "Required for a v0.2 full release: release/release_result.json from a fresh "
+            "canonical 14-arm runtime smoke at the exact release source commit."
+        ),
+    )
+    parser.add_argument(
+        "--runtime-smoke-receipt-max-age-hours",
+        type=float,
+        default=24.0,
+        help="Maximum accepted runtime-smoke result age (default: 24 hours).",
+    )
+    parser.add_argument(
         "--resume-receipt",
         type=Path,
         default=None,

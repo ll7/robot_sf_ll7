@@ -62,6 +62,7 @@ def _manifest_fixture() -> SimpleNamespace:
             "reports/snqi_diagnostics.json",
         ),
         release_tag="paper-benchmark-smoke-v0.1.0",
+        planner_keys=(),
         doi="10.5281/zenodo.<record-id>",
         repository_url="https://github.com/ll7/robot_sf_ll7",
     )
@@ -778,9 +779,27 @@ def test_full_release_acceptance_failure_blocks_publication(
         ),
     )
     receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+    smoke_receipt = tmp_path / "runtime_smoke_result.json"
+    _write_json(smoke_receipt, {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "schema_version": "benchmark-runtime-smoke-admission.v1",
+            "status": "admitted",
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
 
     exit_code = run_benchmark_release.main(
-        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--checkpoint-receipt",
+            str(receipt),
+            "--runtime-smoke-receipt",
+            str(smoke_receipt),
+        ]
     )
 
     payload = json.loads(capsys.readouterr().out)

@@ -220,16 +220,20 @@ def test_hinge_gutter_font_size_is_capped_for_short_labels(monkeypatch: pytest.M
     plt.close(fig)
 
 
-def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path) -> None:
-    """Exercise the renderer delta's print geometry and shared role-color contract."""
+def test_print_contrast_renderer_uses_final_width_and_role_colors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise print geometry, including the panel-B tick/spine clearance regression."""
     episode_kwargs = {
         "payload": {},
         "metadata": {"summary": {"step_count": 3}},
-        "robot_xy": np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+        # Offset the minimal trace so the synthetic axes use two-digit y ticks (10/15/20),
+        # matching the print-layout collision reported by ll7/diss#1409.
+        "robot_xy": np.array([[0.0, 15.0], [1.0, 15.0], [2.0, 15.0]]),
         "robot_vel": np.zeros((3, 2)),
         "time_s": np.array([0.1, 0.2, 0.3]),
         "ped_ids": [7],
-        "ped_xy": np.array([[[4.0, 0.0]], [[4.0, 0.0]], [[4.0, 0.0]]]),
+        "ped_xy": np.array([[[4.0, 15.0]], [[4.0, 15.0]], [[4.0, 15.0]]]),
         "cmd_v": np.array([0.5, 0.5, 0.5]),
         "cmd_omega": np.zeros(3),
         "metrics": {
@@ -241,6 +245,18 @@ def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path
     ep_b = hinge.EpisodeTrace("B", tmp_path, **episode_kwargs)
     out_png = tmp_path / "contrast.png"
 
+    # ``render_hinge_figure`` closes its figure after saving; capture it at close time so the
+    # assertion measures the final post-tight-layout display geometry, not the pre-layout spec.
+    rendered_figures: list[tuple[Any, Any]] = []
+    original_close = hinge.plt.close
+
+    def capture_close(fig: Any = None) -> None:
+        if fig is not None and not isinstance(fig, str):
+            fig.canvas.draw()
+            rendered_figures.append((fig, fig.canvas.get_renderer()))
+        original_close(fig)
+
+    monkeypatch.setattr(hinge.plt, "close", capture_close)
     hinge.render_hinge_figure(
         ep_a,
         ep_b,
@@ -258,8 +274,18 @@ def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path
         focal_ped_id=7,
         events_a={},
         events_b={},
-        closest_a={"distance_m": 2.0, "time_s": 0.3, "robot_xy": [2.0, 0.0], "ped_xy": [4.0, 0.0]},
-        closest_b={"distance_m": 2.0, "time_s": 0.3, "robot_xy": [2.0, 0.0], "ped_xy": [4.0, 0.0]},
+        closest_a={
+            "distance_m": 2.0,
+            "time_s": 0.3,
+            "robot_xy": [2.0, 15.0],
+            "ped_xy": [4.0, 15.0],
+        },
+        closest_b={
+            "distance_m": 2.0,
+            "time_s": 0.3,
+            "robot_xy": [2.0, 15.0],
+            "ped_xy": [4.0, 15.0],
+        },
         outcome_a="success",
         outcome_b="non_completion",
         b_outcome_step=None,
@@ -273,6 +299,21 @@ def test_print_contrast_renderer_uses_final_width_and_role_colors(tmp_path: Path
 
     image = mpimg.imread(out_png)
     assert image.shape[1] == round(hinge.PRINT_FIG_WIDTH_IN * 200)
+
+    assert rendered_figures
+    fig, renderer = rendered_figures[-1]
+    panel_a, panel_b = fig.axes[:2]
+    panel_a_right = panel_a.spines["right"].get_window_extent(renderer).x1
+    tick_boxes = [
+        label.get_window_extent(renderer)
+        for label in panel_b.get_yticklabels()
+        if label.get_visible()
+    ]
+    assert tick_boxes
+    assert all(
+        len(label.get_text()) >= 2 for label in panel_b.get_yticklabels() if label.get_visible()
+    )
+    assert min(box.x0 for box in tick_boxes) - panel_a_right > 0.0
 
     legend = hinge._build_legend_elements(
         contrast_mode=True,

@@ -198,6 +198,7 @@ def test_coding_agents_compatibility_note_is_discoverable() -> None:
     copilot_text = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
     assert "AGENTS.md" in copilot_text
     assert "docs/dev_guide.md" in copilot_text
+    assert note_ref in copilot_text
 
 
 def test_ready_queue_skills_use_issue_thread_rest_fallback() -> None:

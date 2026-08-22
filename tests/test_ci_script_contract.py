@@ -371,12 +371,13 @@ def test_ci_workflow_persists_merged_pytest_duration_store() -> None:
     assert duration_merge["continue-on-error"] is True
     assert "always()" in duration_merge["if"]
     assert "steps.checkout_duration_cache.outcome == 'success'" in duration_merge["if"]
-    assert (
-        "Expected exactly one pytest duration store from each of four shards"
-        in duration_merge["run"]
-    )
-    assert "Overlapping pytest duration stores" in duration_merge["run"]
-    assert "merged.update(durations)" in duration_merge["run"]
+    # The inline merge program is replaced by the tested helper.
+    assert "merge_test_durations.py" in duration_merge["run"]
+    assert "--artifact-dir .duration-artifacts" in duration_merge["run"]
+    assert "--output .test_durations" in duration_merge["run"]
+    assert "Expected exactly one pytest duration store" not in duration_merge["run"]
+    assert "Overlapping pytest duration stores" not in duration_merge["run"]
+    assert "merged.update(durations)" not in duration_merge["run"]
     assert duration_save["continue-on-error"] is True
     assert "always()" in duration_save["if"]
     assert "steps.checkout_duration_cache.outcome == 'success'" in duration_save["if"]
@@ -402,7 +403,12 @@ def test_determinism_gate_reuses_the_model_preflight_cache() -> None:
         if step.get("name") == "Derive model-cache key from registry-pinned digests"
     )
     assert key_step["id"] == "model-cache-key"
-    assert "required_model_ids_for_config" in key_step["run"]
+    assert "model_cache_key.py" in key_step["run"]
+    assert "--config" in key_step["run"]
+    assert "${PPO_ALGO_CONFIG}" in key_step["run"]
+    # The inline registry/preflight snippet is replaced by the tested helper.
+    assert "required_model_ids_for_config" not in key_step["run"]
+    assert "hashlib.sha256" not in key_step["run"]
     restore_step = next(
         step
         for step in determinism_gate["steps"]
@@ -413,6 +419,40 @@ def test_determinism_gate_reuses_the_model_preflight_cache() -> None:
         "path": "output/model_cache",
         "key": "model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}",
     }
+
+
+def test_ci_aggregate_uses_declarative_needs_checker() -> None:
+    """The ci aggregate job must route result checks through check_ci_needs.py."""
+    workflow = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))
+    aggregate = workflow["jobs"]["ci"]
+    result_step = next(
+        step for step in aggregate["steps"] if step.get("name") == "Check split job results"
+    )
+    assert "check_ci_needs.py" in result_step["run"]
+    assert "--event-name" in result_step["run"]
+    assert "${{ github.event_name }}" in result_step["run"]
+    assert "--results" in result_step["run"]
+    assert "toJSON(needs)" in result_step["run"]
+    # The handwritten per-dependency if-blocks are gone.
+    assert 'needs.fast-feedback.result"' not in result_step["run"]
+    assert "needs.determinism-gate.result" not in result_step["run"]
+    # Every required job stays in the aggregate needs set.
+    for job in (
+        "fast-feedback",
+        "changed-coverage-gate",
+        "coverage-gate",
+        "compat-matrix",
+        "fast-pysf-compat",
+        "smoke-artifacts",
+        "scenario-validation",
+        "xdist-scratch-isolation",
+        "wheel-smoke-install",
+        "examples-smoke",
+        "notebooks-smoke",
+        "determinism-gate",
+        "exact-repeat-model-preflight",
+    ):
+        assert job in aggregate["needs"]
 
 
 def test_pytest_coverage_is_explicit_opt_in() -> None:

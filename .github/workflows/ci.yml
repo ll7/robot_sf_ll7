@@ -663,15 +663,7 @@ jobs:
         if: steps.check-changes.outputs.changed == 'true'
         id: model-cache-key
         run: |
-          KEY=$(uv run python -c "
-          import hashlib, yaml
-          from robot_sf.models.registry import get_registry_entry
-          from robot_sf.models.preflight import required_model_ids_for_config
-          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
-          ids = required_model_ids_for_config(cfg)
-          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
-          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
-          ")
+          KEY=$(uv run python scripts/dev/model_cache_key.py --config "${PPO_ALGO_CONFIG}" --machine)
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore exact-repeat model cache
@@ -708,15 +700,7 @@ jobs:
       - name: Derive model-cache key from registry-pinned digests
         id: model-cache-key
         run: |
-          KEY=$(uv run python -c "
-          import hashlib, yaml
-          from robot_sf.models.registry import get_registry_entry
-          from robot_sf.models.preflight import required_model_ids_for_config
-          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
-          ids = required_model_ids_for_config(cfg)
-          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
-          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
-          ")
+          KEY=$(uv run python scripts/dev/model_cache_key.py --config "${PPO_ALGO_CONFIG}" --machine)
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Restore model cache
@@ -755,60 +739,13 @@ jobs:
     steps:
       - name: Check split job results
         run: |
-          if [[ "${{ needs.fast-feedback.result }}" != "success" ]]; then
-            echo "fast-feedback finished with ${{ needs.fast-feedback.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ github.event_name }}" != "pull_request" && "${{ needs.coverage-gate.result }}" != "success" ]]; then
-            echo "coverage-gate finished with ${{ needs.coverage-gate.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group" ]]; then
-            if [[ "${{ needs.changed-coverage-gate.result }}" != "success" ]]; then
-              echo "changed-coverage-gate finished with ${{ needs.changed-coverage-gate.result }}" >&2
-              exit 1
-            fi
-          fi
-          if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
-            echo "compat-matrix finished with ${{ needs.compat-matrix.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.fast-pysf-compat.result }}" != "success" ]]; then
-            echo "fast-pysf-compat finished with ${{ needs.fast-pysf-compat.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.wheel-smoke-install.result }}" != "success" ]]; then
-            echo "wheel-smoke-install finished with ${{ needs.wheel-smoke-install.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then
-            echo "smoke-artifacts finished with ${{ needs.smoke-artifacts.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.scenario-validation.result }}" != "success" ]]; then
-            echo "scenario-validation finished with ${{ needs.scenario-validation.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.xdist-scratch-isolation.result }}" != "success" ]]; then
-            echo "xdist-scratch-isolation finished with ${{ needs.xdist-scratch-isolation.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.examples-smoke.result }}" != "success" ]]; then
-            echo "examples-smoke finished with ${{ needs.examples-smoke.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
-            echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
-            echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
-            echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
-            exit 1
-          fi
+          uv run python scripts/dev/check_ci_needs.py \
+            --event-name "${{ github.event_name }}" \
+            --results "$(python -c "
+          import json
+          needs = ${{ toJSON(needs) }}
+          print(json.dumps({name: job.result for name, job in needs.items()}))
+          ")"
 
       - name: Checkout for duration-cache update
         id: checkout_duration_cache
@@ -829,45 +766,8 @@ jobs:
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' }}
         continue-on-error: true
         run: |
-          python - <<'PY'
-          import json
-          import math
-          from pathlib import Path
-
-          expected_names = {f"pytest-durations-{index}" for index in range(1, 5)}
-          files = sorted(Path(".duration-artifacts").glob("*/.test_durations"))
-          actual_names = {path.parent.name for path in files}
-          if actual_names != expected_names:
-              missing = sorted(expected_names - actual_names)
-              unexpected = sorted(actual_names - expected_names)
-              raise SystemExit(
-                  "Expected exactly one pytest duration store from each of four shards; "
-                  f"missing={missing or 'none'} unexpected={unexpected or 'none'}."
-              )
-
-          merged = {}
-          for path in files:
-              durations = json.loads(path.read_text(encoding="utf-8"))
-              if not isinstance(durations, dict) or any(
-                  not isinstance(nodeid, str)
-                  or not isinstance(duration, (int, float))
-                  or isinstance(duration, bool)
-                  or not math.isfinite(duration)
-                  or duration < 0
-                  for nodeid, duration in durations.items()
-              ):
-                  raise SystemExit(f"Invalid pytest duration store: {path}")
-              overlap = set(merged).intersection(durations)
-              if overlap:
-                  raise SystemExit(f"Overlapping pytest duration stores: {path}")
-              merged.update(durations)
-
-          Path(".test_durations").write_text(
-              json.dumps(merged, indent=4, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-          print(f"Merged {len(files)} shard stores with {len(merged)} test durations.")
-          PY
+          uv run python scripts/dev/merge_test_durations.py \
+            --artifact-dir .duration-artifacts --output .test_durations
 
       - name: Save merged test durations
         if: ${{ always() && needs.fast-feedback.result == 'success' && steps.checkout_duration_cache.outcome == 'success' && steps.merge-test-durations.outcome == 'success' }}

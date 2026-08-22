@@ -29,7 +29,9 @@ def test_core_guidance_surfaces_are_mcp_first_with_gh_fallback() -> None:
     assert "Prefer GitHub MCP / GitHub app tools" in agents_guidance
     assert "Keep the GitHub CLI (`gh`) for scripted batch" in agents_guidance
 
-    dev_guide_text = (ROOT / "docs" / "dev_guide.md").read_text(encoding="utf-8")
+    # The concise landing page intentionally links to the preserved procedural reference;
+    # keep the detailed workflow assertions against that canonical owner.
+    dev_guide_text = (ROOT / "docs" / "dev_guide_reference.md").read_text(encoding="utf-8")
     assert "Prefer GitHub MCP / GitHub app tools for interactive issue, PR, and project work" in (
         dev_guide_text
     )

@@ -19,6 +19,7 @@ ZENODO_VERIFICATION_SCHEMA = "robot-sf-zenodo-verification.v2"
 _REMOTE_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag/[^/?#]+$")
+_ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 _CLAIM_BOUNDARY_TERMS = ("snqi", "advisory", "ranking")
 _CREDENTIAL_KEYS = ("token", "authorization", "password", "secret")
 
@@ -167,6 +168,165 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
         Lowercase hexadecimal SHA-256 digest.
     """
     return hashlib.sha256(_canonical_bytes(_metadata_contract(metadata))).hexdigest()
+
+
+def _binding_value(binding: Any, key: str) -> Any:
+    """Read one release-binding field from a mapping or manifest-like object.
+
+    Returns:
+        The requested field value, or ``None`` when it is absent.
+    """
+    if isinstance(binding, Mapping):
+        return binding.get(key)
+    return getattr(binding, key, None)
+
+
+def _normalize_release_binding(binding: Any) -> dict[str, Any]:
+    """Normalize and validate the public fields needed to bind a Zenodo release.
+
+    Returns:
+        Normalized release identity and metadata path fields.
+    """
+    if binding is None:
+        raise ZenodoPublisherError("Zenodo release binding is missing")
+    metadata_path_value = _binding_value(binding, "metadata_path")
+    if metadata_path_value is None:
+        raise ZenodoPublisherError("Zenodo release binding metadata_path is missing")
+    metadata_path = Path(str(metadata_path_value)).resolve()
+    metadata_sha256 = str(_binding_value(binding, "metadata_sha256") or "").strip().lower()
+    if _SHA256_RE.fullmatch(metadata_sha256) is None:
+        raise ZenodoPublisherError("Zenodo release binding metadata_sha256 is invalid")
+    release_tag = str(_binding_value(binding, "release_tag") or "").strip()
+    if not release_tag:
+        raise ZenodoPublisherError("Zenodo release binding release_tag is missing")
+    expected_source_tag = (
+        release_tag
+        if release_tag.startswith("https://")
+        else f"https://github.com/ll7/robot_sf_ll7/releases/tag/{release_tag}"
+    )
+    if _SOURCE_TAG_RE.fullmatch(expected_source_tag) is None:
+        raise ZenodoPublisherError("Zenodo release binding release_tag is invalid")
+    concept_doi = str(_binding_value(binding, "concept_doi") or "").strip()
+    version_doi = str(_binding_value(binding, "version_doi") or "").strip()
+    if _ZENODO_DOI_RE.fullmatch(concept_doi) is None:
+        raise ZenodoPublisherError("Zenodo release binding concept_doi is invalid")
+    if _ZENODO_DOI_RE.fullmatch(version_doi) is None:
+        raise ZenodoPublisherError("Zenodo release binding version_doi is invalid")
+    if concept_doi == version_doi:
+        raise ZenodoPublisherError("Zenodo release binding concept and version DOI must differ")
+    return {
+        "metadata_path": metadata_path,
+        "metadata_sha256": metadata_sha256,
+        "release_tag": release_tag,
+        "source_tag": expected_source_tag,
+        "concept_doi": concept_doi,
+        "version_doi": version_doi,
+    }
+
+
+def build_release_binding(manifest: Any) -> dict[str, Any]:
+    """Build a publisher binding from a validated benchmark release manifest.
+
+    The function intentionally accepts a manifest-like object instead of
+    importing the release protocol module, keeping the generic publisher
+    independent from the benchmark manifest implementation.
+
+    Returns:
+        Normalized release identity and metadata path fields.
+    """
+    return _normalize_release_binding(manifest)
+
+
+def _state_release_binding(
+    binding: Mapping[str, Any], *, metadata_contract_sha256: str
+) -> dict[str, str]:
+    """Return the credential-free binding persisted in deposition state."""
+    return {
+        "metadata_sha256": str(binding["metadata_sha256"]),
+        "metadata_contract_sha256": metadata_contract_sha256,
+        "release_tag": str(binding["release_tag"]),
+        "concept_doi": str(binding["concept_doi"]),
+        "version_doi": str(binding["version_doi"]),
+    }
+
+
+def _validate_release_binding_file(binding: Mapping[str, Any]) -> dict[str, Any]:
+    """Read and validate the exact metadata file named by a release binding.
+
+    Returns:
+        Validated metadata loaded from the bound file.
+    """
+    return load_dataset_metadata(
+        binding["metadata_path"],
+        expected_source_tag=binding["source_tag"],
+        expected_metadata_sha256=binding["metadata_sha256"],
+    )
+
+
+def _validate_release_binding_metadata(
+    metadata: Mapping[str, Any], binding: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Require operation metadata to be byte-bound to the release manifest.
+
+    Returns:
+        Validated metadata loaded from the bound file.
+    """
+    file_metadata = _validate_release_binding_file(binding)
+    if _metadata_contract(file_metadata) != _metadata_contract(metadata):
+        raise ZenodoPublisherError(
+            "Zenodo operation metadata does not match the release manifest metadata file"
+        )
+    return file_metadata
+
+
+def _assert_deposition_identity(state: Mapping[str, Any], binding: Mapping[str, Any]) -> None:
+    """Require reserved Zenodo identity to equal the manifest's concept/version DOIs."""
+    concept_record_id = str(state.get("concept_record_id") or "")
+    expected_concept_record_id = str(binding["concept_doi"].rsplit(".", 1)[-1])
+    if concept_record_id != expected_concept_record_id:
+        raise ZenodoPublisherError(
+            "Zenodo deposition concept DOI does not match the release manifest"
+        )
+    if state.get("doi") != binding["version_doi"]:
+        raise ZenodoPublisherError(
+            "Zenodo deposition version DOI does not match the release manifest"
+        )
+
+
+def _validate_state_binding(
+    state: dict[str, Any],
+    binding: Mapping[str, Any] | None,
+    *,
+    metadata_contract_sha256: str | None = None,
+) -> None:
+    """Validate or adopt the manifest binding carried by deposition state."""
+    stored = state.get("release_binding")
+    if stored is not None and not isinstance(stored, Mapping):
+        raise ZenodoPublisherError("Zenodo state release binding is malformed")
+    if binding is None:
+        if stored is None:
+            return
+        if not isinstance(stored, Mapping):  # pragma: no cover - narrowed above
+            raise ZenodoPublisherError("Zenodo state release binding is malformed")
+        if (
+            metadata_contract_sha256 is not None
+            and stored.get("metadata_contract_sha256") != metadata_contract_sha256
+        ):
+            raise ZenodoPublisherError("Zenodo state metadata does not match its release binding")
+        return
+
+    _assert_deposition_identity(state, binding)
+    expected_contract_sha256 = metadata_contract_sha256 or str(
+        stored.get("metadata_contract_sha256") if isinstance(stored, Mapping) else ""
+    )
+    if not expected_contract_sha256:
+        raise ZenodoPublisherError("Zenodo release binding metadata contract is missing")
+    expected_state_binding = _state_release_binding(
+        binding, metadata_contract_sha256=expected_contract_sha256
+    )
+    if stored is not None and dict(stored) != expected_state_binding:
+        raise ZenodoPublisherError("Zenodo state release binding does not match the manifest")
+    state["release_binding"] = expected_state_binding
 
 
 def _validate_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
@@ -359,13 +519,22 @@ def load_dataset_metadata(
     path: str | Path,
     *,
     expected_source_tag: str | None = None,
+    expected_metadata_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Load and validate benchmark-dataset deposition metadata.
 
     Returns:
         Metadata suitable for the Zenodo deposition API.
     """
-    metadata_path = Path(path)
+    metadata_path = Path(path).resolve()
+    if expected_metadata_sha256 is not None:
+        expected_digest = str(expected_metadata_sha256).strip().lower()
+        if _SHA256_RE.fullmatch(expected_digest) is None:
+            raise ZenodoPublisherError("expected Zenodo metadata SHA-256 is invalid")
+        if not metadata_path.is_file() or _sha256_file(metadata_path) != expected_digest:
+            raise ZenodoPublisherError(
+                "Zenodo metadata file SHA-256 does not match the release manifest"
+            )
     try:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -430,6 +599,7 @@ def reserve(
     metadata: dict[str, Any],
     *,
     api_base: str = ZENODO_API_BASE,
+    release_binding: Any | None = None,
 ) -> dict[str, Any]:
     """Create a fresh deposition and reserve its version DOI.
 
@@ -437,6 +607,12 @@ def reserve(
         Credential-free deposition state.
     """
     normalized_metadata = _validate_metadata(metadata)
+    binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    file_metadata = (
+        _validate_release_binding_metadata(normalized_metadata, binding)
+        if binding is not None
+        else None
+    )
     normalized_metadata["prereserve_doi"] = True
     response = session.post(
         f"{api_base.rstrip('/')}/deposit/depositions",
@@ -449,6 +625,12 @@ def reserve(
         raise ZenodoPublisherError(
             "Zenodo reserve response omitted deposition/concept/DOI identity"
         )
+    if binding is not None:
+        _assert_deposition_identity(state, binding)
+        state["release_binding"] = _state_release_binding(
+            binding,
+            metadata_contract_sha256=_metadata_sha256(file_metadata or normalized_metadata),
+        )
     return _seal_state(state)
 
 
@@ -458,6 +640,7 @@ def upload(
     files: list[Path],
     *,
     api_base: str = ZENODO_API_BASE,
+    release_binding: Any | None = None,
 ) -> dict[str, Any]:
     """Upload files to an unpublished deposition and record local SHA-256 values.
 
@@ -465,6 +648,15 @@ def upload(
         Updated credential-free deposition state.
     """
     _validate_state_for_operation(state)
+    binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    binding_metadata = _validate_release_binding_file(binding) if binding is not None else None
+    _validate_state_binding(
+        state,
+        binding,
+        metadata_contract_sha256=(
+            _metadata_sha256(binding_metadata) if binding_metadata is not None else None
+        ),
+    )
     deposition_id = state.get("deposition_id")
     deposition = _json_object(
         session.get(f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}", timeout=60),
@@ -513,6 +705,7 @@ def publish(  # noqa: C901
     metadata: Mapping[str, Any] | None = None,
     *,
     api_base: str = ZENODO_API_BASE,
+    release_binding: Any | None = None,
 ) -> dict[str, Any]:
     """Irreversibly publish a deposition admitted by a draft verification receipt.
 
@@ -524,6 +717,21 @@ def publish(  # noqa: C901
     if metadata is None:
         raise ZenodoPublisherError("publish requires the exact expected metadata")
     normalized_metadata = _validate_metadata(metadata)
+    binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    file_metadata = (
+        _validate_release_binding_metadata(normalized_metadata, binding)
+        if binding is not None
+        else None
+    )
+    _validate_state_binding(
+        state,
+        binding,
+        metadata_contract_sha256=(
+            _metadata_sha256(file_metadata or normalized_metadata)
+            if binding is not None
+            else _metadata_sha256(normalized_metadata)
+        ),
+    )
     if bool(state.get("submitted")):
         raise ZenodoPublisherError("Zenodo deposition is already published")
     expected_files, file_problems = _file_inventory(state)
@@ -541,6 +749,14 @@ def publish(  # noqa: C901
         raise ZenodoPublisherError("verification receipt metadata does not match expected metadata")
     if receipt.get("source_tag") != _source_tag(normalized_metadata):
         raise ZenodoPublisherError("verification receipt source tag does not match metadata")
+    if state.get("release_binding") is not None and receipt.get("release_binding") != state.get(
+        "release_binding"
+    ):
+        raise ZenodoPublisherError("verification receipt release binding does not match state")
+    if state.get("release_binding") is not None and receipt.get(
+        "manifest_metadata_sha256"
+    ) != state["release_binding"].get("metadata_sha256"):
+        raise ZenodoPublisherError("verification receipt metadata checksum does not match state")
     receipt_files = receipt.get("files")
     expected_receipt_files = [
         {"name": name, "size": item["size"], "sha256": item["sha256"]}
@@ -559,6 +775,8 @@ def publish(  # noqa: C901
         if published.get(key) != state.get(key):
             raise ZenodoPublisherError(f"Zenodo publish response changed {key}")
     published["files"] = list(state["files"])
+    if state.get("release_binding") is not None:
+        published["release_binding"] = dict(state["release_binding"])
     published["verification_receipt"] = dict(receipt)
     published["published_from_receipt_sha256"] = receipt["integrity"]["receipt_sha256"]
     return _seal_state(published)
@@ -570,6 +788,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     metadata: Mapping[str, Any],
     *,
     api_base: str = ZENODO_API_BASE,
+    release_binding: Any | None = None,
 ) -> dict[str, Any]:
     """Verify a draft or published deposition and, on pass, seal a receipt.
 
@@ -579,6 +798,21 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     """
     _validate_state_for_operation(state)
     normalized_metadata = _validate_metadata(metadata)
+    binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    file_metadata = (
+        _validate_release_binding_metadata(normalized_metadata, binding)
+        if binding is not None
+        else None
+    )
+    _validate_state_binding(
+        state,
+        binding,
+        metadata_contract_sha256=(
+            _metadata_sha256(file_metadata or normalized_metadata)
+            if binding is not None
+            else _metadata_sha256(normalized_metadata)
+        ),
+    )
     deposition_id = state.get("deposition_id")
     remote = _json_object(
         session.get(f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}", timeout=60),
@@ -703,6 +937,14 @@ def verify(  # noqa: C901, PLR0912, PLR0915
                 "metadata_sha256": _metadata_sha256(normalized_metadata),
                 "source_tag": source_tag,
                 "files": receipt_files,
+                **(
+                    {
+                        "release_binding": dict(state["release_binding"]),
+                        "manifest_metadata_sha256": state["release_binding"]["metadata_sha256"],
+                    }
+                    if state.get("release_binding") is not None
+                    else {}
+                ),
             },
             "integrity",
             ZENODO_VERIFICATION_SCHEMA,
@@ -754,6 +996,7 @@ __all__ = [
     "ZENODO_STATE_SCHEMA",
     "ZENODO_VERIFICATION_SCHEMA",
     "ZenodoPublisherError",
+    "build_release_binding",
     "build_session",
     "load_dataset_metadata",
     "load_state",

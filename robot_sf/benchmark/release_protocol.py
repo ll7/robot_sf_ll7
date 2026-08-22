@@ -33,6 +33,7 @@ HISTORICAL_ZENODO_CONCEPT_DOIS = frozenset(
     }
 )
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
@@ -115,6 +116,8 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    metadata_path: Path | None = None
+    metadata_sha256: str | None = None
 
 
 def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> Path:
@@ -371,6 +374,8 @@ def _load_v02_contract(  # noqa: C901
         "snqi_claim_policy": None,
         "concept_doi": None,
         "version_doi": None,
+        "metadata_path": None,
+        "metadata_sha256": None,
     }
     if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         return defaults
@@ -412,6 +417,30 @@ def _load_v02_contract(  # noqa: C901
         or version_doi in HISTORICAL_ZENODO_CONCEPT_DOIS
     ):
         raise ValueError("publication.version_doi must name the reserved Zenodo version")
+
+    # The benchmark-data route must bind every direct Zenodo operation to the
+    # exact metadata file that was reviewed.  Older synthetic v0.2 fixtures and
+    # non-benchmark release manifests remain compatible when they do not opt
+    # into the benchmark-data release kind.
+    metadata_path: Path | None = None
+    metadata_sha256: str | None = None
+    metadata_declared = (
+        payload.get("release_kind") == "benchmark-data"
+        or "metadata_path" in publication
+        or "metadata_sha256" in publication
+    )
+    if metadata_declared:
+        metadata_path = _resolve_required_file(
+            manifest_path,
+            publication.get("metadata_path"),
+            "publication.metadata_path",
+        )
+        metadata_sha256 = str(publication.get("metadata_sha256", "")).strip().lower()
+        if _SHA256_RE.fullmatch(metadata_sha256) is None:
+            raise ValueError("publication.metadata_sha256 must be a 64-character SHA-256")
+        observed_sha256 = _sha256_file(metadata_path)
+        if observed_sha256 != metadata_sha256:
+            raise ValueError("publication.metadata_sha256 does not match publication.metadata_path")
     return {
         "latest_main_base_commit": latest_main_base_commit,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
@@ -432,6 +461,8 @@ def _load_v02_contract(  # noqa: C901
         "snqi_claim_policy": "advisory_no_ranking",
         "concept_doi": concept_doi,
         "version_doi": version_doi,
+        "metadata_path": metadata_path,
+        "metadata_sha256": metadata_sha256,
     }
 
 
@@ -546,6 +577,7 @@ def validate_release_manifest(
     _validate_release_seed_policy(manifest, cfg, problems)
     _validate_release_planners(manifest, cfg, problems)
     _validate_v02_contract(manifest, cfg, problems)
+    _validate_release_metadata_contract(manifest, problems)
 
     return {
         "manifest_path": _repo_relative(manifest.path),
@@ -757,6 +789,30 @@ def _validate_v02_contract(  # noqa: C901
         problems.append("publication concept and version DOI must be distinct")
 
 
+def _validate_release_metadata_contract(
+    manifest: BenchmarkReleaseManifest,
+    problems: list[str],
+) -> None:
+    """Recheck benchmark publication metadata path and bytes at validation time."""
+    if (
+        manifest.release_kind != "benchmark-data"
+        and manifest.metadata_path is None
+        and manifest.metadata_sha256 is None
+    ):
+        return
+    if manifest.metadata_path is None:
+        problems.append("publication.metadata_path is missing")
+        return
+    if not manifest.metadata_path.is_file():
+        problems.append("publication.metadata_path is missing or not a file")
+        return
+    if manifest.metadata_sha256 is None or _SHA256_RE.fullmatch(manifest.metadata_sha256) is None:
+        problems.append("publication.metadata_sha256 is missing or invalid")
+        return
+    if _sha256_file(manifest.metadata_path) != manifest.metadata_sha256:
+        problems.append("publication.metadata_sha256 does not match publication.metadata_path")
+
+
 def build_release_provenance(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -791,6 +847,10 @@ def build_release_provenance(
         "publication_channel": manifest.publication_channel,
         "concept_doi": manifest.concept_doi,
         "version_doi": manifest.version_doi,
+        "metadata_path": (
+            _repo_relative(manifest.metadata_path) if manifest.metadata_path is not None else None
+        ),
+        "metadata_sha256": manifest.metadata_sha256,
     }
 
 
@@ -862,6 +922,10 @@ def build_resolved_release_manifest(
             "publication_channel": manifest.publication_channel,
             "concept_doi": manifest.concept_doi,
             "version_doi": manifest.version_doi,
+            "metadata_path": (
+                _repo_relative(manifest.metadata_path) if manifest.metadata_path else None
+            ),
+            "metadata_sha256": manifest.metadata_sha256,
         },
         "matrix": {
             "expected_episode_cells": manifest.expected_episode_cells,

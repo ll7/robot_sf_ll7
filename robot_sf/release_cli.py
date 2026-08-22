@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark import zenodo_publisher
 from robot_sf.benchmark.release_doctor import collect_release_doctor_report
+from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 
 if TYPE_CHECKING:
     import argparse
@@ -25,6 +26,11 @@ def build_subparser(subparsers: Any) -> None:
         parser.add_argument("--token-file", type=Path, required=True)
         parser.add_argument("--state", type=Path, required=True)
         parser.add_argument("--api-base", default=zenodo_publisher.ZENODO_API_BASE)
+        parser.add_argument(
+            "--manifest",
+            type=Path,
+            help="Validated benchmark release manifest to bind Zenodo operations to.",
+        )
         if mode in {"reserve", "publish", "verify"}:
             parser.add_argument("--metadata", type=Path, required=True)
         if mode == "upload":
@@ -65,6 +71,30 @@ def _print(payload: dict[str, Any]) -> None:
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
+def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]] | None:
+    """Load and validate an optional benchmark manifest for Zenodo operations.
+
+    Returns:
+        The parsed manifest and credential-free publisher binding, or ``None``
+        for the generic publisher route.
+    """
+    manifest_path = getattr(args, "manifest", None)
+    if manifest_path is None:
+        return None
+    manifest = load_release_manifest(Path(manifest_path).resolve())
+    validation = validate_release_manifest(manifest)
+    if validation["status"] != "valid":
+        problems = "; ".join(str(problem) for problem in validation["problems"])
+        raise zenodo_publisher.ZenodoPublisherError(f"release manifest is invalid: {problems}")
+    binding = zenodo_publisher.build_release_binding(manifest)
+    metadata_path = getattr(args, "metadata", None)
+    if metadata_path is not None and Path(metadata_path).resolve() != binding["metadata_path"]:
+        raise zenodo_publisher.ZenodoPublisherError(
+            "Zenodo metadata path does not match the release manifest"
+        )
+    return manifest, binding
+
+
 def handle(args: argparse.Namespace) -> int:
     """Dispatch release operations and return a process exit code.
 
@@ -96,37 +126,83 @@ def handle(args: argparse.Namespace) -> int:
         _print(report)
         return 0 if report["status"] == "pass" else 2
     try:
+        release_context = _load_release_binding(args)
+        release_manifest = release_context[0] if release_context is not None else None
+        release_binding = release_context[1] if release_context is not None else None
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode == "reserve":
-            metadata = zenodo_publisher.load_dataset_metadata(args.metadata)
-            state = zenodo_publisher.reserve(session, metadata, api_base=args.api_base)
+            metadata_kwargs = (
+                {
+                    "expected_source_tag": release_manifest.release_tag,
+                    "expected_metadata_sha256": release_manifest.metadata_sha256,
+                }
+                if release_manifest is not None
+                else {}
+            )
+            metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
+            operation_kwargs = (
+                {"release_binding": release_binding} if release_binding is not None else {}
+            )
+            state = zenodo_publisher.reserve(
+                session, metadata, api_base=args.api_base, **operation_kwargs
+            )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
         state = zenodo_publisher.load_state(args.state)
         if args.zenodo_mode == "upload":
-            state = zenodo_publisher.upload(session, state, args.files, api_base=args.api_base)
+            operation_kwargs = (
+                {"release_binding": release_binding} if release_binding is not None else {}
+            )
+            state = zenodo_publisher.upload(
+                session, state, args.files, api_base=args.api_base, **operation_kwargs
+            )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
         if args.zenodo_mode == "publish":
-            metadata = zenodo_publisher.load_dataset_metadata(args.metadata)
+            metadata_kwargs = (
+                {
+                    "expected_source_tag": release_manifest.release_tag,
+                    "expected_metadata_sha256": release_manifest.metadata_sha256,
+                }
+                if release_manifest is not None
+                else {}
+            )
+            metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
+            operation_kwargs = (
+                {"release_binding": release_binding} if release_binding is not None else {}
+            )
             state = zenodo_publisher.publish(
                 session,
                 state,
                 metadata,
                 api_base=args.api_base,
+                **operation_kwargs,
             )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
-        metadata = zenodo_publisher.load_dataset_metadata(args.metadata)
-        report = zenodo_publisher.verify(session, state, metadata, api_base=args.api_base)
+        metadata_kwargs = (
+            {
+                "expected_source_tag": release_manifest.release_tag,
+                "expected_metadata_sha256": release_manifest.metadata_sha256,
+            }
+            if release_manifest is not None
+            else {}
+        )
+        metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
+        operation_kwargs = (
+            {"release_binding": release_binding} if release_binding is not None else {}
+        )
+        report = zenodo_publisher.verify(
+            session, state, metadata, api_base=args.api_base, **operation_kwargs
+        )
         if report.get("status") == "pass":
             zenodo_publisher.write_state(args.state, state)
         _print(report)
         return 0 if report["status"] == "pass" else 2
-    except zenodo_publisher.ZenodoPublisherError as exc:
+    except (FileNotFoundError, ValueError, zenodo_publisher.ZenodoPublisherError) as exc:
         _print({"status": "blocked", "reason": str(exc)})
         return 2
 

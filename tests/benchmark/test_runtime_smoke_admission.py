@@ -292,6 +292,21 @@ def _admit(result: Path, planners: tuple[str, ...], tmp_path: Path) -> dict:
     )
 
 
+def _set_episode_runtime(result: Path, planner: str, runtime: dict[str, object]) -> None:
+    """Update one fixture row and its provenance-sidecar byte hash."""
+    episodes_path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
+    row = json.loads(episodes_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["planner_runtime"] = runtime
+    _write_json(episodes_path, row)
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    artifact = next(
+        item for item in sidecar["raw_artifacts"] if item.get("kind") == "episodes_jsonl"
+    )
+    artifact["sha256"] = sha256_file(episodes_path)
+    _write_json(sidecar_path, sidecar)
+
+
 def test_runtime_smoke_parsers_reject_malformed_or_wrong_shaped_inputs(tmp_path: Path) -> None:
     invalid_json = tmp_path / "invalid.json"
     invalid_json.write_text("{", encoding="utf-8")
@@ -550,38 +565,45 @@ def test_runtime_smoke_allows_planner_aggregate_not_applicable_learned_contract(
 
 
 @pytest.mark.parametrize("reason", [None, ""])
+@pytest.mark.parametrize("surface", ["summary", "row"])
 def test_runtime_smoke_allows_empty_generic_runtime_reason_when_unused(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     reason: object,
+    surface: str,
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     summary_path = result.parent.parent / "reports/campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
-        "planner_runtime": {
-            "fallback_triggered": False,
-            "fallback_reason": reason,
-        }
+    runtime = {
+        "fallback_triggered": False,
+        "fallback_reason": reason,
     }
-    _write_json(summary_path, summary)
+    if surface == "summary":
+        summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {"planner_runtime": runtime}
+        _write_json(summary_path, summary)
+    else:
+        _set_episode_runtime(result, planners[0], runtime)
 
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
 
 
+@pytest.mark.parametrize("surface", ["summary", "row"])
 def test_runtime_smoke_rejects_nonempty_generic_runtime_reason_when_unused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, surface: str
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     summary_path = result.parent.parent / "reports/campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
-        "planner_runtime": {
-            "fallback_triggered": False,
-            "fallback_reason": "unexpected runtime fallback",
-        }
+    runtime = {
+        "fallback_triggered": False,
+        "fallback_reason": "unexpected runtime fallback",
     }
-    _write_json(summary_path, summary)
+    if surface == "summary":
+        summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {"planner_runtime": runtime}
+        _write_json(summary_path, summary)
+    else:
+        _set_episode_runtime(result, planners[0], runtime)
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
         _admit(result, planners, tmp_path)
@@ -727,13 +749,48 @@ def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
     assert admitted["status"] == "admitted"
 
 
-def test_runtime_smoke_rejects_positive_runtime_fallback_counter(
+def test_runtime_smoke_allows_guarded_ppo_intrinsic_safe_shield_counter(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs/guarded_ppo__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
     row["algorithm_metadata"]["guard_stats"] = {"fallback_safe": 1}
+    row["algorithm_metadata"]["shield_stats"] = {
+        "decision_counts": {"fallback_safe": 1},
+        "last_decision": {
+            "fallback_controller_state": {
+                "policy": "RiskDWAPlannerAdapter",
+                "prior_available": False,
+            }
+        },
+    }
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize(
+    ("planner", "guard_stats"),
+    [
+        ("guarded_ppo", {"fallback_best_effort": 1}),
+        ("prediction_planner", {"fallback_safe": 1}),
+    ],
+)
+def test_runtime_smoke_rejects_noncanonical_guard_fallback_counter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    planner: str,
+    guard_stats: dict[str, int],
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["guard_stats"] = guard_stats
     _write_json(episode_path, row)
     sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))

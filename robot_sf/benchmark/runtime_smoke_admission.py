@@ -348,6 +348,30 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
     """
     if _is_campaign_preflight_unknown(path, value):
         return True
+    # Guarded PPO is the fixed arm at index 11 in the canonical roster. Its
+    # Risk-DWA safety-shield intervention is part of the declared composite
+    # planner, not a missing-policy or degraded-runtime fallback. Keep the
+    # exception exact: best-effort/uncertainty fallbacks and every other arm
+    # continue to fail closed.
+    if (
+        re.fullmatch(
+            r"runs\[11\]\.rows\[0\]\.algorithm_metadata\."
+            r"(?:guard_stats|shield_stats\.decision_counts)\.fallback_safe",
+            path,
+        )
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    ):
+        return True
+    if (
+        path
+        == "runs[11].rows[0].algorithm_metadata.shield_stats.last_decision."
+        "fallback_controller_state"
+        and isinstance(value, dict)
+    ):
+        return True
     if path.startswith("planner_rows[") and key == "benchmark_success":
         return str(value).strip().lower() == "true"
     if (
@@ -364,8 +388,11 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
         return True
     if (
         re.fullmatch(
-            r"runs\[\d+\]\.summary(?:_artifact)?\.(?:preflight\.)?"
-            r"algorithm_metadata_contract\.planner_runtime\.fallback_reason",
+            r"runs\[\d+\]\.(?:"
+            r"rows\[\d+\]\.algorithm_metadata\.planner_runtime"
+            r"|summary(?:_artifact)?\.(?:preflight\.)?"
+            r"algorithm_metadata_contract\.planner_runtime"
+            r")\.fallback_reason",
             path,
         )
         and (value is None or value == "")

@@ -408,8 +408,10 @@ _FAST_FILES = {
     "test_export_trace_dossier.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
+    "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_checkpoint_staging_receipt.py",
+    "test_fallback_policy.py",
     "test_release_acceptance.py",
     "test_release_admission_edge_cases.py",
     "test_release_assurance_case.py",
@@ -418,6 +420,8 @@ _FAST_FILES = {
     "test_release_doctor_edge_cases.py",
     "test_release_protocol.py",
     "test_release_protocol_edge_cases.py",
+    "test_release_resume_admission.py",
+    "test_runtime_smoke_admission.py",
     "test_s30_h600_runtime_smoke_contract.py",
     "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",

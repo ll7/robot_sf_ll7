@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
+DEV_GUIDE_REFERENCE = ROOT / "docs" / "dev_guide_reference.md"
 VSCODE_TASKS = ROOT / ".vscode" / "tasks.json"
 
 
@@ -20,7 +20,7 @@ def _load_vscode_tasks() -> dict[str, str]:
 
 def test_dev_guide_documents_typecheck_as_advisory() -> None:
     """Merge guidance should match the current exit-zero typecheck behavior."""
-    text = DEV_GUIDE.read_text(encoding="utf-8")
+    text = DEV_GUIDE_REFERENCE.read_text(encoding="utf-8")
 
     assert "not a PR-readiness merge blocker by itself" in text
     assert "PRs are not blocked solely because the advisory `ty` phase reports findings" in text

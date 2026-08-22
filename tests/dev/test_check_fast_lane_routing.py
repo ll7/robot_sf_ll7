@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from scripts.dev.check_fast_lane_routing import (
     FastLanePolicy,
     audit_changed_modules,
+    load_fast_lane_policy,
 )
 
 
@@ -62,6 +65,17 @@ def test_registered_contracts_are_not_reported() -> None:
 
     assert all(item.policy_state == "registered-fast" for item in observations)
     assert all(not item.needs_attention for item in observations)
+
+
+def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None:
+    """Release-smoke producer coverage must reach the hosted changed-line combiner."""
+    policy = load_fast_lane_policy(Path("tests/conftest.py").read_text(encoding="utf-8"))
+
+    assert {
+        "test_checkpoint_provenance_issue_4970.py",
+        "test_predictive_mppi_planner.py",
+        "test_runtime_smoke_admission.py",
+    } <= policy.fast_files
 
 
 def test_simulation_and_campaign_tests_remain_slow() -> None:

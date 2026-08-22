@@ -18,6 +18,7 @@ Options:
   --base REF               Base ref; defaults to origin/main.
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
   --dry-run                Run the preflight without invoking Git.
+  --exec COMMAND [ARG...]  Run an explicit command from inside the new worktree.
   -h, --help               Show this help and exit.
 
 The default threshold is 2 GiB (ROBOT_SF_WORKTREE_MIN_FREE_BYTES).  After
@@ -29,6 +30,11 @@ Use scripts/dev/bootstrap_worktree.sh only when a worktree-local environment is
 explicitly required.  For reclaim guidance, run:
 
   scripts/dev/check_worktree_capacity.py --inventory --json
+
+When --exec is supplied, the command is launched in the created worktree even
+though this script itself may have been invoked from another checkout.  The
+worktree is left in place when the command fails so its diagnostics remain
+available for inspection.
 EOF
 }
 
@@ -37,6 +43,7 @@ branch_name=""
 base_ref="origin/main"
 minimum_free_bytes="${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}"
 dry_run=0
+command_args=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -63,6 +70,15 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       dry_run=1
       shift
+      ;;
+    --exec)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "--exec requires a command" >&2
+        exit 2
+      fi
+      command_args=("$@")
+      break
       ;;
     -h|--help)
       show_help
@@ -128,3 +144,11 @@ git worktree prune
 git worktree add -b "$branch_name" "$worktree_path" "$base_ref"
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
+
+if [[ "${#command_args[@]}" -gt 0 ]]; then
+  echo "create_worktree: executing supplied command in $worktree_path"
+  (
+    cd -- "$worktree_path"
+    exec "${command_args[@]}"
+  )
+fi

@@ -16,9 +16,10 @@ The checker never mutates scenario or map files and performs no simulation
 execution beyond scenario loading. Its report is deterministic for a given
 scenario set.
 
-Exit-code policy: findings are informational by default so the first landing
-records existing known deviations without reddening CI; ``--fail-on-violation``
-promotes any finding to exit code 1 for later gate enforcement.
+Exit-code policy: findings are informational by default so existing known
+deviations remain visible without reddening local diagnostics. In
+``--fail-on-violation`` mode, an explicit exact-waiver file is required and
+any missing, stale, duplicate, or changed-evidence row returns exit code 2.
 """
 
 from __future__ import annotations
@@ -33,6 +34,12 @@ from robot_sf.training.scenario_loader import (
     build_robot_config_from_scenario,
     load_scenarios,
 )
+from scripts.validation.scenario_validation_waivers import (
+    WaiverValidationError,
+    canonical_repo_path,
+    load_waiver_rows,
+    validate_exact_waivers,
+)
 
 # The four pinned archetype scenario definitions (same set as the geometry
 # checker's DEFAULT_MAPS, sourced from their scenario/config surface).
@@ -42,6 +49,7 @@ DEFAULT_SCENARIOS = (
     "configs/scenarios/archetypes/classic_group_crossing.yaml",
     "configs/scenarios/archetypes/classic_crossing.yaml",
 )
+DEFAULT_WAIVER_FILE = Path("configs/scenarios/archetype_validation_waivers.yaml")
 
 # Declared simulation_config keys that pass straight through to the runtime
 # SimulationSettings attribute of the same name.
@@ -195,6 +203,66 @@ def format_console_table(report: ScenarioParameterReport) -> str:
     return "\n".join(lines)
 
 
+_PARAMETER_IDENTITY_FIELDS = ("source", "scenario", "parameter")
+
+
+def _parameter_findings(reports: list[ScenarioParameterReport]) -> list[dict[str, object]]:
+    """Convert current parameter findings into exact-waiver identity rows."""
+
+    findings: list[dict[str, object]] = []
+    for report in reports:
+        for check in report.checks:
+            if not check.match or check.driver == "unresolved":
+                findings.append(
+                    {
+                        "source": canonical_repo_path(report.source),
+                        "scenario": report.scenario,
+                        "parameter": check.parameter,
+                        "expected_driver": check.driver,
+                        "expected_declared_value": check.declared_value,
+                        "expected_runtime_value": check.runtime_value,
+                    }
+                )
+    return findings
+
+
+def _validate_parameter_waiver_shape(row: dict[str, object], index: int) -> None:
+    """Require exact identity and evidence fields for one parameter waiver."""
+
+    prefix = f"parameters[{index}]"
+    for field_name in ("source", "scenario", "parameter", "expected_driver"):
+        if not isinstance(row.get(field_name), str) or not str(row[field_name]).strip():
+            raise WaiverValidationError(f"{prefix} requires non-empty {field_name}")
+    for field_name in ("expected_declared_value", "expected_runtime_value"):
+        if field_name not in row:
+            raise WaiverValidationError(f"{prefix} is missing field: {field_name}")
+
+
+def _parameter_evidence_matches(actual: dict[str, object], waiver: dict[str, object]) -> bool:
+    """Compare the expected driver and declared/runtime values for one row."""
+
+    return (
+        actual["expected_driver"] == waiver["expected_driver"]
+        and _values_match(actual["expected_declared_value"], waiver["expected_declared_value"])
+        and _values_match(actual["expected_runtime_value"], waiver["expected_runtime_value"])
+    )
+
+
+def enforce_parameter_waivers(reports: list[ScenarioParameterReport], waiver_file: Path) -> None:
+    """Fail closed unless exact current parameter findings are waived."""
+
+    waiver_rows = load_waiver_rows(waiver_file, "parameters")
+    for index, row in enumerate(waiver_rows):
+        _validate_parameter_waiver_shape(row, index)
+    validate_exact_waivers(
+        _parameter_findings(reports),
+        waiver_rows,
+        identity_fields=_PARAMETER_IDENTITY_FIELDS,
+        evidence_matches=_parameter_evidence_matches,
+        label="parameter",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point returning a process exit code."""
 
@@ -205,11 +273,16 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="Scenario YAML path; repeatable. Defaults to the four pinned archetypes.",
     )
+    parser.add_argument(
+        "--waiver-file",
+        type=Path,
+        help="Exact waiver YAML required with --fail-on-violation.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit the JSON report only.")
     parser.add_argument(
         "--fail-on-violation",
         action="store_true",
-        help="Exit 1 when any finding exists (for later CI enforcement).",
+        help="Require exact waivers for every finding (for CI enforcement).",
     )
     args = parser.parse_args(argv)
 
@@ -232,8 +305,15 @@ def main(argv: list[str] | None = None) -> int:
             print(format_console_table(report))
         print(f"\ntotal findings: {total}")
 
-    if args.fail_on_violation and total > 0:
-        return 1
+    if args.fail_on_violation:
+        if args.waiver_file is None:
+            print("ERROR: --fail-on-violation requires --waiver-file", file=sys.stderr)
+            return 2
+        try:
+            enforce_parameter_waivers(reports, args.waiver_file)
+        except WaiverValidationError as exc:
+            print(f"ERROR: parameter waiver validation failed: {exc}", file=sys.stderr)
+            return 2
     return 0
 
 

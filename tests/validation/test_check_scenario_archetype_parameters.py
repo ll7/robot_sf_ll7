@@ -135,6 +135,11 @@ def test_cli_default_exit_zero_and_fail_flag(tmp_path: Path, capsys) -> None:
     assert "all declared parameters resolve to a runtime driver" in out or "[MISS]" in out
 
 
+def test_cli_fail_flag_requires_an_explicit_waiver_file(capsys) -> None:
+    assert main(["--fail-on-violation"]) == 2
+    assert "requires --waiver-file" in capsys.readouterr().err
+
+
 def test_default_scenarios_are_the_four_pinned_archetypes() -> None:
     assert len(DEFAULT_SCENARIOS) == 4
     for scenario in DEFAULT_SCENARIOS:

@@ -393,6 +393,32 @@ jobs:
           CI_STEP_TIMEOUT_SECONDS: "300"
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
+  scenario-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact evaluated head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Enforce pinned geometry contract
+        run: >-
+          uv run python scripts/validation/check_scenario_archetype_geometry.py
+          --fail-on-violation
+          --waiver-file configs/scenarios/archetype_validation_waivers.yaml
+
+      - name: Enforce pinned parameter contract
+        run: >-
+          uv run python scripts/validation/check_scenario_archetype_parameters.py
+          --fail-on-violation
+          --waiver-file configs/scenarios/archetype_validation_waivers.yaml
+
   reproducibility-check:
     # Run on pull requests so hosted reproducibility evidence is green rather
     # than skipped; retain manual dispatch for standalone diagnostics.
@@ -718,6 +744,7 @@ jobs:
       - compat-matrix
       - fast-pysf-compat
       - smoke-artifacts
+      - scenario-validation
       - xdist-scratch-isolation
       - wheel-smoke-install
       - examples-smoke
@@ -756,6 +783,10 @@ jobs:
           fi
           if [[ "${{ needs.smoke-artifacts.result }}" != "success" ]]; then
             echo "smoke-artifacts finished with ${{ needs.smoke-artifacts.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.scenario-validation.result }}" != "success" ]]; then
+            echo "scenario-validation finished with ${{ needs.scenario-validation.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.xdist-scratch-isolation.result }}" != "success" ]]; then

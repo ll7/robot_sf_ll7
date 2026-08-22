@@ -125,7 +125,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             algo=f"algo-{index}",
             algo_config_path=tmp_path / planner_configs[planner],
             benchmark_profile="baseline-safe",
-            suite_key="default",
+            suite_key="francis2023",
             total_jobs=1,
             written=1,
             horizon=600,
@@ -511,6 +511,40 @@ def test_runtime_smoke_allows_empty_foresight_fallback_reason_when_unused(
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
     sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
     _write_json(sidecar_path, sidecar)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize("reason", [None, ""])
+def test_runtime_smoke_allows_empty_summary_foresight_reason_when_unused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
+        "planner_runtime": {
+            "foresight_prediction": {
+                "fallback_used": False,
+                "fallback_reason": reason,
+            }
+        }
+    }
+    _write_json(summary_path, summary)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+def test_runtime_smoke_allows_planner_aggregate_not_applicable_learned_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["planner_rows"][0]["learned_policy_contract_status"] = "not_applicable"
+    _write_json(summary_path, summary)
 
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
 

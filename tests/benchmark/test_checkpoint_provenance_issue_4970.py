@@ -312,6 +312,14 @@ def test_campaign_manifest_folds_runtime_checkpoint_status_per_kinematics() -> N
                     "checkpoint_sha256": "a" * 64,
                     "load_succeeded": None,
                     "fallback_triggered": None,
+                    "references": [
+                        {
+                            "model_id": "ga3c_cadrl_iros18",
+                            "load_succeeded": None,
+                            "fallback_triggered": None,
+                            "load_status": "not_run",
+                        }
+                    ],
                     "runtime": [],
                 },
             }
@@ -343,4 +351,64 @@ def test_campaign_manifest_folds_runtime_checkpoint_status_per_kinematics() -> N
     assert provenance["fallback_triggered"] is False
     assert provenance["checkpoint_sha256"] == "b" * 64
     assert provenance["runtime"][0]["kinematics"] == "differential_drive"
+    assert provenance["references"][0]["load_succeeded"] is True
+    assert provenance["references"][0]["fallback_triggered"] is False
+    assert provenance["references"][0]["load_status"] == "loaded"
     assert runs[0]["planner"]["checkpoint_provenance"]["load_status"] == "loaded"
+
+
+def test_campaign_manifest_folds_nested_foresight_checkpoint_status() -> None:
+    """Predictive adapters bind their nested learned predictor to the final manifest."""
+    model_id = "predictive_proxy_selected_v1"
+    manifest = {
+        "planners": [
+            {
+                "key": "predictive_mppi",
+                "checkpoint_provenance": {
+                    "status": "not_run",
+                    "model_id": model_id,
+                    "checkpoint_sha256": "a" * 64,
+                    "load_succeeded": None,
+                    "fallback_triggered": None,
+                    "references": [
+                        {
+                            "model_id": model_id,
+                            "load_succeeded": None,
+                            "fallback_triggered": None,
+                            "load_status": "not_run",
+                        }
+                    ],
+                    "runtime": [],
+                },
+            }
+        ]
+    }
+    runs = [
+        {
+            "planner": {"key": "predictive_mppi", "kinematics": "differential_drive"},
+            "status": "ok",
+            "summary": {
+                "algorithm_metadata_contract": {
+                    "planner_runtime": {
+                        "foresight_prediction": {
+                            "requested_model_id": model_id,
+                            "requested_checkpoint_sha256": "a" * 64,
+                            "observed_checkpoint_sha256": "a" * 64,
+                            "load_status": "loaded",
+                            "fallback_used": False,
+                            "load_error": None,
+                        }
+                    }
+                }
+            },
+        }
+    ]
+
+    _finalize_checkpoint_provenance(manifest, runs)
+
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    assert provenance["status"] == "loaded"
+    assert provenance["load_succeeded"] is True
+    assert provenance["fallback_triggered"] is False
+    assert provenance["runtime"][0]["hash_source"] == "runtime_observed"
+    assert provenance["references"][0]["load_status"] == "loaded"

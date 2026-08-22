@@ -1429,6 +1429,27 @@ def _runtime_checkpoint_record(
         return None
     contract = summary.get("algorithm_metadata_contract")
     runtime = contract.get("checkpoint_provenance") if isinstance(contract, dict) else None
+    planner_runtime = contract.get("planner_runtime") if isinstance(contract, dict) else None
+    if not isinstance(runtime, dict) and isinstance(planner_runtime, dict):
+        runtime = planner_runtime.get("checkpoint_provenance")
+    if not isinstance(runtime, dict):
+        foresight = contract.get("foresight_prediction") if isinstance(contract, dict) else None
+        if not isinstance(foresight, dict) and isinstance(planner_runtime, dict):
+            foresight = planner_runtime.get("foresight_prediction")
+        if isinstance(foresight, dict):
+            load_status = str(foresight.get("load_status", "")).strip().lower()
+            fallback_used = foresight.get("fallback_used")
+            observed_sha = foresight.get("observed_checkpoint_sha256")
+            requested_sha = foresight.get("requested_checkpoint_sha256")
+            runtime = {
+                "model_id": foresight.get("requested_model_id"),
+                "checkpoint_sha256": observed_sha or requested_sha,
+                "hash_source": "runtime_observed" if observed_sha else "registry_declared",
+                "load_succeeded": load_status == "loaded" and fallback_used is False,
+                "fallback_triggered": fallback_used,
+                "load_status": load_status or "unknown",
+                "load_error": foresight.get("load_error"),
+            }
     if not isinstance(runtime, dict):
         preflight = summary.get("preflight")
         if isinstance(preflight, dict) and preflight.get("status") == "fallback":
@@ -1449,27 +1470,70 @@ def _runtime_checkpoint_record(
     }
 
 
+def _update_checkpoint_reference_runtime(
+    provenance: dict[str, Any], runtime_records: list[dict[str, Any]]
+) -> None:
+    """Fold matching runtime outcomes into preflight checkpoint references."""
+    references = provenance.get("references")
+    if not isinstance(references, list):
+        return
+    for reference in references:
+        if not isinstance(reference, dict):
+            continue
+        model_id = reference.get("model_id")
+        matching = [
+            item
+            for item in runtime_records
+            if isinstance(item, dict) and item.get("model_id") == model_id
+        ]
+        if not matching:
+            continue
+        reference_loads = [
+            item.get("load_succeeded")
+            for item in matching
+            if isinstance(item.get("load_succeeded"), bool)
+        ]
+        reference_fallbacks = [
+            item.get("fallback_triggered")
+            for item in matching
+            if isinstance(item.get("fallback_triggered"), bool)
+        ]
+        reference["load_succeeded"] = all(reference_loads) if reference_loads else None
+        reference["fallback_triggered"] = (
+            any(reference_fallbacks) if reference_fallbacks else None
+        )
+        if reference["fallback_triggered"] is True:
+            reference["load_status"] = "fallback"
+        elif reference["load_succeeded"] is True:
+            reference["load_status"] = "loaded"
+        elif reference["load_succeeded"] is False:
+            reference["load_status"] = "load_failed"
+        else:
+            reference["load_status"] = "runtime_not_observed"
+
+
 def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
     """Summarize kinematics-specific load results on the planner-level block."""
-    runtime_records = provenance.get("runtime")
-    if not isinstance(runtime_records, list) or not runtime_records:
+    raw_runtime_records = provenance.get("runtime")
+    if not isinstance(raw_runtime_records, list) or not raw_runtime_records:
         return
+    runtime_records = [item for item in raw_runtime_records if isinstance(item, dict)]
     load_values = [
-        item.get("load_succeeded")
+        item["load_succeeded"]
         for item in runtime_records
-        if isinstance(item, dict) and isinstance(item.get("load_succeeded"), bool)
+        if isinstance(item.get("load_succeeded"), bool)
     ]
     fallback_values = [
-        item.get("fallback_triggered")
+        item["fallback_triggered"]
         for item in runtime_records
-        if isinstance(item, dict) and isinstance(item.get("fallback_triggered"), bool)
+        if isinstance(item.get("fallback_triggered"), bool)
     ]
     provenance["load_succeeded"] = all(load_values) if load_values else None
     provenance["fallback_triggered"] = any(fallback_values) if fallback_values else None
     runtime_hashes = {
         str(item["checkpoint_sha256"])
         for item in runtime_records
-        if isinstance(item, dict) and item.get("checkpoint_sha256") is not None
+        if item.get("checkpoint_sha256") is not None
     }
     if len(runtime_hashes) == 1:
         provenance["checkpoint_sha256"] = runtime_hashes.pop()
@@ -1481,6 +1545,7 @@ def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
         provenance["status"] = "load_failed"
     else:
         provenance["status"] = "runtime_not_observed"
+    _update_checkpoint_reference_runtime(provenance, runtime_records)
 
 
 def _finalize_checkpoint_provenance(

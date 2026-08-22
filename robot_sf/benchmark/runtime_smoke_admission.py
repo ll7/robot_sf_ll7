@@ -33,7 +33,7 @@ RUNTIME_SMOKE_CONFIG = Path(
 RUNTIME_SMOKE_HORIZON = 600
 RUNTIME_SMOKE_KINEMATICS = "differential_drive"
 RUNTIME_SMOKE_MAX_AGE_HOURS = 24.0
-RUNTIME_SMOKE_SUITE_KEY = "default"
+RUNTIME_SMOKE_SUITE_KEY = "francis2023"
 RUNTIME_SMOKE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 RUNTIME_SMOKE_PLANNER_KEYS = (
     "prediction_planner",
@@ -352,12 +352,20 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
         return str(value).strip().lower() == "true"
     if (
         re.fullmatch(
-            r"runs\[\d+\]\.rows\[\d+\]\.algorithm_metadata\."
-            r"(?:planner_runtime\.)?foresight_prediction\.fallback_reason",
+            r"runs\[\d+\]\.(?:"
+            r"rows\[\d+\]\.algorithm_metadata\."
+            r"|summary(?:_artifact)?\.(?:preflight\.)?algorithm_metadata_contract\."
+            r")(?:(?:planner_runtime)\.)?foresight_prediction\.fallback_reason",
             path,
         )
         and (value is None or value == "")
         and parent.get("fallback_used") is False
+    ):
+        return True
+    if (
+        key == "learned_policy_contract_status"
+        and re.fullmatch(r"planner_rows\[\d+\]\.learned_policy_contract_status", path)
+        and str(value).strip().lower().replace(" ", "_") == "not_applicable"
     ):
         return True
     return _is_canonical_not_applicable_status(path, key, value)

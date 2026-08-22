@@ -27,7 +27,7 @@ from robot_sf.benchmark.termination_reason import (
     outcome_contradictions,
     route_complete_success,
 )
-from robot_sf.common.artifact_paths import resolve_artifact_path
+from robot_sf.common.artifact_paths import get_repository_root, resolve_artifact_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -409,7 +409,11 @@ def compute_fast_mode_and_cap(max_episodes: int) -> tuple[bool, int]:
 def _git_hash_fallback() -> str:
     """Return the current git hash or 'unknown' if unavailable."""
     try:
-        out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=get_repository_root(),
+            stderr=subprocess.DEVNULL,
+        )
         return out.decode().strip()
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
         logger.debug("_git_hash_fallback failed: {}", exc)

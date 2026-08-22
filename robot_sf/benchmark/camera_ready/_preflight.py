@@ -63,7 +63,11 @@ from robot_sf.benchmark.tuning_run_provenance import (
     build_launch_records,
 )
 from robot_sf.benchmark.utils import _config_hash
-from robot_sf.common.artifact_paths import ensure_canonical_tree, get_artifact_category_path
+from robot_sf.common.artifact_paths import (
+    ensure_canonical_tree,
+    get_artifact_category_path,
+    get_repository_root,
+)
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 
@@ -630,7 +634,10 @@ def _load_scenarios_and_route_clearance(
         RouteClearanceError: When a route centerline is geometrically infeasible.
     """
     scenarios = _load_campaign_scenarios(cfg)
-    check_campaign_scenario_maps_preflight(scenarios)
+    check_campaign_scenario_maps_preflight(
+        scenarios,
+        scenario_path=get_repository_root() / "scoped_scenarios.json",
+    )
     route_clearance_certifications = _load_route_clearance_certifications(
         cfg.route_clearance_certifications_path
     )

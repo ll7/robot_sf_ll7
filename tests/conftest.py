@@ -406,9 +406,39 @@ _FAST_FILES = {
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",
+    # Release admission, staging, doctor, and publisher suites are deterministic
+    # provenance/schema contracts for the benchmark-data release lane.
+    # The direct source/test pairs are required by the changed-coverage router
+    # when the release lane is evaluated against current main.
+    "test_artifact_publication.py",
+    "test_camera_ready_checkpoint_submit_preflight.py",
+    "test_camera_ready_subprocess_isolation.py",
+    "test_checkpoint_staging_receipt.py",
+    "test_fallback_policy.py",
+    "test_release_acceptance.py",
+    "test_release_admission_edge_cases.py",
+    "test_release_assurance_case.py",
+    "test_release_cli_edge_cases.py",
+    "test_release_doctor.py",
+    "test_release_doctor_edge_cases.py",
     "test_release_protocol.py",
+    "test_release_protocol_edge_cases.py",
+    "test_release_resume_admission.py",
+    "test_runtime_smoke_admission.py",
+    "test_s30_h600_runtime_smoke_contract.py",
+    "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",
     "test_trace_dossier_renderer.py",
+    "test_run_benchmark_release.py",
+    "test_zenodo_manifest_binding.py",
+    "test_zenodo_publisher.py",
+    "test_zenodo_publisher_edge_cases.py",
+    # SocNav runtime-adapter tests cover the changed fallback diagnostics in
+    # the planner modules without requiring an external benchmark dependency.
+    "test_socnav.py",
+    "test_socnav_prediction_module.py",
+    # Both CLI test owners exercise deterministic release command contracts.
+    "test_cli.py",
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",

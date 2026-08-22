@@ -7,6 +7,7 @@ from robot_sf.benchmark.fallback_policy import (
     benchmark_run_exit_code,
     campaign_exit_code,
     campaign_status_axes_payload,
+    runtime_fallback_or_degraded_marker,
     summarize_benchmark_availability,
     summarize_campaign_outcome,
     summarize_campaign_status_axes,
@@ -331,4 +332,53 @@ def test_summarize_benchmark_availability_surfaces_learned_contract_reason() -> 
     assert availability.availability_status == "not_available"
     assert availability.availability_reason == (
         "obs_mode=image mismatch; determinism not guaranteed"
+    )
+
+
+def test_runtime_fallback_marker_is_key_aware_and_traverses_lists() -> None:
+    """Structured runtime markers fail closed without matching descriptive text."""
+    payload = {
+        "description": "fallback is forbidden in benchmark evidence",
+        "planner_runtime": {
+            "status": "ok",
+            "events": [
+                {"message": "degraded wording is descriptive only"},
+                {"fallback_count": 2},
+            ],
+        },
+    }
+
+    assert runtime_fallback_or_degraded_marker(payload) == (
+        "planner_runtime.events[1].fallback_count",
+        "2",
+    )
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {"description": "fallback", "planner_runtime": {"status": "ok"}}
+        )
+        is None
+    )
+
+
+def test_summarize_benchmark_availability_rejects_runtime_fallback_marker() -> None:
+    """Runtime fallback metadata must prevent a successful benchmark classification."""
+    summary = {
+        "status": "ok",
+        "written": 1,
+        "total_jobs": 1,
+        "failed_jobs": 0,
+        "preflight": {"status": "ok"},
+        "algorithm_metadata_contract": {
+            "execution_mode": "native",
+            "planner_runtime": {"fallback_triggered": True},
+        },
+    }
+
+    availability = summarize_benchmark_availability(summary)
+
+    assert availability.readiness_status == "fallback"
+    assert availability.availability_status == "failed"
+    assert availability.benchmark_success is False
+    assert availability.availability_reason == (
+        "planner runtime reported forbidden marker fallback_triggered=true"
     )

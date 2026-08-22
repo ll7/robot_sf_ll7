@@ -31,6 +31,7 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[2]
@@ -368,6 +369,7 @@ def test_cli_json_reports_submit_safe_false_for_stageable_remote(
     payload = json.loads(result.stdout)
     assert payload["mode"] == "metadata_only"
     assert payload["submit_safe"] is False
+    assert payload["checkpoint_registry_sha256"] == sha256_file(registry_path)
     assert payload["arms"][0]["status"] == "stageable_remote"
     assert report_path.is_file()
     persisted = json.loads(report_path.read_text(encoding="utf-8"))
@@ -424,6 +426,7 @@ def test_cli_json_never_reports_submit_safe_for_zero_references(
     assert payload["resolved"] == 0
     assert payload["submit_safe"] is False
     assert payload["arms"] == []
+    assert payload["checkpoint_registry_sha256"] is None
     persisted = json.loads(report_path.read_text(encoding="utf-8"))
     assert persisted["submit_safe"] is False
 

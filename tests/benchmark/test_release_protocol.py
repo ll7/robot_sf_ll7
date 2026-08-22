@@ -275,6 +275,72 @@ def test_load_release_manifest_rejects_empty_required_artifact_path(tmp_path: Pa
         load_release_manifest(manifest_path)
 
 
+def test_v02_release_manifest_pins_full_s30_publication_contract(tmp_path: Path) -> None:
+    """v0.2 binds base, matrix, suite/certification, seeds, SNQI policy, and fresh DOI."""
+    source_path = Path(
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml"
+    )
+    payload = yaml.safe_load(source_path.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    loaded = load_release_manifest(source_path)
+    payload.update(
+        {
+            "schema_version": "benchmark-release-manifest.v0.2",
+            "latest_main_base_commit": "a" * 40,
+            "matrix": {"expected_episode_cells": 20160, "horizon_steps": 600},
+            "publication": {
+                "channel": "direct_zenodo_benchmark_dataset",
+                "concept_doi": "10.5281/zenodo.99999990",
+                "version_doi": "10.5281/zenodo.99999991",
+            },
+        }
+    )
+    payload["canonical_campaign_config"] = str(loaded.canonical_campaign_config_path)
+    payload["campaign_config_sha256"] = release_protocol._sha256_file(
+        loaded.canonical_campaign_config_path
+    )
+    payload["scenario"]["matrix_path"] = str(loaded.scenario_matrix_path)
+    suite_policy = Path(
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml"
+    ).resolve()
+    route_certification = Path(
+        "configs/benchmarks/route_clearance_certifications_v1.yaml"
+    ).resolve()
+    payload["scenario"].update(
+        {
+            "suite_policy_path": str(suite_policy),
+            "suite_policy_sha256": release_protocol._sha256_file(suite_policy),
+            "route_certification_path": str(route_certification),
+            "route_certification_sha256": release_protocol._sha256_file(route_certification),
+        }
+    )
+    payload["seed_policy"].update(
+        {
+            "seed_sets_path": str(Path("configs/benchmarks/seed_sets_v1.yaml").resolve()),
+            "seed_sets_sha256": release_protocol._sha256_file(
+                Path("configs/benchmarks/seed_sets_v1.yaml")
+            ),
+            "resolved_seeds": list(range(111, 141)),
+        }
+    )
+    payload["metrics"]["snqi_weights_path"] = str(loaded.snqi_weights_path)
+    payload["metrics"]["snqi_baseline_path"] = str(loaded.snqi_baseline_path)
+    payload["metrics"]["snqi_claim_policy"] = "advisory_no_ranking"
+    payload["provenance"]["doi"] = "10.5281/zenodo.99999991"
+    payload["citation_path"] = str(loaded.citation_path)
+    payload["release_checklist_path"] = str(loaded.release_checklist_path)
+    manifest_path = tmp_path / "release-v0.2.yaml"
+    manifest_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    manifest = load_release_manifest(manifest_path)
+    result = validate_release_manifest(manifest)
+    assert result["status"] == "valid"
+    assert manifest.expected_episode_cells == 20160
+    assert manifest.expected_horizon_steps == 600
+    assert manifest.snqi_claim_policy == "advisory_no_ranking"
+    assert manifest.concept_doi != manifest.version_doi
+
+
 def test_validate_release_manifest_reports_mismatches() -> None:
     """Validation should surface config, seed, planner, and asset drift explicitly."""
     manifest = load_release_manifest(
@@ -380,3 +446,5 @@ def test_build_release_provenance_and_helpers_cover_repo_relative_fallback(tmp_p
     assert provenance["manifest_sha256"]
     assert args.mode == "run"
     assert args.manifest.name == "paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+    assert args.resume_receipt is None
+    assert args.resume_receipt_max_age_hours == 24.0

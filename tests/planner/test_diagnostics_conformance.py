@@ -106,4 +106,5 @@ def test_protocol_member_diagnostics_payload(module_name: str, cls_name: str) ->
     cls = getattr(import_module(module_name), cls_name)
     planner = cls.__new__(cls)
 
-    assert planner.diagnostics() == {"planner_type": cls_name}
+    diagnostics = planner.diagnostics()
+    assert diagnostics["planner_type"] == cls_name

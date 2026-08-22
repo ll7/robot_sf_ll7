@@ -291,10 +291,10 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
     """
     Minimal waypoint-to-velocity adapter inspired by the SocNavBench sampling planner.
 
-    Warning:
-        By default this adapter uses a lightweight heuristic placeholder. Set
-        ``use_upstream=True`` to delegate to the upstream SocNavBench sampling planner
-        (benchmark-ready), and optionally allow fallback when dependencies are missing.
+    ``use_upstream=False`` selects the explicit in-repository heuristic baseline used by
+    ``algo=socnav_sampling``.  It is an experimental planner in its own right, not an
+    implicit fallback for SocNavBench.  ``use_upstream=True`` delegates to the upstream
+    SocNavBench planner and may use the heuristic only when ``allow_fallback=True``.
     """
 
     class _GoalDistanceObjective:
@@ -343,6 +343,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         self._goal_objective: SamplingPlannerAdapter._GoalDistanceObjective | None = None
         self._use_upstream = bool(use_upstream)
         self._allow_fallback = bool(allow_fallback)
+        self._fallback_count = 0
+        self._fallback_reason: str | None = None
 
         if self._use_upstream:
             if planner_factory is not None:
@@ -350,6 +352,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             else:
                 self._planner = self._load_upstream_planner(socnav_root)
             if self._planner is None and self._allow_fallback:
+                self._record_fallback("upstream planner was unavailable during initialization")
                 logger.warning(
                     "SamplingPlannerAdapter is running in fallback heuristic mode and "
                     "is not benchmark-ready."
@@ -360,8 +363,8 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                     "Set allow_fallback=True to use the heuristic fallback."
                 )
         else:
-            logger.warning(
-                "SamplingPlannerAdapter is a heuristic fallback and is not benchmark-ready."
+            logger.info(
+                "SamplingPlannerAdapter is using the explicit in-repository heuristic baseline."
             )
 
     def plan(self, observation: dict) -> tuple[float, float]:
@@ -455,6 +458,9 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
             data = self._planner.optimize(start_config=start_config, goal_config=goal_config)
             traj = data.get("trajectory")
             if traj is None:
+                if not self._allow_fallback:
+                    raise RuntimeError("SocNavBench planner returned no trajectory")
+                self._record_fallback("upstream planner returned no trajectory")
                 return self._heuristic_plan(observation)
             # NOTE: upstream returns a trajectory and controller matrices; for now we
             # consume only the immediate waypoint to preserve the (v, w) interface and
@@ -484,8 +490,14 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         # Upstream planner failures use the heuristic fallback when enabled.
         except Exception as exc:  # pragma: no cover - broad catch: planner surface unknown; heuristic fallback or re-raise
             if self._allow_fallback:
+                self._record_fallback(f"upstream runtime failure: {type(exc).__name__}")
                 return self._heuristic_plan(observation)
             raise RuntimeError("SocNavBench planner failed during _plan_upstream.") from exc
+
+    def _record_fallback(self, reason: str) -> None:
+        """Record a sticky upstream-to-heuristic fallback event."""
+        self._fallback_count += 1
+        self._fallback_reason = reason
 
     def _safe_call_factory(self, factory: Callable[[], Any]) -> Any | None:
         """Invoke a user-provided factory defensively.
@@ -768,8 +780,28 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
                 os.chdir(prev_cwd)
 
     def diagnostics(self) -> dict[str, Any]:
-        """Return execution diagnostics."""
-        return {"planner_type": "SamplingPlannerAdapter"}
+        """Return explicit implementation and fallback diagnostics."""
+        upstream_requested = bool(getattr(self, "_use_upstream", False))
+        upstream_loaded = getattr(self, "_planner", None) is not None
+        fallback_count = int(getattr(self, "_fallback_count", 0) or 0)
+        fallback_reason = getattr(self, "_fallback_reason", None)
+        fallback_triggered = fallback_count > 0
+        if fallback_triggered:
+            implementation_mode = "heuristic_fallback"
+        elif upstream_loaded:
+            implementation_mode = "upstream_socnavbench"
+        else:
+            implementation_mode = "in_repo_heuristic_baseline"
+        return {
+            "planner_type": "SamplingPlannerAdapter",
+            "implementation_mode": implementation_mode,
+            "upstream_requested": upstream_requested,
+            "upstream_loaded": upstream_loaded,
+            "fallback_triggered": fallback_triggered,
+            "fallback_count": fallback_count,
+            "fallback_reason": fallback_reason,
+            "readiness_status": "fallback" if fallback_triggered else "experimental",
+        }
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:

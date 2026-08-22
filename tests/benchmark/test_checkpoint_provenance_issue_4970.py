@@ -19,6 +19,10 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
     check_campaign_arm_checkpoints_preflight,
 )
+from robot_sf.benchmark.fallback_policy import (
+    runtime_fallback_or_degraded_marker,
+    summarize_benchmark_availability,
+)
 from robot_sf.benchmark.map_runner import map_runner
 from robot_sf.benchmark.map_runner.map_runner_batch_summary import merge_runtime_algorithm_contract
 from robot_sf.planner.socnav import SACADRLPlannerAdapter, SocNavPlannerConfig
@@ -197,6 +201,103 @@ def test_batch_summary_bridges_runtime_checkpoint_provenance() -> None:
     unchanged = {"checkpoint_provenance": "malformed"}
     merge_runtime_algorithm_contract(unchanged, runtime)
     assert unchanged["checkpoint_provenance"]["model_id"] == "ppo_demo"
+
+
+def test_batch_summary_preserves_generic_runtime_fallback_markers() -> None:
+    """Episode diagnostics reach the batch contract with sticky fallback semantics."""
+    contract: dict = {}
+    merge_runtime_algorithm_contract(
+        contract,
+        {
+            "planner_runtime": {
+                "planner_type": "SocNavBenchSamplingAdapter",
+                "fallback_triggered": False,
+                "fallback_count": 0,
+            }
+        },
+    )
+    merge_runtime_algorithm_contract(
+        contract,
+        {
+            "planner_runtime": {
+                "planner_type": "SocNavBenchSamplingAdapter",
+                "fallback_triggered": True,
+                "fallback_count": 2,
+                "readiness_status": "fallback",
+            }
+        },
+    )
+
+    runtime = contract["planner_runtime"]
+    assert runtime["fallback_triggered"] is True
+    assert runtime["fallback_count"] == 2
+    assert runtime["readiness_status"] == "fallback"
+
+
+def test_generic_runtime_fallback_fails_benchmark_availability() -> None:
+    """Non-checkpoint adapter fallback diagnostics cannot remain benchmark success."""
+    planner_runtime = {
+        "planner_type": "SocNavBenchSamplingAdapter",
+        "fallback_triggered": True,
+        "fallback_count": 1,
+        "readiness_status": "fallback",
+    }
+    summary = {
+        "status": "ok",
+        "total_jobs": 1,
+        "written": 1,
+        "failed_jobs": 0,
+        "algorithm_metadata_contract": {
+            "planner_kinematics": {"execution_mode": "adapter"},
+            "planner_runtime": planner_runtime,
+        },
+    }
+
+    assert runtime_fallback_or_degraded_marker(planner_runtime) == (
+        "fallback_triggered",
+        "true",
+    )
+    availability = summarize_benchmark_availability(summary)
+    assert availability.benchmark_success is False
+    assert availability.readiness_status == "fallback"
+    assert availability.availability_status == "failed"
+    assert "fallback_triggered=true" in str(availability.availability_reason)
+
+
+@pytest.mark.parametrize(
+    ("planner_runtime", "expected_marker"),
+    [
+        (
+            {"status": "predictive_foresight_model_fallback:KeyError"},
+            ("status", "predictive_foresight_model_fallback:keyerror"),
+        ),
+        (
+            {"foresight_prediction": {"fallback_used": True}},
+            ("foresight_prediction.fallback_used", "true"),
+        ),
+        (
+            {"guard_stats": {"fallback_safe": 2}},
+            ("guard_stats.fallback_safe", "2"),
+        ),
+    ],
+)
+def test_runtime_fallback_detector_catches_foresight_fallback_metadata(
+    planner_runtime: dict[str, object], expected_marker: tuple[str, str]
+) -> None:
+    """The canonical runtime detector recognizes both foresight fallback signals."""
+    assert runtime_fallback_or_degraded_marker(planner_runtime) == expected_marker
+
+
+def test_runtime_fallback_detector_ignores_descriptive_baseline_label() -> None:
+    """The in-repo heuristic baseline label is not a fallback by substring."""
+    planner_runtime = {
+        "implementation_mode": "in_repo_heuristic_baseline",
+        "fallback_triggered": False,
+        "fallback_count": 0,
+        "readiness_status": "experimental",
+    }
+
+    assert runtime_fallback_or_degraded_marker(planner_runtime) is None
 
 
 def test_campaign_manifest_folds_runtime_checkpoint_status_per_kinematics() -> None:

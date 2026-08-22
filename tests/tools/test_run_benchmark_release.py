@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from scripts.tools import run_benchmark_release
@@ -60,9 +62,190 @@ def _manifest_fixture() -> SimpleNamespace:
             "reports/snqi_diagnostics.json",
         ),
         release_tag="paper-benchmark-smoke-v0.1.0",
+        planner_keys=(),
         doi="10.5281/zenodo.<record-id>",
         repository_url="https://github.com/ll7/robot_sf_ll7",
     )
+
+
+def _admit_checkpoint_receipt(monkeypatch, tmp_path: Path) -> Path:
+    """Install a valid receipt stub for runner-focused tests."""
+    receipt = tmp_path / "checkpoint_staging_receipt.json"
+    _write_json(receipt, {"generated_at_utc": "2026-08-21T00:00:00Z"})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: {"generated_at_utc": "2026-08-21T00:00:00Z"},
+    )
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    return receipt
+
+
+def test_release_input_path_rejects_external_location_without_leaking_it(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Publication provenance cannot contain an absolute path outside the release worktree."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    external = tmp_path / "private" / "receipt.json"
+    external.parent.mkdir()
+    external.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+
+    try:
+        run_benchmark_release._required_repo_relative(external)
+    except ValueError as exc:
+        assert str(external) not in str(exc)
+        assert "inside the repository worktree" in str(exc)
+    else:
+        raise AssertionError("external release input was not rejected")
+
+
+def test_release_run_rejects_historical_campaign_artifact_identity(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """A stale fixed-campaign artifact cannot contaminate a new release bundle."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    (campaign_root / "reports" / "stale_identity.md").write_text(
+        "release_tag: 0.0.3.post1\ndoi: 10.5281/zenodo.19482025\n",
+        encoding="utf-8",
+    )
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=False)
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "release_identity_rejected"
+    assert payload["release_status"] == "release_identity_rejected"
+    assert payload["release_benchmark_success"] is False
+    assert "historical release identity" in payload["status_reason"]
+
+
+def test_publication_identity_rejection_does_not_log_campaign_paths(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Publication identity failures keep filesystem-derived details out of stdout."""
+    secret_marker = "secret-release-path-should-not-be-logged"
+    campaign_root = _make_campaign_tree(tmp_path / secret_marker)
+    bundle_dir = tmp_path / secret_marker / "publication_bundle"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / "stale_identity.md").write_text(
+        "release_tag: 0.0.3.post1\n",
+        encoding="utf-8",
+    )
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=True)
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "campaign_execution_status": "completed",
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {"status": "valid", "benchmark_success": True, "blockers": []},
+    )
+    publication_payload = {
+        "bundle_dir": str(bundle_dir),
+        "archive_path": str(bundle_dir.with_suffix(".tar.gz")),
+        "checksums_path": str(bundle_dir / "checksums.sha256"),
+        "manifest_path": str(bundle_dir / "publication_manifest.json"),
+        "file_count": 1,
+        "total_bytes": 32,
+    }
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: publication_payload,
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    stdout = capsys.readouterr().out
+    payload = json.loads(stdout)
+    persisted = json.loads(
+        (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
+    assert exit_code == 2
+    assert payload["release_status"] == "publication_identity_rejected"
+    assert payload["release_benchmark_success"] is False
+    assert secret_marker not in stdout
+    assert secret_marker in persisted["campaign_root"]
 
 
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -336,8 +519,11 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     monkeypatch.setattr(
         run_benchmark_release, "_run_publication_preflight", _fake_publication_preflight
     )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
 
-    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
 
     assert exit_code == 0
     assert called["orca_preflight"] is True
@@ -439,8 +625,11 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     monkeypatch.setattr(
         run_benchmark_release, "_build_publication_payload", _unexpected_publication
     )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
 
-    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
 
     assert exit_code == 3
     payload = json.loads(capsys.readouterr().out)
@@ -466,6 +655,161 @@ def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(
     assert release_result["exit_code"] == 3
     assert release_result["release_status"] == "accepted_unavailable_only"
     assert release_result["release_exit_code"] == 3
+
+
+def test_runtime_smoke_skips_publication_when_config_disables_export(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A release-protocol runtime smoke must not be forced through publication export."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    manifest = _manifest_fixture()
+    cfg = SimpleNamespace(export_publication_bundle=False)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "smoke",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "smoke.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "smoke-config.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("publication must be skipped")),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["release_benchmark_success"] is True
+    assert payload["publication_requested"] is False
+    assert payload["publication_preflight_status"] == "not_requested"
+
+
+def test_full_release_acceptance_failure_blocks_publication(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A permissive campaign result cannot publish when the full gate fails."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    manifest = SimpleNamespace(
+        **_manifest_fixture().__dict__,
+        schema_version="benchmark-release-manifest.v0.2",
+    )
+    cfg = SimpleNamespace(export_publication_bundle=True)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "build_resolved_release_manifest", lambda *a, **k: {}
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "core rows passed",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "full",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: {
+            "status": "invalid",
+            "benchmark_success": False,
+            "blockers": ["fallback row present"],
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_build_publication_payload",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("publication must be blocked by full acceptance")
+        ),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+    smoke_receipt = tmp_path / "runtime_smoke_result.json"
+    _write_json(smoke_receipt, {})
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "schema_version": "benchmark-runtime-smoke-admission.v1",
+            "status": "admitted",
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--checkpoint-receipt",
+            str(receipt),
+            "--runtime-smoke-receipt",
+            str(smoke_receipt),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["campaign_benchmark_success"] is True
+    assert payload["benchmark_success"] is False
+    assert payload["release_benchmark_success"] is False
+    assert payload["release_status"] == "full_release_acceptance_failed"
+    assert payload["release_exit_code"] == 2
+    assert payload["publication_bundle"] is None
 
 
 def test_release_preflight_fails_closed_when_orca_rvo2_missing(
@@ -516,3 +860,59 @@ def test_release_preflight_fails_closed_when_orca_rvo2_missing(
     assert payload["release_status"] == "orca_preflight_failed"
     assert payload["release_exit_code"] == 2
     assert "uv sync --extra orca" in payload["release_status_reason"]
+
+
+def test_release_resume_receipt_requires_fixed_campaign_id(tmp_path: Path) -> None:
+    """A resume ruling cannot be applied to a fresh timestamped campaign."""
+    args = SimpleNamespace(
+        campaign_id=None,
+        output_root=tmp_path,
+        resume_receipt=tmp_path / "resume.json",
+        resume_receipt_max_age_hours=24.0,
+    )
+    cfg = SimpleNamespace(resume=True)
+    config = tmp_path / "campaign.yaml"
+    checkpoint = tmp_path / "checkpoint.json"
+    config.write_text("horizon: 600\n", encoding="utf-8")
+    checkpoint.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(
+        run_benchmark_release.ReleaseResumeAdmissionError,
+        match="explicit fixed campaign_id",
+    ):
+        run_benchmark_release._admit_release_resume(
+            args=args,
+            cfg=cfg,
+            campaign_config_path=config,
+            checkpoint_receipt_path=checkpoint,
+        )
+
+
+def test_release_existing_fixed_campaign_requires_resume_receipt(tmp_path: Path) -> None:
+    """Prior planner output cannot resume from only a fixed campaign id."""
+    campaign_id = "fixed-release"
+    runs = tmp_path / campaign_id / "runs" / "goal__differential_drive"
+    runs.mkdir(parents=True)
+    (runs / "episodes.jsonl").write_text("{}\n", encoding="utf-8")
+    args = SimpleNamespace(
+        campaign_id=campaign_id,
+        output_root=tmp_path,
+        resume_receipt=None,
+        resume_receipt_max_age_hours=24.0,
+    )
+    cfg = SimpleNamespace(resume=True)
+    config = tmp_path / "campaign.yaml"
+    checkpoint = tmp_path / "checkpoint.json"
+    config.write_text("horizon: 600\n", encoding="utf-8")
+    checkpoint.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(
+        run_benchmark_release.ReleaseResumeAdmissionError,
+        match="infrastructure-only resume receipt",
+    ):
+        run_benchmark_release._admit_release_resume(
+            args=args,
+            cfg=cfg,
+            campaign_config_path=config,
+            checkpoint_receipt_path=checkpoint,
+        )

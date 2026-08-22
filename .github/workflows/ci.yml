@@ -738,14 +738,12 @@ jobs:
     if: always()
     steps:
       - name: Check split job results
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           uv run python scripts/dev/check_ci_needs.py \
             --event-name "${{ github.event_name }}" \
-            --results "$(python -c "
-          import json
-          needs = ${{ toJSON(needs) }}
-          print(json.dumps({name: job.result for name, job in needs.items()}))
-          ")"
+            --results "$(python -c 'import json, os; print(json.dumps({name: job.result for name, job in json.loads(os.environ["CI_NEEDS_JSON"]).items()}))')"
 
       - name: Checkout for duration-cache update
         id: checkout_duration_cache

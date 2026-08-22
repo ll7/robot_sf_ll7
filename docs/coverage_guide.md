@@ -514,8 +514,8 @@ change may reopen one of them only with a fresh issue, acceptance criteria, and 
 ## Related Documentation
 
 - [Development Guide](dev_guide.md) - Coverage workflow overview
-- [Testing Strategy](dev_guide.md#testing-strategy-unified-test-suite) - Test suite organization
-- [CI/CD Expectations](dev_guide.md#cicd-expectations) - Quality gates and pipeline
+- [Testing Strategy](dev_guide_reference.md#testing-strategy-unified-test-suite) - Test suite organization
+- [CI/CD Expectations](dev_guide_reference.md#cicd-expectations) - Quality gates and pipeline
 
 ## External References
 

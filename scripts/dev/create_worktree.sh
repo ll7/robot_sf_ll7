@@ -141,7 +141,11 @@ if git show-ref --verify --quiet "refs/heads/$branch_name"; then
 fi
 git worktree prune
 
-git worktree add -b "$branch_name" "$worktree_path" "$base_ref"
+# Avoid automatic upstream-tracking writes to the shared repository config.  A
+# linked worktree's branch can be configured explicitly later with
+# ``git branch --set-upstream-to``; creation itself must remain safe when
+# several workers create worktrees concurrently.
+git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
 

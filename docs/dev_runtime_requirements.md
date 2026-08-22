@@ -54,7 +54,10 @@ scripts/dev/create_worktree.sh --branch issue-123-short-description \
 scripts/dev/run_worktree_shared_venv.sh -- <command>
 ```
 
-This avoids one full virtual environment per worker. Use
+The creator deliberately does not configure automatic upstream tracking for the new branch. That
+keeps concurrent linked-worktree creation from contending on the shared Git configuration; set a
+remote explicitly when publishing, for example with `git push -u origin <branch>`. This avoids one
+full virtual environment per worker. Use
 `scripts/dev/bootstrap_worktree.sh` only when a worktree-local environment is
 explicitly required; inspect reclaim candidates with
 `scripts/dev/check_worktree_capacity.py --inventory` before manually pruning

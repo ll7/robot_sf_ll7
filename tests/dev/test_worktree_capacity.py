@@ -216,6 +216,23 @@ def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) ->
 
         assert result.returncode == 0, result.stderr
         assert result.stdout.splitlines()[-1] == str(target)
+        upstream = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(target),
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert upstream.returncode != 0
+        assert "no upstream configured" in upstream.stderr
     finally:
         subprocess.run(
             ["git", "worktree", "remove", "--force", str(target)],

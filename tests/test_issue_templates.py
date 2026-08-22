@@ -16,7 +16,7 @@ from scripts.tools.issue_template_audit import (
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / ".github" / "ISSUE_TEMPLATE"
-DOCS_GUIDE = ROOT / "docs" / "dev_guide.md"
+DOCS_GUIDE_REFERENCE = ROOT / "docs" / "dev_guide_reference.md"
 
 
 def _skill_path(name: str) -> Path:
@@ -251,7 +251,7 @@ def test_every_issue_template_collects_canonical_issue_metadata() -> None:
         assert tuple(fields["archetype"]["attributes"]["options"]) == CANONICAL_ARCHETYPES
         assert tuple(fields["evidence_tier"]["attributes"]["options"]) == CANONICAL_EVIDENCE_TIERS
 
-    docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
+    docs_text = DOCS_GUIDE_REFERENCE.read_text(encoding="utf-8")
     assert "canonical `archetype` and `evidence_tier` metadata" in docs_text
     assert "context/issue_1512_issue_archetypes.md" in docs_text
 
@@ -270,7 +270,7 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     the new skills should not refer to dead paths or invented gh commands.
     """
 
-    docs_text = DOCS_GUIDE.read_text(encoding="utf-8")
+    docs_text = DOCS_GUIDE_REFERENCE.read_text(encoding="utf-8")
     assert "../.github/ISSUE_TEMPLATE/issue_default.md" in docs_text
     assert "../.github/ISSUE_TEMPLATE/research-validation.yml" in docs_text
     assert "../.github/ISSUE_TEMPLATE/test-debt.yml" in docs_text

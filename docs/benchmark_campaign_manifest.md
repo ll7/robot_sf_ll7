@@ -43,8 +43,9 @@ durable-artifact plan. The evaluator reports one explicit state:
 - `diagnostic_only` — a bounded mechanism or manifest check is valid, but it is
   not decision-capable evidence;
 - `blocked_missing_producer`, `blocked_underpowered`,
-  `blocked_analysis_contract`, `blocked_noncomparable_rows`, or
-  `blocked_artifact_plan` — a named prerequisite is not satisfied;
+  `blocked_analysis_contract`, `blocked_noncomparable_rows`,
+  `blocked_artifact_plan`, or `blocked_missing_proof` — a named prerequisite
+  or executable proof surface is not satisfied;
 - `invalid_contract` — the answerability schema itself is malformed.
 
 The canonical runner includes the state in `summary.json` and `report.md`.
@@ -52,7 +53,82 @@ Use `--require-answerable` when a launch path must reject every state other
 than `answerable`; the default packet path remains compatible with older
 manifests. Required fallback, degraded, unavailable, or missing producers are
 never answerable. Optional unavailable metrics remain explicit and are not
-imputed as zero.
+imputed as zero. Caveated, fallback, degraded, diagnostic-only, unavailable,
+failed, blocked, and not-run row statuses are rejected if a manifest tries to
+declare them as success values.
+
+### Executable proof surfaces
+
+Decision-capable manifests should add all six `answerability.proof_surfaces`
+entries: `producer`, `preregistration`, `evidence_contract`, `analysis`,
+`artifact`, and `result_packet`. The claim-specific minimum for production
+admission is `producer`, `preregistration`, `evidence_contract`, `analysis`,
+and `artifact`; each must be explicitly required and passed. `result_packet`
+is optional only when the generic #7029 validator is unavailable. The bounded
+Issue #6474 fixture remains a compatibility fixture and is not a production launch
+admission.
+
+Each entry records `status` (`passed`, `unavailable`, `failed`, or `not_run`)
+and whether the surface is `required`. An unavailable surface must include
+`unavailable_reason`; required surfaces must be `passed` before admission.
+Optional unavailable, failed, and not-run surfaces remain visible warnings and
+do not become zero-valued evidence. Optional fallback, degraded, blocked, or
+missing producers are also retained as warnings.
+
+The runner can execute typed checks from
+`validation.answerability_proof` when `--execute-validation` or
+`--require-answerable` is supplied. Diagnostic manifests may use manifest rows
+or the bounded `pytest_contract` adapter. Decision-capable manifests use a
+surface-specific map: `producer_receipt`, the public `preregistration` checker,
+the public `evidence_contract` checker, `analysis_receipt`, the public
+`artifact_catalog` checker, and the public `result_packet` loader. A generic
+pytest result cannot substitute for a producer or analysis receipt. Strict
+receipts and file-backed validators bind the campaign, question, estimand, and
+surface identity; artifact proofs additionally bind the catalog, selected
+artifact IDs, and complete source/output/caption digest sets. Registered
+diagnostic commands are argv-only, restricted to repository `tests/*.py` paths,
+and bounded by a 120-second timeout. A missing generic result-packet validator
+is recorded as `unavailable`; it is not replaced by an issue-specific or
+heuristic checker.
+
+Strict admission attaches `answerability.proof_binding` with the source
+manifest SHA-256, the declared camera configuration path and SHA-256, and a
+digest of the exact proof results. Required file-backed proof specs must carry
+the expected input SHA-256, and fixture/diagnostic-only artifact catalogs or
+dry-run manifest rows cannot satisfy a decision-capable proof surface.
+
+The `durable_path` adapter is deliberately not an artifact admission proof:
+path existence alone cannot establish tracked retention or checksum identity.
+A required artifact surface configured with `kind: durable_path` is therefore
+recorded as `unavailable` and blocks `answerable`. Use `kind: artifact_catalog`
+to invoke the public checksum and path-policy validator.
+Decision-capable artifact catalogs must not be sourced from `tests/fixtures` or
+controlled diagnostic/fixture source kinds. Result packets with
+`smoke_diagnostic`, `visualization_fixture`, `diagnostic_only`, or
+`unavailable_causal_inference` classifications are likewise rejected when
+declared as required decision proof. Validators read and verify stable pre/post
+input digests so a mutation between validation and launch cannot produce a
+receipt for different bytes.
+
+The production camera-ready launcher can enforce the same gate without creating
+a second readiness contract:
+
+```bash
+uv run python scripts/tools/run_camera_ready_benchmark.py \
+  --config configs/benchmarks/<camera-ready-config>.yaml \
+  --research-manifest configs/benchmarks/<research-manifest>.yaml \
+  --require-answerable \
+  --mode preflight
+```
+
+The launcher evaluates the manifest before camera-ready preflight or episode
+execution and does not submit compute. A successful gated invocation persists
+the exact answerability receipt and proof binding in its JSON result. The
+issue #3425 wrapper carries `--research-manifest` and `--require-answerable`
+on both preflight and actual run commands, so the gate is re-evaluated after
+any intervening manifest/config mutation. Readiness-only callers may omit
+`--require-answerable`; the existing packet runner remains the owner of packet
+generation.
 
 ## Research-Yield Snapshot
 
@@ -68,10 +144,14 @@ uv run python scripts/analysis/report_research_yield.py \
 ```
 
 The report keeps empirical answers, infrastructure/preflight throughput,
-explicit failure reasons, and lag fields separate. Its source snapshot digest
-and filter definitions remain in the JSON output so a later synthesis can
-reproduce the counts without treating implementation activity as scientific
-evidence.
+explicit failure reasons, lag fields, and query-defined dimensions separate.
+The dimension set is intentionally closed: duplicate/competing pull requests,
+post-merge repairs, admitted result packets, and blocked-age categories must be
+declared in the frozen snapshot with explicit queries, denominators, and
+buckets. Unknown dimension names, fields, or buckets are rejected instead of
+inferred from live issue, pull-request, or campaign state. The source snapshot digest and
+filter definitions remain in the JSON output so a later synthesis can reproduce
+the counts without treating implementation activity as scientific evidence.
 
 ## Required Fields
 

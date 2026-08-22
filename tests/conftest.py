@@ -442,6 +442,14 @@ _FAST_FILES = {
     "test_issue_2527_waiting_crossing_fixture.py",
     "test_issue_2727_fast_bicycle_actor.py",
     "test_issue_3977_public_requirement_smoke.py",
+    # Answerability admission contracts are deterministic and must execute in
+    # pull-request fast shards so the exact-head changed-coverage gate observes
+    # the launch-gate implementation.
+    "test_research_answerability.py",
+    "test_research_answerability_preflight.py",
+    "test_run_research_campaign_manifest.py",
+    "test_issue_3425_empirical_vertical_slice.py",
+    "test_run_camera_ready_benchmark.py",
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",

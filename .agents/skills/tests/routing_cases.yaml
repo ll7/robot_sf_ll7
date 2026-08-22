@@ -90,6 +90,7 @@ cases:
 - intent: Submit issue 791 Auxme job
   primary: auxme-issue791-submit
   secondary:
+  - auxme-slurm-reliable-submit
   - slurm-campaign-submit
   - artifact-provenance
 - intent: Run continuous implement-review-merge-discover autopilot

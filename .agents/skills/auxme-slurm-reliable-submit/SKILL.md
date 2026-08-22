@@ -8,24 +8,46 @@ phase: implementation
 requires_write: true
 requires_slurm: true
 requires_benchmark_artifacts: false
-delegates_to:
-- auxme-issue791-submit
+delegates_to: []
 output_schema: skill_run_summary.v1
 aliases:
+- auxme-issue791-submit
 - auxme-issue791-reliable-submit
 ---
 
 # Auxme SLURM Reliable Submit
 
-Compatibility entry point: for new routing, prefer `slurm-campaign-submit` for generic campaigns and `auxme-issue791-submit` for issue-791-specific Auxme jobs.
+## When to use
 
+Use this skill for issue-791-style Auxme submissions when the private operations overlay,
+explicit config, live partition pressure, and wrapper-safe routing are required. Use the
+`issue-791` profile for the legacy Issue 791 contract; route generic campaigns to
+`slurm-campaign-submit`.
+
+## Modes
+
+- `issue-791` profile: use the legacy `auxme-issue791-submit` alias or select this named profile
+  for Issue 791-style Auxme training jobs.
+- Generic campaigns: route to `slurm-campaign-submit`; this skill does not broaden its wrapper
+  contract to unrelated campaigns.
+
+The `auxme-issue791-submit` and `auxme-issue791-reliable-submit` names are compatibility aliases
+for this canonical skill. The canonical skill never delegates back to an alias.
 
 ## Purpose
 
 Submit Auxme jobs for issue-791-style training reliably and reproducibly.
 Use this when reliability, provenance, and correct config routing matter more than raw queue speed.
 
-## Workflow
+### Issue-791 profile
+
+Use this profile only for Issue 791-specific Auxme submissions that rely on
+`scripts/dev/sbatch_auxme_issue791.sh` or `ISSUE791_TRAIN_CONFIG`.
+
+The profile preserves the legacy `campaign_submission.v1` output contract. It is a submission
+provenance result, not benchmark evidence.
+
+#### Workflow
 
 1. Read cluster-specific preflight and confirm the private operations overlay is configured:
    - `SLURM/AGENTS.md`
@@ -46,17 +68,22 @@ Use this when reliability, provenance, and correct config routing matter more th
 6. Transient failure handling:
    - If allocation handshake shows `Zero Bytes were transmitted or received`, retry once with identical arguments.
 
-## Guardrails
+#### Guardrails
 
 - Never submit an issue-791 wrapper without explicit `ISSUE791_TRAIN_CONFIG`/`--config`.
 - Do not use stale partition status for a submission decision.
 - Do not interpret infrastructure handshake failures as training quality regressions.
+- Do not use this profile for non-issue-791 campaigns; route generic jobs to `slurm-campaign-submit`.
 
-## Output
+#### Output
 
 - Chosen config path, partition/QoS decision, submit command.
 - Startup provenance (stdout markers) and whether a retry was triggered.
 - Final outcome (`submitted` / `blocked` / `retry suggested`) with exact reason.
-## When to use
+- Schema: `campaign_submission.v1`.
 
-Use this skill for the scope named in its frontmatter description and registry metadata.
+## Canonical output
+
+For callers that do not select the Issue-791 profile, return `skill_run_summary.v1` with the
+selected mode, proof status, and any routing blocker. No profile may silently change the wrapper,
+config, or campaign evidence contract.

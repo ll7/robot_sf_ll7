@@ -408,6 +408,8 @@ _FAST_FILES = {
     "test_export_trace_dossier.py",
     # Release admission, staging, doctor, and publisher suites are deterministic
     # provenance/schema contracts for the benchmark-data release lane.
+    # The direct source/test pairs are required by the changed-coverage router
+    # when the release lane is evaluated against current main.
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_checkpoint_staging_receipt.py",

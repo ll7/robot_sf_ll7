@@ -40,6 +40,12 @@ EXPECTED_PLANNER_KEYS = [
     "predictive_mppi",
     "risk_dwa",
 ]
+BLIND_CORNER_HYBRID_CONFIGS = [
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml",
+    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml",
+    "configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml",
+]
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -94,6 +100,23 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
             assert (REPO_ROOT / smoke_row["algo_config"]).is_file()
         assert smoke_row.get("socnav_missing_prereq_policy") != "fallback"
         assert source_row.get("socnav_missing_prereq_policy", "fail-fast") == "fail-fast"
+
+
+def test_blind_corner_hybrid_arms_yield_before_the_release_smoke_conflict() -> None:
+    """The four hybrid arms retain native execution while yielding before the conflict."""
+    for relative_path in BLIND_CORNER_HYBRID_CONFIGS:
+        candidate = _load_yaml(REPO_ROOT / relative_path)
+        override = candidate["scenario_overrides"]["francis2023_blind_corner"]
+
+        assert override["stop_distance_human"] == 2.0
+        assert override["slow_distance_human"] == 3.0
+        assert override["moderate_distance_human"] == 4.0
+        assert "francis2023_blind_corner" not in candidate.get("scenario_algo_overrides", {})
+
+    continuous = _load_yaml(REPO_ROOT / BLIND_CORNER_HYBRID_CONFIGS[-1])
+    assert (
+        continuous["scenario_overrides"]["francis2023_blind_corner"]["hard_safety_margin"] == 0.05
+    )
 
 
 def test_full_and_smoke_release_configs_are_strict_and_use_new_identity() -> None:

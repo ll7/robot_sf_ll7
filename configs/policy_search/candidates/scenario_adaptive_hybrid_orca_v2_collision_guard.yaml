@@ -16,6 +16,10 @@ scenario_overrides:
   classic_merging_low:
     static_clearance_escape_enabled: false
     static_recenter_enabled: false
+  francis2023_blind_corner:
+    stop_distance_human: 2.0
+    slow_distance_human: 3.0
+    moderate_distance_human: 4.0
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6
     static_clearance_escape_max_speed: 0.6

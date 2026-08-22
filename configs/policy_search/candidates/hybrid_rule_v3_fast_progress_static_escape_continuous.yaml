@@ -37,6 +37,11 @@ params:
   corridor_subgoal_clearance_weight: 0.3
   corridor_subgoal_continuity_weight: 0.2
 scenario_overrides:
+  francis2023_blind_corner:
+    hard_safety_margin: 0.05
+    stop_distance_human: 2.0
+    slow_distance_human: 3.0
+    moderate_distance_human: 4.0
   francis2023_perpendicular_traffic:
     very_slow_speed: 0.6
     static_clearance_escape_max_speed: 0.6

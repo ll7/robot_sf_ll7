@@ -3,7 +3,9 @@
 ## Purpose
 
 This guide defines a publication-safe artifact policy for benchmark outputs and
-documents the reproducible export path for camera-ready artifacts.
+documents the reproducible export path for the current S30/H600 benchmark-data
+release. Benchmark-data publication and software/package release are separate
+operations.
 
 For the higher-level benchmark release process, see:
 
@@ -19,11 +21,17 @@ Use this when you need public, stable references for papers based on
 | --- | --- | --- |
 | Git repository (`main`) | Schemas, docs, scripts, compact metadata examples | Reviewable, versioned, lightweight |
 | GitHub Release assets | Export bundles (`*.tar.gz`) with checksums + manifest | Immutable per tag, easy to download |
-| Zenodo (linked to GitHub release) | Final camera-ready bundle snapshot with DOI | Citable long-term DOI endpoint |
+| Zenodo (fresh concept) | Final S30/H600 benchmark-data bundle snapshot with DOI | Citable long-term DOI endpoint |
 
 Rules:
 - Do not require private repository paths for paper evidence.
 - Paper references should point to GitHub release URLs and/or Zenodo DOI links.
+- Reserve a fresh Zenodo concept for each benchmark-data release. Do not reuse
+  historical concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`.
+- Social Navigation Quality Index (SNQI) is advisory/no-ranking for the current
+  S30/H600 release; raw and component metrics remain separately reportable.
+- A one-scenario/one-seed runtime smoke is diagnostic execution evidence, not a
+  full benchmark result or software release.
 - Keep generated large artifacts out of source control unless intentionally tiny
   and review-critical.
 
@@ -41,9 +49,28 @@ Export bundles are produced by
 - `checksums.sha256`: SHA-256 checksums for payload files.
 - `<bundle_name>.tar.gz`: archive for release upload.
 
+When the source campaign contains both
+`release/release_manifest.resolved.json` and `release/release_result.json`, the
+exporter also fails closed on missing release metadata and adds a
+`release_metadata` block to `publication_manifest.json`. Its payload contains:
+
+- the resolved release manifest and release result;
+- the tracked `CITATION.cff` and the exact tracked Zenodo dataset metadata;
+- a generated rights/provenance statement with the raw-artifact boundary; and
+- checksummed SNQI weights and baseline under `payload/release_metadata/snqi/`.
+
+Raw episode rows and component metrics remain eligible for the payload even when
+videos are excluded. Large generated output remains out of Git and must be
+promoted through the durable GitHub/Zenodo artifact path before it is cited.
+The bundle records `campaign_output: durable-required` and
+`local_output: working-storage-not-citation-target` so this distinction survives
+a cold download.
+
 There is no standalone publication-bundle schema validator CLI. For release handoff, inspect
-`publication_manifest.json` for `schema_version: benchmark-publication-bundle.v2` and run
-`sha256sum --check ../checksums.sha256` from the bundle `payload/` directory before upload.
+`publication_manifest.json` for `schema_version: benchmark-publication-bundle.v2`, verify the
+required `release_metadata` roles for a completed release, and run
+`sha256sum -c checksums.sha256` from the bundle root before upload. The release runner invokes
+the stricter publication preflight, including release-result reconciliation and SNQI consistency.
 
 ## Reusable Figure And Table IDs
 
@@ -199,13 +226,25 @@ uv run python scripts/tools/benchmark_publication_bundle.py export \
 This is the canonical command path required for publication exports. Replace the release tag and DOI
 placeholders before citing the bundle as paper-facing evidence.
 
-## DOI-Capable Release Flow
+## DOI-Capable Benchmark-Data Release Flow
 
-1. Create a Git tag/release for the code state.
-2. Upload the exported `*.tar.gz` bundle as a GitHub release asset.
-3. Ensure Zenodo-GitHub integration is enabled for the repository.
-4. Trigger/archive the release in Zenodo and obtain DOI.
-5. Update paper references to the Zenodo DOI and release asset URL.
+1. Freeze the approved S30/H600 benchmark-data manifest and immutable benchmark-data tag.
+2. Export the bundle and independently cold-verify its archive, manifest, checksums,
+   release result, citation, Zenodo metadata, rights statement, and pinned SNQI assets.
+3. Create a fresh Zenodo concept with `release zenodo reserve`; do not reuse a
+   software or historical benchmark concept.
+4. Disable the GitHub-to-Zenodo webhook and leave it disabled, then create a draft
+   GitHub Release and upload the byte-identified `*.tar.gz` bundle plus checksum and
+   manifest assets.
+5. Upload the exact same archive to the reserved Zenodo draft, run read-only
+   `release zenodo verify`, and independently compare GitHub/Zenodo downloads.
+6. Publish the GitHub Release and Zenodo version only after all acceptance and
+   cold-download checks pass. Record the version DOI and parent concept DOI.
+7. Update paper references to the verified Zenodo DOI and benchmark-data asset URL.
+
+Software/package tags and their DOI records remain separate. This documentation
+does not authorize publishing, credential use, webhook changes, or reusing an
+existing Zenodo concept.
 
 ## Citation-Ready URL Templates
 

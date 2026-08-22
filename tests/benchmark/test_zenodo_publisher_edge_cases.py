@@ -1,0 +1,383 @@
+"""Fail-closed and credential-safe edge tests for the Zenodo publisher."""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import TYPE_CHECKING, Any
+
+import pytest
+
+from robot_sf.benchmark import zenodo_publisher as publisher
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+class _Response:
+    """Small requests-like response fixture."""
+
+    def __init__(self, payload: object, status_code: int = 200, content: bytes | None = None):
+        self.payload = payload
+        self.status_code = status_code
+        self.content = content if content is not None else json.dumps(payload).encode()
+
+    def json(self) -> object:
+        """Return the configured payload."""
+        return self.payload
+
+    def raise_for_status(self) -> None:
+        """Raise for HTTP failures."""
+        if self.status_code >= 400:
+            raise RuntimeError("HTTP failure")
+
+    def iter_content(self, *, chunk_size: int) -> Any:
+        """Yield the configured body as a requests-like streamed chunk."""
+        del chunk_size
+        yield self.content
+
+
+class _Session:
+    """Queue-backed session fixture."""
+
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {}
+        self.gets: list[_Response] = []
+        self.posts: list[_Response] = []
+        self.puts: list[_Response] = []
+        self.urls: list[str] = []
+
+    def get(self, url: str, **kwargs: Any) -> _Response:
+        """Consume one GET fixture."""
+        self.urls.append(url)
+        return self.gets.pop(0)
+
+    def post(self, url: str, **kwargs: Any) -> _Response:
+        """Consume one POST fixture."""
+        self.urls.append(url)
+        return self.posts.pop(0)
+
+    def put(self, url: str, **kwargs: Any) -> _Response:
+        """Consume one PUT fixture."""
+        self.urls.append(url)
+        return self.puts.pop(0)
+
+
+def _metadata() -> dict[str, Any]:
+    """Return valid benchmark metadata."""
+    return {
+        "title": "Robot SF benchmark dataset",
+        "upload_type": "dataset",
+        "access_right": "open",
+        "description": "SNQI is advisory only; this release makes no SNQI ranking claim.",
+        "license": "GPL-3.0-only",
+        "creators": [{"name": "Luttkus, Lennart"}],
+        "related_identifiers": [
+            {
+                "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/release",
+                "relation": "isSupplementTo",
+            }
+        ],
+    }
+
+
+def _draft(*, submitted: bool = False, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return one deposition API payload."""
+    return {
+        "id": 7,
+        "record_id": 7,
+        "conceptrecid": "6",
+        "doi": "10.5281/zenodo.7" if submitted else None,
+        "state": "done" if submitted else "unsubmitted",
+        "submitted": submitted,
+        "metadata": metadata or {**_metadata(), "prereserve_doi": {"doi": "10.5281/zenodo.7"}},
+        "links": {"bucket": "https://zenodo.org/api/files/bucket"},
+        "files": [],
+    }
+
+
+def test_token_file_missing_and_empty_are_rejected(tmp_path: Path) -> None:
+    """Token input must exist and contain non-empty text."""
+    with pytest.raises(publisher.ZenodoPublisherError, match="not found"):
+        publisher.read_token_file(tmp_path / "missing")
+    empty = tmp_path / "empty"
+    empty.write_text("\n", encoding="utf-8")
+    os.chmod(empty, 0o600)
+    with pytest.raises(publisher.ZenodoPublisherError, match="empty"):
+        publisher.read_token_file(empty)
+
+
+def test_build_session_uses_header_only_token_and_requires_requests(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Authentication is sent in a header and missing requests fails safely."""
+    token_file = tmp_path / "token"
+    token_file.write_text("secret", encoding="utf-8")
+    os.chmod(token_file, 0o600)
+
+    class Requests:
+        """Minimal requests module fixture."""
+
+        @staticmethod
+        def Session() -> _Session:
+            """Return an empty session."""
+            return _Session()
+
+    monkeypatch.setattr(publisher, "try_import", lambda name: Requests)
+    session = publisher.build_session(token_file)
+    assert session.headers == {"Authorization": "Bearer secret"}
+
+    monkeypatch.setattr(publisher, "try_import", lambda name: None)
+    with pytest.raises(publisher.ZenodoPublisherError, match="requests is required"):
+        publisher.build_session(token_file)
+
+
+@pytest.mark.parametrize(
+    ("metadata", "match"),
+    [
+        ({"upload_type": "dataset"}, "top-level metadata"),
+        ({"metadata": {"upload_type": "software"}}, "upload_type=dataset"),
+        ({"metadata": {"upload_type": "dataset", "license": "MIT"}}, "license"),
+        (
+            {"metadata": {"upload_type": "dataset", "license": "GPL-3.0-only", "creators": []}},
+            "at least one creator",
+        ),
+        (
+            {
+                "metadata": {
+                    "upload_type": "dataset",
+                    "license": "GPL-3.0-only",
+                    "creators": [{"name": "Creator"}],
+                    "related_identifiers": [],
+                }
+            },
+            "exact source tag",
+        ),
+    ],
+)
+def test_metadata_contract_rejects_invalid_publication_metadata(
+    tmp_path: Path, metadata: dict[str, Any], match: str
+) -> None:
+    """Dataset publication metadata is validated before any API call."""
+    path = tmp_path / "metadata.json"
+    path.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(publisher.ZenodoPublisherError, match=match):
+        publisher.load_dataset_metadata(path)
+
+
+@pytest.mark.parametrize(
+    ("response", "match"),
+    [(_Response({}, status_code=500), "request failed"), (_Response([], 200), "not a JSON object")],
+)
+def test_json_object_requires_successful_mapping_response(response: _Response, match: str) -> None:
+    """Zenodo responses must be successful JSON objects."""
+    with pytest.raises(publisher.ZenodoPublisherError, match=match):
+        publisher._json_object(response, "fixture")
+
+
+def test_reserve_rejects_incomplete_deposition_identity() -> None:
+    """A reserved DOI cannot be accepted without complete deposition identity."""
+    session = _Session()
+    session.posts = [_Response({"id": 7, "conceptrecid": "6", "metadata": {}})]
+    with pytest.raises(publisher.ZenodoPublisherError, match="omitted"):
+        publisher.reserve(session, _metadata())
+
+
+def test_public_state_handles_missing_metadata_and_prefers_published_doi() -> None:
+    """State extraction remains credential-free for sparse API payloads."""
+    sparse = publisher._public_state({"id": 1, "record_id": 2, "conceptrecid": 3, "doi": "doi"})
+    assert sparse["doi"] == "doi"
+    assert sparse["files"] == []
+
+
+@pytest.mark.parametrize(
+    ("state", "draft", "match"),
+    [
+        ({}, _draft(), "no deposition_id"),
+        ({"deposition_id": 7}, {"links": {"bucket": "http://insecure"}}, "invalid Zenodo"),
+        ({"deposition_id": 7}, {"links": {}}, "invalid Zenodo"),
+    ],
+)
+def test_upload_rejects_missing_identity_or_insecure_bucket(
+    state: dict[str, Any], draft: dict[str, Any], match: str
+) -> None:
+    """Upload requires a valid draft and HTTPS bucket."""
+    session = _Session()
+    session.gets = [_Response(draft)] if state.get("deposition_id") else []
+    with pytest.raises(publisher.ZenodoPublisherError, match=match):
+        publisher.upload(session, state, [])
+
+
+def test_upload_rejects_missing_file_and_publish_rejects_unsubmitted_response(
+    tmp_path: Path,
+) -> None:
+    """Missing local files and incomplete publish responses fail closed."""
+    session = _Session()
+    session.gets = [_Response(_draft())]
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "files": [],
+        }
+    )
+    with pytest.raises(publisher.ZenodoPublisherError, match="file not found"):
+        publisher.upload(session, state, [tmp_path / "missing.tar"])
+
+    state_for_publish = publisher._seal_state(
+        {
+            **{key: value for key, value in state.items() if key != "integrity"},
+            "files": [{"name": "bundle.tar", "size": 1, "sha256": "0" * 64}],
+        }
+    )
+    session.posts = [_Response(_draft(submitted=False))]
+    with pytest.raises(publisher.ZenodoPublisherError, match="verification receipt"):
+        publisher.publish(session, state_for_publish, _metadata())
+    assert len(session.posts) == 1
+    with pytest.raises(publisher.ZenodoPublisherError, match="no deposition_id"):
+        publisher.publish(session, {}, _metadata())
+
+
+def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Path) -> None:
+    """Verification reports each remote mismatch without treating it as success."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"expected")
+    state = {
+        "schema_version": publisher.ZENODO_STATE_SCHEMA,
+        "deposition_id": 7,
+        "record_id": 7,
+        "doi": "10.5281/zenodo.7",
+        "concept_record_id": "6",
+        "submitted": True,
+        "files": [{"name": bundle.name, "size": bundle.stat().st_size, "sha256": "0" * 64}],
+    }
+    state = publisher._seal_state(state)
+    remote = _draft(submitted=True)
+    remote["metadata"] = {**_metadata(), "title": "different"}
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "http://insecure"},
+        },
+        {"filename": "unexpected.tar", "links": {}},
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+    report = publisher.verify(session, state, _metadata())
+    assert report["status"] == "fail"
+    assert report["problem_count"] >= 3
+
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://download"},
+        }
+    ]
+    session.gets = [_Response(remote), _Response({}, status_code=503)]
+    report = publisher.verify(session, state, _metadata())
+    assert any("download failed" in problem for problem in report["problems"])
+
+    session.gets = [_Response(remote), _Response({}, content=b"wrong")]
+    report = publisher.verify(session, state, _metadata())
+    assert any("SHA-256" in problem for problem in report["problems"])
+
+    remote["files"] = []
+    session = _Session()
+    session.gets = [_Response(remote)]
+    report = publisher.verify(session, state, _metadata())
+    assert report["status"] == "fail"
+    assert any("inventory is empty" in problem for problem in report["problems"])
+
+
+def test_verify_rejects_missing_state_identity() -> None:
+    """Verification requires a deposition identifier before contacting Zenodo."""
+    with pytest.raises(publisher.ZenodoPublisherError, match="no deposition_id"):
+        publisher.verify(_Session(), {}, _metadata())
+
+
+def test_state_load_and_write_are_schema_checked_and_non_destructive(tmp_path: Path) -> None:
+    """State persistence preserves the deposition identity and private permissions."""
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("{}", encoding="utf-8")
+    with pytest.raises(publisher.ZenodoPublisherError, match="invalid"):
+        publisher.load_state(invalid)
+
+    state_path = tmp_path / "nested" / "state.json"
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "files": [],
+        }
+    )
+    publisher.write_state(state_path, state)
+    loaded = publisher.load_state(state_path)
+    assert loaded["deposition_id"] == state["deposition_id"]
+    assert "integrity" in loaded
+    assert state_path.stat().st_mode & 0o077 == 0
+    with pytest.raises(publisher.ZenodoPublisherError, match="different"):
+        publisher.write_state(
+            state_path,
+            publisher._seal_state(
+                {
+                    **{key: value for key, value in state.items() if key != "integrity"},
+                    "deposition_id": 8,
+                }
+            ),
+        )
+
+
+def test_state_integrity_rejects_manual_edit(tmp_path: Path) -> None:
+    """A manually edited state file cannot be admitted to publication."""
+    state_path = tmp_path / "state.json"
+    publisher.write_state(
+        state_path,
+        publisher._seal_state(
+            {
+                "schema_version": publisher.ZENODO_STATE_SCHEMA,
+                "deposition_id": 7,
+                "record_id": 7,
+                "concept_record_id": "6",
+                "doi": "10.5281/zenodo.7",
+                "submitted": False,
+                "files": [],
+            }
+        ),
+    )
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    payload["deposition_id"] = 8
+    state_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(publisher.ZenodoPublisherError, match="integrity"):
+        publisher.load_state(state_path)
+
+
+@pytest.mark.parametrize("access_right", [None, "restricted"])
+def test_metadata_requires_open_access_and_claim_boundary(
+    tmp_path: Path, access_right: str | None
+) -> None:
+    """Benchmark metadata must expose public access and the SNQI claim boundary."""
+    metadata = _metadata()
+    if access_right is None:
+        metadata.pop("access_right")
+    else:
+        metadata["access_right"] = access_right
+    path = tmp_path / "metadata.json"
+    path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    with pytest.raises(publisher.ZenodoPublisherError, match="access_right"):
+        publisher.load_dataset_metadata(path)
+
+    metadata = _metadata()
+    metadata["description"] = "Benchmark dataset without a claim boundary."
+    path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    with pytest.raises(publisher.ZenodoPublisherError, match="claim boundary"):
+        publisher.load_dataset_metadata(path)

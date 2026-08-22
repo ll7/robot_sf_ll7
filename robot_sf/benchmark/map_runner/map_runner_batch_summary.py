@@ -136,7 +136,7 @@ def apply_worker_metadata_bridge(
     )
 
 
-def merge_runtime_algorithm_contract(  # noqa: C901
+def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     base_contract: dict[str, Any],
     runtime_algorithm_metadata: Any,
 ) -> dict[str, Any]:
@@ -148,7 +148,9 @@ def merge_runtime_algorithm_contract(  # noqa: C901
     if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
         return base_contract
 
-    def _merge_mapping(target: dict[str, Any], source: dict[str, Any]) -> None:
+    def _merge_mapping(  # noqa: C901
+        target: dict[str, Any], source: dict[str, Any]
+    ) -> None:
         """Merge authoritative runtime contract values into a nested mapping."""
         authoritative_keys = {
             "robot_kinematics",
@@ -172,6 +174,17 @@ def merge_runtime_algorithm_contract(  # noqa: C901
 
         for key, value in source.items():
             current = target.get(key)
+            if key in {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded"}:
+                target[key] = bool(current) or bool(value)
+                continue
+            if key == "fallback_count" or key.endswith("_fallback_count"):
+                current_count = current if isinstance(current, (int, float)) else 0
+                value_count = value if isinstance(value, (int, float)) else 0
+                target[key] = max(current_count, value_count)
+                continue
+            if key == "readiness_status" and str(value).lower() in {"fallback", "degraded"}:
+                target[key] = value
+                continue
             if _is_placeholder(current):
                 target[key] = value
                 continue
@@ -203,6 +216,11 @@ def merge_runtime_algorithm_contract(  # noqa: C901
 
     runtime_planner = runtime_algorithm_metadata.get("planner_runtime")
     if isinstance(runtime_planner, dict):
+        planner_runtime = base_contract.get("planner_runtime")
+        if not isinstance(planner_runtime, dict):
+            planner_runtime = {}
+            base_contract["planner_runtime"] = planner_runtime
+        _merge_mapping(planner_runtime, runtime_planner)
         runtime_checkpoint = runtime_planner.get("checkpoint_provenance")
         if isinstance(runtime_checkpoint, dict):
             checkpoint = base_contract.get("checkpoint_provenance")

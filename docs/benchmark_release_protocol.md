@@ -3,10 +3,20 @@
 This document defines the benchmark release model used for immutable,
 paper-facing benchmark artifacts in `robot_sf_ll7`.
 
+The current approved benchmark-data surface is the S30/H600 release: 14
+planner arms, 48 scenarios, 30 seeds, horizon 600, and differential-drive
+kinematics. The historical seven-planner/S3 manifest remains available for
+reproduction of old artifacts only; it is not the current release contract.
+
 ## Scope
 
 This protocol covers the benchmark release process only. It does not declare the
 repository or Python package to be `1.0`.
+
+Benchmark-data and software releases are separate. A benchmark-data tag freezes
+the campaign config, manifest, assets, and evidence; a software tag freezes the
+installable package. A benchmark-data release must use a fresh Zenodo concept,
+not an existing software or historical benchmark concept.
 
 Three version concepts are intentionally separate:
 
@@ -43,17 +53,27 @@ Benchmark release versioning is independent from `pyproject.toml`.
 While the release process is still evolving, benchmark releases remain in the
 `0.x.y` line.
 
-## Canonical First Release Unit
+## Current Canonical Release Unit
 
-The first formal release unit is the existing paper-facing matrix:
+The approved S30/H600 benchmark-data campaign is:
 
 - campaign config:
-  - `configs/benchmarks/paper_experiment_matrix_v1.yaml`
-- release manifest:
-  - `configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml`
+  - `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
+- publication-grade manifest:
+  - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
+- fresh Zenodo reservation:
+  - concept DOI `10.5281/zenodo.22053132`
+  - version DOI `10.5281/zenodo.22053133`
+- source contract:
+  - 14 planner arms, `paper_eval_s30`, `horizon: 600`, and
+    `kinematics_matrix: [differential_drive]`
+- bounded runtime smoke manifest:
+  - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 
-This is the benchmark contract we treat as frozen for release purposes. Broader
-exploratory matrices are not benchmark releases.
+The smoke selects one scenario (`francis2023_blind_corner`) and seed `111` but
+retains all 14 arms and H600. It proves construction and runtime compatibility;
+it is not a substitute for the full 20,160-episode benchmark-data release.
+The historical v1/S3 manifest is a compatibility/reproduction input only.
 
 ## Release Manifest
 
@@ -71,8 +91,26 @@ Canonical fields:
 - planner keys and planner-group expectations
 - kinematics contract
 - required campaign artifacts
-- repository URL and DOI placeholder
+- repository URL and distinct reserved concept/version DOI identities
 - citation/checklist references
+
+The publication-grade manifest uses
+`schema_version: benchmark-release-manifest.v0.2`. In addition to the fields
+above, it pins the exact latest-green base commit, expected 20,160 episode
+identities, suite policy and route-certification hashes, resolved seeds
+`111..140`, the `advisory_no_ranking` SNQI claim policy, direct Zenodo dataset
+channel, and distinct fresh concept/version DOIs. `provenance.doi` must equal
+the reserved version DOI.
+
+The release claim boundary must also state:
+
+- Social Navigation Quality Index (SNQI) is advisory only; calibration warnings
+  do not authorize planner ranking
+- runtime smoke output is diagnostic execution evidence, not full benchmark
+  evidence
+- software package/version claims are outside the benchmark-data manifest
+- Zenodo uses a fresh concept; `10.5281/zenodo.19482025` and
+  `10.5281/zenodo.19563812` are historical records and must not be reused
 
 ## Benchmark Claim Artifact
 
@@ -111,19 +149,34 @@ silently substituted for final benchmark evidence.
 Use:
 
 ```bash
+uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
+  --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml \
+  --stage \
+  --report-path output/release/checkpoints/runtime_smoke_staging_receipt.json
 uv run python scripts/tools/run_benchmark_release.py \
-  --manifest configs/benchmarks/releases/paper_experiment_matrix_v1_release_v0_1.yaml
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
 ```
+
+This command is the bounded smoke path. Use
+`configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml` for the
+full publication campaign; do not replace it with the historical
+seven-planner/S3 manifest.
 
 The release entrypoint:
 
 1. validates the manifest,
-2. runs preflight through the existing camera-ready stack,
-3. runs the canonical campaign,
-4. fails closed if `benchmark_success` is false,
-5. injects benchmark-release provenance into campaign artifacts,
-6. exports a publication bundle only for benchmark-valid runs,
-7. writes archival release metadata under `<campaign_root>/release/`.
+2. rejects a missing, stale, config-mismatched, or non-submit-safe checkpoint receipt,
+3. rejects same-campaign resume unless a fresh, hash-bound receipt classifies the
+   interruption as infrastructure-only with the source/config/checkpoint inputs unchanged,
+4. runs preflight through the existing camera-ready stack,
+5. runs the canonical campaign,
+6. fails closed unless the exact 14-arm, 48-scenario, 30-seed, H600 identity
+   product succeeds once at one source commit with no fallback, degraded,
+   failed, or unavailable evidence,
+7. injects benchmark-release provenance into campaign artifacts,
+8. exports a publication bundle only for benchmark-valid runs,
+9. writes archival release metadata under `<campaign_root>/release/`.
 
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.

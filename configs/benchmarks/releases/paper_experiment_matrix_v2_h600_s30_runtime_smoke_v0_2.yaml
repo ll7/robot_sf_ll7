@@ -1,0 +1,111 @@
+# One-scenario/one-seed execution smoke for the approved S30/H600
+# benchmark-data release.  This manifest is diagnostic-only: it verifies
+# construction and runtime compatibility of all 14 arms, not benchmark
+# performance, SNQI ranking, or a software release.
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2
+release_tag: paper-matrix-v2-h600-s30-runtime-smoke
+maturity: pre-1.0
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml
+campaign_config_sha256: "25cd607ee7b2c05367a171e3a41aa15592d4a7315b23c7351dde255dc4fdb66f"
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
+
+release_kind: benchmark-data
+release_status: runtime-smoke-only
+derived_from:
+  config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
+  config_sha256: "11c3c837e3ae16d261eeb6f0ef42c84747c28bc4fbde86f8edf29376c0dd9fb1"
+claim_boundary:
+  evidence_class: runtime-smoke
+  snqi: advisory-no-ranking
+  benchmark_data_release: true
+  software_release: false
+  full_benchmark_evidence: false
+zenodo:
+  concept: fresh-required
+  doi_status: pending-assignment
+  reuse_existing_concept: false
+artifact_provenance:
+  raw_episode_outputs: worktree-local-ignored-cache
+  compact_manifest: tracked-compact-evidence
+  source_commit: record-at-run
+  command: >-
+    uv run python scripts/tools/run_benchmark_release.py
+    --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml
+    --label runtime-smoke
+  campaign_root: output/benchmarks/camera_ready/<campaign_id>
+
+scenario:
+  matrix_path: ../../scenarios/single/francis2023_blind_corner.yaml
+  matrix_sha256: "5c5426d31859cdf69692b85fdade92c58e4379bd9d93963743d932d044c6f6fb"
+
+seed_policy:
+  mode: fixed-list
+  seeds: [111]
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+  interpretation: advisory-only-no-ranking
+
+planners:
+  keys:
+    - prediction_planner
+    - goal
+    - social_force
+    - orca
+    - ppo
+    - socnav_sampling
+    - sacadrl
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - guarded_ppo
+    - predictive_mppi
+    - risk_dwa
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+    scenario_adaptive_hybrid_orca_v1: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
+    hybrid_rule_v3_fast_progress_static_escape: experimental
+    hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
+    guarded_ppo: experimental
+    predictive_mppi: experimental
+    risk_dwa: experimental
+
+kinematics:
+  matrix: [differential_drive]
+
+artifacts:
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - reports/campaign_summary.json
+    - reports/campaign_report.md
+    - reports/matrix_summary.json
+    - reports/campaign_table.md
+    - reports/snqi_diagnostics.json
+
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: 10.5281/zenodo.<fresh-concept-required>
+  doi_status: pending-assignment
+  zenodo_concept: fresh-required
+
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md

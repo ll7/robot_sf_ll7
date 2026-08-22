@@ -1,26 +1,35 @@
 """Tests for benchmark publication bundle helpers."""
 
+# evidence-writer-exempt: these tests write only synthetic pytest tmp_path fixtures, never
+# tracked or durable benchmark evidence.
+
 from __future__ import annotations
 
 import json
 import os
 import tarfile
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 from robot_sf.benchmark.artifact_publication import (
+    _SNQI_DEFAULT_BASELINE_NAME,
+    _SNQI_DEFAULT_WEIGHTS_NAME,
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
+    _build_rights_provenance_statement,
     _compute_and_emit_badging_artifacts,
+    _find_release_sha,
+    _preflight_check_release_metadata,
+    _resolve_release_publication_metadata,
+    _resolve_repo_file,
+    _snqi_load_canonical_basis,
     discover_run_directories,
     export_publication_bundle,
     list_publication_files,
     measure_artifact_size_ranges,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write(path: Path, payload: str) -> None:
@@ -481,3 +490,207 @@ def test_export_publication_bundle_placeholder_doi_yields_none(tmp_path: Path) -
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["artifact_badging"]["claimed_level"] == "none"
+
+
+def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_path: Path) -> None:
+    """A completed release export carries metadata and pinned SNQI inputs for cold checks."""
+    run_dir = tmp_path / "benchmarks" / "release_export"
+    _make_run(run_dir, with_video=True)
+    _write(
+        run_dir / "run_meta.json",
+        json.dumps(
+            {
+                "repo": {
+                    "remote": "git@github.com:ll7/robot_sf_ll7.git",
+                    "commit": "a" * 40,
+                }
+            }
+        ),
+    )
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps(
+            {
+                "schema_version": "benchmark-release-manifest.v0.2",
+                "release_id": "release_export",
+                "release_tag": "paper-matrix-v2-h600-s30-2026-08-abc123456789",
+                "metrics": {
+                    "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                    "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+                },
+                "provenance": {
+                    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+                    "doi": "10.5281/zenodo.1234567",
+                    "citation_path": "CITATION.cff",
+                },
+            }
+        ),
+    )
+    _write(
+        run_dir / "release" / "release_result.json",
+        json.dumps({"status": "ok", "source_commit": "a" * 40}),
+    )
+
+    result = export_publication_bundle(
+        run_dir,
+        tmp_path / "publication",
+        bundle_name="release_export_bundle",
+        include_videos=False,
+        release_tag="paper-matrix-v2-h600-s30-2026-08-abc123456789",
+        doi="10.5281/zenodo.1234567",
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    metadata = manifest["release_metadata"]
+
+    assert metadata["schema_version"] == "benchmark-release-publication-metadata.v1"
+    assert metadata["required"] is True
+    assert set(metadata["files"]) == {
+        "release_manifest",
+        "release_result",
+        "citation",
+        "zenodo_metadata",
+        "rights_provenance",
+        "snqi_weights",
+        "snqi_baseline",
+    }
+    assert metadata["raw_artifact_policy"]["campaign_output"] == "durable-required"
+    assert metadata["cold_verification"]["credentials"] == "not_recorded"
+    assert (result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff").is_file()
+    assert (result.bundle_dir / "payload" / "release_metadata" / "zenodo_metadata.json").is_file()
+    rights = result.bundle_dir / "payload" / "release_metadata" / "rights_provenance.md"
+    assert "SNQI" in rights.read_text(encoding="utf-8")
+    assert "a" * 40 in rights.read_text(encoding="utf-8")
+    assert (
+        result.bundle_dir / "payload" / "release_metadata" / "snqi" / _SNQI_DEFAULT_WEIGHTS_NAME
+    ).is_file()
+    assert (
+        result.bundle_dir / "payload" / "release_metadata" / "snqi" / _SNQI_DEFAULT_BASELINE_NAME
+    ).is_file()
+    # Raw episode rows are retained even when optional videos are excluded.
+    assert (result.bundle_dir / "payload" / "episodes" / "episodes.jsonl").is_file()
+    assert not (result.bundle_dir / "payload" / "videos").exists()
+
+
+def test_release_bundle_snqi_basis_prefers_pinned_payload_assets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cold verification must not silently fall back to a checkout's SNQI files."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    weights_path = payload_dir / "release_metadata" / "snqi" / _SNQI_DEFAULT_WEIGHTS_NAME
+    baseline_path = payload_dir / "release_metadata" / "snqi" / _SNQI_DEFAULT_BASELINE_NAME
+    weights_path.parent.mkdir(parents=True, exist_ok=True)
+    weights_path.write_text(
+        (Path("configs/benchmarks") / _SNQI_DEFAULT_WEIGHTS_NAME).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    baseline_path.write_text(
+        (Path("configs/benchmarks") / _SNQI_DEFAULT_BASELINE_NAME).read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    missing_checkout = tmp_path / "cold_checkout"
+    missing_checkout.mkdir()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.artifact_publication.get_repository_root", lambda: missing_checkout
+    )
+
+    basis = _snqi_load_canonical_basis(payload_dir)
+    assert basis["weights_sha256"]
+    assert basis["baseline_sha256"]
+    assert "rejections" not in basis
+
+
+def test_release_metadata_path_and_source_helpers_fail_closed(tmp_path: Path) -> None:
+    """Metadata helpers accept only repository files and explicit source SHA fields."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    tracked = repo / "metadata.json"
+    tracked.write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+
+    assert _resolve_repo_file(None, repo_root=repo) is None
+    assert _resolve_repo_file("missing.json", repo_root=repo) is None
+    assert _resolve_repo_file(str(outside), repo_root=repo) is None
+    assert _resolve_repo_file("metadata.json", repo_root=repo) == tracked
+    assert _find_release_sha([{"nested": [{"public_source_commit": "A" * 40}]}]) == "a" * 40
+    assert _find_release_sha([{"commit": "short"}, ["not-a-mapping"]]) is None
+
+
+def test_release_rights_statement_uses_safe_defaults() -> None:
+    """Sparse metadata still yields explicit, credential-free claim boundaries."""
+    statement = _build_rights_provenance_statement(
+        resolved_manifest={"release_tag": ""},
+        release_result={},
+        zenodo_metadata={"metadata": {"creators": [{"name": ""}, "invalid"]}},
+    )
+
+    assert "GPL-3.0-only" in statement
+    assert "authoritative release creators" in statement
+    assert "recorded in release_result.json" in statement
+    assert "credentials" not in statement.lower()
+
+
+def test_release_metadata_resolver_distinguishes_nonrelease_and_malformed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bundle metadata resolution is optional for normal runs and strict for release runs."""
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    assert _resolve_release_publication_metadata(run_root) is None
+
+    release_dir = run_root / "release"
+    release_dir.mkdir()
+    (release_dir / "release_manifest.resolved.json").write_text("not-json", encoding="utf-8")
+    (release_dir / "release_result.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="malformed"):
+        _resolve_release_publication_metadata(run_root)
+
+    (release_dir / "release_manifest.resolved.json").write_text("{}\n", encoding="utf-8")
+    empty_repo = tmp_path / "empty-repo"
+    empty_repo.mkdir()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.artifact_publication.get_repository_root", lambda: empty_repo
+    )
+    with pytest.raises(ValueError, match="missing required inputs"):
+        _resolve_release_publication_metadata(run_root)
+
+
+def test_release_metadata_preflight_reports_schema_roles_and_policy(tmp_path: Path) -> None:
+    """Cold verification reports every malformed release-metadata contract surface."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    payload_dir.mkdir(parents=True)
+    violations: list[str] = []
+    _preflight_check_release_metadata(payload_dir, {}, violations=violations)
+    assert violations == []
+
+    _preflight_check_release_metadata(
+        payload_dir, {"release_metadata": "invalid"}, violations=violations
+    )
+    assert "must be an object" in violations[-1]
+
+    violations.clear()
+    _preflight_check_release_metadata(
+        payload_dir,
+        {
+            "release_metadata": {
+                "schema_version": "wrong",
+                "required": True,
+                "files": {},
+                "raw_artifact_policy": {},
+                "cold_verification": {},
+            }
+        },
+        violations=violations,
+    )
+    assert any("unsupported schema_version" in item for item in violations)
+    assert any("missing required role" in item for item in violations)
+    assert any("must retain campaign output" in item for item in violations)
+    assert any("credential policy is invalid" in item for item in violations)
+
+    violations.clear()
+    _preflight_check_release_metadata(
+        payload_dir,
+        {"release_metadata": {"files": {"citation": {"path": "outside"}}}},
+        violations=violations,
+    )
+    assert any("invalid payload path" in item for item in violations)

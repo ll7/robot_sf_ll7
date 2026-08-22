@@ -58,6 +58,58 @@ _ACCEPTED_UNAVAILABLE_CAMPAIGN_STATUSES = {"accepted_unavailable_only"}
 _UNEXPECTED_FAILURE_CAMPAIGN_STATUSES = {"unexpected_failure"}
 _CANONICAL_EXIT_CODES: set[int] = {0, 2, 3}
 
+_RUNTIME_STATUS_FIELDS = frozenset(
+    {"status", "row_status", "readiness_status", "availability_status", "execution_mode"}
+)
+_RUNTIME_BOOLEAN_MARKERS = frozenset(
+    {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded"}
+)
+_RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
+
+
+def runtime_fallback_or_degraded_marker(  # noqa: C901
+    payload: Any,
+) -> tuple[str, str] | None:
+    """Return the first structured runtime fallback/degraded marker, if any.
+
+    The traversal is deliberately key-aware: descriptive strings such as an
+    implementation-mode label are not failures by substring.  Only canonical
+    status fields, explicit booleans, and positive fallback counters fail closed.
+
+    Returns:
+        ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
+    """
+
+    def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901
+        if isinstance(value, dict):
+            for raw_key, item in value.items():
+                key = str(raw_key)
+                item_path = f"{path}.{key}" if path else key
+                if key in _RUNTIME_STATUS_FIELDS:
+                    normalized = str(item).strip().lower().replace("-", "_")
+                    if normalized in _RUNTIME_FORBIDDEN_STATUSES:
+                        return item_path, normalized
+                if key in _RUNTIME_BOOLEAN_MARKERS and item is True:
+                    return item_path, "true"
+                if (
+                    (key == "fallback_count" or key.endswith("_fallback_count"))
+                    and isinstance(item, (int, float))
+                    and not isinstance(item, bool)
+                    and item > 0
+                ):
+                    return item_path, str(item)
+                nested = _visit(item, item_path)
+                if nested is not None:
+                    return nested
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                nested = _visit(item, f"{path}[{index}]")
+                if nested is not None:
+                    return nested
+        return None
+
+    return _visit(payload, "")
+
 
 def _int_field(result: dict[str, Any], key: str) -> int:
     """Read one integer-like explicit campaign field with a fail-closed default.
@@ -637,6 +689,11 @@ def summarize_benchmark_availability(summary: dict[str, Any] | None) -> Benchmar
     total_jobs = int(summary.get("total_jobs", 0) or 0)
     written = int(summary.get("written", 0) or 0)
     execution_mode = resolve_execution_mode(summary.get("algorithm_metadata_contract"))
+    runtime_contract = summary.get("algorithm_metadata_contract")
+    planner_runtime = (
+        runtime_contract.get("planner_runtime") if isinstance(runtime_contract, dict) else None
+    )
+    runtime_marker = runtime_fallback_or_degraded_marker(planner_runtime)
 
     readiness_status = "native"
     if preflight_status == "fallback":
@@ -647,6 +704,17 @@ def summarize_benchmark_availability(summary: dict[str, Any] | None) -> Benchmar
         readiness_status = "adapter"
 
     reason = _summary_reason(summary, preflight)
+    if runtime_marker is not None:
+        marker_path, marker_value = runtime_marker
+        return BenchmarkAvailability(
+            execution_mode=execution_mode,
+            readiness_status="fallback" if "fallback" in marker_path else "degraded",
+            availability_status="failed",
+            benchmark_success=False,
+            availability_reason=(
+                f"planner runtime reported forbidden marker {marker_path}={marker_value}"
+            ),
+        )
     if preflight_status in {"fallback", "skipped"}:
         return BenchmarkAvailability(
             execution_mode=execution_mode,

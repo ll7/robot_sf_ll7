@@ -1,5 +1,4 @@
 {
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "arguments": [
     {
       "claim_id": "C_release_bundle_manifest",
@@ -203,7 +202,7 @@
       "kind": "file",
       "manifest_field": "release_checklist_path",
       "path": "docs/RELEASE.md",
-      "sha256": "731347e64e7f568f0a7321d0f15cc62f06a703e40ac934e808f3d8992470b398"
+      "sha256": "e7ced2eeacc062b8463200d6d7f0204dbd0adc2e26df0914d4e3b4ffde6ad974"
     },
     {
       "description": "Citation metadata referenced by the release manifest.",
@@ -290,6 +289,7 @@
       ]
     }
   },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "root_argument_ids": [
     "A_release_manifest_integrity",
     "A_roster_seed_scope",

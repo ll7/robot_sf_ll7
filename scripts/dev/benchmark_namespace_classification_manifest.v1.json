@@ -41,6 +41,7 @@
     "case_publication_figure.py",
     "case_workbench.py",
     "certification_transfer.py",
+    "checkpoint_staging_receipt.py",
     "circuit_breaker.py",
     "classic_interactions_loader.py",
     "clearance_semantics.py",
@@ -217,11 +218,15 @@
     "rare_event_sampling.py",
     "reactivity_ablation.py",
     "reactivity_replay_preflight.py",
+    "release_acceptance.py",
     "release_assurance_case.py",
+    "release_doctor.py",
     "release_gates.py",
     "release_preflight.py",
     "release_protocol.py",
+    "release_resume_admission.py",
     "release_publication_contract.py",
+    "runtime_smoke_admission.py",
     "release_suite_contract.py",
     "release_suite_reference_validation.py",
     "report_crosswalk.py",
@@ -300,6 +305,7 @@
     "validation",
     "validation_utils.py",
     "version_utils.py",
-    "visualization.py"
+    "visualization.py",
+    "zenodo_publisher.py"
   ]
 }
